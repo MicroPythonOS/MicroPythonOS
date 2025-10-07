@@ -40,7 +40,7 @@ fi
 
 
 #$mpremote fs cp boot.py :/boot.py
-$mpremote fs cp boot_fri3d2024.py :/boot.py
+$mpremote fs cp boot_fri3d-2024.py :/boot.py
 $mpremote fs cp main.py :/main.py
 
 #$mpremote fs cp main.py :/system/button.py
