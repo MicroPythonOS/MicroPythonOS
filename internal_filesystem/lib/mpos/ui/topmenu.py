@@ -84,7 +84,7 @@ def create_notification_bar():
     # Time label
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
-    time_label.align(lv.ALIGN.LEFT_MID, 0, 0)
+    time_label.align(lv.ALIGN.LEFT_MID, mpos.ui.pct_of_display_width(10), 0)
     temp_label = lv.label(notification_bar)
     temp_label.set_text("00°C")
     temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, mpos.ui.pct_of_display_width(7)	, 0)
@@ -108,7 +108,7 @@ def create_notification_bar():
     battery_icon = lv.label(notification_bar)
     battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
     #battery_icon.align_to(battery_label, lv.ALIGN.OUT_LEFT_MID, 0, 0)
-    battery_icon.align(lv.ALIGN.RIGHT_MID, 0, 0)
+    battery_icon.align(lv.ALIGN.RIGHT_MID, -mpos.ui.pct_of_display_width(10), 0)
     battery_icon.add_flag(lv.obj.FLAG.HIDDEN) # keep it hidden until it has a correct value
     # WiFi icon
     wifi_icon = lv.label(notification_bar)

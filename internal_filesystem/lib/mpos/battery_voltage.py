@@ -2,7 +2,8 @@ have_adc=True
 try:
     from machine import ADC, Pin
     # Configure ADC on pin 5 (IO5 / BAT_ADC)
-    adc = ADC(Pin(5))
+    #adc = ADC(Pin(5)) # TouchColorPiggy
+    adc = ADC(Pin(13)) # fri3d-2024
     # Set ADC to 11dB attenuation for 0–3.3V range (common for ESP32)
     adc.atten(ADC.ATTN_11DB)
 except Exception as e:
@@ -18,6 +19,14 @@ VOLTAGE_DIVIDER = 3  # (R1 + R2) / R2 = (200k + 100k) / 100k = 3
 
 MIN_VOLTAGE = 3.7
 MAX_VOLTAGE = 4.2
+
+# On fri3d-2024, it's 2367 for full
+# Battery voltage ranges from 3.15V (0%) to 4.15 (100%) as datasheet specifies
+# 3.0 +/- 0.1V (discharge cut-off) to 4.2V (no margin of error provided, assuming 0.05V)
+# Charger stops charging at 4.07V (92%) to reduce battery wear.
+#define RG_BATTERY_CALC_PERCENT(raw) (((raw) * 2.f - 3150.f) / (4150.f - 3150.f) * 100.f)
+#define RG_BATTERY_CALC_VOLTAGE(raw) ((raw) * 2.f * 0.001f)
+
 
 # USB connected, full battery: VBAT 4.179 5V: 5.1
 # read_battery_voltage raw_value: 1598.4
@@ -67,7 +76,8 @@ def read_battery_voltage():
     #print(f"read_battery_voltage raw_value: {raw_value}")
     # Convert to voltage, accounting for divider and reference
     #voltage = (raw_value / ADC_MAX) * VREF * VOLTAGE_DIVIDER
-    voltage = raw_value * 262 / 100000
+    #voltage = raw_value * 262 / 100000 # 2inch
+    voltage = raw_value * 2 / 1000 # fri3d-2024
     # Clamp to 0–4.2V range for LiPo battery
     voltage = max(0, min(voltage, MAX_VOLTAGE))
     #return raw_value
