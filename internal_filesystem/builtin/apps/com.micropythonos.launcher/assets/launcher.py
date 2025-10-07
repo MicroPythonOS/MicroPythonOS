@@ -20,7 +20,7 @@ class Launcher(mpos.apps.Activity):
     def onCreate(self):
         print("launcher.py onCreate()")
         main_screen = lv.obj()
-        main_screen.set_style_border_width(0, 0)
+        main_screen.set_style_border_width(0, lv.PART.MAIN)
         main_screen.set_style_radius(0, 0)
         main_screen.set_pos(0, mpos.ui.topmenu.NOTIFICATION_BAR_HEIGHT) # leave some margin for the notification bar
         #main_screen.set_size(lv.pct(100), lv.pct(100))
@@ -65,6 +65,10 @@ class Launcher(mpos.apps.Activity):
         start = time.ticks_ms()
 
         screen.clean()
+        # Get the group for focusable objects
+        focusgroup = lv.group_get_default()
+        if not focusgroup:
+            print("WARNING: could not get default focusgroup")
 
         # Sort apps alphabetically by app.name
         app_list.sort(key=lambda x: x[0].lower())  # Case-insensitive sorting
@@ -75,9 +79,10 @@ class Launcher(mpos.apps.Activity):
             # Create container for each app (icon + label)
             app_cont = lv.obj(screen)
             app_cont.set_size(iconcont_width, iconcont_height)
-            app_cont.set_style_border_width(0, 0)
+            app_cont.set_style_border_width(0, lv.PART.MAIN)
             app_cont.set_style_pad_all(0, 0)
             app_cont.set_style_bg_opa(lv.OPA.TRANSP,0) # prevent default style from adding slight gray to this container
+            app_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
             # Load and display icon
             icon_path = f"{app_dir_fullpath}/res/mipmap-mdpi/icon_64x64.png"
             image = lv.image(app_cont)
@@ -100,6 +105,9 @@ class Launcher(mpos.apps.Activity):
             label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             label.set_style_text_align(lv.TEXT_ALIGN.CENTER, 0)
             app_cont.add_event_cb(lambda e, path=app_dir_fullpath: mpos.apps.start_app(path), lv.EVENT.CLICKED, None)
+            app_cont.add_event_cb(lambda e, app_cont=app_cont: self.focus_app_cont(app_cont),lv.EVENT.FOCUSED,None)
+            app_cont.add_event_cb(lambda e, app_cont=app_cont: self.defocus_app_cont(app_cont),lv.EVENT.DEFOCUSED,None)
+            focusgroup.add_obj(app_cont)
         
         end = time.ticks_ms()
         print(f"Redraw icons took: {end-start}ms")
@@ -113,3 +121,13 @@ class Launcher(mpos.apps.Activity):
                 'data': image_data
             })
         return image_dsc
+
+    def focus_app_cont(self, app_cont):
+        #print(f"app_cont {app_cont} focused, setting border...")
+        app_cont.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
+        app_cont.set_style_border_width(1, lv.PART.MAIN)
+        app_cont.scroll_to_view(lv.ANIM.ON) # scroll to bring it into view
+
+    def defocus_app_cont(self, app_cont):
+        #print(f"app_cont {app_cont} defocused, unsetting border...")
+        app_cont.set_style_border_width(0, lv.PART.MAIN)
