@@ -116,53 +116,74 @@ def read_joystick():
     return None  # No key triggered
 
 
+# Track button states for debouncing (only for buttons, not joystick)
+last_button_key = None
+last_button_state = lv.INDEV_STATE.RELEASED
+
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
-    data.continue_reading = False  # No more data to read
-    # Check GPIOs and set key/state (only one key at a time)
+    global last_button_key, last_button_state
+    data.continue_reading = False
+
+    # Check buttons and joystick
+    current_key = None
+    is_joystick = False
+
+    # Check buttons first (debounced)
     if btn_x.value() == 0:
-        data.key = lv.KEY.ESC
-        data.state = lv.INDEV_STATE.PRESSED
-        mpos.ui.back_screen()
+        current_key = lv.KEY.ESC
     elif btn_y.value() == 0:
-        data.key = lv.KEY.ESC
-        data.state = lv.INDEV_STATE.PRESSED
-        mpos.ui.back_screen()
+        current_key = lv.KEY.PREV
     elif btn_a.value() == 0:
-        #print("A pressed")
-        data.key = lv.KEY.ENTER
-        data.state = lv.INDEV_STATE.PRESSED
+        current_key = lv.KEY.NEXT
     elif btn_b.value() == 0:
-        #print("B pressed")
-        data.key = lv.KEY.ENTER
-        data.state = lv.INDEV_STATE.PRESSED
+        current_key = lv.KEY.ENTER
     elif btn_menu.value() == 0:
-        data.key = lv.KEY.HOME
-        data.state = lv.INDEV_STATE.PRESSED
+        current_key = lv.KEY.HOME
     elif btn_start.value() == 0:
-        data.key = lv.KEY.END
-        data.state = lv.INDEV_STATE.PRESSED
+        current_key = lv.KEY.END
     else:
-        data.state = lv.INDEV_STATE.RELEASED
-    if data.state == lv.INDEV_STATE.RELEASED:
+        # Check joystick (not debounced)
         joystick = read_joystick()
         if joystick == "LEFT":
-            data.key = lv.KEY.PREV
-            data.state = lv.INDEV_STATE.PRESSED
+            current_key = lv.KEY.LEFT
+            is_joystick = True
         elif joystick == "RIGHT":
-            data.key = lv.KEY.NEXT
-            data.state = lv.INDEV_STATE.PRESSED
+            current_key = lv.KEY.RIGHT
+            is_joystick = True
         elif joystick == "UP":
-            data.key = lv.KEY.UP
-            data.state = lv.INDEV_STATE.PRESSED
+            current_key = lv.KEY.UP
+            is_joystick = True
         elif joystick == "DOWN":
-            data.key = lv.KEY.DOWN
-            data.state = lv.INDEV_STATE.PRESSED
-        else:
-            data.state = lv.INDEV_STATE.RELEASED
+            current_key = lv.KEY.DOWN
+            is_joystick = True
 
+    # Handle joystick (continuous pressing allowed)
+    if is_joystick and current_key:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED  # Always send PRESSED for joystick
+    # Handle buttons (debounced)
+    elif current_key:
+        if current_key != last_button_key:
+            data.key = current_key
+            data.state = lv.INDEV_STATE.PRESSED
+            last_button_key = current_key
+            last_button_state = lv.INDEV_STATE.PRESSED
+        else:
+            data.state = lv.INDEV_STATE.RELEASED  # Avoid continuous PRESSED
+    else:
+        # No input
+        data.key = last_button_key if last_button_key else lv.KEY.ENTER
+        data.state = lv.INDEV_STATE.RELEASED
+        last_button_key = None
+        last_button_state = lv.INDEV_STATE.RELEASED
+
+    # Handle ESC for back navigation
+    if current_key == lv.KEY.ESC and last_button_state == lv.INDEV_STATE.PRESSED:
+        import mpos
+        mpos.ui.back_screen()
 
 group = lv.group_create()
 group.set_default()
