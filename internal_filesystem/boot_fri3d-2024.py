@@ -82,6 +82,7 @@ display.set_params(0x36, bytearray([0x28]))
 
 # Button and joystick handling code:
 from machine import ADC, Pin
+import time
 
 btn_x = Pin(38, Pin.IN, Pin.PULL_UP) # X
 btn_y = Pin(41, Pin.IN, Pin.PULL_UP) # Y
@@ -116,22 +117,28 @@ def read_joystick():
     return None  # No key triggered
 
 
-# Track button states for debouncing (only for buttons, not joystick)
-last_button_key = None
-last_button_state = lv.INDEV_STATE.RELEASED
+# Key repeat configuration
+# This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
+# the lv_keyboard widget doesn't handle PRESSING (long presses) properly, it loses focus.
+REPEAT_INITIAL_DELAY_MS = 500  # Delay before first repeat
+REPEAT_RATE_MS = 200  # Interval between repeats
+last_key = None
+last_state = lv.INDEV_STATE.RELEASED
+key_press_start = 0  # Time when key was first pressed
+last_repeat_time = 0  # Time of last repeat event
 
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
-    global last_button_key, last_button_state
+    global last_key, last_state, key_press_start, last_repeat_time
     data.continue_reading = False
 
     # Check buttons and joystick
     current_key = None
-    is_joystick = False
+    current_time = time.ticks_ms()
 
-    # Check buttons first (debounced)
+    # Check buttons
     if btn_x.value() == 0:
         current_key = lv.KEY.ESC
     elif btn_y.value() == 0:
@@ -145,43 +152,52 @@ def keypad_read_cb(indev, data):
     elif btn_start.value() == 0:
         current_key = lv.KEY.END
     else:
-        # Check joystick (not debounced)
+        # Check joystick
         joystick = read_joystick()
         if joystick == "LEFT":
             current_key = lv.KEY.LEFT
-            is_joystick = True
         elif joystick == "RIGHT":
             current_key = lv.KEY.RIGHT
-            is_joystick = True
         elif joystick == "UP":
             current_key = lv.KEY.UP
-            is_joystick = True
         elif joystick == "DOWN":
             current_key = lv.KEY.DOWN
-            is_joystick = True
 
-    # Handle joystick (continuous pressing allowed)
-    if is_joystick and current_key:
-        data.key = current_key
-        data.state = lv.INDEV_STATE.PRESSED  # Always send PRESSED for joystick
-    # Handle buttons (debounced)
-    elif current_key:
-        if current_key != last_button_key:
+    # Key repeat logic
+    if current_key:
+        if current_key != last_key:
+            # New key press
             data.key = current_key
             data.state = lv.INDEV_STATE.PRESSED
-            last_button_key = current_key
-            last_button_state = lv.INDEV_STATE.PRESSED
+            last_key = current_key
+            last_state = lv.INDEV_STATE.PRESSED
+            key_press_start = current_time
+            last_repeat_time = current_time
         else:
-            data.state = lv.INDEV_STATE.RELEASED  # Avoid continuous PRESSED
+            # Key held: Check for repeat
+            elapsed = time.ticks_diff(current_time, key_press_start)
+            since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
+            if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
+                # Send a new PRESSED/RELEASED pair for repeat
+                data.key = current_key
+                data.state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
+                last_state = data.state
+                last_repeat_time = current_time
+            else:
+                # No repeat yet, send RELEASED to avoid PRESSING
+                data.state = lv.INDEV_STATE.RELEASED
+                last_state = lv.INDEV_STATE.RELEASED
     else:
-        # No input
-        data.key = last_button_key if last_button_key else lv.KEY.ENTER
+        # No key pressed
+        data.key = last_key if last_key else lv.KEY.ENTER
         data.state = lv.INDEV_STATE.RELEASED
-        last_button_key = None
-        last_button_state = lv.INDEV_STATE.RELEASED
+        last_key = None
+        last_state = lv.INDEV_STATE.RELEASED
+        key_press_start = 0
+        last_repeat_time = 0
 
-    # Handle ESC for back navigation
-    if current_key == lv.KEY.ESC and last_button_state == lv.INDEV_STATE.PRESSED:
+    # Handle ESC for back navigation (only on initial PRESSED)
+    if current_key == lv.KEY.ESC and last_state == lv.INDEV_STATE.PRESSED and since_last_repeat == 0:
         import mpos
         mpos.ui.back_screen()
 
