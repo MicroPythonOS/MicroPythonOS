@@ -71,29 +71,4 @@ sdlkeyboard.set_paste_text_callback(mpos.clipboard.paste_text)
    # print(f"boot_unix: code={event_code}") # target={event.get_target()}, user_data={event.get_user_data()}, param={event.get_param()}
 #keyboard.add_event_cb(keyboard_cb, lv.EVENT.ALL, None)
 
-# On the Waveshare ESP32-S3-Touch-LCD-2, the camera is hard-wired to power on,
-# so it needs a software power off to prevent it from staying hot all the time and quickly draining the battery.
-# 1) Initialize camera, otherwise it doesn't reply to I2C commands:
-try:
-    from camera import Camera
-    cam = Camera(data_pins=[12,13,15,11,14,10,7,2],vsync_pin=6,href_pin=4,sda_pin=21,scl_pin=16,pclk_pin=9,xclk_pin=8,xclk_freq=20000000,powerdown_pin=-1,reset_pin=-1,pixel_format=PixelFormat.RGB565,frame_size=FrameSize.R240X240,grab_mode=GrabMode.LATEST)
-    cam.deinit()
-except Exception as e:
-    print(f"camera init for power off got exception: {e}")
-# 2) Soft-power off camera, otherwise it uses a lot of current for nothing:
-try:
-    from machine import Pin, I2C
-    i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
-    devices = i2c.scan()
-    print("Scan of I2C bus on scl=16, sda=21:")
-    print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
-    camera_addr = 0x3C # for OV5640
-    reg_addr = 0x3008
-    reg_high = (reg_addr >> 8) & 0xFF  # 0x30
-    reg_low = reg_addr & 0xFF         # 0x08
-    power_off_command = 0x42 # Power off command
-    i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
-except Exception as e:
-    print(f"Warning: powering off camera got exception: {e}")
-
 print("boot_unix.py finished")
