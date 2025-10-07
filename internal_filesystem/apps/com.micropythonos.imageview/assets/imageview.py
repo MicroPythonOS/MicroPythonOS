@@ -167,6 +167,7 @@ class ImageView(Activity):
     def unfocus(self):
         group = lv.group_get_default()
         if not group:
+            print("WARNING: imageview.py could not get default focus group")
             return
         print("got focus group")
         # group.focus_obj(self.play_button) would be better but appears missing?!
