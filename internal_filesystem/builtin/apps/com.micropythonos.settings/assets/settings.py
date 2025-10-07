@@ -59,6 +59,11 @@ class SettingsActivity(Activity):
 
         # Create settings entries
         screen.clean()
+        # Get the group for focusable objects
+        focusgroup = lv.group_get_default()
+        if not focusgroup:
+            print("WARNING: could not get default focusgroup")
+
         for setting in self.settings:
             #print(f"setting {setting.get('title')} has changed_callback {setting.get('changed_callback')}")
             # Container for each setting
@@ -66,7 +71,7 @@ class SettingsActivity(Activity):
             setting_cont.set_width(lv.pct(100))
             setting_cont.set_height(lv.SIZE_CONTENT)
             setting_cont.set_style_border_width(1, 0)
-            setting_cont.set_style_border_side(lv.BORDER_SIDE.BOTTOM, 0)
+            #setting_cont.set_style_border_side(lv.BORDER_SIDE.BOTTOM, 0)
             setting_cont.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
             setting_cont.add_flag(lv.obj.FLAG.CLICKABLE)
             setting["cont"] = setting_cont  # Store container reference for visibility control
@@ -84,9 +89,10 @@ class SettingsActivity(Activity):
             value.set_style_text_color(lv.color_hex(0x666666), 0)
             value.set_pos(0, 20)
             setting["value_label"] = value  # Store reference for updating
-            setting_cont.add_event_cb(
-                lambda e, s=setting: self.startSettingActivity(s), lv.EVENT.CLICKED, None
-            )
+            setting_cont.add_event_cb(lambda e, s=setting: self.startSettingActivity(s), lv.EVENT.CLICKED, None)
+            setting_cont.add_event_cb(lambda e, container=setting_cont: self.focus_container(container),lv.EVENT.FOCUSED,None)
+            setting_cont.add_event_cb(lambda e, container=setting_cont: self.defocus_container(container),lv.EVENT.DEFOCUSED,None)
+            focusgroup.add_obj(setting_cont)
 
     def startSettingActivity(self, setting):
         intent = Intent(activity_class=SettingActivity)
@@ -96,6 +102,17 @@ class SettingsActivity(Activity):
     @staticmethod
     def get_timezone_tuples():
         return [(tz, tz) for tz in mpos.time.get_timezones()]
+
+    def focus_container(self, container):
+        print(f"container {container} focused, setting border...")
+        container.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
+        container.set_style_border_width(1, lv.PART.MAIN)
+        container.scroll_to_view(lv.ANIM.ON) # scroll to bring it into view
+
+    def defocus_container(self, container):
+        print(f"container {container} defocused, unsetting border...")
+        container.set_style_border_width(0, lv.PART.MAIN)
+
 
 # Used to edit one setting:
 class SettingActivity(Activity):
