@@ -98,12 +98,16 @@ class CameraApp(Activity):
         self.status_label = lv.label(self.status_label_cont)
         self.status_label.set_text("No camera found.")
         self.status_label.set_long_mode(lv.label.LONG.WRAP)
-        self.status_label.set_style_text_color(lv.color_white(), 0)
         self.status_label.set_width(lv.pct(100))
         self.status_label.center()
         self.setContentView(main_screen)
     
     def onResume(self, screen):
+        try:
+            assert(current_hardware == "unix" or current_hardware == "waveshare-esp32-s3-touch-lcd-2")
+        except Exception as e: # use an assert in case current_hardware isn't defined for some boards
+            print("WARNING: the current_hardware doesn't have support for a camera!")
+            return
         self.cam = init_internal_cam()
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees

@@ -1,4 +1,5 @@
 # Hardware initialization for Unix and MacOS systems
+current_hardware = "unix"
 
 import lcd_bus
 import lvgl as lv
