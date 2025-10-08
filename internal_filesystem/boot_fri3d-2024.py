@@ -214,4 +214,8 @@ disp = lv.display_get_default()  # NOQA
 indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
 
+# Battery voltage ADC measuring
+import mpos.battery_voltage
+mpos.battery_voltage.init_adc(13)
+
 print("boot.py finished")

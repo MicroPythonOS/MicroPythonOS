@@ -82,4 +82,8 @@ indev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # but
 lv.init()
 display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
+# Battery voltage ADC measuring
+import mpos.battery_voltage
+mpos.battery_voltage.init_adc(5)
+
 print("boot.py finished")

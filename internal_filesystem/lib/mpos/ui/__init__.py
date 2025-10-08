@@ -1,6 +1,5 @@
 import lvgl as lv
 import mpos.apps
-import mpos.battery_voltage
 import mpos.time
 import mpos.wifi
 from mpos.ui.anim import WidgetAnimator

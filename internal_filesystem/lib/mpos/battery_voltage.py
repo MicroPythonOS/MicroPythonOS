@@ -1,14 +1,19 @@
+adc = None
 have_adc=True
-try:
-    from machine import ADC, Pin
-    # Configure ADC on pin 5 (IO5 / BAT_ADC)
-    #adc = ADC(Pin(5)) # TouchColorPiggy
-    adc = ADC(Pin(13)) # fri3d-2024
-    # Set ADC to 11dB attenuation for 0–3.3V range (common for ESP32)
-    adc.atten(ADC.ATTN_11DB)
-except Exception as e:
-    print("Info: this platform has no ADC for measuring battery voltage")
-    have_adc=False
+
+# This gets called by (the device-specific) boot*.py
+def init_adc(pinnr):
+    global adc
+    try:
+        from machine import ADC, Pin
+        print("setting adc")
+        adc = ADC(Pin(pinnr))
+        print("adc set")
+        # Set ADC to 11dB attenuation for 0–3.3V range (common for ESP32)
+        adc.atten(ADC.ATTN_11DB)
+    except Exception as e:
+        print("Info: this platform has no ADC for measuring battery voltage")
+        have_adc=False
 
 import time
 
