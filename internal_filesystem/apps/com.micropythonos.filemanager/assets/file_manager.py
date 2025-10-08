@@ -14,9 +14,9 @@ class FileManager(Activity):
         #self.file_explorer.explorer_open_dir('/')
         #self.file_explorer.explorer_open_dir('M:data/images/')
         #self.file_explorer.explorer_open_dir('M:/')
-        self.file_explorer.explorer_open_dir('M:/')
+        self.file_explorer.explorer_open_dir('M:/') # unicode error on desktop?
         #self.file_explorer.explorer_open_dir('M:data/images/')
-        #self.file_explorer.explorer_open_dir('P:.') # POSIX works, fs_driver doesn't because it doesn't have dir_open, dir_read, dir_close
+        #self.file_explorer.explorer_open_dir('P:.') # POSIX works on desktop, fs_driver doesn't because it doesn't have dir_open, dir_read, dir_close
         #self.file_explorer.explorer_open_dir('P:/tmp') # POSIX works, fs_driver doesn't because it doesn't have dir_open, dir_read, dir_close
         #file_explorer.explorer_open_dir('S:/')
         #self.file_explorer.set_size(lv.pct(100), lv.pct(100))
