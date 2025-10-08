@@ -120,8 +120,8 @@ def read_joystick():
 # Key repeat configuration
 # This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
 # the lv_keyboard widget doesn't handle PRESSING (long presses) properly, it loses focus.
-REPEAT_INITIAL_DELAY_MS = 500  # Delay before first repeat
-REPEAT_RATE_MS = 200  # Interval between repeats
+REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
+REPEAT_RATE_MS = 100  # Interval between repeats
 last_key = None
 last_state = lv.INDEV_STATE.RELEASED
 key_press_start = 0  # Time when key was first pressed
@@ -133,6 +133,7 @@ last_repeat_time = 0  # Time of last repeat event
 def keypad_read_cb(indev, data):
     global last_key, last_state, key_press_start, last_repeat_time
     data.continue_reading = False
+    since_last_repeat = 0
 
     # Check buttons and joystick
     current_key = None
