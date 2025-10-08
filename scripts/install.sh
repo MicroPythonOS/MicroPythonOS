@@ -1,15 +1,19 @@
 pkill -f "python.*mpremote"
 
-appname="$1"
+target="$1"
+appname="$2"
 
-if [ -z "$appname" ]; then
-	echo "Usage: $0 [appname]"
+if [ -z "$target" -o -z "$appname" ]; then
+	echo "Usage: $0 [target] [appname]"
 	echo "Example: $0"
-	echo "Example: $0 launcher"
-	echo "Example: $0 wificonf"
-	echo "Example: $0 appstore"
+	echo "Example: $0 fri3d-2024 wifi"
+	echo "Example: $0 fri3d-2024 appstore"
+	echo "Example: $0 waveshare-esp32-s3-touch-lcd-2 launcher"
+	echo "Example: $0 waveshare-esp32-s3-touch-lcd-2 imu"
 	sleep 2
 fi
+
+
 
 mpremote=~/projects/MicroPythonOS/lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py
 
@@ -39,8 +43,11 @@ if [ ! -z "$appname" ]; then
 fi
 
 
-#$mpremote fs cp boot.py :/boot.py
-$mpremote fs cp boot_fri3d-2024.py :/boot.py
+if [ -z "$target" -o "$target" == "waveshare-esp32-s3-touch-lcd-2" ]; then
+	$mpremote fs cp boot.py :/boot.py
+else
+	$mpremote fs cp boot_"$target".py :/boot.py
+fi
 $mpremote fs cp main.py :/main.py
 
 #$mpremote fs cp main.py :/system/button.py
