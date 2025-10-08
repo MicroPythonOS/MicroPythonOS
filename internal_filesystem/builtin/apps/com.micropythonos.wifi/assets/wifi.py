@@ -40,6 +40,7 @@ class WiFi(Activity):
     scan_button_label = None
 
     def onCreate(self):
+        print("wifi.py onCreate")
         main_screen = lv.obj()
         main_screen.set_style_pad_all(15, 0)
         print("create_ui: Creating list widget")
@@ -62,6 +63,7 @@ class WiFi(Activity):
         self.setContentView(main_screen)
 
     def onResume(self, screen):
+        print("wifi.py onResume")
         global access_points
         access_points = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").get_dict("access_points")
         self.keep_running = True
@@ -224,6 +226,27 @@ class WiFi(Activity):
             lv.async_call(lambda l: self.refresh_list(), None)
 
 
+def print_events(event):
+    event_code=event.get_code()
+    #print(f"got event {event_code}")
+    # Ignore:
+    # =======
+    # 19: HIT_TEST
+    # COVER_CHECK
+    # DRAW_MAIN
+    # DRAW_MAIN_BEGIN
+    # DRAW_MAIN_END
+    # DRAW_POST
+    # DRAW_POST_BEGIN
+    # DRAW_POST_END
+    # 39: CHILD_CHANGED
+    # GET_SELF_SIZE
+    if event_code not in [19,23,25,26,27,28,29,30,39,49]:
+        name = mpos.ui.get_event_name(event_code)
+        print(f"lv_event_t: code={event_code}, name={name}")
+        target=event.get_target()
+        print(f"target: {target}")
+
 
 
 class PasswordPage(Activity):
@@ -250,8 +273,9 @@ class PasswordPage(Activity):
         self.password_ta.set_size(200,30)
         self.password_ta.set_one_line(True)
         self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_MID, 5, 0)
-        self.password_ta.add_event_cb(lambda *args: mpos.ui.anim.smooth_show(self.keyboard), lv.EVENT.CLICKED, None) # it might be focused, but keyboard hidden (because ready/cancel clicked)
-        self.password_ta.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.DEFOCUSED, None)
+        self.password_ta.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None) # it might be focused, but keyboard hidden (because ready/cancel clicked)
+        self.password_ta.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.FOCUSED, None)
+        #self.password_ta.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.DEFOCUSED, None) # doesn't work for non-touchscreen (Keypad) control because then focus needs to go to the lv_keyboard widget
         print("PasswordPage: Creating Connect button")
         self.connect_button=lv.button(password_page)
         self.connect_button.set_size(100,40)
@@ -277,14 +301,15 @@ class PasswordPage(Activity):
         self.keyboard.align(lv.ALIGN.BOTTOM_MID,0,0)
         self.keyboard.set_textarea(self.password_ta)
         self.keyboard.set_style_min_height(160, 0)
-        self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.READY, None)
-        self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.CANCEL, None)
+        self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.READY, None)
+        self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.CANCEL, None)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self.keyboard.add_event_cb(print_events, lv.EVENT.ALL, None)
         print("PasswordPage: Loading password page")
         self.setContentView(password_page)
 
     def onStop(self, screen):
-        mpos.ui.anim.smooth_hide(self.keyboard)
+        self.hide_keyboard()
 
     def connect_cb(self, event):
         global access_points
@@ -303,6 +328,20 @@ class PasswordPage(Activity):
     def cancel_cb(self, event):
         print("cancel_cb: Cancel button clicked")
         self.finish()
+
+    def show_keyboard(self):
+        self.connect_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
+        mpos.ui.anim.smooth_show(self.keyboard)
+        focusgroup = lv.group_get_default()
+        focusgroup.focus_next() # move the focus to the keypad
+
+    def hide_keyboard(self):
+        self.connect_button.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
+        focusgroup = lv.group_get_default()
+        focusgroup.focus_prev() # move the focus to the close button, otherwise it goes back to the textarea, which opens the keyboard again
+        mpos.ui.anim.smooth_hide(self.keyboard)
 
     @staticmethod
     def setPassword(ssid, password):
