@@ -1,6 +1,4 @@
 # Hardware initialization for Fri3d Camp 2024 Badge
-current_hardware = "fri3d-2024"
-
 from machine import Pin, SPI
 import st7789 
 import lcd_bus
