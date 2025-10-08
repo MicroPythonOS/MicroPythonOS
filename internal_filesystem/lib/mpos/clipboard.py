@@ -10,9 +10,9 @@ def get():
 
 def paste_text(text): # called when CTRL-V is pressed on the keyboard
     print(f"mpos.ui.clipboard.py paste_text adding {text}")
-    group = lv.group_get_default()
-    if not group:
+    focusgroup = lv.group_get_default()
+    if not focusgroup:
         return
-    focused_obj = group.get_focused()
+    focused_obj = focusgroup.get_focused()
     if focused_obj and isinstance(focused_obj, lv.textarea):
         focused_obj.add_text(text)

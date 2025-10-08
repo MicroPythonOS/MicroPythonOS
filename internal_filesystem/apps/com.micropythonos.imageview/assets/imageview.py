@@ -165,23 +165,23 @@ class ImageView(Activity):
             self.show_next_image()
 
     def unfocus(self):
-        group = lv.group_get_default()
-        if not group:
+        focusgroup = lv.group_get_default()
+        if not focusgroup:
             print("WARNING: imageview.py could not get default focus group")
             return
         print("got focus group")
         # group.focus_obj(self.play_button) would be better but appears missing?!
-        focused = group.get_focused()
+        focused = focusgroup.get_focused()
         print("got focus button")
         #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
         if focused:
             print("checking which button is focused")
             if focused == self.next_button:
                 print("next is focused")
-                group.focus_prev()
+                focusgroup.focus_prev()
             elif focused == self.prev_button:
                 print("prev is focused")
-                group.focus_next()
+                focusgroup.focus_next()
             else:
                 print("focus isn't on next or previous, leaving it...")
 

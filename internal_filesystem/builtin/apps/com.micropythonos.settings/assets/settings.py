@@ -92,7 +92,8 @@ class SettingsActivity(Activity):
             setting_cont.add_event_cb(lambda e, s=setting: self.startSettingActivity(s), lv.EVENT.CLICKED, None)
             setting_cont.add_event_cb(lambda e, container=setting_cont: self.focus_container(container),lv.EVENT.FOCUSED,None)
             setting_cont.add_event_cb(lambda e, container=setting_cont: self.defocus_container(container),lv.EVENT.DEFOCUSED,None)
-            focusgroup.add_obj(setting_cont)
+            if focusgroup:
+                focusgroup.add_obj(setting_cont)
 
     def startSettingActivity(self, setting):
         intent = Intent(activity_class=SettingActivity)

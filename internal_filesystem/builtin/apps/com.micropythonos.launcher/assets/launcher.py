@@ -107,7 +107,8 @@ class Launcher(mpos.apps.Activity):
             app_cont.add_event_cb(lambda e, path=app_dir_fullpath: mpos.apps.start_app(path), lv.EVENT.CLICKED, None)
             app_cont.add_event_cb(lambda e, app_cont=app_cont: self.focus_app_cont(app_cont),lv.EVENT.FOCUSED,None)
             app_cont.add_event_cb(lambda e, app_cont=app_cont: self.defocus_app_cont(app_cont),lv.EVENT.DEFOCUSED,None)
-            focusgroup.add_obj(app_cont)
+            if focusgroup:
+                focusgroup.add_obj(app_cont)
         
         end = time.ticks_ms()
         print(f"Redraw icons took: {end-start}ms")

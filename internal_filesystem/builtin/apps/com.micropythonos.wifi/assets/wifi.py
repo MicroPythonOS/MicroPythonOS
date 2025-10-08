@@ -314,13 +314,15 @@ class PasswordPage(Activity):
         self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
         mpos.ui.anim.smooth_show(self.keyboard)
         focusgroup = lv.group_get_default()
-        focusgroup.focus_next() # move the focus to the keypad
+        if focusgroup:
+            focusgroup.focus_next() # move the focus to the keypad
 
     def hide_keyboard(self):
         self.connect_button.remove_flag(lv.obj.FLAG.HIDDEN)
         self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
         focusgroup = lv.group_get_default()
-        focusgroup.focus_prev() # move the focus to the close button, otherwise it goes back to the textarea, which opens the keyboard again
+        if focusgroup:
+            focusgroup.focus_prev() # move the focus to the close button, otherwise it goes back to the textarea, which opens the keyboard again
         mpos.ui.anim.smooth_hide(self.keyboard)
 
     def print_events(self, event):

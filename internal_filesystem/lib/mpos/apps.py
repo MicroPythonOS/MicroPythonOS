@@ -335,9 +335,9 @@ class ActivityNavigator:
         activity._result_callback = result_callback  # Pass callback to activity
         start_time = utime.ticks_ms()
         # Remove objects from previous screens from the focus group:
-        group = lv.group_get_default()
-        if group: # on esp32 this may not be set
-            group.remove_all_objs() #  might be better to save and restore the group for "back" actions
+        focusgroup = lv.group_get_default()
+        if focusgroup: # on esp32 this may not be set
+            focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
         activity.onCreate()
         end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
         print(f"apps.py _launch_activity: activity.onCreate took {end_time}ms")
