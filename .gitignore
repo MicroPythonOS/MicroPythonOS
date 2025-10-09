@@ -1,6 +1,5 @@
 trash/
 
-*.sh
 conf.json*
 
 # auto created when running on desktop:
