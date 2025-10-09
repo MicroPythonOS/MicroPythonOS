@@ -1,3 +1,4 @@
+from machine import ADC, Pin
 import time
 
 MIN_VOLTAGE = 3.15
@@ -7,14 +8,15 @@ adc = None
 scale_factor = 0
 
 # This gets called by (the device-specific) boot*.py
-def init_adc(pinnr, scale_factor):
-    global adc
+def init_adc(pinnr, sf):
+    global adc, scale_factor
     try:
         from machine import ADC, Pin
-        print("Initializing ADC pin {pinnr} with scale_factor {scale_factor}")
+        print(f"Initializing ADC pin {pinnr} with scale_factor {scale_factor}")
         adc = ADC(Pin(pinnr))
         # Set ADC to 11dB attenuation for 0–3.3V range (common for ESP32)
         adc.atten(ADC.ATTN_11DB)
+        scale_factor = sf
     except Exception as e:
         print("Info: this platform has no ADC for measuring battery voltage")
 
