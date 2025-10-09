@@ -4,6 +4,7 @@
 
 0.0.10
 ======
+- About app: add machine.freq, unique_id, wake_reason and reset_cause
 - Reduce timezones from 400 to 150 to reduce scrolling
 - Experimental Fri3d Camp 2024 Badge support
 
