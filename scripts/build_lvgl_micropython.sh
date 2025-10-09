@@ -1,3 +1,7 @@
+#!/bin/bash
+
+mydir=$(readlink -f "$0")
+mydir=$(dirname "$mydir")
 
 target="$1"
 buildtype="$2"
@@ -20,15 +24,16 @@ if [ "$buildtype" == "prod" ]; then
 	./scripts/freezefs_mount_builtin.sh
 fi
 
-manifest=""
 
+
+manifest=""
 if [ "$target" == "esp32" ]; then
 	if [ "$buildtype" == "prod" ]; then
 		if [ "$subtarget" == "fri3d-2024" ]; then
 			cp internal_filesystem/boot_fri3d-2024.py /tmp/boot.py # dirty hack to have it included as boot.py by the manifest
-			manifest="FROZEN_MANIFEST=/home/user/projects/MicroPythonOS/MicroPythonOS/manifest_fri3d-2024.py"
+			manifest="manifest_fri3d-2024.py"
 		else
-			manifest="FROZEN_MANIFEST=/home/user/projects/MicroPythonOS/MicroPythonOS/manifest.py"
+			manifest="manifest.py"
 		fi
 	else
 		echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
@@ -46,17 +51,21 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_USE_TRACE_FACILITY=y
 	# CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
+	twoup=$(readlink -f "$mydir"/../..) # build process needs absolute paths
+	oneup=$(readlink -f "$mydir"/..) # build process needs absolute paths
 	pushd ~/projects/MicroPythonOS/lvgl_micropython
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE=/home/user/projects/MicroPythonOS/micropython-camera-API/src/micropython.cmake USER_C_MODULE=/home/user/projects/MicroPythonOS/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE=/home/user/projects/MicroPythonOS/MicroPythonOS/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$manifest"
+	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$twoup"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$twoup"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$oneup"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
 elif [ "$target" == "unix" -o "$target" == "macos" ]; then
 	if [ "$buildtype" == "prod" ]; then
-		manifest="FROZEN_MANIFEST=/home/user/projects/MicroPythonOS/MicroPythonOS/manifest_unix.py"
+		manifest="manifest_unix.py"
 	fi
 	# build for desktop
 	#python3 make.py "$target"  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
 	# LV_CFLAGS are passed to USER_C_MODULES
 	# STRIP= makes it so that debug symbols are kept
+	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
 	pushd ~/projects/MicroPythonOS/lvgl_micropython
 	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb -ljpeg" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
 	popd

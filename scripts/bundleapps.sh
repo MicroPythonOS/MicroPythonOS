@@ -1,4 +1,4 @@
-output=/home/user/projects/MicroPythonOS/apps/
+output=../apps/
 outputjson="$output"/app_index.json
 output=$(readlink -f "$output")
 outputjson=$(readlink -f "$outputjson")
