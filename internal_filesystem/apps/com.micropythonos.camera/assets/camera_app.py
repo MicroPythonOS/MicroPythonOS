@@ -103,14 +103,6 @@ class CameraApp(Activity):
         self.setContentView(main_screen)
     
     def onResume(self, screen):
-        try:
-            pass
-            #print(f"current_hardware: {current_hardware}") # problem: this isn't defined
-            #assert(current_hardware == "unix" or current_hardware == "waveshare-esp32-s3-touch-lcd-2")
-        except Exception as e: # use an assert in case current_hardware isn't defined for some boards
-            print("WARNING: the current_hardware doesn't have support for a camera!")
-            print(e)
-            return
         self.cam = init_internal_cam()
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
