@@ -7,11 +7,7 @@ import mpos.ui.anim
 
 class ImageView(Activity):
 
-    #imagedir = "../icons/"
-    #imagedir = "../artwork/"
     imagedir = "data/images"
-    #imagedir = "/home/user/Downloads/"
-    #imagedir = "/home/user/images/"
     images = []
     image_nr = None
     image_timer = None
