@@ -82,6 +82,6 @@ display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing 
 
 # Battery voltage ADC measuring
 import mpos.battery_voltage
-mpos.battery_voltage.init_adc(5)
+mpos.battery_voltage.init_adc(5, 262 / 100000)
 
 print("boot.py finished")

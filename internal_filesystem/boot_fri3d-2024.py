@@ -214,6 +214,6 @@ indev.enable(True)  # NOQA
 
 # Battery voltage ADC measuring
 import mpos.battery_voltage
-mpos.battery_voltage.init_adc(13)
+mpos.battery_voltage.init_adc(13, 2 / 1000)
 
 print("boot.py finished")

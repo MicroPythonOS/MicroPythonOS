@@ -1,6 +1,8 @@
 import lvgl as lv
 
 import mpos.ui
+import mpos.battery_voltage
+
 from mpos.ui.anim import WidgetAnimator
 
 NOTIFICATION_BAR_HEIGHT=24
