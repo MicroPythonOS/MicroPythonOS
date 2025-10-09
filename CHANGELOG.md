@@ -1,7 +1,11 @@
+0.0.11
+======
+- Merge official Fri3d Camp 2024 Badge support
+
 0.0.10
 ======
 - Reduce timezones from 400 to 150 to reduce scrolling
-
+- Experimental Fri3d Camp 2024 Badge support
 
 0.0.9
 =====
