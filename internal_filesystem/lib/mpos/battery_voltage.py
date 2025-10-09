@@ -1,4 +1,3 @@
-from machine import ADC, Pin
 import time
 
 MIN_VOLTAGE = 3.15
@@ -11,8 +10,8 @@ scale_factor = 0
 def init_adc(pinnr, sf):
     global adc, scale_factor
     try:
-        from machine import ADC, Pin
         print(f"Initializing ADC pin {pinnr} with scale_factor {scale_factor}")
+        from machine import ADC, Pin # do this inside the try because it will fail on desktop
         adc = ADC(Pin(pinnr))
         # Set ADC to 11dB attenuation for 0–3.3V range (common for ESP32)
         adc.atten(ADC.ATTN_11DB)
