@@ -38,9 +38,13 @@ echo "$0 appname # starts the app by appname, for example: com.example.helloworl
 export HEAPSIZE=32M # for 1280x720 images in the image viewer
 export HEAPSIZE=128M # for 1280x720 images in the image viewer
 
+binary=../lvgl_micropython/build/lvgl_micropy_unix
+binary=$(readlink -f "$binary")
+chmod +x "$binary"
+
 pushd internal_filesystem/
 	if [ -f "$script" ]; then
-		../../lvgl_micropython/build/lvgl_micropy_unix  -v -i "$script"
+		"$binary"  -v -i "$script"
 	elif [ ! -z "$script" ]; then # it's an app name
 		scriptdir="apps/$script"
 		if [ ! -d "$scriptdir" ]; then
@@ -51,9 +55,9 @@ pushd internal_filesystem/
 			exit 1
 		fi
 		echo "Running app from $scriptdir"
-		../../lvgl_micropython/build/lvgl_micropy_unix -X heapsize=$HEAPSIZE  -v -i -c "$(cat boot_unix.py main.py) ; import mpos.apps; mpos.apps.start_app('$scriptdir')"
+		"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat boot_unix.py main.py) ; import mpos.apps; mpos.apps.start_app('$scriptdir')"
 	else
-		../../lvgl_micropython/build/lvgl_micropy_unix -X heapsize=$HEAPSIZE -v -i -c "$(cat boot_unix.py main.py)"
+		"$binary" -X heapsize=$HEAPSIZE -v -i -c "$(cat boot_unix.py main.py)"
 	fi
 		
 
