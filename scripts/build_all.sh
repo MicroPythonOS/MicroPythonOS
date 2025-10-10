@@ -3,8 +3,8 @@ outdir=../build_outputs
 
 buildfile="$builddir"/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
 
-#./scripts/build_lvgl_micropython.sh esp32 dev fri3d-2024
-#cp "$buildfile" "$outdir"/MicroPythonOS_fri3d-2024_dev
+./scripts/build_lvgl_micropython.sh esp32 dev fri3d-2024
+cp "$buildfile" "$outdir"/MicroPythonOS_fri3d-2024_dev
 
 ./scripts/build_lvgl_micropython.sh esp32 prod fri3d-2024
 cp "$buildfile" "$outdir"/MicroPythonOS_fri3d-2024_prod
