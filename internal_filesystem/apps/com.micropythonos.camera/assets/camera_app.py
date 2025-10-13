@@ -97,7 +97,7 @@ class CameraApp(Activity):
         self.status_label_cont.set_style_border_width(0, 0)
         self.status_label = lv.label(self.status_label_cont)
         self.status_label.set_text("No camera found.")
-        self.status_label.set_long_mode(lv.label.LONG.WRAP)
+        self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(100))
         self.status_label.center()
         self.setContentView(main_screen)

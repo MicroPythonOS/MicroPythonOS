@@ -215,7 +215,7 @@ def setContentView(new_activity, new_screen):
         #print(f"ui.py setContentView: new_activity.onResume took {end_time}ms")
 
 def remove_and_stop_current_activity():
-    current_activity, current_screen = screen_stack.pop()  # Remove current screen
+    current_activity, current_screen = screen_stack.pop()  # Get current activity and its screen
     if current_activity:
         current_activity.onPause(current_screen)
         current_activity.onStop(current_screen)

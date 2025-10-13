@@ -101,7 +101,7 @@ class OSUpdate(Activity):
         self.progress_bar.set_size(200, 20)
         self.progress_bar.align(lv.ALIGN.BOTTOM_MID, 0, -50)
         self.progress_bar.set_range(0, 100)
-        self.progress_bar.set_value(0, lv.ANIM.OFF)
+        self.progress_bar.set_value(0, False)
         try:
             _thread.stack_size(mpos.apps.good_stack_size())
             _thread.start_new_thread(self.update_with_lvgl, (download_url,))
@@ -111,7 +111,7 @@ class OSUpdate(Activity):
     def progress_callback(self, percent):
         print(f"OTA Update: {percent:.1f}%")
         lv.async_call(lambda l: self.progress_label.set_text(f"OTA Update: {percent:.2f}%"), None)
-        lv.async_call(lambda l: self.progress_bar.set_value(int(percent), lv.ANIM.ON), None)
+        lv.async_call(lambda l: self.progress_bar.set_value(int(percent), True), None)
         time.sleep_ms(100)
 
     # Custom OTA update with LVGL progress

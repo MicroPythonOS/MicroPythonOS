@@ -319,16 +319,16 @@ class AppDetail(Activity):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...") # TODO: Put "Cancel" if cancellation is possible
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(33, lv.ANIM.ON)
+        self.progress_bar.set_value(33, True)
         try:
             import shutil
             shutil.rmtree(app_folder)
-            self.progress_bar.set_value(66, lv.ANIM.ON)
+            self.progress_bar.set_value(66, True)
         except Exception as e:
             print(f"Removing app_folder {app_folder} got error: {e}")
-        self.progress_bar.set_value(100, lv.ANIM.OFF)
+        self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(0, lv.ANIM.OFF)
+        self.progress_bar.set_value(0, False)
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
         if self.is_builtin_app(app_fullname):
@@ -340,7 +340,7 @@ class AppDetail(Activity):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...") # TODO: Put "Cancel" if cancellation is possible
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(20, lv.ANIM.ON)
+        self.progress_bar.set_value(20, True)
         try:
             # Step 1: Download the .mpk file
             print(f"Downloading .mpk file from: {zip_url}")
@@ -349,7 +349,7 @@ class AppDetail(Activity):
                 print("Download failed: Status code", response.status_code)
                 response.close()
                 self.set_install_label(app_fullname)
-            self.progress_bar.set_value(40, lv.ANIM.ON)
+            self.progress_bar.set_value(40, True)
             # Save the .mpk file to a temporary location
             try:
                 os.remove(temp_zip_path)
@@ -364,7 +364,7 @@ class AppDetail(Activity):
             # TODO: check free available space first!
             with open(temp_zip_path, "wb") as f:
                 f.write(response.content)
-            self.progress_bar.set_value(60, lv.ANIM.ON)
+            self.progress_bar.set_value(60, True)
             response.close()
             print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
         except Exception as e:
@@ -378,7 +378,7 @@ class AppDetail(Activity):
             print("Unzipping it to:", dest_folder)
             with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
                 zip_ref.extractall(dest_folder)
-            self.progress_bar.set_value(80, lv.ANIM.ON)
+            self.progress_bar.set_value(80, True)
             print("Unzipped successfully")
             # Step 3: Clean up
             os.remove(temp_zip_path)
@@ -387,9 +387,9 @@ class AppDetail(Activity):
             print(f"Unzip and cleanup failed: {e}")
             # Would be good to show error message here if it fails...
         # Success:
-        self.progress_bar.set_value(100, lv.ANIM.OFF)
+        self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(0, lv.ANIM.OFF)
+        self.progress_bar.set_value(0, False)
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
 

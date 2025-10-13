@@ -92,10 +92,10 @@ class IMU(Activity):
             gx = 45
             gy = 50
             gz = 55
-        self.sliderx.set_value(axp, lv.ANIM.OFF)
-        self.slidery.set_value(ayp, lv.ANIM.OFF)
-        self.sliderz.set_value(azp, lv.ANIM.OFF)
-        self.slidergx.set_value(gx, lv.ANIM.OFF)
-        self.slidergy.set_value(gy, lv.ANIM.OFF)
-        self.slidergz.set_value(gz, lv.ANIM.OFF)
+        self.sliderx.set_value(axp, False)
+        self.slidery.set_value(ayp, False)
+        self.sliderz.set_value(azp, False)
+        self.slidergx.set_value(gx, False)
+        self.slidergy.set_value(gy, False)
+        self.slidergz.set_value(gz, False)
 

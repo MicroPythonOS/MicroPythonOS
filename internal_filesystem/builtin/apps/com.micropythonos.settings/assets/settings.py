@@ -108,7 +108,7 @@ class SettingsActivity(Activity):
         print(f"container {container} focused, setting border...")
         container.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
         container.set_style_border_width(1, lv.PART.MAIN)
-        container.scroll_to_view(lv.ANIM.ON) # scroll to bring it into view
+        container.scroll_to_view(True) # scroll to bring it into view
 
     def defocus_container(self, container):
         print(f"container {container} defocused, unsetting border...")

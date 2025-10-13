@@ -100,7 +100,7 @@ class Launcher(mpos.apps.Activity):
             image.set_size(icon_size, icon_size)
             label = lv.label(app_cont)
             label.set_text(app_name)  # Use app_name directly
-            label.set_long_mode(lv.label.LONG.WRAP)
+            label.set_long_mode(lv.label.LONG_MODE.WRAP)
             label.set_width(iconcont_width)
             label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             label.set_style_text_align(lv.TEXT_ALIGN.CENTER, 0)
@@ -127,7 +127,7 @@ class Launcher(mpos.apps.Activity):
         #print(f"app_cont {app_cont} focused, setting border...")
         app_cont.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
         app_cont.set_style_border_width(1, lv.PART.MAIN)
-        app_cont.scroll_to_view(lv.ANIM.ON) # scroll to bring it into view
+        app_cont.scroll_to_view(True) # scroll to bring it into view
 
     def defocus_app_cont(self, app_cont):
         #print(f"app_cont {app_cont} defocused, unsetting border...")

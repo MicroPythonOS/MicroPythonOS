@@ -38,7 +38,7 @@ def open_drawer():
         open_bar()
         drawer_open=True
         WidgetAnimator.show_widget(drawer, anim_type="slide_down", duration=1000, delay=0)
-        drawer.scroll_to(0,0,lv.ANIM.OFF) # make sure it's at the top, not scrolled down
+        drawer.scroll_to(0,0,False) # make sure it's at the top, not scrolled down
 
 def close_drawer(to_launcher=False):
     global drawer_open, drawer
@@ -189,7 +189,7 @@ def create_notification_bar():
     hide_bar_animation.init()
     hide_bar_animation.set_var(notification_bar)
     hide_bar_animation.set_values(0, -NOTIFICATION_BAR_HEIGHT)
-    hide_bar_animation.set_time(2000)
+    hide_bar_animation.set_duration(2000)
     hide_bar_animation.set_custom_exec_cb(lambda not_used, value : notification_bar.set_y(value))
     
     # show bar animation
@@ -198,7 +198,7 @@ def create_notification_bar():
     show_bar_animation.init()
     show_bar_animation.set_var(notification_bar)
     show_bar_animation.set_values(show_bar_animation_start_value, show_bar_animation_end_value)
-    show_bar_animation.set_time(1000)
+    show_bar_animation.set_duration(1000)
     show_bar_animation.set_custom_exec_cb(lambda not_used, value : notification_bar.set_y(value))
     
 
