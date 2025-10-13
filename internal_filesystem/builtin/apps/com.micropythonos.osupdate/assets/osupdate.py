@@ -51,7 +51,13 @@ class OSUpdate(Activity):
 
     def show_update_info(self):
         self.status_label.set_text("Checking for OS updates...")
-        url = "https://updates.micropythonos.com/osupdate.json"
+        hwid = mpos.info.get_hardware_id()
+        if (hwid == "waveshare-esp32-s3-touch-lcd-2"):
+            infofile = "osupdate.json"
+            # Device that was first supported did not have the hardware ID in the URL, so it's special:
+        else:
+            infofile = f"osupdate_{hwid}.json"
+        url = f"https://updates.micropythonos.com/{infofile}"
         print(f"OSUpdate: fetching {url}")
         try:
             print("doing requests.get()")
@@ -71,6 +77,7 @@ class OSUpdate(Activity):
                 print("Changelog:", changelog)
                 self.handle_update_info(version, download_url, changelog)
             else:
+                self.status_label.set_text(f"Error: {response.status_code} while checking\nfile: {infofile}\nat: {url}")
                 print("Failed to download JSON. Status code:", response.status_code)
             # Close response
             response.close()

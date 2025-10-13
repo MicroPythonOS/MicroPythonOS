@@ -11,6 +11,9 @@ import lvgl as lv
 import task_handler
 
 import mpos.ui
+import mpos.info
+
+mpos.info.set_hardware_id("waveshare-esp32-s3-touch-lcd-2")
 
 # Pin configuration
 SPI_BUS = 2

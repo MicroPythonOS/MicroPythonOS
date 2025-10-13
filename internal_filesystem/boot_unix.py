@@ -9,6 +9,9 @@ sys.path.append('lib/')
 
 import mpos.ui
 import mpos.clipboard
+import mpos.info
+
+mpos.info.set_hardware_id("linux-desktop")
 
 # Same as Waveshare ESP32-S3-Touch-LCD-2
 TFT_HOR_RES=320
