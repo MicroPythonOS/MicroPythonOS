@@ -2,6 +2,8 @@
 
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
+twoup=$(readlink -f "$mydir"/../..) # build process needs absolute paths
+oneup=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
 target="$1"
 buildtype="$2"
@@ -53,8 +55,6 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
-	twoup=$(readlink -f "$mydir"/../..) # build process needs absolute paths
-	oneup=$(readlink -f "$mydir"/..) # build process needs absolute paths
 	pushd "$twoup"/lvgl_micropython
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$twoup"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$twoup"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$oneup"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
