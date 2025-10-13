@@ -55,7 +55,7 @@ if [ "$target" == "esp32" ]; then
 	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
 	twoup=$(readlink -f "$mydir"/../..) # build process needs absolute paths
 	oneup=$(readlink -f "$mydir"/..) # build process needs absolute paths
-	pushd ~/projects/MicroPythonOS/lvgl_micropython
+	pushd "$twoup"/lvgl_micropython
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$twoup"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$twoup"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$oneup"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
 elif [ "$target" == "unix" -o "$target" == "macos" ]; then
@@ -67,7 +67,7 @@ elif [ "$target" == "unix" -o "$target" == "macos" ]; then
 	# LV_CFLAGS are passed to USER_C_MODULES
 	# STRIP= makes it so that debug symbols are kept
 	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
-	pushd ~/projects/MicroPythonOS/lvgl_micropython
+	pushd "$twoup"/lvgl_micropython
 	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb -ljpeg" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
 	popd
 else

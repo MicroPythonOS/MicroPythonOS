@@ -15,7 +15,7 @@ fi
 
 
 
-mpremote=~/projects/MicroPythonOS/lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py
+mpremote=$(readlink -f "../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
 
 pushd internal_filesystem/
 
