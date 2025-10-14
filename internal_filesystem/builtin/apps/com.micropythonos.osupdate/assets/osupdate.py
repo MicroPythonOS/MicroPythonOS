@@ -184,13 +184,23 @@ class OSUpdate(Activity):
             if total_size:
                 self.progress_callback(bytes_written / total_size * 100)
         response.close()
-        if bytes_written >= total_size and not simulate: # if the update was completely installed
-            next_partition.set_boot()
-            import machine
-            machine.reset()
-        # In case it didn't reset:
-        lv.async_call(lambda l: self.status_label.set_text("Update finished! Please restart."), None)
-        # self.install_button stays disabled to prevent the user from downloading an update twice
+        try:
+            if bytes_written >= total_size:
+                if not simulate: # if the update was completely installed
+                    next_partition.set_boot()
+                    import machine
+                    machine.reset()
+                    # In case it didn't reset:
+                    lv.async_call(lambda l: self.status_label.set_text("Update finished! Please restart."), None)
+                    # self.install_button stays disabled to prevent the user from installing the same update twice
+                else:
+                    print("This is an OSUpdate simulation, not attempting to restart the device.")
+            else:
+                lv.async_call(lambda l: self.status_label.set_text(f"Wrote {bytes_written} < {total_size} so not enough!"), None)
+                self.install_button.remove_state(lv.STATE.DISABLED) # allow retry
+        except Exception as e:
+            lv.async_call(lambda l: self.status_label.set_text(f"Update error: {e}"), None)
+            self.install_button.remove_state(lv.STATE.DISABLED) # allow retry
 
 # Non-class functions:
 
