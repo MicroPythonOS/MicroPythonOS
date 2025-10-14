@@ -186,12 +186,11 @@ class OSUpdate(Activity):
         response.close()
         try:
             if bytes_written >= total_size:
+                lv.async_call(lambda l: self.status_label.set_text("Update finished! Please restart."), None)
                 if not simulate: # if the update was completely installed
                     next_partition.set_boot()
                     import machine
                     machine.reset()
-                    # In case it didn't reset:
-                    lv.async_call(lambda l: self.status_label.set_text("Update finished! Please restart."), None)
                     # self.install_button stays disabled to prevent the user from installing the same update twice
                 else:
                     print("This is an OSUpdate simulation, not attempting to restart the device.")
