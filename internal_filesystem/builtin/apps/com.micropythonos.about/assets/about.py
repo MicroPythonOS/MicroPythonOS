@@ -22,9 +22,9 @@ class About(Activity):
         label4.set_text(f"sys.platform: {sys.platform}")
         try:
             print("Trying to find out additional board info, not available on every platform...")
-            import machine
             label5 = lv.label(screen)
             label5.set_text("") # otherwise it will show the default "Text" if there's an exception below
+            import machine
             label5.set_text(f"machine.freq: {machine.freq()}")
             label6 = lv.label(screen)
             label6.set_text(f"machine.unique_id(): {machine.unique_id()}")
@@ -34,4 +34,15 @@ class About(Activity):
             label8.set_text(f"machine.reset_cause(): {machine.reset_cause()}")
         except Exception as e:
             print(f"Additional board info got exception: {e}")
+        try:
+            label9 = lv.label(screen)
+            label9.set_text("") # otherwise it will show the default "Text" if there's an exception below
+            from esp32 import Partition
+            current = Partition(Partition.RUNNING)
+            label9.set_text(f"Partition.RUNNING: {current}")
+            next_partition = current.get_next_update()
+            label10 = lv.label(screen)
+            label10.set_text(f"Next update partition: {next_partition}")
+        except Exception as e:
+            print(f"Partition info got exception: {e}")
         self.setContentView(screen)
