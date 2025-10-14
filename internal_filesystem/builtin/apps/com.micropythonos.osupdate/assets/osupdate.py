@@ -11,9 +11,12 @@ import mpos.ui
 class OSUpdate(Activity):
 
     keep_running = True
+    download_update_url = None
 
     # Widgets:
+    status_label = None
     install_button = None
+    force_update = None
     main_screen = None
     progress_label = None
     progress_bar = None
@@ -21,15 +24,23 @@ class OSUpdate(Activity):
     def onCreate(self):
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
+        self.current_version_label = lv.label(self.main_screen)
+        self.current_version_label.align(lv.ALIGN.TOP_LEFT,0,0)
+        self.current_version_label.set_text(f"Installed OS version: {mpos.info.CURRENT_OS_VERSION}")
+        self.force_update = lv.checkbox(self.main_screen)
+        self.force_update.set_text("Force Update")
+        self.force_update.add_event_cb(lambda *args: self.force_update_clicked(), lv.EVENT.CLICKED, None)
+        self.force_update.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, mpos.ui.pct_of_display_height(5))
         self.install_button = lv.button(self.main_screen)
-        self.install_button.align(lv.ALIGN.TOP_RIGHT, 0, mpos.ui.topmenu.NOTIFICATION_BAR_HEIGHT)
+        self.install_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         self.install_button.add_state(lv.STATE.DISABLED) # button will be enabled if there is an update available
         self.install_button.set_size(lv.SIZE_CONTENT, lv.pct(25))
+        self.install_button.add_event_cb(lambda e: self.install_button_click(), lv.EVENT.CLICKED, None)
         install_label = lv.label(self.install_button)
         install_label.set_text("Update OS")
         install_label.center()
         self.status_label = lv.label(self.main_screen)
-        self.status_label.align(lv.ALIGN.TOP_LEFT,0,mpos.ui.topmenu.NOTIFICATION_BAR_HEIGHT)
+        self.status_label.align_to(self.force_update, lv.ALIGN.OUT_BOTTOM_LEFT, 0, mpos.ui.pct_of_display_height(5))
         self.setContentView(self.main_screen)
 
     def onStart(self, screen):
@@ -85,20 +96,25 @@ class OSUpdate(Activity):
             print("Error:", str(e))
     
     def handle_update_info(self, version, download_url, changelog):
-        label = f"Installed OS version: {mpos.info.CURRENT_OS_VERSION}\n"
+        self.download_update_url = download_url
         if compare_versions(version, mpos.info.CURRENT_OS_VERSION):
         #if True: # for testing
-            label += "Available new"
+            label = "New "
             self.install_button.remove_state(lv.STATE.DISABLED)
-            self.install_button.add_event_cb(lambda e, u=download_url: self.install_button_click(u), lv.EVENT.CLICKED, None)
         else:
-            label += "isn't older than latest"
+            label = "Same "
+            if (self.force_update.get_state() & lv.STATE.CHECKED):
+                self.install_button.remove_state(lv.STATE.DISABLED)
         label += f" version: {version}\n\nDetails:\n\n{changelog}"
         self.status_label.set_text(label)
 
 
-    def install_button_click(self, download_url):
-        print(f"install_button_click for url {download_url}")
+    def install_button_click(self):
+        if not self.download_update_url:
+            print("Install button clicked but download_update_url is unknown, returning...")
+            return
+        else:
+            print(f"install_button_click for url {self.download_update_url}")
         self.install_button.add_state(lv.STATE.DISABLED) # button will be enabled if there is an update available
         self.status_label.set_text("Update in progress.\nNavigate away to cancel.")
         self.progress_label = lv.label(self.main_screen)
@@ -111,9 +127,15 @@ class OSUpdate(Activity):
         self.progress_bar.set_value(0, False)
         try:
             _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.update_with_lvgl, (download_url,))
+            _thread.start_new_thread(self.update_with_lvgl, (self.download_update_url,))
         except Exception as e:
             print("Could not start update_with_lvgl thread: ", e)
+
+    def force_update_clicked(self):
+        if self.download_update_url and (self.force_update.get_state() & lv.STATE.CHECKED):
+            self.install_button.remove_state(lv.STATE.DISABLED)
+        else:
+            self.install_button.add_state(lv.STATE.DISABLED)
 
     def progress_callback(self, percent):
         print(f"OTA Update: {percent:.1f}%")
@@ -168,6 +190,7 @@ class OSUpdate(Activity):
             machine.reset()
         # In case it didn't reset:
         lv.async_call(lambda l: self.status_label.set_text("Update finished! Please restart."), None)
+        # self.install_button stays disabled to prevent the user from downloading an update twice
 
 # Non-class functions:
 
