@@ -1,6 +1,6 @@
 0.1.1
 =====
-- OSUpdate: check update depending on current hardware identifier
+- OSUpdate: check update depending on current hardware identifier, add "force update" option
 
 0.1.0
 =====
