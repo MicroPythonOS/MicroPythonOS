@@ -1,10 +1,8 @@
 0.1.1
 =====
-- OSUpdate: check update depending on current hardware identifier, add "force update" option
-
-0.1.0
-=====
 - Update to MicroPython 1.25.1 and LVGL 9.3
+- OSUpdate: check update depending on current hardware identifier, add "force update" option
+- AppStore, Launcher, Settings: fix compatibility with LVGL 9.3
 
 0.0.11
 ======

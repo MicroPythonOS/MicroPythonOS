@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Store for App(lication)s",
 "long_description": "",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/icons/com.micropythonos.appstore_0.0.4_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/mpks/com.micropythonos.appstore_0.0.4.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/icons/com.micropythonos.appstore_0.0.6_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/mpks/com.micropythonos.appstore_0.0.6.mpk",
 "fullname": "com.micropythonos.appstore",
-"version": "0.0.4",
+"version": "0.0.6",
 "category": "appstore",
 "activities": [
     {
