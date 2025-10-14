@@ -99,10 +99,10 @@ class OSUpdate(Activity):
         self.download_update_url = download_url
         if compare_versions(version, mpos.info.CURRENT_OS_VERSION):
         #if True: # for testing
-            label = "New "
+            label = "New"
             self.install_button.remove_state(lv.STATE.DISABLED)
         else:
-            label = "Same "
+            label = "Same latest"
             if (self.force_update.get_state() & lv.STATE.CHECKED):
                 self.install_button.remove_state(lv.STATE.DISABLED)
         label += f" version: {version}\n\nDetails:\n\n{changelog}"
