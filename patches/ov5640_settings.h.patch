@@ -1,0 +1,11 @@
+--- lib/micropython/./ports/esp32/managed_components/espressif__esp32-camera/sensors/private_include/ov5640_settings.h.orig	2025-10-14 22:26:38.752674296 +0200
++++ lib/micropython/./ports/esp32/managed_components/espressif__esp32-camera/sensors/private_include/ov5640_settings.h	2025-10-14 22:26:53.780918299 +0200
+@@ -232,7 +232,7 @@
+ 
+ static const DRAM_ATTR uint16_t sensor_fmt_rgb565[][2] = {
+     {FORMAT_CTRL, 0x01}, // RGB
+-    {FORMAT_CTRL00, 0x61}, // RGB565 (BGR)
++    {FORMAT_CTRL00, 0x6F}, // RGB565 (RGB)
+     {REGLIST_TAIL, 0x00}
+ };
+ 

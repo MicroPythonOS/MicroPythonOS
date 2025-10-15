@@ -3,7 +3,7 @@
 - Update to MicroPython 1.25.0 and LVGL 9.3.0
 - About app: add info about over-the-air partitions
 - OSUpdate app: check update depending on current hardware identifier, add "force update" option, improve user feedback
-- AppStore, Launcher, Settings: adjust for compatibility with LVGL 9.3.0
+- AppStore, Camera, Launcher, Settings: adjust for compatibility with LVGL 9.3.0
 
 0.0.11
 ======
