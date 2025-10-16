@@ -68,6 +68,7 @@ elif [ "$target" == "unix" -o "$target" == "macos" ]; then
 	# STRIP= makes it so that debug symbols are kept
 	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
 	pushd "$twoup"/lvgl_micropython
+	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
 	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb -ljpeg" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
 	popd
 else
