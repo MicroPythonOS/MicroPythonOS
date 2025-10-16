@@ -210,7 +210,7 @@ group.set_default()
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(keypad_read_cb)
-indev.set_group(group)
+indev.set_group(group) # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
 disp = lv.display_get_default()  # NOQA
 indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA

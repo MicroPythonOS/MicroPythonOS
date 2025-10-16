@@ -4,6 +4,7 @@ import mpos.time
 import mpos.wifi
 from mpos.ui.anim import WidgetAnimator
 import mpos.ui.topmenu
+import mpos.util
 
 th = None
 
@@ -172,30 +173,44 @@ def close_top_layer_msgboxes():
         print(f"Top layer still has {child_count} children")
 
 
-screen_stack = [] # Stack of (activity, screen) tuples
+screen_stack = [] # Stack of (activity, screen, focusgroup) tuples
 
 def empty_screen_stack():
     global screen_stack
     screen_stack.clear()
+
+def move_focusgroup_objects(fromgroup, togroup):
+    print(f"Moving {fromgroup.get_obj_count()} focused objects")
+    for objnr in range(fromgroup.get_obj_count()):
+        #print(f"saving object {objnr} from default focusgroup to current_focusgroup")
+        next = fromgroup.get_obj_by_index(0)
+        mpos.util.print_lvgl_widget(next)
+        if next:
+            togroup.add_obj(next)
+    print("Done moving focused objects")
+
+
+# Saves all objects from the default focus group in the activity's focus group
+def save_and_clear_current_focusgroup():
+    global screen_stack
+    if len(screen_stack) > 0:
+        current_activity, current_screen, current_focusgroup = screen_stack[-1]
+        move_focusgroup_objects(lv.group_get_default(), current_focusgroup)
 
 # new_activity might be None for compatibility, can be removed if compatibility is no longer needed
 def setContentView(new_activity, new_screen):
     global screen_stack
 
     # Get current activity and screen
-    current_activity, current_screen = None, None
     if len(screen_stack) > 0:
-        current_activity, current_screen = screen_stack[-1]
-
-    if current_activity and current_screen:
+        current_activity, current_screen, current_focusgroup = screen_stack[-1]
         # Notify current activity that it's being backgrounded:
         current_activity.onPause(current_screen)
         current_activity.onStop(current_screen)
         # don't destroy because the user might go back to it
 
-    # Start the new one:
-    print("Appending screen to screen_stack")
-    screen_stack.append((new_activity, new_screen))
+    print("Appending new activity, new screen and new focusgroup to screen_stack")
+    screen_stack.append((new_activity, new_screen, lv.group_create()))
     close_top_layer_msgboxes() # otherwise they remain
     if new_activity:
         #start_time = utime.ticks_ms()
@@ -215,11 +230,13 @@ def setContentView(new_activity, new_screen):
         #print(f"ui.py setContentView: new_activity.onResume took {end_time}ms")
 
 def remove_and_stop_current_activity():
-    current_activity, current_screen = screen_stack.pop()  # Get current activity and its screen
+    current_activity, current_screen, current_focusgroup = screen_stack.pop()  # Get current activity and its screen
     if current_activity:
         current_activity.onPause(current_screen)
         current_activity.onStop(current_screen)
         current_activity.onDestroy(current_screen)
+        if current_screen:
+            current_screen.clean() # should free up memory
 
 def back_screen():
     print("back_screen() running")
@@ -229,11 +246,14 @@ def back_screen():
         return False  # No previous screen
     #close_top_layer_msgboxes() # would be nicer to "cancel" all input events
     remove_and_stop_current_activity()
-    prev_activity, prev_screen = screen_stack[-1] # load previous screen
+    prev_activity, prev_screen, prev_focusgroup = screen_stack[-1] # load previous screen
     print("loading prev_screen with animation")
     lv.screen_load_anim(prev_screen, lv.SCR_LOAD_ANIM.OVER_RIGHT, 500, 0, True) #  True means delete the old screen, which is fine as we're going back and current_activity.onDestroy() was called
+    # Restore the focused objects
+    move_focusgroup_objects(prev_focusgroup, lv.group_get_default())
     if prev_activity:
         prev_activity.onResume(prev_screen)
+        print(f"5 default focus group has {lv.group_get_default().get_obj_count()} items")
     if len(screen_stack) == 1:
         mpos.ui.topmenu.open_bar()
 
