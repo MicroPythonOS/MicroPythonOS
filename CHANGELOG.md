@@ -1,3 +1,7 @@
+0.1.2
+=====
+- Fix KeyPad focus handling for devices without touch screen like the Fri3d Camp 2024 Badge
+
 0.1.1
 =====
 - Update to MicroPython 1.25.0 and LVGL 9.3.0
