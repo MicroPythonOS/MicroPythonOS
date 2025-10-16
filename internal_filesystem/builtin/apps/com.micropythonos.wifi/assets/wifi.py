@@ -107,7 +107,7 @@ class WiFi(Activity):
                 self.ssids = list(set(n[0].decode() for n in networks))
             else:
                 time.sleep(2)
-                self.ssids = ["Home WiFi", "I believe Wi can Fi", "Winternet is coming", "The Promised LAN"]
+                self.ssids = ["Home WiFi", "Pretty Fly for a WiFi", "Winternet is coming", "The Promised LAN"]
             print(f"scan_networks: Found networks: {self.ssids}")
         except Exception as e:
             print(f"scan_networks: Scan failed: {e}")
