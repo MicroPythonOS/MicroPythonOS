@@ -173,7 +173,7 @@ def close_top_layer_msgboxes():
         print(f"Top layer still has {child_count} children")
 
 
-screen_stack = [] # Stack of (activity, screen, focusgroup) tuples
+screen_stack = [] # Stack of (activity, screen, focusgroup, focused_object) tuples
 
 def empty_screen_stack():
     global screen_stack
@@ -193,9 +193,15 @@ def move_focusgroup_objects(fromgroup, togroup):
 # Saves all objects from the default focus group in the activity's focus group
 def save_and_clear_current_focusgroup():
     global screen_stack
-    if len(screen_stack) > 0:
-        current_activity, current_screen, current_focusgroup = screen_stack[-1]
+    default_focusgroup = lv.group_get_default()
+    if default_focusgroup and len(screen_stack) > 0:
+        current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()
+        current_focused_object = default_focusgroup.get_focused()
+        if current_focused_object:
+            print("current_focused_object: ")
+            mpos.util.print_lvgl_widget(current_focused_object)
         move_focusgroup_objects(lv.group_get_default(), current_focusgroup)
+        screen_stack.append((current_activity, current_screen, current_focusgroup, current_focused_object))
 
 # new_activity might be None for compatibility, can be removed if compatibility is no longer needed
 def setContentView(new_activity, new_screen):
@@ -203,14 +209,14 @@ def setContentView(new_activity, new_screen):
 
     # Get current activity and screen
     if len(screen_stack) > 0:
-        current_activity, current_screen, current_focusgroup = screen_stack[-1]
+        current_activity, current_screen, current_focusgroup, current_focused_object = screen_stack[-1]
         # Notify current activity that it's being backgrounded:
         current_activity.onPause(current_screen)
         current_activity.onStop(current_screen)
         # don't destroy because the user might go back to it
 
     print("Appending new activity, new screen and new focusgroup to screen_stack")
-    screen_stack.append((new_activity, new_screen, lv.group_create()))
+    screen_stack.append((new_activity, new_screen, lv.group_create(), None))
     close_top_layer_msgboxes() # otherwise they remain
     if new_activity:
         #start_time = utime.ticks_ms()
@@ -230,13 +236,25 @@ def setContentView(new_activity, new_screen):
         #print(f"ui.py setContentView: new_activity.onResume took {end_time}ms")
 
 def remove_and_stop_current_activity():
-    current_activity, current_screen, current_focusgroup = screen_stack.pop()  # Get current activity and its screen
+    current_activity, current_screen, current_focusgroup, current_focused_object = screen_stack.pop()  # Get current activity and its screen
     if current_activity:
         current_activity.onPause(current_screen)
         current_activity.onStop(current_screen)
         current_activity.onDestroy(current_screen)
         if current_screen:
             current_screen.clean() # should free up memory
+
+# This function is missing so emulate it using focus_next():
+def emulate_focus_obj(focusgroup, to_focus):
+    for objnr in range(focusgroup.get_obj_count()):
+        obj = focusgroup.get_obj_by_index(objnr)
+        #print ("checking obj for equality...")
+        mpos.util.print_lvgl_widget(obj)
+        if obj is to_focus:
+            #print("found it!")
+            break
+        else:
+            focusgroup.focus_next()
 
 def back_screen():
     print("back_screen() running")
@@ -246,11 +264,15 @@ def back_screen():
         return False  # No previous screen
     #close_top_layer_msgboxes() # would be nicer to "cancel" all input events
     remove_and_stop_current_activity()
-    prev_activity, prev_screen, prev_focusgroup = screen_stack[-1] # load previous screen
+    prev_activity, prev_screen, prev_focusgroup, prev_focused_object = screen_stack[-1] # load previous screen
     print("loading prev_screen with animation")
     lv.screen_load_anim(prev_screen, lv.SCR_LOAD_ANIM.OVER_RIGHT, 500, 0, True) #  True means delete the old screen, which is fine as we're going back and current_activity.onDestroy() was called
     # Restore the focused objects
-    move_focusgroup_objects(prev_focusgroup, lv.group_get_default())
+    default_focusgroup = lv.group_get_default()
+    move_focusgroup_objects(prev_focusgroup, default_focusgroup)
+    print("restoring prev_focused_object: ")
+    mpos.util.print_lvgl_widget(prev_focused_object)
+    emulate_focus_obj(default_focusgroup, prev_focused_object) # LVGL 9.3 should have: default_focusgroup.focus_obj(prev_focused_object)
     if prev_activity:
         prev_activity.onResume(prev_screen)
         print(f"5 default focus group has {lv.group_get_default().get_obj_count()} items")
