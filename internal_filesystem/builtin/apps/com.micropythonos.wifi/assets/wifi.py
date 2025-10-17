@@ -106,8 +106,8 @@ class WiFi(Activity):
                 networks = wlan.scan()
                 self.ssids = list(set(n[0].decode() for n in networks))
             else:
-                time.sleep(2)
-                self.ssids = ["Home WiFi", "Pretty Fly for a WiFi", "Winternet is coming", "The Promised LAN"]
+                time.sleep(1)
+                self.ssids = ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
             print(f"scan_networks: Found networks: {self.ssids}")
         except Exception as e:
             print(f"scan_networks: Scan failed: {e}")
@@ -253,9 +253,7 @@ class PasswordPage(Activity):
         self.password_ta.set_size(200,30)
         self.password_ta.set_one_line(True)
         self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_MID, 5, 0)
-        self.password_ta.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None) # it might be focused, but keyboard hidden (because ready/cancel clicked)
-        self.password_ta.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.FOCUSED, None)
-        #self.password_ta.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.DEFOCUSED, None) # doesn't work for non-touchscreen (Keypad) control because then focus needs to go to the lv_keyboard widget
+        self.password_ta.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
         print("PasswordPage: Creating Connect button")
         self.connect_button=lv.button(password_page)
         self.connect_button.set_size(100,40)
@@ -284,7 +282,7 @@ class PasswordPage(Activity):
         self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.READY, None)
         self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.CANCEL, None)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
-        self.keyboard.add_event_cb(self.print_events, lv.EVENT.ALL, None)
+        self.keyboard.add_event_cb(self.handle_keyboard_events, lv.EVENT.VALUE_CHANGED, None)
         print("PasswordPage: Loading password page")
         self.setContentView(password_page)
 
@@ -315,49 +313,21 @@ class PasswordPage(Activity):
         mpos.ui.anim.smooth_show(self.keyboard)
         focusgroup = lv.group_get_default()
         if focusgroup:
-            focusgroup.focus_next() # move the focus to the keypad
+            focusgroup.focus_next() # move the focus to the keypad to save the user a "next" button press (optional but nice)
 
     def hide_keyboard(self):
         self.connect_button.remove_flag(lv.obj.FLAG.HIDDEN)
         self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.focus_prev() # move the focus to the close button, otherwise it goes back to the textarea, which opens the keyboard again
         mpos.ui.anim.smooth_hide(self.keyboard)
 
-    def print_events(self, event):
-        event_code=event.get_code()
-        #print(f"got event {event_code}")
-        # Ignore:
-        # =======
-        # 19: HIT_TEST
-        # COVER_CHECK
-        # DRAW_MAIN
-        # DRAW_MAIN_BEGIN
-        # DRAW_MAIN_END
-        # DRAW_POST
-        # DRAW_POST_BEGIN
-        # DRAW_POST_END
-        # 39: CHILD_CHANGED
-        # GET_SELF_SIZE
-        if event_code not in [19,23,25,26,27,28,29,30,39,49]:
-            name = mpos.ui.get_event_name(event_code)
-            print(f"lv_event_t: code={event_code}, name={name}")
-            #target=event.get_target()
-            #print(f"target: {target}") # blob
-            if event_code == lv.EVENT.VALUE_CHANGED:
-                button = self.keyboard.get_selected_button()
-                text = self.keyboard.get_button_text(button)
-                print(f"button {button} and text {text}")
-                if text == lv.SYMBOL.NEW_LINE:
-                    print("Newline pressed, would be nice to close the keyboard but that triggers the cancel button...")
-                    #self.hide_keyboard() # makes cancel button click!
-                    #self.keyboard.send_event(lv.EVENT.READY, None)
-                    # workaround: dont change focus to cancel button:
-                    #self.connect_button.remove_flag(lv.obj.FLAG.HIDDEN)
-                    #self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
-                    #mpos.ui.anim.smooth_hide(self.keyboard)
-                    # => doesnt work because then the focus goes back to the keyboard which reopens
+    def handle_keyboard_events(self, event):
+        target_obj=event.get_target_obj() # keyboard
+        button = target_obj.get_selected_button()
+        text = target_obj.get_button_text(button)
+        #print(f"button {button} and text {text}")
+        if text == lv.SYMBOL.NEW_LINE:
+            print("Newline pressed, closing the keyboard...")
+            self.hide_keyboard()
 
     @staticmethod
     def setPassword(ssid, password):
