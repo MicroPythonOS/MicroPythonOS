@@ -18,6 +18,7 @@ class AppStore(Activity):
     apps = []
     app_index_url = "https://apps.micropythonos.com/app_index.json"
     can_check_network = True
+    keep_running = False
 
     # Widgets:
     main_screen = None
@@ -35,8 +36,9 @@ class AppStore(Activity):
         self.setContentView(self.main_screen)
 
     def onResume(self, screen):
+        self.keep_running = True
         if len(self.apps):
-            return
+            return # already downloaded them
         try:
             import network
         except Exception as e:
@@ -47,12 +49,16 @@ class AppStore(Activity):
             _thread.stack_size(mpos.apps.good_stack_size())
             _thread.start_new_thread(self.download_app_index, (self.app_index_url,))
 
+    def onStop(self, screen):
+        self.keep_running = False
+
     def download_app_index(self, json_url):
         try:
             response = requests.get(json_url, timeout=10)
         except Exception as e:
             print("Download failed:", e)
-            lv.async_call(lambda l, error=e: self.please_wait_label.set_text(f"Downloading app index from:\n{json_url}\ngot error: {error}"), None)
+            if self.keep_running:
+                lv.async_call(lambda l, error=e: self.please_wait_label.set_text(f"App index download \n{json_url}\ngot error: {error}"), None)
             return
         if response and response.status_code == 200:
             #print(f"Got response text: {response.text}")
@@ -69,8 +75,9 @@ class AppStore(Activity):
                 # Sort apps by app.name
                 self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
                 time.sleep_ms(200)
-                lv.async_call(lambda l: self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN), None)
-                lv.async_call(lambda l: self.create_apps_list(), None)
+                if self.keep_running:
+                    lv.async_call(lambda l: self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN), None)
+                    lv.async_call(lambda l: self.create_apps_list(), None)
             except Exception as e:
                 print(f"ERROR: could not parse reponse.text JSON: {e}")
             finally:
@@ -133,6 +140,8 @@ class AppStore(Activity):
             print(f"Downloading icon for {app.name}")
             image_dsc = self.download_icon(app.icon_url)
             app.image_dsc = image_dsc # save it for the app detail page
+            if not self.keep_running:
+                break
             lv.async_call(lambda l: app.image.set_src(image_dsc), None)
             time.sleep_ms(200) # not waiting here will result in some async_calls() not being executed
         print("Finished downloading icons...")

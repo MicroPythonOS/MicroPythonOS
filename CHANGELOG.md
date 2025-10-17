@@ -1,6 +1,7 @@
 0.1.2
 =====
 - Fix KeyPad focus handling for devices without touch screen like the Fri3d Camp 2024 Badge
+- AppStore app: don't update UI after the user has closed the app
 
 0.1.1
 =====
