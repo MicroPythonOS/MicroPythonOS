@@ -339,7 +339,7 @@ class MposSDLKeyboard(keypad_framework.KeypadDriver):
                 1073741903: lv.KEY.RIGHT,   # SDL Right Arrow
                 1073741904: lv.KEY.LEFT,    # SDL Left Arrow
                 1073741905: lv.KEY.DOWN,    # SDL Down Arrow
-                1073741906: lv.KEY.Up,      # SDL Up Arrow
+                1073741906: lv.KEY.UP,      # SDL Up Arrow
                 1073741882: KEY_F1,         # SDL F1
                 1073741883: KEY_F2,         # SDL F2
                 1073741884: KEY_F3,         # SDL F3
