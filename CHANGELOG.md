@@ -2,6 +2,7 @@
 =====
 - Fix KeyPad focus handling for devices without touch screen like the Fri3d Camp 2024 Badge
 - AppStore app: don't update UI after the user has closed the app
+- Wifi app: cleanup and improve keyboard and focus handling
 
 0.1.1
 =====

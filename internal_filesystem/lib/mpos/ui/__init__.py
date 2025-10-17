@@ -275,7 +275,7 @@ def back_screen():
     emulate_focus_obj(default_focusgroup, prev_focused_object) # LVGL 9.3 should have: default_focusgroup.focus_obj(prev_focused_object)
     if prev_activity:
         prev_activity.onResume(prev_screen)
-        print(f"5 default focus group has {lv.group_get_default().get_obj_count()} items")
+        print(f"after onResume, default focus group has {lv.group_get_default().get_obj_count()} items")
     if len(screen_stack) == 1:
         mpos.ui.topmenu.open_bar()
 
