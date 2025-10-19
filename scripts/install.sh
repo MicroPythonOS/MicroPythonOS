@@ -3,14 +3,13 @@ pkill -f "python.*mpremote"
 target="$1"
 appname="$2"
 
-if [ -z "$target" -o -z "$appname" ]; then
-	echo "Usage: $0 [target] [appname]"
-	echo "Example: $0"
-	echo "Example: $0 fri3d-2024 wifi"
+if [ -z "$target" ]; then
+	echo "Usage: $0 <target> [appname]"
+	echo "Example: $0 fri3d-2024"
+	echo "Example: $0 waveshare-esp32-s3-touch-lcd-2"
 	echo "Example: $0 fri3d-2024 appstore"
-	echo "Example: $0 waveshare-esp32-s3-touch-lcd-2 launcher"
 	echo "Example: $0 waveshare-esp32-s3-touch-lcd-2 imu"
-	sleep 2
+	exit 1
 fi
 
 
