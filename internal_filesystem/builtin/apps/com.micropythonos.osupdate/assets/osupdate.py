@@ -198,7 +198,8 @@ class OSUpdate(Activity):
                 lv.async_call(lambda l: self.status_label.set_text(f"Wrote {bytes_written} < {total_size} so not enough!"), None)
                 self.install_button.remove_state(lv.STATE.DISABLED) # allow retry
         except Exception as e:
-            lv.async_call(lambda l: self.status_label.set_text(f"Update error: {e}"), None)
+            if self.keep_running:
+                lv.async_call(lambda l: self.status_label.set_text(f"Update error: {e}"), None)
             self.install_button.remove_state(lv.STATE.DISABLED) # allow retry
 
 # Non-class functions:
