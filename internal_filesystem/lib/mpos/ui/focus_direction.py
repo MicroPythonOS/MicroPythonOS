@@ -60,7 +60,8 @@ def find_closest_obj_in_direction(direction_degrees, angle_tolerance=45):
         
         # Compute angle to the object
         angle_deg = compute_angle_to_object(current_focused, obj)
-        print(f"angle_deg is {angle_deg}")
+        print(f"angle_deg is {angle_deg} for")
+        mpos.util.print_lvgl_widget(obj)
         
         # Check if object is in the desired direction (within ±angle_tolerance)
         angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
