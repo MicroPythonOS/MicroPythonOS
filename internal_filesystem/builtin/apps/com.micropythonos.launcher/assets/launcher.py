@@ -59,6 +59,7 @@ class Launcher(mpos.apps.Activity):
                                     if main_launcher:
                                         app_list.append((app.name, full_path))
             except OSError:
+                print(f"launcher.py got OSError: {e}")
                 pass
 
         import time
