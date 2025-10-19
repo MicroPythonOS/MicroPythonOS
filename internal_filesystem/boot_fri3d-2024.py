@@ -5,6 +5,7 @@ import lcd_bus
 import machine
 import cst816s
 import i2c
+import math
 
 import lvgl as lv
 import task_handler
@@ -117,6 +118,34 @@ def read_joystick():
             return mapping['key']
     return None  # No key triggered
 
+# Rotate: UP = 0°, RIGHT = 90°, DOWN = 180°, LEFT = 270°
+def read_joystick_angle(threshold=0.1):
+    # Read ADC values
+    val_up_down = adc_up_down.read()
+    val_left_right = adc_left_right.read()
+
+    if time.time() < 60:
+        print(f"val_up_down: {val_up_down}")
+        print(f"val_left_right: {val_left_right}")
+
+    # Normalize to [-1, 1]
+    x = (val_left_right - 2048) / 2048  # Positive x = RIGHT
+    y = (val_up_down - 2048) / 2048    # Positive y = UP
+    if time.time() < 60:
+        print(f"x,y = {x},{y}")
+
+    # Check if joystick is near center
+    magnitude = math.sqrt(x*x + y*y)
+    if time.time() < 60:
+        print(f"magnitude: {magnitude}")
+    if magnitude < threshold:
+        return None  # Neutral position
+
+    # Calculate angle in degrees with UP = 0°, clockwise
+    angle_rad = math.atan2(-x, y)
+    angle_deg = math.degrees(angle_rad)
+    angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
+    return angle_deg
 
 # Key repeat configuration
 # This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
@@ -155,15 +184,18 @@ def keypad_read_cb(indev, data):
         current_key = lv.KEY.END
     else:
         # Check joystick
-        joystick = read_joystick()
-        if joystick == "LEFT":
-            current_key = lv.KEY.LEFT
-        elif joystick == "RIGHT":
-            current_key = lv.KEY.RIGHT
-        elif joystick == "UP":
-            current_key = lv.KEY.UP
-        elif joystick == "DOWN":
-            current_key = lv.KEY.DOWN
+        joystick = read_joystick_angle(0.25)
+        if joystick:
+            if time.time() < 60:
+                print(f"joystick angle: {joystick}")
+            if joystick == "LEFT":
+                current_key = lv.KEY.LEFT
+            elif joystick == "RIGHT":
+                current_key = lv.KEY.RIGHT
+            elif joystick == "UP":
+                current_key = lv.KEY.UP
+            elif joystick == "DOWN":
+                current_key = lv.KEY.DOWN
 
     # Key repeat logic
     if current_key:
