@@ -1,3 +1,8 @@
+0.2.1
+=====
+- Settings app: fix stray /cat in Europe/Brussels timezone
+- Launcher app: fix handling of empty filesystem without apps
+
 0.2.0
 =====
 - Fix KeyPad focus handling for devices without touch screen like the Fri3d Camp 2024 Badge
