@@ -60,12 +60,12 @@ class Launcher(mpos.apps.Activity):
                                             main_launcher = mpos.apps.find_main_launcher_activity(app)
                                             if main_launcher:
                                                 app_list.append((app.name, full_path))
-                            except OSError:
-                                print(f"launcher.py stat of {full_path} got OSError: {e}")
-                    except OSError:
-                        print(f"launcher.py listdir of {dir_path} got OSError: {e}")
-            except OSError:
-                print(f"launcher.py stat of {dir_path} got OSError: {e}")
+                            except Exception as e:
+                                print(f"launcher.py stat of {full_path} got exception: {e}")
+                    except Exception as e:
+                        print(f"launcher.py listdir of {dir_path} got exception: {e}")
+            except Exception as e:
+                print(f"launcher.py stat of {dir_path} got exception: {e}")
 
         import time
         start = time.ticks_ms()
