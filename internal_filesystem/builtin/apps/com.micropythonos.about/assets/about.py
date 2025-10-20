@@ -51,6 +51,7 @@ class About(Activity):
         except Exception as e:
             print(f"Additional board info got exception: {e}")
         try:
+            print("Trying to find out freezefs info, this only works on production builds...") # dev builds already have the /builtin folder
             import freezefs_mount_builtin
             label11 = lv.label(screen)
             label11.set_text(f"freezefs_mount_builtin.date_frozen: {freezefs_mount_builtin.date_frozen}")
