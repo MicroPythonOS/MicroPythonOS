@@ -45,4 +45,9 @@ class About(Activity):
             label10.set_text(f"machine.reset_cause(): {machine.reset_cause()}")
         except Exception as e:
             print(f"Additional board info got exception: {e}")
+        # Make the screen focusable so it can be scrolled with the arrow keys
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(screen)
+
         self.setContentView(screen)
