@@ -194,7 +194,7 @@ def move_focus_direction(angle):
     if isinstance(current_focused, lv.dropdown) and current_focused.is_open():
         print("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")
         return
-    o = find_closest_obj_in_direction(focus_group, current_focused, angle, True)
+    o = find_closest_obj_in_direction(focus_group, current_focused, angle, False)
     if o:
         print("move_focus_direction: moving focus to:")
         mpos.util.print_lvgl_widget(o)

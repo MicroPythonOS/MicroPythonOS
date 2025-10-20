@@ -188,30 +188,12 @@ def keypad_read_cb(indev, data):
         current_key = lv.KEY.END
     else:
         # Check joystick
-        angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 seems good
-        if angle and time.time() < 60:
-            print(f"got joystick angle: {angle}")
-            #gc.collect()
-            print("Memory after joystick:", end=" ")
-            micropython.mem_info()
+        angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 should be good
+        if angle:
             try:
                 mpos.ui.focus_direction.move_focus_direction(angle)
             except Exception as e:
-                print(f"Error in move_focus_direction: {e}")
-            print(f"after joystick angle: {angle}")
-            #gc.collect()
-            print("Memory after joystick:", end=" ")
-            micropython.mem_info()
-        else: # old behavior
-            joystick = read_joystick()
-            if joystick == "LEFT":
-                current_key = lv.KEY.LEFT
-            elif joystick == "RIGHT":
-                current_key = lv.KEY.RIGHT
-            elif joystick == "UP":
-                current_key = lv.KEY.UP
-            elif joystick == "DOWN":
-                current_key = lv.KEY.DOWN
+                print(f"Exception from move_focus_direction: {e}")
 
     # Key repeat logic
     if current_key:
@@ -223,7 +205,7 @@ def keypad_read_cb(indev, data):
             last_state = lv.INDEV_STATE.PRESSED
             key_press_start = current_time
             last_repeat_time = current_time
-        else:
+        else: # same key
             # Key held: Check for repeat
             elapsed = time.ticks_diff(current_time, key_press_start)
             since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
