@@ -1,4 +1,4 @@
-0.1.2
+0.2.0
 =====
 - Fix KeyPad focus handling for devices without touch screen like the Fri3d Camp 2024 Badge
 - Use direction arrows for more intuitive navigation instead of B/A or pageup/pagedown for previous/next
