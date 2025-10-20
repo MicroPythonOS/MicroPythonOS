@@ -68,13 +68,13 @@ def catch_escape_key(indev, indev_data):
     if pressed == 1 and code == 27:
         mpos.ui.back_screen()
     elif pressed == 1 and code == lv.KEY.RIGHT:
-        mpos.ui.focus_direction.move_focus_direction(270)
-    elif pressed == 1 and code == lv.KEY.LEFT:
         mpos.ui.focus_direction.move_focus_direction(90)
+    elif pressed == 1 and code == lv.KEY.LEFT:
+        mpos.ui.focus_direction.move_focus_direction(270)
     elif pressed == 1 and code == lv.KEY.UP:
-        mpos.ui.focus_direction.move_focus_direction(180)
-    elif pressed == 1 and code == lv.KEY.DOWN:
         mpos.ui.focus_direction.move_focus_direction(0)
+    elif pressed == 1 and code == lv.KEY.DOWN:
+        mpos.ui.focus_direction.move_focus_direction(180)
 
     sdlkeyboard._read(indev, indev_data)
 

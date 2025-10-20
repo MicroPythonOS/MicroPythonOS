@@ -15,10 +15,13 @@ def urldecode(s):
 def print_lvgl_widget(obj, depth=0):
     if obj:
         label = ""
+        hidden = ""
+        if obj.has_flag(lv.obj.FLAG.HIDDEN):
+            hidden = "hidden "
         if isinstance(obj,lv.label):
             label = f" has label '{obj.get_text()}'"
         padding = "  " * depth
-        print(f"{padding}{obj} with size {obj.get_width()}x{obj.get_height()}{label}")
+        print(f"{padding}{hidden}{obj} with size {obj.get_width()}x{obj.get_height()}{label}")
         for childnr in range(obj.get_child_count()):
             print_lvgl_widget(obj.get_child(childnr), depth+1)
     else:

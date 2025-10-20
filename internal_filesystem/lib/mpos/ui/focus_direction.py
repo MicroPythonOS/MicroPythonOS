@@ -28,7 +28,7 @@ def compute_angle_to_object(from_obj, to_obj):
     dy = to_y - from_y
     
     # Calculate angle (0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT)
-    angle_rad = math.atan2(-dx, dy)  # -dx, dy aligns UP with 0°, clockwise
+    angle_rad = math.atan2(dx, -dy)  # Fixed for correct convention
     angle_deg = math.degrees(angle_rad)
     return (angle_deg + 360) % 360  # Normalize to [0, 360)
 
@@ -41,19 +41,67 @@ def is_object_in_focus_group(focus_group, obj):
             return True
     return False
 
-def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees, angle_tolerance=45):
+def get_closest_edge_point_and_distance(from_x, from_y, obj, direction_degrees, debug=False):
+    """
+    Calculate the distance to the closest edge point on obj, and check if its angle is within the direction cone.
+    Returns (distance, closest_x, closest_y, angle_deg) or None if not in direction or inside.
+    """
+    x = obj.get_x()
+    y = obj.get_y()
+    width = obj.get_width()
+    height = obj.get_height()
+    right = x + width
+    bottom = y + height
+    
+    # Clamp to the rect bounds to find closest point
+    closest_x = max(x, min(from_x, right))
+    closest_y = max(y, min(from_y, bottom))
+    
+    # Compute vector to closest point
+    dx = closest_x - from_x
+    dy = closest_y - from_y
+    
+    # If closest point is the from point, the from is inside the obj, skip
+    if dx == 0 and dy == 0:
+        if debug:
+            print(f"  Skipping {obj} because current center is inside the object.")
+        return None
+    
+    # Compute distance
+    distance = math.sqrt(dx**2 + dy**2)
+    
+    # Compute angle to the closest point (using same convention)
+    angle_rad = math.atan2(dx, -dy)  # Fixed
+    angle_deg = math.degrees(angle_rad)
+    angle_deg = (angle_deg + 360) % 360
+    
+    # Check if in direction cone (±45°)
+    angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
+    if angle_diff > 45:
+        if debug:
+            print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, diff {angle_diff:.1f}° > 45°, skipped")
+        return None
+    
+    if debug:
+        print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, distance {distance:.1f}, diff {angle_diff:.1f}°")
+    
+    return distance, closest_x, closest_y, angle_deg
+
+def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees, debug=False):
     """
     Find the closest object in the specified direction from the current focused object.
     Only considers objects that are in the focus_group (including children of any object).
+    Uses closest edge point for distance to handle object sizes intuitively.
     Direction is in degrees: 0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT (clockwise).
-    Returns the closest object within ±angle_tolerance of direction_degrees, or None.
+    Returns the closest object or None.
     """
     if not current_focused:
         print("No current focused object.")
         return None
     
-    print(f"Current focused object: {current_focused}")
-    print(f"Default focus group has {focus_group.get_obj_count()} items")
+    if debug:
+        print(f"Current focused object: {current_focused}")
+        print(f"Default focus group has {focus_group.get_obj_count()} items")
     
     closest_obj = None
     min_distance = float('inf')
@@ -68,19 +116,14 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         
         # Check if the object is in the focus group and evaluate it
         if is_object_in_focus_group(focus_group, obj):
-            # Compute angle to the object
-            angle_deg = compute_angle_to_object(current_focused, obj)
-            
-            # Check if object is in the desired direction (within ±angle_tolerance)
-            angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
-            if angle_diff <= angle_tolerance:
-                # Calculate Euclidean distance
-                obj_x, obj_y = get_object_center(obj)
-                distance = math.sqrt((obj_x - current_x)**2 + (obj_y - current_y)**2)
-                # Update closest object if this one is closer
+            result = get_closest_edge_point_and_distance(current_x, current_y, obj, direction_degrees, debug)
+            if result:
+                distance, closest_x, closest_y, angle_deg = result
                 if distance < min_distance:
                     min_distance = distance
                     closest_obj = obj
+                    if debug:
+                        print(f"  Updated closest: {obj}, distance {distance:.1f}, angle {angle_deg:.1f}°")
         
         # Process children regardless of parent's focus group membership
         for childnr in range(obj.get_child_count()):
@@ -125,7 +168,7 @@ def move_focus_direction(angle):
     if isinstance(current_focused, lv.keyboard):
         print("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
         return
-    o = find_closest_obj_in_direction(focus_group, current_focused, angle)
+    o = find_closest_obj_in_direction(focus_group, current_focused, angle, True)
     if o:
         print("move_focus_direction: moving focus to:")
         mpos.util.print_lvgl_widget(o)
