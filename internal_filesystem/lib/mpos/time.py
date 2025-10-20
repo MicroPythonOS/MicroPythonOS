@@ -40,7 +40,12 @@ def localtime():
         refresh_timezone_preference()
     ptz = timezone_to_posix_time_zone(timezone_preference)
     t = time.time()
-    return localPTZtime.tztime(t, ptz)
+    try:
+        localtime = localPTZtime.tztime(t, ptz)
+    except Exception as e:
+        #print(f"localPTZtime setting got exception {e}, defaulting to non-localized time...") # this gets called too often to print
+        return time.localtime()
+    return localtime
 
 def timezone_to_posix_time_zone(timezone):
     """

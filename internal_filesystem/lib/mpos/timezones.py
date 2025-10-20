@@ -137,7 +137,7 @@ TIMEZONE_MAP = {
     "Europe/Athens": "EET-2EEST,M3.5.0/3,M10.5.0/4",  # Greece’s capital
     "Europe/Belgrade": "CET-1CEST,M3.5.0,M10.5.0/3",  # Serbia’s capital
     "Europe/Berlin": "CET-1CEST,M3.5.0,M10.5.0/3",  # Germany’s capital
-    "Europe/Brussels": "CET-/cat,1CEST,M3.5.0,M10.5.0/3",  # Belgium’s capital
+    "Europe/Brussels": "CET-1CEST,M3.5.0,M10.5.0/3",  # Belgium’s capital
     "Europe/Bucharest": "EET-2EEST,M3.5.0/3,M10.5.0/4",  # Romania’s capital
     "Europe/Budapest": "CET-1CEST,M3.5.0,M10.5.0/3",  # Hungary’s capital
     "Europe/Copenhagen": "CET-1CEST,M3.5.0,M10.5.0/3",  # Denmark’s capital
