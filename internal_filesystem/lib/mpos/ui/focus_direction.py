@@ -2,6 +2,8 @@ import math
 import lvgl as lv
 import mpos.util
 
+import math
+
 def get_object_center(obj):
     """Calculate the center (x, y) of an object based on its position and size."""
     width = obj.get_width()
@@ -30,9 +32,19 @@ def compute_angle_to_object(from_obj, to_obj):
     angle_deg = math.degrees(angle_rad)
     return (angle_deg + 360) % 360  # Normalize to [0, 360)
 
+def is_object_in_focus_group(focus_group, obj):
+    """Check if an object is in the focus group."""
+    if obj is None:
+        return False
+    for objnr in range(focus_group.get_obj_count()):
+        if focus_group.get_obj_by_index(objnr) is obj:
+            return True
+    return False
+
 def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees, angle_tolerance=45):
     """
-    Find the closest object (including children) in the specified direction from the current focused object.
+    Find the closest object in the specified direction from the current focused object.
+    Only considers objects that are in the focus_group (including children of any object).
     Direction is in degrees: 0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT (clockwise).
     Returns the closest object within ±angle_tolerance of direction_degrees, or None.
     """
@@ -54,22 +66,23 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         if obj is None or obj is current_focused:
             return
         
-        # Compute angle to the object
-        angle_deg = compute_angle_to_object(current_focused, obj)
-        
-        # Check if object is in the desired direction (within ±angle_tolerance)
-        angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
-        if angle_diff <= angle_tolerance:
-            # Calculate Euclidean distance
-            obj_x, obj_y = get_object_center(obj)
-            distance = math.sqrt((obj_x - current_x)**2 + (obj_y - current_y)**2)
+        # Check if the object is in the focus group and evaluate it
+        if is_object_in_focus_group(focus_group, obj):
+            # Compute angle to the object
+            angle_deg = compute_angle_to_object(current_focused, obj)
             
-            # Update closest object if this one is closer
-            if distance < min_distance:
-                min_distance = distance
-                closest_obj = obj
+            # Check if object is in the desired direction (within ±angle_tolerance)
+            angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
+            if angle_diff <= angle_tolerance:
+                # Calculate Euclidean distance
+                obj_x, obj_y = get_object_center(obj)
+                distance = math.sqrt((obj_x - current_x)**2 + (obj_y - current_y)**2)
+                # Update closest object if this one is closer
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_obj = obj
         
-        # Process children
+        # Process children regardless of parent's focus group membership
         for childnr in range(obj.get_child_count()):
             child = obj.get_child(childnr)
             process_object(child, depth + 1)
@@ -86,7 +99,6 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         print(f"No object found in direction {direction_degrees}°")
     
     return closest_obj
-
 
 # This function is missing so emulate it using focus_next():
 def emulate_focus_obj(focusgroup, target):
