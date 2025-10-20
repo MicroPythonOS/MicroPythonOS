@@ -13,8 +13,6 @@ if [ "$overwrite" != "--overwrite" ] && ls "$outdir"/*"$version"* 2>/dev/null; t
 	exit 1
 fi
 
-exit 0
-
 ./scripts/build_lvgl_micropython.sh esp32 prod fri3d-2024
 cp "$buildfile" "$outdir"/MicroPythonOS_fri3d-2024_prod_"$version".bin
 cp "$updatefile" "$updatesdir"/MicroPythonOS_fri3d-2024_prod_"$version".ota
