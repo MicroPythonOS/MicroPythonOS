@@ -128,20 +128,20 @@ def read_joystick_angle(threshold=0.1):
     val_up_down = adc_up_down.read()
     val_left_right = adc_left_right.read()
 
-    if time.time() < 60:
-        print(f"val_up_down: {val_up_down}")
-        print(f"val_left_right: {val_left_right}")
+    #if time.time() < 60:
+    #    print(f"val_up_down: {val_up_down}")
+    #    print(f"val_left_right: {val_left_right}")
 
     # Normalize to [-1, 1]
     x = (val_left_right - 2048) / 2048  # Positive x = RIGHT
     y = (val_up_down - 2048) / 2048    # Positive y = UP
-    if time.time() < 60:
-        print(f"x,y = {x},{y}")
+    #if time.time() < 60:
+    #    print(f"x,y = {x},{y}")
 
     # Check if joystick is near center
     magnitude = math.sqrt(x*x + y*y)
-    if time.time() < 60:
-        print(f"magnitude: {magnitude}")
+    #if time.time() < 60:
+    #    print(f"magnitude: {magnitude}")
     if magnitude < threshold:
         return None  # Neutral position
 
