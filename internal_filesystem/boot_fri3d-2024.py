@@ -177,11 +177,11 @@ def keypad_read_cb(indev, data):
     if btn_x.value() == 0:
         current_key = lv.KEY.ESC
     elif btn_y.value() == 0:
-        current_key = lv.KEY.PREV
+        current_key = ord("Y")
     elif btn_a.value() == 0:
-        current_key = lv.KEY.NEXT
-    elif btn_b.value() == 0:
         current_key = lv.KEY.ENTER
+    elif btn_b.value() == 0:
+        current_key = ord("B")
     elif btn_menu.value() == 0:
         current_key = lv.KEY.HOME
     elif btn_start.value() == 0:
