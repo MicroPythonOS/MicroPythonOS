@@ -2,13 +2,17 @@ import math
 import lvgl as lv
 import mpos.util
 
+import math
+import mpos.util
 
 def get_object_center(obj):
-    """Calculate the center (x, y) of an object based on its position and size."""
-    width = obj.get_width()
-    height = obj.get_height()
-    x = obj.get_x()
-    y = obj.get_y()
+    """Calculate the center (x, y) of an object based on its absolute screen coordinates."""
+    obj_area = lv.area_t()
+    obj.get_coords(obj_area)
+    width = obj_area.x2 - obj_area.x1
+    height = obj_area.y2 - obj_area.y1
+    x = obj_area.x1
+    y = obj_area.y1
     center_x = x + width / 2
     center_y = y + height / 2
     return center_x, center_y
@@ -27,7 +31,7 @@ def compute_angle_to_object(from_obj, to_obj):
     dy = to_y - from_y
     
     # Calculate angle (0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT)
-    angle_rad = math.atan2(dx, -dy)  # Fixed for correct convention
+    angle_rad = math.atan2(dx, -dy)
     angle_deg = math.degrees(angle_rad)
     return (angle_deg + 360) % 360  # Normalize to [0, 360)
 
@@ -45,12 +49,14 @@ def get_closest_edge_point_and_distance(from_x, from_y, obj, direction_degrees, 
     Calculate the distance to the closest edge point on obj, and check if its angle is within the direction cone.
     Returns (distance, closest_x, closest_y, angle_deg) or None if not in direction or inside.
     """
-    x = obj.get_x()
-    y = obj.get_y()
-    width = obj.get_width()
-    height = obj.get_height()
-    right = x + width
-    bottom = y + height
+    obj_area = lv.area_t()
+    obj.get_coords(obj_area)
+    x = obj_area.x1
+    y = obj_area.y1
+    right = obj_area.x2
+    bottom = obj_area.y2
+    width = right - x
+    height = bottom - y
     
     # Clamp to the rect bounds to find closest point
     closest_x = max(x, min(from_x, right))
@@ -70,7 +76,7 @@ def get_closest_edge_point_and_distance(from_x, from_y, obj, direction_degrees, 
     distance = math.sqrt(dx**2 + dy**2)
     
     # Compute angle to the closest point (using same convention)
-    angle_rad = math.atan2(dx, -dy)  # Fixed
+    angle_rad = math.atan2(dx, -dy)
     angle_deg = math.degrees(angle_rad)
     angle_deg = (angle_deg + 360) % 360
     
@@ -78,7 +84,7 @@ def get_closest_edge_point_and_distance(from_x, from_y, obj, direction_degrees, 
     angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
     if angle_diff > 45:
         if debug:
-            print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, diff {angle_diff:.1f}° > 45, skipped")
+            print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, diff {angle_diff:.1f}° > 45°, skipped")
         return None
     
     if debug:
@@ -144,6 +150,18 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         print(f"No object found in direction {direction_degrees}°")
     
     return closest_obj
+
+
+
+
+
+
+
+
+
+
+
+
 
 # This function is missing so emulate it using focus_next():
 def emulate_focus_obj(focusgroup, target):
