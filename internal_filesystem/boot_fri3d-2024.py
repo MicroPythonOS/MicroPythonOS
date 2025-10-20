@@ -190,10 +190,16 @@ def keypad_read_cb(indev, data):
         # Check joystick
         angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 should be good
         if angle:
-            try:
-                mpos.ui.focus_direction.move_focus_direction(angle)
-            except Exception as e:
-                print(f"Exception from move_focus_direction: {e}")
+            if angle > 45 and angle < 135:
+                current_key = lv.KEY.RIGHT
+            elif angle > 135 and angle < 225:
+                current_key = lv.KEY.DOWN
+            elif angle > 225 and angle < 315:
+                current_key = lv.KEY.LEFT
+            elif angle < 45 or angle > 315:
+                current_key = lv.KEY.UP
+            else:
+                print(f"WARNING: unhandled joystick angle {angle}") # maybe we could also handle diagonals?
 
     # Key repeat logic
     if current_key:
@@ -229,8 +235,17 @@ def keypad_read_cb(indev, data):
         last_repeat_time = 0
 
     # Handle ESC for back navigation (only on initial PRESSED)
-    if current_key == lv.KEY.ESC and last_state == lv.INDEV_STATE.PRESSED and since_last_repeat == 0:
-        mpos.ui.back_screen()
+    if last_state == lv.INDEV_STATE.PRESSED:
+        if current_key == lv.KEY.ESC and since_last_repeat == 0:
+            mpos.ui.back_screen()
+        elif current_key == lv.KEY.RIGHT:
+            mpos.ui.focus_direction.move_focus_direction(90)
+        elif current_key == lv.KEY.LEFT:
+            mpos.ui.focus_direction.move_focus_direction(270)
+        elif current_key == lv.KEY.UP:
+            mpos.ui.focus_direction.move_focus_direction(0)
+        elif current_key == lv.KEY.DOWN:
+            mpos.ui.focus_direction.move_focus_direction(180)
 
 group = lv.group_create()
 group.set_default()
