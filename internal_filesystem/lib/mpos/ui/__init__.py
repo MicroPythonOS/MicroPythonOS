@@ -3,6 +3,7 @@ import mpos.apps
 import mpos.time
 import mpos.wifi
 from mpos.ui.anim import WidgetAnimator
+import mpos.ui.focus_direction
 import mpos.ui.topmenu
 import mpos.util
 
@@ -244,17 +245,6 @@ def remove_and_stop_current_activity():
         if current_screen:
             current_screen.clean() # should free up memory
 
-# This function is missing so emulate it using focus_next():
-def emulate_focus_obj(focusgroup, to_focus):
-    for objnr in range(focusgroup.get_obj_count()):
-        obj = focusgroup.get_obj_by_index(objnr)
-        #print ("checking obj for equality...")
-        mpos.util.print_lvgl_widget(obj)
-        if obj is to_focus:
-            #print("found it!")
-            break
-        else:
-            focusgroup.focus_next()
 
 def back_screen():
     print("back_screen() running")
@@ -272,7 +262,7 @@ def back_screen():
     move_focusgroup_objects(prev_focusgroup, default_focusgroup)
     print("restoring prev_focused_object: ")
     mpos.util.print_lvgl_widget(prev_focused_object)
-    emulate_focus_obj(default_focusgroup, prev_focused_object) # LVGL 9.3 should have: default_focusgroup.focus_obj(prev_focused_object)
+    mpos.ui.focus_direction.emulate_focus_obj(default_focusgroup, prev_focused_object) # LVGL 9.3 should have: default_focusgroup.focus_obj(prev_focused_object)
     if prev_activity:
         prev_activity.onResume(prev_screen)
         print(f"after onResume, default focus group has {lv.group_get_default().get_obj_count()} items")

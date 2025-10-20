@@ -11,6 +11,7 @@ import mpos.clipboard
 import mpos.indev.mpos_sdl_keyboard
 import mpos.info
 import mpos.ui
+import mpos.ui.focus_direction
 
 mpos.info.set_hardware_id("linux-desktop")
 
@@ -63,9 +64,18 @@ def catch_escape_key(indev, indev_data):
     #state = indev_data.state
     #print(f"indev_data: {state} and {key}") # this catches the previous key release instead of the next key press
     pressed, code = sdlkeyboard._get_key() # get the current key and state
-    #print(f"catch_escape_key caught: {pressed}, {code}")
+    print(f"catch_escape_key caught: {pressed}, {code}")
     if pressed == 1 and code == 27:
         mpos.ui.back_screen()
+    elif pressed == 1 and code == lv.KEY.RIGHT:
+        mpos.ui.focus_direction.move_focus_direction(270)
+    elif pressed == 1 and code == lv.KEY.LEFT:
+        mpos.ui.focus_direction.move_focus_direction(90)
+    elif pressed == 1 and code == lv.KEY.UP:
+        mpos.ui.focus_direction.move_focus_direction(180)
+    elif pressed == 1 and code == lv.KEY.DOWN:
+        mpos.ui.focus_direction.move_focus_direction(0)
+
     sdlkeyboard._read(indev, indev_data)
 
 #import sdl_keyboard

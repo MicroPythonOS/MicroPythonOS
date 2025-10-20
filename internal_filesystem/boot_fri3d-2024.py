@@ -10,8 +10,9 @@ import math
 import lvgl as lv
 import task_handler
 
-import mpos.ui
 import mpos.info
+import mpos.ui
+import mpos.ui.focus_direction
 
 mpos.info.set_hardware_id("fri3d-2024")
 
@@ -184,10 +185,11 @@ def keypad_read_cb(indev, data):
         current_key = lv.KEY.END
     else:
         # Check joystick
-        joystick = read_joystick_angle(0.25)
-        if joystick:
-            if time.time() < 60:
-                print(f"joystick angle: {joystick}")
+        angle = read_joystick_angle(0.25)
+        if angle and time.time() < 60:
+            print(f"joystick angle: {angle}")
+            mpos.ui.focus_direction.move_focus_direction(angle)
+            joystick = read_joystick()
             if joystick == "LEFT":
                 current_key = lv.KEY.LEFT
             elif joystick == "RIGHT":
