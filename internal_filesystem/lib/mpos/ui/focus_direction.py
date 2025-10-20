@@ -2,7 +2,6 @@ import math
 import lvgl as lv
 import mpos.util
 
-import math
 
 def get_object_center(obj):
     """Calculate the center (x, y) of an object based on its position and size."""
@@ -33,8 +32,8 @@ def compute_angle_to_object(from_obj, to_obj):
     return (angle_deg + 360) % 360  # Normalize to [0, 360)
 
 def is_object_in_focus_group(focus_group, obj):
-    """Check if an object is in the focus group."""
-    if obj is None:
+    """Check if an object is in the focus group and not hidden."""
+    if obj is None or obj.has_flag(lv.obj.FLAG.HIDDEN):
         return False
     for objnr in range(focus_group.get_obj_count()):
         if focus_group.get_obj_by_index(objnr) is obj:
@@ -79,7 +78,7 @@ def get_closest_edge_point_and_distance(from_x, from_y, obj, direction_degrees, 
     angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
     if angle_diff > 45:
         if debug:
-            print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, diff {angle_diff:.1f}° > 45°, skipped")
+            print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, diff {angle_diff:.1f}° > 45, skipped")
         return None
     
     if debug:
@@ -90,8 +89,8 @@ def get_closest_edge_point_and_distance(from_x, from_y, obj, direction_degrees, 
 def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees, debug=False):
     """
     Find the closest object in the specified direction from the current focused object.
-    Only considers objects that are in the focus_group (including children of any object).
     Uses closest edge point for distance to handle object sizes intuitively.
+    Only considers objects that are in the focus_group and not hidden (including children).
     Direction is in degrees: 0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT (clockwise).
     Returns the closest object or None.
     """
@@ -100,7 +99,8 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         return None
     
     if debug:
-        print(f"Current focused object: {current_focused}")
+        print("Current focused object:")
+        mpos.util.print_lvgl_widget(current_focused)
         print(f"Default focus group has {focus_group.get_obj_count()} items")
     
     closest_obj = None
@@ -114,7 +114,7 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         if obj is None or obj is current_focused:
             return
         
-        # Check if the object is in the focus group and evaluate it
+        # Check if the object is in the focus group and not hidden, then evaluate it
         if is_object_in_focus_group(focus_group, obj):
             result = get_closest_edge_point_and_distance(current_x, current_y, obj, direction_degrees, debug)
             if result:
@@ -123,7 +123,8 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
                     min_distance = distance
                     closest_obj = obj
                     if debug:
-                        print(f"  Updated closest: {obj}, distance {distance:.1f}, angle {angle_deg:.1f}°")
+                        print(f"  Updated closest (distance {distance:.1f}, angle {angle_deg:.1f}°):")
+                        mpos.util.print_lvgl_widget(obj, depth=depth)
         
         # Process children regardless of parent's focus group membership
         for childnr in range(obj.get_child_count()):
@@ -137,7 +138,8 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     
     # Result
     if closest_obj:
-        print(f"Closest object in direction {direction_degrees}°: {closest_obj}")
+        print(f"Closest object in direction {direction_degrees}°:")
+        mpos.util.print_lvgl_widget(closest_obj)
     else:
         print(f"No object found in direction {direction_degrees}°")
     
