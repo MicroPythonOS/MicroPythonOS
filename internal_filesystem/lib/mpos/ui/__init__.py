@@ -163,7 +163,10 @@ def print_event(event):
     if event_code not in [19,23,25,26,27,28,29,30,31, 32, 33, 39,49, 52]:
         name = get_event_name(event_code)
         target_obj=event.get_target_obj()
-        print(f"{target_obj} got event code={event_code}, name={name}")
+        key = ""
+        if event_code == lv.EVENT.KEY:
+            key = f", key: {event.get_key()}"
+        print(f"{target_obj} got event code={event_code}, name={name}{key}")
 
 def close_top_layer_msgboxes():
     """
