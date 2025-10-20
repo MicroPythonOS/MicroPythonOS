@@ -7,6 +7,9 @@ import cst816s
 import i2c
 import math
 
+import micropython
+import gc
+
 import lvgl as lv
 import task_handler
 
@@ -143,7 +146,7 @@ def read_joystick_angle(threshold=0.1):
         return None  # Neutral position
 
     # Calculate angle in degrees with UP = 0°, clockwise
-    angle_rad = math.atan2(-x, y)
+    angle_rad = math.atan2(x, y)
     angle_deg = math.degrees(angle_rad)
     angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
     return angle_deg
@@ -185,10 +188,21 @@ def keypad_read_cb(indev, data):
         current_key = lv.KEY.END
     else:
         # Check joystick
-        angle = read_joystick_angle(0.25)
+        angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 seems good
         if angle and time.time() < 60:
-            print(f"joystick angle: {angle}")
-            mpos.ui.focus_direction.move_focus_direction(angle)
+            print(f"got joystick angle: {angle}")
+            #gc.collect()
+            print("Memory after joystick:", end=" ")
+            micropython.mem_info()
+            try:
+                mpos.ui.focus_direction.move_focus_direction(angle)
+            except Exception as e:
+                print(f"Error in move_focus_direction: {e}")
+            print(f"after joystick angle: {angle}")
+            #gc.collect()
+            print("Memory after joystick:", end=" ")
+            micropython.mem_info()
+        else: # old behavior
             joystick = read_joystick()
             if joystick == "LEFT":
                 current_key = lv.KEY.LEFT
@@ -234,7 +248,6 @@ def keypad_read_cb(indev, data):
 
     # Handle ESC for back navigation (only on initial PRESSED)
     if current_key == lv.KEY.ESC and last_state == lv.INDEV_STATE.PRESSED and since_last_repeat == 0:
-        import mpos
         mpos.ui.back_screen()
 
 group = lv.group_create()
