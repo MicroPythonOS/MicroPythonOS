@@ -46,21 +46,26 @@ class Launcher(mpos.apps.Activity):
         for dir_path in [apps_dir, apps_dir_builtin]:
             try:
                 if uos.stat(dir_path)[0] & 0x4000:  # Verify directory exists
-                    for d in uos.listdir(dir_path):
-                        full_path = f"{dir_path}/{d}"
-                        #print(f"full_path: {full_path}")
-                        if uos.stat(full_path)[0] & 0x4000:  # Check if it's a directory
-                            base_name = d
-                            if base_name not in seen_base_names:  # Avoid duplicates
-                                seen_base_names.add(base_name)
-                                app = mpos.apps.parse_manifest(f"{full_path}/META-INF/MANIFEST.JSON")
-                                if app.category != "launcher":  # Skip launchers
-                                    main_launcher = mpos.apps.find_main_launcher_activity(app)
-                                    if main_launcher:
-                                        app_list.append((app.name, full_path))
+                    try:
+                        for d in uos.listdir(dir_path):
+                            full_path = f"{dir_path}/{d}"
+                            #print(f"full_path: {full_path}")
+                            try:
+                                if uos.stat(full_path)[0] & 0x4000:  # Check if it's a directory
+                                    base_name = d
+                                    if base_name not in seen_base_names:  # Avoid duplicates
+                                        seen_base_names.add(base_name)
+                                        app = mpos.apps.parse_manifest(f"{full_path}/META-INF/MANIFEST.JSON")
+                                        if app.category != "launcher":  # Skip launchers
+                                            main_launcher = mpos.apps.find_main_launcher_activity(app)
+                                            if main_launcher:
+                                                app_list.append((app.name, full_path))
+                            except OSError:
+                                print(f"launcher.py stat of {full_path} got OSError: {e}")
+                    except OSError:
+                        print(f"launcher.py listdir of {dir_path} got OSError: {e}")
             except OSError:
-                print(f"launcher.py got OSError: {e}")
-                pass
+                print(f"launcher.py stat of {dir_path} got OSError: {e}")
 
         import time
         start = time.ticks_ms()
