@@ -30,7 +30,6 @@ class ImageView(Activity):
         self.gif.add_flag(lv.obj.FLAG.CLICKABLE)
         self.gif.add_flag(lv.obj.FLAG.HIDDEN)
         self.gif.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
-        #self.image.add_event_cb(self.print_events, lv.EVENT.ALL, None)
         self.label = lv.label(screen)
         self.label.set_text(f"Loading images from\n{self.imagedir}")
         self.label.align(lv.ALIGN.TOP_MID,0,0)
@@ -85,27 +84,6 @@ class ImageView(Activity):
         if self.image_timer:
             print("ImageView: deleting image_timer")
             self.image_timer.delete()
-    
-    def print_events(self, event):
-        global canvas
-        event_code=event.get_code()
-        #print(f"got event {event_code}")
-        # Ignore:
-        # =======
-        # 19: HIT_TEST
-        # COVER_CHECK
-        # DRAW_MAIN
-        # DRAW_MAIN_BEGIN
-        # DRAW_MAIN_END
-        # DRAW_POST
-        # DRAW_POST_BEGIN
-        # DRAW_POST_END
-        # 39: CHILD_CHANGED
-        # GET_SELF_SIZE
-        if event_code not in [19,23,25,26,27,28,29,30,39,49]:
-            name = mpos.ui.get_event_name(event_code)
-            print(f"lv_event_t: code={event_code}, name={name}") # target={event.get_target()}, user_data={event.get_user_data()}, param={event.get_param()}
-
 
     def show_prev_image(self, event=None):
         print("showing previous image...")
