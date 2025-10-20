@@ -280,13 +280,13 @@ def back_screen():
     lv.screen_load_anim(prev_screen, lv.SCR_LOAD_ANIM.OVER_RIGHT, 500, 0, True) #  True means delete the old screen, which is fine as we're going back and current_activity.onDestroy() was called
     # Restore the focused objects
     default_focusgroup = lv.group_get_default()
-    move_focusgroup_objects(prev_focusgroup, default_focusgroup)
-    print("restoring prev_focused_object: ")
-    mpos.util.print_lvgl_widget(prev_focused_object)
-    mpos.ui.focus_direction.emulate_focus_obj(default_focusgroup, prev_focused_object) # LVGL 9.3 should have: default_focusgroup.focus_obj(prev_focused_object)
+    if default_focusgroup:
+        move_focusgroup_objects(prev_focusgroup, default_focusgroup)
+        print("restoring prev_focused_object: ")
+        mpos.util.print_lvgl_widget(prev_focused_object)
+        mpos.ui.focus_direction.emulate_focus_obj(default_focusgroup, prev_focused_object) # LVGL 9.3 should have: default_focusgroup.focus_obj(prev_focused_object)
     if prev_activity:
         prev_activity.onResume(prev_screen)
-        print(f"after onResume, default focus group has {lv.group_get_default().get_obj_count()} items")
     if len(screen_stack) == 1:
         mpos.ui.topmenu.open_bar()
 
