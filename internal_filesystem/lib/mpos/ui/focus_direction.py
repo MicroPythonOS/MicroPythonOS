@@ -188,6 +188,10 @@ def move_focus_direction(angle):
     if isinstance(current_focused, lv.keyboard):
         print("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
         return
+    if isinstance(current_focused, lv.dropdown):
+        if current_focused.is_open():
+            print("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")
+            return
     o = find_closest_obj_in_direction(focus_group, current_focused, angle, True)
     if o:
         print("move_focus_direction: moving focus to:")
