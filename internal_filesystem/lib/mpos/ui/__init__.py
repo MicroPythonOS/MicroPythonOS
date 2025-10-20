@@ -144,6 +144,27 @@ def get_event_name(event_code):
     return EVENT_MAP.get(event_code, f"Unknown event {event_code}")
 
 
+def print_event(event):
+    global canvas
+    event_code=event.get_code()
+    #print(f"got event {event_code}")
+    # Ignore:
+    # =======
+    # 19: HIT_TEST
+    # COVER_CHECK
+    # DRAW_MAIN
+    # DRAW_MAIN_BEGIN
+    # DRAW_MAIN_END
+    # 31: DRAW_POST_BEGIN
+    # 32: DRAW_POST
+    # 33: DRAW_POST_END
+    # 39: CHILD_CHANGED
+    # 52: GET_SELF_SIZE
+    if event_code not in [19,23,25,26,27,28,29,30,31, 32, 33, 39,49, 52]:
+        name = get_event_name(event_code)
+        target_obj=event.get_target_obj()
+        print(f"{target_obj} got event code={event_code}, name={name}")
+
 def close_top_layer_msgboxes():
     """
     Iterate through all widgets in lv.layer_top() and close any lv.msgbox instances.
