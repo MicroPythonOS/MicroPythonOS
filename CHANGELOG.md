@@ -1,7 +1,7 @@
 0.1.2
 =====
 - Fix KeyPad focus handling for devices without touch screen like the Fri3d Camp 2024 Badge
-- Use direction arrows for more intuitive navigation instead of pageup/pagedown for previous/next
+- Use direction arrows for more intuitive navigation instead of B/A or pageup/pagedown for previous/next
 - About app: enable scrolling using arrow keys so off-screen info can be viewed
 - AppStore app: don't update UI after the user has closed the app
 - Launcher app: improve error handling
