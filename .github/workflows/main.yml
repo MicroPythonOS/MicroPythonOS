@@ -15,6 +15,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Fetch tags, needed for lib/SDL
+        run: |
+          git submodule foreach --recursive 'git fetch origin "refs/*:refs/*"'
+
       - name: Install dependencies
         run: |
           sudo apt-get update
