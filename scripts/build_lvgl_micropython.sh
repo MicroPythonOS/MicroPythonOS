@@ -2,8 +2,7 @@
 
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
-twoup=$(readlink -f "$mydir"/../..) # build process needs absolute paths
-oneup=$(readlink -f "$mydir"/..) # build process needs absolute paths
+codebasedir=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
 target="$1"
 buildtype="$2"
@@ -23,8 +22,46 @@ if [ -z "$target" -o -z "$buildtype" ]; then
 	exit 1
 fi
 
+
+# This assumes all the git submodules have been checked out recursively
+
+echo "Fetch tags for lib/SDL, otherwise lvgl_micropython's make.py script can't checkout a specific tag..."
+pushd "$codebasedir"/lvgl_micropython/lib/SDL
+git fetch --unshallow origin
+# Or fetch all refs without unshallowing (keeps it shallow but adds refs)
+git fetch origin 'refs/*:refs/*'
+popd
+
+echo "Check need to add esp32-camera..."
+idfile="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/main/idf_component.yml
+if grep -v esp32-camera "$idfile"; then
+	echo "Adding esp32-camera to $idfile"
+	echo "  espressif/esp32-camera:
+    git: https://github.com/MicroPythonOS/esp32-camera" >> "$idfile"
+else
+	echo "No need to add esp32-camera to $idfile"
+fi
+
+echo "Check need to add asyncio..."
+manifile="$codebasedir"/lib/micropython/ports/unix/variants/manifest.py
+if grep -v asyncio "$manifile"; then
+	echo "Adding asyncio to $manifile"
+	echo 'include("$(MPY_DIR)/extmod/asyncio") # needed to have asyncio, which is used by aiohttp, which has used by websockets' >> "$manifile"
+else
+	echo "No need to add asyncio to $manifile"
+fi
+
+# unix and macOS builds need these symlinks because make.py doesn't handle USER_C_MODULE arguments for them:
+echo "Symlinking secp256k1-embedded-ecdh for unix and macOS builds..."
+ln -sf ../../secp256k1-embedded-ecdh "$codebasedir"/lvgl_micropython/ext_mod/secp256k1-embedded-ecdh
+echo "Symlinking c_mpos for unix and macOS builds..."
+ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
+
+
 if [ "$buildtype" == "prod" ]; then
-	./scripts/freezefs_mount_builtin.sh
+	freezefs="$codebasedir"/scripts/freezefs_mount_builtin.sh
+	echo "It's a $buildtype build, running $freezefs"
+	$freezefs
 fi
 
 
@@ -55,8 +92,8 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
-	pushd lvgl_micropython
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$mydir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$mydir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$mydir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
+	pushd "$codebasedir"/lvgl_micropython/
+	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	if [ "$buildtype" == "prod" ]; then
@@ -67,7 +104,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# LV_CFLAGS are passed to USER_C_MODULES
 	# STRIP= makes it so that debug symbols are kept
 	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
-	pushd lvgl_micropython/
+	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
 	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb -ljpeg" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
 	popd
