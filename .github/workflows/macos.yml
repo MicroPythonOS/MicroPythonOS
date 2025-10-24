@@ -23,11 +23,6 @@ jobs:
           xcode-select --install
           brew install pkg-config libffi ninja make SDL2
 
-      - name: Install additional MicroPythonOS dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libv4l-dev
-
       - name: Build LVGL MicroPython for unix dev
         run: |
           ./scripts/build_lvgl_micropython.sh macOS dev
