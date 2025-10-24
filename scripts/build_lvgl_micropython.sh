@@ -34,7 +34,7 @@ popd
 
 echo "Check need to add esp32-camera..."
 idfile="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/main/idf_component.yml
-if grep -v esp32-camera "$idfile"; then
+if ! grep esp32-camera "$idfile"; then
 	echo "Adding esp32-camera to $idfile"
 	echo "  espressif/esp32-camera:
     git: https://github.com/MicroPythonOS/esp32-camera" >> "$idfile"
@@ -44,7 +44,7 @@ fi
 
 echo "Check need to add asyncio..."
 manifile="$codebasedir"/lib/micropython/ports/unix/variants/manifest.py
-if grep -v asyncio "$manifile"; then
+if ! grep asyncio "$manifile"; then
 	echo "Adding asyncio to $manifile"
 	echo 'include("$(MPY_DIR)/extmod/asyncio") # needed to have asyncio, which is used by aiohttp, which has used by websockets' >> "$manifile"
 else
