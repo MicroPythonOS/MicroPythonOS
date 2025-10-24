@@ -1,0 +1,13 @@
+[submodule "freezeFS"]
+	path = freezeFS
+	url = https://github.com/MicroPythonOS/freezeFS
+[submodule "secp256k1-embedded-ecdh"]
+	path = secp256k1-embedded-ecdh
+	url = https://github.com/MicroPythonOS/secp256k1-embedded-ecdh
+	branch = micropython_1.25.0
+[submodule "lvgl_micropython"]
+	path = lvgl_micropython
+	url = https://github.com/MicroPythonOS/lvgl_micropython
+[submodule "micropython-camera-API"]
+	path = micropython-camera-API
+	url = https://github.com/cnadler86/micropython-camera-API
