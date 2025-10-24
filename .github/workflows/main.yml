@@ -18,11 +18,11 @@ jobs:
       - name: Fetch tags for lib/SDL
         run: |
           # Unshallow a specific submodule (fetches full history)
-          cd lib/SDL
+          cd lvgl_micropython/lib/SDL
           git fetch --unshallow origin
           # Or fetch all refs without unshallowing (keeps it shallow but adds refs)
           git fetch origin 'refs/*:refs/*'
-          cd ../..
+          cd ../../..
 
       - name: Install dependencies
         run: |
