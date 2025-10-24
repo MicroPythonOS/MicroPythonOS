@@ -9,7 +9,6 @@ UNAME_S := $(shell uname -s)
 ifneq ($(UNAME_S),Darwin)
     # Non-macOS settings (e.g., Linux)
     LDFLAGS += -lv4l2
-    SRC_USERMOD_C += $(MOD_DIR)/src/hello_world.c
     SRC_USERMOD_C += $(MOD_DIR)/src/webcam.c
 endif
 
