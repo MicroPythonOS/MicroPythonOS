@@ -1,0 +1,42 @@
+name: Build LVGL MicroPython for MacOS
+
+on:
+  push:
+    branches:
+      - add-submodules
+  pull_request:
+    branches: [add-submodules]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies via Homebrew
+        run: |
+          xcode-select --install
+          brew install pkg-config libffi ninja make SDL2
+
+      - name: Install additional MicroPythonOS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libv4l-dev
+
+      - name: Build LVGL MicroPython for unix dev
+        run: |
+          ./scripts/build_lvgl_micropython.sh macOS dev
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lvgl_micropy_macOS
+          path: lvgl_micropython/build/lvgl_micropy_macOS
+          retention-days: 7  # Adjust as needed; artifacts can be downloaded from the workflow run summary
+
+

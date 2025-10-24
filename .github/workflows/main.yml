@@ -49,7 +49,7 @@ jobs:
             fcitx-libs-dev \
             libpipewire-0.3-dev \
             libwayland-dev \
-            libdecor-0-dev \
+            libdecor-0-dev
 
       - name: Install additional MicroPythonOS dependencies
         run: |
