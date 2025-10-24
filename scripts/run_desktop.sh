@@ -38,7 +38,17 @@ echo "$0 appname # starts the app by appname, for example: com.example.helloworl
 export HEAPSIZE=32M # for 1280x720 images in the image viewer
 export HEAPSIZE=128M # for 1280x720 images in the image viewer
 
-binary=../lvgl_micropython/build/lvgl_micropy_unix
+# print os and set binary
+os_name=$(uname -s)
+if [ "$os_name" == "Darwin" ]; then
+	echo "Running on macOS"
+	binary=../lvgl_micropython/build/lvgl_micropy_macOS
+else
+	# other cases can be added here
+	echo "Running on $os_name"
+	binary=../lvgl_micropython/build/lvgl_micropy_unix
+fi
+
 binary=$(readlink -f "$binary")
 chmod +x "$binary"
 
