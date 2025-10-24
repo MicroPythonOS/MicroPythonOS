@@ -27,9 +27,9 @@ fi
 
 echo "Fetch tags for lib/SDL, otherwise lvgl_micropython's make.py script can't checkout a specific tag..."
 pushd "$codebasedir"/lvgl_micropython/lib/SDL
-git fetch --unshallow origin
+git fetch --unshallow origin 2>/dev/null # will give error if already done
 # Or fetch all refs without unshallowing (keeps it shallow but adds refs)
-git fetch origin 'refs/*:refs/*'
+git fetch origin 'refs/*:refs/*' >/dev/null # huge list that pollutes the build output
 popd
 
 echo "Check need to add esp32-camera..."
@@ -43,7 +43,7 @@ else
 fi
 
 echo "Check need to add asyncio..."
-manifile="$codebasedir"/lib/micropython/ports/unix/variants/manifest.py
+manifile="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/variants/manifest.py
 if ! grep asyncio "$manifile"; then
 	echo "Adding asyncio to $manifile"
 	echo 'include("$(MPY_DIR)/extmod/asyncio") # needed to have asyncio, which is used by aiohttp, which has used by websockets' >> "$manifile"
