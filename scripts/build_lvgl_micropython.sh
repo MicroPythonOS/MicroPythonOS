@@ -29,7 +29,7 @@ echo "Fetch tags for lib/SDL, otherwise lvgl_micropython's make.py script can't 
 pushd "$codebasedir"/lvgl_micropython/lib/SDL
 git fetch --unshallow origin 2>/dev/null # will give error if already done
 # Or fetch all refs without unshallowing (keeps it shallow but adds refs)
-git fetch origin 'refs/*:refs/*' >/dev/null # huge list that pollutes the build output
+git fetch origin 'refs/tags/*:refs/tags/*'
 popd
 
 echo "Check need to add esp32-camera..."
