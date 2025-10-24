@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies via Homebrew
         run: |
-          xcode-select --install
+          xcode-select --install || true # already installed on github
           brew install pkg-config libffi ninja make SDL2
 
       - name: Build LVGL MicroPython for unix dev
