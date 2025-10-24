@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/bash -x
 scriptdir=$(readlink -f "$0")
-scriptdir=$(dirname "$mydir")
+scriptdir=$(dirname "$scriptdir")
 script="$1"
 if [ -f "$script" ]; then
 	script=$(readlink -f "$script")
