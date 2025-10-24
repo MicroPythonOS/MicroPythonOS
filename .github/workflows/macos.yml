@@ -37,6 +37,4 @@ jobs:
         with:
           name: lvgl_micropy_macOS
           path: lvgl_micropython/build/lvgl_micropy_macOS
-          retention-days: 7  # Adjust as needed; artifacts can be downloaded from the workflow run summary
-
-
+          retention-days: 7
