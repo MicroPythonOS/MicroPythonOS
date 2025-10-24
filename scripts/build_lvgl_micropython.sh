@@ -11,7 +11,7 @@ subtarget="$3"
 
 if [ -z "$target" -o -z "$buildtype" ]; then
 	echo "Usage: $0 target buildtype [optional subtarget]"
-	echo "Usage: $0 <esp32 or unix or macos> <dev or prod> [<waveshare-esp32-s3-touch-lcd-2 or fri3d-2024>]"
+	echo "Usage: $0 <esp32 or unix or macOS> <dev or prod> [<waveshare-esp32-s3-touch-lcd-2 or fri3d-2024>]"
 	echo "Example: $0 unix dev"
 	echo "Example: $0 esp32 dev fri3d-2024"
 	echo "Example: $0 esp32 prod fri3d-2024"
@@ -58,7 +58,7 @@ if [ "$target" == "esp32" ]; then
 	pushd "$twoup"/lvgl_micropython
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$twoup"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$twoup"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$oneup"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
-elif [ "$target" == "unix" -o "$target" == "macos" ]; then
+elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	if [ "$buildtype" == "prod" ]; then
 		manifest="manifest_unix.py"
 	fi
