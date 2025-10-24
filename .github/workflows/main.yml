@@ -15,7 +15,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install dependencies
+      - name: Install lvgl_micropython dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -50,7 +50,11 @@ jobs:
             libpipewire-0.3-dev \
             libwayland-dev \
             libdecor-0-dev \
-            git
+
+      - name: Install additional MicroPythonOS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libv4l-dev
 
       - name: Build LVGL MicroPython for unix dev
         run: |
