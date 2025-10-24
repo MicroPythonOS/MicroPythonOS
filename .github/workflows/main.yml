@@ -15,9 +15,14 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Fetch tags, needed for lib/SDL
+      - name: Fetch tags for lib/SDL
         run: |
-          git submodule foreach --recursive 'git fetch origin "refs/*:refs/*"'
+          # Unshallow a specific submodule (fetches full history)
+          cd lib/SDL
+          git fetch --unshallow origin
+          # Or fetch all refs without unshallowing (keeps it shallow but adds refs)
+          git fetch origin 'refs/*:refs/*'
+          cd ../..
 
       - name: Install dependencies
         run: |
