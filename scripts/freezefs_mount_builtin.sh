@@ -1,5 +1,8 @@
-builtindir=$(readlink -f "internal_filesystem/builtin")
+mydir=$(readlink -f "$0")
+mydir=$(dirname "$mydir") # scripts dir
 
-pushd ../freezeFS/
+builtindir=$(readlink -f "$mydir"/../internal_filesystem/builtin)
+
+pushd "$mydir"/../freezeFS/
 python3 -m freezefs --target /builtin --on-import mount "$builtindir" freezefs_mount_builtin.py
 popd
