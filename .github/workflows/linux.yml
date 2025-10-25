@@ -1,4 +1,4 @@
-name: Build LVGL MicroPython on Push to add-submodules
+name: Build LVGL MicroPython on Linux
 
 on:
   push:
