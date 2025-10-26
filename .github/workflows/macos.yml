@@ -25,7 +25,7 @@ jobs:
 
       - name: Build LVGL MicroPython for unix dev
         run: |
-          ./scripts/build_lvgl_micropython.sh macOS dev
+          ./scripts/build_mpos.sh macOS dev
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
@@ -37,7 +37,7 @@ jobs:
 
       - name: Build LVGL MicroPython esp32 prod fri3d-2024
         run: |
-          ./scripts/build_lvgl_micropython.sh esp32 prod fri3d-2024
+          ./scripts/build_mpos.sh esp32 prod fri3d-2024
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
@@ -48,7 +48,7 @@ jobs:
 
       - name: Build LVGL MicroPython esp32 dev fri3d-2024
         run: |
-          ./scripts/build_lvgl_micropython.sh esp32 dev fri3d-2024
+          ./scripts/build_mpos.sh esp32 dev fri3d-2024
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
@@ -60,7 +60,7 @@ jobs:
 
       - name: Build LVGL MicroPython esp32 prod waveshare-esp32-s3-touch-lcd-2
         run: |
-          ./scripts/build_lvgl_micropython.sh esp32 prod waveshare-esp32-s3-touch-lcd-2
+          ./scripts/build_mpos.sh esp32 prod waveshare-esp32-s3-touch-lcd-2
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
@@ -71,7 +71,7 @@ jobs:
 
       - name: Build LVGL MicroPython esp32 dev waveshare-esp32-s3-touch-lcd-2
         run: |
-          ./scripts/build_lvgl_micropython.sh esp32 dev waveshare-esp32-s3-touch-lcd-2
+          ./scripts/build_mpos.sh esp32 dev waveshare-esp32-s3-touch-lcd-2
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
