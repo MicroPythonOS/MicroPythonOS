@@ -49,8 +49,6 @@ except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
-mpos.apps.execute_script("builtin/system/button.py", True) # Install button handler through IRQ
-
 try:
     import mpos.wifi
     _thread.stack_size(mpos.apps.good_stack_size())
