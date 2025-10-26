@@ -42,6 +42,16 @@ else
 	echo "No need to add esp32-camera to $idfile"
 fi
 
+echo "Check need to add lvgl_micropython manifest to micropython-camera-API's manifest..."
+camani="$codebasedir"/micropython-camera-API/src/manifest.py
+lvglmani="$codebasedir"/lvgl_micropython/build/manifest.py
+if ! grep "lvgl_micropython/build/manifest.py" "$idfile"; then
+	echo "Adding include(\"$lvglmani\") to $camani"
+	echo "include(\"$lvglmani\") # workaround to prevent micropython-camera-API from overriding the lvgl_micropython manifest..." >> "$camani"
+else
+	echo "No need to add include(\"$lvglmani\") to $camani"
+fi
+
 echo "Check need to add asyncio..."
 manifile="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/variants/manifest.py
 if ! grep asyncio "$manifile"; then
