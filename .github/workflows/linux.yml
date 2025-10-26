@@ -65,6 +65,7 @@ jobs:
         with:
           name: lvgl_micropy_unix
           path: lvgl_micropython/build/lvgl_micropy_unix
+          compression-level: 0 # dont zip it
           retention-days: 7
 
       - name: Build LVGL MicroPython esp32 prod fri3d-2024
@@ -76,6 +77,7 @@ jobs:
         with:
           name: MicroPythonOS_fri3d-2024_prod
           path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
           retention-days: 7
 
       - name: Upload built binary as artifact
@@ -83,6 +85,7 @@ jobs:
         with:
           name: MicroPythonOS_fri3d-2024_prod.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+          compression-level: 0 # dont zip it
           retention-days: 7
 
       - name: Cleanup
@@ -99,6 +102,7 @@ jobs:
         with:
           name: MicroPythonOS_fri3d-2024_dev
           path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
           retention-days: 7
 
       - name: Cleanup
@@ -115,6 +119,7 @@ jobs:
         with:
           name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod
           path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
           retention-days: 7
 
       - name: Upload built binary as artifact
@@ -122,6 +127,7 @@ jobs:
         with:
           name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+          compression-level: 0 # dont zip it
           retention-days: 7
 
       - name: Cleanup
@@ -138,6 +144,7 @@ jobs:
         with:
           name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_dev
           path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
           retention-days: 7
 
 
