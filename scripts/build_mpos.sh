@@ -47,8 +47,8 @@ fi
 echo "Check need to add lvgl_micropython manifest to micropython-camera-API's manifest..."
 camani="$codebasedir"/micropython-camera-API/src/manifest.py
 rellvglmani=lvgl_micropython/build/manifest.py
+abslvglmani="$codebasedir"/"$rellvglmani"
 if ! grep "$rellvglmani" "$camani"; then
-	abslvglmani="$codebasedir"/"$rellvglmani"
 	echo "Adding include(\"$abslvglmani\") to $camani"
 	echo >> "$camani" # needs newline because file doesn't have newline at the end
 	echo "include(\"$abslvglmani\") # workaround to prevent micropython-camera-API from overriding the lvgl_micropython manifest..." >> "$camani"
