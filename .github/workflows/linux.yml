@@ -1,0 +1,150 @@
+name: Build LVGL MicroPython on Linux
+
+on:
+  push:
+    branches:
+      - add-submodules
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # Ubuntu is Debian-based and commonly used in GitHub Actions
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install lvgl_micropython dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libffi-dev \
+            pkg-config \
+            cmake \
+            ninja-build \
+            gnome-desktop-testing \
+            libasound2-dev \
+            libpulse-dev \
+            libaudio-dev \
+            libjack-dev \
+            libsndio-dev \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxfixes-dev \
+            libxi-dev \
+            libxss-dev \
+            libxkbcommon-dev \
+            libdrm-dev \
+            libgbm-dev \
+            libgl1-mesa-dev \
+            libgles2-mesa-dev \
+            libegl1-mesa-dev \
+            libdbus-1-dev \
+            libibus-1.0-dev \
+            libudev-dev \
+            fcitx-libs-dev \
+            libpipewire-0.3-dev \
+            libwayland-dev \
+            libdecor-0-dev
+
+      - name: Install additional MicroPythonOS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libv4l-dev
+
+      - name: Build LVGL MicroPython for unix dev
+        run: |
+          ./scripts/build_mpos.sh unix dev
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lvgl_micropy_unix
+          path: lvgl_micropython/build/lvgl_micropy_unix
+          compression-level: 0 # dont zip it
+          retention-days: 7
+
+      - name: Build LVGL MicroPython esp32 prod fri3d-2024
+        run: |
+          ./scripts/build_mpos.sh esp32 prod fri3d-2024
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_fri3d-2024_prod
+          path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
+          retention-days: 7
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_fri3d-2024_prod.ota
+          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+          compression-level: 0 # dont zip it
+          retention-days: 7
+
+      - name: Cleanup
+        run: |
+          rm lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          rm lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+
+      - name: Build LVGL MicroPython esp32 dev fri3d-2024
+        run: |
+          ./scripts/build_mpos.sh esp32 dev fri3d-2024
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_fri3d-2024_dev
+          path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
+          retention-days: 7
+
+      - name: Cleanup
+        run: |
+          rm lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          rm lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+
+      - name: Build LVGL MicroPython esp32 prod waveshare-esp32-s3-touch-lcd-2
+        run: |
+          ./scripts/build_mpos.sh esp32 prod waveshare-esp32-s3-touch-lcd-2
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod
+          path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
+          retention-days: 7
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod.ota
+          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+          compression-level: 0 # dont zip it
+          retention-days: 7
+
+      - name: Cleanup
+        run: |
+          rm lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          rm lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+
+      - name: Build LVGL MicroPython esp32 dev waveshare-esp32-s3-touch-lcd-2
+        run: |
+          ./scripts/build_mpos.sh esp32 dev waveshare-esp32-s3-touch-lcd-2
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_dev
+          path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          compression-level: 0 # dont zip it
+          retention-days: 7
+
+

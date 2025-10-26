@@ -1,3 +1,6 @@
+#!/bin/bash -x
+scriptdir=$(readlink -f "$0")
+scriptdir=$(dirname "$scriptdir")
 script="$1"
 if [ -f "$script" ]; then
 	script=$(readlink -f "$script")
@@ -40,13 +43,13 @@ export HEAPSIZE=128M # for 1280x720 images in the image viewer
 
 # print os and set binary
 os_name=$(uname -s)
-if [ "$os_name" == "Darwin" ]; then
+if [ "$os_name" = "Darwin" ]; then
 	echo "Running on macOS"
-	binary=../lvgl_micropython/build/lvgl_micropy_macOS
+	binary="$scriptdir"/../lvgl_micropython/build/lvgl_micropy_macOS
 else
 	# other cases can be added here
 	echo "Running on $os_name"
-	binary=../lvgl_micropython/build/lvgl_micropy_unix
+	binary="$scriptdir"/../lvgl_micropython/build/lvgl_micropy_unix
 fi
 
 binary=$(readlink -f "$binary")
