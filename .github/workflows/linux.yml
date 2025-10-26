@@ -3,7 +3,7 @@ name: Build LVGL MicroPython on Linux
 on:
   push:
     branches:
-      - add-submodules
+      - main
 
 jobs:
   build:

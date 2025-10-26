@@ -3,9 +3,10 @@ name: Build LVGL MicroPython for MacOS
 on:
   push:
     branches:
-      - add-submodules
+      - main
   pull_request:
-    branches: [add-submodules]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
