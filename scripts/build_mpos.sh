@@ -38,6 +38,8 @@ if ! grep esp32-camera "$idfile"; then
 	echo "Adding esp32-camera to $idfile"
 	echo "  espressif/esp32-camera:
     git: https://github.com/MicroPythonOS/esp32-camera" >> "$idfile"
+	echo "Resulting file:"
+	cat "$idfile"
 else
 	echo "No need to add esp32-camera to $idfile"
 fi
@@ -48,7 +50,10 @@ rellvglmani=lvgl_micropython/build/manifest.py
 if ! grep "$rellvglmani" "$idfile"; then
 	abslvglmani="$codebasedir"/"$rellvglmani"
 	echo "Adding include(\"$abslvglmani\") to $camani"
+	echo >> "$camani" # needs newline because file doesn't have newline at the end
 	echo "include(\"$abslvglmani\") # workaround to prevent micropython-camera-API from overriding the lvgl_micropython manifest..." >> "$camani"
+	echo "Resulting file:"
+	cat "$camani"
 else
 	echo "No need to add include(\"$abslvglmani\") to $camani"
 fi
@@ -58,6 +63,8 @@ manifile="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/variants/man
 if ! grep asyncio "$manifile"; then
 	echo "Adding asyncio to $manifile"
 	echo 'include("$(MPY_DIR)/extmod/asyncio") # needed to have asyncio, which is used by aiohttp, which has used by websockets' >> "$manifile"
+	echo "Resulting file:"
+	cat "$manifile"
 else
 	echo "No need to add asyncio to $manifile"
 fi
@@ -67,7 +74,6 @@ echo "Symlinking secp256k1-embedded-ecdh for unix and macOS builds..."
 ln -sf ../../secp256k1-embedded-ecdh "$codebasedir"/lvgl_micropython/ext_mod/secp256k1-embedded-ecdh
 echo "Symlinking c_mpos for unix and macOS builds..."
 ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
-
 
 if [ "$buildtype" == "prod" ]; then
 	freezefs="$codebasedir"/scripts/freezefs_mount_builtin.sh
