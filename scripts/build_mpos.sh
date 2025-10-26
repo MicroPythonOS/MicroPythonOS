@@ -75,6 +75,8 @@ if [ "$target" == "esp32" ]; then
 		else
 			manifest="manifest.py"
 		fi
+		manifest=$(readlink -f "$codebasedir"/manifests/"$manifest")
+		frozenmanifest="FROZEN_MANIFEST=$manifest"
 	else
 		echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
 	fi
@@ -91,19 +93,18 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_USE_TRACE_FACILITY=y
 	# CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
-	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
 	pushd "$codebasedir"/lvgl_micropython/
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	if [ "$buildtype" == "prod" ]; then
-		manifest="manifest_unix.py"
+		manifest=$(readlink -f "$codebasedir"/manifests/manifest_unix.py)
+		frozenmanifest="FROZEN_MANIFEST=$manifest"
 	fi
 	# build for desktop
 	#python3 make.py "$target"  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
 	# LV_CFLAGS are passed to USER_C_MODULES
 	# STRIP= makes it so that debug symbols are kept
-	[ ! -z "$manifest" ] && frozenmanifest="FROZEN_MANIFEST="$(readlink -f "$manifest")
 	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
 	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb -ljpeg" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
