@@ -263,8 +263,7 @@ indev.enable(True)  # NOQA
 import mpos.battery_voltage
 mpos.battery_voltage.init_adc(13, 2 / 1000)
 
-# SD card doesn't need to be plugged in at boot, can be plugged in later
 import mpos.sdcard
-mpos.sdcard.inform_sdcard(machine.SDCard(spi_bus=spi_bus,cs=14))
+mpos.sdcard.init(spi_bus, cs_pin=14)
 
 print("boot.py finished")

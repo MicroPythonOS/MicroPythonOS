@@ -1,72 +1,77 @@
 import os
 import machine
+import vfs
 
-sdcard = None
-
-# This gets called by (the device-specific) boot*.py
-def inform_sdcard(so):
-    global sdcard
-    sdcard = so
-
-def format_sdcard(sdcard):
-    """Format the SD card with FAT filesystem"""
-    try:
-        print("Formatting SD card...")
-        # Unmount if already mounted
+class SDCardManager:
+    def __init__(self, spi_bus, cs_pin):
+        self._sdcard = None
         try:
-            os.umount('/sdcard')
-        except:
-            pass
-        
-        # Format the SD card (this erases all data!)
-        sdcard.format()
-        print("SD card formatted successfully")
-        return True
-    except Exception as e:
-        print(f"WARNING: Failed to format SD card: {e}")
-        return False
+            self._sdcard = machine.SDCard(spi_bus=spi_bus, cs=cs_pin)
+            self._sdcard.info()
+            print("SD card initialized")
+        except Exception as e:
+            print(f"ERROR: Failed to initialize SD card: {e}")
 
-# Tries to mount and returns True if it worked
-def try_mount(sdcard):
-    try:
-        os.mount(sdcard, '/sdcard')
-        print("SD card mounted successfully at /sdcard")
-        return True
-    except Exception as e:
-        print(f"WARNING: failed to mount SD card: {e}")
-        return False
-
-# Returns True if everything successful, otherwise False if it failed to mount
-def mount_sdcard_optional_format():
-    global sdcard # should have been initialized by inform_sdcard()
-
-    if not sdcard:
-        print("WARNING: no machine.SDCard object has been initialized at boot, aborting...")
-        return False
-
-    # Try to detect SD card
-    try:
-        sdcard.info()
-        print("SD card detected")
-    except Exception as e:
-        print(f"WARNING: sdcard.info() got exception: {e}")
-        print("SD card not detected or hardware issue")
-        return False
-
-    if not try_mount(sdcard):
-        if format_sdcard(sdcard):
-            if not try_mount(sdcard):
-                print(f"WARNING: failed to mount SD card even after formatting, aborting...")
-                return False
-        else:
-            print("WARNING: Could not format SD card - check hardware connections or reformat on a PC. Aborting...")
+    def mount(self, mount_point):
+        if not self._sdcard:
+            return False
+        try:
+            os.mount(self._sdcard, mount_point)
+            print(f"Mounted at {mount_point}")
+            return True
+        except OSError as e:
+            print(f"Mount failed: {e}")
             return False
 
-    try:
-        print("SD card contents:", os.listdir('/sdcard'))
-    except Exception as e:
-        print(f"WARNING: SD card did not fail to mount but could not list SD card contents: {e}")
-        return False
+    def format_and_mount(self, mount_point):
+        if not self._sdcard:
+            return False
+        print("Formatting SD card...")
+        try:
+            os.umount(mount_point)
+        except:
+            pass
+        try:
+            vfs.VfsFat.mkfs(self._sdcard)
+            print("Formatted")
+            return self.mount(mount_point)
+        except OSError as e:
+            print(f"Format failed: {e}")
+            return False
 
-    print("SD card mounted successfully!")
-    return True
+    def is_mounted(self, mount_point):
+        try:
+            return mount_point in os.listdir('/') and os.path.ismount(mount_point)
+        except:
+            return False
+
+    def list(self, mount_point):
+        try:
+            return os.listdir(mount_point)
+        except:
+            return []
+
+# --- Global instance (singleton) ---
+_manager = None
+
+def init(spi_bus, cs_pin):
+    """Initialize the global SD card manager."""
+    global _manager
+    if _manager is None:
+        _manager = SDCardManager(spi_bus, cs_pin)
+    return _manager
+
+def get():
+    """Get the global SD card manager instance."""
+    return _manager
+
+# Optional: convenience functions
+def mount(mount_point):
+    mgr = get()
+    return mgr and mgr.mount(mount_point)
+
+def mount_with_format(mount_point):
+    mgr = get()
+    if mgr and not mgr.mount(mount_point):
+        return mgr.format_and_mount(mount_point)
+    return mgr and mgr.is_mounted(mount_point)
