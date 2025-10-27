@@ -24,6 +24,11 @@ jobs:
           xcode-select --install || true # already installed on github
           brew install pkg-config libffi ninja make SDL2
 
+      - name: Show version numbers
+        run: |
+          xcodebuild -version
+          clang --version
+
       - name: Build LVGL MicroPython for unix dev
         run: |
           ./scripts/build_mpos.sh macOS dev
