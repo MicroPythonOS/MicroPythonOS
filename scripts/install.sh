@@ -1,3 +1,6 @@
+mydir=$(readlink -f "$0")
+mydir=$(dirname "$mydir")
+
 pkill -f "python.*mpremote"
 
 target="$1"
@@ -14,7 +17,7 @@ fi
 
 
 
-mpremote=$(readlink -f "../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
+mpremote=$(readlink -f "$mydir/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
 
 pushd internal_filesystem/
 
