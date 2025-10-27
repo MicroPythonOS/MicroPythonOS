@@ -1,5 +1,5 @@
 # Hardware initialization for Fri3d Camp 2024 Badge
-from machine import Pin, SPI
+from machine import Pin, SPI, SDCard
 import st7789 
 import lcd_bus
 import machine
@@ -262,5 +262,9 @@ indev.enable(True)  # NOQA
 # Battery voltage ADC measuring
 import mpos.battery_voltage
 mpos.battery_voltage.init_adc(13, 2 / 1000)
+
+# SD card doesn't need to be plugged in at boot, can be plugged in later
+import mpos.sdcard
+mpos.sdcard.inform_sdcard(machine.SDCard(spi_bus=spi_bus,cs=14))
 
 print("boot.py finished")
