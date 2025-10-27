@@ -1,10 +1,10 @@
+import machine
+import uos
+import _thread
+
 from mpos.apps import Activity
 import mpos.sdcard
 import mpos.ui
-# play music
-import machine
-import uos
-from machine import I2S, Pin
 
 class MusicPlayer(Activity):
 
@@ -37,7 +37,9 @@ class MusicPlayer(Activity):
                 fullpath = f"{clean_path}{file}"
                 print(f"Selected: {fullpath}")
                 if fullpath.lower().endswith('.wav'):
-                    self.play_wav(fullpath)
+                    _thread.stack_size(mpos.apps.good_stack_size())
+                    _thread.start_new_thread(self.play_wav, (fullpath,))
+                    #self.play_wav(fullpath)
                 else:
                     print("INFO: ignoring unsupported file format")
 
@@ -68,13 +70,13 @@ class MusicPlayer(Activity):
                     raise ValueError("Only mono audio supported (convert with -ac 1 in FFmpeg)")
 	
                 # Configure I2S (TX mode for output)
-                i2s = I2S(0,  # I2S peripheral 0
-                        sck=Pin(2, Pin.OUT),      # BCK
-                        ws=Pin(47, Pin.OUT),      # LRCK
-                        sd=Pin(16, Pin.OUT),      # DIN
-                        mode=I2S.TX,
+                i2s = machine.I2S(0,  # I2S peripheral 0
+                        sck=machine.Pin(2, machine.Pin.OUT),      # BCK
+                        ws=machine.Pin(47, machine.Pin.OUT),      # LRCK
+                        sd=machine.Pin(16, machine.Pin.OUT),      # DIN
+                        mode=machine.I2S.TX,
                         bits=16,
-                        format=I2S.MONO,
+                        format=machine.I2S.MONO,
                         rate=sample_rate,
                         ibuf=16000)  # Internal buffer size (adjust if audio stutters)
 
