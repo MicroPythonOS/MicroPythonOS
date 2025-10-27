@@ -21,11 +21,15 @@ class SDCardManager:
             print(f"SD card mounted successfully at {mount_point}")
             return True
         except OSError as e:
-            print(f"WARNING: Failed to mount SD card at {mount_point}: {e}")
-            print("  - Possible causes: Unformatted SD card (needs FAT32), corrupted filesystem, or card removed")
-            print(f"  - Check: SD card format, ensure card is inserted")
-            print("  - Try: Format card on PC, or proceed to auto-format if enabled")
-            return False
+            if e.errno == errno.EPERM:  # EPERM is 1, meaning already mounted
+                print(f"Got mount error {e} which means already mounted.")
+                return True
+            else:
+                print(f"WARNING: Failed to mount SD card at {mount_point}: {e}")
+                print("  - Possible causes: Unformatted SD card (needs FAT32), corrupted filesystem, or card removed")
+                print(f"  - Check: SD card format, ensure card is inserted")
+                print("  - Try: Format card on PC, or proceed to auto-format if enabled")
+                return False
 
     def _format(self, mount_point):
         try:
