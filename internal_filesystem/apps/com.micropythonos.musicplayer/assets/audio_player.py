@@ -1,6 +1,8 @@
 import machine
 import os
 import time
+import micropython
+
 
 # ----------------------------------------------------------------------
 #  AudioPlayer – robust, volume-controllable WAV player
@@ -8,7 +10,7 @@ import time
 class AudioPlayer:
     # class-level defaults (shared by every instance)
     _i2s = None          # the I2S object (created once per playback)
-    _volume = 100        # 0-100  (100 = full scale)
+    _volume = 50        # 0-100  (100 = full scale)
 
     @staticmethod
     def find_data_chunk(f):
@@ -102,25 +104,37 @@ class AudioPlayer:
                 print(f"Playing {data_size} bytes (vol {cls._volume}%) …")
                 f.seek(data_start)
 
+                @micropython.viper
+                def scale_audio(buf: ptr8, num_bytes: int, scale_fixed: int):
+                    for i in range(0, num_bytes, 2):
+                        lo = int(buf[i])
+                        hi = int(buf[i+1])
+                        sample = (hi << 8) | lo
+                        if hi & 128:
+                            sample -= 65536
+                        sample = (sample * scale_fixed) // 32768
+                        if sample > 32767:
+                            sample = 32767
+                        elif sample < -32768:
+                            sample = -32768
+                        buf[i] = sample & 255
+                        buf[i+1] = (sample >> 8) & 255
+
                 chunk_size = 4096                     # 4 KB → safe on ESP32
 
                 total = 0
                 while total < data_size:
                     to_read = min(chunk_size, data_size - total)
-                    raw = f.read(to_read)
+                    raw = bytearray(f.read(to_read))  # mutable for in-place scaling
                     if not raw:
                         break
 
-                    # ---- on-the-fly volume scaling (16-bit little-endian) ----
-                    scale = cls._volume / 100.0           # float 0.0-1.0
-                    if scale < 0.9:
-                        scaled = bytearray(len(raw))
-                        for i in range(0, len(raw), 2):
-                            sample = int.from_bytes(raw[i:i+2], 'little', True)
-                            sample = int(sample * scale)
-                            scaled[i:i+2] = sample.to_bytes(2, 'little', True)
-                        raw = bytes(scaled)
-                    # ---------------------------------------------------------
+                    # ---- fast viper scaling (in-place) ----
+                    scale = cls._volume / 100.0           # adjust the volume on the fly instead of at the start of playback
+                    if scale < 1.0:
+                        scale_fixed = int(scale * 32768)
+                        scale_audio(raw, len(raw), scale_fixed)
+                    # ---------------------------------------
 
                     if cls._i2s:
                         cls._i2s.write(raw)
