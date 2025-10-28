@@ -1,10 +1,12 @@
 import machine
-import uos
+import os
 import _thread
 
 from mpos.apps import Activity, Intent
 import mpos.sdcard
 import mpos.ui
+
+from audio_player import AudioPlayer
 
 class MusicPlayer(Activity):
 
@@ -41,104 +43,6 @@ class MusicPlayer(Activity):
                     self.startActivity(Intent(activity_class=FullscreenPlayer).putExtra("filename", fullpath))
                 else:
                     print("INFO: ignoring unsupported file format")
-
-class AudioPlayer:
-
-    def find_data_chunk(f):
-        """Skip chunks until 'data' is found. Returns (data_start_pos, data_size)."""
-        # Go back to start
-        f.seek(0)
-        riff = f.read(4)
-        if riff != b'RIFF':
-            raise ValueError("Not a RIFF file")
-        file_size = int.from_bytes(f.read(4), 'little') + 8  # Total file size
-        wave = f.read(4)
-        if wave != b'WAVE':
-            raise ValueError("Not a WAVE file")
-    
-        pos = 12  # Start after RIFF header
-        while pos < file_size:
-            f.seek(pos)
-            chunk_id = f.read(4)
-            if len(chunk_id) < 4:
-                break
-            chunk_size = int.from_bytes(f.read(4), 'little')
-            if chunk_id == b'fmt ':
-                fmt_data = f.read(chunk_size)
-                if len(fmt_data) < 16:
-                    raise ValueError("Invalid fmt chunk")
-                audio_format = int.from_bytes(fmt_data[0:2], 'little')
-                channels = int.from_bytes(fmt_data[2:4], 'little')
-                sample_rate = int.from_bytes(fmt_data[4:8], 'little')
-                bits_per_sample = int.from_bytes(fmt_data[14:16], 'little')
-                if audio_format != 1:
-                    raise ValueError("Only PCM supported")
-                if bits_per_sample != 16:
-                    raise ValueError("Only 16-bit supported")
-                if channels != 1:
-                    raise ValueError("Only mono supported")
-            elif chunk_id == b'data':
-                data_start = f.tell()
-                data_size = chunk_size
-                return data_start, data_size, sample_rate
-            # Skip chunk (pad byte if odd size)
-            pos += 8 + chunk_size
-            if chunk_size % 2 == 1:
-                pos += 1
-        raise ValueError("No 'data' chunk found")
-    
-    def play_wav(filename):
-        """Play large WAV files robustly with chunk skipping and streaming."""
-        try:
-            with open(filename, 'rb') as f:
-                stat = uos.stat(filename)
-                file_size = stat[6]
-                print(f"File size: {file_size} bytes")
-    
-                data_start, data_size, sample_rate = AudioPlayer.find_data_chunk(f)
-                print(f"Found 'data' chunk: {data_size} bytes at {sample_rate} Hz")
-    
-                if data_size > file_size - data_start:
-                    print("Warning: data_size exceeds file bounds. Truncating.")
-                    data_size = file_size - data_start
-    
-                # Configure I2S
-                i2s = machine.I2S(
-                    0,
-                    sck=machine.Pin(2, machine.Pin.OUT),
-                    ws=machine.Pin(47, machine.Pin.OUT),
-                    sd=machine.Pin(16, machine.Pin.OUT),
-                    mode=machine.I2S.TX,
-                    bits=16,
-                    format=machine.I2S.MONO,
-                    rate=sample_rate,
-                    ibuf=32000  # Larger buffer for stability
-                )
-    
-                print(f"Playing {data_size} bytes at {sample_rate} Hz...")
-                f.seek(data_start)
-    
-                chunk_size = 4096  # 4KB chunks = safe for ESP32
-                total_read = 0
-                while total_read < data_size:
-                    remaining = data_size - total_read
-                    read_size = min(chunk_size, remaining)
-                    chunk = f.read(read_size)
-                    if not chunk:
-                        break
-                    i2s.write(chunk)
-                    total_read += len(chunk)
-    
-                print("Playback finished.")
-        except Exception as e:
-            print(f"Error: {e}")
-        finally:
-            try:
-                i2s.deinit()
-            except:
-                pass
-
-
 
 class FullscreenPlayer(Activity):
     # No __init__() so super.__init__() will be called automatically
