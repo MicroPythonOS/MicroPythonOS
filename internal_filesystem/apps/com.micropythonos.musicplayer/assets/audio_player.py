@@ -1,3 +1,4 @@
+import machine
 import os
 import time
 
@@ -96,13 +97,12 @@ class AudioPlayer:
                         ibuf=32000
                     )
                 except Exception as e:
-                    print("Warning: error initializing I2S audio device, simulating playback...")
+                    print(f"Warning: simulating playback due to error initializing I2S audio device: {e}")
 
                 print(f"Playing {data_size} bytes (vol {cls._volume}%) …")
                 f.seek(data_start)
 
                 chunk_size = 4096                     # 4 KB → safe on ESP32
-                scale = cls._volume / 100.0           # float 0.0-1.0
 
                 total = 0
                 while total < data_size:
@@ -112,13 +112,14 @@ class AudioPlayer:
                         break
 
                     # ---- on-the-fly volume scaling (16-bit little-endian) ----
-                    if scale < 1.0:
-                        # convert bytes → array of signed ints → scale → back to bytes
-                        import array
-                        samples = array.array('h', raw)          # 'h' = signed short
-                        for i in range(len(samples)):
-                            samples[i] = int(samples[i] * scale)
-                        raw = samples.tobytes()
+                    scale = cls._volume / 100.0           # float 0.0-1.0
+                    if scale < 0.9:
+                        scaled = bytearray(len(raw))
+                        for i in range(0, len(raw), 2):
+                            sample = int.from_bytes(raw[i:i+2], 'little', True)
+                            sample = int(sample * scale)
+                            scaled[i:i+2] = sample.to_bytes(2, 'little', True)
+                        raw = bytes(scaled)
                     # ---------------------------------------------------------
 
                     if cls._i2s:
