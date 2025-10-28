@@ -59,9 +59,6 @@ class AudioPlayer:
         """Set playback volume 0-100 (100 = full scale)."""
         volume = max(0, min(100, volume))          # clamp
         cls._volume = volume
-        # If playback is already running we could instantly re-scale the
-        # current buffer, but the simple way (scale on each write) is
-        # enough and works even if playback starts later.
 
     @classmethod
     def get_volume(cls) -> int:
@@ -73,9 +70,6 @@ class AudioPlayer:
         print("stop_playing()")
         AudioPlayer._keep_running = False
 
-    # ------------------------------------------------------------------
-    #  Playback entry point (called from a thread)
-    # ------------------------------------------------------------------
     @classmethod
     def play_wav(cls, filename):
         AudioPlayer._keep_running = True
