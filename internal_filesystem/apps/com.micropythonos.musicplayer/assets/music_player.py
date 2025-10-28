@@ -154,8 +154,6 @@ class FullscreenPlayer(Activity):
     def onCreate(self):
         self._filename = self.getIntent().extras.get("filename")
         qr_screen = lv.obj()
-        #qr_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        #qr_screen.set_scroll_dir(lv.DIR.NONE)
         self._slider_label=lv.label(qr_screen)
         self._slider_label.set_text(f"Volume: 100%")
         self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
@@ -163,18 +161,24 @@ class FullscreenPlayer(Activity):
         self._slider.set_range(0,100)
         self._slider.set_value(100,False)
         self._slider.set_width(lv.pct(80))
-        self._slider.align(lv.ALIGN.LEFT_MID,0,0)
+        self._slider.align_to(self._slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
         def volume_slider_changed(e):
             volume_int = self._slider.get_value()
             self._slider_label.set_text(f"Volume: {volume_int}%")
             # TODO: set volume using AudioPlayer.set_volume(volume_int)
         self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
         self._filename_label = lv.label(qr_screen)
-        self._filename_label.align_to(self._slider,lv.ALIGN.OUT_BOTTOM_MID,0,10)
+        self._filename_label.align(lv.ALIGN.CENTER,0,0)
         self._filename_label.set_text(self._filename)
+        self._filename_label.set_width(lv.pct(90))
+        self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.focus_obj(obj), lv.EVENT.FOCUSED, None)
+        self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.defocus_obj(obj), lv.EVENT.DEFOCUSED, None)
+        self._filename_label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
+
         focusgroup = lv.group_get_default()
         if focusgroup:
             focusgroup.add_obj(qr_screen)
+            focusgroup.add_obj(self._filename_label)
         self.setContentView(qr_screen)
 
     def onResume(self, screen):
@@ -184,3 +188,10 @@ class FullscreenPlayer(Activity):
             print("Starting thread to play file {self._filename}")
             _thread.stack_size(mpos.apps.good_stack_size())
             _thread.start_new_thread(AudioPlayer.play_wav, (self._filename,))
+
+    def focus_obj(self, obj):
+        obj.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
+        obj.set_style_border_width(1, lv.PART.MAIN)
+
+    def defocus_obj(self, obj):
+        obj.set_style_border_width(0, lv.PART.MAIN)
