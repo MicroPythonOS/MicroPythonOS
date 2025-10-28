@@ -57,6 +57,7 @@ class FullscreenPlayer(Activity):
     
     # Internal state:
     _filename = None
+    _keep_running = True
 
     def onCreate(self):
         self._filename = self.getIntent().extras.get("filename")
@@ -94,6 +95,7 @@ class FullscreenPlayer(Activity):
         self.setContentView(qr_screen)
 
     def onResume(self, screen):
+        self._keep_running = True
         if not self._filename:
             print("Not playing any file...")
         else:
@@ -111,10 +113,13 @@ class FullscreenPlayer(Activity):
         obj.set_style_border_width(0, lv.PART.MAIN)
 
     def stop_button_clicked(self, event):
+        self._keep_running = False
         AudioPlayer.stop_playing()
         self.finish()
 
     def player_finished(self, result=None):
+        if not self._keep_running:
+            return # stop immediately
         text = f"Finished playing {self._filename}"
         if result:
             text = result
