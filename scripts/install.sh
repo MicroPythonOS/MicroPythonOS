@@ -66,4 +66,7 @@ $mpremote fs cp -r resources :/
 
 popd
 
-$mpremote reset
+if [ -z "$appname" ]; then
+	echo "Not resetting so the installed app can be used immediately."
+	$mpremote reset
+fi

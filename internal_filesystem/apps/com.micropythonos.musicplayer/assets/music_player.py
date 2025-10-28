@@ -10,6 +10,8 @@ class MusicPlayer(Activity):
 
     # Widgets:
     file_explorer = None
+    _slider_label = None
+    _slider = None
 
     def onCreate(self):
         screen = lv.obj()
@@ -19,6 +21,19 @@ class MusicPlayer(Activity):
         self.file_explorer.explorer_open_dir('M:/')
         self.file_explorer.align(lv.ALIGN.CENTER, 0, 0)
         self.file_explorer.add_event_cb(self.file_explorer_event_cb, lv.EVENT.ALL, None)
+        self._slider_label=lv.label(screen)
+        self._slider_label.set_text(f"Volume: 100%")
+        self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
+        self._slider=lv.slider(screen)
+        self._slider.set_range(0,100)
+        self._slider.set_value(100,False)
+        self._slider.set_width(lv.pct(80))
+        self._slider.align_to(self._slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
+        def volume_slider_changed(e):
+            volume_int = self._slider.get_value()
+            self._slider_label.set_text(f"Volume: {volume_int}%")
+            # TODO: set volume using AudioPlayer.set_volume(volume_int)
+        self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
         self.setContentView(screen)
 
     def onResume(self, screen):
@@ -39,61 +54,99 @@ class MusicPlayer(Activity):
                 if fullpath.lower().endswith('.wav'):
                     _thread.stack_size(mpos.apps.good_stack_size())
                     _thread.start_new_thread(self.play_wav, (fullpath,))
-                    #self.play_wav(fullpath)
                 else:
                     print("INFO: ignoring unsupported file format")
 
-    def parse_wav_header(self, f):
-        """Parse standard WAV header (44 bytes) and return channels, sample_rate, bits_per_sample, data_size."""
-        header = f.read(44)
-        if header[0:4] != b'RIFF' or header[8:12] != b'WAVE' or header[12:16] != b'fmt ':
-            raise ValueError("Invalid WAV file")
-        audio_format = int.from_bytes(header[20:22], 'little')
-        if audio_format != 1:  # PCM only
-            raise ValueError("Only PCM WAV supported")
-        channels = int.from_bytes(header[22:24], 'little')
-        sample_rate = int.from_bytes(header[24:28], 'little')
-        bits_per_sample = int.from_bytes(header[34:36], 'little')
-        # Skip to data chunk
-        f.read(8)  # 'data' + size
-        data_size = int.from_bytes(f.read(4), 'little')
-        return channels, sample_rate, bits_per_sample, data_size
-
-    def play_wav(self, filename):
-        """Play WAV file via I2S to MAX98357A."""
-        with open(filename, 'rb') as f:
-            try:
-                channels, sample_rate, bits_per_sample, data_size = self.parse_wav_header(f)
+    def find_data_chunk(self, f):
+        """Skip chunks until 'data' is found. Returns (data_start_pos, data_size)."""
+        # Go back to start
+        f.seek(0)
+        riff = f.read(4)
+        if riff != b'RIFF':
+            raise ValueError("Not a RIFF file")
+        file_size = int.from_bytes(f.read(4), 'little') + 8  # Total file size
+        wave = f.read(4)
+        if wave != b'WAVE':
+            raise ValueError("Not a WAVE file")
+    
+        pos = 12  # Start after RIFF header
+        while pos < file_size:
+            f.seek(pos)
+            chunk_id = f.read(4)
+            if len(chunk_id) < 4:
+                break
+            chunk_size = int.from_bytes(f.read(4), 'little')
+            if chunk_id == b'fmt ':
+                fmt_data = f.read(chunk_size)
+                if len(fmt_data) < 16:
+                    raise ValueError("Invalid fmt chunk")
+                audio_format = int.from_bytes(fmt_data[0:2], 'little')
+                channels = int.from_bytes(fmt_data[2:4], 'little')
+                sample_rate = int.from_bytes(fmt_data[4:8], 'little')
+                bits_per_sample = int.from_bytes(fmt_data[14:16], 'little')
+                if audio_format != 1:
+                    raise ValueError("Only PCM supported")
                 if bits_per_sample != 16:
-                    raise ValueError("Only 16-bit audio supported")
+                    raise ValueError("Only 16-bit supported")
                 if channels != 1:
-                    raise ValueError("Only mono audio supported (convert with -ac 1 in FFmpeg)")
-	
-                # Configure I2S (TX mode for output)
-                i2s = machine.I2S(0,  # I2S peripheral 0
-                        sck=machine.Pin(2, machine.Pin.OUT),      # BCK
-                        ws=machine.Pin(47, machine.Pin.OUT),      # LRCK
-                        sd=machine.Pin(16, machine.Pin.OUT),      # DIN
-                        mode=machine.I2S.TX,
-                        bits=16,
-                        format=machine.I2S.MONO,
-                        rate=sample_rate,
-                        ibuf=16000)  # Internal buffer size (adjust if audio stutters)
-
+                    raise ValueError("Only mono supported")
+            elif chunk_id == b'data':
+                data_start = f.tell()
+                data_size = chunk_size
+                return data_start, data_size, sample_rate
+            # Skip chunk (pad byte if odd size)
+            pos += 8 + chunk_size
+            if chunk_size % 2 == 1:
+                pos += 1
+        raise ValueError("No 'data' chunk found")
+    
+    def play_wav(self, filename):
+        """Play large WAV files robustly with chunk skipping and streaming."""
+        try:
+            with open(filename, 'rb') as f:
+                stat = uos.stat(filename)
+                file_size = stat[6]
+                print(f"File size: {file_size} bytes")
+    
+                data_start, data_size, sample_rate = self.find_data_chunk(f)
+                print(f"Found 'data' chunk: {data_size} bytes at {sample_rate} Hz")
+    
+                if data_size > file_size - data_start:
+                    print("Warning: data_size exceeds file bounds. Truncating.")
+                    data_size = file_size - data_start
+    
+                # Configure I2S
+                i2s = machine.I2S(
+                    0,
+                    sck=machine.Pin(2, machine.Pin.OUT),
+                    ws=machine.Pin(47, machine.Pin.OUT),
+                    sd=machine.Pin(16, machine.Pin.OUT),
+                    mode=machine.I2S.TX,
+                    bits=16,
+                    format=machine.I2S.MONO,
+                    rate=sample_rate,
+                    ibuf=32000  # Larger buffer for stability
+                )
+    
                 print(f"Playing {data_size} bytes at {sample_rate} Hz...")
-
-                # Stream data in chunks (16-bit = 2 bytes per sample)
-                chunk_size = 1024 * 2  # 1KB chunks (tune for your RAM)
+                f.seek(data_start)
+    
+                chunk_size = 4096  # 4KB chunks = safe for ESP32
                 total_read = 0
                 while total_read < data_size:
-                    chunk = f.read(min(chunk_size, data_size - total_read))
+                    remaining = data_size - total_read
+                    read_size = min(chunk_size, remaining)
+                    chunk = f.read(read_size)
                     if not chunk:
                         break
-                    i2s.write(chunk)  # Direct byte stream (little-endian matches I2S)
+                    i2s.write(chunk)
                     total_read += len(chunk)
-
+    
                 print("Playback finished.")
-            except Exception as e:
-                print(f"Error: {e}")
-            finally:
-                i2s.deinit()  # Clean up
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            try:
+                i2s.deinit()
+            except:
+                pass
