@@ -11,7 +11,7 @@ import micropython
 # ----------------------------------------------------------------------
 class AudioPlayer:
     _i2s = None
-    _volume = 50          # 0-100
+    _volume = 50 # 0-100
     _keep_running = True
 
     # ------------------------------------------------------------------
@@ -22,10 +22,10 @@ class AudioPlayer:
         """Return (data_start, data_size, sample_rate, channels, bits_per_sample)"""
         f.seek(0)
         if f.read(4) != b'RIFF':
-            raise ValueError("Not a RIFF file")
+            raise ValueError("Not a RIFF (standard .wav) file")
         file_size = int.from_bytes(f.read(4), 'little') + 8
         if f.read(4) != b'WAVE':
-            raise ValueError("Not a WAVE file")
+            raise ValueError("Not a WAVE (standard .wav) file")
 
         pos = 12
         sample_rate = None
@@ -154,7 +154,7 @@ class AudioPlayer:
     #  Main playback routine
     # ------------------------------------------------------------------
     @classmethod
-    def play_wav(cls, filename):
+    def play_wav(cls, filename, result_callback=None):
         cls._keep_running = True
         try:
             with open(filename, 'rb') as f:
@@ -265,9 +265,13 @@ class AudioPlayer:
 
                     total_original += to_read
 
-                print("Playback finished.")
+                print(f"Finished playing {filename}")
+                if result_callback:
+                    result_callback(f"Finished playing {filename}")
         except Exception as e:
-            print(f"AudioPlayer error: {e}")
+            print(f"Error: {e}\nwhile playing {filename}")
+            if result_callback:
+                result_callback(f"Error: {e}\nwhile playing {filename}")
         finally:
             if cls._i2s:
                 cls._i2s.deinit()

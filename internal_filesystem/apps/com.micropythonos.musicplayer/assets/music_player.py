@@ -39,11 +39,11 @@ class MusicPlayer(Activity):
                 file = self.file_explorer.explorer_get_selected_file_name()
                 fullpath = f"{clean_path}{file}"
                 print(f"Selected: {fullpath}")
-                if fullpath.lower().endswith('.wav'):
-                    self.destination = FullscreenPlayer
-                    self.startActivity(Intent(activity_class=FullscreenPlayer).putExtra("filename", fullpath))
-                else:
-                    print("INFO: ignoring unsupported file format")
+                #if fullpath.lower().endswith('.wav'):
+                self.destination = FullscreenPlayer
+                self.startActivity(Intent(activity_class=FullscreenPlayer).putExtra("filename", fullpath))
+                #else:
+                #    print("INFO: ignoring unsupported file format")
 
 class FullscreenPlayer(Activity):
     # No __init__() so super.__init__() will be called automatically
@@ -101,7 +101,7 @@ class FullscreenPlayer(Activity):
             AudioPlayer.stop_playing()
             time.sleep(0.1)
             _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(AudioPlayer.play_wav, (self._filename,))
+            _thread.start_new_thread(AudioPlayer.play_wav, (self._filename,self.player_finished,))
 
     def focus_obj(self, obj):
         obj.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
@@ -113,3 +113,10 @@ class FullscreenPlayer(Activity):
     def stop_button_clicked(self, event):
         AudioPlayer.stop_playing()
         self.finish()
+
+    def player_finished(self, result=None):
+        text = f"Finished playing {self._filename}"
+        if result:
+            text = result
+        print(f"AudioPlayer finished: {text}")
+        lv.async_call(lambda l: self._filename_label.set_text(text), None)
