@@ -2,7 +2,7 @@ import machine
 import uos
 import _thread
 
-from mpos.apps import Activity
+from mpos.apps import Activity, Intent
 import mpos.sdcard
 import mpos.ui
 
@@ -10,8 +10,6 @@ class MusicPlayer(Activity):
 
     # Widgets:
     file_explorer = None
-    _slider_label = None
-    _slider = None
 
     def onCreate(self):
         screen = lv.obj()
@@ -21,19 +19,6 @@ class MusicPlayer(Activity):
         self.file_explorer.explorer_open_dir('M:/')
         self.file_explorer.align(lv.ALIGN.CENTER, 0, 0)
         self.file_explorer.add_event_cb(self.file_explorer_event_cb, lv.EVENT.ALL, None)
-        self._slider_label=lv.label(screen)
-        self._slider_label.set_text(f"Volume: 100%")
-        self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
-        self._slider=lv.slider(screen)
-        self._slider.set_range(0,100)
-        self._slider.set_value(100,False)
-        self._slider.set_width(lv.pct(80))
-        self._slider.align_to(self._slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
-        def volume_slider_changed(e):
-            volume_int = self._slider.get_value()
-            self._slider_label.set_text(f"Volume: {volume_int}%")
-            # TODO: set volume using AudioPlayer.set_volume(volume_int)
-        self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
         self.setContentView(screen)
 
     def onResume(self, screen):
@@ -52,12 +37,14 @@ class MusicPlayer(Activity):
                 fullpath = f"{clean_path}{file}"
                 print(f"Selected: {fullpath}")
                 if fullpath.lower().endswith('.wav'):
-                    _thread.stack_size(mpos.apps.good_stack_size())
-                    _thread.start_new_thread(self.play_wav, (fullpath,))
+                    self.destination = FullscreenPlayer
+                    self.startActivity(Intent(activity_class=FullscreenPlayer).putExtra("filename", fullpath))
                 else:
                     print("INFO: ignoring unsupported file format")
 
-    def find_data_chunk(self, f):
+class AudioPlayer:
+
+    def find_data_chunk(f):
         """Skip chunks until 'data' is found. Returns (data_start_pos, data_size)."""
         # Go back to start
         f.seek(0)
@@ -100,7 +87,7 @@ class MusicPlayer(Activity):
                 pos += 1
         raise ValueError("No 'data' chunk found")
     
-    def play_wav(self, filename):
+    def play_wav(filename):
         """Play large WAV files robustly with chunk skipping and streaming."""
         try:
             with open(filename, 'rb') as f:
@@ -108,7 +95,7 @@ class MusicPlayer(Activity):
                 file_size = stat[6]
                 print(f"File size: {file_size} bytes")
     
-                data_start, data_size, sample_rate = self.find_data_chunk(f)
+                data_start, data_size, sample_rate = AudioPlayer.find_data_chunk(f)
                 print(f"Found 'data' chunk: {data_size} bytes at {sample_rate} Hz")
     
                 if data_size > file_size - data_start:
@@ -150,3 +137,50 @@ class MusicPlayer(Activity):
                 i2s.deinit()
             except:
                 pass
+
+
+
+class FullscreenPlayer(Activity):
+    # No __init__() so super.__init__() will be called automatically
+
+    # Widgets:
+    _filename_label = None
+    _slider_label = None
+    _slider = None
+    
+    # Internal state:
+    _filename = None
+
+    def onCreate(self):
+        self._filename = self.getIntent().extras.get("filename")
+        qr_screen = lv.obj()
+        #qr_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        #qr_screen.set_scroll_dir(lv.DIR.NONE)
+        self._slider_label=lv.label(qr_screen)
+        self._slider_label.set_text(f"Volume: 100%")
+        self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
+        self._slider=lv.slider(qr_screen)
+        self._slider.set_range(0,100)
+        self._slider.set_value(100,False)
+        self._slider.set_width(lv.pct(80))
+        self._slider.align(lv.ALIGN.LEFT_MID,0,0)
+        def volume_slider_changed(e):
+            volume_int = self._slider.get_value()
+            self._slider_label.set_text(f"Volume: {volume_int}%")
+            # TODO: set volume using AudioPlayer.set_volume(volume_int)
+        self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
+        self._filename_label = lv.label(qr_screen)
+        self._filename_label.align_to(self._slider,lv.ALIGN.OUT_BOTTOM_MID,0,10)
+        self._filename_label.set_text(self._filename)
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(qr_screen)
+        self.setContentView(qr_screen)
+
+    def onResume(self, screen):
+        if not self._filename:
+            print("Not playing any file...")
+        else:
+            print("Starting thread to play file {self._filename}")
+            _thread.stack_size(mpos.apps.good_stack_size())
+            _thread.start_new_thread(AudioPlayer.play_wav, (self._filename,))
