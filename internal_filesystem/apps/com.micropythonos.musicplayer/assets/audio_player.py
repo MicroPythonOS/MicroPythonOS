@@ -11,6 +11,7 @@ class AudioPlayer:
     # class-level defaults (shared by every instance)
     _i2s = None          # the I2S object (created once per playback)
     _volume = 50        # 0-100  (100 = full scale)
+    _keep_running = True
 
     @staticmethod
     def find_data_chunk(f):
@@ -67,11 +68,17 @@ class AudioPlayer:
         """Return current volume 0-100."""
         return cls._volume
 
+    #@classmethod
+    def stop_playing():
+        print("stop_playing()")
+        AudioPlayer._keep_running = False
+
     # ------------------------------------------------------------------
     #  Playback entry point (called from a thread)
     # ------------------------------------------------------------------
     @classmethod
     def play_wav(cls, filename):
+        AudioPlayer._keep_running = True
         """Play a large mono 16-bit PCM WAV file with on-the-fly volume."""
         try:
             with open(filename, 'rb') as f:
@@ -124,6 +131,11 @@ class AudioPlayer:
 
                 total = 0
                 while total < data_size:
+                    if total % 51 == 0:
+                        print('.', end='')
+                    if not AudioPlayer._keep_running:
+                        print("_keep_running = False, stopping...")
+                        break
                     to_read = min(chunk_size, data_size - total)
                     raw = bytearray(f.read(to_read))  # mutable for in-place scaling
                     if not raw:

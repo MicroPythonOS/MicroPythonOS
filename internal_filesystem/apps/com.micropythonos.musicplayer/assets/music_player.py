@@ -1,6 +1,7 @@
 import machine
 import os
 import _thread
+import time
 
 from mpos.apps import Activity, Intent
 import mpos.sdcard
@@ -90,6 +91,8 @@ class FullscreenPlayer(Activity):
             print("Not playing any file...")
         else:
             print("Starting thread to play file {self._filename}")
+            AudioPlayer.stop_playing()
+            time.sleep(1)
             _thread.stack_size(mpos.apps.good_stack_size())
             _thread.start_new_thread(AudioPlayer.play_wav, (self._filename,))
 
