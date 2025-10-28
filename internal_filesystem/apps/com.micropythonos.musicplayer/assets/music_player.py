@@ -32,7 +32,7 @@ class MusicPlayer(Activity):
         event_code = event.get_code()
         if event_code not in [2,19,23,24,25,26,27,28,29,30,31,32,33,47,49,52]:
             name = mpos.ui.get_event_name(event_code)
-            print(f"file_explorer_event_cb {event_code} with name {name}")
+            #print(f"file_explorer_event_cb {event_code} with name {name}")
             if event_code == lv.EVENT.VALUE_CHANGED:
                 path = self.file_explorer.explorer_get_current_path()
                 clean_path = path[2:] if path[1] == ':' else path
@@ -52,6 +52,8 @@ class FullscreenPlayer(Activity):
     _filename_label = None
     _slider_label = None
     _slider = None
+    _stop_button = None
+    _stop_button_label = None
     
     # Internal state:
     _filename = None
@@ -79,6 +81,11 @@ class FullscreenPlayer(Activity):
         self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.focus_obj(obj), lv.EVENT.FOCUSED, None)
         self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.defocus_obj(obj), lv.EVENT.DEFOCUSED, None)
         self._filename_label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
+        self._stop_button = lv.button(qr_screen)
+        self._stop_button.align(lv.ALIGN.BOTTOM_MID,0,0)
+        self._stop_button.add_event_cb(self.stop_button_clicked,lv.EVENT.CLICKED,None)
+        self._stop_button_label = lv.label(self._stop_button)
+        self._stop_button_label.set_text("Stop")
 
         focusgroup = lv.group_get_default()
         if focusgroup:
@@ -92,7 +99,7 @@ class FullscreenPlayer(Activity):
         else:
             print("Starting thread to play file {self._filename}")
             AudioPlayer.stop_playing()
-            time.sleep(1)
+            time.sleep(0.1)
             _thread.stack_size(mpos.apps.good_stack_size())
             _thread.start_new_thread(AudioPlayer.play_wav, (self._filename,))
 
@@ -102,3 +109,7 @@ class FullscreenPlayer(Activity):
 
     def defocus_obj(self, obj):
         obj.set_style_border_width(0, lv.PART.MAIN)
+
+    def stop_button_clicked(self, event):
+        AudioPlayer.stop_playing()
+        self.finish()
