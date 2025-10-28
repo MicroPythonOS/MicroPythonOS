@@ -205,14 +205,14 @@ def empty_screen_stack():
     screen_stack.clear()
 
 def move_focusgroup_objects(fromgroup, togroup):
-    print(f"Moving {fromgroup.get_obj_count()} focused objects")
+    #print(f"Moving {fromgroup.get_obj_count()} focused objects")
     for objnr in range(fromgroup.get_obj_count()):
         #print(f"saving object {objnr} from default focusgroup to current_focusgroup")
         next = fromgroup.get_obj_by_index(0)
-        mpos.util.print_lvgl_widget(next)
+        #mpos.util.print_lvgl_widget(next)
         if next:
             togroup.add_obj(next)
-    print("Done moving focused objects")
+    #print("Done moving focused objects")
 
 
 # Saves all objects from the default focus group in the activity's focus group
@@ -222,9 +222,9 @@ def save_and_clear_current_focusgroup():
     if default_focusgroup and len(screen_stack) > 0:
         current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()
         current_focused_object = default_focusgroup.get_focused()
-        if current_focused_object:
-            print("current_focused_object: ")
-            mpos.util.print_lvgl_widget(current_focused_object)
+        #if current_focused_object:
+        #    print("current_focused_object: ")
+        #    mpos.util.print_lvgl_widget(current_focused_object)
         move_focusgroup_objects(lv.group_get_default(), current_focusgroup)
         screen_stack.append((current_activity, current_screen, current_focusgroup, current_focused_object))
 
@@ -285,8 +285,8 @@ def back_screen():
     default_focusgroup = lv.group_get_default()
     if default_focusgroup:
         move_focusgroup_objects(prev_focusgroup, default_focusgroup)
-        print("restoring prev_focused_object: ")
-        mpos.util.print_lvgl_widget(prev_focused_object)
+        #print("restoring prev_focused_object: ")
+        #mpos.util.print_lvgl_widget(prev_focused_object)
         mpos.ui.focus_direction.emulate_focus_obj(default_focusgroup, prev_focused_object) # LVGL 9.3 should have: default_focusgroup.focus_obj(prev_focused_object)
     if prev_activity:
         prev_activity.onResume(prev_screen)

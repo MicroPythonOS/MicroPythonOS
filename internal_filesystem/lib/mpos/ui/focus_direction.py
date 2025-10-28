@@ -147,7 +147,8 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         print(f"Closest object in direction {direction_degrees}°:")
         mpos.util.print_lvgl_widget(closest_obj)
     else:
-        print(f"No object found in direction {direction_degrees}°")
+        #print(f"No object found in direction {direction_degrees}°")
+        pass
     
     return closest_obj
 
