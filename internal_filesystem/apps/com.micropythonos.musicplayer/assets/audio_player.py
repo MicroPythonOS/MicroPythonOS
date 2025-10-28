@@ -131,8 +131,9 @@ class AudioPlayer:
 
                 total = 0
                 while total < data_size:
-                    if total % 51 == 0:
-                        print('.', end='')
+                    # Progress:
+                    #if total % 51 == 0:
+                    #    print('.', end='')
                     if not AudioPlayer._keep_running:
                         print("_keep_running = False, stopping...")
                         break
