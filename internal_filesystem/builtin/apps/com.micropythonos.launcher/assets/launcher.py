@@ -49,6 +49,9 @@ class Launcher(mpos.apps.Activity):
 
         # Create UI for each app
         for app in PackageManager.get_app_list():
+            if app.category == "launcher":
+                print("Skipping launcher app from launcher apps...")
+                continue
             app_name = app.name
             app_dir_fullpath = app.installed_path
             print(f"Adding app {app_name} from {app_dir_fullpath}")
