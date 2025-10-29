@@ -26,7 +26,7 @@ class FileManager(Activity):
         # Attach event callback
         self.file_explorer.add_event_cb(self.file_explorer_event_cb, lv.EVENT.ALL, None)
         self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.HOME_DIR, "M:/home/user/")
-        self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.IMAGE_DIR, "M:/data/images/")
+        self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.PICTURES_DIR, "M:/data/images/")
         self.setContentView(screen)
 
     def file_explorer_event_cb(self, event):
