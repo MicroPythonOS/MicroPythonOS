@@ -66,5 +66,7 @@ class About(Activity):
             print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
             label11 = lv.label(screen)
             label11.set_text(f"freezefs_mount_builtin exception (normal on dev builds): {e}")
-
+        # TODO:
+        # - add total size, used and free space on internal storage
+        # - add total size, used and free space on SD card
         self.setContentView(screen)

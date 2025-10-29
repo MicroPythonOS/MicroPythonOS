@@ -13,6 +13,8 @@ except ImportError:
 
 from mpos.apps import Activity, Intent
 import mpos.ui
+from mpos.package_manager import PackageManager
+
 
 class AppStore(Activity):
     apps = []
@@ -250,7 +252,7 @@ class AppDetail(Activity):
         self.install_label = lv.label(self.install_button)
         self.install_label.center()
         self.set_install_label(app.fullname)
-        if self.is_update_available(app.fullname, app.version):
+        if PackageManager.is_update_available(app.fullname, app.version):
             self.install_button.set_size(lv.pct(47), 40) # make space for update button
             print("Update available, adding update button.")
             self.update_button = lv.button(buttoncont)
@@ -285,10 +287,10 @@ class AppDetail(Activity):
         # - update is separate button, only shown if already installed and new version
         is_installed = True
         update_available = False
-        builtin_app = self.is_builtin_app(app_fullname)
-        overridden_builtin_app = self.is_overridden_builtin_app(app_fullname)
+        builtin_app = PackageManager.is_builtin_app(app_fullname)
+        overridden_builtin_app = PackageManager.is_overridden_builtin_app(app_fullname)
         if not overridden_builtin_app:
-            is_installed = AppDetail.is_installed_by_name(app_fullname)
+            is_installed = PackageManager.is_installed_by_name(app_fullname)
         if is_installed:
             if builtin_app:
                 if overridden_builtin_app:
@@ -308,16 +310,16 @@ class AppDetail(Activity):
         if label_text == self.action_label_install:
             try:
                 _thread.stack_size(mpos.apps.good_stack_size())
-                _thread.start_new_thread(self.download_and_unzip, (download_url, f"apps/{fullname}", fullname))
+                _thread.start_new_thread(self.download_and_install, (download_url, f"apps/{fullname}", fullname))
             except Exception as e:
-                print("Could not start download_and_unzip thread: ", e)
+                print("Could not start download_and_install thread: ", e)
         elif label_text == self.action_label_uninstall or label_text == self.action_label_restore:
             print("Uninstalling app....")
             try:
                 _thread.stack_size(mpos.apps.good_stack_size())
-                _thread.start_new_thread(self.uninstall_app, (f"apps/{fullname}", fullname))
+                _thread.start_new_thread(self.uninstall_app, (fullname))
             except Exception as e:
-                print("Could not start download_and_unzip thread: ", e)
+                print("Could not start uninstall_app thread: ", e)
     
     def update_button_click(self, download_url, fullname):
         print(f"Update button clicked for {download_url} and fullname {fullname}")
@@ -325,32 +327,26 @@ class AppDetail(Activity):
         self.install_button.set_size(lv.pct(100), 40)
         try:
             _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.download_and_unzip, (download_url, f"apps/{fullname}", fullname))
+            _thread.start_new_thread(self.download_and_install, (download_url, f"apps/{fullname}", fullname))
         except Exception as e:
-            print("Could not start download_and_unzip thread: ", e)
-    
-    def uninstall_app(self, app_folder, app_fullname):
+            print("Could not start download_and_install thread: ", e)
+
+    def uninstall_app(self, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...") # TODO: Put "Cancel" if cancellation is possible
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(33, True)
-        try:
-            import shutil
-            shutil.rmtree(app_folder)
-            self.progress_bar.set_value(66, True)
-        except Exception as e:
-            print(f"Removing app_folder {app_folder} got error: {e}")
+        self.progress_bar.set_value(42, True)
+        PackageManager.uninstall_app(app_fullname)
         self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(0, False)
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
-        if self.is_builtin_app(app_fullname):
+        if PackageManager.is_builtin_app(app_fullname):
             self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
             self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
-    
 
-    def download_and_unzip(self, zip_url, dest_folder, app_fullname):
+    def download_and_install(self, zip_url, dest_folder, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...") # TODO: Put "Cancel" if cancellation is possible
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -387,86 +383,11 @@ class AppDetail(Activity):
         finally:
             if 'response' in locals():
                 response.close()
-        try:
-            # Step 2: Unzip the file
-            print("Unzipping it to:", dest_folder)
-            with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-                zip_ref.extractall(dest_folder)
-            self.progress_bar.set_value(80, True)
-            print("Unzipped successfully")
-            # Step 3: Clean up
-            os.remove(temp_zip_path)
-            print("Removed temporary .mpk file")
-        except Exception as e:
-            print(f"Unzip and cleanup failed: {e}")
-            # Would be good to show error message here if it fails...
+        # Step 2: install it:
+        PackageManager.install_mpk(temp_zip_path, dest_folder)
         # Success:
         self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(0, False)
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
-
-    @staticmethod
-    def compare_versions(ver1: str, ver2: str) -> bool:
-        """Compare two version numbers (e.g., '1.2.3' vs '4.5.6').
-        Returns True if ver1 is greater than ver2, False otherwise."""
-        print(f"Comparing versions: {ver1} vs {ver2}")
-        v1_parts = [int(x) for x in ver1.split('.')]
-        v2_parts = [int(x) for x in ver2.split('.')]
-        print(f"Version 1 parts: {v1_parts}")
-        print(f"Version 2 parts: {v2_parts}")
-        for i in range(max(len(v1_parts), len(v2_parts))):
-            v1 = v1_parts[i] if i < len(v1_parts) else 0
-            v2 = v2_parts[i] if i < len(v2_parts) else 0
-            print(f"Comparing part {i}: {v1} vs {v2}")
-            if v1 > v2:
-                print(f"{ver1} is greater than {ver2}")
-                return True
-            if v1 < v2:
-                print(f"{ver1} is less than {ver2}")
-                return False
-        print(f"Versions are equal or {ver1} is not greater than {ver2}")
-        return False
-
-    @staticmethod
-    def is_builtin_app(app_fullname):
-        return AppDetail.is_installed_by_path(f"builtin/apps/{app_fullname}")
-
-    @staticmethod
-    def is_overridden_builtin_app(app_fullname):
-        return AppDetail.is_installed_by_path(f"apps/{app_fullname}") and AppDetail.is_installed_by_path(f"builtin/apps/{app_fullname}")
-
-    @staticmethod
-    def is_update_available(app_fullname, new_version):
-        appdir = f"apps/{app_fullname}"
-        builtinappdir = f"builtin/apps/{app_fullname}"
-        installed_app=None
-        if AppDetail.is_installed_by_path(appdir):
-            print(f"{appdir} found, getting version...")
-            installed_app = mpos.apps.parse_manifest(appdir)
-        elif AppDetail.is_installed_by_path(builtinappdir):
-            print(f"{builtinappdir} found, getting version...")
-            installed_app = mpos.apps.parse_manifest(builtinappdir)
-        if not installed_app or installed_app.version == "0.0.0": # special case, if the installed app doesn't have a version number then there's no update
-            return False
-        return AppDetail.compare_versions(new_version, installed_app.version)
-
-    @staticmethod
-    def is_installed_by_path(dir_path):
-        try:
-            if os.stat(dir_path)[0] & 0x4000:
-                print(f"is_installed_by_path: {dir_path} found, checking manifest...")
-                manifest = f"{dir_path}/META-INF/MANIFEST.JSON"
-                if os.stat(manifest)[0] & 0x8000:
-                    return True
-        except OSError:
-            print(f"is_installed_by_path got OSError for {dir_path}")
-            pass # Skip if directory or manifest doesn't exist
-        return False
-
-    @staticmethod
-    def is_installed_by_name(app_fullname):
-        print(f"Checking if app {app_fullname} is installed...")
-        return AppDetail.is_installed_by_path(f"apps/{app_fullname}") or AppDetail.is_installed_by_path(f"builtin/apps/{app_fullname}")
-
