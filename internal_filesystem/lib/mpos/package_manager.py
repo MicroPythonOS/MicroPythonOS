@@ -221,7 +221,6 @@ class PackageManager:
         return PackageManager.is_installed_by_path(f"apps/{app_fullname}") or PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
-    def is_launcher(app_name):
-        print(f"checking is_launcher for {app_name}")
-        # Simple check, could be more elaborate by checking the MANIFEST.JSON for the app...
-        return "launcher" in app_name or len(mpos.ui.screen_stack) < 2 # assumes the first one on the stack is the launcher
+    def is_valid_launcher(app_obj):
+        #print(f"checking is_valid_launcher for {app_obj}")
+        return app_obj.category == "launcher" and app_obj.main_launcher_activity
