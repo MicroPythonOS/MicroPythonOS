@@ -79,6 +79,7 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
         tb = getattr(e, '__traceback__', None)
         traceback.print_exception(type(e), e, tb)
 
+""" Unused:
 # Run the script in a new thread:
 # TODO: check if the script exists here instead of launching a new thread?
 def execute_script_new_thread(scriptname, is_file):
@@ -104,6 +105,7 @@ def execute_script_new_thread(scriptname, is_file):
         _thread.start_new_thread(execute_script, (scriptname, is_file))
     except Exception as e:
         print("main.py: execute_script_new_thread(): error starting new thread thread: ", e)
+"""
 
 def start_app(fullname):
     mpos.ui.set_foreground_app(fullname)
