@@ -10,6 +10,7 @@ import traceback
 
 import mpos.info
 import mpos.ui
+from mpos.package_manager import PackageManager
 
 def good_stack_size():
     stacksize = 24*1024
@@ -119,8 +120,7 @@ def start_app(app_dir, is_launcher=False):
     import utime
     start_time = utime.ticks_ms()
     mpos.ui.set_foreground_app(app_dir) # would be better to store only the app name...
-    manifest_path = f"{app_dir}/META-INF/MANIFEST.JSON"
-    app = mpos.apps.parse_manifest(manifest_path)
+    app = mpos.apps.parse_manifest(app_dir)
     print(f"start_app parsed manifest and got: {str(app)}")
     main_launcher_activity = find_main_launcher_activity(app)
     if not main_launcher_activity:
@@ -136,10 +136,16 @@ def start_app(app_dir, is_launcher=False):
     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
     print(f"start_app() took {end_time}ms")
 
+# Starts the first launcher that's found
 def restart_launcher():
+    print("restart_launcher")
     mpos.ui.empty_screen_stack()
     # No need to stop the other launcher first, because it exits after building the screen
-    start_app_by_name("com.micropythonos.launcher", True) # Would be better to query the PackageManager for Activities that are launchers
+    for app in mpos.package_manager.PackageManager.get_app_list():
+        #print(f"checking {app}")
+        if app.category == "launcher" and find_main_launcher_activity(app):
+            print(f"Found launcher, starting {app.fullname}")
+            start_app_by_name(app.fullname, True)
 
 def find_main_launcher_activity(app):
     result = None
@@ -163,7 +169,7 @@ def is_launcher(app_name):
 
 
 class App:
-    def __init__(self, name, publisher, short_description, long_description, icon_url, download_url, fullname, version, category, activities):
+    def __init__(self, name, publisher, short_description, long_description, icon_url, download_url, fullname, version, category, activities, installed_path=None):
         self.name = name
         self.publisher = publisher
         self.short_description = short_description
@@ -176,6 +182,7 @@ class App:
         self.image = None
         self.image_dsc = None
         self.activities = activities
+        self.installed_path = installed_path
 
     def __str__(self):
         return (f"App(name='{self.name}', "
@@ -183,9 +190,12 @@ class App:
                 f"short_description='{self.short_description}', "
                 f"version='{self.version}', "
                 f"category='{self.category}', "
-                f"activities={self.activities})")
+                f"activities='{self.activities}', "
+                f"installed_path={self.installed_path})")
 
-def parse_manifest(manifest_path):
+def parse_manifest(appdir):
+    print(f"parse_manifest({appdir})")
+    manifest_path = f"{appdir}/META-INF/MANIFEST.JSON"
     # Default values for App object
     default_app = App(
         name="Unknown",
@@ -197,7 +207,8 @@ def parse_manifest(manifest_path):
         fullname="Unknown",
         version="0.0.0",
         category="",
-        activities=[]
+        activities=[],
+        installed_path=appdir
     )
     try:
         with open(manifest_path, 'r') as f:
@@ -214,7 +225,8 @@ def parse_manifest(manifest_path):
                 fullname=app_info.get("fullname", default_app.fullname),
                 version=app_info.get("version", default_app.version),
                 category=app_info.get("category", default_app.category),
-                activities=app_info.get("activities", default_app.activities)
+                activities=app_info.get("activities", default_app.activities),
+                installed_path=appdir
             )
     except OSError:
         print(f"parse_manifest: error loading manifest_path: {manifest_path}")

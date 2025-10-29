@@ -66,7 +66,7 @@ class AppStore(Activity):
                 applist = json.loads(response.text)
                 for app in json.loads(response.text):
                     try:
-                        self.apps.append(mpos.apps.App(**app))
+                        self.apps.append(mpos.apps.App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
                     except Exception as e:
                         print(f"Warning: could not add app from {json_url} to apps list: {e}")
                 # Remove duplicates based on app.name
@@ -137,14 +137,19 @@ class AppStore(Activity):
             if app.image_dsc:
                 print(f"Skipping icon download for {app.name} because already downloaded.")
                 continue
+            if not self.keep_running:
+                print(f"App is stopping, aborting icon downloads.")
+                break
             print(f"Downloading icon for {app.name}")
             image_dsc = self.download_icon(app.icon_url)
             app.image_dsc = image_dsc # save it for the app detail page
             if not self.keep_running:
+                print(f"App is stopping, aborting all icon downloads.")
                 break
-            lv.async_call(lambda l: app.image.set_src(image_dsc), None)
+            else:
+                lv.async_call(lambda l: app.image.set_src(image_dsc), None)
             time.sleep_ms(200) # not waiting here will result in some async_calls() not being executed
-        print("Finished downloading icons...")
+        print("Finished downloading icons.")
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
@@ -439,10 +444,10 @@ class AppDetail(Activity):
         installed_app=None
         if AppDetail.is_installed_by_path(appdir):
             print(f"{appdir} found, getting version...")
-            installed_app = mpos.apps.parse_manifest(f"{appdir}/META-INF/MANIFEST.JSON")
+            installed_app = mpos.apps.parse_manifest(appdir)
         elif AppDetail.is_installed_by_path(builtinappdir):
             print(f"{builtinappdir} found, getting version...")
-            installed_app = mpos.apps.parse_manifest(f"{builtinappdir}/META-INF/MANIFEST.JSON")
+            installed_app = mpos.apps.parse_manifest(builtinappdir)
         if not installed_app or installed_app.version == "0.0.0": # special case, if the installed app doesn't have a version number then there's no update
             return False
         return AppDetail.compare_versions(new_version, installed_app.version)

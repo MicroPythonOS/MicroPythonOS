@@ -14,6 +14,7 @@ import lvgl as lv
 
 import mpos.apps
 import mpos.ui
+from mpos.package_manager import PackageManager
 
 class Launcher(mpos.apps.Activity):
 
@@ -30,57 +31,28 @@ class Launcher(mpos.apps.Activity):
         self.setContentView(main_screen)
 
     def onResume(self, screen):
-        app_list = []
-        seen_base_names = set()
-       # Check and collect subdirectories from existing directories
-        apps_dir = "apps"
-        apps_dir_builtin = "builtin/apps"
         # Grid parameters
         icon_size = 64  # Adjust based on your display
         label_height = 24
         iconcont_width = icon_size + label_height
         iconcont_height = icon_size + label_height
 
-
-        # Check and collect unique subdirectories
-        for dir_path in [apps_dir, apps_dir_builtin]:
-            try:
-                if uos.stat(dir_path)[0] & 0x4000:  # Verify directory exists
-                    try:
-                        for d in uos.listdir(dir_path):
-                            full_path = f"{dir_path}/{d}"
-                            #print(f"full_path: {full_path}")
-                            try:
-                                if uos.stat(full_path)[0] & 0x4000:  # Check if it's a directory
-                                    base_name = d
-                                    if base_name not in seen_base_names:  # Avoid duplicates
-                                        seen_base_names.add(base_name)
-                                        app = mpos.apps.parse_manifest(f"{full_path}/META-INF/MANIFEST.JSON")
-                                        if app.category != "launcher":  # Skip launchers
-                                            main_launcher = mpos.apps.find_main_launcher_activity(app)
-                                            if main_launcher:
-                                                app_list.append((app.name, full_path))
-                            except Exception as e:
-                                print(f"launcher.py stat of {full_path} got exception: {e}")
-                    except Exception as e:
-                        print(f"launcher.py listdir of {dir_path} got exception: {e}")
-            except Exception as e:
-                print(f"launcher.py stat of {dir_path} got exception: {e}")
+        app_list = PackageManager.app_list
 
         import time
         start = time.ticks_ms()
 
         screen.clean()
+
         # Get the group for focusable objects
         focusgroup = lv.group_get_default()
         if not focusgroup:
             print("WARNING: could not get default focusgroup")
 
-        # Sort apps alphabetically by app.name
-        app_list.sort(key=lambda x: x[0].lower())  # Case-insensitive sorting
-        
         # Create UI for each app
-        for app_name, app_dir_fullpath in app_list:
+        for app in app_list:
+            app_name = app.name
+            app_dir_fullpath = app.installed_path
             print(f"Adding app {app_name} from {app_dir_fullpath}")
             # Create container for each app (icon + label)
             app_cont = lv.obj(screen)
