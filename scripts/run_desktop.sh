@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash 
 scriptdir=$(readlink -f "$0")
 scriptdir=$(dirname "$scriptdir")
 script="$1"
