@@ -221,22 +221,6 @@ class PackageManager:
         return PackageManager.is_installed_by_path(f"apps/{app_fullname}") or PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
-    def find_main_launcher_activity(app):
-        result = None
-        for activity in app.activities:
-            if not activity.get("entrypoint") or not activity.get("classname"):
-                print(f"Warning: activity {activity} has no entrypoint and classname, skipping...")
-                continue
-            print("checking activity's intent_filters...")
-            for intent_filter in activity.get("intent_filters"):
-                print("checking intent_filter...")
-                if intent_filter.get("action") == "main" and intent_filter.get("category") == "launcher":
-                    print("found main_launcher!")
-                    result = activity
-                    break
-        return result
-
-    @staticmethod
     def is_launcher(app_name):
         print(f"checking is_launcher for {app_name}")
         # Simple check, could be more elaborate by checking the MANIFEST.JSON for the app...

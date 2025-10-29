@@ -93,7 +93,7 @@ def execute_script_new_thread(scriptname, is_file):
         if "camtest" in scriptname:
             print("Starting camtest with extra stack size!")
             stack=32*1024
-        elif "appstore"in scriptname:
+        elif "appstore" in scriptname:
             print("Starting appstore with extra stack size!")
             stack=24*1024 # this doesn't do anything because it's all started in the same thread
         else:
@@ -111,17 +111,16 @@ def start_app(fullname):
     start_time = utime.ticks_ms()
     app = PackageManager.get(fullname)
     if not app:
-        print(f"Warning: start_app could not find app {fullname}, aborting...")
+        print(f"Warning: start_app can't find app {fullname}")
         return
     if not app.installed_path:
-        print(f"Warning: start_app could not find installed_path for {fullname}, aborting...")
+        print(f"Warning: start_app can't start {fullname} because no it doesn't have an installed_path")
         return
-    main_launcher_activity = PackageManager.find_main_launcher_activity(app)
-    if not main_launcher_activity:
-        print(f"WARNING: can't start {fullname} because no main_launcher_activity was found.")
+    if not app.main_launcher_activity:
+        print(f"WARNING: start_app can't start {fullname} because it doesn't have a main_launcher_activity")
         return
-    start_script_fullpath = f"{app.installed_path}/{main_launcher_activity.get('entrypoint')}"
-    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", main_launcher_activity.get("classname"))
+    start_script_fullpath = f"{app.installed_path}/{app.main_launcher_activity.get('entrypoint')}"
+    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"))
     # Launchers have the bar, other apps don't have it
     if PackageManager.is_launcher(fullname):
         mpos.ui.topmenu.open_bar()
@@ -137,7 +136,7 @@ def restart_launcher():
     # No need to stop the other launcher first, because it exits after building the screen
     for app in mpos.package_manager.PackageManager.get_app_list():
         #print(f"checking {app}")
-        if app.category == "launcher" and PackageManager.find_main_launcher_activity(app):
+        if app.category == "launcher" and app.main_launcher_activity: # if it's a launcher and it has a main_launcher_activity
             print(f"Found launcher, starting {app.fullname}")
             start_app(app.fullname)
 
@@ -157,6 +156,7 @@ class App:
         self.image_dsc = None
         self.activities = activities
         self.installed_path = installed_path
+        self.main_launcher_activity = self._find_main_launcher_activity()
 
     def __str__(self):
         return (f"App(name='{self.name}', "
@@ -166,6 +166,22 @@ class App:
                 f"category='{self.category}', "
                 f"activities='{self.activities}', "
                 f"installed_path={self.installed_path})")
+
+    def _find_main_launcher_activity(self):
+        result = None
+        for activity in self.activities:
+            if not activity.get("entrypoint") or not activity.get("classname"):
+                print(f"Warning: activity {activity} has no entrypoint and classname, skipping...")
+                continue
+            print("checking activity's intent_filters...")
+            for intent_filter in activity.get("intent_filters"):
+                print("checking intent_filter...")
+                if intent_filter.get("action") == "main" and intent_filter.get("category") == "launcher":
+                    print("found main_launcher!")
+                    result = activity
+                    break
+        return result
+
 
 def parse_manifest(appdir):
     print(f"parse_manifest({appdir})")
