@@ -1,6 +1,11 @@
 import os
 import mpos.apps
 
+try:
+    import zipfile
+except ImportError:
+    print("import zipfile failed, installation won't work!")
+
 '''
 Initialized at boot.
 Typical users: appstore, launcher

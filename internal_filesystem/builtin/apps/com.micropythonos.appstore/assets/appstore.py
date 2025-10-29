@@ -6,11 +6,6 @@ import os
 import time
 import _thread
 
-try:
-    import zipfile
-except ImportError:
-    print("import zipfile failed, installation won't work!")
-
 from mpos.apps import Activity, Intent
 import mpos.ui
 from mpos.package_manager import PackageManager
