@@ -1,5 +1,6 @@
 import os
 import mpos.apps
+import mpos.ui # wont be needed after improving is_launcher()
 
 try:
     import zipfile
@@ -52,7 +53,7 @@ class PackageManager:
     @classmethod
     def get_app_list(cls):
         if not cls._app_list:
-            cls.find_apps()
+            cls.refresh_apps()
         return cls._app_list
 
     # --------------------------------------------------------------------- #
@@ -72,12 +73,22 @@ class PackageManager:
         return cls._by_fullname.get(fullname)
 
     # --------------------------------------------------------------------- #
+    # Clear everything – useful when you want to force a full rescan
+    # --------------------------------------------------------------------- #
+    @classmethod
+    def clear(cls):
+        """Empty the internal caches.  Call ``get_app_list()`` afterwards to repopulate."""
+        cls._app_list = []
+        cls._by_fullname = {}
+
+    # --------------------------------------------------------------------- #
     # discovery & population
     # --------------------------------------------------------------------- #
     @classmethod
-    def find_apps(cls):
-        print("\n\n\nPackageManager finding apps...")
+    def refresh_apps(cls):
+        print("PackageManager finding apps...")
 
+        cls.clear()                     # <-- this guarantees both containers are empty
         seen = set()                     # avoid processing the same fullname twice
         apps_dir         = "apps"
         apps_dir_builtin = "builtin/apps"
@@ -127,15 +138,14 @@ class PackageManager:
         # ---- sort the list by display name (case-insensitive) ------------
         cls._app_list.sort(key=lambda a: a.name.lower())
 
-
     @staticmethod
     def uninstall_app(app_fullname):
         try:
             import shutil
             shutil.rmtree(f"apps/{app_fullname}") # never in builtin/apps because those can't be uninstalled
-            # TODO: also remove it from the app_list
         except Exception as e:
             print(f"Removing app_folder {app_folder} got error: {e}")
+        PackageManager.refresh_apps()
 
     @staticmethod
     def install_mpk(temp_zip_path, dest_folder):
@@ -151,6 +161,7 @@ class PackageManager:
         except Exception as e:
             print(f"Unzip and cleanup failed: {e}")
             # Would be good to show error message here if it fails...
+        PackageManager.refresh_apps()
 
     @staticmethod
     def compare_versions(ver1: str, ver2: str) -> bool:
@@ -186,14 +197,8 @@ class PackageManager:
     def is_update_available(app_fullname, new_version):
         appdir = f"apps/{app_fullname}"
         builtinappdir = f"builtin/apps/{app_fullname}"
-        installed_app=None
-        if PackageManager.is_installed_by_path(appdir):
-            print(f"{appdir} found, getting version...")
-            installed_app = mpos.apps.parse_manifest(appdir) # probably no need to re-parse the manifest
-        elif PackageManager.is_installed_by_path(builtinappdir):
-            print(f"{builtinappdir} found, getting version...")
-            installed_app = mpos.apps.parse_manifest(builtinappdir) # probably no need to re-parse the manifest
-        if not installed_app or installed_app.version == "0.0.0": # special case, if the installed app doesn't have a version number then there's no update
+        installed_app=PackageManager.get(app_fullname)
+        if not installed_app:
             return False
         return PackageManager.compare_versions(new_version, installed_app.version)
 
@@ -215,3 +220,24 @@ class PackageManager:
         print(f"Checking if app {app_fullname} is installed...")
         return PackageManager.is_installed_by_path(f"apps/{app_fullname}") or PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
+    @staticmethod
+    def find_main_launcher_activity(app):
+        result = None
+        for activity in app.activities:
+            if not activity.get("entrypoint") or not activity.get("classname"):
+                print(f"Warning: activity {activity} has no entrypoint and classname, skipping...")
+                continue
+            print("checking activity's intent_filters...")
+            for intent_filter in activity.get("intent_filters"):
+                print("checking intent_filter...")
+                if intent_filter.get("action") == "main" and intent_filter.get("category") == "launcher":
+                    print("found main_launcher!")
+                    result = activity
+                    break
+        return result
+
+    @staticmethod
+    def is_launcher(app_name):
+        print(f"checking is_launcher for {app_name}")
+        # Simple check, could be more elaborate by checking the MANIFEST.JSON for the app...
+        return "launcher" in app_name or len(mpos.ui.screen_stack) < 2 # assumes the first one on the stack is the launcher

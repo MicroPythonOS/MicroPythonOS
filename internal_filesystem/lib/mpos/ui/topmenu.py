@@ -253,7 +253,7 @@ def create_drawer(display=None):
     wifi_label.center()
     def wifi_event(e):
         close_drawer()
-        mpos.apps.start_app_by_name("com.micropythonos.wifi")
+        mpos.apps.start_app("com.micropythonos.wifi")
     wifi_btn.add_event_cb(wifi_event,lv.EVENT.CLICKED,None)
     settings_btn=lv.button(drawer)
     settings_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
@@ -263,7 +263,7 @@ def create_drawer(display=None):
     settings_label.center()
     def settings_event(e):
         close_drawer()
-        mpos.apps.start_app_by_name("com.micropythonos.settings")
+        mpos.apps.start_app("com.micropythonos.settings")
     settings_btn.add_event_cb(settings_event,lv.EVENT.CLICKED,None)
     launcher_btn=lv.button(drawer)
     launcher_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))

@@ -83,7 +83,7 @@ class Launcher(mpos.apps.Activity):
             label.set_width(iconcont_width)
             label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             label.set_style_text_align(lv.TEXT_ALIGN.CENTER, 0)
-            app_cont.add_event_cb(lambda e, path=app_dir_fullpath: mpos.apps.start_app(path), lv.EVENT.CLICKED, None)
+            app_cont.add_event_cb(lambda e, fullname=app.fullname: mpos.apps.start_app(fullname), lv.EVENT.CLICKED, None)
             app_cont.add_event_cb(lambda e, app_cont=app_cont: self.focus_app_cont(app_cont),lv.EVENT.FOCUSED,None)
             app_cont.add_event_cb(lambda e, app_cont=app_cont: self.defocus_app_cont(app_cont),lv.EVENT.DEFOCUSED,None)
             if focusgroup:

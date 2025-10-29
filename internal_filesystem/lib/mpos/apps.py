@@ -105,31 +105,25 @@ def execute_script_new_thread(scriptname, is_file):
     except Exception as e:
         print("main.py: execute_script_new_thread(): error starting new thread thread: ", e)
 
-def start_app_by_name(app_name, is_launcher=False):
-    mpos.ui.set_foreground_app(app_name)
-    custom_app_dir=f"apps/{app_name}"
-    builtin_app_dir=f"builtin/apps/{app_name}"
-    try:
-        stat = uos.stat(custom_app_dir)
-        start_app(custom_app_dir, is_launcher)
-    except OSError:
-        start_app(builtin_app_dir, is_launcher)
-
-def start_app(app_dir, is_launcher=False):
-    print(f"main.py start_app({app_dir},{is_launcher})")
+def start_app(fullname):
+    mpos.ui.set_foreground_app(fullname)
     import utime
     start_time = utime.ticks_ms()
-    mpos.ui.set_foreground_app(app_dir) # would be better to store only the app name...
-    app = mpos.apps.parse_manifest(app_dir)
-    print(f"start_app parsed manifest and got: {str(app)}")
-    main_launcher_activity = find_main_launcher_activity(app)
-    if not main_launcher_activity:
-        print(f"WARNING: can't start {app_dir} because no main_launcher_activity was found.")
+    app = PackageManager.get(fullname)
+    if not app:
+        print(f"Warning: start_app could not find app {fullname}, aborting...")
         return
-    start_script_fullpath = f"{app_dir}/{main_launcher_activity.get('entrypoint')}"
-    execute_script(start_script_fullpath, True, app_dir + "/assets/", main_launcher_activity.get("classname"))
+    if not app.installed_path:
+        print(f"Warning: start_app could not find installed_path for {fullname}, aborting...")
+        return
+    main_launcher_activity = PackageManager.find_main_launcher_activity(app)
+    if not main_launcher_activity:
+        print(f"WARNING: can't start {fullname} because no main_launcher_activity was found.")
+        return
+    start_script_fullpath = f"{app.installed_path}/{main_launcher_activity.get('entrypoint')}"
+    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", main_launcher_activity.get("classname"))
     # Launchers have the bar, other apps don't have it
-    if is_launcher:
+    if PackageManager.is_launcher(fullname):
         mpos.ui.topmenu.open_bar()
     else:
         mpos.ui.topmenu.close_bar()
@@ -143,29 +137,9 @@ def restart_launcher():
     # No need to stop the other launcher first, because it exits after building the screen
     for app in mpos.package_manager.PackageManager.get_app_list():
         #print(f"checking {app}")
-        if app.category == "launcher" and find_main_launcher_activity(app):
+        if app.category == "launcher" and PackageManager.find_main_launcher_activity(app):
             print(f"Found launcher, starting {app.fullname}")
-            start_app_by_name(app.fullname, True)
-
-def find_main_launcher_activity(app):
-    result = None
-    for activity in app.activities:
-        if not activity.get("entrypoint") or not activity.get("classname"):
-            print(f"Warning: activity {activity} has no entrypoint and classname, skipping...")
-            continue
-        print("checking activity's intent_filters...")
-        for intent_filter in activity.get("intent_filters"):
-            print("checking intent_filter...")
-            if intent_filter.get("action") == "main" and intent_filter.get("category") == "launcher":
-                print("found main_launcher!")
-                result = activity
-                break
-    return result
-
-def is_launcher(app_name):
-    print(f"checking is_launcher for {app_name}")
-    # Simple check, could be more elaborate by checking the MANIFEST.JSON for the app...
-    return "launcher" in app_name or len(mpos.ui.screen_stack) < 2 # assumes the first one on the stack is the launcher
+            start_app(app.fullname)
 
 
 class App:
