@@ -37,8 +37,6 @@ class Launcher(mpos.apps.Activity):
         iconcont_width = icon_size + label_height
         iconcont_height = icon_size + label_height
 
-        app_list = PackageManager.app_list
-
         import time
         start = time.ticks_ms()
 
@@ -50,7 +48,7 @@ class Launcher(mpos.apps.Activity):
             print("WARNING: could not get default focusgroup")
 
         # Create UI for each app
-        for app in app_list:
+        for app in PackageManager.get_app_list():
             app_name = app.name
             app_dir_fullpath = app.installed_path
             print(f"Adding app {app_name} from {app_dir_fullpath}")
