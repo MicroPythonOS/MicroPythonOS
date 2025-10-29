@@ -22,6 +22,7 @@ class MusicPlayer(Activity):
         self.file_explorer.explorer_open_dir('M:/')
         self.file_explorer.align(lv.ALIGN.CENTER, 0, 0)
         self.file_explorer.add_event_cb(self.file_explorer_event_cb, lv.EVENT.ALL, None)
+        self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.MUSIC_DIR, "M:/sdcard/music")
         self.setContentView(screen)
 
     def onResume(self, screen):
