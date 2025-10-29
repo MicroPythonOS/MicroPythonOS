@@ -11,3 +11,6 @@
 [submodule "micropython-camera-API"]
 	path = micropython-camera-API
 	url = https://github.com/cnadler86/micropython-camera-API
+[submodule "micropython-nostr"]
+	path = micropython-nostr
+	url = https://github.com/MicroPythonOS/micropython-nostr
