@@ -1,6 +1,5 @@
 import os
 import mpos.apps
-import mpos.ui # wont be needed after improving is_launcher()
 
 try:
     import zipfile
