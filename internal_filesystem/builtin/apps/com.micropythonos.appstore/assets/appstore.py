@@ -312,7 +312,7 @@ class AppDetail(Activity):
             print("Uninstalling app....")
             try:
                 _thread.stack_size(mpos.apps.good_stack_size())
-                _thread.start_new_thread(self.uninstall_app, (fullname))
+                _thread.start_new_thread(self.uninstall_app, (fullname,))
             except Exception as e:
                 print("Could not start uninstall_app thread: ", e)
     
@@ -349,7 +349,7 @@ class AppDetail(Activity):
         try:
             # Step 1: Download the .mpk file
             print(f"Downloading .mpk file from: {zip_url}")
-            response = requests.get(zip_url, timeout=10)
+            response = requests.get(zip_url, timeout=10) # TODO: use stream=True and do it in chunks like in OSUpdate
             if response.status_code != 200:
                 print("Download failed: Status code", response.status_code)
                 response.close()

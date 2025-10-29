@@ -28,50 +28,105 @@ Question: does it make sense to cache the database?
 
 '''
 
+# PackageManager.py  (MicroPython)
 
-class PackageManager():
+import os
 
-    app_list = [] # list of App objects, sorted alphabetically by app.name, unique by full_name (com.example.appname)
+class PackageManager:
+    """Registry of all discovered apps.
 
+    * PackageManager.get_app_list()          -> list of App objects (sorted by name)
+    * PackageManager[fullname]               -> App (raises KeyError if missing)
+    * PackageManager.get(fullname)           -> App or None
+    """
+
+    # --------------------------------------------------------------------- #
+    # internal storage
+    # --------------------------------------------------------------------- #
+    _app_list = []                     # sorted by app.name
+    _by_fullname = {}                  # fullname -> App
+
+    # --------------------------------------------------------------------- #
+    # public list access (kept for backward compatibility)
+    # --------------------------------------------------------------------- #
     @classmethod
     def get_app_list(cls):
-        if len(cls.app_list) == 0:
+        if not cls._app_list:
             cls.find_apps()
-        return cls.app_list
+        return cls._app_list
 
+    # --------------------------------------------------------------------- #
+    # dict-style lookup:  PackageManager["com.example.myapp"]
+    # --------------------------------------------------------------------- #
+    def __class_getitem__(cls, fullname):
+        try:
+            return cls._by_fullname[fullname]
+        except KeyError:
+            raise KeyError("No app with fullname='{}'".format(fullname))
+
+    # --------------------------------------------------------------------- #
+    # safe lookup:  PackageManager.get("com.example.myapp") -> App or None
+    # --------------------------------------------------------------------- #
+    @classmethod
+    def get(cls, fullname):
+        return cls._by_fullname.get(fullname)
+
+    # --------------------------------------------------------------------- #
+    # discovery & population
+    # --------------------------------------------------------------------- #
     @classmethod
     def find_apps(cls):
         print("\n\n\nPackageManager finding apps...")
-        seen_fullnames = set()
-       # Check and collect subdirectories from existing directories
-        apps_dir = "apps"
+
+        seen = set()                     # avoid processing the same fullname twice
+        apps_dir         = "apps"
         apps_dir_builtin = "builtin/apps"
 
-        # Check and collect unique subdirectories
-        for dir_path in [apps_dir, apps_dir_builtin]:
+        for base in (apps_dir, apps_dir_builtin):
             try:
-                if os.stat(dir_path)[0] & 0x4000:  # Verify directory exists
-                    try:
-                        for d in os.listdir(dir_path):
-                            full_path = f"{dir_path}/{d}"
-                            print(f"full_path: {full_path}")
-                            try:
-                                if os.stat(full_path)[0] & 0x4000:  # Check if it's a directory
-                                    fullname = d
-                                    if fullname not in seen_fullnames:  # Avoid duplicates
-                                        seen_fullnames.add(fullname)
-                                        app = mpos.apps.parse_manifest(full_path)
-                                        cls.app_list.append(app)
-                                        print(f"added app {app}")
-                            except Exception as e:
-                                print(f"PackageManager: stat of {full_path} got exception: {e}")
-                    except Exception as e:
-                        print(f"PackageManager: listdir of {dir_path} got exception: {e}")
-            except Exception as e:
-                print(f"PackageManager: stat of {dir_path} got exception: {e}")
+                # ---- does the directory exist? --------------------------------
+                st = os.stat(base)
+                if not (st[0] & 0x4000):          # 0x4000 = directory bit
+                    continue
 
-        # Sort apps alphabetically by app.name
-        cls.app_list.sort(key=lambda x: x.name.lower())  # Case-insensitive sorting by name
+                # ---- iterate over immediate children -------------------------
+                for name in os.listdir(base):
+                    full_path = "{}/{}".format(base, name)
+
+                    # ---- is it a directory? ---------------------------------
+                    try:
+                        st = os.stat(full_path)
+                        if not (st[0] & 0x4000):
+                            continue
+                    except Exception as e:
+                        print("PackageManager: stat of {} got exception: {}".format(full_path, e))
+                        continue
+
+                    fullname = name
+
+                    # ---- skip duplicates ------------------------------------
+                    if fullname in seen:
+                        continue
+                    seen.add(fullname)
+
+                    # ---- parse the manifest ---------------------------------
+                    try:
+                        app = mpos.apps.parse_manifest(full_path)
+                    except Exception as e:
+                        print("PackageManager: parsing {} failed: {}".format(full_path, e))
+                        continue
+
+                    # ---- store in both containers ---------------------------
+                    cls._app_list.append(app)
+                    cls._by_fullname[fullname] = app
+                    print("added app {}".format(app))
+
+            except Exception as e:
+                print("PackageManager: handling {} got exception: {}".format(base, e))
+
+        # ---- sort the list by display name (case-insensitive) ------------
+        cls._app_list.sort(key=lambda a: a.name.lower())
+
 
     @staticmethod
     def uninstall_app(app_fullname):
