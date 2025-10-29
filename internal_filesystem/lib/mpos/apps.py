@@ -122,7 +122,7 @@ def start_app(fullname):
     start_script_fullpath = f"{app.installed_path}/{app.main_launcher_activity.get('entrypoint')}"
     execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"))
     # Launchers have the bar, other apps don't have it
-    if PackageManager.is_valid_launcher(app):
+    if app.is_valid_launcher():
         mpos.ui.topmenu.open_bar()
     else:
         mpos.ui.topmenu.close_bar()
@@ -135,9 +135,10 @@ def restart_launcher():
     mpos.ui.empty_screen_stack()
     # No need to stop the other launcher first, because it exits after building the screen
     for app in mpos.package_manager.PackageManager.get_app_list():
-        if PackageManager.is_valid_launcher(app):
+        if app.is_valid_launcher():
             print(f"Found launcher, starting {app.fullname}")
             start_app(app.fullname)
+            break
 
 class App:
     def __init__(self, name, publisher, short_description, long_description, icon_url, download_url, fullname, version, category, activities, installed_path=None):
@@ -179,6 +180,10 @@ class App:
                     result = activity
                     break
         return result
+
+    def is_valid_launcher(self):
+        #print(f"checking is_valid_launcher for {app_obj}")
+        return self.category == "launcher" and self.main_launcher_activity
 
 
 def parse_manifest(appdir):

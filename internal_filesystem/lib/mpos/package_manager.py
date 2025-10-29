@@ -220,7 +220,3 @@ class PackageManager:
         print(f"Checking if app {app_fullname} is installed...")
         return PackageManager.is_installed_by_path(f"apps/{app_fullname}") or PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
-    @staticmethod
-    def is_valid_launcher(app_obj):
-        #print(f"checking is_valid_launcher for {app_obj}")
-        return app_obj.category == "launcher" and app_obj.main_launcher_activity
