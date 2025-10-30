@@ -4,7 +4,7 @@ from .view import (
     screen_stack
 )
 from .widget import handle_back_swipe, handle_top_swipe
-from .topmenu import open_bar, close_bar, open_drawer, drawer_open
+from .topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
 from .focus import save_and_clear_current_focusgroup
 from .display import (
     get_display_width, get_display_height,
@@ -18,7 +18,7 @@ from .util import shutdown, set_foreground_app, get_foreground_app, show_launche
 __all__ = [
     "setContentView", "back_screen", "empty_screen_stack",
     "handle_back_swipe", "handle_top_swipe",
-    "open_bar", "close_bar", "open_drawer", "drawer_open",
+    "open_bar", "close_bar", "open_drawer", "drawer_open", "NOTIFICATION_BAR_HEIGHT",
     "save_and_clear_current_focusgroup",
     "get_display_width", "get_display_height",
     "pct_of_display_width", "pct_of_display_height",
