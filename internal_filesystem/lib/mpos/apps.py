@@ -21,7 +21,7 @@ def good_stack_size():
     return stacksize
 
 # Run the script in the current thread:
-def execute_script(script_source, is_file, cwd=None, classname=None, app=None):
+def execute_script(script_source, is_file, cwd=None, classname=None):
     import utime # for timing read and compile
     thread_id = _thread.get_ident()
     compile_name = 'script' if not is_file else script_source
@@ -123,7 +123,7 @@ def start_app(fullname):
         print(f"WARNING: start_app can't start {fullname} because it doesn't have a main_launcher_activity")
         return
     start_script_fullpath = f"{app.installed_path}/{app.main_launcher_activity.get('entrypoint')}"
-    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"), app)
+    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"))
     # Launchers have the bar, other apps don't have it
     if app.is_valid_launcher():
         mpos.ui.topmenu.open_bar()
@@ -142,5 +142,4 @@ def restart_launcher():
             print(f"Found launcher, starting {app.fullname}")
             start_app(app.fullname)
             break
-
 

@@ -1,4 +1,5 @@
-from mpos.apps import Activity, ActivityNavigator, Intent
+from mpos.apps import Activity, Intent
+from mpos.navigator import ActivityNavigator
 
 import mpos.config
 import mpos.ui
