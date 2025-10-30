@@ -1,5 +1,4 @@
 import ujson
-#from ..content.intent import Intent  # optional, if App uses Intent
 from ..navigator import ActivityNavigator
 
 class App:

@@ -1,13 +1,11 @@
 import utime
 from .content.intent import Intent
-
 from .content.pm import PackageManager
 
 import mpos.ui
 
 class ActivityNavigator:
-    #handlersa = PackageManager.APP_REGISTRY.get(intent.action, [])
-    
+
     @staticmethod
     def startActivity(intent):
         if not isinstance(intent, Intent):
