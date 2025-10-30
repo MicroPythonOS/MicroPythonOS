@@ -1,5 +1,8 @@
 import os
-import mpos.apps
+
+from mpos.app.app import App
+from mpos.app.activities.view import ViewActivity
+from mpos.app.activities.share import ShareActivity
 
 try:
     import zipfile
@@ -28,11 +31,13 @@ Question: does it make sense to cache the database?
 
 '''
 
-# PackageManager.py  (MicroPython)
-
-import os
-
 class PackageManager:
+
+    APP_REGISTRY = {
+        "view": [ViewActivity],
+        "share": [ShareActivity]
+    }
+
     """Registry of all discovered apps.
 
     * PackageManager.get_app_list()          -> list of App objects (sorted by name)
@@ -121,7 +126,7 @@ class PackageManager:
 
                     # ---- parse the manifest ---------------------------------
                     try:
-                        app = mpos.apps.App.from_manifest(full_path)
+                        app = App.from_manifest(full_path)
                     except Exception as e:
                         print("PackageManager: parsing {} failed: {}".format(full_path, e))
                         continue
@@ -218,4 +223,5 @@ class PackageManager:
     def is_installed_by_name(app_fullname):
         print(f"Checking if app {app_fullname} is installed...")
         return PackageManager.is_installed_by_path(f"apps/{app_fullname}") or PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
+
 

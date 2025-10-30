@@ -1,5 +1,5 @@
 import lvgl as lv
-import mpos.apps
+#import mpos.apps
 import mpos.time
 import mpos.wifi
 from mpos.ui.anim import WidgetAnimator
@@ -44,8 +44,8 @@ def set_foreground_app(appname):
     foreground_app_name = appname
     print(f"foreground app is: {foreground_app_name}")
 
-def show_launcher():
-    mpos.apps.restart_launcher()
+#def show_launcher():
+#    mpos.apps.restart_launcher()
 
 def init_rootscreen():
     global horizontal_resolution, vertical_resolution

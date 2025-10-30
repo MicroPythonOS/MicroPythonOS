@@ -7,6 +7,7 @@ import time
 import _thread
 
 from mpos.apps import Activity, Intent
+from mpos.app import App
 import mpos.ui
 from mpos.package_manager import PackageManager
 
@@ -63,7 +64,7 @@ class AppStore(Activity):
                 applist = json.loads(response.text)
                 for app in json.loads(response.text):
                     try:
-                        self.apps.append(mpos.apps.App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
+                        self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
                     except Exception as e:
                         print(f"Warning: could not add app from {json_url} to apps list: {e}")
                 # Remove duplicates based on app.name

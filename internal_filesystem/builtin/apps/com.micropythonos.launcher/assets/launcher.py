@@ -15,8 +15,9 @@ import lvgl as lv
 import mpos.apps
 import mpos.ui
 from mpos.package_manager import PackageManager
+from mpos import Activity
 
-class Launcher(mpos.apps.Activity):
+class Launcher(Activity):
 
     def onCreate(self):
         print("launcher.py onCreate()")
