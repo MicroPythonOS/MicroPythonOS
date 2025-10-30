@@ -1,9 +1,5 @@
 import os
 
-from mpos.app.app import App
-from mpos.app.activities.view import ViewActivity
-from mpos.app.activities.share import ShareActivity
-
 try:
     import zipfile
 except ImportError:
@@ -33,10 +29,25 @@ Question: does it make sense to cache the database?
 
 class PackageManager:
 
-    APP_REGISTRY = {
-        "view": [ViewActivity],
-        "share": [ShareActivity]
-    }
+    _registry = {}          # action → [ActivityClass, ...]
+
+    @classmethod
+    def register_activity(cls, action, activity_cls):
+        """Called by each activity module to register itself."""
+        if action not in cls._registry:
+            cls._registry[action] = []
+        if activity_cls not in cls._registry[action]:
+            cls._registry[action].append(activity_cls)
+
+    @classmethod
+    def resolve_activity(cls, intent):
+        """Return list of Activity classes that handle the intent.action."""
+        return cls._registry.get(intent.action, [])
+
+    @classmethod
+    def query_intent_activities(cls, intent):
+        """Same as resolve_activity – more Android-like name."""
+        return cls.resolve_activity(intent)
 
     """Registry of all discovered apps.
 
@@ -45,49 +56,31 @@ class PackageManager:
     * PackageManager.get(fullname)           -> App or None
     """
 
-    # --------------------------------------------------------------------- #
-    # internal storage
-    # --------------------------------------------------------------------- #
     _app_list = []                     # sorted by app.name
     _by_fullname = {}                  # fullname -> App
 
-    # --------------------------------------------------------------------- #
-    # public list access (kept for backward compatibility)
-    # --------------------------------------------------------------------- #
     @classmethod
     def get_app_list(cls):
         if not cls._app_list:
             cls.refresh_apps()
         return cls._app_list
 
-    # --------------------------------------------------------------------- #
-    # dict-style lookup:  PackageManager["com.example.myapp"]
-    # --------------------------------------------------------------------- #
     def __class_getitem__(cls, fullname):
         try:
             return cls._by_fullname[fullname]
         except KeyError:
             raise KeyError("No app with fullname='{}'".format(fullname))
 
-    # --------------------------------------------------------------------- #
-    # safe lookup:  PackageManager.get("com.example.myapp") -> App or None
-    # --------------------------------------------------------------------- #
     @classmethod
     def get(cls, fullname):
         return cls._by_fullname.get(fullname)
 
-    # --------------------------------------------------------------------- #
-    # Clear everything – useful when you want to force a full rescan
-    # --------------------------------------------------------------------- #
     @classmethod
     def clear(cls):
         """Empty the internal caches.  Call ``get_app_list()`` afterwards to repopulate."""
         cls._app_list = []
         cls._by_fullname = {}
 
-    # --------------------------------------------------------------------- #
-    # discovery & population
-    # --------------------------------------------------------------------- #
     @classmethod
     def refresh_apps(cls):
         print("PackageManager finding apps...")
@@ -126,6 +119,7 @@ class PackageManager:
 
                     # ---- parse the manifest ---------------------------------
                     try:
+                        from ..app.app import App
                         app = App.from_manifest(full_path)
                     except Exception as e:
                         print("PackageManager: parsing {} failed: {}".format(full_path, e))

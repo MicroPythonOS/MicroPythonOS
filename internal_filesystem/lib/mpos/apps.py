@@ -11,7 +11,7 @@ import traceback
 import mpos.info
 import mpos.ui
 from mpos import Activity, Intent
-from mpos.package_manager import PackageManager
+from mpos.content.pm import PackageManager
 
 def good_stack_size():
     stacksize = 24*1024
@@ -21,7 +21,7 @@ def good_stack_size():
     return stacksize
 
 # Run the script in the current thread:
-def execute_script(script_source, is_file, cwd=None, classname=None):
+def execute_script(script_source, is_file, cwd=None, classname=None, app=None):
     import utime # for timing read and compile
     thread_id = _thread.get_ident()
     compile_name = 'script' if not is_file else script_source
@@ -63,7 +63,13 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
                 main_activity = script_globals.get(classname)
                 if main_activity:
                     start_time = utime.ticks_ms()
-                    Activity.startActivity(None, Intent(activity_class=main_activity))
+                    from mpos.app.activity import Activity as BaseActivity
+                    if app:
+                        dummy = BaseActivity()
+                        dummy.app = app
+                        returned_activity = dummy.startActivity(Intent(activity_class=main_activity))
+                    else:
+                        print("Warning: app not found in PackageManager")
                     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
                     print(f"execute_script: Activity.startActivity took {end_time}ms")
                 else:
@@ -123,7 +129,7 @@ def start_app(fullname):
         print(f"WARNING: start_app can't start {fullname} because it doesn't have a main_launcher_activity")
         return
     start_script_fullpath = f"{app.installed_path}/{app.main_launcher_activity.get('entrypoint')}"
-    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"))
+    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"), app)
     # Launchers have the bar, other apps don't have it
     if app.is_valid_launcher():
         mpos.ui.topmenu.open_bar()
@@ -137,7 +143,7 @@ def restart_launcher():
     print("restart_launcher")
     mpos.ui.empty_screen_stack()
     # No need to stop the other launcher first, because it exits after building the screen
-    for app in mpos.package_manager.PackageManager.get_app_list():
+    for app in PackageManager.get_app_list():
         if app.is_valid_launcher():
             print(f"Found launcher, starting {app.fullname}")
             start_app(app.fullname)

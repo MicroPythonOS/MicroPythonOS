@@ -1,6 +1,6 @@
 import ujson
 #from ..content.intent import Intent  # optional, if App uses Intent
-
+from ..navigator import ActivityNavigator
 
 class App:
     def __init__(
@@ -71,3 +71,7 @@ class App:
             activities=data.get("activities", default.activities),
             installed_path=appdir,
         )
+
+    def start_activity(self, intent):
+            """Android-like: App.startActivity(Intent)"""
+            return ActivityNavigator.startActivity(intent)

@@ -1,4 +1,5 @@
 from ..activity import Activity
+from ...content.pm import PackageManager
 
 class ViewActivity(Activity):
     def __init__(self):
@@ -25,3 +26,6 @@ class ViewActivity(Activity):
             print("Stopped for View")
         else:
             print("Stopped for other screen")
+
+# Register this activity for "view" intents
+PackageManager.register_activity("view", ViewActivity)

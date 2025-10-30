@@ -1,11 +1,7 @@
 import utime
 from .content.intent import Intent
 
-# circular import issue:
-#import mpos.package_manager
-#from .package_manager import PackageManager
-#from mpos import PackageManager
-#from mpos import *
+from .content.pm import PackageManager
 
 import mpos.ui
 
@@ -17,14 +13,15 @@ class ActivityNavigator:
         if not isinstance(intent, Intent):
             raise ValueError("Must provide an Intent")
         if intent.action:  # Implicit intent: resolve handlers
-            #handlers = PackageManager.APP_REGISTRY.get(intent.action, [])
+            handlers = PackageManager.resolve_activity(intent)
+            if not handlers:
+                print("No handler for action:", intent.action)
+                return
             if len(handlers) == 1:
                 intent.activity_class = handlers[0]
                 ActivityNavigator._launch_activity(intent)
             elif handlers:
                 ActivityNavigator._show_chooser(intent, handlers)
-            else:
-                raise ValueError(f"No handlers for action: {intent.action}")
         else:
             ActivityNavigator._launch_activity(intent)
 
@@ -34,15 +31,16 @@ class ActivityNavigator:
         if not isinstance(intent, Intent):
             raise ValueError("Must provide an Intent")
         if intent.action:  # Implicit intent: resolve handlers
-            #handlers = PackageManager.APP_REGISTRY.get(intent.action, [])
+            handlers = PackageManager.resolve_activity(intent)
+            if not handlers:
+                print("No handler for action:", intent.action)
+                return
             if len(handlers) == 1:
                 intent.activity_class = handlers[0]
                 return ActivityNavigator._launch_activity(intent, result_callback)
             elif handlers:
                 ActivityNavigator._show_chooser(intent, handlers)
                 return None  # Chooser handles result forwarding
-            else:
-                raise ValueError(f"No handlers for action: {intent.action}")
         else:
             return ActivityNavigator._launch_activity(intent, result_callback)
 
@@ -63,5 +61,4 @@ class ActivityNavigator:
     def _show_chooser(intent, handlers):
         chooser_intent = Intent(ChooserActivity, extras={"original_intent": intent, "handlers": [h.__name__ for h in handlers]})
         ActivityNavigator._launch_activity(chooser_intent)
-
 

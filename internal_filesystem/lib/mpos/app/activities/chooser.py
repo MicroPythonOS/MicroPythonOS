@@ -1,6 +1,8 @@
 from ..activity import Activity
+# Chooser doesn't handle an action — it shows handlers
+# → No registration needed
 
-import mpos.package_manager
+from ...content.pm import PackageManager
 
 class ChooserActivity(Activity):
     def __init__(self):
@@ -25,7 +27,7 @@ class ChooserActivity(Activity):
         self.setContentView(screen)
 
     def _select_handler(self, handler_name, original_intent):
-        for handler in mpos.package_manager.PackageManager.APP_REGISTRY.get(original_intent.action, []):
+        for handler in PackageManager.APP_REGISTRY.get(original_intent.action, []):
             if handler.__name__ == handler_name:
                 original_intent.activity_class = handler
                 navigator.startActivity(original_intent)
@@ -37,3 +39,5 @@ class ChooserActivity(Activity):
             print("Stopped for Chooser")
         else:
             print("Stopped for other screen")
+
+

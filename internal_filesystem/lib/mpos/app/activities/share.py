@@ -1,4 +1,5 @@
 from ..activity import Activity
+from ...content.pm import PackageManager
 
 class ShareActivity(Activity):
     def __init__(self):
@@ -33,3 +34,5 @@ class ShareActivity(Activity):
             print("Stopped for Share")
         else:
             print("Stopped for other screen")
+
+PackageManager.register_activity("share", ShareActivity)

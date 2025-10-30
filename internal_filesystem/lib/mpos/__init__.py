@@ -3,7 +3,7 @@ from .app.app import App
 from .app.activity import Activity
 from .content.intent import Intent
 from .navigator import ActivityNavigator
-from .package_manager import PackageManager
+from .content.pm import PackageManager
 
 # Optional: re-export activities
 from .app.activities.chooser import ChooserActivity
