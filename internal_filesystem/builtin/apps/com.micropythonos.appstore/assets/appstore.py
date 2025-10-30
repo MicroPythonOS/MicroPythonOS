@@ -329,7 +329,7 @@ class AppDetail(Activity):
 
     def uninstall_app(self, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
-        self.install_label.set_text("Please wait...") # TODO: Put "Cancel" if cancellation is possible
+        self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(42, True)
         PackageManager.uninstall_app(app_fullname)
@@ -344,7 +344,7 @@ class AppDetail(Activity):
 
     def download_and_install(self, zip_url, dest_folder, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
-        self.install_label.set_text("Please wait...") # TODO: Put "Cancel" if cancellation is possible
+        self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(20, True)
         try:

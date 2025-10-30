@@ -8,9 +8,6 @@ import mpos.ui
 from mpos.app.activity import Activity
 from mpos.content.intent import Intent
 from mpos.content.pm import PackageManager
-# the code uses things like:
-# mpos.ui.set_foreground_app(fullname)
-# Activity.startActivity(None, Intent(activity_class=main_activity))
 
 def good_stack_size():
     stacksize = 24*1024
@@ -81,7 +78,7 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
 
 """ Unused:
 # Run the script in a new thread:
-# TODO: check if the script exists here instead of launching a new thread?
+# NOTE: check if the script exists here instead of launching a new thread?
 def execute_script_new_thread(scriptname, is_file):
     print(f"main.py: execute_script_new_thread({scriptname},{is_file})")
     try:
