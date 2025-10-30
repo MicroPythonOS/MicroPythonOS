@@ -9,3 +9,4 @@ from .package_manager import PackageManager
 from .app.activities.chooser import ChooserActivity
 from .app.activities.view import ViewActivity
 from .app.activities.share import ShareActivity
+

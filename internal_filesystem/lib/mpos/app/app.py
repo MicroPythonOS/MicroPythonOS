@@ -1,5 +1,5 @@
 import ujson
-from ..content.intent import Intent  # optional, if App uses Intent
+#from ..content.intent import Intent  # optional, if App uses Intent
 
 
 class App:

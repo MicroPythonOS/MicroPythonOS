@@ -1,13 +1,5 @@
 from ..activity import Activity
 
-#from ..activity import Activity
-
-#import mpos.app.activity
-
-#import mpos.app.activity
-
-#from mpos.app import Activity
-
 import mpos.package_manager
 
 class ChooserActivity(Activity):
@@ -18,7 +10,7 @@ class ChooserActivity(Activity):
         screen = lv.obj()
         # Get handlers from intent extras
         original_intent = self.getIntent().extras.get("original_intent")
-        handlers = self.getIntent().extras.gepackage_managert("handlers", [])
+        handlers = self.getIntent().extras.get("handlers", [])
         label = lv.label(screen)
         label.set_text("Choose an app")
         label.set_pos(10, 10)

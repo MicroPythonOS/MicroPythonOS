@@ -1,17 +1,23 @@
 import utime
 from .content.intent import Intent
-#from .app.activity import Activity
 
+# circular import issue:
 #import mpos.package_manager
+#from .package_manager import PackageManager
+#from mpos import PackageManager
+#from mpos import *
+
 import mpos.ui
 
 class ActivityNavigator:
+    #handlersa = PackageManager.APP_REGISTRY.get(intent.action, [])
+    
     @staticmethod
     def startActivity(intent):
         if not isinstance(intent, Intent):
             raise ValueError("Must provide an Intent")
         if intent.action:  # Implicit intent: resolve handlers
-            #handlers = mpos.package_manager.PackageManager.APP_REGISTRY.get(intent.action, [])
+            #handlers = PackageManager.APP_REGISTRY.get(intent.action, [])
             if len(handlers) == 1:
                 intent.activity_class = handlers[0]
                 ActivityNavigator._launch_activity(intent)
