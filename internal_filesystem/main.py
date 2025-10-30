@@ -37,11 +37,13 @@ mpos.ui.topmenu.create_notification_bar()
 mpos.ui.topmenu.create_drawer(display)
 mpos.ui.handle_back_swipe()
 mpos.ui.handle_top_swipe()
+
 # Clear top menu, notification bar, swipe back and swipe down buttons
 # Ideally, these would be stored in a different focusgroup that is used when the user opens the drawer
 focusgroup = lv.group_get_default()
 if focusgroup: # on esp32 this may not be set
     focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
+
 mpos.ui.th = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop
 
 try:

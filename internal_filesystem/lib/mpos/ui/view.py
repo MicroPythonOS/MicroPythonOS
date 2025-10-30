@@ -28,6 +28,15 @@ def setContentView(new_activity, new_screen):
     if new_activity:
         new_activity.onResume(new_screen)
 
+def remove_and_stop_current_activity():
+    current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()
+    if current_activity:
+        current_activity.onPause(current_screen)
+        current_activity.onStop(current_screen)
+        current_activity.onDestroy(current_screen)
+        if current_screen:
+            current_screen.clean()
+
 def back_screen():
     global screen_stack
     if len(screen_stack) <= 1:
@@ -37,14 +46,7 @@ def back_screen():
     from .util import close_top_layer_msgboxes
     close_top_layer_msgboxes()
 
-    # Pop current
-    current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()
-    if current_activity:
-        current_activity.onPause(current_screen)
-        current_activity.onStop(current_screen)
-        current_activity.onDestroy(current_screen)
-        if current_screen:
-            current_screen.clean()
+    remove_and_stop_current_activity()
 
     # Load previous
     prev_activity, prev_screen, prev_focusgroup, prev_focused = screen_stack[-1]

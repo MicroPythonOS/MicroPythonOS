@@ -305,12 +305,13 @@ def create_drawer(display=None):
     restart_label.set_text(lv.SYMBOL.REFRESH+" Reset")
     restart_label.center()
     def reset_cb(e):
-        mpos.ui.remove_and_stop_current_activity() # make sure current app, like camera, does cleanup, saves progress, stops hardware etc.
+        from .view import remove_and_stop_current_activity
+        remove_and_stop_current_activity() # make sure current app, like camera, does cleanup, saves progress, stops hardware etc.
         import machine
         if hasattr(machine, 'reset'):
             machine.reset()
         elif hasattr(machine, 'soft_reset'):
-            machine.soft_reset()
+            machine.soft_reset() # this causes a SystemExit exception on desktop
         else:
             print("Warning: machine has no reset or soft_reset method available")
     restart_btn.add_event_cb(reset_cb,lv.EVENT.CLICKED,None)
@@ -322,7 +323,8 @@ def create_drawer(display=None):
     poweroff_label.center()
     def poweroff_cb(e):
         print("Power off action...")
-        mpos.ui.remove_and_stop_current_activity() # make sure current app, like camera, does cleanup, saves progress, stops hardware etc.
+        from .view import remove_and_stop_current_activity
+        remove_and_stop_current_activity() # make sure current app, like camera, does cleanup, saves progress, stops hardware etc.
         import sys
         if sys.platform == "esp32":
             #On ESP32, there's no power off but there is a forever sleep
@@ -335,7 +337,7 @@ def create_drawer(display=None):
             print("Entering deep sleep. Press BOOT button to wake up.")
             machine.deepsleep() # sleep forever
         else: # assume unix:
-            lv.deinit()  # Deinitialize LVGL (if supported)
+            lv.deinit() # Deinitialize LVGL (if supported)
             sys.exit(0)
     poweroff_btn.add_event_cb(poweroff_cb,lv.EVENT.CLICKED,None)
     # Add invisible padding at the bottom to make the drawer scrollable
