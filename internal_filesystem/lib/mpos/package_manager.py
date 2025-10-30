@@ -121,7 +121,7 @@ class PackageManager:
 
                     # ---- parse the manifest ---------------------------------
                     try:
-                        app = mpos.apps.parse_manifest(full_path)
+                        app = mpos.apps.App.from_manifest(full_path)
                     except Exception as e:
                         print("PackageManager: parsing {} failed: {}".format(full_path, e))
                         continue

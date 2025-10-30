@@ -143,56 +143,11 @@ def restart_launcher():
             break
 
 class App:
-    def __init__(self, name, publisher, short_description, long_description, icon_url, download_url, fullname, version, category, activities, installed_path=None):
-        self.name = name
-        self.publisher = publisher
-        self.short_description = short_description
-        self.long_description = long_description
-        self.icon_url = icon_url
-        self.download_url = download_url
-        self.fullname = fullname
-        self.version = version
-        self.category = category
-        self.image = None
-        self.image_dsc = None
-        self.activities = activities
-        self.installed_path = installed_path
-        self.main_launcher_activity = self._find_main_launcher_activity()
-
-    def __str__(self):
-        return (f"App(name='{self.name}', "
-                f"publisher='{self.publisher}', "
-                f"short_description='{self.short_description}', "
-                f"version='{self.version}', "
-                f"category='{self.category}', "
-                f"activities='{self.activities}', "
-                f"installed_path={self.installed_path})")
-
-    def _find_main_launcher_activity(self):
-        result = None
-        for activity in self.activities:
-            if not activity.get("entrypoint") or not activity.get("classname"):
-                print(f"Warning: activity {activity} has no entrypoint and classname, skipping...")
-                continue
-            print("checking activity's intent_filters...")
-            for intent_filter in activity.get("intent_filters"):
-                print("checking intent_filter...")
-                if intent_filter.get("action") == "main" and intent_filter.get("category") == "launcher":
-                    print("found main_launcher!")
-                    result = activity
-                    break
-        return result
-
-    def is_valid_launcher(self):
-        #print(f"checking is_valid_launcher for {app_obj}")
-        return self.category == "launcher" and self.main_launcher_activity
-
-
-def parse_manifest(appdir):
-    print(f"parse_manifest({appdir})")
-    manifest_path = f"{appdir}/META-INF/MANIFEST.JSON"
-    # Default values for App object
-    default_app = App(
+    # ------------------------------------------------------------------ #
+    #  Regular constructor – use when you already have the data
+    # ------------------------------------------------------------------ #
+    def __init__(
+        self,
         name="Unknown",
         publisher="Unknown",
         short_description="",
@@ -202,30 +157,103 @@ def parse_manifest(appdir):
         fullname="Unknown",
         version="0.0.0",
         category="",
-        activities=[],
-        installed_path=appdir
-    )
-    try:
-        with open(manifest_path, 'r') as f:
-            app_info = ujson.load(f)
-            #print(f"parsed app: {app_info}")
-            # Create App object with values from manifest, falling back to defaults
-            return App(
-                name=app_info.get("name", default_app.name),
-                publisher=app_info.get("publisher", default_app.publisher),
-                short_description=app_info.get("short_description", default_app.short_description),
-                long_description=app_info.get("long_description", default_app.long_description),
-                icon_url=app_info.get("icon_url", default_app.icon_url),
-                download_url=app_info.get("download_url", default_app.download_url),
-                fullname=app_info.get("fullname", default_app.fullname),
-                version=app_info.get("version", default_app.version),
-                category=app_info.get("category", default_app.category),
-                activities=app_info.get("activities", default_app.activities),
-                installed_path=appdir
-            )
-    except OSError:
-        print(f"parse_manifest: error loading manifest_path: {manifest_path}")
-        return default_app
+        activities=None,
+        installed_path=None,
+    ):
+        self.name = name
+        self.publisher = publisher
+        self.short_description = short_description
+        self.long_description = long_description
+        self.icon_url = icon_url
+        self.download_url = download_url
+        self.fullname = fullname
+        self.version = version
+        self.category = category
+        self.activities = activities if activities is not None else []
+        self.installed_path = installed_path
+
+        # Cached image fields (kept for compatibility)
+        self.image = None
+        self.image_dsc = None
+
+        # Find the main launcher activity once, at construction time
+        self.main_launcher_activity = self._find_main_launcher_activity()
+
+    # ------------------------------------------------------------------ #
+    #  Human-readable representation
+    # ------------------------------------------------------------------ #
+    def __str__(self):
+        return (
+            f"App(name='{self.name}', "
+            f"publisher='{self.publisher}', "
+            f"short_description='{self.short_description}', "
+            f"version='{self.version}', "
+            f"category='{self.category}', "
+            f"activities={len(self.activities)} items, "
+            f"installed_path={self.installed_path})"
+        )
+
+    # ------------------------------------------------------------------ #
+    #  Private helper – locate the MAIN/LAUNCHER activity
+    # ------------------------------------------------------------------ #
+    def _find_main_launcher_activity(self):
+        for activity in self.activities:
+            if not activity.get("entrypoint") or not activity.get("classname"):
+                print("Warning: activity missing entrypoint or classname – skipping")
+                continue
+
+            for intent_filter in activity.get("intent_filters", []):
+                if (
+                    intent_filter.get("action") == "main"
+                    and intent_filter.get("category") == "launcher"
+                ):
+                    print("Found main launcher activity!")
+                    return activity
+        return None
+
+    # ------------------------------------------------------------------ #
+    #  Convenience check for launcher-type apps
+    # ------------------------------------------------------------------ #
+    def is_valid_launcher(self):
+        return self.category == "launcher" and self.main_launcher_activity is not None
+
+    # ------------------------------------------------------------------ #
+    #  Class-method constructor that builds an App from a manifest file
+    # ------------------------------------------------------------------ #
+    @classmethod
+    def from_manifest(cls, appdir):
+        """
+        Parse <appdir>/META-INF/MANIFEST.JSON and return a fully-populated
+        App instance.  If the file cannot be read, a default App with
+        placeholder values is returned.
+        """
+        print(f"parse_manifest({appdir})")
+        manifest_path = f"{appdir}/META-INF/MANIFEST.JSON"
+
+        # Minimal default instance – guarantees every field has a fallback
+        default = cls(installed_path=appdir)
+
+        try:
+            with open(manifest_path, "r") as f:
+                data = ujson.load(f)
+        except OSError as exc:
+            print(f"parse_manifest: error loading {manifest_path} – {exc}")
+            return default
+
+        # Merge manifest data with defaults
+        return cls(
+            name=data.get("name", default.name),
+            publisher=data.get("publisher", default.publisher),
+            short_description=data.get("short_description", default.short_description),
+            long_description=data.get("long_description", default.long_description),
+            icon_url=data.get("icon_url", default.icon_url),
+            download_url=data.get("download_url", default.download_url),
+            fullname=data.get("fullname", default.fullname),
+            version=data.get("version", default.version),
+            category=data.get("category", default.category),
+            activities=data.get("activities", default.activities),
+            installed_path=appdir,
+        )
 
 
 class Activity:
