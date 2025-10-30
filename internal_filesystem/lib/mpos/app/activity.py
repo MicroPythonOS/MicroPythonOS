@@ -26,12 +26,11 @@ class Activity:
         mpos.ui.setContentView(self, screen)
 
     def startActivity(self, intent):
-        if not hasattr(self, 'app') or not self.app:
-            print("ERROR: Activity has no .app – cannot startActivity")
-            return
-        self.app.start_activity(intent)
+        from mpos.navigator import ActivityNavigator
+        ActivityNavigator.startActivity(intent)
 
     def startActivityForResult(self, intent, result_callback):
+        from mpos.navigator import ActivityNavigator
         ActivityNavigator.startActivityForResult(intent, result_callback)
 
     def initError(self, e):
