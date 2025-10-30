@@ -1,10 +1,5 @@
 import lvgl as lv
 
-import uio
-import ujson
-import uos
-import utime # for timing calls
-
 import _thread
 import traceback
 
