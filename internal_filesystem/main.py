@@ -11,6 +11,7 @@ import mpos.apps
 import mpos.config
 import mpos.ui
 import mpos.ui.topmenu
+from mpos.ui.display import init_rootscreen
 
 prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
 
@@ -31,7 +32,7 @@ theme = lv.theme_default_init(display._disp_drv, primary_color, lv.color_hex(0xF
 
 #display.set_theme(theme)
 
-mpos.ui.init_rootscreen()
+init_rootscreen()
 mpos.ui.topmenu.create_notification_bar()
 mpos.ui.topmenu.create_drawer(display)
 mpos.ui.handle_back_swipe()

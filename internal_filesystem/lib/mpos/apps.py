@@ -5,8 +5,12 @@ import traceback
 
 import mpos.info
 import mpos.ui
-from mpos import Activity, Intent
+from mpos.app.activity import Activity
+from mpos.content.intent import Intent
 from mpos.content.pm import PackageManager
+# the code uses things like:
+# mpos.ui.set_foreground_app(fullname)
+# Activity.startActivity(None, Intent(activity_class=main_activity))
 
 def good_stack_size():
     stacksize = 24*1024

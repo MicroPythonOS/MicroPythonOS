@@ -2,6 +2,8 @@ import lvgl as lv
 
 import mpos.ui
 import mpos.battery_voltage
+from .display import (get_display_width, get_display_height)
+from .util import (get_foreground_app)
 
 from mpos.ui.anim import WidgetAnimator
 
@@ -44,8 +46,8 @@ def close_drawer(to_launcher=False):
     global drawer_open, drawer
     if drawer_open:
         drawer_open=False
-        if not to_launcher and not mpos.apps.is_launcher(mpos.ui.foreground_app_name):
-            print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {mpos.ui.foreground_app_name}")
+        if not to_launcher and not "launcher" in get_foreground_app():
+            print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {get_foreground_app()}")
             close_bar(False)
         WidgetAnimator.hide_widget(drawer, anim_type="slide_up", duration=1000, delay=0)
 
@@ -339,7 +341,7 @@ def create_drawer(display=None):
     # Add invisible padding at the bottom to make the drawer scrollable
     l2 = lv.label(drawer)
     l2.set_text("\n")
-    l2.set_pos(0,mpos.ui.vertical_resolution)
+    l2.set_pos(0,get_display_height())
 
 
 def drawer_scroll_callback(event):
