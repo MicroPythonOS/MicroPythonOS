@@ -63,13 +63,7 @@ def execute_script(script_source, is_file, cwd=None, classname=None, app=None):
                 main_activity = script_globals.get(classname)
                 if main_activity:
                     start_time = utime.ticks_ms()
-                    from mpos.app.activity import Activity as BaseActivity
-                    if app:
-                        dummy = BaseActivity()
-                        dummy.app = app
-                        returned_activity = dummy.startActivity(Intent(activity_class=main_activity))
-                    else:
-                        print("Warning: app not found in PackageManager")
+                    Activity.startActivity(None, Intent(activity_class=main_activity))
                     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
                     print(f"execute_script: Activity.startActivity took {end_time}ms")
                 else:

@@ -72,6 +72,3 @@ class App:
             installed_path=appdir,
         )
 
-    def start_activity(self, intent):
-            """Android-like: App.startActivity(Intent)"""
-            return ActivityNavigator.startActivity(intent)
