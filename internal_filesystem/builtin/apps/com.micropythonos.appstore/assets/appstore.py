@@ -331,8 +331,12 @@ class AppDetail(Activity):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.progress_bar.set_value(21, True)
+        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(42, True)
+        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         PackageManager.uninstall_app(app_fullname)
+        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(0, False)
@@ -347,6 +351,7 @@ class AppDetail(Activity):
         self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(20, True)
+        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         try:
             # Step 1: Download the .mpk file
             print(f"Downloading .mpk file from: {zip_url}")
@@ -382,6 +387,7 @@ class AppDetail(Activity):
         # Step 2: install it:
         PackageManager.install_mpk(temp_zip_path, dest_folder)
         # Success:
+        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(0, False)
