@@ -70,6 +70,7 @@ class AppStore(Activity):
                 time.sleep_ms(200)
                 self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
                 self.update_ui_threadsafe_if_foreground(self.create_apps_list)
+                self.download_icons()
             except Exception as e:
                 print(f"ERROR: could not parse reponse.text JSON: {e}")
             finally:
@@ -119,11 +120,6 @@ class AppStore(Activity):
             desc_label.set_style_text_font(lv.font_montserrat_12, 0)
             desc_label.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
         print("create_apps_list app done")
-        try:
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.download_icons,()) # maybe there's no need for a new thread here, just do it in download_app_index()?
-        except Exception as e:
-            print("Could not start thread to download icons: ", e)
     
     def download_icons(self):
         for app in self.apps:
