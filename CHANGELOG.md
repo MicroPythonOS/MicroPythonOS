@@ -2,7 +2,9 @@
 =====
 - Overhaul build system: much simplier (single clone and script run), add MacOS support, build with GitHub Workflow, etc.
 - Remove "long press pin 0" for bootloader mode; either use the Settings app or keep it pressed while pressing and releasing the "RESET" button
-- Add SDCardManager for SD Card support
+- API: Add SDCardManager for SD Card support
+- API: add PackageManager to (un)install MPK packages
+- API: split mpos.ui into logical components
 
 0.2.1
 =====
