@@ -3,7 +3,7 @@ from .view import (
     setContentView, back_screen, empty_screen_stack,
     screen_stack, remove_and_stop_current_activity
 )
-from .widget import handle_back_swipe, handle_top_swipe
+from .gesture_navigation import handle_back_swipe, handle_top_swipe
 from .topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
 from .focus import save_and_clear_current_focusgroup
 from .display import (

@@ -1,4 +1,3 @@
-# lib/mpos/ui/widget.py
 import lvgl as lv
 from .anim import smooth_show, smooth_hide
 from .view import back_screen
