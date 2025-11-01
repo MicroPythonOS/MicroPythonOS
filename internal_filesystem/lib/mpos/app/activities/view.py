@@ -1,5 +1,5 @@
 from ..activity import Activity
-from ...content.pm import PackageManager
+from ...content.package_manager import PackageManager
 
 class ViewActivity(Activity):
     def __init__(self):

@@ -7,7 +7,7 @@ import mpos.info
 import mpos.ui
 from mpos.app.activity import Activity
 from mpos.content.intent import Intent
-from mpos.content.pm import PackageManager
+from mpos.content.package_manager import PackageManager
 
 def good_stack_size():
     stacksize = 24*1024

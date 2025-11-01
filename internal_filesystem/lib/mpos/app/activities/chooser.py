@@ -2,7 +2,7 @@ from ..activity import Activity
 # Chooser doesn't handle an action — it shows handlers
 # → No registration needed
 
-from ...content.pm import PackageManager
+from ...content.package_manager import PackageManager
 
 class ChooserActivity(Activity):
     def __init__(self):

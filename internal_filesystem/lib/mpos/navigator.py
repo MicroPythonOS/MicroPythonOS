@@ -1,6 +1,6 @@
 import utime
 from .content.intent import Intent
-from .content.pm import PackageManager
+from .content.package_manager import PackageManager
 
 import mpos.ui
 
