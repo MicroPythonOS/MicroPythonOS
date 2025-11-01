@@ -10,7 +10,6 @@ import mpos.ui
 
 class OSUpdate(Activity):
 
-    keep_running = True
     download_update_url = None
 
     # Widgets:
@@ -57,9 +56,6 @@ class OSUpdate(Activity):
         else:
             print("Showing update info...")
             self.show_update_info()
-
-    def onStop(self, screen):
-        self.keep_running = False # this is checked by the update_with_lvgl thread
 
     def show_update_info(self):
         self.status_label.set_text("Checking for OS updates...")
@@ -140,8 +136,8 @@ class OSUpdate(Activity):
 
     def progress_callback(self, percent):
         print(f"OTA Update: {percent:.1f}%")
-        lv.async_call(lambda l: self.progress_label.set_text(f"OTA Update: {percent:.2f}%"), None)
-        lv.async_call(lambda l: self.progress_bar.set_value(int(percent), True), None)
+        self.update_ui_threadsafe_if_foreground(self.progress_bar.set_value, int(percent), True)
+        self.update_ui_threadsafe_if_foreground(self.progress_label.set_text, f"OTA Update: {percent:.2f}%")
         time.sleep_ms(100)
 
     # Custom OTA update with LVGL progress
@@ -168,7 +164,7 @@ class OSUpdate(Activity):
         i = 0
         total_size = round_up_to_multiple(total_size, chunk_size)
         print(f"Starting OTA update of size: {total_size}")
-        while self.keep_running: # stop if the user navigates away
+        while self.has_foreground(): # stop if the user navigates away
             time.sleep_ms(100) # don't hog the CPU
             chunk = response.raw.read(chunk_size)
             if not chunk:
@@ -187,7 +183,7 @@ class OSUpdate(Activity):
         response.close()
         try:
             if bytes_written >= total_size:
-                lv.async_call(lambda l: self.status_label.set_text("Update finished! Please restart."), None)
+                lv.update_ui_threadsafe_if_foreground(self.status_label.set_text, "Update finished! Please restart.")
                 if not simulate: # if the update was completely installed
                     next_partition.set_boot()
                     import machine
@@ -196,12 +192,11 @@ class OSUpdate(Activity):
                 else:
                     print("This is an OSUpdate simulation, not attempting to restart the device.")
             else:
-                lv.async_call(lambda l: self.status_label.set_text(f"Wrote {bytes_written} < {total_size} so not enough!"), None)
-                self.install_button.remove_state(lv.STATE.DISABLED) # allow retry
+                self.update_ui_threadsafe_if_foreground(self.status_label.set_text, f"Wrote {bytes_written} < {total_size} so not enough!")
+                self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED) # allow retry
         except Exception as e:
-            if self.keep_running:
-                lv.async_call(lambda l: self.status_label.set_text(f"Update error: {e}"), None)
-            self.install_button.remove_state(lv.STATE.DISABLED) # allow retry
+            self.update_ui_threadsafe_if_foreground(self.status_label.set_text, f"Update error: {e}")
+            self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)
 
 # Non-class functions:
 
