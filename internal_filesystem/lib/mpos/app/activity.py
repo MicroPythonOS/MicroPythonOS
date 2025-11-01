@@ -73,7 +73,4 @@ class Activity:
     # Update the UI in a threadsafe way if the Activity is in the foreground
     def update_ui_threadsafe_if_foreground(self, func, *args, **kwargs):
         # lv.async_call() is needed to update the UI from another thread than the main one (as LVGL is not thread safe)
-        lv.async_call(
-            lambda _: self.if_foreground(func, *args, **kwargs),
-            None
-        )
+        lv.async_call(lambda _: self.if_foreground(func, *args, **kwargs),None)

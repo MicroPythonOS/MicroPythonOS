@@ -16,7 +16,6 @@ class AppStore(Activity):
     apps = []
     app_index_url = "https://apps.micropythonos.com/app_index.json"
     can_check_network = True
-    keep_running = False
 
     # Widgets:
     main_screen = None
@@ -34,7 +33,7 @@ class AppStore(Activity):
         self.setContentView(self.main_screen)
 
     def onResume(self, screen):
-        self.keep_running = True
+        super().onResume(screen)
         if len(self.apps):
             return # already downloaded them
         try:
@@ -47,16 +46,12 @@ class AppStore(Activity):
             _thread.stack_size(mpos.apps.good_stack_size())
             _thread.start_new_thread(self.download_app_index, (self.app_index_url,))
 
-    def onStop(self, screen):
-        self.keep_running = False
-
     def download_app_index(self, json_url):
         try:
             response = requests.get(json_url, timeout=10)
         except Exception as e:
             print("Download failed:", e)
-            if self.keep_running:
-                lv.async_call(lambda l, error=e: self.please_wait_label.set_text(f"App index download \n{json_url}\ngot error: {error}"), None)
+            self.update_ui_threadsafe_if_foreground(self.please_wait_label.set_text, f"App index download \n{json_url}\ngot error: {e}")
             return
         if response and response.status_code == 200:
             #print(f"Got response text: {response.text}")
@@ -73,9 +68,8 @@ class AppStore(Activity):
                 # Sort apps by app.name
                 self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
                 time.sleep_ms(200)
-                if self.keep_running:
-                    lv.async_call(lambda l: self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN), None)
-                    lv.async_call(lambda l: self.create_apps_list(), None)
+                self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
+                self.update_ui_threadsafe_if_foreground(self.create_apps_list)
             except Exception as e:
                 print(f"ERROR: could not parse reponse.text JSON: {e}")
             finally:
@@ -91,6 +85,7 @@ class AppStore(Activity):
         apps_list.set_size(lv.pct(100), lv.pct(100))
         print("create_apps_list iterating")
         for app in self.apps:
+            print(app)
             item = apps_list.add_button(None, "Test")
             item.set_style_pad_all(0, 0)
             #item.set_style_border_width(0, 0)
@@ -126,7 +121,7 @@ class AppStore(Activity):
         print("create_apps_list app done")
         try:
             _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.download_icons,())
+            _thread.start_new_thread(self.download_icons,()) # maybe there's no need for a new thread here, just do it in download_app_index()?
         except Exception as e:
             print("Could not start thread to download icons: ", e)
     
@@ -135,17 +130,13 @@ class AppStore(Activity):
             if app.image_dsc:
                 print(f"Skipping icon download for {app.name} because already downloaded.")
                 continue
-            if not self.keep_running:
+            if not self.has_foreground():
                 print(f"App is stopping, aborting icon downloads.")
                 break
             print(f"Downloading icon for {app.name}")
             image_dsc = self.download_icon(app.icon_url)
             app.image_dsc = image_dsc # save it for the app detail page
-            if not self.keep_running:
-                print(f"App is stopping, aborting all icon downloads.")
-                break
-            else:
-                lv.async_call(lambda l: app.image.set_src(image_dsc), None)
+            self.update_ui_threadsafe_if_foreground(app.image.set_src, image_dsc)
             time.sleep_ms(200) # not waiting here will result in some async_calls() not being executed
         print("Finished downloading icons.")
 
