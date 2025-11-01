@@ -28,7 +28,6 @@ class WiFi(Activity):
     scan_button_scanning_text = "Scanning..."
 
     ssids=[]
-    keep_running = True
     busy_scanning = False
     busy_connecting = False
     error_timer = None
@@ -64,9 +63,9 @@ class WiFi(Activity):
 
     def onResume(self, screen):
         print("wifi.py onResume")
+        super().onResume(screen)
         global access_points
         access_points = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").get_dict("access_points")
-        self.keep_running = True
         if len(self.ssids) == 0:
             if mpos.wifi.WifiService.wifi_busy == False:
                 mpos.wifi.WifiService.wifi_busy = True
@@ -74,24 +73,16 @@ class WiFi(Activity):
             else:
                 self.show_error("Wifi is busy, please try again later.")
 
-    def onStop(self, screen):
-        self.keep_running = False
-
     def show_error(self, message):
-        if self.keep_running: # called from slow threads so might already have stopped
-            # Schedule UI updates because different thread
-            print(f"show_error: Displaying error: {message}")
-            lv.async_call(lambda l: self.error_label.set_text(message), None)
-            lv.async_call(lambda l: self.error_label.remove_flag(lv.obj.FLAG.HIDDEN), None)
-            self.error_timer = lv.timer_create(self.hide_error,5000,None)
-            self.error_timer.set_repeat_count(1)
+        # Schedule UI updates because different thread
+        print(f"show_error: Displaying error: {message}")
+        self.update_ui_threadsafe_if_foreground(self.error_label.set_text, message)
+        self.update_ui_threadsafe_if_foreground(self.error_label.remove_flag, lv.obj.FLAG.HIDDEN)
+        self.error_timer = lv.timer_create(self.hide_error,5000,None)
+        self.error_timer.set_repeat_count(1)
 
     def hide_error(self, timer):
-        if self.keep_running:
-            try: # self.error_label might be None
-                self.error_label.add_flag(lv.obj.FLAG.HIDDEN)
-            except Exception as e:
-                print(f"self.error_label.add_flag(lv.obj.FLAG.HIDDEN) got exception: {e}")
+        self.update_ui_threadsafe_if_foreground(self.error_label.add_flag,lv.obj.FLAG.HIDDEN)
 
     def scan_networks_thread(self):
         global have_network
@@ -115,24 +106,19 @@ class WiFi(Activity):
         # scan done:
         self.busy_scanning = False
         mpos.wifi.WifiService.wifi_busy = False
-        if self.keep_running:
-            # Schedule UI updates because different thread
-            lv.async_call(lambda l: self.scan_button_label.set_text(self.scan_button_scan_text), None)
-            lv.async_call(lambda l: self.scan_button.remove_state(lv.STATE.DISABLED), None)
-            lv.async_call(lambda l: self.refresh_list(), None)
+        self.update_ui_threadsafe_if_foreground(self.scan_button_label.set_text,self.scan_button_scan_text)
+        self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
+        self.update_ui_threadsafe_if_foreground(self.refresh_list)
 
     def start_scan_networks(self):
-        print("scan_networks: Showing scanning label")
         if self.busy_scanning:
             print("Not scanning for networks because already busy_scanning.")
-        elif not self.keep_running:
             return
-        else:
-            self.busy_scanning = True
-            self.scan_button.add_state(lv.STATE.DISABLED)
-            self.scan_button_label.set_text(self.scan_button_scanning_text)
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.scan_networks_thread, ())
+        self.busy_scanning = True
+        self.scan_button.add_state(lv.STATE.DISABLED)
+        self.scan_button_label.set_text(self.scan_button_scanning_text)
+        _thread.stack_size(mpos.apps.good_stack_size())
+        _thread.start_new_thread(self.scan_networks_thread, ())
 
     def refresh_list(self):
         global have_network
@@ -198,7 +184,7 @@ class WiFi(Activity):
                 wlan.disconnect()
                 wlan.connect(ssid,password)
                 for i in range(10):
-                    if wlan.isconnected() or not self.keep_running:
+                    if wlan.isconnected():
                         print(f"attempt_connecting: Connected to {ssid} after {i+1} seconds")
                         break
                     print(f"attempt_connecting: Waiting for connection, attempt {i+1}/10")
@@ -219,13 +205,9 @@ class WiFi(Activity):
         if have_network and wlan.isconnected():
             mpos.time.sync_time()
         self.busy_connecting=False
-        if self.keep_running:
-            # Schedule UI updates because different thread
-            lv.async_call(lambda l: self.scan_button_label.set_text(self.scan_button_scan_text), None)
-            lv.async_call(lambda l: self.scan_button.remove_state(lv.STATE.DISABLED), None)
-            lv.async_call(lambda l: self.refresh_list(), None)
-
-
+        self.update_ui_threadsafe_if_foreground(self.scan_button_label.set_text, self.scan_button_scan_text)
+        self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
+        self.update_ui_threadsafe_if_foreground(self.refresh_list)
 
 
 
