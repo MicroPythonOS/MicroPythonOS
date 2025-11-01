@@ -9,7 +9,7 @@ import _thread
 from mpos.apps import Activity, Intent
 from mpos.app import App
 import mpos.ui
-from mpos.content.pm import PackageManager
+from mpos.content.package_manager import PackageManager
 
 
 class AppStore(Activity):

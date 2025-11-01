@@ -1,5 +1,3 @@
-#from mpos.navigator import ActivityNavigator
-
 import mpos.ui
 
 class Activity:
@@ -13,9 +11,9 @@ class Activity:
         pass
     def onStart(self, screen):
         pass
-    def onResume(self, screen):
+    def onResume(self, screen): # app gets foreground
         pass
-    def onPause(self, screen):
+    def onPause(self, screen): # app goes to background
         pass
     def onStop(self, screen):
         pass
@@ -26,11 +24,11 @@ class Activity:
         mpos.ui.setContentView(self, screen)
 
     def startActivity(self, intent):
-        from mpos.navigator import ActivityNavigator
+        from mpos.activity_navigator import ActivityNavigator
         ActivityNavigator.startActivity(intent)
 
     def startActivityForResult(self, intent, result_callback):
-        from mpos.navigator import ActivityNavigator
+        from mpos.activity_navigator import ActivityNavigator
         ActivityNavigator.startActivityForResult(intent, result_callback)
 
     def initError(self, e):

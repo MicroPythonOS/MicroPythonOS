@@ -1,5 +1,5 @@
 from mpos.apps import Activity, Intent
-from mpos.navigator import ActivityNavigator
+from mpos.activity_navigator import ActivityNavigator
 
 import mpos.config
 import mpos.ui
@@ -295,7 +295,7 @@ class SettingActivity(Activity):
             if self.active_radio_index == 1:
                 from mpos.bootloader import ResetIntoBootloader
                 intent = Intent(activity_class=ResetIntoBootloader)
-                ActivityNavigator.startActivity(intent)
+                self.startActivity(intent)
                 return
 
         ui = setting.get("ui")

@@ -11,7 +11,7 @@
 import lvgl as lv
 import mpos.apps
 import mpos.ui
-from mpos.content.pm import PackageManager
+from mpos.content.package_manager import PackageManager
 from mpos import Activity
 import time
 import uhashlib

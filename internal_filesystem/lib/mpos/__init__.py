@@ -2,7 +2,7 @@
 from .app.app import App
 from .app.activity import Activity
 from .content.intent import Intent
-from .navigator import ActivityNavigator
+from .activity_navigator import ActivityNavigator
 from .content.package_manager import PackageManager
 
 # Common activities (optional)
