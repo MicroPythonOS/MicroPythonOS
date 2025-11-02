@@ -1,8 +1,8 @@
 #!/bin/bash
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
-fs="$mydir"/../../internal_filesystem/
-cross="$mydir"/../../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross
+fs="$mydir"/../internal_filesystem/
+cross="$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross
 
 failed=0
 while read file; do
@@ -17,4 +17,7 @@ done < <(find "$fs" -iname "*.py")
 if [ $failed -ne 0 ]; then
 	echo "ERROR: $failed .py files have syntax errors"
 	exit 1
+else
+	echo "GOOD: no .py files have syntax errors"
+	exit 0
 fi

@@ -35,7 +35,7 @@ jobs:
 
       - name: Run tests on macOS dev
         run: |
-          ./scripts/tests/check_syntax.sh
+          ./tests/check_syntax.sh
         continue-on-error: true
 
       - name: Upload built binary as artifact
