@@ -10,6 +10,7 @@ class App:
         short_description="",
         long_description="",
         icon_url="",
+        icon_path="builtin/res/mipmap-mdpi/default_icon_64x64.png",
         download_url="",
         fullname="Unknown",
         version="0.0.0",
@@ -32,16 +33,25 @@ class App:
         self.image = None
         self.image_dsc = None
         self.icon_path = self._find_icon_path()
+        if self.icon_path:
+            self.icon_data = self._load_icon_data(self.icon_path)
         self.main_launcher_activity = self._find_main_launcher_activity()
 
     def __str__(self):
-        return f"App({self.name}, v{self.version}, {self.category})"
+        return f"App({self.name}, version {self.version}, {self.category})"
+
+    def _load_icon_data(self, icon_path):
+        try:
+            f =  open(icon_path, 'rb')
+            return f.read()
+        except Exception as e:
+            print(f"open {icon_path} got error: {e}")
 
     def _check_icon_path(self, tocheck):
         try:
             #print(f"checking {tocheck}")
             st = os.stat(tocheck)
-            #print(f"_find_icon_path got {st}")
+            print(f"_find_icon_path for {tocheck} found {st}")
             return tocheck
         except Exception as e:
             #print(f"No app icon found: {e}")
