@@ -195,7 +195,7 @@ class AppDetail(Activity):
             })
             icon_spacer.set_src(image_dsc)
         else:
-            icon_spacer.set_src(lv.SYMBOL.REFRESH)
+            icon_spacer.set_src(lv.SYMBOL.IMAGE)
         detail_cont = lv.obj(headercont)
         detail_cont.set_style_border_width(0, 0)
         detail_cont.set_style_radius(0, 0)

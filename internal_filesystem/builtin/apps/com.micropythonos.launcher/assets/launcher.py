@@ -111,10 +111,13 @@ class Launcher(Activity):
 
             # ----- icon ----------------------------------------------------
             image = lv.image(app_cont)
-            image.set_src(lv.image_dsc_t({
-                'data_size': len(app.icon_data),
-                'data': app.icon_data
-            }))
+            if app.icon_data:
+                image.set_src(lv.image_dsc_t({
+                    'data_size': len(app.icon_data),
+                    'data': app.icon_data
+                }))
+            else:
+                image.set_src(lv.SYMBOL.IMAGE)
             image.align(lv.ALIGN.TOP_MID, 0, 0)
             image.set_size(icon_size, icon_size)
 

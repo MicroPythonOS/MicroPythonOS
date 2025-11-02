@@ -62,7 +62,7 @@ class App:
 
     def _find_icon_path(self):
         fullpath = "apps/" + self.fullname + "/res/mipmap-mdpi/icon_64x64.png"
-        return self._check_icon_path(fullpath) or self._check_icon_path("builtin/" + fullpath) 
+        return self._check_icon_path(fullpath) or self._check_icon_path("builtin/" + fullpath)
 
     def _find_main_launcher_activity(self):
         for act in self.activities:
