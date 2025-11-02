@@ -7,4 +7,5 @@ This /lib folder contains:
 - mip.install("aiohttp") # easy websockets
 - mip.install("base64") # for nostr etc
 - mip.install("collections") # used by aiohttp
+- mip.install("unittest")
 

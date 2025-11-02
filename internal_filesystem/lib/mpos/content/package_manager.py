@@ -166,8 +166,12 @@ class PackageManager:
         """Compare two version numbers (e.g., '1.2.3' vs '4.5.6').
         Returns True if ver1 is greater than ver2, False otherwise."""
         print(f"Comparing versions: {ver1} vs {ver2}")
-        v1_parts = [int(x) for x in ver1.split('.')]
-        v2_parts = [int(x) for x in ver2.split('.')]
+        try:
+            v1_parts = [int(x) for x in ver1.split('.')]
+            v2_parts = [int(x) for x in ver2.split('.')]
+        except ValueError as e:
+            print(f"Invalid input, got error: {e}")
+            return False
         print(f"Version 1 parts: {v1_parts}")
         print(f"Version 2 parts: {v2_parts}")
         for i in range(max(len(v1_parts), len(v2_parts))):

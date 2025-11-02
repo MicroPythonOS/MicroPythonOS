@@ -4,6 +4,7 @@ conf.json*
 
 # auto created when running on desktop:
 internal_filesystem/SDLPointer_2
+internal_filesystem/SDLPointer_3
 
 # config files etc:
 internal_filesystem/data
