@@ -60,8 +60,7 @@ class Launcher(Activity):
         for app in PackageManager.get_app_list():
             if app.category == "launcher":
                 continue
-            icon_path = f"{app.installed_path}/res/mipmap-mdpi/icon_64x64.png"
-            icon_hash = Launcher._hash_file(icon_path)   # cheap SHA-1 of the icon file
+            icon_hash = Launcher._hash_file(app.icon_path)   # cheap SHA-1 of the icon file
             current_apps.append((app.name, app.installed_path, icon_hash))
 
         # ------------------------------------------------------------------
@@ -111,19 +110,11 @@ class Launcher(Activity):
             app_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
             # ----- icon ----------------------------------------------------
-            icon_path = f"{app_dir_fullpath}/res/mipmap-mdpi/icon_64x64.png"
             image = lv.image(app_cont)
-            try:
-                image.set_src(Launcher.load_icon(icon_path))
-            except Exception as e:
-                print(f"Error loading icon {icon_path}: {e} - loading default")
-                icon_path = "builtin/res/mipmap-mdpi/default_icon_64x64.png"
-                try:
-                    image.set_src(Launcher.load_icon(icon_path))
-                except Exception as e:
-                    print(f"Error loading default {icon_path}: {e} - using symbol")
-                    image.set_src(lv.SYMBOL.STOP)
-
+            image.set_src(lv.image_dsc_t({
+                'data_size': len(app.icon_data),
+                'data': app.icon_data
+            }))
             image.align(lv.ALIGN.TOP_MID, 0, 0)
             image.set_size(icon_size, icon_size)
 
@@ -159,7 +150,7 @@ class Launcher(Activity):
 
     # ------------------------------------------------------------------
     @staticmethod
-    def load_icon(icon_path):
+    def create_icon_dsc(icon_path):
         with open(icon_path, 'rb') as f:
             image_data = f.read()
             image_dsc = lv.image_dsc_t({

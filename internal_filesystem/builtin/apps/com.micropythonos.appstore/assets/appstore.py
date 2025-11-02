@@ -129,6 +129,7 @@ class AppStore(Activity):
             if not self.has_foreground():
                 print(f"App is stopping, aborting icon downloads.")
                 break
+            #if app.icon_path:
             print(f"Downloading icon for {app.name}")
             image_dsc = self.download_icon(app.icon_url)
             app.image_dsc = image_dsc # save it for the app detail page
