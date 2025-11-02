@@ -24,7 +24,6 @@ class AppStore(Activity):
     install_label = None
     please_wait_label = None
     progress_bar = None
-    _icon_widgets = {}
 
     def onCreate(self):
         self.main_screen = lv.obj()
@@ -64,7 +63,7 @@ class AppStore(Activity):
                         print(f"Warning: could not add app from {json_url} to apps list: {e}")
                 # Remove duplicates based on app.name
                 seen = set()
-                self.apps = [app for app in self.apps if not (app.name in seen or seen.add(app.name))]
+                self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
                 # Sort apps by app.name
                 self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
                 time.sleep_ms(200)
@@ -84,15 +83,12 @@ class AppStore(Activity):
         apps_list.set_style_radius(0, 0)
         apps_list.set_style_pad_all(0, 0)
         apps_list.set_size(lv.pct(100), lv.pct(100))
-        # Clear old icons
-        self._icon_widgets = {}
+        self._icon_widgets = {} # Clear old icons
         print("create_apps_list iterating")
         for app in self.apps:
             print(app)
             item = apps_list.add_button(None, "Test")
             item.set_style_pad_all(0, 0)
-            #item.set_style_border_width(0, 0)
-            #item.set_style_radius(0, 0)
             item.set_size(lv.pct(100), lv.SIZE_CONTENT)
             item.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
             cont = lv.obj(item)
@@ -106,8 +102,8 @@ class AppStore(Activity):
             icon_spacer = lv.image(cont)
             icon_spacer.set_size(64, 64)
             icon_spacer.set_src(lv.SYMBOL.REFRESH)
-            self._icon_widgets[app.fullname] = icon_spacer
             icon_spacer.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
+            app.image_icon_widget = icon_spacer # save it so it can be later set to the actual image
             label_cont = lv.obj(cont)
             label_cont.set_style_border_width(0, 0)
             label_cont.set_style_radius(0, 0)
@@ -130,17 +126,16 @@ class AppStore(Activity):
                 print(f"App is stopping, aborting icon downloads.")
                 break
             if not app.icon_data:
-                print(f"No icon_data found for {app}, downloading...")
                 app.icon_data = self.download_icon_data(app.icon_url)
             if app.icon_data:
                 print("download_icons has icon_data, showing it...")
-                icon_widget = self._icon_widgets.get(app.fullname)
-                if icon_widget:
+                image_icon_widget = app.image_icon_widget
+                if image_icon_widget:
                     image_dsc = lv.image_dsc_t({
                         'data_size': len(app.icon_data),
                         'data': app.icon_data
                     })
-                    self.update_ui_threadsafe_if_foreground(icon_widget.set_src, image_dsc) # error: 'App' object has no attribute 'image'
+                    self.update_ui_threadsafe_if_foreground(image_icon_widget.set_src, image_dsc) # error: 'App' object has no attribute 'image'
         print("Finished downloading icons.")
 
     def show_app_detail(self, app):
