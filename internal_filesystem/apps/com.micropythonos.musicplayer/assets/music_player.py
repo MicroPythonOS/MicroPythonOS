@@ -22,7 +22,10 @@ class MusicPlayer(Activity):
         self.file_explorer.explorer_open_dir('M:/')
         self.file_explorer.align(lv.ALIGN.CENTER, 0, 0)
         self.file_explorer.add_event_cb(self.file_explorer_event_cb, lv.EVENT.ALL, None)
-        self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.MUSIC_DIR, "M:/sdcard/music")
+        import os
+        local_filesystem_dir = os.getcwd().rstrip('/') # if it's / then it has a slash, if it's a subfolder then it doesn't
+        self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.HOME_DIR, f"M:{local_filesystem_dir}/")
+        self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.MUSIC_DIR, f"M:{local_filesystem_dir}/sdcard/music")
         self.setContentView(screen)
 
     def onResume(self, screen):
