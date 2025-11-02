@@ -33,9 +33,14 @@ jobs:
         run: |
           ./scripts/build_mpos.sh macOS dev
 
-      - name: Run tests on macOS dev
+      - name: Run syntax tests on macOS dev
         run: |
           ./tests/check_syntax.sh
+        continue-on-error: true
+
+      - name: Run unit tests on macOS dev
+        run: |
+          ./tests/unittest.sh
         continue-on-error: true
 
       - name: Upload built binary as artifact
