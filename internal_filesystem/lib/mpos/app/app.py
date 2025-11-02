@@ -10,13 +10,14 @@ class App:
         short_description="",
         long_description="",
         icon_url="",
-        icon_path="builtin/res/mipmap-mdpi/default_icon_64x64.png",
         download_url="",
         fullname="Unknown",
         version="0.0.0",
         category="",
         activities=None,
         installed_path=None,
+        icon_path="builtin/res/mipmap-mdpi/default_icon_64x64.png",
+        icon_data=None,
     ):
         self.name = name
         self.publisher = publisher
@@ -30,17 +31,19 @@ class App:
         self.activities = activities or []
         self.installed_path = installed_path
 
-        self.image = None
-        self.image_dsc = None
         self.icon_path = self._find_icon_path()
+        print(f"App constructor got icon_path: {self.icon_path}")
         if self.icon_path:
             self.icon_data = self._load_icon_data(self.icon_path)
+        else:
+            self.icon_data = None
         self.main_launcher_activity = self._find_main_launcher_activity()
 
     def __str__(self):
         return f"App({self.name}, version {self.version}, {self.category})"
 
     def _load_icon_data(self, icon_path):
+        print(f"App _load_icon_data for {icon_path}")
         try:
             f =  open(icon_path, 'rb')
             return f.read()
@@ -49,12 +52,12 @@ class App:
 
     def _check_icon_path(self, tocheck):
         try:
-            #print(f"checking {tocheck}")
+            print(f"checking {tocheck}")
             st = os.stat(tocheck)
             print(f"_find_icon_path for {tocheck} found {st}")
             return tocheck
         except Exception as e:
-            #print(f"No app icon found: {e}")
+            print(f"No app icon found in {tocheck}: {e}")
             return None
 
     def _find_icon_path(self):

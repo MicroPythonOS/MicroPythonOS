@@ -24,6 +24,7 @@ class AppStore(Activity):
     install_label = None
     please_wait_label = None
     progress_bar = None
+    _icon_widgets = {}
 
     def onCreate(self):
         self.main_screen = lv.obj()
@@ -56,7 +57,6 @@ class AppStore(Activity):
         if response and response.status_code == 200:
             #print(f"Got response text: {response.text}")
             try:
-                applist = json.loads(response.text)
                 for app in json.loads(response.text):
                     try:
                         self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
@@ -70,6 +70,7 @@ class AppStore(Activity):
                 time.sleep_ms(200)
                 self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
                 self.update_ui_threadsafe_if_foreground(self.create_apps_list)
+                time.sleep(0.1) # give the UI time to display the app list before starting to download
                 self.download_icons()
             except Exception as e:
                 print(f"ERROR: could not parse reponse.text JSON: {e}")
@@ -78,12 +79,13 @@ class AppStore(Activity):
 
     def create_apps_list(self):
         print("create_apps_list")
-        default_icon_dsc = self.load_icon("builtin/res/mipmap-mdpi/default_icon_64x64.png")
         apps_list = lv.list(self.main_screen)
         apps_list.set_style_border_width(0, 0)
         apps_list.set_style_radius(0, 0)
         apps_list.set_style_pad_all(0, 0)
         apps_list.set_size(lv.pct(100), lv.pct(100))
+        # Clear old icons
+        self._icon_widgets = {}
         print("create_apps_list iterating")
         for app in self.apps:
             print(app)
@@ -103,7 +105,8 @@ class AppStore(Activity):
             cont.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
             icon_spacer = lv.image(cont)
             icon_spacer.set_size(64, 64)
-            app.image = icon_spacer
+            icon_spacer.set_src(lv.SYMBOL.REFRESH)
+            self._icon_widgets[app.fullname] = icon_spacer
             icon_spacer.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
             label_cont = lv.obj(cont)
             label_cont.set_style_border_width(0, 0)
@@ -123,18 +126,21 @@ class AppStore(Activity):
     
     def download_icons(self):
         for app in self.apps:
-            if app.image_dsc:
-                print(f"Skipping icon download for {app.name} because already downloaded.")
-                continue
             if not self.has_foreground():
                 print(f"App is stopping, aborting icon downloads.")
                 break
-            #if app.icon_path:
-            print(f"Downloading icon for {app.name}")
-            image_dsc = self.download_icon(app.icon_url)
-            app.image_dsc = image_dsc # save it for the app detail page
-            self.update_ui_threadsafe_if_foreground(app.image.set_src, image_dsc)
-            time.sleep_ms(200) # not waiting here will result in some async_calls() not being executed
+            if not app.icon_data:
+                print(f"No icon_data found for {app}, downloading...")
+                app.icon_data = self.download_icon_data(app.icon_url)
+            if app.icon_data:
+                print("download_icons has icon_data, showing it...")
+                icon_widget = self._icon_widgets.get(app.fullname)
+                if icon_widget:
+                    image_dsc = lv.image_dsc_t({
+                        'data_size': len(app.icon_data),
+                        'data': app.icon_data
+                    })
+                    self.update_ui_threadsafe_if_foreground(icon_widget.set_src, image_dsc) # error: 'App' object has no attribute 'image'
         print("Finished downloading icons.")
 
     def show_app_detail(self, app):
@@ -143,33 +149,19 @@ class AppStore(Activity):
         self.startActivity(intent)
 
     @staticmethod
-    def download_icon(url):
+    def download_icon_data(url):
         print(f"Downloading icon from {url}")
         try:
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 image_data = response.content
                 print("Downloaded image, size:", len(image_data), "bytes")
-                image_dsc = lv.image_dsc_t({
-                    'data_size': len(image_data),
-                    'data': image_data
-                })
-                return image_dsc
+                return image_data
             else:
                 print("Failed to download image: Status code", response.status_code)
         except Exception as e:
             print(f"Exception during download of icon: {e}")
         return None
-
-    @staticmethod
-    def load_icon(icon_path):
-        with open(icon_path, 'rb') as f:
-            image_data = f.read()
-            image_dsc = lv.image_dsc_t({
-                'data_size': len(image_data),
-                'data': image_data
-            })
-        return image_dsc
 
 class AppDetail(Activity):
 
@@ -192,7 +184,7 @@ class AppDetail(Activity):
         app_detail_screen.set_size(lv.pct(100), lv.pct(100))
         app_detail_screen.set_pos(0, 40)
         app_detail_screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        #
+
         headercont = lv.obj(app_detail_screen)
         headercont.set_style_border_width(0, 0)
         headercont.set_style_pad_all(0, 0)
@@ -200,10 +192,15 @@ class AppDetail(Activity):
         headercont.set_size(lv.pct(100), lv.SIZE_CONTENT)
         headercont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         icon_spacer = lv.image(headercont)
-        if app.image_dsc:
-            icon_spacer.set_src(app.image_dsc)
         icon_spacer.set_size(64, 64)
-        #
+        if app.icon_data:
+            image_dsc = lv.image_dsc_t({
+                'data_size': len(app.icon_data),
+                'data': app.icon_data
+            })
+            icon_spacer.set_src(image_dsc)
+        else:
+            icon_spacer.set_src(lv.SYMBOL.REFRESH)
         detail_cont = lv.obj(headercont)
         detail_cont.set_style_border_width(0, 0)
         detail_cont.set_style_radius(0, 0)
@@ -216,7 +213,7 @@ class AppDetail(Activity):
         publisher_label = lv.label(detail_cont)
         publisher_label.set_text(app.publisher)
         publisher_label.set_style_text_font(lv.font_montserrat_16, 0)
-        #
+
         self.progress_bar = lv.bar(app_detail_screen)
         self.progress_bar.set_width(lv.pct(100))
         self.progress_bar.set_range(0, 100)
