@@ -19,6 +19,9 @@ else
         binary="$scriptdir"/../lvgl_micropython/build/lvgl_micropy_unix
 fi
 
+binary=$(readlink -f "$binary")
+chmod +x "$binary"
+
 one_test() {
 	file="$1"
 	pushd "$fs"

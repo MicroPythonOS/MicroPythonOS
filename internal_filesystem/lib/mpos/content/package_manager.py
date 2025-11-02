@@ -164,7 +164,8 @@ class PackageManager:
     @staticmethod
     def compare_versions(ver1: str, ver2: str) -> bool:
         """Compare two version numbers (e.g., '1.2.3' vs '4.5.6').
-        Returns True if ver1 is greater than ver2, False otherwise."""
+        Returns True if ver1 is greater than ver2, False otherwise.
+        Invalid or empty version numbers also result in False."""
         print(f"Comparing versions: {ver1} vs {ver2}")
         try:
             v1_parts = [int(x) for x in ver1.split('.')]
