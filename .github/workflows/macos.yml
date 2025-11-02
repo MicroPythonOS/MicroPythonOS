@@ -29,9 +29,14 @@ jobs:
           xcodebuild -version
           clang --version
 
-      - name: Build LVGL MicroPython for unix dev
+      - name: Build LVGL MicroPython for macOS dev
         run: |
           ./scripts/build_mpos.sh macOS dev
+
+      - name: Run tests on macOS dev
+        run: |
+          ./scripts/tests/check_syntax.sh
+        continue-on-error: true
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
@@ -40,7 +45,6 @@ jobs:
           path: lvgl_micropython/build/lvgl_micropy_macOS
           compression-level: 0 # don't zip it
           retention-days: 7
-
 
       - name: Build LVGL MicroPython esp32 prod fri3d-2024
         run: |

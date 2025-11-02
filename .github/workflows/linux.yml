@@ -64,6 +64,11 @@ jobs:
         run: |
           ./scripts/build_mpos.sh unix dev
 
+      - name: Run tests on unix dev
+        run: |
+          ./scripts/tests/check_syntax.sh
+        continue-on-error: true
+
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
