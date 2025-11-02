@@ -35,7 +35,7 @@ jobs:
 
       - name: Run syntax tests on macOS dev
         run: |
-          ./tests/check_syntax.sh
+          ./tests/syntax.sh
         continue-on-error: true
 
       - name: Run unit tests on macOS dev
