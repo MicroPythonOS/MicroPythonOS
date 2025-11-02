@@ -1,6 +1,6 @@
 import unittest
 
-from mpos import PackageManager
+from mpos import App, PackageManager
 
 class TestCompareVersions(unittest.TestCase):
 
@@ -35,3 +35,15 @@ class TestPackageManager_is_installed_by_name(unittest.TestCase):
 
     def test_not_installed(self):
         self.assertFalse(PackageManager.is_installed_by_name("com.micropythonos.badname"))
+
+class TestPackageManager_get_app_list(unittest.TestCase):
+
+    def test_get_app_list(self):
+        app_list = PackageManager.get_app_list()
+        self.assertEqual(len(app_list), 17)
+
+    def test_get_app(self):
+        app_list = PackageManager.get_app_list()
+	hello_world_app = PackageManager.get("com.micropythonos.helloworld")
+        self.assertIsInstance(hello_world_app, App)
+	self.assertEqual(hello_world_app.icon_path, "apps/com.micropythonos.helloworld/res/mipmap-mdpi/icon_64x64.png")

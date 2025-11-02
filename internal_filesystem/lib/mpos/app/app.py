@@ -1,3 +1,4 @@
+import os
 import ujson
 from ..activity_navigator import ActivityNavigator
 
@@ -30,10 +31,25 @@ class App:
 
         self.image = None
         self.image_dsc = None
+        self.icon_path = self._find_icon_path()
         self.main_launcher_activity = self._find_main_launcher_activity()
 
     def __str__(self):
         return f"App({self.name}, v{self.version}, {self.category})"
+
+    def _check_icon_path(self, tocheck):
+        try:
+            #print(f"checking {tocheck}")
+            st = os.stat(tocheck)
+            #print(f"_find_icon_path got {st}")
+            return tocheck
+        except Exception as e:
+            #print(f"No app icon found: {e}")
+            return None
+
+    def _find_icon_path(self):
+        fullpath = "apps/" + self.fullname + "/res/mipmap-mdpi/icon_64x64.png"
+        return self._check_icon_path(fullpath) or self._check_icon_path("builtin/" + fullpath) 
 
     def _find_main_launcher_activity(self):
         for act in self.activities:
