@@ -59,14 +59,7 @@ pushd internal_filesystem/
 	if [ -f "$script" ]; then
 		"$binary"  -v -i "$script"
 	elif [ ! -z "$script" ]; then # it's an app name
-		scriptdir="apps/$script"
-		if [ ! -d "$scriptdir" ]; then
-			scriptdir="builtin/apps/$script"
-		fi
-		if [ ! -d "$scriptdir" ]; then
-			echo "ERROR: no app found by the name '$script'"
-			exit 1
-		fi
+		scriptdir="$script"
 		echo "Running app from $scriptdir"
 		"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat boot_unix.py main.py) ; import mpos.apps; mpos.apps.start_app('$scriptdir')"
 	else
