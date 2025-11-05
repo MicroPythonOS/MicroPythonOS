@@ -1,0 +1,24 @@
+{
+"name": "Benchmark",
+"publisher": "MicroPythonOS",
+"short_description": "Benchmark MicroPythonOS",
+"long_description": "Different benchmarks to measure the speed of MicroPythonOS.",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.benchmark/icons/com.micropythonos.benchmark_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.benchmark/mpks/com.micropythonos.benchmark_0.0.1.mpk",
+"fullname": "com.micropythonos.benchmark",
+"version": "0.0.1",
+"category": "benchmark",
+"activities": [
+    {
+      "entrypoint": "assets/benchmark.py",
+      "classname": "Benchmark",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
