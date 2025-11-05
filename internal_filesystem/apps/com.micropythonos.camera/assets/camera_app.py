@@ -154,7 +154,8 @@ class CameraApp(Activity):
         print("camera app cleanup done.")
 
     def set_image_size(self):
-        target_h = mpos.ui.vertical_resolution
+        disp = lv.display_get_default()
+        target_h = disp.get_vertical_resolution()
         target_w = target_h
         if target_w == self.width and target_h == self.height:
             print("Target width and height are the same as native image, no scaling required.")
