@@ -13,7 +13,7 @@ echo "$0 appname # starts the app by appname, for example: com.example.helloworl
 
 #export SDL_WINDOW_FULLSCREEN=true
 
-#export HEAPSIZE=8M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
+export HEAPSIZE=8M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
 #export HEAPSIZE=9M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
 #export HEAPSIZE=10M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
 #export HEAPSIZE=11M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
@@ -38,8 +38,8 @@ echo "$0 appname # starts the app by appname, for example: com.example.helloworl
 #export HEAPSIZE=20M # this is fine for 1024x576
 #export HEAPSIZE=15M # fine too
 
-export HEAPSIZE=32M # for 1280x720 images in the image viewer
-export HEAPSIZE=128M # for 1280x720 images in the image viewer
+#export HEAPSIZE=32M # for 1280x720 images in the image viewer
+#export HEAPSIZE=128M # for 1280x720 images in the image viewer
 
 # print os and set binary
 os_name=$(uname -s)
