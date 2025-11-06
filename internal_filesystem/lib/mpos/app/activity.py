@@ -1,5 +1,6 @@
 import lvgl as lv
 import mpos.ui
+import time
 
 class Activity:
 
@@ -15,6 +16,8 @@ class Activity:
         pass
     def onResume(self, screen): # app gets foreground
         self._has_foreground = True
+        mpos.ui.th.add_event_cb(self.thc, 2)
+
     def onPause(self, screen): # app goes to background
         self._has_foreground = False
     def onStop(self, screen):
@@ -62,15 +65,27 @@ class Activity:
     def has_foreground(self):
         return self._has_foreground
 
+    def thc(self, a, b):
+        #print("thc called")
+        self.counter = 0
+
     # Execute a function if the Activity is in the foreground
     def if_foreground(self, func, *args, **kwargs):
         if self._has_foreground:
-            return func(*args, **kwargs)
+            print(f"executing {func} with args {args} and kwargs {kwargs}")
+            result = func(*args, **kwargs)
+            return result
         else:
-            print(f"[if_foreground] Skipped {func} because _has_foreground=False")
+            #print(f"[if_foreground] Skipped {func} because _has_foreground=False")
             return None
 
+    counter=0
     # Update the UI in a threadsafe way if the Activity is in the foreground
-    def update_ui_threadsafe_if_foreground(self, func, *args, **kwargs):
+    def update_ui_threadsafe_if_foreground(self, func, *args, important=False, **kwargs):
+        self.counter += 1
+        if not important and self.counter > 250:
+            #print(f"skipping because self.counter is {self.counter} and not important")
+            return
         # lv.async_call() is needed to update the UI from another thread than the main one (as LVGL is not thread safe)
-        lv.async_call(lambda _: self.if_foreground(func, *args, **kwargs),None)
+        result = lv.async_call(lambda _: self.if_foreground(func, *args, **kwargs),None)
+        return result
