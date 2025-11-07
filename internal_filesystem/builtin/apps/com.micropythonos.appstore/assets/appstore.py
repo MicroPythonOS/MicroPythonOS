@@ -61,20 +61,20 @@ class AppStore(Activity):
                         self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
                     except Exception as e:
                         print(f"Warning: could not add app from {json_url} to apps list: {e}")
-                # Remove duplicates based on app.name
-                seen = set()
-                self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
-                # Sort apps by app.name
-                self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
-                time.sleep_ms(200)
-                self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
-                self.update_ui_threadsafe_if_foreground(self.create_apps_list)
-                time.sleep(0.1) # give the UI time to display the app list before starting to download
-                self.download_icons()
             except Exception as e:
                 print(f"ERROR: could not parse reponse.text JSON: {e}")
             finally:
                 response.close()
+            # Remove duplicates based on app.name
+            seen = set()
+            self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
+            # Sort apps by app.name
+            self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
+            time.sleep_ms(200)
+            self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
+            self.update_ui_threadsafe_if_foreground(self.create_apps_list)
+            time.sleep(0.1) # give the UI time to display the app list before starting to download
+            self.download_icons()
 
     def create_apps_list(self):
         print("create_apps_list")
@@ -129,7 +129,11 @@ class AppStore(Activity):
                 app.icon_data = self.download_icon_data(app.icon_url)
             if app.icon_data:
                 print("download_icons has icon_data, showing it...")
-                image_icon_widget = app.image_icon_widget
+                image_icon_widget = None
+                try:
+                    image_icon_widget = app.image_icon_widget
+                except Exception as e:
+                    print(f"app.image_icon_widget got exception {e}")
                 if image_icon_widget:
                     image_dsc = lv.image_dsc_t({
                         'data_size': len(app.icon_data),
