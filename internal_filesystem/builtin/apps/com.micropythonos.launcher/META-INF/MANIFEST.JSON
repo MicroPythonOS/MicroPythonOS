@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Simple launcher to start apps.",
 "long_description": "",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.launcher/icons/com.micropythonos.launcher_0.0.7_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.launcher/mpks/com.micropythonos.launcher_0.0.7.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.launcher/icons/com.micropythonos.launcher_0.0.8_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.launcher/mpks/com.micropythonos.launcher_0.0.8.mpk",
 "fullname": "com.micropythonos.launcher",
-"version": "0.0.7",
+"version": "0.0.8",
 "category": "launcher",
 "activities": [
     {
