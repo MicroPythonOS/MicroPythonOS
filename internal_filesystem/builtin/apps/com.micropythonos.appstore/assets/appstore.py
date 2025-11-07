@@ -282,7 +282,6 @@ class AppDetail(Activity):
         else:
             action_label = self.action_label_install
         self.install_label.set_text(action_label)
-    
 
     def toggle_install(self, download_url, fullname):
         print(f"Install button clicked for {download_url} and fullname {fullname}")

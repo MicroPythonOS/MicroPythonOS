@@ -57,6 +57,15 @@ $mpremote fs cp main.py :/main.py
 #$mpremote fs cp -r system :/
 
 $mpremote fs cp -r apps :/
+
+if false; then
+$mpremote fs cp -r apps/com.micropythonos.* :/apps/
+find apps/ -type l | while read symlink; do
+	echo "Handling symlink $symlink"
+	$mpremote fs mkdir :/{}
+done
+fi
+
 $mpremote fs cp -r builtin :/
 $mpremote fs cp -r lib :/
 $mpremote fs cp -r resources :/

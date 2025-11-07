@@ -1,10 +1,15 @@
 0.3.0
 =====
-- Overhaul build system: much simplier (single clone and script run), add MacOS support, build with GitHub Workflow, etc.
-- Remove "long press pin 0" for bootloader mode; either use the Settings app or keep it pressed while pressing and releasing the "RESET" button
+- OSUpdate app: now gracefully handles the user closing the app mid-update instead of freezing
+- Launcher app: much faster thanks to PackageManager + UI only rebuilt when apps actually change
+- AppStore app: improved stability + icons for already-installed apps are shown instantly (no download needed)
 - API: Add SDCardManager for SD Card support
 - API: add PackageManager to (un)install MPK packages
 - API: split mpos.ui into logical components
+- Remove "long press pin 0" for bootloader mode; either use the Settings app or keep it pressed while pressing and releasing the "RESET" button
+- Increase framerate on ESP32 by lowering task_handler duration from 5ms to 1ms
+- Throttle per-frame async_call() to prevent apps from overflowing memory
+- Overhaul build system and docs: much simplier (single clone and script run), add MacOS support, build with GitHub Workflow, automatic tests, etc.
 
 0.2.1
 =====

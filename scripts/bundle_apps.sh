@@ -20,7 +20,8 @@ echo "[" | tee -a "$outputjson"
 
 # currently, this script doesn't purge unnecessary information from the manifests, such as activities
 
-for apprepo in internal_filesystem/apps internal_filesystem/builtin/apps; do
+#for apprepo in internal_filesystem/apps internal_filesystem/builtin/apps; do
+for apprepo in internal_filesystem/apps
     echo "Listing apps in $apprepo"
     ls -1 "$apprepo" | while read appdir; do
 	if echo "$blacklist" | grep "$appdir"; then
