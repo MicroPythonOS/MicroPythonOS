@@ -20,12 +20,12 @@ TFT_HOR_RES=320
 TFT_VER_RES=240
 
 # Fri3d Camp 2024 Badge:
-TFT_HOR_RES=296
-TFT_VER_RES=240
+#TFT_HOR_RES=296
+#TFT_VER_RES=240
 
 # Bigger screen
-TFT_HOR_RES=640
-TFT_VER_RES=480
+#TFT_HOR_RES=640
+#TFT_VER_RES=480
 
 # 4:3 DVD resolution:
 #TFT_HOR_RES=720
@@ -64,7 +64,7 @@ def catch_escape_key(indev, indev_data):
     #state = indev_data.state
     #print(f"indev_data: {state} and {key}") # this catches the previous key release instead of the next key press
     pressed, code = sdlkeyboard._get_key() # get the current key and state
-    print(f"catch_escape_key caught: {pressed}, {code}")
+    #print(f"catch_escape_key caught: {pressed}, {code}")
     if pressed == 1 and code == 27:
         mpos.ui.back_screen()
     elif pressed == 1 and code == lv.KEY.RIGHT:
