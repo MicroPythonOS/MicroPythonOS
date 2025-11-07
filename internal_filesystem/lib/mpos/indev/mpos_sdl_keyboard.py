@@ -220,7 +220,7 @@ class MposSDLKeyboard(keypad_framework.KeypadDriver):
             return
         else:
             _, state, key, mod = args
-        print(f"sdl_keyboard.py _keypad_cb got {_}, {state} {key} {mod}")
+        #print(f"mpos_sdl_keyboard.py _keypad_cb got {_}, {state} {key} {mod}")
 
         # Skip modifier keys and SDL-specific large keycodes (>= 2^30), except keypad, nav, and func keys
         if (key in {KEY_LSHIFT, KEY_RSHIFT, KEY_LCTRL, KEY_RCTRL, KEY_LALT, KEY_RALT,
