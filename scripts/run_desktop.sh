@@ -13,7 +13,7 @@ echo "$0 appname # starts the app by appname, for example: com.example.helloworl
 
 #export SDL_WINDOW_FULLSCREEN=true
 
-export HEAPSIZE=8M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
+export HEAPSIZE=8M # default, same a PSRAM on many ESP32-S3 boards
 #export HEAPSIZE=9M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
 #export HEAPSIZE=10M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
 #export HEAPSIZE=11M # 9MB is not enough for slides, 10MB is okay for 5, 16 for 10, 64 for 100s
