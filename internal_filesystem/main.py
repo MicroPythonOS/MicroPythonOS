@@ -44,7 +44,15 @@ focusgroup = lv.group_get_default()
 if focusgroup: # on esp32 this may not be set
     focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
 
-mpos.ui.th = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop
+# Can be passed to TaskHandler, currently unused:
+def custom_exception_handler(e):
+    print(f"custom_exception_handler called: {e}")
+    mpos.ui.th.deinit()
+    # otherwise it does focus_next and then crashes while doing lv.deinit()
+    focusgroup.remove_all_objs()
+    focusgroup.delete()
+
+mpos.ui.th = task_handler.TaskHandler(duration=1) # 5ms is recommended for MicroPython+LVGL on desktop but lower gives higher framerate
 
 try:
     import freezefs_mount_builtin
