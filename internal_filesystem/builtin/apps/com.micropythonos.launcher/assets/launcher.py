@@ -334,6 +334,23 @@ class Launcher(Activity):
     # ------------------------------------------------------------------
     def _show_uninstall_confirmation_modal(self, app):
         """Show confirmation modal for uninstalling an app"""
+        # Get current focus group
+        focus_group = lv.group_get_default()
+
+        # Remove all app containers from focus group temporarily
+        if focus_group:
+            for widget_info in self._app_widgets:
+                try:
+                    focus_group.remove_obj(widget_info['container'])
+                except:
+                    pass
+            # Also remove mode button
+            if self._mode_button:
+                try:
+                    focus_group.remove_obj(self._mode_button)
+                except:
+                    pass
+
         # Create modal background on layer_top to ensure it's above everything
         try:
             parent = lv.layer_top()
@@ -376,6 +393,16 @@ class Launcher(Activity):
         btn_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
         btn_cont.set_flex_align(lv.FLEX_ALIGN.SPACE_EVENLY, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
 
+        # No button (add first so it gets focus by default - safer option)
+        no_btn = lv.button(btn_cont)
+        no_btn.set_size(lv.pct(40), 50)
+        no_btn.add_event_cb(lambda e, m=modal_bg: self._close_modal(m), lv.EVENT.CLICKED, None)
+        no_label = lv.label(no_btn)
+        no_label.set_text("No")
+        no_label.center()
+        if focus_group:
+            focus_group.add_obj(no_btn)
+
         # Yes button
         yes_btn = lv.button(btn_cont)
         yes_btn.set_size(lv.pct(40), 50)
@@ -383,18 +410,29 @@ class Launcher(Activity):
         yes_label = lv.label(yes_btn)
         yes_label.set_text("Yes")
         yes_label.center()
-
-        # No button
-        no_btn = lv.button(btn_cont)
-        no_btn.set_size(lv.pct(40), 50)
-        no_btn.add_event_cb(lambda e, m=modal_bg: self._close_modal(m), lv.EVENT.CLICKED, None)
-        no_label = lv.label(no_btn)
-        no_label.set_text("No")
-        no_label.center()
+        if focus_group:
+            focus_group.add_obj(yes_btn)
 
     # ------------------------------------------------------------------
     def _show_builtin_info_modal(self, app):
         """Show info modal explaining builtin apps cannot be uninstalled"""
+        # Get current focus group
+        focus_group = lv.group_get_default()
+
+        # Remove all app containers from focus group temporarily
+        if focus_group:
+            for widget_info in self._app_widgets:
+                try:
+                    focus_group.remove_obj(widget_info['container'])
+                except:
+                    pass
+            # Also remove mode button
+            if self._mode_button:
+                try:
+                    focus_group.remove_obj(self._mode_button)
+                except:
+                    pass
+
         # Create modal background on layer_top to ensure it's above everything
         try:
             parent = lv.layer_top()
@@ -436,11 +474,31 @@ class Launcher(Activity):
         ok_label = lv.label(ok_btn)
         ok_label.set_text("OK")
         ok_label.center()
+        if focus_group:
+            focus_group.add_obj(ok_btn)
 
     # ------------------------------------------------------------------
     def _close_modal(self, modal_bg):
-        """Close and delete modal"""
+        """Close and delete modal and restore focus group"""
+        # Get focus group
+        focus_group = lv.group_get_default()
+
+        # Delete modal (this will remove modal buttons from group)
         modal_bg.delete()
+
+        # Re-add all app containers and mode button back to focus group
+        if focus_group:
+            for widget_info in self._app_widgets:
+                try:
+                    focus_group.add_obj(widget_info['container'])
+                except:
+                    pass
+            # Re-add mode button
+            if self._mode_button:
+                try:
+                    focus_group.add_obj(self._mode_button)
+                except:
+                    pass
 
     # ------------------------------------------------------------------
     def _confirm_uninstall(self, app, modal_bg):
