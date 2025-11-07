@@ -4,16 +4,8 @@ import _thread
 from mpos.apps import Activity
 import mpos.ui
 
-indev_error_x = 160
-indev_error_y = 120
-
-DARKPINK = lv.color_hex(0xEC048C)
-
 class Benchmark(Activity):
 
-    hor_res = 0
-    ver_res = 0
-    layer = None
     fps_buffer = [0] # Buffer to store FPS
     bird_x = 100
     bird_y = 0
@@ -39,32 +31,39 @@ class Benchmark(Activity):
             focusgroup.add_obj(screen)
         screen.add_event_cb(self.key_cb, lv.EVENT.KEY, None)
         self.image = lv.image(screen)
-        #self.load_image("data/images/screenshots/snapshot_640x480_RGB565.raw")
         self.load_image("data/images/screenshots/snapshot_296x240_RGB565.raw")
-        #self.image.set_size(self.lvgl_w, self.lvgl_h)
-        #self.gif.set_size(lvgl_w, lvgl_h) doesn't seem to do anything. get_style_transform_scale_x/y works but then it needs get_style_translate_x/y
-        #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
         scale_factor_w = round(self.image_target_w * 256 / self.image_w)
         self.image.set_scale(scale_factor_w)
-        #self.image.set_scale(128)
-        #self.image.set_size(640, 480)
         self.spinner = lv.spinner(screen)
         self.spinner.set_size(16, 16)
         self.setContentView(screen)
 
     def onResume(self, screen):
-        super().onResume(screen)
         lv.log_register_print_cb(self.log_callback)
-        try:
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.game, ())
-        except Exception as e:
-            print("Could not start thread: ", e)
-    
-    def onStop(self, screen):
-        super().onStop(screen)
+        mpos.ui.th.add_event_cb(self.update_frame, 1)
+
+    def onPause(self, screen):
+        mpos.ui.th.remove_event_cb(self.update_frame)
         lv.log_register_print_cb(None)
 
+    def key_cb(self, event):
+        key = event.get_key()
+        #print(f"got key {key}")
+
+        if key == lv.KEY.UP:
+            self.image_target_w += 20
+            scale_factor_w = round(self.image_target_w * 256 / self.image_w)
+            self.image.set_scale(scale_factor_w)
+        elif key == lv.KEY.DOWN:
+            self.image_target_w -= 20
+            scale_factor_w = round(self.image_target_w * 256 / self.image_w)
+            self.image.set_scale(scale_factor_w)
+        elif key == lv.KEY.LEFT:
+            self.bird_x -= 10
+        elif key == lv.KEY.RIGHT:
+            self.bird_x += 10
+        elif key == lv.KEY.ENTER:
+            self.bird_y -= 25
 
     def extract_dimensions_and_format(self, filename):
         # Split the filename by '_'
@@ -132,37 +131,14 @@ class Benchmark(Activity):
             except (IndexError, ValueError):
                 pass
 
-    def key_cb(self, event):
-        key = event.get_key()
-        #print(f"got key {key}")
 
-        if key == lv.KEY.UP:
-            self.image_target_w += 20
-            scale_factor_w = round(self.image_target_w * 256 / self.image_w)
-            self.image.set_scale(scale_factor_w)
-            #self.bird_y -= 10
-        elif key == lv.KEY.DOWN:
-            self.image_target_w -= 20
-            scale_factor_w = round(self.image_target_w * 256 / self.image_w)
-            self.image.set_scale(scale_factor_w)
-            #self.bird_y += 10
-        elif key == lv.KEY.LEFT:
-            self.bird_x -= 10
-        elif key == lv.KEY.RIGHT:
-            self.bird_x += 10
-        elif key == lv.KEY.ENTER:
-            self.bird_y -= 25
-    
-    def game(self):
-        # print("Waiting a bit before starting...") ; time.sleep(1) # wait for top bar to go away
-        while self.has_foreground():
-            self.update_ui_threadsafe_if_foreground(self.spinner.set_pos, self.bird_x, self.bird_y)
-            self.update_ui_threadsafe_if_foreground(self.image.set_x, self.image_x)
-            time.sleep_ms(10)
-            self.image_x -= 1
-            if self.image_x < (-self.image_target_w*2):
-                self.image_x = self.image_w
-            self.bird_y += 1
-            if self.bird_y > self.image_h:
-                self.bird_y = 0
+    def update_frame(self, a, b):
+        self.spinner.set_pos(self.bird_x, self.bird_y)
+        self.image.set_x(self.image_x)
+        self.image_x -= 1
+        if self.image_x < (-self.image_target_w*2):
+            self.image_x = self.image_w
+        self.bird_y += 1
+        if self.bird_y > self.image_h:
+            self.bird_y = 0
 
