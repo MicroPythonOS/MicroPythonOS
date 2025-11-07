@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Simple drawing app",
 "long_description": "Draw simple shapes on the screen.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/icons/com.micropythonos.draw_0.0.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/mpks/com.micropythonos.draw_0.0.1.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/icons/com.micropythonos.draw_0.0.2_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/mpks/com.micropythonos.draw_0.0.2.mpk",
 "fullname": "com.micropythonos.draw",
-"version": "0.0.1",
+"version": "0.0.2",
 "category": "graphics",
 "activities": [
     {
