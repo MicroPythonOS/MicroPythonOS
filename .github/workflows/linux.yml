@@ -105,7 +105,7 @@ jobs:
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.ota
+          name: MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
 
