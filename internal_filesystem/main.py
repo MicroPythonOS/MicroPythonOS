@@ -52,7 +52,11 @@ def custom_exception_handler(e):
     focusgroup.remove_all_objs()
     focusgroup.delete()
 
-mpos.ui.th = task_handler.TaskHandler(duration=1) # 5ms is recommended for MicroPython+LVGL on desktop but lower gives higher framerate
+import sys
+if sys.platform == "esp32":
+    mpos.ui.th = task_handler.TaskHandler(duration=1) # 1ms gives highest framerate on esp32-s3's
+else:
+    mpos.ui.th = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
 
 try:
     import freezefs_mount_builtin
