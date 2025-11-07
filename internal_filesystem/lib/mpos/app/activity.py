@@ -4,6 +4,8 @@ import time
 
 class Activity:
 
+    throttle_async_call_counter = 0
+
     def __init__(self):
         self.intent = None  # Store the intent that launched this activity
         self.result = None
@@ -14,12 +16,14 @@ class Activity:
         pass
     def onStart(self, screen):
         pass
-    def onResume(self, screen): # app gets foreground
+
+    def onResume(self, screen): # app goes to foreground
         self._has_foreground = True
-        mpos.ui.th.add_event_cb(self.thc, 2)
+        mpos.ui.th.add_event_cb(self.task_handler_callback, 1)
 
     def onPause(self, screen): # app goes to background
         self._has_foreground = False
+
     def onStop(self, screen):
         pass
     def onDestroy(self, screen):
@@ -65,9 +69,8 @@ class Activity:
     def has_foreground(self):
         return self._has_foreground
 
-    def thc(self, a, b):
-        #print("thc called")
-        self.counter = 0
+    def task_handler_callback(self, a, b):
+        self.throttle_async_call_counter = 0
 
     # Execute a function if the Activity is in the foreground
     def if_foreground(self, func, *args, **kwargs):
@@ -79,13 +82,13 @@ class Activity:
             #print(f"[if_foreground] Skipped {func} because _has_foreground=False")
             return None
 
-    counter=0
     # Update the UI in a threadsafe way if the Activity is in the foreground
+    # The call may get throttled, unless important=True is added to it.
     def update_ui_threadsafe_if_foreground(self, func, *args, important=False, **kwargs):
-        self.counter += 1
-        if not important and self.counter > 250:
-            #print(f"skipping because self.counter is {self.counter} and not important")
-            return
+        self.throttle_async_call_counter += 1
+        if not important and self.throttle_async_call_counter > 100: # 250 seems to be okay, so 100 is on the safe side
+            print(f"update_ui_threadsafe_if_foreground called more than 100 times for one UI frame, which can overflow - throttling!")
+            return None
         # lv.async_call() is needed to update the UI from another thread than the main one (as LVGL is not thread safe)
         result = lv.async_call(lambda _: self.if_foreground(func, *args, **kwargs),None)
         return result
