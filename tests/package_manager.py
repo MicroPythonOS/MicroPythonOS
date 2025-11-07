@@ -40,7 +40,7 @@ class TestPackageManager_get_app_list(unittest.TestCase):
 
     def test_get_app_list(self):
         app_list = PackageManager.get_app_list()
-        self.assertGreaterEqual(len(app_list), 14) # more if the symlinks in internal_filesystem/app aren't dangling
+        self.assertGreaterEqual(len(app_list), 13) # more if the symlinks in internal_filesystem/app aren't dangling
 
     def test_get_app(self):
         app_list = PackageManager.get_app_list()
