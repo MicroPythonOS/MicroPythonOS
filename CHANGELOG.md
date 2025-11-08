@@ -1,6 +1,7 @@
 0.3.1
 =====
 - Fix "Home" button in top menu not stopping all apps
+- Update micropython-nostr library to fix epoch time on ESP32 and NWC event kind
 
 0.3.0
 =====
