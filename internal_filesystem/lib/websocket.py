@@ -47,7 +47,7 @@ def _run_callback(callback, *args):
 async def _process_callbacks_async():
     """Process queued callbacks asynchronously."""
     import _thread
-    while True:
+    while True: # this stops when "NWCWallet: manage_wallet_thread stopping, closing connections..."
         #print(f"thread {_thread.get_ident()}: _process_callbacks_async")
         while _callback_queue:
             _log_debug("Processing callbacks queue...")
