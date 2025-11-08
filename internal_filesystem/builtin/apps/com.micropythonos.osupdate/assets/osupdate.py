@@ -183,7 +183,6 @@ class OSUpdate(Activity):
         response.close()
         try:
             if bytes_written >= total_size:
-                lv.update_ui_threadsafe_if_foreground(self.status_label.set_text, "Update finished! Please restart.")
                 if not simulate: # if the update was completely installed
                     next_partition.set_boot()
                     import machine
@@ -191,6 +190,7 @@ class OSUpdate(Activity):
                     # self.install_button stays disabled to prevent the user from installing the same update twice
                 else:
                     print("This is an OSUpdate simulation, not attempting to restart the device.")
+                self.update_ui_threadsafe_if_foreground(self.status_label.set_text, "Update finished! Please restart.")
             else:
                 self.update_ui_threadsafe_if_foreground(self.status_label.set_text, f"Wrote {bytes_written} < {total_size} so not enough!")
                 self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED) # allow retry
