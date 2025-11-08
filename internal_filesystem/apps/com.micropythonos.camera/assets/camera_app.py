@@ -21,7 +21,7 @@ class CameraApp(Activity):
     height = 240
 
     status_label_text = "No camera found."
-    status_label_text_searching = "Searching QR codes...\n\nHold still and make them big!\n10cm for simple QR codes,\n20cm for complex."
+    status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-20cm) and QR size (6-12cm). Ensure proper lighting."
     status_label_text_found = "Decoding QR..."
 
     cam = None
