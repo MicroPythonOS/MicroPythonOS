@@ -1,6 +1,7 @@
 0.3.1
 =====
-- Fix "Home" button in top menu not stopping all apps
+- OSUpdate app: fix typo that caused update rollback
+- Fix 'Home' button in top menu not stopping all apps
 - Update micropython-nostr library to fix epoch time on ESP32 and NWC event kind
 
 0.3.0
@@ -11,7 +12,7 @@
 - API: Add SDCardManager for SD Card support
 - API: add PackageManager to (un)install MPK packages
 - API: split mpos.ui into logical components
-- Remove "long press pin 0" for bootloader mode; either use the Settings app or keep it pressed while pressing and releasing the "RESET" button
+- Remove 'long press pin 0' for bootloader mode; either use the Settings app or keep it pressed while pressing and releasing the 'RESET' button
 - Increase framerate on ESP32 by lowering task_handler duration from 5ms to 1ms
 - Throttle per-frame async_call() to prevent apps from overflowing memory
 - Overhaul build system and docs: much simplier (single clone and script run), add MacOS support, build with GitHub Workflow, automatic tests, etc.
@@ -36,7 +37,7 @@
 =====
 - Update to MicroPython 1.25.0 and LVGL 9.3.0
 - About app: add info about over-the-air partitions
-- OSUpdate app: check update depending on current hardware identifier, add "force update" option, improve user feedback
+- OSUpdate app: check update depending on current hardware identifier, add 'force update' option, improve user feedback
 - AppStore, Camera, Launcher, Settings: adjust for compatibility with LVGL 9.3.0
 
 0.0.11
@@ -55,7 +56,7 @@
 - UI: prevent menu drawer button clicks while swiping
 - Settings: add Timezone configuration
 - Draw: new app for simple drawing on a canvas
-- IMU: new app for showing data from the Intertial Measurement Unit ("Accellerometer")
+- IMU: new app for showing data from the Intertial Measurement Unit ('Accellerometer')
 - Camera: speed up QR decoding 4x - thanks @kdmukai!
 
 
@@ -68,15 +69,15 @@
 0.0.7
 =====
 - Update battery icon every 5 seconds depending on VBAT/BAT_ADC
-- Add "Power" off button in menu drawer
+- Add 'Power' off button in menu drawer
 
 0.0.6
 =====
 - Scale button size in drawer for bigger screens
-- Show "Brightness" text in drawer
-- Add builtin "Settings" app with settings for Light/Dark Theme, Theme Color, Restart to Bootloader
-- Add "Settings" button to drawer that opens settings app
-- Save and restore "Brightness" setting
+- Show 'Brightness' text in drawer
+- Add builtin 'Settings' app with settings for Light/Dark Theme, Theme Color, Restart to Bootloader
+- Add 'Settings' button to drawer that opens settings app
+- Save and restore 'Brightness' setting
 - AppStore: speed up app installs
 - Camera: scale camera image to fit screen on bigger displays
 - Camera: show decoded result on-display if QR decoded
@@ -117,7 +118,7 @@
 
 0.0.2
 =====
-- Handle IO0 "BOOT button" so long-press starts bootloader mode for updating firmware over USB
+- Handle IO0 'BOOT button' so long-press starts bootloader mode for updating firmware over USB
 
 0.0.1
 =====
