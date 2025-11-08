@@ -14,9 +14,6 @@ def get_foreground_app():
     global _foreground_app_name
     return _foreground_app_name
 
-def show_launcher():
-    restart_launcher()
-
 def shutdown():
     print("Shutting down...")
     lv.deinit()

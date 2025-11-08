@@ -1,7 +1,6 @@
-# lib/mpos/ui/__init__.py
 from .view import (
-    setContentView, back_screen, empty_screen_stack,
-    screen_stack, remove_and_stop_current_activity
+    setContentView, back_screen,
+    screen_stack, remove_and_stop_current_activity, remove_and_stop_all_activities
 )
 from .gesture_navigation import handle_back_swipe, handle_top_swipe
 from .topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
@@ -13,10 +12,10 @@ from .display import (
     get_pointer_xy   # ← now correct
 )
 from .event import get_event_name, print_event
-from .util import shutdown, set_foreground_app, get_foreground_app, show_launcher
+from .util import shutdown, set_foreground_app, get_foreground_app
 
 __all__ = [
-    "setContentView", "back_screen", "empty_screen_stack", "remove_and_stop_current_activity"
+    "setContentView", "back_screen", "remove_and_stop_current_activity", "remove_and_stop_all_activities"
     "handle_back_swipe", "handle_top_swipe",
     "open_bar", "close_bar", "open_drawer", "drawer_open", "NOTIFICATION_BAR_HEIGHT",
     "save_and_clear_current_focusgroup",
@@ -25,5 +24,5 @@ __all__ = [
     "min_resolution", "max_resolution",
     "get_pointer_xy",
     "get_event_name", "print_event",
-    "shutdown", "set_foreground_app", "get_foreground_app", "show_launcher"
+    "shutdown", "set_foreground_app", "get_foreground_app"
 ]

@@ -1,14 +1,9 @@
-# lib/mpos/ui/view.py
 import lvgl as lv
 from ..apps import restart_launcher
 from .focus import save_and_clear_current_focusgroup
 from .topmenu import open_bar
 
 screen_stack = []
-
-def empty_screen_stack():
-    global screen_stack
-    screen_stack.clear()
 
 def setContentView(new_activity, new_screen):
     global screen_stack
@@ -27,6 +22,11 @@ def setContentView(new_activity, new_screen):
     lv.screen_load_anim(new_screen, lv.SCR_LOAD_ANIM.OVER_LEFT, 500, 0, False)
     if new_activity:
         new_activity.onResume(new_screen)
+
+def remove_and_stop_all_activities():
+    global screen_stack
+    while len(screen_stack):
+        remove_and_stop_current_activity()
 
 def remove_and_stop_current_activity():
     current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()

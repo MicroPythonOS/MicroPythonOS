@@ -131,7 +131,8 @@ def start_app(fullname):
 # Starts the first launcher that's found
 def restart_launcher():
     print("restart_launcher")
-    mpos.ui.empty_screen_stack()
+    # Stop all apps
+    mpos.ui.remove_and_stop_all_activities()
     # No need to stop the other launcher first, because it exits after building the screen
     for app in PackageManager.get_app_list():
         if app.is_valid_launcher():

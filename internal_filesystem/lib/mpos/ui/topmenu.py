@@ -276,7 +276,7 @@ def create_drawer(display=None):
     def launcher_event(e):
         print("Home button pressed!")
         close_drawer(True)
-        mpos.ui.show_launcher()
+        mpos.apps.restart_launcher()
     launcher_btn.add_event_cb(launcher_event,lv.EVENT.CLICKED,None)
     '''
     sleep_btn=lv.button(drawer)
@@ -295,7 +295,7 @@ def create_drawer(display=None):
         else: # assume unix:
             # maybe do a system suspend here? or at least show a popup toast "not supported"
             close_drawer(True)
-            show_launcher()
+            mpos.apps.restart_launcher()
     sleep_btn.add_event_cb(sleep_event,lv.EVENT.CLICKED,None)
     '''
     restart_btn=lv.button(drawer)
