@@ -75,7 +75,7 @@ class Activity:
     # Execute a function if the Activity is in the foreground
     def if_foreground(self, func, *args, **kwargs):
         if self._has_foreground:
-            print(f"executing {func} with args {args} and kwargs {kwargs}")
+            #print(f"executing {func} with args {args} and kwargs {kwargs}")
             result = func(*args, **kwargs)
             return result
         else:
