@@ -368,7 +368,7 @@ class AppDetail(Activity):
             if 'response' in locals():
                 response.close()
         # Step 2: install it:
-        PackageManager.install_mpk(temp_zip_path, dest_folder)
+        PackageManager.install_mpk(temp_zip_path, dest_folder) # ERROR: temp_zip_path might not be set if download failed!
         # Success:
         time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(100, False)

@@ -1,3 +1,7 @@
+0.3.1
+=====
+- Fix "Home" button in top menu not stopping all apps
+
 0.3.0
 =====
 - OSUpdate app: now gracefully handles the user closing the app mid-update instead of freezing
