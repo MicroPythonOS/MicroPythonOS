@@ -196,7 +196,7 @@ class OSUpdate(Activity):
                 self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED) # allow retry
         except Exception as e:
             self.update_ui_threadsafe_if_foreground(self.status_label.set_text, f"Update error: {e}")
-            self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)
+            self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED) # allow retry
 
 # Non-class functions:
 
