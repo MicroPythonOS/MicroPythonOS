@@ -330,7 +330,7 @@ class WebSocketApp:
                     raise WebSocketConnectionClosedException("WebSocket closed")
                 elif msg.type == ABNF.OPCODE_PING:
                     data = msg.data
-                    _run_callback(self.on_ping, self, data, ABNF.OPCODE_PING, True)
+                    _run_callback(self.on_ping, self, data)
 
     async def _send_async(self, data, opcode):
         """Async send implementation."""
