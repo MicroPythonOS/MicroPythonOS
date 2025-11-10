@@ -69,7 +69,7 @@ if [ -z "$onetest" ]; then
 			failed=$(expr $failed \+ 1)
 		fi
 
-	done < <( find "$testdir" -iname "*.py" )
+	done < <( find "$testdir" -iname "test_*.py" )
 else
 	one_test $(readlink -f "$onetest")
 	[ $? -ne 0 ] && failed=1
