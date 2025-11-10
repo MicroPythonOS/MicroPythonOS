@@ -1,0 +1,24 @@
+{
+"name": "ShowFonts",
+"publisher": "MicroPythonOS",
+"short_description": "Show installed fonts",
+"long_description": "Visualize the installed fonts so the user can check them out.",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.showfonts/icons/com.micropythonos.showfonts_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.showfonts/mpks/com.micropythonos.showfonts_0.0.1.mpk",
+"fullname": "com.micropythonos.showfonts",
+"version": "0.0.1",
+"category": "development",
+"activities": [
+    {
+      "entrypoint": "assets/showfonts.py",
+      "classname": "ShowFonts",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
