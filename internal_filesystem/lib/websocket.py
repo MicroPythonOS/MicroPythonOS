@@ -48,7 +48,7 @@ async def _process_callbacks_async():
     """Process queued callbacks asynchronously."""
     import _thread
     while True: # this stops when "NWCWallet: manage_wallet_thread stopping, closing connections..."
-        #print(f"thread {_thread.get_ident()}: _process_callbacks_async")
+        #print(f"_process_callbacks_async thread {_thread.get_ident()}: _process_callbacks_async")
         while _callback_queue:
             _log_debug("Processing callbacks queue...")
             try:
@@ -260,7 +260,7 @@ class WebSocketApp:
         while self.running:
             _log_debug("Main loop iteration: self.running=True")
             try:
-                await self._connect_and_run()
+                await self._connect_and_run() # keep waiting for it, until finished
             except Exception as e:
                 _log_error(f"_async_main got exception: {e}")
                 self.has_errored = True
@@ -275,6 +275,8 @@ class WebSocketApp:
 
         # Cleanup
         _log_debug("Initiating cleanup")
+        _run_callback(self.on_close, self, None, None)
+        await asyncio.sleep(1) # wait a bit for _process_callbacks_async to call on_close
         self.running = False
         callback_task.cancel()  # Stop callback task
         try:
@@ -282,7 +284,6 @@ class WebSocketApp:
         except asyncio.CancelledError:
             _log_debug("Callback task cancelled")
         await self._close_async()
-        _run_callback(self.on_close, self, None, None)
         _log_debug("_async_main completed")
 
     async def _connect_and_run(self):
