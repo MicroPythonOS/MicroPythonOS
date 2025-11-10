@@ -35,6 +35,7 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 	else
 		cleanname=$(echo "$file" | sed "s#/#_#g")
 		testlog=/tmp/"$cleanname".log
+		echo "$test logging to $testlog"
 		mpremote.py exec "import sys ; sys.path.append('lib')
 $(cat $file)
 result = unittest.main()
@@ -42,7 +43,7 @@ if result.wasSuccessful():
     print('TEST WAS A SUCCESS')
 else:
     print('TEST WAS A FAILURE')
-" > "$testlog"
+" | tee "$testlog"
 		grep "TEST WAS A SUCCESS" "$testlog"
 		result=$?
 	fi
