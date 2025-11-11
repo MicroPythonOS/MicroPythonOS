@@ -37,13 +37,15 @@ class WebSocketTimeoutException(WebSocketException):
 _callback_queue = ucollections.deque((), 100)  # Empty tuple, maxlen=100
 
 def _run_callback(callback, *args):
+    if not callback:
+        print("_run_callback: skipping None callback")
+        return
     """Add callback to queue for execution."""
     try:
         _callback_queue.append((callback, args))
         _log_debug(f"Queued callback {callback}, args={args}, queue size: {len(_callback_queue)}")
-        #if callback:
-        #    print("Doing callback directly:")
-        #    callback(*args)
+        # print("Doing callback directly:")
+        # callback(*args)
     except IndexError:
         _log_error("ERROR: websocket.py callback queue full, dropping callback")
 
