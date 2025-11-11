@@ -93,6 +93,12 @@ class TestNWCWallet(unittest.TestCase):
         self.assertNotEqual(self.redraw_balance_cb_called,saved+1, "should be equal, but LNBits doesn't seem to send payment notifications (yet)")
         self.assertGreaterEqual(self.redraw_payments_cb_called, 1)
         self.assertGreaterEqual(self.redraw_static_receive_code_cb_called, 1)
+        print("Stopping wallet...")
+        self.wallet.stop()
+        time.sleep(5)
+        self.assertNotEqual(self.redraw_balance_cb_called,saved+1, "should be equal, but LNBits doesn't seem to send payment notifications (yet)")
+        self.assertGreaterEqual(self.redraw_payments_cb_called, 1)
+        self.assertGreaterEqual(self.redraw_static_receive_code_cb_called, 1)
         print("test finished")
 
 
