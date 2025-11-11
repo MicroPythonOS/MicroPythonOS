@@ -21,8 +21,8 @@ mpos.info.set_hardware_id("fri3d-2024")
 
 # Pin configuration
 SPI_BUS = 2
-#SPI_FREQ = 40000000
-SPI_FREQ = 20000000 # also works but I guess higher is better
+SPI_FREQ = 40000000
+#SPI_FREQ = 20000000 # also works but I guess higher is better
 LCD_SCLK = 7
 LCD_MOSI = 6
 LCD_MISO = 8
