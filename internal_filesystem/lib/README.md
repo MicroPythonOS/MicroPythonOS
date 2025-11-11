@@ -8,4 +8,5 @@ This /lib folder contains:
 - mip.install("base64") # for nostr etc
 - mip.install("collections") # used by aiohttp
 - mip.install("unittest")
+- mip.install("logging")
 
