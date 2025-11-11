@@ -25,6 +25,10 @@ chmod +x "$binary"
 
 one_test() {
 	file="$1"
+	if [ ! -f "$file" ]; then
+		echo "ERROR: $file is not a regular, existing file!"
+		exit 1
+	fi
 	pushd "$fs"
 	echo "Testing $file"
 	if [ -z "$ondevice" ]; then
