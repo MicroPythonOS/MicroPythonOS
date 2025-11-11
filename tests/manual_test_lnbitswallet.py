@@ -82,7 +82,7 @@ class TestLNBitsWallet(unittest.TestCase):
         self.wallet.start(self.redraw_balance_cb, self.redraw_payments_cb, self.redraw_static_receive_code_cb, self.error_callback)
         time.sleep(3)
         self.assertEqual(self.redraw_balance_cb_called, 1)
-        self.assertGreaterEqual(self.redraw_payments_cb_called, 3)
+        self.assertGreaterEqual(self.redraw_payments_cb_called, 1) # called once for all of them
         before_receive = self.redraw_payments_cb_called
         self.assertEqual(self.redraw_static_receive_code_cb_called, 0) # no static receive code so error 404
         self.assertEqual(self.error_callback_called, 1)

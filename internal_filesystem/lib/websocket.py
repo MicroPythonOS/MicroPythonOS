@@ -40,7 +40,10 @@ def _run_callback(callback, *args):
     """Add callback to queue for execution."""
     try:
         _callback_queue.append((callback, args))
-        #_log_debug(f"Queued callback {callback}, args={args}, queue size: {len(_callback_queue)}")
+        _log_debug(f"Queued callback {callback}, args={args}, queue size: {len(_callback_queue)}")
+        #if callback:
+        #    print("Doing callback directly:")
+        #    callback(*args)
     except IndexError:
         _log_error("ERROR: websocket.py callback queue full, dropping callback")
 
@@ -252,6 +255,7 @@ class WebSocketApp:
 
         # Start callback processing task
         try:
+            # Make sure the queue is empty
             callback_task = asyncio.create_task(_process_callbacks_async())
             _log_debug("Started callback processing task")
         except Exception as e:
