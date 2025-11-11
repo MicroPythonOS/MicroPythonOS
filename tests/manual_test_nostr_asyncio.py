@@ -115,7 +115,7 @@ class TestNostr(unittest.TestCase):
     #relays = [ "wss://relay.damus.io", "wss://nostr-pub.wellorder.net" ]
     #relays = [ "ws://127.0.0.1:5000/nostrrelay/test", "ws://127.0.0.1:5000/nostrclient/api/v1/relay", "wss://relay.damus.io", "wss://nostr-pub.wellorder.net" ]
     #relays = [ "ws://127.0.0.1:5000/nostrclient/api/v1/relay", "wss://relay.damus.io", "wss://nostr-pub.wellorder.net" ]
-    secret = "fab0a9a11d4cf4b1d92e901a0b2c56634275e2fa1a7eb396ff1b942f95d59fd3"
+    secret = "fab0a9a11d4cf4b1d92e901a0b2c56634275e2fa1a7eb396ff1b942f95d59fd3" # not really a secret, just from a local fake wallet
     wallet_pubkey = "e46762afab282c324278351165122345f9983ea447b47943b052100321227571"
 
     async def fetch_balance(self):
@@ -203,7 +203,7 @@ class TestNostr(unittest.TestCase):
 
         print(f"DEBUG: Opening relay connections")
         await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
-        self.connected = False
+        self.allconnected = False
         for _ in range(20):
             print("Waiting for relay connection...")
             await asyncio.sleep(0.5)
@@ -219,13 +219,12 @@ class TestNostr(unittest.TestCase):
                 except Exception as e:
                     print(f"could not find relay: {e}")
                     break # not all of them have been initialized, skip...
-            self.connected = ( nrconnected == len(self.relays) )
-            if self.connected:
+            self.allconnected = ( nrconnected == len(self.relays) )
+            if self.allconnected:
                 print("All relays connected!")
                 break
-        if not self.connected or not self.keep_running:
+        if not self.allconnected or not self.keep_running:
             print(f"ERROR: could not connect to relay or not self.keep_running, aborting...")
-            # TODO: call an error callback to notify the user
             return
 
         # Set up subscription to receive response
