@@ -71,7 +71,7 @@ async def _process_callbacks_async():
             except IndexError:
                 _log_debug("Callback queue empty")
                 break
-        await asyncio.sleep(0.5)  # Yield to other tasks
+        await asyncio.sleep(0.1)  # Yield to other tasks
 
 class WebSocketApp:
     def __init__(
@@ -281,8 +281,10 @@ class WebSocketApp:
 
         # Cleanup
         _log_debug("Initiating cleanup")
-        _run_callback(self.on_close, self, None, None)
-        await asyncio.sleep(1) # wait a bit for _process_callbacks_async to call on_close
+        #_run_callback(self.on_close, self, None, None)
+        # await asyncio.sleep(0.1) # need to wait for _process_callbacks_async to call on_close, but how much is enough?
+        if self.on_close:
+            self.on_close(self, None, None) # don't use _run_callback() but do it immediately
         self.running = False
         callback_task.cancel()  # Stop callback task
         try:
