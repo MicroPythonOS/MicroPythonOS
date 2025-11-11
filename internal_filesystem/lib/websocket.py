@@ -130,7 +130,7 @@ class WebSocketApp:
         """Send binary data."""
         self.send(data, ABNF.OPCODE_BINARY)
 
-    def close(self, **kwargs):
+    async def close(self, **kwargs):
         """Close the WebSocket connection."""
         _log_debug("Close requested")
         self.running = False
@@ -184,7 +184,7 @@ class WebSocketApp:
         _log_debug(f"Connection status: ready={status}")
         return status
 
-    def run_forever(
+    async def run_forever(
         self,
         sockopt=None,
         sslopt=None,
@@ -230,7 +230,7 @@ class WebSocketApp:
             self.close()
             return False
         except Exception as e:
-            _log_error(f"run_forever's _loop.run_until_complete() got general exception: {e}")
+            _log_error(f"run_forever's _loop.run_until_complete() for {self.url} got general exception: {e}")
             self.has_errored = True
             self.running = False
             #return True
@@ -262,7 +262,7 @@ class WebSocketApp:
             try:
                 await self._connect_and_run() # keep waiting for it, until finished
             except Exception as e:
-                _log_error(f"_async_main got exception: {e}")
+                _log_error(f"_async_main's await self._connect_and_run() got exception: {e}")
                 self.has_errored = True
                 _run_callback(self.on_error, self, e)
                 if not reconnect:
@@ -298,6 +298,11 @@ class WebSocketApp:
 
         self.session = aiohttp.ClientSession(headers=self.header)
         async with self.session.ws_connect(self.url, ssl=ssl_context) as ws:
+            if not ws:
+                print("ERROR: ws_connect got None instead of ws object!")
+                _run_callback(self.on_error, self, str(e))
+                return
+
             self.ws = ws
             _log_debug("WebSocket connected, running on_open callback")
             _run_callback(self.on_open, self)
