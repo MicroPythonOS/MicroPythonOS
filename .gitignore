@@ -8,4 +8,5 @@ internal_filesystem/SDLPointer_3
 
 # config files etc:
 internal_filesystem/data
+internal_filesystem/sdcard
 
