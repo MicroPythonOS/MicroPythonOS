@@ -96,8 +96,6 @@ class WebSocketClient:
             return self.PONG, payload
         elif opcode == self.PONG:  # pragma: no branch
             return None, None
-        else:
-            print(f"Warning: aiohttp_ws.py received unsupported opcode {opcode} with data {payload}")
         return None, payload
 
     @classmethod
@@ -191,7 +189,7 @@ class WebSocketClient:
             await self.send(b"", self.CLOSE)
 
     async def _read_frame(self):
-        header = await self.reader.read(2)
+        header = await self.reader.readexactly(2)
         if len(header) != 2:  # pragma: no cover
             # raise OSError(32, "Websocket connection closed")
             opcode = self.CLOSE
@@ -199,31 +197,13 @@ class WebSocketClient:
             return opcode, payload
         fin, opcode, has_mask, length = self._parse_frame_header(header)
         if length == 126:  # Magic number, length header is 2 bytes
-            length_data = await self.reader.read(2)
-            if len(length_data) != 2:
-                print("WARNING: aiohttp_ws.py failed to read 2-byte length, closing")
-                return self.CLOSE, b""
-            (length,) = struct.unpack("!H", length_data)
+            (length,) = struct.unpack("!H", await self.reader.readexactly(2))
         elif length == 127:  # Magic number, length header is 8 bytes
-            length_data = await self.reader.read(8)
-            if len(length_data) != 8:
-                print("WARNING: aiohttp_ws.py failed to read 8-byte length, closing")
-                return self.CLOSE, b""
-            (length,) = struct.unpack("!Q", length_data)
+            (length,) = struct.unpack("!Q", await self.reader.readexactly(8))
+
         if has_mask:  # pragma: no cover
-            mask = await self.reader.read(4)
-            if len(mask) != 4:
-                print("WARNING: aiohttp_ws.py failed to read mask, closing")
-                return self.CLOSE, b""
-        payload = b""
-        remaining_length = length
-        while remaining_length > 0:
-            chunk = await self.reader.read(remaining_length)
-            if not chunk:  # Connection closed or error
-                print(f"WARNING: aiohttp_ws.py connection closed while reading payload, got {len(payload)}/{length} bytes, closing")
-                return self.CLOSE, b""
-            payload += chunk
-            remaining_length -= len(chunk)
+            mask = await self.reader.readexactly(4)
+        payload = await self.reader.readexactly(length)
         if has_mask:  # pragma: no cover
             payload = bytes(x ^ mask[i % 4] for i, x in enumerate(payload))
         return opcode, payload
