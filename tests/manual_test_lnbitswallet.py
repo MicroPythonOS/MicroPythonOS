@@ -4,6 +4,8 @@ import ssl
 import _thread
 import time
 import unittest
+import requests
+import ujson
 
 import sys
 sys.path.append("apps/com.lightningpiggy.displaywallet/assets/")
@@ -16,8 +18,8 @@ class TestLNBitsWallet(unittest.TestCase):
     redraw_static_receive_code_cb_called = 0
     error_callback_called = 0
 
-    def redraw_balance_cb(self, balance=0):
-        print(f"redraw_callback called, balance: {balance}")
+    def redraw_balance_cb(self, balance_added=0):
+        print(f"redraw_callback called, balance_added: {balance_added}")
         self.redraw_balance_cb_called += 1
 
     def redraw_payments_cb(self):
@@ -32,15 +34,67 @@ class TestLNBitsWallet(unittest.TestCase):
         print(f"error_callback called, error: {error}")
         self.error_callback_called += 1
 
+    def update_balance(self, sats):
+        """
+        Updates the user balance by 'sats' amount using the local API.
+        Authenticates first, then sends the balance update.
+        """
+        try:
+            # Step 1: Authenticate and get access token
+            auth_url = "http://192.168.1.16:5000/api/v1/auth"
+            auth_payload = {"username": "admin", "password": "adminadmin"}
+            print("Authenticating...")
+            auth_response = requests.post( auth_url, json=auth_payload, headers={"Content-Type": "application/json"} )
+            if auth_response.status_code != 200:
+                print("Auth failed:", auth_response.text)
+                auth_response.close()
+                return False
+            auth_data = ujson.loads(auth_response.text)
+            access_token = auth_data["access_token"]
+            auth_response.close()
+            print("Authenticated, got token.")
+            # Step 2: Update balance
+            balance_url = "http://192.168.1.16:5000/users/api/v1/balance"
+            balance_payload = { "amount": str(sats), "id": "24e9334d39b946a3b642f5fd8c292a07" }
+            cookie_header = f"cookie_access_token={access_token}; is_lnbits_user_authorized=true"
+            print(f"Updating balance by {sats} sats...")
+            update_response = requests.put(
+                balance_url,
+                json=balance_payload,
+                headers={ "Content-Type": "application/json", "Cookie": cookie_header })
+            result = ujson.loads(update_response.text)
+            update_response.close()
+            if result.get("success"):
+                print("Balance updated successfully!")
+                return True
+            else:
+                print("Update failed:", result)
+                return False
+        except Exception as e:
+            print("Error:", e)
+            return False
+
     def test_it(self):
         print("starting test")
+        import sys
+        print(sys.path)
         self.wallet = LNBitsWallet("http://192.168.1.16:5000/", "5a2cf5d536ec45cb9a043071002e4449")
         self.wallet.start(self.redraw_balance_cb, self.redraw_payments_cb, self.redraw_static_receive_code_cb, self.error_callback)
-        time.sleep(5)
-        self.assertTrue(self.redraw_balance_cb_called > 0)
-        self.assertTrue(self.redraw_payments_cb_called > 0)
-        self.assertTrue(self.redraw_static_receive_code_cb_called == 0) # no static receive code so error 404
-        self.assertTrue(self.error_callback_called == 1)
+        time.sleep(3)
+        self.assertEqual(self.redraw_balance_cb_called, 1)
+        self.assertGreaterEqual(self.redraw_payments_cb_called, 3)
+        before_receive = self.redraw_payments_cb_called
+        self.assertEqual(self.redraw_static_receive_code_cb_called, 0) # no static receive code so error 404
+        self.assertEqual(self.error_callback_called, 1)
+        print("Everything good so far, now add a transaction...")
+        self.update_balance(9)
+        time.sleep(2) # allow some time for the notification
+        self.wallet.stop() # don't stop the wallet for the fullscreen QR activity
+        time.sleep(2)
+        self.assertEqual(self.redraw_balance_cb_called, 2)
+        self.assertGreaterEqual(self.redraw_payments_cb_called, before_receive+1)
+        self.assertEqual(self.redraw_static_receive_code_cb_called, 0) # no static receive code so error 404
+        self.assertEqual(self.error_callback_called, 1)
         print("test finished")
 
 
