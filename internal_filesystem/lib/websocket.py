@@ -43,7 +43,7 @@ def _run_callback(callback, *args):
     """Add callback to queue for execution."""
     try:
         _callback_queue.append((callback, args))
-        _log_debug(f"Queued callback {callback}, args={args}, queue size: {len(_callback_queue)}")
+        #_log_debug(f"Queued callback {callback}, args={args}, queue size: {len(_callback_queue)}")
         # print("Doing callback directly:")
         # callback(*args)
     except IndexError:
@@ -245,14 +245,15 @@ class WebSocketApp:
     async def _async_main(self):
         """Main async loop for WebSocket handling."""
         _log_debug("Starting _async_main")
-        reconnect = 0  # Default, as RECONNECT may not be defined
-        try:
-            from websocket import RECONNECT
-            reconnect = RECONNECT
-        except ImportError:
-            pass
-        if reconnect is not None:
-            reconnect = reconnect
+        #reconnect = 0  # Default, as RECONNECT may not be defined
+        #try:
+        #    from websocket import RECONNECT
+        #    reconnect = RECONNECT
+        #except ImportError:
+        #    pass
+        #if reconnect is not None:
+        #    reconnect = reconnect
+        reconnect = 3
         _log_debug(f"Reconnect interval set to {reconnect}s")
 
         # Start callback processing task
@@ -268,7 +269,7 @@ class WebSocketApp:
             try:
                 await self._connect_and_run() # keep waiting for it, until finished
             except Exception as e:
-                _log_error(f"_async_main's await self._connect_and_run() got exception: {e}")
+                _log_error(f"_async_main's await self._connect_and_run() for {self.url} got exception: {e}")
                 self.has_errored = True
                 _run_callback(self.on_error, self, e)
                 if not reconnect:
