@@ -11,6 +11,11 @@
 - Update aiohttp_ws library to 0.0.6
 - Add fragmentation support for aiohttp_ws library
 
+Known issues:
+- Camera app: one in two times, camera image stays blank (workaround: close and re-open it)
+- OSUpdate app: long changelog can't be scrolled without touchscreen (workaround: read the changelog here)
+- Fri3d-2024 Badge: joystick arrow up ticks a radio button (workaround: un-tick the radio button)
+
 0.3.1
 =====
 - OSUpdate app: fix typo that prevented update rollback from being cancelled
