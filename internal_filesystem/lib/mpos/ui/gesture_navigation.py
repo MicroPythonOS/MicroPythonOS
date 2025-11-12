@@ -34,7 +34,7 @@ def _back_swipe_cb(event):
         backbutton.set_pos(magnetic_x,back_start_y)
     elif event_code == lv.EVENT.RELEASED:
         smooth_hide(backbutton)
-        if x > min(100, get_display_width() / 3):
+        if x > min(100, get_display_width() / 4):
             back_screen()
 
 
@@ -62,7 +62,7 @@ def _top_swipe_cb(event):
         downbutton.set_pos(down_start_x,magnetic_y)
     elif event_code == lv.EVENT.RELEASED:
         smooth_hide(downbutton)
-        if y > min(80, get_display_height() / 3):
+        if y > min(80, get_display_height() / 4):
             open_drawer()
 
 
