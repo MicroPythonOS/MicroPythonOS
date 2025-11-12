@@ -23,6 +23,11 @@ class OSUpdate(Activity):
     def onCreate(self):
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
+
+        # Make the screen focusable so it can be scrolled with the arrow keys
+        if focusgroup := lv.group_get_default():
+            focusgroup.add_obj(self.main_screen)
+
         self.current_version_label = lv.label(self.main_screen)
         self.current_version_label.align(lv.ALIGN.TOP_LEFT,0,0)
         self.current_version_label.set_text(f"Installed OS version: {mpos.info.CURRENT_OS_VERSION}")
