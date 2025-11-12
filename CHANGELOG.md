@@ -1,3 +1,7 @@
+0.3.3
+=====
+- OSUpdate App: enable scrolling with joystick/arrow keys
+
 0.3.2
 =====
 - Settings app: add 'Auto Start App' setting
