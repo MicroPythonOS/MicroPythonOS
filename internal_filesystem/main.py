@@ -75,7 +75,7 @@ except Exception as e:
 # Start launcher so it's always at bottom of stack
 launcher_app = PackageManager.get_launcher()
 started_launcher = mpos.apps.start_app(launcher_app.fullname)
-# Then start another app if configured
+# Then start auto_start_app if configured
 auto_start_app = prefs.get_string("auto_start_app", None)
 if auto_start_app and launcher_app.fullname != auto_start_app:
     mpos.apps.start_app(auto_start_app)
