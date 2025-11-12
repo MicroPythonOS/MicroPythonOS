@@ -1,10 +1,15 @@
 0.3.2
 =====
 - Settings app: add "Auto Start App" setting
-- Fri3d-2024 Badge: use same SPI freq as Waveshare 2 inch for uniformity
-- ESP32: reduce drawing frequency increasing task_handler duration from 1ms to 5ms
 - Tweak gesture navigation to trigger back and top menu more easily
 - Rollback OTA update if launcher fails to start
+- Rename "Home" to "Launch" in top menu drawer
+- Fri3d-2024 Badge: use same SPI freq as Waveshare 2 inch for uniformity
+- ESP32: reduce drawing frequency by increasing task_handler duration from 1ms to 5ms
+- Rework MicroPython WebSocketApp websocket-client library using uasyncio
+- Rework MicroPython python-nostr library using uasyncio
+- Update aiohttp_ws library to 0.0.6
+- Add fragmentation support for aiohttp_ws library
 
 0.3.1
 =====
