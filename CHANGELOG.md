@@ -30,7 +30,7 @@ Known issues:
 - API: Add SDCardManager for SD Card support
 - API: add PackageManager to (un)install MPK packages
 - API: split mpos.ui into logical components
-- Remove 'long press IO0 button' to activate bootloader mode; either use the Settings app (very convenient) or keep it pressed while plugging in the USB cable (or pressing the reset button)
+- Remove 'long press IO0 button' to activate bootloader mode; either use the Settings app (very convenient) or keep it pressed while plugging in the USB cable (or briefly pressing the reset button)
 - Increase framerate on ESP32 by lowering task_handler duration from 5ms to 1ms
 - Throttle per-frame async_call() to prevent apps from overflowing memory
 - Overhaul build system and docs: much simplier (single clone and script run), add MacOS support, build with GitHub Workflow, automatic tests, etc.
