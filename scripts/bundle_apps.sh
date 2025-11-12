@@ -17,7 +17,9 @@ rm "$outputjson"
 # These apps are for testing, or aren't ready yet:
 # com.quasikili.quasidoodle doesn't work on touch screen devices
 # com.micropythonos.filemanager doesn't do anything other than let you browse the filesystem, so it's confusing
-blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle"
+# com.micropythonos.confetti crashes when closing
+# com.micropythonos.showfonts is slow to open
+blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.confetti com.micropythonos.showfonts"
 
 echo "[" | tee -a "$outputjson"
 
