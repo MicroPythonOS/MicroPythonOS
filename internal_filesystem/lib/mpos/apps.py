@@ -17,6 +17,7 @@ def good_stack_size():
     return stacksize
 
 # Run the script in the current thread:
+# Returns True if successful
 def execute_script(script_source, is_file, cwd=None, classname=None):
     import utime # for timing read and compile
     thread_id = _thread.get_ident()
@@ -55,26 +56,32 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
             #print("Classes:", classes.keys())
             #print("Functions:", functions.keys())
             #print("Variables:", variables.keys())
-            if classname:
-                main_activity = script_globals.get(classname)
-                if main_activity:
-                    start_time = utime.ticks_ms()
-                    Activity.startActivity(None, Intent(activity_class=main_activity))
-                    end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                    print(f"execute_script: Activity.startActivity took {end_time}ms")
-                else:
-                    print("Warning: could not find main_activity")
+            if not classname:
+                print("Running without a classname isn't supported right now.")
+                return False
+            main_activity = script_globals.get(classname)
+            if main_activity:
+                start_time = utime.ticks_ms()
+                Activity.startActivity(None, Intent(activity_class=main_activity))
+                end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
+                print(f"execute_script: Activity.startActivity took {end_time}ms")
+            else:
+                print(f"Warning: could not find app's main_activity {main_activity}")
+                return False
         except Exception as e:
             print(f"Thread {thread_id}: exception during execution:")
             # Print stack trace with exception type, value, and traceback
             tb = getattr(e, '__traceback__', None)
             traceback.print_exception(type(e), e, tb)
-        print(f"Thread {thread_id}: script {compile_name} finished")
+            return False
+        print(f"Thread {thread_id}: script {compile_name} finished, restoring sys.path to {sys.path}")
         sys.path = path_before
+        return True
     except Exception as e:
         print(f"Thread {thread_id}: error:")
         tb = getattr(e, '__traceback__', None)
         traceback.print_exception(type(e), e, tb)
+        return False
 
 """ Unused:
 # Run the script in a new thread:
@@ -104,6 +111,7 @@ def execute_script_new_thread(scriptname, is_file):
         print("main.py: execute_script_new_thread(): error starting new thread thread: ", e)
 """
 
+# Returns True if successful
 def start_app(fullname):
     mpos.ui.set_foreground_app(fullname)
     import utime
@@ -119,7 +127,7 @@ def start_app(fullname):
         print(f"WARNING: start_app can't start {fullname} because it doesn't have a main_launcher_activity")
         return
     start_script_fullpath = f"{app.installed_path}/{app.main_launcher_activity.get('entrypoint')}"
-    execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"))
+    result = execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"))
     # Launchers have the bar, other apps don't have it
     if app.is_valid_launcher():
         mpos.ui.topmenu.open_bar()
@@ -127,6 +135,8 @@ def start_app(fullname):
         mpos.ui.topmenu.close_bar()
     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
     print(f"start_app() took {end_time}ms")
+    return result
+
 
 # Starts the first launcher that's found
 def restart_launcher():
@@ -134,9 +144,5 @@ def restart_launcher():
     # Stop all apps
     mpos.ui.remove_and_stop_all_activities()
     # No need to stop the other launcher first, because it exits after building the screen
-    for app in PackageManager.get_app_list():
-        if app.is_valid_launcher():
-            print(f"Found launcher, starting {app.fullname}")
-            start_app(app.fullname)
-            break
+    return start_app(PackageManager.get_launcher().fullname)
 

@@ -12,6 +12,7 @@ import mpos.config
 import mpos.ui
 import mpos.ui.topmenu
 from mpos.ui.display import init_rootscreen
+from mpos.content.package_manager import PackageManager
 
 prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
 
@@ -71,7 +72,13 @@ try:
 except Exception as e:
     print(f"Couldn't start mpos.wifi.WifiService.auto_connect thread because: {e}")
 
-mpos.apps.restart_launcher()
+# Start launcher so it's always at bottom of stack
+launcher_app = PackageManager.get_launcher()
+mpos.apps.start_app(launcher_app.fullname)
+# Then start another app if configured
+auto_start_app = prefs.get_string("auto_start_app", None)
+if auto_start_app and launcher_app.fullname != auto_start_app:
+    mpos.apps.start_app(auto_start_app)
 
 # If we got this far without crashing, then no need to rollback the update:
 try:

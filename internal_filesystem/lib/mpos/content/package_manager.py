@@ -73,7 +73,16 @@ class PackageManager:
 
     @classmethod
     def get(cls, fullname):
+        if not cls._app_list:
+            cls.refresh_apps()
         return cls._by_fullname.get(fullname)
+
+    @classmethod
+    def get_launcher(cls):
+        for app in cls.get_app_list():
+            if app.is_valid_launcher():
+                print(f"Found launcher {app.fullname}")
+                return app
 
     @classmethod
     def clear(cls):
@@ -222,5 +231,4 @@ class PackageManager:
     def is_installed_by_name(app_fullname):
         print(f"Checking if app {app_fullname} is installed...")
         return PackageManager.is_installed_by_path(f"apps/{app_fullname}") or PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
-
 

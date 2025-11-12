@@ -14,7 +14,10 @@ mkdir -p "$output"
 #rm "$output"/*.png
 rm "$outputjson"
 
-blacklist="com.micropythonos.filemanager com.example.bla"
+# These apps are for testing, or aren't ready yet:
+# com.quasikili.quasidoodle doesn't work on touch screen devices
+# com.micropythonos.filemanager doesn't do anything other than let you browse the filesystem, so it's confusing
+blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle"
 
 echo "[" | tee -a "$outputjson"
 

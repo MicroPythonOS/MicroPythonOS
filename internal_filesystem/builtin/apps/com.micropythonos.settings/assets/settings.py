@@ -36,10 +36,13 @@ class SettingsActivity(Activity):
             ("Turquoise", "40e0d0")
         ]
         self.settings = [
+            # Novice settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")]},
             {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors},
-            {"title": "Restart to Bootloader", "key": "boot_mode", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")]}, # special that doesn't get saved
             {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda : mpos.time.refresh_timezone_preference()},
+            # Advanced settings, alphabetically:
+            {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Launcher", "com.micropythonos.launcher"), ("LightningPiggy", "com.lightningpiggy.displaywallet")]},
+            {"title": "Restart to Bootloader", "key": "boot_mode", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")]}, # special that doesn't get saved
             # This is currently only in the drawer but would make sense to have it here for completeness:
             #{"title": "Display Brightness", "key": "display_brightness", "value_label": None, "cont": None, "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)

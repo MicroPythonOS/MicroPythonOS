@@ -271,10 +271,10 @@ def create_drawer(display=None):
     launcher_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
     launcher_btn.align(lv.ALIGN.CENTER,0,0)
     launcher_label=lv.label(launcher_btn)
-    launcher_label.set_text(lv.SYMBOL.HOME+" Home")
+    launcher_label.set_text(lv.SYMBOL.HOME+" Launch")
     launcher_label.center()
     def launcher_event(e):
-        print("Home button pressed!")
+        print("Launch button pressed!")
         close_drawer(True)
         mpos.apps.restart_launcher()
     launcher_btn.add_event_cb(launcher_event,lv.EVENT.CLICKED,None)
