@@ -175,9 +175,9 @@ class TestNWCWalletMultiRelay(unittest.TestCase):
         print("\nAsserting state...")
         saved = self.redraw_balance_cb_called
         print(f"redraw_balance_cb_called is {self.redraw_balance_cb_called}")
-        self.assertGreaterEqual(self.redraw_balance_cb_called,1)
-        self.assertGreaterEqual(self.redraw_payments_cb_called, 1)
-        self.assertGreaterEqual(self.redraw_static_receive_code_cb_called, 1)
+        self.assertGreaterEqual(self.redraw_balance_cb_called,1,"redraw_balance_cb should be called once")
+        self.assertGreaterEqual(self.redraw_payments_cb_called, 1, "redraw_payments_cb should be called once")
+        self.assertGreaterEqual(self.redraw_static_receive_code_cb_called, 1, "redraw_static_receive_code_cb should be called once")
         self.assertEqual(self.error_callback_called, 0)
         self.update_balance(321)
         time.sleep(10)
