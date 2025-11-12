@@ -62,9 +62,9 @@ class Confetti(Activity):
         piece = {
             'img_idx': idx,
             'x': random.uniform(-10, self.SCREEN_WIDTH + 10),
-            'y': random.uniform(50, 100),
+            'y': random.uniform(50, 150),
             'vx': random.uniform(-100, 100),
-            'vy': random.uniform(-250, -80),
+            'vy': random.uniform(-150, -80),
             'spin': random.uniform(-400, 400),
             'age': 0.0,
             'lifetime': random.uniform(1.8, 5),
