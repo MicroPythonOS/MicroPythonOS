@@ -1,6 +1,14 @@
+0.3.2
+=====
+- Settings app: add "Auto Start App" setting
+- Fri3d-2024 Badge: use same SPI freq as Waveshare 2 inch for uniformity
+- ESP32: reduce drawing frequency increasing task_handler duration from 1ms to 5ms
+- Tweak gesture navigation to trigger back and top menu more easily
+- Rollback OTA update if launcher fails to start
+
 0.3.1
 =====
-- OSUpdate app: fix typo that caused update rollback
+- OSUpdate app: fix typo that prevented update rollback from being cancelled
 - Fix 'Home' button in top menu not stopping all apps
 - Update micropython-nostr library to fix epoch time on ESP32 and NWC event kind
 

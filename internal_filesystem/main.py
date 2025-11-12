@@ -74,15 +74,17 @@ except Exception as e:
 
 # Start launcher so it's always at bottom of stack
 launcher_app = PackageManager.get_launcher()
-mpos.apps.start_app(launcher_app.fullname)
+started_launcher = mpos.apps.start_app(launcher_app.fullname)
 # Then start another app if configured
 auto_start_app = prefs.get_string("auto_start_app", None)
 if auto_start_app and launcher_app.fullname != auto_start_app:
     mpos.apps.start_app(auto_start_app)
 
-# If we got this far without crashing, then no need to rollback the update:
-try:
-    import ota.rollback
-    ota.rollback.cancel()
-except Exception as e:
-    print("main.py: warning: could not mark this update as valid:", e)
+if not started_launcher:
+    print("WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
+else:
+    try:
+        import ota.rollback
+        ota.rollback.cancel()
+    except Exception as e:
+        print("main.py: warning: could not mark this update as valid:", e)
