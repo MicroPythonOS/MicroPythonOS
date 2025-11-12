@@ -56,15 +56,16 @@ $mpremote fs cp main.py :/main.py
 #$mpremote fs cp autorun.py :/autorun.py
 #$mpremote fs cp -r system :/
 
-$mpremote fs cp -r apps :/
+# The issue is that this brings all the .git folders with it:
+#$mpremote fs cp -r apps :/
 
-if false; then
+#if false; then
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -type l | while read symlink; do
 	echo "Handling symlink $symlink"
 	$mpremote fs mkdir :/{}
 done
-fi
+#fi
 
 $mpremote fs cp -r builtin :/
 $mpremote fs cp -r lib :/
