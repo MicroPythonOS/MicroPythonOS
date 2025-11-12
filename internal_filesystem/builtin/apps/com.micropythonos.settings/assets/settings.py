@@ -1,6 +1,7 @@
 from mpos.apps import Activity, Intent
 from mpos.activity_navigator import ActivityNavigator
 
+from mpos import PackageManager
 import mpos.config
 import mpos.ui
 import mpos.time
@@ -41,7 +42,7 @@ class SettingsActivity(Activity):
             {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors},
             {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda : mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
-            {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Launcher", "com.micropythonos.launcher"), ("LightningPiggy", "com.lightningpiggy.displaywallet")]},
+            {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
             {"title": "Restart to Bootloader", "key": "boot_mode", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")]}, # special that doesn't get saved
             # This is currently only in the drawer but would make sense to have it here for completeness:
             #{"title": "Display Brightness", "key": "display_brightness", "value_label": None, "cont": None, "placeholder": "A value from 0 to 100."},
