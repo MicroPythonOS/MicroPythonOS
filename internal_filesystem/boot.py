@@ -26,7 +26,7 @@ LCD_CS = 45
 LCD_BL = 1
 
 I2C_BUS = 0
-I2C_FREQ = 100000
+I2C_FREQ = 400000
 TP_SDA = 48
 TP_SCL = 47
 TP_ADDR = 0x15
@@ -86,5 +86,22 @@ display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing 
 # Battery voltage ADC measuring
 import mpos.battery_voltage
 mpos.battery_voltage.init_adc(5, 262 / 100000)
+
+# On the Waveshare ESP32-S3-Touch-LCD-2, the camera is hard-wired to power on,
+# so it needs a software power off to prevent it from staying hot all the time and quickly draining the battery.
+try:
+    from machine import Pin, I2C
+    i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
+    devices = i2c.scan()
+    print("Scan of I2C bus on scl=16, sda=21:")
+    print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
+    camera_addr = 0x3C # for OV5640
+    reg_addr = 0x3008
+    reg_high = (reg_addr >> 8) & 0xFF  # 0x30
+    reg_low = reg_addr & 0xFF         # 0x08
+    power_off_command = 0x42 # Power off command
+    i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
+except Exception as e:
+    print(f"Warning: powering off camera got exception: {e}")
 
 print("boot.py finished")
