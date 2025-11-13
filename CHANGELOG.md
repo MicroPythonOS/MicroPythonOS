@@ -1,6 +1,7 @@
 0.3.3
 =====
-- OSUpdate App: enable scrolling with joystick/arrow keys
+- OSUpdate app: enable scrolling with joystick/arrow keys
+- waveshare-esp32-s3-touch-lcd-2: power off camera at boot to conserve power
 
 0.3.2
 =====
