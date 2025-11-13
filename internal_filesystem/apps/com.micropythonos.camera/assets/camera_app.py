@@ -104,6 +104,9 @@ class CameraApp(Activity):
     
     def onResume(self, screen):
         self.cam = init_internal_cam()
+        if not self.cam:
+            # try again because the manual i2c poweroff leaves it in a bad state
+            self.cam = init_internal_cam()
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
         else:
