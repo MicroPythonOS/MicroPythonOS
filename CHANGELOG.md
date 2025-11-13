@@ -1,7 +1,9 @@
 0.3.3
 =====
+- Camera app: fix one-in-two "camera image stays blank" issue
 - OSUpdate app: enable scrolling with joystick/arrow keys
 - waveshare-esp32-s3-touch-lcd-2: power off camera at boot to conserve power
+- waveshare-esp32-s3-touch-lcd-2: increase touch screen input clock frequency from 100kHz to 400kHz
 
 0.3.2
 =====
