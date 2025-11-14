@@ -60,7 +60,6 @@ class Connect4(Activity):
 
     def onCreate(self):
         self.screen = lv.obj()
-        self.screen.set_style_bg_color(lv.color_hex(0x34495E), 0)
         self.screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
@@ -79,25 +78,16 @@ class Connect4(Activity):
         # Status label (top left)
         self.status_label = lv.label(self.screen)
         self.status_label.set_text("Your turn!")
-        self.status_label.set_style_text_font(lv.font_montserrat_12, 0)
-        self.status_label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
         self.status_label.set_pos(5, 10)
 
-        # Difficulty selector (top center)
-        difficulty_cont = lv.obj(self.screen)
-        difficulty_cont.set_size(60, 26)
-        difficulty_cont.align(lv.ALIGN.TOP_MID, 0, 5)
-        difficulty_cont.set_style_bg_color(lv.color_hex(0x2C3E50), 0)
-        difficulty_cont.set_style_border_width(1, 0)
-        difficulty_cont.set_style_border_color(lv.color_hex(0xFFFFFF), 0)
-        difficulty_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        difficulty_cont.add_flag(lv.obj.FLAG.CLICKABLE)
-        difficulty_cont.add_event_cb(self.cycle_difficulty, lv.EVENT.CLICKED, None)
+        # Difficulty button (top center)
+        difficulty_btn = lv.button(self.screen)
+        difficulty_btn.set_size(70, 26)
+        difficulty_btn.align(lv.ALIGN.TOP_MID, 0, 5)
+        difficulty_btn.add_event_cb(self.cycle_difficulty, lv.EVENT.CLICKED, None)
 
-        self.difficulty_label = lv.label(difficulty_cont)
+        self.difficulty_label = lv.label(difficulty_btn)
         self.difficulty_label.set_text("Easy")
-        self.difficulty_label.set_style_text_font(lv.font_montserrat_12, 0)
-        self.difficulty_label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
         self.difficulty_label.center()
 
         # New Game button (top right)
@@ -107,7 +97,6 @@ class Connect4(Activity):
         new_game_btn.add_event_cb(lambda e: self.new_game(), lv.EVENT.CLICKED, None)
         new_game_label = lv.label(new_game_btn)
         new_game_label.set_text("New")
-        new_game_label.set_style_text_font(lv.font_montserrat_12, 0)
         new_game_label.center()
 
         # Create board background
