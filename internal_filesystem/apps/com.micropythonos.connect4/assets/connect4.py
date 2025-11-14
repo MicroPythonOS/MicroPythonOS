@@ -70,16 +70,23 @@ class Connect4(Activity):
         self.SCREEN_HEIGHT = d.get_vertical_resolution()
 
         # Calculate scaling based on available space
-        available_height = self.SCREEN_HEIGHT - 75  # Leave space for controls
+        available_height = self.SCREEN_HEIGHT - 40  # Leave space for top bar only
         max_cell_size = min(available_height // self.ROWS, (self.SCREEN_WIDTH - 20) // self.COLS)
         self.CELL_SIZE = max_cell_size
         self.PIECE_RADIUS = int(self.CELL_SIZE * 0.4)
         self.BOARD_TOP = 35
 
-        # Difficulty selector (top left)
+        # Status label (top left)
+        self.status_label = lv.label(self.screen)
+        self.status_label.set_text("Your turn!")
+        self.status_label.set_style_text_font(lv.font_montserrat_12, 0)
+        self.status_label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
+        self.status_label.set_pos(5, 10)
+
+        # Difficulty selector (top center)
         difficulty_cont = lv.obj(self.screen)
-        difficulty_cont.set_size(145, 28)
-        difficulty_cont.set_pos(5, 3)
+        difficulty_cont.set_size(60, 26)
+        difficulty_cont.align(lv.ALIGN.TOP_MID, 0, 5)
         difficulty_cont.set_style_bg_color(lv.color_hex(0x2C3E50), 0)
         difficulty_cont.set_style_border_width(1, 0)
         difficulty_cont.set_style_border_color(lv.color_hex(0xFFFFFF), 0)
@@ -88,17 +95,20 @@ class Connect4(Activity):
         difficulty_cont.add_event_cb(self.cycle_difficulty, lv.EVENT.CLICKED, None)
 
         self.difficulty_label = lv.label(difficulty_cont)
-        self.difficulty_label.set_text("Difficulty: Easy")
+        self.difficulty_label.set_text("Easy")
         self.difficulty_label.set_style_text_font(lv.font_montserrat_12, 0)
         self.difficulty_label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
         self.difficulty_label.center()
 
-        # Status label (top right)
-        self.status_label = lv.label(self.screen)
-        self.status_label.set_text("Your turn!")
-        self.status_label.set_style_text_font(lv.font_montserrat_12, 0)
-        self.status_label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
-        self.status_label.set_pos(self.SCREEN_WIDTH - 95, 10)
+        # New Game button (top right)
+        new_game_btn = lv.button(self.screen)
+        new_game_btn.set_size(70, 26)
+        new_game_btn.align(lv.ALIGN.TOP_RIGHT, -5, 5)
+        new_game_btn.add_event_cb(lambda e: self.new_game(), lv.EVENT.CLICKED, None)
+        new_game_label = lv.label(new_game_btn)
+        new_game_label.set_text("New")
+        new_game_label.set_style_text_font(lv.font_montserrat_12, 0)
+        new_game_label.center()
 
         # Create board background
         board_bg = lv.obj(self.screen)
@@ -141,15 +151,6 @@ class Connect4(Activity):
             btn.add_event_cb(lambda e, c=col: self.on_column_click(c), lv.EVENT.CLICKED, None)
             self.column_buttons.append(btn)
 
-        # New Game button
-        new_game_btn = lv.button(self.screen)
-        new_game_btn.set_size(100, 30)
-        new_game_btn.align(lv.ALIGN.BOTTOM_MID, 0, -5)
-        new_game_btn.add_event_cb(lambda e: self.new_game(), lv.EVENT.CLICKED, None)
-        new_game_label = lv.label(new_game_btn)
-        new_game_label.set_text("New Game")
-        new_game_label.center()
-
         self.setContentView(self.screen)
 
     def onResume(self, screen):
@@ -160,7 +161,7 @@ class Connect4(Activity):
             return
         self.difficulty = (self.difficulty + 1) % 3
         difficulty_names = ["Easy", "Medium", "Hard"]
-        self.difficulty_label.set_text(f"Difficulty: {difficulty_names[self.difficulty]}")
+        self.difficulty_label.set_text(difficulty_names[self.difficulty])
         self.difficulty_label.center()
 
     def on_column_click(self, col):
