@@ -229,7 +229,7 @@ class Connect4(Activity):
         self.current_player = self.COMPUTER if player == self.PLAYER else self.PLAYER
 
         if self.current_player == self.COMPUTER:
-            self.status_label.set_text("Computer thinking...")
+            self.status_label.set_text("Thinking...")
             # Delay computer move slightly for better UX
             lv.timer_create(lambda t: self.computer_move(), 500, None).set_repeat_count(1)
         else:
