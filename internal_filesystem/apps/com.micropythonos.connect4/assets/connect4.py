@@ -15,12 +15,12 @@ class Connect4(Activity):
     COLS = 7
     ROWS = 6
 
-    # Screen layout
+    # Screen layout (dynamically set in onCreate)
     SCREEN_WIDTH = 320
     SCREEN_HEIGHT = 240
-    BOARD_TOP = 50
-    CELL_SIZE = 35
-    PIECE_RADIUS = 14
+    BOARD_TOP = 40
+    CELL_SIZE = 30
+    PIECE_RADIUS = 12
 
     # Colors
     COLOR_EMPTY = 0x2C3E50
@@ -64,17 +64,22 @@ class Connect4(Activity):
         self.screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
-        # Title
-        title = lv.label(self.screen)
-        title.set_text("Connect 4")
-        title.set_style_text_font(lv.font_montserrat_20, 0)
-        title.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
-        title.set_pos(10, 5)
+        # Get dynamic screen resolution
+        d = lv.display_get_default()
+        self.SCREEN_WIDTH = d.get_horizontal_resolution()
+        self.SCREEN_HEIGHT = d.get_vertical_resolution()
 
-        # Difficulty selector
+        # Calculate scaling based on available space
+        available_height = self.SCREEN_HEIGHT - 75  # Leave space for controls
+        max_cell_size = min(available_height // self.ROWS, (self.SCREEN_WIDTH - 20) // self.COLS)
+        self.CELL_SIZE = max_cell_size
+        self.PIECE_RADIUS = int(self.CELL_SIZE * 0.4)
+        self.BOARD_TOP = 35
+
+        # Difficulty selector (top left)
         difficulty_cont = lv.obj(self.screen)
-        difficulty_cont.set_size(150, 30)
-        difficulty_cont.set_pos(165, 5)
+        difficulty_cont.set_size(145, 28)
+        difficulty_cont.set_pos(5, 3)
         difficulty_cont.set_style_bg_color(lv.color_hex(0x2C3E50), 0)
         difficulty_cont.set_style_border_width(1, 0)
         difficulty_cont.set_style_border_color(lv.color_hex(0xFFFFFF), 0)
@@ -88,12 +93,12 @@ class Connect4(Activity):
         self.difficulty_label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
         self.difficulty_label.center()
 
-        # Status label
+        # Status label (top right)
         self.status_label = lv.label(self.screen)
         self.status_label.set_text("Your turn!")
-        self.status_label.set_style_text_font(lv.font_montserrat_14, 0)
+        self.status_label.set_style_text_font(lv.font_montserrat_12, 0)
         self.status_label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
-        self.status_label.set_pos(10, 32)
+        self.status_label.set_pos(self.SCREEN_WIDTH - 95, 10)
 
         # Create board background
         board_bg = lv.obj(self.screen)
