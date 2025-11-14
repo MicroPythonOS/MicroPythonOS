@@ -99,7 +99,7 @@ class PackageManager:
         apps_dir         = "apps"
         apps_dir_builtin = "builtin/apps"
 
-        for base in (apps_dir, apps_dir_builtin):
+        for base in (apps_dir, apps_dir_builtin): # added apps override builtin apps
             try:
                 # ---- does the directory exist? --------------------------------
                 st = os.stat(base)

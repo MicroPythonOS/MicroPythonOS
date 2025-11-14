@@ -198,6 +198,12 @@ def move_focus_direction(angle):
     if isinstance(current_focused, lv.keyboard):
         print("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
         return
+    if False and isinstance(current_focused, lv.checkbox): # arrow up/down or left/right is the toggle
+        print("focus is on a checkbox, which has its own move_focus_direction: NOT moving")
+        return
+    if False and isinstance(current_focused, lv.slider): # arrows change the slider
+        print("focus is on a slider, which has its own move_focus_direction: NOT moving")
+        return
     if isinstance(current_focused, lv.dropdown) and current_focused.is_open():
         print("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")
         return

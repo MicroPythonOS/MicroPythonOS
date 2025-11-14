@@ -334,7 +334,7 @@ def create_drawer(display=None):
             #wake_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP)  # Pull-up enabled, active low
             #import esp32
             #esp32.wake_on_ext0(pin=wake_pin, level=esp32.WAKEUP_ALL_LOW)
-            print("Entering deep sleep. Press BOOT button to wake up.")
+            print("Entering deep sleep...")
             machine.deepsleep() # sleep forever
         else: # assume unix:
             lv.deinit() # Deinitialize LVGL (if supported)
