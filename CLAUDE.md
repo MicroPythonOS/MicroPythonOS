@@ -186,12 +186,36 @@ The `unittest.sh` script:
 - Sets up the proper paths and heapsize
 - Can run tests on device using `mpremote` with the `ondevice` argument
 - Runs all `test_*.py` files when no argument is provided
+- On device, assumes the OS is already running (boot.py and main.py already executed), so tests run against the live system
+- Test infrastructure (graphical_test_helper.py) is automatically installed by `scripts/install.sh`
 
 **Available unit test modules**:
 - `test_shared_preferences.py`: Tests for `mpos.config.SharedPreferences` (configuration storage)
 - `test_intent.py`: Tests for `mpos.content.intent.Intent` (intent creation, extras, flags)
 - `test_package_manager.py`: Tests for `PackageManager` (version comparison, app discovery)
 - `test_start_app.py`: Tests for app launching (requires SDL display initialization)
+- `test_graphical_about_app.py`: Graphical test that verifies About app UI and captures screenshots
+
+**Graphical tests** (UI verification with screenshots):
+```bash
+# Run graphical tests on desktop
+./tests/unittest.sh tests/test_graphical_about_app.py
+
+# Run graphical tests on device
+./tests/unittest.sh tests/test_graphical_about_app.py ondevice
+
+# Convert screenshots from raw RGB565 to PNG
+cd tests/screenshots
+./convert_to_png.sh  # Converts all .raw files in the directory
+```
+
+Graphical tests use `tests/graphical_test_helper.py` which provides utilities like:
+- `wait_for_render()`: Wait for LVGL to process UI events
+- `capture_screenshot()`: Take screenshot as RGB565 raw data
+- `find_label_with_text()`: Find labels containing specific text
+- `verify_text_present()`: Verify expected text is on screen
+
+Screenshots are saved as `.raw` files (RGB565 format) and can be converted to PNG using `tests/screenshots/convert_to_png.sh`
 
 **Manual tests** (interactive, for hardware-specific features):
 - `manual_test_camera.py`: Camera and QR scanning

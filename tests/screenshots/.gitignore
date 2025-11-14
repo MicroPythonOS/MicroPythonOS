@@ -1,0 +1,9 @@
+# Ignore all screenshot files
+*.raw
+
+# Ignore converted PNG files (can be regenerated from .raw)
+*.png
+
+# Allow this .gitignore and README.md
+!.gitignore
+!README.md

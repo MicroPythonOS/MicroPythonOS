@@ -31,16 +31,42 @@ one_test() {
 	fi
 	pushd "$fs"
 	echo "Testing $file"
+
+	# Detect if this is a graphical test (filename contains "graphical")
+	if echo "$file" | grep -q "graphical"; then
+		echo "Detected graphical test - including boot and main files"
+		is_graphical=1
+		# Get absolute path to tests directory for imports
+		tests_abs_path=$(readlink -f "$testdir")
+	else
+		is_graphical=0
+	fi
+
 	if [ -z "$ondevice" ]; then
-		"$binary" -X heapsize=8M -c "import sys ; sys.path.append('lib')
+		# Desktop execution
+		if [ $is_graphical -eq 1 ]; then
+			# Graphical test: include boot_unix.py and main.py
+			"$binary" -X heapsize=8M -c "$(cat boot_unix.py main.py)
+import sys ; sys.path.append('lib') ; sys.path.append(\"$tests_abs_path\")
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
+		else
+			# Regular test: no boot files
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.append('lib')
+$(cat $file)
+result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
+		fi
 		result=$?
 	else
+		# Device execution
+		# NOTE: On device, the OS is already running with boot.py and main.py executed,
+		# so we don't need to (and shouldn't) re-run them. The system is already initialized.
 		cleanname=$(echo "$file" | sed "s#/#_#g")
 		testlog=/tmp/"$cleanname".log
 		echo "$test logging to $testlog"
-		mpremote.py exec "import sys ; sys.path.append('lib')
+		if [ $is_graphical -eq 1 ]; then
+			# Graphical test: system already initialized, just add test paths
+			mpremote.py exec "import sys ; sys.path.append('lib') ; sys.path.append('tests')
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
@@ -48,6 +74,17 @@ if result.wasSuccessful():
 else:
     print('TEST WAS A FAILURE')
 " | tee "$testlog"
+		else
+			# Regular test: no boot files
+			mpremote.py exec "import sys ; sys.path.append('lib')
+$(cat $file)
+result = unittest.main()
+if result.wasSuccessful():
+    print('TEST WAS A SUCCESS')
+else:
+    print('TEST WAS A FAILURE')
+" | tee "$testlog"
+		fi
 		grep "TEST WAS A SUCCESS" "$testlog"
 		result=$?
 	fi

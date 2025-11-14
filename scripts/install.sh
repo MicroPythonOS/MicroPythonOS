@@ -76,6 +76,13 @@ $mpremote fs cp -r resources :/
 
 popd
 
+# Install test infrastructure (for running ondevice tests)
+echo "Installing test infrastructure..."
+$mpremote fs mkdir :/tests
+$mpremote fs mkdir :/tests/screenshots
+testdir=$(readlink -f "$mydir/../tests")
+$mpremote fs cp "$testdir/graphical_test_helper.py" :/tests/graphical_test_helper.py
+
 if [ -z "$appname" ]; then
 	echo "Not resetting so the installed app can be used immediately."
 	$mpremote reset
