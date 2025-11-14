@@ -453,3 +453,353 @@ def handle_result(self, result):
 - `mpos.sdcard.SDCardManager`: SD card mounting and management
 - `mpos.clipboard`: System clipboard access
 - `mpos.battery_voltage`: Battery level reading (ESP32 only)
+
+## Animations and Game Loops
+
+MicroPythonOS supports frame-based animations and game loops using the TaskHandler event system. This pattern is used for games, particle effects, and smooth animations.
+
+### The update_frame() Pattern
+
+The core pattern involves:
+1. Registering a callback that fires every frame
+2. Calculating delta time for framerate-independent physics
+3. Updating object positions and properties
+4. Rendering to LVGL objects
+5. Unregistering when animation completes
+
+**Basic structure**:
+```python
+from mpos.apps import Activity
+import mpos.ui
+import time
+import lvgl as lv
+
+class MyAnimatedApp(Activity):
+    last_time = 0
+
+    def onCreate(self):
+        # Set up your UI
+        self.screen = lv.obj()
+        # ... create objects ...
+        self.setContentView(self.screen)
+
+    def onResume(self, screen):
+        # Register the frame callback
+        self.last_time = time.ticks_ms()
+        mpos.ui.th.add_event_cb(self.update_frame, 1)
+
+    def onPause(self, screen):
+        # Unregister when app goes to background
+        mpos.ui.th.remove_event_cb(self.update_frame)
+
+    def update_frame(self, a, b):
+        # Calculate delta time for framerate independence
+        current_time = time.ticks_ms()
+        delta_ms = time.ticks_diff(current_time, self.last_time)
+        delta_time = delta_ms / 1000.0  # Convert to seconds
+        self.last_time = current_time
+
+        # Update your animation/game logic here
+        # Use delta_time to make physics framerate-independent
+```
+
+### Framerate-Independent Physics
+
+All movement and physics should be multiplied by `delta_time` to ensure consistent behavior regardless of framerate:
+
+```python
+# Example from QuasiBird game
+GRAVITY = 200  # pixels per second²
+PIPE_SPEED = 100  # pixels per second
+
+def update_frame(self, a, b):
+    current_time = time.ticks_ms()
+    delta_time = time.ticks_diff(current_time, self.last_time) / 1000.0
+    self.last_time = current_time
+
+    # Update velocity with gravity
+    self.bird_velocity += self.GRAVITY * delta_time
+
+    # Update position with velocity
+    self.bird_y += self.bird_velocity * delta_time
+
+    # Update bird sprite position
+    self.bird_img.set_y(int(self.bird_y))
+
+    # Move pipes
+    for pipe in self.pipes:
+        pipe.x -= self.PIPE_SPEED * delta_time
+```
+
+**Key principles**:
+- Constants define rates in "per second" units (pixels/second, degrees/second)
+- Multiply all rates by `delta_time` when applying them
+- This ensures objects move at the same speed regardless of framerate
+- Use `time.ticks_ms()` and `time.ticks_diff()` for timing (handles rollover correctly)
+
+### Object Pooling for Performance
+
+Pre-create LVGL objects and reuse them instead of creating/destroying during animation:
+
+```python
+# Example from LightningPiggy confetti animation
+MAX_CONFETTI = 21
+confetti_images = []
+confetti_pieces = []
+used_img_indices = set()
+
+def onStart(self, screen):
+    # Pre-create all image objects (hidden initially)
+    for i in range(self.MAX_CONFETTI):
+        img = lv.image(lv.layer_top())
+        img.set_src(f"{self.ASSET_PATH}confetti{i % 5}.png")
+        img.add_flag(lv.obj.FLAG.HIDDEN)
+        self.confetti_images.append(img)
+
+def _spawn_one(self):
+    # Find a free image slot
+    for idx, img in enumerate(self.confetti_images):
+        if img.has_flag(lv.obj.FLAG.HIDDEN) and idx not in self.used_img_indices:
+            break
+    else:
+        return  # No free slot
+
+    # Create particle data (not LVGL object)
+    piece = {
+        'img_idx': idx,
+        'x': random.uniform(0, self.SCREEN_WIDTH),
+        'y': 0,
+        'vx': random.uniform(-80, 80),
+        'vy': random.uniform(-150, 0),
+        'rotation': 0,
+        'scale': 1.0,
+        'age': 0.0
+    }
+    self.confetti_pieces.append(piece)
+    self.used_img_indices.add(idx)
+
+def update_frame(self, a, b):
+    delta_time = time.ticks_diff(time.ticks_ms(), self.last_time) / 1000.0
+    self.last_time = time.ticks_ms()
+
+    new_pieces = []
+    for piece in self.confetti_pieces:
+        # Update physics
+        piece['x'] += piece['vx'] * delta_time
+        piece['y'] += piece['vy'] * delta_time
+        piece['vy'] += self.GRAVITY * delta_time
+        piece['rotation'] += piece['spin'] * delta_time
+        piece['age'] += delta_time
+
+        # Update LVGL object
+        img = self.confetti_images[piece['img_idx']]
+        img.remove_flag(lv.obj.FLAG.HIDDEN)
+        img.set_pos(int(piece['x']), int(piece['y']))
+        img.set_rotation(int(piece['rotation'] * 10))
+        img.set_scale(int(256 * piece['scale']))
+
+        # Check if particle should die
+        if piece['y'] > self.SCREEN_HEIGHT or piece['age'] > piece['lifetime']:
+            img.add_flag(lv.obj.FLAG.HIDDEN)
+            self.used_img_indices.discard(piece['img_idx'])
+        else:
+            new_pieces.append(piece)
+
+    self.confetti_pieces = new_pieces
+```
+
+**Object pooling benefits**:
+- Avoid memory allocation/deallocation during animation
+- Reuse LVGL image objects (expensive to create)
+- Hide/show objects instead of create/delete
+- Track which slots are in use with a set
+- Separate particle data (Python dict) from rendering (LVGL object)
+
+### Particle Systems and Effects
+
+**Staggered spawning** (spawn particles over time instead of all at once):
+```python
+def start_animation(self):
+    self.spawn_timer = 0
+    self.spawn_interval = 0.15  # seconds between spawns
+    mpos.ui.th.add_event_cb(self.update_frame, 1)
+
+def update_frame(self, a, b):
+    delta_time = time.ticks_diff(time.ticks_ms(), self.last_time) / 1000.0
+
+    # Staggered spawning
+    self.spawn_timer += delta_time
+    if self.spawn_timer >= self.spawn_interval:
+        self.spawn_timer = 0
+        for _ in range(random.randint(1, 2)):
+            if len(self.particles) < self.MAX_PARTICLES:
+                self._spawn_one()
+```
+
+**Particle lifecycle** (age, scale, death):
+```python
+piece = {
+    'x': x, 'y': y,
+    'vx': random.uniform(-80, 80),
+    'vy': random.uniform(-150, 0),
+    'spin': random.uniform(-500, 500),  # degrees/sec
+    'age': 0.0,
+    'lifetime': random.uniform(5.0, 10.0),
+    'rotation': random.uniform(0, 360),
+    'scale': 1.0
+}
+
+# In update_frame
+piece['age'] += delta_time
+piece['scale'] = max(0.3, 1.0 - (piece['age'] / piece['lifetime']) * 0.7)
+
+# Death check
+dead = (
+    piece['x'] < -60 or piece['x'] > SCREEN_WIDTH + 60 or
+    piece['y'] > SCREEN_HEIGHT + 60 or
+    piece['age'] > piece['lifetime']
+)
+```
+
+### Game Loop Patterns
+
+**Scrolling backgrounds** (parallax and tiling):
+```python
+# Parallax clouds (multiple layers at different speeds)
+CLOUD_SPEED = 30  # pixels/sec (slower than foreground)
+cloud_positions = [50, 180, 320]
+
+for i, cloud_img in enumerate(self.cloud_images):
+    self.cloud_positions[i] -= self.CLOUD_SPEED * delta_time
+
+    # Wrap around when off-screen
+    if self.cloud_positions[i] < -60:
+        self.cloud_positions[i] = SCREEN_WIDTH + 20
+
+    cloud_img.set_x(int(self.cloud_positions[i]))
+
+# Tiled ground (infinite scrolling)
+self.ground_x -= self.PIPE_SPEED * delta_time
+self.ground_img.set_offset_x(int(self.ground_x))  # LVGL handles wrapping
+```
+
+**Object pooling for game entities**:
+```python
+# Pre-create pipe images
+MAX_PIPES = 4
+pipe_images = []
+
+for i in range(MAX_PIPES):
+    top_pipe = lv.image(screen)
+    top_pipe.set_src("M:path/to/pipe.png")
+    top_pipe.set_rotation(1800)  # 180 degrees * 10
+    top_pipe.add_flag(lv.obj.FLAG.HIDDEN)
+
+    bottom_pipe = lv.image(screen)
+    bottom_pipe.set_src("M:path/to/pipe.png")
+    bottom_pipe.add_flag(lv.obj.FLAG.HIDDEN)
+
+    pipe_images.append({"top": top_pipe, "bottom": bottom_pipe, "in_use": False})
+
+# Update visible pipes
+def update_pipe_images(self):
+    for pipe_img in self.pipe_images:
+        pipe_img["in_use"] = False
+
+    for i, pipe in enumerate(self.pipes):
+        if i < self.MAX_PIPES:
+            pipe_imgs = self.pipe_images[i]
+            pipe_imgs["in_use"] = True
+            pipe_imgs["top"].remove_flag(lv.obj.FLAG.HIDDEN)
+            pipe_imgs["top"].set_pos(int(pipe.x), int(pipe.gap_y - 200))
+            pipe_imgs["bottom"].remove_flag(lv.obj.FLAG.HIDDEN)
+            pipe_imgs["bottom"].set_pos(int(pipe.x), int(pipe.gap_y + pipe.gap_size))
+
+    # Hide unused slots
+    for pipe_img in self.pipe_images:
+        if not pipe_img["in_use"]:
+            pipe_img["top"].add_flag(lv.obj.FLAG.HIDDEN)
+            pipe_img["bottom"].add_flag(lv.obj.FLAG.HIDDEN)
+```
+
+**Collision detection**:
+```python
+def check_collision(self):
+    # Boundaries
+    if self.bird_y <= 0 or self.bird_y >= SCREEN_HEIGHT - 40 - self.bird_size:
+        return True
+
+    # AABB (Axis-Aligned Bounding Box) collision
+    bird_left = self.BIRD_X
+    bird_right = self.BIRD_X + self.bird_size
+    bird_top = self.bird_y
+    bird_bottom = self.bird_y + self.bird_size
+
+    for pipe in self.pipes:
+        pipe_left = pipe.x
+        pipe_right = pipe.x + pipe.width
+
+        # Check horizontal overlap
+        if bird_right > pipe_left and bird_left < pipe_right:
+            # Check if bird is outside the gap
+            if bird_top < pipe.gap_y or bird_bottom > pipe.gap_y + pipe.gap_size:
+                return True
+
+    return False
+```
+
+### Animation Control and Cleanup
+
+**Starting/stopping animations**:
+```python
+def start_animation(self):
+    self.animation_running = True
+    self.last_time = time.ticks_ms()
+    mpos.ui.th.add_event_cb(self.update_frame, 1)
+
+    # Optional: auto-stop after duration
+    lv.timer_create(self.stop_animation, 15000, None).set_repeat_count(1)
+
+def stop_animation(self, timer=None):
+    self.animation_running = False
+    # Don't remove callback yet - let it clean up and remove itself
+
+def update_frame(self, a, b):
+    # ... update logic ...
+
+    # Stop when animation completes
+    if not self.animation_running and len(self.particles) == 0:
+        mpos.ui.th.remove_event_cb(self.update_frame)
+        print("Animation finished")
+```
+
+**Lifecycle integration**:
+```python
+def onResume(self, screen):
+    # Only start if needed (e.g., game in progress)
+    if self.game_started and not self.game_over:
+        self.last_time = time.ticks_ms()
+        mpos.ui.th.add_event_cb(self.update_frame, 1)
+
+def onPause(self, screen):
+    # Always stop when app goes to background
+    mpos.ui.th.remove_event_cb(self.update_frame)
+```
+
+### Performance Tips
+
+1. **Pre-create LVGL objects**: Creating objects during animation causes lag
+2. **Use object pools**: Reuse objects instead of create/destroy
+3. **Limit particle counts**: Use `MAX_PARTICLES` constant (21 is a good default)
+4. **Integer positions**: Convert float positions to int before setting: `img.set_pos(int(x), int(y))`
+5. **Delta time**: Always use delta time for framerate independence
+6. **Layer management**: Use `lv.layer_top()` for overlays (confetti, popups)
+7. **Rotation units**: LVGL rotation is in 1/10 degrees: `set_rotation(int(degrees * 10))`
+8. **Scale units**: LVGL scale is 256 = 100%: `set_scale(int(256 * scale_factor))`
+9. **Hide vs destroy**: Hide objects with `add_flag(lv.obj.FLAG.HIDDEN)` instead of deleting
+10. **Cleanup**: Always unregister callbacks in `onPause()` to prevent memory leaks
+
+### Example Apps
+
+- **QuasiBird** (`MPOS-QuasiBird/assets/quasibird.py`): Full game with physics, scrolling, object pooling
+- **LightningPiggy** (`LightningPiggyApp/.../displaywallet.py`): Confetti particle system with staggered spawning
