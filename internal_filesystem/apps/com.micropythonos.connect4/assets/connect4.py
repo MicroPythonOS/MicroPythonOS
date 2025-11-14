@@ -129,6 +129,10 @@ class Connect4(Activity):
             self.pieces.append(piece_row)
 
         # Create column buttons (invisible clickable areas)
+        focusgroup = lv.group_get_default()
+        if not focusgroup:
+            print("WARNING: could not get default focusgroup")
+
         for col in range(self.COLS):
             btn = lv.obj(self.screen)
             btn.set_size(self.CELL_SIZE, self.ROWS * self.CELL_SIZE)
@@ -138,12 +142,27 @@ class Connect4(Activity):
             btn.set_style_border_width(0, 0)
             btn.add_flag(lv.obj.FLAG.CLICKABLE)
             btn.add_event_cb(lambda e, c=col: self.on_column_click(c), lv.EVENT.CLICKED, None)
+            btn.add_event_cb(lambda e, b=btn: self.focus_column(b), lv.EVENT.FOCUSED, None)
+            btn.add_event_cb(lambda e, b=btn: self.defocus_column(b), lv.EVENT.DEFOCUSED, None)
+
+            if focusgroup:
+                focusgroup.add_obj(btn)
+
             self.column_buttons.append(btn)
 
         self.setContentView(self.screen)
 
     def onResume(self, screen):
         self.last_time = time.ticks_ms()
+
+    def focus_column(self, column_btn):
+        """Highlight column when focused"""
+        column_btn.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+        column_btn.set_style_border_width(3, lv.PART.MAIN)
+
+    def defocus_column(self, column_btn):
+        """Remove highlight when unfocused"""
+        column_btn.set_style_border_width(0, lv.PART.MAIN)
 
     def cycle_difficulty(self, event):
         if self.animating:

@@ -447,6 +447,54 @@ def handle_result(self, result):
 - `mpos.ui.focus_direction`: Keyboard/joystick navigation helpers
 - `mpos.ui.anim`: Animation utilities
 
+### Keyboard and Focus Navigation
+
+MicroPythonOS supports keyboard/joystick navigation through LVGL's focus group system. This allows users to navigate apps using arrow keys and select items with Enter.
+
+**Basic focus handling pattern**:
+```python
+def onCreate(self):
+    # Get the default focus group
+    focusgroup = lv.group_get_default()
+    if not focusgroup:
+        print("WARNING: could not get default focusgroup")
+
+    # Create a clickable object
+    button = lv.button(screen)
+
+    # Add focus/defocus event handlers
+    button.add_event_cb(lambda e, b=button: self.focus_handler(b), lv.EVENT.FOCUSED, None)
+    button.add_event_cb(lambda e, b=button: self.defocus_handler(b), lv.EVENT.DEFOCUSED, None)
+
+    # Add to focus group (enables keyboard navigation)
+    if focusgroup:
+        focusgroup.add_obj(button)
+
+def focus_handler(self, obj):
+    """Called when object receives focus"""
+    obj.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+    obj.set_style_border_width(2, lv.PART.MAIN)
+    obj.scroll_to_view(True)  # Scroll into view if needed
+
+def defocus_handler(self, obj):
+    """Called when object loses focus"""
+    obj.set_style_border_width(0, lv.PART.MAIN)
+```
+
+**Key principles**:
+- Get the default focus group with `lv.group_get_default()`
+- Add objects to the focus group to make them keyboard-navigable
+- Use `lv.EVENT.FOCUSED` to highlight focused elements (usually with a border)
+- Use `lv.EVENT.DEFOCUSED` to remove highlighting
+- Use theme color for consistency: `lv.theme_get_color_primary(None)`
+- Call `scroll_to_view(True)` to auto-scroll focused items into view
+- The focus group automatically handles arrow key navigation between objects
+
+**Example apps with focus handling**:
+- **Launcher** (`builtin/apps/com.micropythonos.launcher/assets/launcher.py`): App icons are focusable
+- **Settings** (`builtin/apps/com.micropythonos.settings/assets/settings_app.py`): Settings items are focusable
+- **Connect 4** (`apps/com.micropythonos.connect4/assets/connect4.py`): Game columns are focusable
+
 **Other utilities**:
 - `mpos.apps.good_stack_size()`: Returns appropriate thread stack size for platform (16KB ESP32, 24KB desktop)
 - `mpos.wifi`: WiFi management utilities
