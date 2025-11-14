@@ -18,9 +18,9 @@ class Draw(Activity):
     def onCreate(self):
         screen = lv.obj()
         self.canvas = lv.canvas(screen)
-        disp = lv.display_get_default()
-        self.hor_res = disp.get_horizontal_resolution()
-        self.ver_res = disp.get_vertical_resolution()
+        d = lv.display_get_default()
+        self.hor_res = d.get_horizontal_resolution()
+        self.ver_res = d.get_vertical_resolution()
         self.canvas.set_size(self.hor_res, self.ver_res)
         self.canvas.set_style_bg_color(lv.color_white(), 0)
         buffer = bytearray(self.hor_res * self.ver_res * 4)
