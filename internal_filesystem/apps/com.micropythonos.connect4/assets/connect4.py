@@ -157,7 +157,8 @@ class Connect4(Activity):
 
     def focus_column(self, column_btn):
         """Highlight column when focused"""
-        column_btn.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+        # Use white for focus border to contrast with blue board
+        column_btn.set_style_border_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
         column_btn.set_style_border_width(3, lv.PART.MAIN)
 
     def defocus_column(self, column_btn):
