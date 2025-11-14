@@ -69,31 +69,31 @@ class Connect4(Activity):
         self.SCREEN_HEIGHT = d.get_vertical_resolution()
 
         # Calculate scaling based on available space
-        available_height = self.SCREEN_HEIGHT - 40  # Leave space for top bar only
+        available_height = self.SCREEN_HEIGHT - 40  # Leave space for bottom bar only
         max_cell_size = min(available_height // self.ROWS, (self.SCREEN_WIDTH - 20) // self.COLS)
         self.CELL_SIZE = max_cell_size
         self.PIECE_RADIUS = int(self.CELL_SIZE * 0.4)
-        self.BOARD_TOP = 35
+        self.BOARD_TOP = 5
 
-        # Status label (top left)
+        # Status label (bottom left)
         self.status_label = lv.label(self.screen)
         self.status_label.set_text("Your turn!")
-        self.status_label.set_pos(5, 10)
+        self.status_label.align(lv.ALIGN.BOTTOM_LEFT, 5, -8)
 
-        # Difficulty button (top center)
+        # Difficulty button (bottom center)
         difficulty_btn = lv.button(self.screen)
         difficulty_btn.set_size(70, 26)
-        difficulty_btn.align(lv.ALIGN.TOP_MID, 0, 5)
+        difficulty_btn.align(lv.ALIGN.BOTTOM_MID, 0, -5)
         difficulty_btn.add_event_cb(self.cycle_difficulty, lv.EVENT.CLICKED, None)
 
         self.difficulty_label = lv.label(difficulty_btn)
         self.difficulty_label.set_text("Easy")
         self.difficulty_label.center()
 
-        # New Game button (top right)
+        # New Game button (bottom right)
         new_game_btn = lv.button(self.screen)
         new_game_btn.set_size(70, 26)
-        new_game_btn.align(lv.ALIGN.TOP_RIGHT, -5, 5)
+        new_game_btn.align(lv.ALIGN.BOTTOM_RIGHT, -5, -5)
         new_game_btn.add_event_cb(lambda e: self.new_game(), lv.EVENT.CLICKED, None)
         new_game_label = lv.label(new_game_btn)
         new_game_label.set_text("New")
