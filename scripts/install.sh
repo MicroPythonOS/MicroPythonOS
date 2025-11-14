@@ -60,10 +60,13 @@ $mpremote fs cp main.py :/main.py
 #$mpremote fs cp -r apps :/
 
 #if false; then
+$mpremote fs mkdir :/apps
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
-find apps/ -type l | while read symlink; do
+find apps/ -maxdepth 1 -type l | while read symlink; do
 	echo "Handling symlink $symlink"
-	$mpremote fs mkdir :/{}
+	$mpremote fs mkdir :/"$symlink"
+	$mpremote fs cp -r "$symlink"/* :/"$symlink"/
+
 done
 #fi
 
