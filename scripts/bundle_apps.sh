@@ -19,7 +19,8 @@ rm "$outputjson"
 # com.micropythonos.filemanager doesn't do anything other than let you browse the filesystem, so it's confusing
 # com.micropythonos.confetti crashes when closing
 # com.micropythonos.showfonts is slow to open
-blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.confetti com.micropythonos.showfonts"
+# com.micropythonos.draw isnt very useful
+blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.confetti com.micropythonos.showfonts com.micropythonos.draw"
 
 echo "[" | tee -a "$outputjson"
 
