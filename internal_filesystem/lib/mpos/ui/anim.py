@@ -1,5 +1,31 @@
 import lvgl as lv
 
+
+def safe_widget_access(callback):
+    """
+    Wrapper to safely access a widget, catching LvReferenceError.
+
+    If the widget has been deleted, the callback is silently skipped.
+    This prevents crashes when animations try to access deleted widgets.
+
+    Args:
+        callback: Function to call (should access a widget)
+
+    Returns:
+        None (always, even if callback returns a value)
+    """
+    try:
+        callback()
+    except Exception as e:
+        # Check if it's an LvReferenceError (widget was deleted)
+        if "LvReferenceError" in str(type(e).__name__) or "Referenced object was deleted" in str(e):
+            # Widget was deleted - silently ignore
+            pass
+        else:
+            # Some other error - re-raise it
+            raise
+
+
 class WidgetAnimator:
 
 #    def __init__(self):
@@ -27,10 +53,10 @@ class WidgetAnimator:
             anim.set_values(0, 255)
             anim.set_duration(duration)
             anim.set_delay(delay)
-            anim.set_custom_exec_cb(lambda anim, value: widget.set_style_opa(value, 0))
+            anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_style_opa(value, 0)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Ensure opacity is reset after animation
-            anim.set_completed_cb(lambda *args: widget.set_style_opa(255, 0))
+            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_style_opa(255, 0)))
         elif anim_type == "slide_down":
             print("doing slide_down")
             # Create slide-down animation (y from -height to original y)
@@ -42,10 +68,10 @@ class WidgetAnimator:
             anim.set_values(original_y - height, original_y)
             anim.set_duration(duration)
             anim.set_delay(delay)
-            anim.set_custom_exec_cb(lambda anim, value: widget.set_y(value))
+            anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Reset y position after animation
-            anim.set_completed_cb(lambda *args: widget.set_y(original_y))
+            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_y(original_y)))
         elif anim_type == "slide_up":
             # Create slide-up animation (y from +height to original y)
             # Seems to cause scroll bars to be added somehow if done to a keyboard at the bottom of the screen...
@@ -57,10 +83,10 @@ class WidgetAnimator:
             anim.set_values(original_y + height, original_y)
             anim.set_duration(duration)
             anim.set_delay(delay)
-            anim.set_custom_exec_cb(lambda anim, value: widget.set_y(value))
+            anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Reset y position after animation
-            anim.set_completed_cb(lambda *args: widget.set_y(original_y))
+            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_y(original_y)))
 
         # Store and start animation
         #self.animations[widget] = anim
@@ -77,10 +103,10 @@ class WidgetAnimator:
             anim.set_values(255, 0)
             anim.set_duration(duration)
             anim.set_delay(delay)
-            anim.set_custom_exec_cb(lambda anim, value: widget.set_style_opa(value, 0))
+            anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_style_opa(value, 0)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Set HIDDEN flag after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator.hide_complete_cb(widget, hide=hide))
+            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: WidgetAnimator.hide_complete_cb(widget, hide=hide)))
         elif anim_type == "slide_down":
             # Create slide-down animation (y from original y to +height)
             # Seems to cause scroll bars to be added somehow if done to a keyboard at the bottom of the screen...
@@ -92,10 +118,10 @@ class WidgetAnimator:
             anim.set_values(original_y, original_y + height)
             anim.set_duration(duration)
             anim.set_delay(delay)
-            anim.set_custom_exec_cb(lambda anim, value: widget.set_y(value))
+            anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Set HIDDEN flag after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator.hide_complete_cb(widget, original_y, hide))
+            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: WidgetAnimator.hide_complete_cb(widget, original_y, hide)))
         elif anim_type == "slide_up":
             print("hide with slide_up")
             # Create slide-up animation (y from original y to -height)
@@ -107,10 +133,10 @@ class WidgetAnimator:
             anim.set_values(original_y, original_y - height)
             anim.set_duration(duration)
             anim.set_delay(delay)
-            anim.set_custom_exec_cb(lambda anim, value: widget.set_y(value))
+            anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Set HIDDEN flag after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator.hide_complete_cb(widget, original_y, hide))
+            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: WidgetAnimator.hide_complete_cb(widget, original_y, hide)))
 
         # Store and start animation
         #self.animations[widget] = anim

@@ -179,98 +179,32 @@ class CustomKeyboard:
         ta.set_text(new_text)
 
     # ========================================================================
-    # LVGL keyboard-compatible API
+    # Python magic method for automatic method forwarding
     # ========================================================================
 
-    def set_textarea(self, textarea):
-        """Set the textarea that this keyboard should edit."""
-        self._keyboard.set_textarea(textarea)
+    def __getattr__(self, name):
+        """
+        Forward any undefined method/attribute to the underlying LVGL keyboard.
 
-    def get_textarea(self):
-        """Get the currently associated textarea."""
-        return self._keyboard.get_textarea()
+        This allows CustomKeyboard to support ALL lv.keyboard methods automatically
+        without needing to manually wrap each one. Any method not defined on
+        CustomKeyboard will be forwarded to self._keyboard.
 
-    def set_mode(self, mode):
-        """Set keyboard mode (use MODE_* constants)."""
-        self._keyboard.set_mode(mode)
-
-    def align(self, align_type, x_offset=0, y_offset=0):
-        """Align the keyboard."""
-        self._keyboard.align(align_type, x_offset, y_offset)
-
-    def set_style_min_height(self, height, selector):
-        """Set minimum height."""
-        self._keyboard.set_style_min_height(height, selector)
-
-    def set_style_height(self, height, selector):
-        """Set height."""
-        self._keyboard.set_style_height(height, selector)
-
-    def set_style_max_height(self, height, selector):
-        """Set maximum height."""
-        self._keyboard.set_style_max_height(height, selector)
-
-    def set_style_opa(self, opacity, selector):
-        """Set opacity (required for fade animations)."""
-        self._keyboard.set_style_opa(opacity, selector)
-
-    def get_x(self):
-        """Get X position."""
-        return self._keyboard.get_x()
-
-    def set_x(self, x):
-        """Set X position."""
-        self._keyboard.set_x(x)
-
-    def get_y(self):
-        """Get Y position."""
-        return self._keyboard.get_y()
-
-    def set_y(self, y):
-        """Set Y position."""
-        self._keyboard.set_y(y)
-
-    def set_pos(self, x, y):
-        """Set position."""
-        self._keyboard.set_pos(x, y)
-
-    def get_height(self):
-        """Get height."""
-        return self._keyboard.get_height()
-
-    def get_width(self):
-        """Get width."""
-        return self._keyboard.get_width()
-
-    def add_flag(self, flag):
-        """Add object flag (e.g., HIDDEN)."""
-        self._keyboard.add_flag(flag)
-
-    def remove_flag(self, flag):
-        """Remove object flag."""
-        self._keyboard.remove_flag(flag)
-
-    def has_flag(self, flag):
-        """Check if object has flag."""
-        return self._keyboard.has_flag(flag)
-
-    def add_event_cb(self, callback, event_code, user_data):
-        """Add event callback."""
-        self._keyboard.add_event_cb(callback, event_code, user_data)
-
-    def remove_event_cb(self, callback):
-        """Remove event callback."""
-        self._keyboard.remove_event_cb(callback)
-
-    def send_event(self, event_code, param):
-        """Send event to keyboard."""
-        self._keyboard.send_event(event_code, param)
+        Examples:
+            keyboard.set_textarea(ta)       # Works
+            keyboard.align(lv.ALIGN.CENTER) # Works
+            keyboard.set_style_opa(128, 0)  # Works
+            keyboard.any_lvgl_method()      # Works!
+        """
+        # Forward to the underlying keyboard object
+        return getattr(self._keyboard, name)
 
     def get_lvgl_obj(self):
         """
         Get the underlying LVGL keyboard object.
 
-        Use this if you need direct access to LVGL methods not wrapped here.
+        This is now rarely needed since __getattr__ forwards everything automatically.
+        Kept for backwards compatibility.
         """
         return self._keyboard
 
