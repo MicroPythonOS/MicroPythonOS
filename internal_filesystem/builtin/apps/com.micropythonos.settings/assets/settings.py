@@ -205,6 +205,7 @@ class SettingActivity(Activity):
             self.keyboard = lv.keyboard(lv.layer_sys())
             self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             self.keyboard.set_style_min_height(150, 0)
+            mpos.ui.theme.fix_keyboard_button_style(self.keyboard)  # Fix button visibility in light mode
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
             self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.READY, None)
             self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.CANCEL, None)
