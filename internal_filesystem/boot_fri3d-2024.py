@@ -63,7 +63,7 @@ STATE_HIGH = 1
 STATE_LOW = 0
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
-display = st7789.ST7789(
+mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
@@ -76,15 +76,15 @@ display = st7789.ST7789(
     reset_state=STATE_LOW
 )
 
-display.init()
-display.set_power(True)
-display.set_backlight(100)
+mpos.ui.main_display.init()
+mpos.ui.main_display.set_power(True)
+mpos.ui.main_display.set_backlight(100)
 
-display.set_color_inversion(False)
+mpos.ui.main_display.set_color_inversion(False)
 
 lv.init()
-display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
-display.set_params(0x36, bytearray([0x28]))
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+mpos.ui.main_display.set_params(0x36, bytearray([0x28]))
 
 # Button and joystick handling code:
 from machine import ADC, Pin

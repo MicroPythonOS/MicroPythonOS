@@ -59,7 +59,7 @@ _BUFFER_SIZE = const(28800)
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-display = st7789.ST7789(
+mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
@@ -71,9 +71,9 @@ display = st7789.ST7789(
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
 )
-display.init()
-display.set_power(True)
-display.set_backlight(100)
+mpos.ui.main_display.init()
+mpos.ui.main_display.set_power(True)
+mpos.ui.main_display.set_backlight(100)
 
 # Touch handling:
 i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_locks=False)
@@ -81,7 +81,7 @@ touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=TP_ADDR, reg_bits=TP_REGBITS)
 indev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
 
 lv.init()
-display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 # Battery voltage ADC measuring
 import mpos.battery_voltage

@@ -16,26 +16,10 @@ from mpos.content.package_manager import PackageManager
 
 prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
 
-# Load and set theme:
-theme_light_dark = prefs.get_string("theme_light_dark", "light") # default to a light theme
-theme_dark_bool = ( theme_light_dark == "dark" )
-primary_color = lv.theme_get_color_primary(None)
-color_string = prefs.get_string("theme_primary_color")
-if color_string:
-    try:
-        color_string = color_string.replace("0x", "").replace("#", "").strip().lower()
-        color_int = int(color_string, 16)
-        print(f"Setting primary color: {color_int}")
-        primary_color = lv.color_hex(color_int)
-    except Exception as e:
-        print(f"Converting color setting '{color_string}' to lv_color_hex() got exception: {e}")
-theme = lv.theme_default_init(display._disp_drv, primary_color, lv.color_hex(0xFBDC05), theme_dark_bool, lv.font_montserrat_12)
-
-#display.set_theme(theme)
-
+mpos.ui.set_theme(prefs)
 init_rootscreen()
 mpos.ui.topmenu.create_notification_bar()
-mpos.ui.topmenu.create_drawer(display)
+mpos.ui.topmenu.create_drawer(mpos.ui.display)
 mpos.ui.handle_back_swipe()
 mpos.ui.handle_top_swipe()
 
@@ -48,16 +32,17 @@ if focusgroup: # on esp32 this may not be set
 # Can be passed to TaskHandler, currently unused:
 def custom_exception_handler(e):
     print(f"custom_exception_handler called: {e}")
-    mpos.ui.th.deinit()
+    mpos.ui.task_handler.deinit()
     # otherwise it does focus_next and then crashes while doing lv.deinit()
     focusgroup.remove_all_objs()
     focusgroup.delete()
+    lv.deinit()
 
 import sys
 if sys.platform == "esp32":
-    mpos.ui.th = task_handler.TaskHandler(duration=5) # 1ms gives highest framerate on esp32-s3's but might have side effects?
+    mpos.ui.task_handler = task_handler.TaskHandler(duration=5) # 1ms gives highest framerate on esp32-s3's but might have side effects?
 else:
-    mpos.ui.th = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
+    mpos.ui.task_handler = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
 
 try:
     import freezefs_mount_builtin

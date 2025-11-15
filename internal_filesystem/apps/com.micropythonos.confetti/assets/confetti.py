@@ -45,10 +45,10 @@ class Confetti(Activity):
         self.setContentView(self.screen)
 
     def onResume(self, screen):
-        mpos.ui.th.add_event_cb(self.update_frame, 1)
+        mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
 
     def onPause(self, screen):
-        mpos.ui.th.remove_event_cb(self.update_frame)
+        mpos.ui.task_handler.remove_event_cb(self.update_frame)
 
     def spawn_confetti(self):
         """Safely spawn a new confetti piece with unique img_idx"""

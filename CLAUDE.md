@@ -534,11 +534,11 @@ class MyAnimatedApp(Activity):
     def onResume(self, screen):
         # Register the frame callback
         self.last_time = time.ticks_ms()
-        mpos.ui.th.add_event_cb(self.update_frame, 1)
+        mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
 
     def onPause(self, screen):
         # Unregister when app goes to background
-        mpos.ui.th.remove_event_cb(self.update_frame)
+        mpos.ui.task_handler.remove_event_cb(self.update_frame)
 
     def update_frame(self, a, b):
         # Calculate delta time for framerate independence
@@ -670,7 +670,7 @@ def update_frame(self, a, b):
 def start_animation(self):
     self.spawn_timer = 0
     self.spawn_interval = 0.15  # seconds between spawns
-    mpos.ui.th.add_event_cb(self.update_frame, 1)
+    mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
 
 def update_frame(self, a, b):
     delta_time = time.ticks_diff(time.ticks_ms(), self.last_time) / 1000.0
@@ -803,7 +803,7 @@ def check_collision(self):
 def start_animation(self):
     self.animation_running = True
     self.last_time = time.ticks_ms()
-    mpos.ui.th.add_event_cb(self.update_frame, 1)
+    mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
 
     # Optional: auto-stop after duration
     lv.timer_create(self.stop_animation, 15000, None).set_repeat_count(1)
@@ -817,7 +817,7 @@ def update_frame(self, a, b):
 
     # Stop when animation completes
     if not self.animation_running and len(self.particles) == 0:
-        mpos.ui.th.remove_event_cb(self.update_frame)
+        mpos.ui.task_handler.remove_event_cb(self.update_frame)
         print("Animation finished")
 ```
 
@@ -827,11 +827,11 @@ def onResume(self, screen):
     # Only start if needed (e.g., game in progress)
     if self.game_started and not self.game_over:
         self.last_time = time.ticks_ms()
-        mpos.ui.th.add_event_cb(self.update_frame, 1)
+        mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
 
 def onPause(self, screen):
     # Always stop when app goes to background
-    mpos.ui.th.remove_event_cb(self.update_frame)
+    mpos.ui.task_handler.remove_event_cb(self.update_frame)
 ```
 
 ### Performance Tips

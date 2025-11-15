@@ -327,4 +327,6 @@ class SettingActivity(Activity):
         if changed_callback and old_value != new_value:
             print(f"Setting {setting['key']} changed from {old_value} to {new_value}, calling changed_callback...")
             changed_callback()
+        if setting["key"] == "theme_light_dark" or setting["key"] == "theme_primary_color":
+            mpos.ui.set_theme(self.prefs)
         self.finish()

@@ -222,8 +222,8 @@ def create_drawer(display=None):
     slider_label=lv.label(drawer)
     prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
     brightness_int = prefs.get_int("display_brightness", 100)
-    if display:
-        display.set_backlight(brightness_int)
+    if mpos.ui.main_display:
+        mpos.ui.main_display.set_backlight(brightness_int)
     slider_label.set_text(f"Brightness: {brightness_int}%")
     slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
     slider=lv.slider(drawer)
@@ -234,8 +234,8 @@ def create_drawer(display=None):
     def brightness_slider_changed(e):
         brightness_int = slider.get_value()
         slider_label.set_text(f"Brightness: {brightness_int}%")
-        if display:
-            display.set_backlight(brightness_int)
+        if mpos.ui.main_display:
+            mpos.ui.main_display.set_backlight(brightness_int)
     def brightness_slider_released(e):
         brightness_int = slider.get_value()
         prefs = mpos.config.SharedPreferences("com.micropythonos.settings")

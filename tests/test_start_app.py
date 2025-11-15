@@ -24,7 +24,7 @@ class TestStartApp(unittest.TestCase):
         init_rootscreen()
         mpos.ui.topmenu.create_notification_bar()
         mpos.ui.topmenu.create_drawer(display)
-        mpos.ui.th = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
+        mpos.ui.task_handler = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
 
 
     def test_normal(self):

@@ -19,7 +19,7 @@ class Activity:
 
     def onResume(self, screen): # app goes to foreground
         self._has_foreground = True
-        mpos.ui.th.add_event_cb(self.task_handler_callback, 1)
+        mpos.ui.task_handler.add_event_cb(self.task_handler_callback, 1)
 
     def onPause(self, screen): # app goes to background
         self._has_foreground = False

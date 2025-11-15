@@ -12,17 +12,18 @@ def init_rootscreen():
     _vertical_resolution = disp.get_vertical_resolution()
     print(f"init_rootscreen set _vertical_resolution to {_vertical_resolution}")
 
+    # It seems this style 
     style = lv.style_t()
     style.init()
-    style.set_bg_opa(lv.OPA.TRANSP)
+    #style.set_bg_opa(lv.OPA.TRANSP)
     style.set_border_width(0)
-    style.set_outline_width(0)
-    style.set_shadow_width(0)
+    #style.set_outline_width(0)
+    #style.set_shadow_width(0)
     style.set_pad_all(0)
     style.set_radius(0)
     screen.add_style(style, 0)
-    screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-    screen.set_scroll_dir(lv.DIR.NONE)
+    #screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+    #screen.set_scroll_dir(lv.DIR.NONE)
 
     label = lv.label(screen)
     label.set_text("Welcome to MicroPythonOS")
