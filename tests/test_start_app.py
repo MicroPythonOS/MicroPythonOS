@@ -18,12 +18,12 @@ class TestStartApp(unittest.TestCase):
         TFT_VER_RES=240
         
         bus = lcd_bus.SDLBus(flags=0)
-        buf1 = bus.allocate_framebuffer(320 * 240 * 2, 0)
-        display = sdl_display.SDLDisplay(data_bus=bus,display_width=TFT_HOR_RES,display_height=TFT_VER_RES,frame_buffer1=buf1,color_space=lv.COLOR_FORMAT.RGB565)
-        display.init()
+        buf1 = bus.allocate_framebuffer(TFT_HOR_RES * TFT_VER_RES * 2, 0)
+        mpos.ui.main_display = sdl_display.SDLDisplay(data_bus=bus,display_width=TFT_HOR_RES,display_height=TFT_VER_RES,frame_buffer1=buf1,color_space=lv.COLOR_FORMAT.RGB565)
+        mpos.ui.main_display.init()
         init_rootscreen()
         mpos.ui.topmenu.create_notification_bar()
-        mpos.ui.topmenu.create_drawer(display)
+        mpos.ui.topmenu.create_drawer(mpos.ui.main_display)
         mpos.ui.task_handler = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
 
 

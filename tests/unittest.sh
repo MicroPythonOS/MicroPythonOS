@@ -106,10 +106,9 @@ if [ -z "$onetest" ]; then
 		one_test "$file"
 		result=$?
 		if [ $result -ne 0 ]; then
-			echo "test $file got error $result"
+			echo "\n\n\nWARNING: test $file got error $result !!!\n\n\n"
 			failed=$(expr $failed \+ 1)
 		fi
-
 	done < <( find "$testdir" -iname "test_*.py" )
 else
 	one_test $(readlink -f "$onetest")
