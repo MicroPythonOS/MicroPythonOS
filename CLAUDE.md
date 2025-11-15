@@ -178,13 +178,16 @@ Tests are in the `tests/` directory. There are two types: unit tests and manual 
 ./tests/unittest.sh tests/test_start_app.py
 
 # Run a specific test on connected device (via mpremote)
-./tests/unittest.sh tests/test_shared_preferences.py ondevice
+./tests/unittest.sh tests/test_shared_preferences.py --ondevice
+
+# Run all tests on connected device
+./tests/unittest.sh --ondevice
 ```
 
 The `unittest.sh` script:
 - Automatically detects the platform (Linux/macOS) and uses the correct binary
 - Sets up the proper paths and heapsize
-- Can run tests on device using `mpremote` with the `ondevice` argument
+- Can run tests on device using `mpremote` with the `--ondevice` flag
 - Runs all `test_*.py` files when no argument is provided
 - On device, assumes the OS is already running (boot.py and main.py already executed), so tests run against the live system
 - Test infrastructure (graphical_test_helper.py) is automatically installed by `scripts/install.sh`
@@ -202,7 +205,7 @@ The `unittest.sh` script:
 ./tests/unittest.sh tests/test_graphical_about_app.py
 
 # Run graphical tests on device
-./tests/unittest.sh tests/test_graphical_about_app.py ondevice
+./tests/unittest.sh tests/test_graphical_about_app.py --ondevice
 
 # Convert screenshots from raw RGB565 to PNG
 cd tests/screenshots

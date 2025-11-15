@@ -12,7 +12,7 @@ trying to access it.
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_animation_deleted_widget.py
-    Device:  ./tests/unittest.sh tests/test_graphical_animation_deleted_widget.py ondevice
+    Device:  ./tests/unittest.sh tests/test_graphical_animation_deleted_widget.py --ondevice
 """
 
 import unittest

@@ -5,8 +5,18 @@ mydir=$(dirname "$mydir")
 testdir="$mydir"
 scriptdir=$(readlink -f "$mydir"/../scripts/)
 fs="$mydir"/../internal_filesystem/
-onetest="$1"
-ondevice="$2"
+
+# Parse arguments
+ondevice=""
+onetest=""
+
+for arg in "$@"; do
+    if [ "$arg" = "--ondevice" ]; then
+        ondevice="yes"
+    else
+        onetest="$arg"
+    fi
+done
 
 
 # print os and set binary
@@ -95,19 +105,21 @@ else:
 failed=0
 
 if [ -z "$onetest" ]; then
-	echo "Usage: $0 [one_test_to_run.py] [ondevice]"
+	echo "Usage: $0 [one_test_to_run.py] [--ondevice]"
 	echo "Example: $0 tests/simple.py"
-	echo "Example: $0 tests/simple.py ondevice"
+	echo "Example: $0 tests/simple.py --ondevice"
+	echo "Example: $0 --ondevice"
 	echo
 	echo "If no test is specified: run all tests from $testdir on local machine."
 	echo
-	echo "The 'ondevice' argument will try to run the test on a connected device using mpremote.py (should be on the PATH) over a serial connection."
+	echo "The '--ondevice' flag will run the test(s) on a connected device using mpremote.py (should be on the PATH) over a serial connection."
 	while read file; do
 		one_test "$file"
 		result=$?
 		if [ $result -ne 0 ]; then
 			echo "\n\n\nWARNING: test $file got error $result !!!\n\n\n"
 			failed=$(expr $failed \+ 1)
+			exit 1
 		fi
 	done < <( find "$testdir" -iname "test_*.py" )
 else

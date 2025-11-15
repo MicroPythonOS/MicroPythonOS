@@ -6,7 +6,7 @@ required by mpos.ui.anim.smooth_show() and smooth_hide().
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_animation.py
-    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_animation.py ondevice
+    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_animation.py --ondevice
 """
 
 import unittest

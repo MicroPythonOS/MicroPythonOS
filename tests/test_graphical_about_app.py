@@ -12,7 +12,7 @@ This is a proof of concept for graphical testing that:
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_about_app.py
-    Device:  ./tests/unittest.sh tests/test_graphical_about_app.py ondevice
+    Device:  ./tests/unittest.sh tests/test_graphical_about_app.py --ondevice
 """
 
 import unittest

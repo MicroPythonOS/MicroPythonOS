@@ -6,7 +6,7 @@ and mode switching. Captures screenshots for regression testing.
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_custom_keyboard.py
-    Device:  ./tests/unittest.sh tests/test_graphical_custom_keyboard.py ondevice
+    Device:  ./tests/unittest.sh tests/test_graphical_custom_keyboard.py --ondevice
 """
 
 import unittest
