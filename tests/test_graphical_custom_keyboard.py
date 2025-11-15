@@ -1,5 +1,5 @@
 """
-Graphical tests for CustomKeyboard.
+Graphical tests for MposKeyboard.
 
 Tests keyboard visual appearance, text input via simulated button presses,
 and mode switching. Captures screenshots for regression testing.
@@ -13,15 +13,15 @@ import unittest
 import lvgl as lv
 import sys
 import os
-from mpos.ui.keyboard import CustomKeyboard, create_keyboard
+from mpos.ui.keyboard import MposKeyboard, create_keyboard
 from graphical_test_helper import (
     wait_for_render,
     capture_screenshot,
 )
 
 
-class TestGraphicalCustomKeyboard(unittest.TestCase):
-    """Test suite for CustomKeyboard graphical verification."""
+class TestGraphicalMposKeyboard(unittest.TestCase):
+    """Test suite for MposKeyboard graphical verification."""
 
     def setUp(self):
         """Set up test fixtures before each test method."""
@@ -65,7 +65,7 @@ class TestGraphicalCustomKeyboard(unittest.TestCase):
         textarea.set_one_line(True)
 
         # Create custom keyboard
-        keyboard = CustomKeyboard(screen)
+        keyboard = MposKeyboard(screen)
         keyboard.set_textarea(textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
 
@@ -114,7 +114,7 @@ class TestGraphicalCustomKeyboard(unittest.TestCase):
         screen, keyboard, textarea = self._create_test_keyboard_scene()
 
         # Ensure lowercase mode
-        keyboard.set_mode(CustomKeyboard.MODE_LOWERCASE)
+        keyboard.set_mode(MposKeyboard.MODE_LOWERCASE)
         wait_for_render(10)
 
         # Capture screenshot
@@ -136,7 +136,7 @@ class TestGraphicalCustomKeyboard(unittest.TestCase):
         screen, keyboard, textarea = self._create_test_keyboard_scene()
 
         # Switch to uppercase mode
-        keyboard.set_mode(CustomKeyboard.MODE_UPPERCASE)
+        keyboard.set_mode(MposKeyboard.MODE_UPPERCASE)
         wait_for_render(10)
 
         # Capture screenshot
@@ -158,7 +158,7 @@ class TestGraphicalCustomKeyboard(unittest.TestCase):
         screen, keyboard, textarea = self._create_test_keyboard_scene()
 
         # Switch to numbers mode
-        keyboard.set_mode(CustomKeyboard.MODE_NUMBERS)
+        keyboard.set_mode(MposKeyboard.MODE_NUMBERS)
         wait_for_render(10)
 
         # Capture screenshot
@@ -180,7 +180,7 @@ class TestGraphicalCustomKeyboard(unittest.TestCase):
         screen, keyboard, textarea = self._create_test_keyboard_scene()
 
         # Switch to specials mode
-        keyboard.set_mode(CustomKeyboard.MODE_SPECIALS)
+        keyboard.set_mode(MposKeyboard.MODE_SPECIALS)
         wait_for_render(10)
 
         # Capture screenshot
@@ -248,7 +248,7 @@ class TestGraphicalCustomKeyboard(unittest.TestCase):
 
             self.assertFalse(
                 is_white,
-                f"Custom keyboard buttons are pure white in light mode (invisible)!"
+                f"Mpos keyboard buttons are pure white in light mode (invisible)!"
             )
 
         print("=== Visibility test PASSED ===")

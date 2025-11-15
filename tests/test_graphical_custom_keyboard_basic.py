@@ -1,5 +1,5 @@
 """
-Functional tests for CustomKeyboard.
+Functional tests for MposKeyboard.
 
 Tests keyboard creation, mode switching, text input, and API compatibility.
 
@@ -10,11 +10,11 @@ Usage:
 
 import unittest
 import lvgl as lv
-from mpos.ui.keyboard import CustomKeyboard, create_keyboard
+from mpos.ui.keyboard import MposKeyboard, create_keyboard
 
 
-class TestCustomKeyboard(unittest.TestCase):
-    """Test suite for CustomKeyboard functionality."""
+class TestMposKeyboard(unittest.TestCase):
+    """Test suite for MposKeyboard functionality."""
 
     def setUp(self):
         """Set up test fixtures before each test method."""
@@ -37,10 +37,10 @@ class TestCustomKeyboard(unittest.TestCase):
         print("=== Test Cleanup Complete ===\n")
 
     def test_keyboard_creation(self):
-        """Test that CustomKeyboard can be created."""
+        """Test that MposKeyboard can be created."""
         print("Testing keyboard creation...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # Verify keyboard exists
         self.assertIsNotNone(keyboard)
@@ -54,10 +54,10 @@ class TestCustomKeyboard(unittest.TestCase):
 
         keyboard = create_keyboard(self.screen, custom=True)
 
-        # Verify it's a CustomKeyboard instance
-        self.assertIsInstance(keyboard, CustomKeyboard)
+        # Verify it's a MposKeyboard instance
+        self.assertIsInstance(keyboard, MposKeyboard)
 
-        print("Factory created CustomKeyboard successfully")
+        print("Factory created MposKeyboard successfully")
 
     def test_keyboard_factory_standard(self):
         """Test factory function creates standard keyboard."""
@@ -65,9 +65,9 @@ class TestCustomKeyboard(unittest.TestCase):
 
         keyboard = create_keyboard(self.screen, custom=False)
 
-        # Verify it's an LVGL keyboard (not CustomKeyboard)
-        self.assertFalse(isinstance(keyboard, CustomKeyboard),
-                        "Factory with custom=False should not create CustomKeyboard")
+        # Verify it's an LVGL keyboard (not MposKeyboard)
+        self.assertFalse(isinstance(keyboard, MposKeyboard),
+                        "Factory with custom=False should not create MposKeyboard")
         # It should be an lv.keyboard instance
         self.assertEqual(type(keyboard).__name__, 'keyboard')
 
@@ -77,7 +77,7 @@ class TestCustomKeyboard(unittest.TestCase):
         """Test setting textarea association."""
         print("Testing set_textarea...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(self.textarea)
 
         # Verify textarea is associated
@@ -90,13 +90,13 @@ class TestCustomKeyboard(unittest.TestCase):
         """Test keyboard mode switching."""
         print("Testing mode switching...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # Test setting different modes
-        keyboard.set_mode(CustomKeyboard.MODE_LOWERCASE)
-        keyboard.set_mode(CustomKeyboard.MODE_UPPERCASE)
-        keyboard.set_mode(CustomKeyboard.MODE_NUMBERS)
-        keyboard.set_mode(CustomKeyboard.MODE_SPECIALS)
+        keyboard.set_mode(MposKeyboard.MODE_LOWERCASE)
+        keyboard.set_mode(MposKeyboard.MODE_UPPERCASE)
+        keyboard.set_mode(MposKeyboard.MODE_NUMBERS)
+        keyboard.set_mode(MposKeyboard.MODE_SPECIALS)
 
         print("Mode switching successful")
 
@@ -104,7 +104,7 @@ class TestCustomKeyboard(unittest.TestCase):
         """Test keyboard alignment."""
         print("Testing alignment...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
 
         print("Alignment successful")
@@ -113,7 +113,7 @@ class TestCustomKeyboard(unittest.TestCase):
         """Test height configuration."""
         print("Testing height settings...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.set_style_min_height(160, 0)
         keyboard.set_style_height(160, 0)
 
@@ -123,7 +123,7 @@ class TestCustomKeyboard(unittest.TestCase):
         """Test object flags (show/hide)."""
         print("Testing flags...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # Test hiding
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)
@@ -139,7 +139,7 @@ class TestCustomKeyboard(unittest.TestCase):
         """Test adding event callbacks."""
         print("Testing event callbacks...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         callback_called = [False]
 
         def test_callback(event):
@@ -157,10 +157,10 @@ class TestCustomKeyboard(unittest.TestCase):
         print("Event callback successful")
 
     def test_api_compatibility(self):
-        """Test that CustomKeyboard has same API as lv.keyboard."""
+        """Test that MposKeyboard has same API as lv.keyboard."""
         print("Testing API compatibility...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # Check that all essential methods exist
         essential_methods = [
@@ -178,11 +178,11 @@ class TestCustomKeyboard(unittest.TestCase):
         for method_name in essential_methods:
             self.assertTrue(
                 hasattr(keyboard, method_name),
-                f"CustomKeyboard missing method: {method_name}"
+                f"MposKeyboard missing method: {method_name}"
             )
             self.assertTrue(
                 callable(getattr(keyboard, method_name)),
-                f"CustomKeyboard.{method_name} is not callable"
+                f"MposKeyboard.{method_name} is not callable"
             )
 
         print("API compatibility verified")

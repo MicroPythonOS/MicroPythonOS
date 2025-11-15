@@ -1,8 +1,8 @@
 """
-Test that CustomKeyboard forwards all methods to underlying lv.keyboard.
+Test that MposKeyboard forwards all methods to underlying lv.keyboard.
 
 This demonstrates the __getattr__ magic method works correctly and that
-CustomKeyboard supports any LVGL keyboard method without manual wrapping.
+MposKeyboard supports any LVGL keyboard method without manual wrapping.
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_keyboard_method_forwarding.py
@@ -10,7 +10,7 @@ Usage:
 
 import unittest
 import lvgl as lv
-from mpos.ui.keyboard import CustomKeyboard
+from mpos.ui.keyboard import MposKeyboard
 
 
 class TestMethodForwarding(unittest.TestCase):
@@ -30,7 +30,7 @@ class TestMethodForwarding(unittest.TestCase):
         """Test commonly used LVGL methods work via __getattr__."""
         print("\nTesting common LVGL methods...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # These should all work without explicit wrapper methods:
         methods_to_test = [
@@ -58,7 +58,7 @@ class TestMethodForwarding(unittest.TestCase):
         """Test various style methods work."""
         print("\nTesting style methods...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # All these style methods should work:
         keyboard.set_style_min_height(100, 0)
@@ -72,7 +72,7 @@ class TestMethodForwarding(unittest.TestCase):
         """Test position methods work."""
         print("\nTesting position methods...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # Position methods:
         x = keyboard.get_x()
@@ -98,7 +98,7 @@ class TestMethodForwarding(unittest.TestCase):
         """
         print("\nTesting that arbitrary LVGL methods work...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
 
         # Try some less common methods:
         try:
@@ -125,10 +125,10 @@ class TestMethodForwarding(unittest.TestCase):
         """
         print("\nTesting that forwarding preserves behavior...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         textarea = lv.textarea(self.screen)
 
-        # Set textarea through CustomKeyboard
+        # Set textarea through MposKeyboard
         keyboard.set_textarea(textarea)
 
         # Get it back

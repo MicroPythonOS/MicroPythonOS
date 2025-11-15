@@ -1,7 +1,7 @@
 """
-Test CustomKeyboard animation support (show/hide with mpos.ui.anim).
+Test MposKeyboard animation support (show/hide with mpos.ui.anim).
 
-This test reproduces the bug where CustomKeyboard is missing methods
+This test reproduces the bug where MposKeyboard is missing methods
 required by mpos.ui.anim.smooth_show() and smooth_hide().
 
 Usage:
@@ -12,11 +12,11 @@ Usage:
 import unittest
 import lvgl as lv
 import mpos.ui.anim
-from mpos.ui.keyboard import CustomKeyboard
+from mpos.ui.keyboard import MposKeyboard
 
 
 class TestKeyboardAnimation(unittest.TestCase):
-    """Test CustomKeyboard compatibility with animation system."""
+    """Test MposKeyboard compatibility with animation system."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -40,13 +40,13 @@ class TestKeyboardAnimation(unittest.TestCase):
 
     def test_keyboard_has_set_style_opa(self):
         """
-        Test that CustomKeyboard has set_style_opa method.
+        Test that MposKeyboard has set_style_opa method.
 
         This method is required by mpos.ui.anim for fade animations.
         """
-        print("Testing that CustomKeyboard has set_style_opa...")
+        print("Testing that MposKeyboard has set_style_opa...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(self.textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)
@@ -54,11 +54,11 @@ class TestKeyboardAnimation(unittest.TestCase):
         # Verify method exists
         self.assertTrue(
             hasattr(keyboard, 'set_style_opa'),
-            "CustomKeyboard missing set_style_opa method"
+            "MposKeyboard missing set_style_opa method"
         )
         self.assertTrue(
             callable(getattr(keyboard, 'set_style_opa')),
-            "CustomKeyboard.set_style_opa is not callable"
+            "MposKeyboard.set_style_opa is not callable"
         )
 
         # Try calling it (should not raise AttributeError)
@@ -72,13 +72,13 @@ class TestKeyboardAnimation(unittest.TestCase):
 
     def test_keyboard_smooth_show(self):
         """
-        Test that CustomKeyboard can be shown with smooth_show animation.
+        Test that MposKeyboard can be shown with smooth_show animation.
 
         This reproduces the actual user interaction in QuasiNametag.
         """
         print("Testing smooth_show animation...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(self.textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)
@@ -89,7 +89,7 @@ class TestKeyboardAnimation(unittest.TestCase):
             print("smooth_show called successfully")
         except AttributeError as e:
             self.fail(f"smooth_show raised AttributeError: {e}\n"
-                     "This is the bug - CustomKeyboard missing animation methods")
+                     "This is the bug - MposKeyboard missing animation methods")
 
         # Verify keyboard is no longer hidden
         self.assertFalse(
@@ -101,13 +101,13 @@ class TestKeyboardAnimation(unittest.TestCase):
 
     def test_keyboard_smooth_hide(self):
         """
-        Test that CustomKeyboard can be hidden with smooth_hide animation.
+        Test that MposKeyboard can be hidden with smooth_hide animation.
 
         This reproduces the hide behavior in QuasiNametag.
         """
         print("Testing smooth_hide animation...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(self.textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         # Start visible
@@ -119,7 +119,7 @@ class TestKeyboardAnimation(unittest.TestCase):
             print("smooth_hide called successfully")
         except AttributeError as e:
             self.fail(f"smooth_hide raised AttributeError: {e}\n"
-                     "This is the bug - CustomKeyboard missing animation methods")
+                     "This is the bug - MposKeyboard missing animation methods")
 
         print("=== smooth_hide test PASSED ===")
 
@@ -133,7 +133,7 @@ class TestKeyboardAnimation(unittest.TestCase):
         """
         print("Testing full show/hide cycle...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(self.textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)
@@ -160,13 +160,13 @@ class TestKeyboardAnimation(unittest.TestCase):
 
     def test_keyboard_has_get_y_and_set_y(self):
         """
-        Test that CustomKeyboard has get_y and set_y methods.
+        Test that MposKeyboard has get_y and set_y methods.
 
         These are required for slide animations (though not currently used).
         """
         print("Testing get_y and set_y methods...")
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
 
         # Verify methods exist

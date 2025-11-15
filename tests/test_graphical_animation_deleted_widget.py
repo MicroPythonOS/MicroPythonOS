@@ -130,14 +130,14 @@ class TestAnimationDeletedWidget(unittest.TestCase):
         """
         print("Testing keyboard deletion scenario...")
 
-        from mpos.ui.keyboard import CustomKeyboard
+        from mpos.ui.keyboard import MposKeyboard
 
         # Create textarea and keyboard (like QuasiNametag does)
         textarea = lv.textarea(self.screen)
         textarea.set_size(280, 40)
         textarea.align(lv.ALIGN.TOP_MID, 0, 10)
 
-        keyboard = CustomKeyboard(self.screen)
+        keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)
