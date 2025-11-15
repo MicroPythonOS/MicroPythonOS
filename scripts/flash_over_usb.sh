@@ -1,6 +1,10 @@
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
-fwfile="$mydir/../lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin"
+fwfile="$0"
+# This would break the --erase-all
+#if [ -z "$fwfile" ]; then
+	#fwfile="$mydir/../lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin"
+#fi
 ls -al $fwfile
 echo "Add --erase-all if needed"
 sleep 5
