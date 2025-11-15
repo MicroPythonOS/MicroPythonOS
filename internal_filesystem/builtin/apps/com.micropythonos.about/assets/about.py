@@ -25,6 +25,17 @@ class About(Activity):
         label3.set_text(f"sys.implementation: {sys.implementation}")
         label4 = lv.label(screen)
         label4.set_text(f"sys.platform: {sys.platform}")
+        label15 = lv.label(screen)
+        label15.set_text(f"sys.path: {sys.path}")
+        import micropython
+        label16 = lv.label(screen)
+        label16.set_text(f"micropython.mem_info(): {micropython.mem_info()}")
+        label17 = lv.label(screen)
+        label17.set_text(f"micropython.opt_level(): {micropython.opt_level()}")
+        label18 = lv.label(screen)
+        label18.set_text(f"micropython.qstr_info(): {micropython.qstr_info()}")
+        label19 = lv.label(screen)
+        label19.set_text(f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
         try:
             label5 = lv.label(screen)
             label5.set_text("") # otherwise it will show the default "Text" if there's an exception below
@@ -62,7 +73,12 @@ class About(Activity):
             label14 = lv.label(screen)
             label14.set_text(f"freezefs_mount_builtin.version: {freezefs_mount_builtin.version}")
         except Exception as e:
-            # This will throw an exception if there is already a "/builtin" folder present
+            # This will throw an EEXIST exception if there is already a "/builtin" folder present
+            # It will throw "no module named 'freezefs_mount_builtin'" if there is no frozen filesystem
+            # It's possible that the user had a dev build with a non-frozen /buitin folder in the vfat storage partition,
+            # and then they install a prod build (with OSUpdate) that then is unable to mount the freezefs into /builtin
+            # BUT which will still have the frozen-inside /lib folder. So the user will be able to install apps into /builtin
+            # but they will not be able to install libraries into /lib.
             print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
             label11 = lv.label(screen)
             label11.set_text(f"freezefs_mount_builtin exception (normal on dev builds): {e}")
