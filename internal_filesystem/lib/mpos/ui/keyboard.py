@@ -6,10 +6,10 @@ more characters (including emoticons), and improved usability compared
 to the default LVGL keyboard.
 
 Usage:
-    from mpos.ui.keyboard import CustomKeyboard
+    from mpos.ui.keyboard import MposKeyboard
 
     # Create keyboard
-    keyboard = CustomKeyboard(parent_obj)
+    keyboard = MposKeyboard(parent_obj)
     keyboard.set_textarea(my_textarea)
     keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
 
@@ -22,7 +22,7 @@ import lvgl as lv
 import mpos.ui.theme
 
 
-class CustomKeyboard:
+class MposKeyboard:
     """
     Enhanced keyboard widget with multiple layouts and emoticons.
 
@@ -186,9 +186,9 @@ class CustomKeyboard:
         """
         Forward any undefined method/attribute to the underlying LVGL keyboard.
 
-        This allows CustomKeyboard to support ALL lv.keyboard methods automatically
+        This allows MposKeyboard to support ALL lv.keyboard methods automatically
         without needing to manually wrap each one. Any method not defined on
-        CustomKeyboard will be forwarded to self._keyboard.
+        MposKeyboard will be forwarded to self._keyboard.
 
         Examples:
             keyboard.set_textarea(ta)       # Works
@@ -218,10 +218,10 @@ def create_keyboard(parent, custom=False):
 
     Args:
         parent: Parent LVGL object
-        custom: If True, create CustomKeyboard; if False, create standard lv.keyboard
+        custom: If True, create MposKeyboard; if False, create standard lv.keyboard
 
     Returns:
-        CustomKeyboard instance or lv.keyboard instance
+        MposKeyboard instance or lv.keyboard instance
 
     Example:
         # Use custom keyboard
@@ -231,7 +231,7 @@ def create_keyboard(parent, custom=False):
         keyboard = create_keyboard(screen, custom=False)
     """
     if custom:
-        return CustomKeyboard(parent)
+        return MposKeyboard(parent)
     else:
         keyboard = lv.keyboard(parent)
         mpos.ui.theme.fix_keyboard_button_style(keyboard)

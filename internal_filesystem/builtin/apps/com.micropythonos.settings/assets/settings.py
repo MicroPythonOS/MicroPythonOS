@@ -1,6 +1,7 @@
 from mpos.apps import Activity, Intent
 from mpos.activity_navigator import ActivityNavigator
 
+from mpos.ui.keyboard import MposKeyboard
 from mpos import PackageManager
 import mpos.config
 import mpos.ui
@@ -202,10 +203,9 @@ class SettingActivity(Activity):
             self.textarea.add_event_cb(lambda *args: mpos.ui.anim.smooth_show(self.keyboard), lv.EVENT.CLICKED, None) # it might be focused, but keyboard hidden (because ready/cancel clicked)
             self.textarea.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.DEFOCUSED, None)
             # Initialize keyboard (hidden initially)
-            self.keyboard = lv.keyboard(lv.layer_sys())
+            self.keyboard = MposKeyboard(settings_screen_detail)
             self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-            self.keyboard.set_style_min_height(150, 0)
-            mpos.ui.theme.fix_keyboard_button_style(self.keyboard)  # Fix button visibility in light mode
+            self.keyboard.set_style_min_height(165, 0)
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
             self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.READY, None)
             self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.CANCEL, None)

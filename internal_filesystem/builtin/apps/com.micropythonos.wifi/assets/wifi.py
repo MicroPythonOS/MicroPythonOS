@@ -5,6 +5,7 @@ import lvgl as lv
 import _thread
 
 from mpos.apps import Activity, Intent
+from mpos.ui.keyboard import MposKeyboard
 
 import mpos.config
 import mpos.ui.anim
@@ -229,13 +230,13 @@ class PasswordPage(Activity):
         password_page=lv.obj()
         print(f"show_password_page: Creating label for SSID: {self.selected_ssid}")
         label=lv.label(password_page)
-        label.set_text(f"Password for {self.selected_ssid}")
-        label.align(lv.ALIGN.TOP_MID,0,5)
+        label.set_text(f"Password for: {self.selected_ssid}")
+        label.align(lv.ALIGN.TOP_MID,0,10)
         print("PasswordPage: Creating password textarea")
         self.password_ta=lv.textarea(password_page)
         self.password_ta.set_width(lv.pct(90))
         self.password_ta.set_one_line(True)
-        self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_MID, 0, 0)
+        self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
         self.password_ta.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
         print("PasswordPage: Creating Connect button")
         self.connect_button=lv.button(password_page)
@@ -258,11 +259,10 @@ class PasswordPage(Activity):
             self.password_ta.set_text(pwd)
         self.password_ta.set_placeholder_text("Password")
         print("PasswordPage: Creating keyboard (hidden by default)")
-        self.keyboard=lv.keyboard(password_page)
+        self.keyboard=MposKeyboard(password_page)
         self.keyboard.align(lv.ALIGN.BOTTOM_MID,0,0)
         self.keyboard.set_textarea(self.password_ta)
-        self.keyboard.set_style_min_height(160, 0)
-        mpos.ui.theme.fix_keyboard_button_style(self.keyboard)  # Fix button visibility in light mode
+        self.keyboard.set_style_min_height(165, 0)
         self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.READY, None)
         self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.CANCEL, None)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
