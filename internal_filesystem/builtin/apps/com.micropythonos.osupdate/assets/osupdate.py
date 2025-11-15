@@ -5,6 +5,7 @@ import time
 import _thread
 
 from mpos.apps import Activity
+from mpos import PackageManager
 import mpos.info
 import mpos.ui
 
@@ -16,9 +17,27 @@ class OSUpdate(Activity):
     status_label = None
     install_button = None
     force_update = None
+    check_again_button = None
     main_screen = None
     progress_label = None
     progress_bar = None
+
+    # State management
+    current_state = None
+
+    def __init__(self):
+        super().__init__()
+        # Initialize business logic components with dependency injection
+        self.network_monitor = NetworkMonitor()
+        self.update_checker = UpdateChecker()
+        self.update_downloader = UpdateDownloader(network_monitor=self.network_monitor)
+        self.current_state = UpdateState.IDLE
+
+    def set_state(self, new_state):
+        """Change app state and update UI accordingly."""
+        print(f"OSUpdate: state change {self.current_state} -> {new_state}")
+        self.current_state = new_state
+        self._update_ui_for_state()
 
     def onCreate(self):
         self.main_screen = lv.obj()
@@ -44,63 +63,150 @@ class OSUpdate(Activity):
         install_label = lv.label(self.install_button)
         install_label.set_text("Update OS")
         install_label.center()
+
+        # Check Again button (hidden initially, shown on errors)
+        self.check_again_button = lv.button(self.main_screen)
+        self.check_again_button.align(lv.ALIGN.BOTTOM_MID, 0, -10)
+        self.check_again_button.set_size(lv.SIZE_CONTENT, lv.pct(15))
+        self.check_again_button.add_event_cb(lambda e: self.check_again_click(), lv.EVENT.CLICKED, None)
+        self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)  # Initially hidden
+        check_again_label = lv.label(self.check_again_button)
+        check_again_label.set_text("Check Again")
+        check_again_label.center()
+
         self.status_label = lv.label(self.main_screen)
         self.status_label.align_to(self.force_update, lv.ALIGN.OUT_BOTTOM_LEFT, 0, mpos.ui.pct_of_display_height(5))
         self.setContentView(self.main_screen)
 
     def onStart(self, screen):
-        network_connected = True
-        try:
-            import network
-            network_connected = network.WLAN(network.STA_IF).isconnected()
-        except Exception as e:
-            print("Warning: could not check WLAN status:", str(e))
-        
-        if not network_connected:
-            self.status_label.set_text("Error: WiFi is not connected.")
+        # Check wifi and either start update check or wait for wifi
+        if not self.network_monitor.is_connected():
+            self.set_state(UpdateState.WAITING_WIFI)
+            # Start wifi monitoring in background
+            _thread.stack_size(mpos.apps.good_stack_size())
+            _thread.start_new_thread(self._wifi_wait_thread, ())
         else:
+            self.set_state(UpdateState.CHECKING_UPDATE)
             print("Showing update info...")
             self.show_update_info()
+
+    def _update_ui_for_state(self):
+        """Update UI elements based on current state."""
+        if self.current_state == UpdateState.WAITING_WIFI:
+            self.status_label.set_text("Waiting for WiFi connection...")
+            self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+        elif self.current_state == UpdateState.CHECKING_UPDATE:
+            self.status_label.set_text("Checking for OS updates...")
+            self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+        elif self.current_state == UpdateState.DOWNLOADING:
+            self.status_label.set_text("Update in progress.\nNavigate away to cancel.")
+            self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+        elif self.current_state == UpdateState.DOWNLOAD_PAUSED:
+            self.status_label.set_text("Download paused - waiting for WiFi...")
+            self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+        elif self.current_state == UpdateState.ERROR:
+            # Show "Check Again" button on errors
+            self.check_again_button.remove_flag(lv.obj.FLAG.HIDDEN)
+
+    def _wifi_wait_thread(self):
+        """Background thread that waits for wifi connection."""
+        print("OSUpdate: waiting for wifi...")
+        check_interval = 5  # Check every 5 seconds
+        max_wait_time = 300  # 5 minutes timeout
+        elapsed = 0
+
+        while elapsed < max_wait_time and self.has_foreground():
+            if self.network_monitor.is_connected():
+                print("OSUpdate: wifi connected, checking for updates")
+                # Switch to checking state and start update check
+                self.update_ui_threadsafe_if_foreground(
+                    self.set_state, UpdateState.CHECKING_UPDATE
+                )
+                self.show_update_info()
+                return
+
+            time.sleep(check_interval)
+            elapsed += check_interval
+
+        # Timeout or user navigated away
+        if self.has_foreground():
+            self.update_ui_threadsafe_if_foreground(
+                self.status_label.set_text,
+                "WiFi connection timeout.\nPlease check your network and restart the app."
+            )
+
+    def _get_user_friendly_error(self, error):
+        """Convert technical errors into user-friendly messages with guidance."""
+        error_str = str(error).lower()
+
+        # HTTP errors
+        if "404" in error_str:
+            return ("Update information not found for your device.\n\n"
+                   "This hardware may not yet be supported.\n"
+                   "Check https://micropythonos.com for updates.")
+        elif "500" in error_str or "502" in error_str or "503" in error_str:
+            return ("Update server is temporarily unavailable.\n\n"
+                   "Please try again in a few minutes.")
+        elif "timeout" in error_str:
+            return ("Connection timeout.\n\n"
+                   "Check your internet connection and try again.")
+        elif "connection refused" in error_str:
+            return ("Cannot connect to update server.\n\n"
+                   "Check your internet connection.")
+
+        # JSON/Data errors
+        elif "invalid json" in error_str or "syntax error" in error_str:
+            return ("Server returned invalid data.\n\n"
+                   "The update server may be experiencing issues.\n"
+                   "Try again later.")
+        elif "missing required fields" in error_str:
+            return ("Update information is incomplete.\n\n"
+                   "The update server may be experiencing issues.\n"
+                   "Try again later.")
+
+        # Storage errors
+        elif "enospc" in error_str or "no space" in error_str:
+            return ("Not enough storage space.\n\n"
+                   "Free up space and try again.")
+
+        # Generic errors
+        else:
+            return f"An error occurred:\n{str(error)}\n\nPlease try again."
 
     def show_update_info(self):
         self.status_label.set_text("Checking for OS updates...")
         hwid = mpos.info.get_hardware_id()
-        if (hwid == "waveshare-esp32-s3-touch-lcd-2"):
-            infofile = "osupdate.json"
-            # Device that was first supported did not have the hardware ID in the URL, so it's special:
-        else:
-            infofile = f"osupdate_{hwid}.json"
-        url = f"https://updates.micropythonos.com/{infofile}"
-        print(f"OSUpdate: fetching {url}")
+
         try:
-            print("doing requests.get()")
-            # Download the JSON
-            response = requests.get(url)
-            # Check if request was successful
-            if response.status_code == 200:
-                # Parse JSON
-                osupdate = ujson.loads(response.text)
-                # Access attributes
-                version = osupdate["version"]
-                download_url = osupdate["download_url"]
-                changelog = osupdate["changelog"]
-                # Print the values
-                print("Version:", version)
-                print("Download URL:", download_url)
-                print("Changelog:", changelog)
-                self.handle_update_info(version, download_url, changelog)
-            else:
-                self.status_label.set_text(f"Error: {response.status_code} while checking\nfile: {infofile}\nat: {url}")
-                print("Failed to download JSON. Status code:", response.status_code)
-            # Close response
-            response.close()
+            # Use UpdateChecker to fetch update info
+            update_info = self.update_checker.fetch_update_info(hwid)
+            self.handle_update_info(
+                update_info["version"],
+                update_info["download_url"],
+                update_info["changelog"]
+            )
+        except ValueError as e:
+            # JSON parsing or validation error
+            self.set_state(UpdateState.ERROR)
+            self.status_label.set_text(self._get_user_friendly_error(e))
+        except RuntimeError as e:
+            # Network or HTTP error
+            self.set_state(UpdateState.ERROR)
+            self.status_label.set_text(self._get_user_friendly_error(e))
         except Exception as e:
-            print("Error:", str(e))
+            # Unexpected error
+            self.set_state(UpdateState.ERROR)
+            self.status_label.set_text(self._get_user_friendly_error(e))
     
     def handle_update_info(self, version, download_url, changelog):
         self.download_update_url = download_url
-        if compare_versions(version, mpos.info.CURRENT_OS_VERSION):
-        #if True: # for testing
+
+        # Use UpdateChecker to determine if update is available
+        is_newer = self.update_checker.is_update_available(
+            version, mpos.info.CURRENT_OS_VERSION
+        )
+
+        if is_newer:
             label = "New"
             self.install_button.remove_state(lv.STATE.DISABLED)
         else:
@@ -117,8 +223,10 @@ class OSUpdate(Activity):
             return
         else:
             print(f"install_button_click for url {self.download_update_url}")
-        self.install_button.add_state(lv.STATE.DISABLED) # button will be enabled if there is an update available
-        self.status_label.set_text("Update in progress.\nNavigate away to cancel.")
+
+        self.install_button.add_state(lv.STATE.DISABLED)
+        self.set_state(UpdateState.DOWNLOADING)
+
         self.progress_label = lv.label(self.main_screen)
         self.progress_label.set_text("OS Update: 0.00%")
         self.progress_label.align(lv.ALIGN.CENTER, 0, 0)
@@ -139,6 +247,13 @@ class OSUpdate(Activity):
         else:
             self.install_button.add_state(lv.STATE.DISABLED)
 
+    def check_again_click(self):
+        """Handle 'Check Again' button click - retry update check."""
+        print("OSUpdate: Check Again button clicked")
+        self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.set_state(UpdateState.CHECKING_UPDATE)
+        self.show_update_info()
+
     def progress_callback(self, percent):
         print(f"OTA Update: {percent:.1f}%")
         self.update_ui_threadsafe_if_foreground(self.progress_bar.set_value, int(percent), True)
@@ -147,84 +262,431 @@ class OSUpdate(Activity):
 
     # Custom OTA update with LVGL progress
     def update_with_lvgl(self, url):
-        simulate = False
+        """Download and install update in background thread.
+
+        Supports automatic pause/resume on wifi loss.
+        """
         try:
-            from esp32 import Partition
-            #current_partition = Partition(Partition.RUNNING)
-            #print(f"Current partition: {current_partition}")
-            #next_partition = current_partition.get_next_update()
-            #print(f"Next partition: {next_partition}")
-            current = Partition(Partition.RUNNING)
-            next_partition = current.get_next_update()
-            #import ota.update
-            #import ota.status
-            #ota.status.status()
-        except Exception as e:
-            print("Warning: could not import esp32.Partition, simulating update...")
-            simulate = True
-        response = requests.get(url, stream=True)
-        total_size = int(response.headers.get('Content-Length', 0))
-        bytes_written = 0
-        chunk_size = 4096
-        i = 0
-        total_size = round_up_to_multiple(total_size, chunk_size)
-        print(f"Starting OTA update of size: {total_size}")
-        while self.has_foreground(): # stop if the user navigates away
-            time.sleep_ms(100) # don't hog the CPU
-            chunk = response.raw.read(chunk_size)
-            if not chunk:
-                print("No chunk, breaking...")
-                break
-            if len(chunk) < chunk_size:
-                print(f"Padding chunk {i} from {len(chunk)} to {chunk_size} bytes")
-                chunk = chunk + b'\xFF' * (chunk_size - len(chunk))
-            print(f"Writing chunk {i} with length {len(chunk)}")
-            if not simulate:
-                next_partition.writeblocks(i, chunk)
-            bytes_written += len(chunk)
-            i += 1
-            if total_size:
-                self.progress_callback(bytes_written / total_size * 100)
-        response.close()
-        try:
-            if bytes_written >= total_size:
-                if not simulate: # if the update was completely installed
-                    next_partition.set_boot()
-                    import machine
-                    machine.reset()
-                    # self.install_button stays disabled to prevent the user from installing the same update twice
+            # Loop to handle pause/resume cycles
+            while self.has_foreground():
+                # Use UpdateDownloader to handle the download
+                result = self.update_downloader.download_and_install(
+                    url,
+                    progress_callback=self.progress_callback,
+                    should_continue_callback=self.has_foreground
+                )
+
+                if result['success']:
+                    # Update succeeded - set boot partition and restart
+                    self.update_ui_threadsafe_if_foreground(
+                        self.status_label.set_text,
+                        "Update finished! Restarting..."
+                    )
+                    # Small delay to show the message
+                    time.sleep_ms(500)
+                    self.update_downloader.set_boot_partition_and_restart()
+                    return
+
+                elif result.get('paused', False):
+                    # Download paused due to wifi loss
+                    bytes_written = result.get('bytes_written', 0)
+                    total_size = result.get('total_size', 0)
+                    percent = (bytes_written / total_size * 100) if total_size > 0 else 0
+
+                    print(f"OSUpdate: Download paused at {percent:.1f}% ({bytes_written}/{total_size} bytes)")
+                    self.update_ui_threadsafe_if_foreground(
+                        self.set_state, UpdateState.DOWNLOAD_PAUSED
+                    )
+
+                    # Wait for wifi to return
+                    check_interval = 5  # Check every 5 seconds
+                    max_wait = 300  # 5 minutes timeout
+                    elapsed = 0
+
+                    while elapsed < max_wait and self.has_foreground():
+                        if self.network_monitor.is_connected():
+                            print("OSUpdate: WiFi reconnected, resuming download")
+                            self.update_ui_threadsafe_if_foreground(
+                                self.set_state, UpdateState.DOWNLOADING
+                            )
+                            break  # Exit wait loop and retry download
+
+                        time.sleep(check_interval)
+                        elapsed += check_interval
+
+                    if elapsed >= max_wait:
+                        # Timeout waiting for wifi
+                        msg = f"WiFi timeout during download.\n{bytes_written}/{total_size} bytes written.\nPress Update to retry."
+                        self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
+                        self.update_ui_threadsafe_if_foreground(
+                            self.install_button.remove_state, lv.STATE.DISABLED
+                        )
+                        return
+
+                    # If we're here, wifi is back - continue to next iteration to resume
+
                 else:
-                    print("This is an OSUpdate simulation, not attempting to restart the device.")
-                self.update_ui_threadsafe_if_foreground(self.status_label.set_text, "Update finished! Please restart.")
-            else:
-                self.update_ui_threadsafe_if_foreground(self.status_label.set_text, f"Wrote {bytes_written} < {total_size} so not enough!")
-                self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED) # allow retry
+                    # Update failed with error (not pause)
+                    error_msg = result.get('error', 'Unknown error')
+                    bytes_written = result.get('bytes_written', 0)
+                    total_size = result.get('total_size', 0)
+
+                    if "cancelled" in error_msg.lower():
+                        msg = ("Update cancelled by user.\n\n"
+                              f"{bytes_written}/{total_size} bytes downloaded.\n"
+                              "Press 'Update OS' to resume.")
+                    else:
+                        # Use friendly error message
+                        friendly_msg = self._get_user_friendly_error(Exception(error_msg))
+                        progress_info = f"\n\nProgress: {bytes_written}/{total_size} bytes"
+                        if bytes_written > 0:
+                            progress_info += "\n\nPress 'Update OS' to resume."
+                        msg = friendly_msg + progress_info
+
+                    self.update_ui_threadsafe_if_foreground(
+                        self.set_state, UpdateState.ERROR
+                    )
+                    self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
+                    self.update_ui_threadsafe_if_foreground(
+                        self.install_button.remove_state, lv.STATE.DISABLED
+                    )  # allow retry
+                    return
+
         except Exception as e:
-            self.update_ui_threadsafe_if_foreground(self.status_label.set_text, f"Update error: {e}")
-            self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED) # allow retry
+            msg = self._get_user_friendly_error(e) + "\n\nPress 'Update OS' to retry."
+            self.update_ui_threadsafe_if_foreground(
+                self.set_state, UpdateState.ERROR
+            )
+            self.update_ui_threadsafe_if_foreground(
+                self.status_label.set_text, msg
+            )
+            self.update_ui_threadsafe_if_foreground(
+                self.install_button.remove_state, lv.STATE.DISABLED
+            )  # allow retry
+
+# Business Logic Classes:
+
+class UpdateState:
+    """State machine states for OSUpdate app."""
+    IDLE = "idle"
+    WAITING_WIFI = "waiting_wifi"
+    CHECKING_UPDATE = "checking_update"
+    UPDATE_AVAILABLE = "update_available"
+    NO_UPDATE = "no_update"
+    DOWNLOADING = "downloading"
+    DOWNLOAD_PAUSED = "download_paused"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+class NetworkMonitor:
+    """Monitors network connectivity status."""
+
+    def __init__(self, network_module=None):
+        """Initialize with optional dependency injection for testing.
+
+        Args:
+            network_module: Network module (defaults to network if available)
+        """
+        self.network_module = network_module
+        if self.network_module is None:
+            try:
+                import network
+                self.network_module = network
+            except ImportError:
+                # Desktop/simulation mode - no network module
+                self.network_module = None
+
+    def is_connected(self):
+        """Check if WiFi is currently connected.
+
+        Returns:
+            bool: True if connected, False otherwise
+        """
+        if self.network_module is None:
+            # No network module available (desktop mode)
+            # Assume connected for testing purposes
+            return True
+
+        try:
+            wlan = self.network_module.WLAN(self.network_module.STA_IF)
+            return wlan.isconnected()
+        except Exception as e:
+            print(f"NetworkMonitor: Error checking connection: {e}")
+            return False
+
+
+class UpdateDownloader:
+    """Handles downloading and installing OS updates."""
+
+    def __init__(self, requests_module=None, partition_module=None, network_monitor=None):
+        """Initialize with optional dependency injection for testing.
+
+        Args:
+            requests_module: HTTP requests module (defaults to requests)
+            partition_module: ESP32 Partition module (defaults to esp32.Partition if available)
+            network_monitor: NetworkMonitor instance for checking wifi during download
+        """
+        self.requests = requests_module if requests_module else requests
+        self.partition_module = partition_module
+        self.network_monitor = network_monitor
+        self.simulate = False
+
+        # Download state for pause/resume
+        self.is_paused = False
+        self.bytes_written_so_far = 0
+        self.total_size_expected = 0
+
+        # Try to import Partition if not provided
+        if self.partition_module is None:
+            try:
+                from esp32 import Partition
+                self.partition_module = Partition
+            except ImportError:
+                print("UpdateDownloader: Partition module not available, will simulate")
+                self.simulate = True
+
+    def download_and_install(self, url, progress_callback=None, should_continue_callback=None):
+        """Download firmware and install to OTA partition.
+
+        Supports pause/resume on wifi loss using HTTP Range headers.
+
+        Args:
+            url: URL to download firmware from
+            progress_callback: Optional callback function(percent: float)
+            should_continue_callback: Optional callback function() -> bool
+                Returns False to cancel download
+
+        Returns:
+            dict: Result with keys:
+                - 'success': bool
+                - 'bytes_written': int
+                - 'total_size': int
+                - 'error': str (if success=False)
+                - 'paused': bool (if paused due to wifi loss)
+
+        Raises:
+            Exception: If download or installation fails
+        """
+        result = {
+            'success': False,
+            'bytes_written': 0,
+            'total_size': 0,
+            'error': None,
+            'paused': False
+        }
+
+        try:
+            # Get OTA partition
+            next_partition = None
+            if not self.simulate:
+                current = self.partition_module(self.partition_module.RUNNING)
+                next_partition = current.get_next_update()
+                print(f"UpdateDownloader: Writing to partition: {next_partition}")
+
+            # Start download (or resume if we have bytes_written_so_far)
+            headers = {}
+            if self.bytes_written_so_far > 0:
+                headers['Range'] = f'bytes={self.bytes_written_so_far}-'
+                print(f"UpdateDownloader: Resuming from byte {self.bytes_written_so_far}")
+
+            response = self.requests.get(url, stream=True, headers=headers)
+
+            # For initial download, get total size
+            if self.bytes_written_so_far == 0:
+                total_size = int(response.headers.get('Content-Length', 0))
+                result['total_size'] = round_up_to_multiple(total_size, 4096)
+                self.total_size_expected = result['total_size']
+            else:
+                # For resume, use the stored total size
+                # (Content-Length will be the remaining bytes, not total)
+                result['total_size'] = self.total_size_expected
+
+            print(f"UpdateDownloader: Download target {result['total_size']} bytes")
+
+            chunk_size = 4096
+            bytes_written = self.bytes_written_so_far
+            block_index = bytes_written // chunk_size
+
+            while True:
+                # Check if we should continue (user cancelled)
+                if should_continue_callback and not should_continue_callback():
+                    result['error'] = "Download cancelled by user"
+                    response.close()
+                    return result
+
+                # Check wifi connection (if monitoring enabled)
+                if self.network_monitor and not self.network_monitor.is_connected():
+                    print("UpdateDownloader: WiFi lost, pausing download")
+                    self.is_paused = True
+                    self.bytes_written_so_far = bytes_written
+                    result['paused'] = True
+                    result['bytes_written'] = bytes_written
+                    response.close()
+                    return result
+
+                # Read next chunk
+                chunk = response.raw.read(chunk_size)
+                if not chunk:
+                    break
+
+                # Pad last chunk if needed
+                if len(chunk) < chunk_size:
+                    print(f"UpdateDownloader: Padding chunk {block_index} from {len(chunk)} to {chunk_size} bytes")
+                    chunk = chunk + b'\xFF' * (chunk_size - len(chunk))
+
+                # Write to partition
+                if not self.simulate:
+                    next_partition.writeblocks(block_index, chunk)
+
+                bytes_written += len(chunk)
+                self.bytes_written_so_far = bytes_written
+                block_index += 1
+
+                # Update progress
+                if progress_callback and result['total_size'] > 0:
+                    percent = (bytes_written / result['total_size']) * 100
+                    progress_callback(percent)
+
+                # Small delay to avoid hogging CPU
+                time.sleep_ms(100)
+
+            response.close()
+            result['bytes_written'] = bytes_written
+
+            # Check if complete
+            if bytes_written >= result['total_size']:
+                result['success'] = True
+                self.is_paused = False
+                self.bytes_written_so_far = 0  # Reset for next download
+                self.total_size_expected = 0
+                print(f"UpdateDownloader: Download complete ({bytes_written} bytes)")
+            else:
+                result['error'] = f"Incomplete download: {bytes_written} < {result['total_size']}"
+                print(f"UpdateDownloader: {result['error']}")
+
+        except Exception as e:
+            result['error'] = str(e)
+            print(f"UpdateDownloader: Error during download: {e}")
+
+        return result
+
+    def set_boot_partition_and_restart(self):
+        """Set the updated partition as boot partition and restart device.
+
+        Only works on ESP32 hardware. On desktop, just prints a message.
+        """
+        if self.simulate:
+            print("UpdateDownloader: Simulating restart (desktop mode)")
+            return
+
+        try:
+            current = self.partition_module(self.partition_module.RUNNING)
+            next_partition = current.get_next_update()
+            next_partition.set_boot()
+            print("UpdateDownloader: Boot partition set, restarting...")
+
+            import machine
+            machine.reset()
+        except Exception as e:
+            print(f"UpdateDownloader: Error setting boot partition: {e}")
+            raise
+
+
+class UpdateChecker:
+    """Handles checking for OS updates from remote server."""
+
+    def __init__(self, requests_module=None, json_module=None):
+        """Initialize with optional dependency injection for testing.
+
+        Args:
+            requests_module: HTTP requests module (defaults to requests)
+            json_module: JSON parsing module (defaults to ujson)
+        """
+        self.requests = requests_module if requests_module else requests
+        self.json = json_module if json_module else ujson
+
+    def get_update_url(self, hardware_id):
+        """Determine the update JSON URL based on hardware ID.
+
+        Args:
+            hardware_id: Hardware identifier string
+
+        Returns:
+            str: Full URL to update JSON file
+        """
+        if hardware_id == "waveshare-esp32-s3-touch-lcd-2":
+            # First supported device - no hardware ID in URL
+            infofile = "osupdate.json"
+        else:
+            infofile = f"osupdate_{hardware_id}.json"
+        return f"https://updates.micropythonos.com/{infofile}"
+
+    def fetch_update_info(self, hardware_id):
+        """Fetch and parse update information from server.
+
+        Args:
+            hardware_id: Hardware identifier string
+
+        Returns:
+            dict: Update info with keys 'version', 'download_url', 'changelog'
+                  or None if error occurred
+
+        Raises:
+            ValueError: If JSON is malformed or missing required fields
+            ConnectionError: If network request fails
+        """
+        url = self.get_update_url(hardware_id)
+        print(f"OSUpdate: fetching {url}")
+
+        try:
+            response = self.requests.get(url)
+
+            if response.status_code != 200:
+                # Use RuntimeError instead of ConnectionError (not available in MicroPython)
+                raise RuntimeError(
+                    f"HTTP {response.status_code} while checking {url}"
+                )
+
+            # Parse JSON
+            try:
+                update_data = self.json.loads(response.text)
+            except Exception as e:
+                raise ValueError(f"Invalid JSON in update file: {e}")
+            finally:
+                response.close()
+
+            # Validate required fields
+            required_fields = ['version', 'download_url', 'changelog']
+            missing_fields = [f for f in required_fields if f not in update_data]
+            if missing_fields:
+                raise ValueError(
+                    f"Update file missing required fields: {', '.join(missing_fields)}"
+                )
+
+            print("Version:", update_data["version"])
+            print("Download URL:", update_data["download_url"])
+            print("Changelog:", update_data["changelog"])
+
+            return update_data
+
+        except Exception as e:
+            print(f"Error fetching update info: {e}")
+            raise
+
+    def is_update_available(self, remote_version, current_version):
+        """Check if remote version is newer than current version.
+
+        Args:
+            remote_version: Version string from update server
+            current_version: Currently installed version string
+
+        Returns:
+            bool: True if remote version is newer
+        """
+        return PackageManager.compare_versions(remote_version, current_version)
+
 
 # Non-class functions:
 
 def round_up_to_multiple(n, multiple):
     return ((n + multiple - 1) // multiple) * multiple
-
-def compare_versions(ver1: str, ver2: str) -> bool:
-    """Compare two version numbers (e.g., '1.2.3' vs '4.5.6').
-    Returns True if ver1 is greater than ver2, False otherwise."""
-    print(f"Comparing versions: {ver1} vs {ver2}")
-    v1_parts = [int(x) for x in ver1.split('.')]
-    v2_parts = [int(x) for x in ver2.split('.')]
-    print(f"Version 1 parts: {v1_parts}")
-    print(f"Version 2 parts: {v2_parts}")
-    for i in range(max(len(v1_parts), len(v2_parts))):
-        v1 = v1_parts[i] if i < len(v1_parts) else 0
-        v2 = v2_parts[i] if i < len(v2_parts) else 0
-        print(f"Comparing part {i}: {v1} vs {v2}")
-        if v1 > v2:
-            print(f"{ver1} is greater than {ver2}")
-            return True
-        if v1 < v2:
-            print(f"{ver1} is less than {ver2}")
-            return False
-    print(f"Versions are equal or {ver1} is not greater than {ver2}")
-    return False

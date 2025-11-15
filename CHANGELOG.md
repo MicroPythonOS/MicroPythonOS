@@ -1,3 +1,18 @@
+0.3.4 (unreleased)
+==================
+OSUpdate app: Major rework with improved reliability and user experience
+- OSUpdate app: add WiFi monitoring - shows "Waiting for WiFi..." instead of error when no connection
+- OSUpdate app: add automatic pause/resume on WiFi loss during downloads using HTTP Range headers
+- OSUpdate app: add user-friendly error messages with specific guidance for each error type
+- OSUpdate app: add "Check Again" button for easy retry after errors
+- OSUpdate app: add state machine for better app state management
+- OSUpdate app: add comprehensive test coverage (42 tests: 31 unit tests + 11 graphical tests)
+- OSUpdate app: refactor code into testable components (NetworkMonitor, UpdateChecker, UpdateDownloader)
+- OSUpdate app: improve download error recovery with progress preservation
+- OSUpdate app: improve timeout handling (5-minute wait for WiFi with clear messaging)
+- Tests: add test infrastructure with mock classes for network, HTTP, and partition operations
+- Tests: add graphical test helper utilities for UI verification and screenshot capture
+
 0.3.3
 =====
 - Camera app: fix one-in-two "camera image stays blank" issue
