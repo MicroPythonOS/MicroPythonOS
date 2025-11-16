@@ -175,7 +175,7 @@ Tests are in the `tests/` directory. There are two types: unit tests and manual 
 ./tests/unittest.sh tests/test_shared_preferences.py
 ./tests/unittest.sh tests/test_intent.py
 ./tests/unittest.sh tests/test_package_manager.py
-./tests/unittest.sh tests/test_start_app.py
+./tests/unittest.sh tests/test_graphical_start_app.py
 
 # Run a specific test on connected device (via mpremote)
 ./tests/unittest.sh tests/test_shared_preferences.py --ondevice
@@ -196,7 +196,7 @@ The `unittest.sh` script:
 - `test_shared_preferences.py`: Tests for `mpos.config.SharedPreferences` (configuration storage)
 - `test_intent.py`: Tests for `mpos.content.intent.Intent` (intent creation, extras, flags)
 - `test_package_manager.py`: Tests for `PackageManager` (version comparison, app discovery)
-- `test_start_app.py`: Tests for app launching (requires SDL display initialization)
+- `test_graphical_start_app.py`: Tests for app launching (graphical test with proper boot/main initialization)
 - `test_graphical_about_app.py`: Graphical test that verifies About app UI and captures screenshots
 
 **Graphical tests** (UI verification with screenshots):

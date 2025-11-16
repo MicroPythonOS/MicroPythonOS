@@ -10,12 +10,16 @@ fs="$mydir"/../internal_filesystem/
 ondevice=""
 onetest=""
 
-for arg in "$@"; do
-    if [ "$arg" = "--ondevice" ]; then
-        ondevice="yes"
-    else
-        onetest="$arg"
-    fi
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --ondevice)
+            ondevice="yes"
+            ;;
+        *)
+            onetest="$1"
+            ;;
+    esac
+    shift
 done
 
 
@@ -68,7 +72,7 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		fi
 		result=$?
 	else
-		# Device execution
+		echo "Device execution"
 		# NOTE: On device, the OS is already running with boot.py and main.py executed,
 		# so we don't need to (and shouldn't) re-run them. The system is already initialized.
 		cleanname=$(echo "$file" | sed "s#/#_#g")
@@ -103,6 +107,7 @@ else:
 }
 
 failed=0
+ran=0
 
 if [ -z "$onetest" ]; then
 	echo "Usage: $0 [one_test_to_run.py] [--ondevice]"
@@ -120,19 +125,22 @@ if [ -z "$onetest" ]; then
 			echo "\n\n\nWARNING: test $file got error $result !!!\n\n\n"
 			failed=$(expr $failed \+ 1)
 			exit 1
+		else
+			ran=$(expr $ran \+ 1)
 		fi
 	done < <( find "$testdir" -iname "test_*.py" )
 else
+	echo "doing $onetest"
 	one_test $(readlink -f "$onetest")
 	[ $? -ne 0 ] && failed=1
 fi
 
 
 if [ $failed -ne 0 ]; then
-        echo "ERROR: $failed .py files have failing unit tests"
+        echo "ERROR: $failed of the $ran tests failed"
         exit 1
 else
-	echo "GOOD: no .py files have failing unit tests"
+	echo "GOOD: none of the $ran tests failed"
 	exit 0
 fi
 
