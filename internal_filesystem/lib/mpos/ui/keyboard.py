@@ -40,7 +40,8 @@ class MposKeyboard:
     LABEL_LETTERS = "abc"
     LABEL_SPACE = "     "
 
-    # Keyboard modes (using LVGL's USER modes)
+    # Keyboard modes - use USER modes for our API
+    # We'll also register to standard modes to catch LVGL's internal switches
     MODE_LOWERCASE = lv.keyboard.MODE.USER_1
     MODE_UPPERCASE = lv.keyboard.MODE.USER_2
     MODE_NUMBERS = lv.keyboard.MODE.USER_3
@@ -62,17 +63,29 @@ class MposKeyboard:
         # Configure layouts
         self._setup_layouts()
 
-        # Initialize ALL keyboard mode maps (prevents LVGL from using default maps)
+        # Initialize ALL keyboard mode maps
+        # Register to BOTH our USER modes AND standard LVGL modes
+        # This prevents LVGL from using default maps when it internally switches modes
+
+        # Our USER modes (what we use in our API)
         self._keyboard.set_map(self.MODE_LOWERCASE, self._lowercase_map, self._lowercase_ctrl)
         self._keyboard.set_map(self.MODE_UPPERCASE, self._uppercase_map, self._uppercase_ctrl)
         self._keyboard.set_map(self.MODE_NUMBERS, self._numbers_map, self._numbers_ctrl)
         self._keyboard.set_map(self.MODE_SPECIALS, self._specials_map, self._specials_ctrl)
 
+        # ALSO register to standard LVGL modes (what LVGL uses internally)
+        # This catches cases where LVGL internally calls set_mode(TEXT_LOWER)
+        self._keyboard.set_map(lv.keyboard.MODE.TEXT_LOWER, self._lowercase_map, self._lowercase_ctrl)
+        self._keyboard.set_map(lv.keyboard.MODE.TEXT_UPPER, self._uppercase_map, self._uppercase_ctrl)
+        self._keyboard.set_map(lv.keyboard.MODE.NUMBER, self._numbers_map, self._numbers_ctrl)
+        self._keyboard.set_map(lv.keyboard.MODE.SPECIAL, self._specials_map, self._specials_ctrl)
+
         # Set default mode to lowercase
         self._keyboard.set_mode(self.MODE_LOWERCASE)
 
         # Add event handler for custom behavior
-        self._keyboard.add_event_cb(self._handle_events, lv.EVENT.VALUE_CHANGED, None)
+        # We need to handle ALL events to catch mode changes that LVGL might trigger
+        self._keyboard.add_event_cb(self._handle_events, lv.EVENT.ALL, None)
 
         # Apply theme fix for light mode visibility
         mpos.ui.theme.fix_keyboard_button_style(self._keyboard)
@@ -126,10 +139,27 @@ class MposKeyboard:
         Args:
             event: LVGL event object
         """
-        # Only process VALUE_CHANGED events
         event_code = event.get_code()
+
+        # Intercept READY event to prevent LVGL from changing modes
+        if event_code == lv.EVENT.READY:
+            # Stop LVGL from processing READY (which might trigger mode changes)
+            event.stop_processing()
+            # Forward READY event to external handlers if needed
+            return
+
+        # Intercept CANCEL event similarly
+        if event_code == lv.EVENT.CANCEL:
+            event.stop_processing()
+            return
+
+        # Only process VALUE_CHANGED events for actual typing
         if event_code != lv.EVENT.VALUE_CHANGED:
             return
+
+        # Stop event propagation FIRST, before doing anything else
+        # This prevents LVGL's default handler from interfering
+        event.stop_processing()
 
         # Get the pressed button and its text
         button = self._keyboard.get_selected_button()
@@ -138,11 +168,6 @@ class MposKeyboard:
         # Ignore if no valid button text (can happen during initialization)
         if text is None:
             return
-
-        # Stop event propagation to prevent LVGL's default mode-switching behavior
-        # This is critical to prevent LVGL from switching to its default TEXT_LOWER,
-        # TEXT_UPPER, NUMBER modes when it sees mode-switching buttons
-        event.stop_processing()
 
         # Get current textarea content (from our own reference, not LVGL's)
         ta = self._textarea
@@ -231,17 +256,26 @@ class MposKeyboard:
 
         Args:
             mode: One of MODE_LOWERCASE, MODE_UPPERCASE, MODE_NUMBERS, MODE_SPECIALS
+                  (can also accept standard LVGL modes)
         """
         # Map mode constants to their corresponding map arrays
+        # Support both our USER modes and standard LVGL modes
         mode_maps = {
             self.MODE_LOWERCASE: (self._lowercase_map, self._lowercase_ctrl),
             self.MODE_UPPERCASE: (self._uppercase_map, self._uppercase_ctrl),
             self.MODE_NUMBERS: (self._numbers_map, self._numbers_ctrl),
             self.MODE_SPECIALS: (self._specials_map, self._specials_ctrl),
+            # Also map standard LVGL modes
+            lv.keyboard.MODE.TEXT_LOWER: (self._lowercase_map, self._lowercase_ctrl),
+            lv.keyboard.MODE.TEXT_UPPER: (self._uppercase_map, self._uppercase_ctrl),
+            lv.keyboard.MODE.NUMBER: (self._numbers_map, self._numbers_ctrl),
+            lv.keyboard.MODE.SPECIAL: (self._specials_map, self._specials_ctrl),
         }
 
         if mode in mode_maps:
             key_map, ctrl_map = mode_maps[mode]
+            # CRITICAL: Always call set_map() BEFORE set_mode()
+            # This prevents lv_keyboard_update_map() crashes
             self._keyboard.set_map(mode, key_map, ctrl_map)
 
         self._keyboard.set_mode(mode)
