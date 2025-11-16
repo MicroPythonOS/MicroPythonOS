@@ -60,6 +60,7 @@ class MposKeyboard:
         self._setup_layouts()
 
         # Set default mode to lowercase
+        self._keyboard.set_map(self.MODE_LOWERCASE, self._lowercase_map, self._lowercase_ctrl)
         self._keyboard.set_mode(self.MODE_LOWERCASE)
 
         # Add event handler for custom behavior
@@ -75,44 +76,40 @@ class MposKeyboard:
         """Configure all keyboard layout modes."""
 
         # Lowercase letters
-        lowercase_map = [
+        self._lowercase_map = [
             "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
             "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
             lv.SYMBOL.UP, "z", "x", "c", "v", "b", "n", "m", lv.SYMBOL.BACKSPACE, "\n",
             self.LABEL_NUMBERS_SPECIALS, ",", self.LABEL_SPACE, ".", lv.SYMBOL.NEW_LINE, None
         ]
-        lowercase_ctrl = [10] * len(lowercase_map)
-        self._keyboard.set_map(self.MODE_LOWERCASE, lowercase_map, lowercase_ctrl)
+        self._lowercase_ctrl = [10] * len(self._lowercase_map)
 
         # Uppercase letters
-        uppercase_map = [
+        self._uppercase_map = [
             "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
             "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
             lv.SYMBOL.DOWN, "Z", "X", "C", "V", "B", "N", "M", lv.SYMBOL.BACKSPACE, "\n",
             self.LABEL_NUMBERS_SPECIALS, ",", self.LABEL_SPACE, ".", lv.SYMBOL.NEW_LINE, None
         ]
-        uppercase_ctrl = [10] * len(uppercase_map)
-        self._keyboard.set_map(self.MODE_UPPERCASE, uppercase_map, uppercase_ctrl)
+        self._uppercase_ctrl = [10] * len(self._uppercase_map)
 
         # Numbers and common special characters
-        numbers_map = [
+        self._numbers_map = [
             "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
             "@", "#", "$", "_", "&", "-", "+", "(", ")", "/", "\n",
             self.LABEL_SPECIALS, "*", "\"", "'", ":", ";", "!", "?", lv.SYMBOL.BACKSPACE, "\n",
             self.LABEL_LETTERS, ",", self.LABEL_SPACE, ".", lv.SYMBOL.NEW_LINE, None
         ]
-        numbers_ctrl = [10] * len(numbers_map)
-        self._keyboard.set_map(self.MODE_NUMBERS, numbers_map, numbers_ctrl)
+        self._numbers_ctrl = [10] * len(self._numbers_map)
 
         # Additional special characters with emoticons
-        specials_map = [
+        self._specials_map = [
             "~", "`", "|", "•", ":-)", ";-)", ":-D", "\n",
             ":-(" , ":'-(", "^", "°", "=", "{", "}", "\\", "\n",
             self.LABEL_NUMBERS_SPECIALS, ":-o", ":-P", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
             self.LABEL_LETTERS, "<", self.LABEL_SPACE, ">", lv.SYMBOL.NEW_LINE, None
         ]
-        specials_ctrl = [10] * len(specials_map)
-        self._keyboard.set_map(self.MODE_SPECIALS, specials_map, specials_ctrl)
+        self._specials_ctrl = [10] * len(self._specials_map)
 
     def _handle_events(self, event):
         """
@@ -140,21 +137,25 @@ class MposKeyboard:
 
         elif text == lv.SYMBOL.UP:
             # Switch to uppercase
+            self._keyboard.set_map(self.MODE_UPPERCASE, self._uppercase_map, self._uppercase_ctrl)
             self._keyboard.set_mode(self.MODE_UPPERCASE)
             return  # Don't modify text
 
         elif text == lv.SYMBOL.DOWN or text == self.LABEL_LETTERS:
             # Switch to lowercase
+            self._keyboard.set_map(self.MODE_LOWERCASE, self._lowercase_map, self._lowercase_ctrl)
             self._keyboard.set_mode(self.MODE_LOWERCASE)
             return  # Don't modify text
 
         elif text == self.LABEL_NUMBERS_SPECIALS:
             # Switch to numbers/specials
+            self._keyboard.set_map(self.MODE_NUMBERS, self._numbers_map, self._numbers_ctrl)
             self._keyboard.set_mode(self.MODE_NUMBERS)
             return  # Don't modify text
 
         elif text == self.LABEL_SPECIALS:
             # Switch to additional specials
+            self._keyboard.set_map(self.MODE_SPECIALS, self._specials_map, self._specials_ctrl)
             self._keyboard.set_mode(self.MODE_SPECIALS)
             return  # Don't modify text
 
@@ -177,6 +178,30 @@ class MposKeyboard:
 
         # Update textarea
         ta.set_text(new_text)
+
+    def set_mode(self, mode):
+        """
+        Set keyboard mode with proper map configuration.
+
+        This method ensures set_map() is called before set_mode() to prevent
+        LVGL crashes when switching between custom keyboard modes.
+
+        Args:
+            mode: One of MODE_LOWERCASE, MODE_UPPERCASE, MODE_NUMBERS, MODE_SPECIALS
+        """
+        # Map mode constants to their corresponding map arrays
+        mode_maps = {
+            self.MODE_LOWERCASE: (self._lowercase_map, self._lowercase_ctrl),
+            self.MODE_UPPERCASE: (self._uppercase_map, self._uppercase_ctrl),
+            self.MODE_NUMBERS: (self._numbers_map, self._numbers_ctrl),
+            self.MODE_SPECIALS: (self._specials_map, self._specials_ctrl),
+        }
+
+        if mode in mode_maps:
+            key_map, ctrl_map = mode_maps[mode]
+            self._keyboard.set_map(mode, key_map, ctrl_map)
+
+        self._keyboard.set_mode(mode)
 
     # ========================================================================
     # Python magic method for automatic method forwarding
