@@ -62,8 +62,13 @@ class MposKeyboard:
         # Configure layouts
         self._setup_layouts()
 
-        # Set default mode to lowercase
+        # Initialize ALL keyboard mode maps (prevents LVGL from using default maps)
         self._keyboard.set_map(self.MODE_LOWERCASE, self._lowercase_map, self._lowercase_ctrl)
+        self._keyboard.set_map(self.MODE_UPPERCASE, self._uppercase_map, self._uppercase_ctrl)
+        self._keyboard.set_map(self.MODE_NUMBERS, self._numbers_map, self._numbers_ctrl)
+        self._keyboard.set_map(self.MODE_SPECIALS, self._specials_map, self._specials_ctrl)
+
+        # Set default mode to lowercase
         self._keyboard.set_mode(self.MODE_LOWERCASE)
 
         # Add event handler for custom behavior
@@ -134,6 +139,11 @@ class MposKeyboard:
         if text is None:
             return
 
+        # Stop event propagation to prevent LVGL's default mode-switching behavior
+        # This is critical to prevent LVGL from switching to its default TEXT_LOWER,
+        # TEXT_UPPER, NUMBER modes when it sees mode-switching buttons
+        event.stop_processing()
+
         # Get current textarea content (from our own reference, not LVGL's)
         ta = self._textarea
         if not ta:
@@ -149,26 +159,22 @@ class MposKeyboard:
 
         elif text == lv.SYMBOL.UP:
             # Switch to uppercase
-            self._keyboard.set_map(self.MODE_UPPERCASE, self._uppercase_map, self._uppercase_ctrl)
-            self._keyboard.set_mode(self.MODE_UPPERCASE)
+            self.set_mode(self.MODE_UPPERCASE)
             return  # Don't modify text
 
         elif text == lv.SYMBOL.DOWN or text == self.LABEL_LETTERS:
             # Switch to lowercase
-            self._keyboard.set_map(self.MODE_LOWERCASE, self._lowercase_map, self._lowercase_ctrl)
-            self._keyboard.set_mode(self.MODE_LOWERCASE)
+            self.set_mode(self.MODE_LOWERCASE)
             return  # Don't modify text
 
         elif text == self.LABEL_NUMBERS_SPECIALS:
             # Switch to numbers/specials
-            self._keyboard.set_map(self.MODE_NUMBERS, self._numbers_map, self._numbers_ctrl)
-            self._keyboard.set_mode(self.MODE_NUMBERS)
+            self.set_mode(self.MODE_NUMBERS)
             return  # Don't modify text
 
         elif text == self.LABEL_SPECIALS:
             # Switch to additional specials
-            self._keyboard.set_map(self.MODE_SPECIALS, self._specials_map, self._specials_ctrl)
-            self._keyboard.set_mode(self.MODE_SPECIALS)
+            self.set_mode(self.MODE_SPECIALS)
             return  # Don't modify text
 
         elif text == self.LABEL_SPACE:
