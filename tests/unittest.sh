@@ -23,12 +23,6 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-if [ ! -z "$ondevice" ]; then
-	echo "Hack: reset the device to make sure no previous UnitTest classes have been registered..."
-	"$mpremote" reset
-	sleep 15
-fi
-
 # print os and set binary
 os_name=$(uname -s)
 if [ "$os_name" = "Darwin" ]; then
@@ -78,6 +72,12 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		fi
 		result=$?
 	else
+		if [ ! -z "$ondevice" ]; then
+			echo "Hack: reset the device to make sure no previous UnitTest classes have been registered..."
+			"$mpremote" reset
+			sleep 15
+		fi
+
 		echo "Device execution"
 		# NOTE: On device, the OS is already running with boot.py and main.py executed,
 		# so we don't need to (and shouldn't) re-run them. The system is already initialized.
