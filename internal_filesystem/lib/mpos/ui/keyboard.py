@@ -56,6 +56,9 @@ class MposKeyboard:
         # Create underlying LVGL keyboard widget
         self._keyboard = lv.keyboard(parent)
 
+        # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
+        self._textarea = None
+
         # Configure layouts
         self._setup_layouts()
 
@@ -118,12 +121,21 @@ class MposKeyboard:
         Args:
             event: LVGL event object
         """
+        # Only process VALUE_CHANGED events
+        event_code = event.get_code()
+        if event_code != lv.EVENT.VALUE_CHANGED:
+            return
+
         # Get the pressed button and its text
         button = self._keyboard.get_selected_button()
         text = self._keyboard.get_button_text(button)
 
-        # Get current textarea content
-        ta = self._keyboard.get_textarea()
+        # Ignore if no valid button text (can happen during initialization)
+        if text is None:
+            return
+
+        # Get current textarea content (from our own reference, not LVGL's)
+        ta = self._textarea
         if not ta:
             return
 
@@ -178,6 +190,31 @@ class MposKeyboard:
 
         # Update textarea
         ta.set_text(new_text)
+
+    def set_textarea(self, textarea):
+        """
+        Set the textarea that this keyboard types into.
+
+        IMPORTANT: We store the textarea reference ourselves and DON'T pass
+        it to the underlying LVGL keyboard. This prevents LVGL's built-in
+        automatic character insertion, which would cause double-character bugs
+        (LVGL inserts + our handler inserts = double characters).
+
+        Args:
+            textarea: The lv.textarea widget to type into, or None to disconnect
+        """
+        self._textarea = textarea
+        # NOTE: We deliberately DO NOT call self._keyboard.set_textarea()
+        # to avoid LVGL's automatic character insertion
+
+    def get_textarea(self):
+        """
+        Get the textarea that this keyboard types into.
+
+        Returns:
+            The lv.textarea widget, or None if not connected
+        """
+        return self._textarea
 
     def set_mode(self, mode):
         """
