@@ -185,5 +185,3 @@ class TestKeyboardAnimation(unittest.TestCase):
         print("=== Position methods test PASSED ===")
 
 
-if __name__ == "__main__":
-    unittest.main()

@@ -476,5 +476,3 @@ class TestSharedPreferences(unittest.TestCase):
         self.assertEqual(loaded["settings"]["limits"][2], 30)
 
 
-if __name__ == '__main__':
-    unittest.main()

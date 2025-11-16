@@ -5,6 +5,7 @@ mydir=$(dirname "$mydir")
 testdir="$mydir"
 scriptdir=$(readlink -f "$mydir"/../scripts/)
 fs="$mydir"/../internal_filesystem/
+mpremote="$mydir"/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py
 
 # Parse arguments
 ondevice=""
@@ -22,6 +23,11 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ ! -z "$ondevice" ]; then
+	echo "Hack: reset the device to make sure no previous UnitTest classes have been registered..."
+	"$mpremote" reset
+	sleep 15
+fi
 
 # print os and set binary
 os_name=$(uname -s)
@@ -80,7 +86,7 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		echo "$test logging to $testlog"
 		if [ $is_graphical -eq 1 ]; then
 			# Graphical test: system already initialized, just add test paths
-			mpremote.py exec "import sys ; sys.path.append('lib') ; sys.path.append('tests')
+			"$mpremote" exec "import sys ; sys.path.append('lib') ; sys.path.append('tests')
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
@@ -90,7 +96,7 @@ else:
 " | tee "$testlog"
 		else
 			# Regular test: no boot files
-			mpremote.py exec "import sys ; sys.path.append('lib')
+			"$mpremote" exec "import sys ; sys.path.append('lib')
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
@@ -99,7 +105,7 @@ else:
     print('TEST WAS A FAILURE')
 " | tee "$testlog"
 		fi
-		grep "TEST WAS A SUCCESS" "$testlog"
+		grep -q "TEST WAS A SUCCESS" "$testlog"
 		result=$?
 	fi
 	popd

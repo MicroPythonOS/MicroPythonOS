@@ -188,5 +188,3 @@ class TestMposKeyboard(unittest.TestCase):
         print("API compatibility verified")
 
 
-if __name__ == "__main__":
-    unittest.main()

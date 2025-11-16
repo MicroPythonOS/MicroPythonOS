@@ -141,5 +141,3 @@ class TestMethodForwarding(unittest.TestCase):
         print("Method forwarding preserves behavior correctly!")
 
 
-if __name__ == "__main__":
-    unittest.main()

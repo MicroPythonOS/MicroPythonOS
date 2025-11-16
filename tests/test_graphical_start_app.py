@@ -67,5 +67,3 @@ class TestStartApp(unittest.TestCase):
         print("Launcher restart successful")
 
 
-if __name__ == "__main__":
-    unittest.main()

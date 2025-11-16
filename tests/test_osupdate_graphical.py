@@ -325,5 +325,3 @@ class TestOSUpdateGraphicalScreenshots(unittest.TestCase):
         capture_screenshot(screenshot_path)
 
 
-if __name__ == '__main__':
-    unittest.main()

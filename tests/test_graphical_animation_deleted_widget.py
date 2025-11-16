@@ -214,5 +214,3 @@ class TestAnimationDeletedWidget(unittest.TestCase):
         print("=== Multiple animations test PASSED ===")
 
 
-if __name__ == "__main__":
-    unittest.main()

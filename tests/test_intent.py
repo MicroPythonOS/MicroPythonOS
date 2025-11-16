@@ -302,5 +302,3 @@ class TestIntent(unittest.TestCase):
         self.assertTrue(intent.extras["data"]["config"]["retry"])
 
 
-if __name__ == '__main__':
-    unittest.main()

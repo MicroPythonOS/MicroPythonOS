@@ -564,5 +564,3 @@ class TestUpdateDownloader(unittest.TestCase):
         self.assertEqual(result['bytes_written'], 8192)
 
 
-if __name__ == '__main__':
-    unittest.main()

@@ -171,7 +171,3 @@ class TestGraphicalAboutApp(unittest.TestCase):
         print("=== OS version test completed successfully ===")
 
 
-if __name__ == "__main__":
-    # Note: This file is executed by unittest.sh which handles unittest.main()
-    # But we include it here for completeness
-    unittest.main()

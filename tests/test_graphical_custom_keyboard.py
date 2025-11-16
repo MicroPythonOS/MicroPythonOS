@@ -316,5 +316,3 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         print("=== Comparison test PASSED ===")
 
 
-if __name__ == "__main__":
-    unittest.main()
