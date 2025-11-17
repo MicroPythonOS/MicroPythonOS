@@ -110,22 +110,19 @@ class MposKeyboard:
         self._keyboard.set_style_min_height(165, 0)
 
     def _handle_events(self, event):
-        event_code=event.get_code()
-        if event_code in [19,23,24,25,26,27,28,29,30,31,32,33,39,49,52]:
+        # Only process VALUE_CHANGED events for actual typing
+        if event.get_code() != lv.EVENT.VALUE_CHANGED:
             return
-
-        name = mpos.ui.get_event_name(event_code)
-        print(f"lv_event_t: code={event_code}, name={name}")
 
         # Get the pressed button and its text
         target_obj=event.get_target_obj() # keyboard
+        if not target_obj:
+            return
         button = target_obj.get_selected_button()
+        if not button:
+            return
         text = target_obj.get_button_text(button)
         print(f"[KBD] btn={button}, mode={self._current_mode}, text='{text}'")
-
-        # Only process VALUE_CHANGED events for actual typing
-        if event_code != lv.EVENT.VALUE_CHANGED:
-            return
 
         # Ignore if no valid button text (can happen during mode switching)
         if text is None:
