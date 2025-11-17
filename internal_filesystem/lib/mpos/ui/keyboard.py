@@ -20,6 +20,7 @@ Usage:
 
 import lvgl as lv
 import mpos.ui.theme
+import time
 
 
 class MposKeyboard:
@@ -59,6 +60,14 @@ class MposKeyboard:
 
         # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
         self._textarea = None
+
+        # Track last mode switch time to prevent race conditions
+        # When user rapidly clicks mode buttons, button indices can get confused
+        # because index 29 is "abc" in numbers mode but "," in lowercase mode
+        self._last_mode_switch_time = 0
+
+        # Re-entrancy guard to prevent recursive event processing during mode switches
+        self._in_mode_switch = False
 
         # Configure layouts
         self._setup_layouts()
@@ -148,11 +157,20 @@ class MposKeyboard:
         # This prevents LVGL's default handler from interfering
         event.stop_processing()
 
+        # Re-entrancy guard: Skip processing if we're currently switching modes
+        # This prevents set_mode() from triggering recursive event processing
+        if self._in_mode_switch:
+            return
+
         # Get the pressed button and its text
         button = self._keyboard.get_selected_button()
+        current_mode = self._keyboard.get_mode()
         text = self._keyboard.get_button_text(button)
 
-        # Ignore if no valid button text (can happen during initialization)
+        # DEBUG
+        print(f"[KBD] btn={button}, mode={current_mode}, text='{text}'")
+
+        # Ignore if no valid button text (can happen during mode switching)
         if text is None:
             return
 
@@ -245,29 +263,29 @@ class MposKeyboard:
             mode: One of MODE_LOWERCASE, MODE_UPPERCASE, MODE_NUMBERS, MODE_SPECIALS
                   (can also accept standard LVGL modes)
         """
-        # Determine which layout we're switching to
-        # We need to set the map for BOTH the USER mode and the corresponding standard mode
-        # to prevent crashes if LVGL internally switches between them
+        # Map modes to their layouts
         mode_info = {
-            self.MODE_LOWERCASE: (self._lowercase_map, self._lowercase_ctrl, [self.MODE_LOWERCASE, lv.keyboard.MODE.TEXT_LOWER]),
-            self.MODE_UPPERCASE: (self._uppercase_map, self._uppercase_ctrl, [self.MODE_UPPERCASE, lv.keyboard.MODE.TEXT_UPPER]),
-            self.MODE_NUMBERS: (self._numbers_map, self._numbers_ctrl, [self.MODE_NUMBERS, lv.keyboard.MODE.NUMBER]),
-            self.MODE_SPECIALS: (self._specials_map, self._specials_ctrl, [self.MODE_SPECIALS, lv.keyboard.MODE.SPECIAL]),
-            # Also support standard LVGL modes
-            lv.keyboard.MODE.TEXT_LOWER: (self._lowercase_map, self._lowercase_ctrl, [self.MODE_LOWERCASE, lv.keyboard.MODE.TEXT_LOWER]),
-            lv.keyboard.MODE.TEXT_UPPER: (self._uppercase_map, self._uppercase_ctrl, [self.MODE_UPPERCASE, lv.keyboard.MODE.TEXT_UPPER]),
-            lv.keyboard.MODE.NUMBER: (self._numbers_map, self._numbers_ctrl, [self.MODE_NUMBERS, lv.keyboard.MODE.NUMBER]),
-            lv.keyboard.MODE.SPECIAL: (self._specials_map, self._specials_ctrl, [self.MODE_SPECIALS, lv.keyboard.MODE.SPECIAL]),
+            self.MODE_LOWERCASE: (self._lowercase_map, self._lowercase_ctrl),
+            self.MODE_UPPERCASE: (self._uppercase_map, self._uppercase_ctrl),
+            self.MODE_NUMBERS: (self._numbers_map, self._numbers_ctrl),
+            self.MODE_SPECIALS: (self._specials_map, self._specials_ctrl),
         }
 
-        if mode in mode_info:
-            key_map, ctrl_map, mode_list = mode_info[mode]
-            # CRITICAL: Set the map for BOTH modes to prevent NULL pointer crashes
-            # This ensures the map is set regardless of which mode LVGL uses internally
-            for m in mode_list:
-                self._keyboard.set_map(m, key_map, ctrl_map)
+        # Set re-entrancy guard to block any events triggered during mode switch
+        self._in_mode_switch = True
 
-        self._keyboard.set_mode(mode)
+        try:
+            # Set the map for the new mode BEFORE calling set_mode()
+            # This prevents crashes from set_mode() being called with no map set
+            if mode in mode_info:
+                key_map, ctrl_map = mode_info[mode]
+                self._keyboard.set_map(mode, key_map, ctrl_map)
+
+            # Now switch to the new mode
+            self._keyboard.set_mode(mode)
+        finally:
+            # Always clear the guard, even if an exception occurs
+            self._in_mode_switch = False
 
     # ========================================================================
     # Python magic method for automatic method forwarding
