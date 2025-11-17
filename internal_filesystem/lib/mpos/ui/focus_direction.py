@@ -141,15 +141,7 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     for objnr in range(focus_group.get_obj_count()):
         obj = focus_group.get_obj_by_index(objnr)
         process_object(obj)
-    
-    # Result
-    if closest_obj:
-        print(f"Closest object in direction {direction_degrees}°:")
-        mpos.util.print_lvgl_widget(closest_obj)
-    else:
-        #print(f"No object found in direction {direction_degrees}°")
-        pass
-    
+
     return closest_obj
 
 
@@ -209,6 +201,6 @@ def move_focus_direction(angle):
         return
     o = find_closest_obj_in_direction(focus_group, current_focused, angle, False)
     if o:
-        print("move_focus_direction: moving focus to:")
-        mpos.util.print_lvgl_widget(o)
+        #print("move_focus_direction: moving focus to:")
+        #mpos.util.print_lvgl_widget(o)
         emulate_focus_obj(focus_group, o)
