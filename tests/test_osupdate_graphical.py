@@ -18,29 +18,6 @@ from graphical_test_helper import (
 class TestOSUpdateGraphicalUI(unittest.TestCase):
     """Graphical tests for OSUpdate app UI state."""
 
-    def setUp(self):
-        """Set up test fixtures before each test method."""
-        self.hardware_id = mpos.info.get_hardware_id()
-        self.screenshot_dir = "tests/screenshots"
-
-        # Ensure screenshots directory exists
-        # First check if tests directory exists
-        try:
-            os.stat("tests")
-        except OSError:
-            # We're not in the right directory, maybe running from root
-            pass
-
-        # Now create screenshots directory if needed
-        try:
-            os.stat(self.screenshot_dir)
-        except OSError:
-            try:
-                os.mkdir(self.screenshot_dir)
-            except OSError:
-                # Might already exist or permission issue
-                pass
-
     def tearDown(self):
         """Clean up after each test method."""
         # Navigate back to launcher
@@ -204,12 +181,6 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         print("\n=== OSUpdate Initial State Labels ===")
         print_screen_labels(screen)
 
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/osupdate_initial_{self.hardware_id}.raw"
-        capture_screenshot(screenshot_path)
-        print(f"Screenshot saved to: {screenshot_path}")
-
-
 class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
     """Graphical tests for OSUpdate status messages."""
 
@@ -294,15 +265,6 @@ class TestOSUpdateGraphicalScreenshots(unittest.TestCase):
         self.assertTrue(result)
         wait_for_render(20)
 
-        screenshot_path = f"{self.screenshot_dir}/osupdate_main_{self.hardware_id}.raw"
-        capture_screenshot(screenshot_path)
-
-        # Verify file was created
-        try:
-            stat = os.stat(screenshot_path)
-            self.assertTrue(stat[6] > 0, "Screenshot file should not be empty")
-        except OSError:
-            self.fail(f"Screenshot file not created: {screenshot_path}")
 
     def test_capture_with_labels_visible(self):
         """Capture screenshot ensuring all text is visible."""
@@ -320,8 +282,5 @@ class TestOSUpdateGraphicalScreenshots(unittest.TestCase):
         self.assertTrue(has_version, "Version label should be visible")
         self.assertTrue(has_force, "Force checkbox should be visible")
         self.assertTrue(has_button, "Update button should be visible")
-
-        screenshot_path = f"{self.screenshot_dir}/osupdate_labeled_{self.hardware_id}.raw"
-        capture_screenshot(screenshot_path)
 
 

@@ -43,6 +43,7 @@ def wait_for_render(iterations=10):
 
 
 def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565):
+    print(f"capture_screenshot writing to {filepath}")
     """
     Capture screenshot of current screen using LVGL snapshot.
 
