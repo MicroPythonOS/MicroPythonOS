@@ -58,7 +58,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
                 if text and text not in ["\n", ""]:
                     print(f"  Index {i}: '{text}'")
                     # Track special labels
-                    if text in ["ABC", "abc", "1#", "?123", "#+=", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
+                    if text in ["Abc", "Abc", "1#", "?123", "#+=", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
                         found_special_labels[text] = i
             except:
                 pass
@@ -68,8 +68,8 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
             print(f"  '{label}' at index {idx}")
 
         print("\n--- Characteristics of DEFAULT LVGL keyboard ---")
-        if "ABC" in found_special_labels:
-            print("  ✓ Has 'ABC' (uppercase label)")
+        if "Abc" in found_special_labels:
+            print("  ✓ Has 'Abc' (uppercase label)")
         if "1#" in found_special_labels:
             print("  ✓ Has '1#' (numbers label)")
         if "#+" in found_special_labels or "#+=" in found_special_labels:
@@ -104,7 +104,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
                 if text and text not in ["\n", ""]:
                     print(f"  Index {i}: '{text}'")
                     # Track special labels
-                    if text in ["ABC", "abc", "1#", "?123", "=\\<", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
+                    if text in ["Abc", "Abc", "1#", "?123", "=\\<", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
                         found_special_labels[text] = i
             except:
                 pass
@@ -123,7 +123,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
 
     def test_mode_switching_bug_reproduction(self):
         """
-        Try to reproduce the bug: numbers -> abc -> wrong layout.
+        Try to reproduce the bug: numbers -> Abc -> wrong layout.
         """
         print("\n=== Attempting to reproduce the bug ===")
 
@@ -150,7 +150,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         wait_for_render(5)
         labels_step2 = self._get_special_labels(keyboard)
         print(f"  Labels: {list(labels_step2.keys())}")
-        self.assertIn("abc", labels_step2, "Should have 'abc' in numbers mode")
+        self.assertIn("Abc", labels_step2, "Should have 'Abc' in numbers mode")
 
         # Step 3: Switch back to lowercase (this is where bug might happen)
         print("\nStep 3: Switch back to lowercase via set_mode()")
@@ -160,7 +160,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         print(f"  Labels: {list(labels_step3.keys())}")
 
         # Check for bug
-        if "ABC" in labels_step3 or "1#" in labels_step3:
+        if "Abc" in labels_step3 or "1#" in labels_step3:
             print("  ❌ BUG DETECTED: Got default LVGL keyboard!")
             print(f"     Found these labels: {list(labels_step3.keys())}")
             self.fail("BUG: Switched to default LVGL keyboard instead of custom")
@@ -178,7 +178,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         for i in range(100):
             try:
                 text = keyboard.get_button_text(i)
-                if text in ["ABC", "abc", "1#", "?123", "=\\<", "#+=", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
+                if text in ["Abc", "Abc", "1#", "?123", "=\\<", "#+=", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
                     labels[text] = i
             except:
                 pass

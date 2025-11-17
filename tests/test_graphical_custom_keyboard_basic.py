@@ -10,7 +10,7 @@ Usage:
 
 import unittest
 import lvgl as lv
-from mpos.ui.keyboard import MposKeyboard, create_keyboard
+from mpos.ui.keyboard import MposKeyboard
 
 
 class TestMposKeyboard(unittest.TestCase):
@@ -44,34 +44,9 @@ class TestMposKeyboard(unittest.TestCase):
 
         # Verify keyboard exists
         self.assertIsNotNone(keyboard)
-        self.assertIsNotNone(keyboard.get_lvgl_obj())
 
         print("Keyboard created successfully")
 
-    def test_keyboard_factory_custom(self):
-        """Test factory function creates custom keyboard."""
-        print("Testing factory function with custom=True...")
-
-        keyboard = create_keyboard(self.screen, custom=True)
-
-        # Verify it's a MposKeyboard instance
-        self.assertIsInstance(keyboard, MposKeyboard)
-
-        print("Factory created MposKeyboard successfully")
-
-    def test_keyboard_factory_standard(self):
-        """Test factory function creates standard keyboard."""
-        print("Testing factory function with custom=False...")
-
-        keyboard = create_keyboard(self.screen, custom=False)
-
-        # Verify it's an LVGL keyboard (not MposKeyboard)
-        self.assertFalse(isinstance(keyboard, MposKeyboard),
-                        "Factory with custom=False should not create MposKeyboard")
-        # It should be an lv.keyboard instance
-        self.assertEqual(type(keyboard).__name__, 'keyboard')
-
-        print("Factory created standard keyboard successfully")
 
     def test_set_textarea(self):
         """Test setting textarea association."""

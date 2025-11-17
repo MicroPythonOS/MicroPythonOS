@@ -13,7 +13,7 @@ import unittest
 import lvgl as lv
 import sys
 import os
-from mpos.ui.keyboard import MposKeyboard, create_keyboard
+from mpos.ui.keyboard import MposKeyboard
 from graphical_test_helper import (
     wait_for_render,
     capture_screenshot,
@@ -86,10 +86,9 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         Returns:
             str: Text of the pressed button
         """
-        lvgl_keyboard = keyboard.get_lvgl_obj()
 
         # Get button text before pressing
-        button_text = lvgl_keyboard.get_button_text(button_index)
+        button_text = keyboard.get_button_text(button_index)
 
         # Simulate button press by setting it as selected and sending event
         # Note: This is a bit of a hack since we can't directly click in tests
@@ -97,7 +96,7 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
 
         # The keyboard has an internal handler that responds to VALUE_CHANGED
         # We need to manually trigger it
-        lvgl_keyboard.send_event(lv.EVENT.VALUE_CHANGED, None)
+        keyboard.send_event(lv.EVENT.VALUE_CHANGED, None)
 
         wait_for_render(5)
 
@@ -217,8 +216,7 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         screen, keyboard, textarea = self._create_test_keyboard_scene()
 
         # Get button background color
-        lvgl_keyboard = keyboard.get_lvgl_obj()
-        bg_color = lvgl_keyboard.get_style_bg_color(lv.PART.ITEMS)
+        bg_color = keyboard.get_style_bg_color(lv.PART.ITEMS)
 
         # Extract RGB (similar to keyboard styling test)
         try:
@@ -273,7 +271,7 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         ta_standard.set_one_line(True)
 
         # Create standard keyboard (hidden initially)
-        keyboard_standard = create_keyboard(screen, custom=False)
+        keyboard_standard = MposKeyboard(screen)
         keyboard_standard.set_textarea(ta_standard)
         keyboard_standard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard_standard.set_style_min_height(145, 0)
@@ -301,7 +299,7 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         ta_custom.set_placeholder_text("Custom")
         ta_custom.set_one_line(True)
 
-        keyboard_custom = create_keyboard(screen2, custom=True)
+        keyboard_custom = MposKeyboard(screen2)
         keyboard_custom.set_textarea(ta_custom)
         keyboard_custom.align(lv.ALIGN.BOTTOM_MID, 0, 0)
 

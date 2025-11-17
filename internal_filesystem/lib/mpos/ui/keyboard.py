@@ -13,9 +13,6 @@ Usage:
     keyboard.set_textarea(my_textarea)
     keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
 
-    # Or use factory function for drop-in replacement
-    from mpos.ui.keyboard import create_keyboard
-    keyboard = create_keyboard(parent_obj, custom=True)
 """
 
 import lvgl as lv
@@ -41,10 +38,10 @@ class MposKeyboard:
 
     # Keyboard modes - use USER modes for our API
     # We'll also register to standard modes to catch LVGL's internal switches
-    CUSTOM_MODE_LOWERCASE = lv.keyboard.MODE.USER_1
-    CUSTOM_MODE_UPPERCASE = lv.keyboard.MODE.USER_2
-    CUSTOM_MODE_NUMBERS = lv.keyboard.MODE.USER_3
-    CUSTOM_MODE_SPECIALS = lv.keyboard.MODE.USER_4
+    MODE_LOWERCASE = lv.keyboard.MODE.USER_1
+    MODE_UPPERCASE = lv.keyboard.MODE.USER_2
+    MODE_NUMBERS = lv.keyboard.MODE.USER_3
+    MODE_SPECIALS = lv.keyboard.MODE.USER_4
 
     # Lowercase letters
     _lowercase_map = [
@@ -84,10 +81,10 @@ class MposKeyboard:
 
     # Map modes to their layouts
     mode_info = {
-        CUSTOM_MODE_LOWERCASE: (_lowercase_map, _lowercase_ctrl),
-        CUSTOM_MODE_UPPERCASE: (_uppercase_map, _uppercase_ctrl),
-        CUSTOM_MODE_NUMBERS: (_numbers_map, _numbers_ctrl),
-        CUSTOM_MODE_SPECIALS: (_specials_map, _specials_ctrl),
+        MODE_LOWERCASE: (_lowercase_map, _lowercase_ctrl),
+        MODE_UPPERCASE: (_uppercase_map, _uppercase_ctrl),
+        MODE_NUMBERS: (_numbers_map, _numbers_ctrl),
+        MODE_SPECIALS: (_specials_map, _specials_ctrl),
     }
 
     _current_mode = None
@@ -99,7 +96,7 @@ class MposKeyboard:
         # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
         self._textarea = None
 
-        self.set_mode(self.CUSTOM_MODE_LOWERCASE)
+        self.set_mode(self.MODE_LOWERCASE)
 
         self._keyboard.add_event_cb(self._handle_events, lv.EVENT.ALL, None)
         # Apply theme fix for light mode visibility
@@ -141,19 +138,19 @@ class MposKeyboard:
             new_text = current_text[:-1]
         elif text == lv.SYMBOL.UP:
             # Switch to uppercase
-            self.set_mode(self.CUSTOM_MODE_UPPERCASE)
+            self.set_mode(self.MODE_UPPERCASE)
             return  # Don't modify text
         elif text == lv.SYMBOL.DOWN or text == self.LABEL_LETTERS:
             # Switch to lowercase
-            self.set_mode(self.CUSTOM_MODE_LOWERCASE)
+            self.set_mode(self.MODE_LOWERCASE)
             return  # Don't modify text
         elif text == self.LABEL_NUMBERS_SPECIALS:
             # Switch to numbers/specials
-            self.set_mode(self.CUSTOM_MODE_NUMBERS)
+            self.set_mode(self.MODE_NUMBERS)
             return  # Don't modify text
         elif text == self.LABEL_SPECIALS:
             # Switch to additional specials
-            self.set_mode(self.CUSTOM_MODE_SPECIALS)
+            self.set_mode(self.MODE_SPECIALS)
             return  # Don't modify text
         elif text == self.LABEL_SPACE:
             # Space bar

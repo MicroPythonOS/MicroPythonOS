@@ -40,12 +40,12 @@ class TestRapidModeSwitching(unittest.TestCase):
 
     def test_rapid_clicking_abc_button(self):
         """
-        Rapidly click the "abc" button to reproduce the comma bug and crash.
+        Rapidly click the "Abc" button to reproduce the comma bug and crash.
 
-        Expected: Clicking "abc" should NOT add comma to textarea
+        Expected: Clicking "Abc" should NOT add comma to textarea
         Bug: Comma is being added, suggesting button index confusion
         """
-        print("\n=== Testing rapid clicking of abc button ===")
+        print("\n=== Testing rapid clicking of Abc button ===")
 
         keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(self.textarea)
@@ -65,17 +65,17 @@ class TestRapidModeSwitching(unittest.TestCase):
         for i in range(100):
             try:
                 text = keyboard.get_button_text(i)
-                if text == "abc":
+                if text == "Abc":
                     abc_button_index = i
-                    print(f"  Found 'abc' button at index {i}")
+                    print(f"  Found 'Abc' button at index {i}")
                     break
             except:
                 pass
 
-        self.assertIsNotNone(abc_button_index, "Should find 'abc' button in numbers mode")
+        self.assertIsNotNone(abc_button_index, "Should find 'Abc' button in numbers mode")
 
         # Simulate rapid clicking by alternating modes
-        print("\nStep 2: Rapidly switch modes by simulating abc/?123 clicks")
+        print("\nStep 2: Rapidly switch modes by simulating Abc/?123 clicks")
         for i in range(10):
             # Get current mode
             current_mode = keyboard._keyboard.get_mode()
@@ -85,7 +85,7 @@ class TestRapidModeSwitching(unittest.TestCase):
             print(f"  Click {i+1}: mode={current_mode}, textarea='{textarea_before}'")
 
             if current_mode == MposKeyboard.MODE_NUMBERS or current_mode == lv.keyboard.MODE.NUMBER:
-                # Click "abc" to go to lowercase
+                # Click "Abc" to go to lowercase
                 keyboard.set_mode(MposKeyboard.MODE_LOWERCASE)
             else:
                 # Click "?123" to go to numbers
@@ -129,7 +129,7 @@ class TestRapidModeSwitching(unittest.TestCase):
         for i in range(40):
             try:
                 text = keyboard.get_button_text(i)
-                if text in ["?123", ",", "abc", lv.SYMBOL.UP]:
+                if text in ["?123", ",", "Abc", lv.SYMBOL.UP]:
                     lowercase_buttons[text] = i
                     print(f"  '{text}' at index {i}")
             except:
@@ -144,24 +144,11 @@ class TestRapidModeSwitching(unittest.TestCase):
         for i in range(40):
             try:
                 text = keyboard.get_button_text(i)
-                if text in ["?123", ",", "abc", "=\\<"]:
+                if text in ["?123", ",", "Abc", "=\\<"]:
                     numbers_buttons[text] = i
                     print(f"  '{text}' at index {i}")
             except:
                 pass
-
-        # Check if comma and abc are at same index
-        if "," in lowercase_buttons and "abc" in numbers_buttons:
-            comma_idx = lowercase_buttons[","]
-            abc_idx = numbers_buttons["abc"]
-            print(f"\nComparison:")
-            print(f"  Comma in lowercase: index {comma_idx}")
-            print(f"  'abc' in numbers: index {abc_idx}")
-
-            if comma_idx == abc_idx:
-                print("  WARNING: Comma and 'abc' share the same index!")
-                print("  This could explain why comma appears when clicking 'abc'")
-
 
 if __name__ == "__main__":
     unittest.main()

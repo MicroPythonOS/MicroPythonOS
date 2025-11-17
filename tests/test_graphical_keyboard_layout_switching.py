@@ -1,7 +1,7 @@
 """
 Test for keyboard layout switching bug.
 
-This test reproduces the issue where clicking the "abc" button in numbers mode
+This test reproduces the issue where clicking the "Abc" button in numbers mode
 goes to the wrong (default LVGL) keyboard layout instead of our custom lowercase layout.
 
 Usage:
@@ -40,18 +40,18 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
 
     def test_abc_button_from_numbers_mode(self):
         """
-        Test that clicking "abc" button in numbers mode goes to lowercase mode.
+        Test that clicking "Abc" button in numbers mode goes to lowercase mode.
 
         BUG: Currently goes to the wrong (default LVGL) keyboard layout
              instead of our custom lowercase layout.
 
         Expected behavior:
         1. Start in lowercase mode (has "q", "w", "e", etc.)
-        2. Switch to numbers mode (has "1", "2", "3", etc. and "abc" button)
-        3. Click "abc" button
+        2. Switch to numbers mode (has "1", "2", "3", etc. and "Abc" button)
+        3. Click "Abc" button
         4. Should return to lowercase mode (has "q", "w", "e", etc.)
         """
-        print("\n=== Testing 'abc' button from numbers mode ===")
+        print("\n=== Testing 'Abc' button from numbers mode ===")
 
         # Create keyboard
         keyboard = MposKeyboard(self.screen)
@@ -94,23 +94,23 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
 
         self.assertIsNotNone(one_button_index, "Should find '1' in numbers mode")
 
-        # Find the 'abc' button in numbers mode
-        print("\nStep 3: Find 'abc' button in numbers mode")
+        # Find the 'Abc' button in numbers mode
+        print("\nStep 3: Find 'Abc' button in numbers mode")
         abc_button_index = None
         for i in range(100):
             try:
                 text = keyboard.get_button_text(i)
-                if text == "abc":
+                if text == "Abc":
                     abc_button_index = i
-                    print(f"  Found 'abc' at index {i}")
+                    print(f"  Found 'Abc' at index {i}")
                     break
             except:
                 pass
 
-        self.assertIsNotNone(abc_button_index, "Should find 'abc' button in numbers mode")
+        self.assertIsNotNone(abc_button_index, "Should find 'Abc' button in numbers mode")
 
-        # Switch back to lowercase by calling set_mode (simulating clicking 'abc')
-        print("\nStep 4: Click 'abc' to switch back to lowercase")
+        # Switch back to lowercase by calling set_mode (simulating clicking 'Abc')
+        print("\nStep 4: Click 'Abc' to switch back to lowercase")
         keyboard.set_mode(MposKeyboard.MODE_LOWERCASE)
         wait_for_render(5)
 
@@ -119,7 +119,7 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
         # - Our custom keyboard has "?123" (to switch to numbers)
         # - Default LVGL keyboard has "1#" (to switch to numbers) and "ABC" (to switch to uppercase)
         #
-        # Note: "abc" only appears in NUMBERS/SPECIALS modes to switch back to lowercase
+        # Note: "Abc" only appears in NUMBERS/SPECIALS modes to switch back to lowercase
         print("\nStep 5: Verify we're in OUR custom lowercase mode (not default LVGL)")
 
         found_labels = {}
@@ -127,7 +127,7 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
             try:
                 text = keyboard.get_button_text(i)
                 # Check for all possible distinguishing labels
-                if text in ["abc", "ABC", "?123", "1#", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
+                if text in ["Abc", "ABC", "?123", "1#", lv.SYMBOL.UP, lv.SYMBOL.DOWN]:
                     found_labels[text] = i
                     print(f"  Found label '{text}' at index {i}")
             except:
@@ -156,7 +156,7 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
 
         print(f"  Found '?123' at index {found_labels['?123']} - GOOD (custom keyboard)")
         print(f"  Found UP symbol at index {found_labels[lv.SYMBOL.UP]} - GOOD (custom keyboard)")
-        print("\nSUCCESS: 'abc' button correctly returns to custom lowercase layout!")
+        print("\nSUCCESS: 'Abc' button correctly returns to custom lowercase layout!")
 
     def test_layout_switching_cycle(self):
         """
@@ -205,7 +205,7 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
         """
         Test that the event handler properly switches layouts.
 
-        This simulates what happens when the user actually CLICKS the "abc" button,
+        This simulates what happens when the user actually CLICKS the "Abc" button,
         going through the _handle_events method instead of calling set_mode() directly.
         """
         print("\n=== Testing event handler layout switching ===")
@@ -232,10 +232,10 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
                 pass
         self.assertTrue(one_found, "Should be in numbers mode")
 
-        # Now simulate what the event handler does when "abc" is clicked
+        # Now simulate what the event handler does when "Qbc" is clicked
         # The event handler checks: elif text == lv.SYMBOL.DOWN or text == self.LABEL_LETTERS:
         # Then it calls: self._keyboard.set_map() and self._keyboard.set_mode()
-        print("\nStep 2: Simulate clicking 'abc' (via event handler logic)")
+        print("\nStep 2: Simulate clicking 'Abc' (via event handler logic)")
 
         # This is what the event handler does:
         keyboard._keyboard.set_map(
@@ -256,7 +256,7 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
         for i in range(100):
             try:
                 text = keyboard.get_button_text(i)
-                if text in ["abc", "ABC", "?123", "1#", lv.SYMBOL.UP]:
+                if text in ["Abc", "ABC", "?123", "1#", lv.SYMBOL.UP]:
                     found_labels[text] = i
                     print(f"  Found label '{text}' at index {i}")
             except:
