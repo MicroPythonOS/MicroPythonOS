@@ -21,9 +21,18 @@ Usage:
 
     # Capture screenshot
     capture_screenshot("tests/screenshots/mytest.raw")
+
+    # Simulate click at coordinates
+    simulate_click(160, 120)  # Click at center of 320x240 screen
 """
 
 import lvgl as lv
+
+# Simulation globals for touch input
+_touch_x = 0
+_touch_y = 0
+_touch_pressed = False
+_touch_indev = None
 
 
 def wait_for_render(iterations=10):
@@ -200,3 +209,92 @@ def print_screen_labels(obj):
     print(f"Found {len(texts)} labels on screen:")
     for i, text in enumerate(texts):
         print(f"  {i}: {text}")
+
+
+def _touch_read_cb(indev_drv, data):
+    """
+    Internal callback for simulated touch input device.
+
+    This callback is registered with LVGL and provides touch state
+    when simulate_click() is used.
+
+    Args:
+        indev_drv: Input device driver (LVGL internal)
+        data: Input device data structure to fill
+    """
+    global _touch_x, _touch_y, _touch_pressed
+    data.point.x = _touch_x
+    data.point.y = _touch_y
+    if _touch_pressed:
+        data.state = lv.INDEV_STATE.PRESSED
+    else:
+        data.state = lv.INDEV_STATE.RELEASED
+
+
+def _ensure_touch_indev():
+    """
+    Ensure that the simulated touch input device is created.
+
+    This is called automatically by simulate_click() on first use.
+    Creates a pointer-type input device that uses _touch_read_cb.
+    """
+    global _touch_indev
+    if _touch_indev is None:
+        _touch_indev = lv.indev_create()
+        _touch_indev.set_type(lv.INDEV_TYPE.POINTER)
+        _touch_indev.set_read_cb(_touch_read_cb)
+        print("Created simulated touch input device")
+
+
+def simulate_click(x, y, press_duration_ms=50):
+    """
+    Simulate a touch/click at the specified coordinates.
+
+    This creates a simulated touch press at (x, y) and automatically
+    releases it after press_duration_ms milliseconds. The touch is
+    processed through LVGL's normal input handling, so it triggers
+    click events, focus changes, scrolling, etc. just like real input.
+
+    To find object coordinates for clicking, use:
+        obj_area = lv.area_t()
+        obj.get_coords(obj_area)
+        center_x = (obj_area.x1 + obj_area.x2) // 2
+        center_y = (obj_area.y1 + obj_area.y2) // 2
+        simulate_click(center_x, center_y)
+
+    Args:
+        x: X coordinate to click (in pixels)
+        y: Y coordinate to click (in pixels)
+        press_duration_ms: How long to hold the press (default: 50ms)
+
+    Example:
+        # Click at screen center (320x240)
+        simulate_click(160, 120)
+
+        # Click on a specific button
+        button_area = lv.area_t()
+        button.get_coords(button_area)
+        simulate_click(button_area.x1 + 10, button_area.y1 + 10)
+    """
+    global _touch_x, _touch_y, _touch_pressed
+
+    # Ensure the touch input device exists
+    _ensure_touch_indev()
+
+    # Set touch position and press state
+    _touch_x = x
+    _touch_y = y
+    _touch_pressed = True
+
+    # Process the press immediately
+    lv.task_handler()
+
+    def release_timer_cb(timer):
+        """Timer callback to release the touch press."""
+        global _touch_pressed
+        _touch_pressed = False
+        lv.task_handler()  # Process the release immediately
+
+    # Schedule the release
+    timer = lv.timer_create(release_timer_cb, press_duration_ms, None)
+    timer.set_repeat_count(1)

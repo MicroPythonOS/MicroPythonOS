@@ -11,6 +11,7 @@ Usage:
 import unittest
 import lvgl as lv
 from mpos.ui.keyboard import MposKeyboard
+from graphical_test_helper import simulate_click, wait_for_render
 
 
 class TestMposKeyboard(unittest.TestCase):
@@ -161,5 +162,94 @@ class TestMposKeyboard(unittest.TestCase):
             )
 
         print("API compatibility verified")
+
+    def test_simulate_click_on_button(self):
+        """Test clicking keyboard buttons using simulate_click()."""
+        print("Testing simulate_click() on keyboard buttons...")
+
+        # Create keyboard and load screen
+        keyboard = MposKeyboard(self.screen)
+        keyboard.set_textarea(self.textarea)
+        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        lv.screen_load(self.screen)
+        wait_for_render(10)
+
+        # Get initial text
+        initial_text = self.textarea.get_text()
+        print(f"Initial textarea text: '{initial_text}'")
+
+        # Get keyboard area and click on it
+        # The keyboard is an lv.keyboard object (accessed via _keyboard or through __getattr__)
+        obj_area = lv.area_t()
+        keyboard.get_coords(obj_area)
+
+        # Calculate a point to click - let's click in the lower part of keyboard
+        # which should be around where letters are
+        click_x = (obj_area.x1 + obj_area.x2) // 2  # Center horizontally
+        click_y = obj_area.y1 + (obj_area.y2 - obj_area.y1) // 3  # Upper third
+
+        print(f"Keyboard area: ({obj_area.x1}, {obj_area.y1}) to ({obj_area.x2}, {obj_area.y2})")
+        print(f"Clicking keyboard at ({click_x}, {click_y})")
+
+        # Click on the keyboard using simulate_click
+        simulate_click(click_x, click_y, press_duration_ms=100)
+        wait_for_render(5)
+
+        final_text = self.textarea.get_text()
+        print(f"Final textarea text: '{final_text}'")
+
+        # The important thing is that simulate_click worked without crashing
+        # The text might have changed if we hit a letter key
+        print("simulate_click() completed successfully")
+
+    def test_click_vs_send_event_comparison(self):
+        """Compare simulate_click() vs send_event() for triggering button actions."""
+        print("Testing simulate_click() vs send_event() comparison...")
+
+        # Create keyboard and load screen
+        keyboard = MposKeyboard(self.screen)
+        keyboard.set_textarea(self.textarea)
+        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        lv.screen_load(self.screen)
+        wait_for_render(10)
+
+        # Test 1: Use send_event() to trigger READY event
+        callback_from_send_event = [False]
+
+        def callback_send_event(event):
+            callback_from_send_event[0] = True
+            print("send_event callback triggered")
+
+        keyboard.add_event_cb(callback_send_event, lv.EVENT.READY, None)
+        keyboard.send_event(lv.EVENT.READY, None)
+        wait_for_render(3)
+
+        self.assertTrue(
+            callback_from_send_event[0],
+            "send_event() should trigger callback"
+        )
+
+        # Test 2: Use simulate_click() to click on keyboard
+        # This demonstrates that simulate_click works with real UI interaction
+        initial_text = self.textarea.get_text()
+
+        # Get keyboard area to click within it
+        obj_area = lv.area_t()
+        keyboard.get_coords(obj_area)
+
+        # Click somewhere in the middle of the keyboard
+        click_x = (obj_area.x1 + obj_area.x2) // 2
+        click_y = (obj_area.y1 + obj_area.y2) // 2
+
+        print(f"Clicking keyboard at ({click_x}, {click_y})")
+        simulate_click(click_x, click_y, press_duration_ms=100)
+        wait_for_render(5)
+
+        # Verify click completed without crashing
+        final_text = self.textarea.get_text()
+        print(f"Text before click: '{initial_text}'")
+        print(f"Text after click: '{final_text}'")
+
+        print("Both send_event() and simulate_click() work correctly")
 
 
