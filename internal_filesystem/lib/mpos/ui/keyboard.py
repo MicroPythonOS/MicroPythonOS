@@ -118,7 +118,7 @@ class MposKeyboard:
         if not button:
             return
         text = target_obj.get_button_text(button)
-        print(f"[KBD] btn={button}, mode={self._current_mode}, text='{text}'")
+        #print(f"[KBD] btn={button}, mode={self._current_mode}, text='{text}'")
 
         # Ignore if no valid button text (can happen during mode switching)
         if text is None:
@@ -196,7 +196,7 @@ class MposKeyboard:
         return self._textarea
 
     def set_mode(self, mode):
-        print(f"[kbc] setting mode to {mode}")
+        #print(f"[kbc] setting mode to {mode}")
         self._current_mode = mode
         key_map, ctrl_map = self.mode_info[mode]
         self._keyboard.set_map(mode, key_map, ctrl_map)
@@ -205,7 +205,7 @@ class MposKeyboard:
 
     # Python magic method for automatic method forwarding
     def __getattr__(self, name):
-        print(f"[kbd] __getattr__ {name}")
+        #print(f"[kbd] __getattr__ {name}")
         """
         Forward any undefined method/attribute to the underlying LVGL keyboard.
 
