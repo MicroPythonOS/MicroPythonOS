@@ -205,7 +205,6 @@ class SettingActivity(Activity):
             # Initialize keyboard (hidden initially)
             self.keyboard = MposKeyboard(settings_screen_detail)
             self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-            self.keyboard.set_style_min_height(165, 0)
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
             self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.READY, None)
             self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.CANCEL, None)

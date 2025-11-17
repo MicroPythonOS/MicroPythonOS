@@ -102,12 +102,11 @@ class MposKeyboard:
         self.set_mode(self.CUSTOM_MODE_LOWERCASE)
 
         self._keyboard.add_event_cb(self._handle_events, lv.EVENT.ALL, None)
-
         # Apply theme fix for light mode visibility
         mpos.ui.theme.fix_keyboard_button_style(self._keyboard)
 
         # Set good default height
-        self._keyboard.set_style_min_height(165, 0)
+        self._keyboard.set_style_min_height(175, 0)
 
     def _handle_events(self, event):
         # Only process VALUE_CHANGED events for actual typing
