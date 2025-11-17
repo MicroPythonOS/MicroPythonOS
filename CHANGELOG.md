@@ -2,6 +2,7 @@
 =====
 - Add custom MposKeyboard with more than 50% bigger buttons, great for tiny touch screens!
 - Apply theme changes (dark mode, color) immediately after saving
+- About app: add a bit more info
 - Camera app: fix one-in-two "camera image stays blank" issue
 - OSUpdate app: enable scrolling with joystick/arrow keys
 - OSUpdate app: Major rework with improved reliability and user experience
