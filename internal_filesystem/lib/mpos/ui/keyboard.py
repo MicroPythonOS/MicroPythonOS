@@ -63,25 +63,12 @@ class MposKeyboard:
         # Configure layouts
         self._setup_layouts()
 
-        # Initialize ALL keyboard mode maps
-        # Register to BOTH our USER modes AND standard LVGL modes
-        # This prevents LVGL from using default maps when it internally switches modes
-
-        # Our USER modes (what we use in our API)
-        self._keyboard.set_map(self.MODE_LOWERCASE, self._lowercase_map, self._lowercase_ctrl)
-        self._keyboard.set_map(self.MODE_UPPERCASE, self._uppercase_map, self._uppercase_ctrl)
-        self._keyboard.set_map(self.MODE_NUMBERS, self._numbers_map, self._numbers_ctrl)
-        self._keyboard.set_map(self.MODE_SPECIALS, self._specials_map, self._specials_ctrl)
-
-        # ALSO register to standard LVGL modes (what LVGL uses internally)
-        # This catches cases where LVGL internally calls set_mode(TEXT_LOWER)
-        self._keyboard.set_map(lv.keyboard.MODE.TEXT_LOWER, self._lowercase_map, self._lowercase_ctrl)
-        self._keyboard.set_map(lv.keyboard.MODE.TEXT_UPPER, self._uppercase_map, self._uppercase_ctrl)
-        self._keyboard.set_map(lv.keyboard.MODE.NUMBER, self._numbers_map, self._numbers_ctrl)
-        self._keyboard.set_map(lv.keyboard.MODE.SPECIAL, self._specials_map, self._specials_ctrl)
-
         # Set default mode to lowercase
-        self._keyboard.set_mode(self.MODE_LOWERCASE)
+        # IMPORTANT: We do NOT call set_map() here in __init__.
+        # Instead, set_mode() will call set_map() immediately before set_mode().
+        # This matches the proof-of-concept pattern and prevents crashes from
+        # calling set_map() multiple times which can corrupt button matrix state.
+        self.set_mode(self.MODE_LOWERCASE)
 
         # Add event handler for custom behavior
         # We need to handle ALL events to catch mode changes that LVGL might trigger
@@ -258,25 +245,27 @@ class MposKeyboard:
             mode: One of MODE_LOWERCASE, MODE_UPPERCASE, MODE_NUMBERS, MODE_SPECIALS
                   (can also accept standard LVGL modes)
         """
-        # Map mode constants to their corresponding map arrays
-        # Support both our USER modes and standard LVGL modes
-        mode_maps = {
-            self.MODE_LOWERCASE: (self._lowercase_map, self._lowercase_ctrl),
-            self.MODE_UPPERCASE: (self._uppercase_map, self._uppercase_ctrl),
-            self.MODE_NUMBERS: (self._numbers_map, self._numbers_ctrl),
-            self.MODE_SPECIALS: (self._specials_map, self._specials_ctrl),
-            # Also map standard LVGL modes
-            lv.keyboard.MODE.TEXT_LOWER: (self._lowercase_map, self._lowercase_ctrl),
-            lv.keyboard.MODE.TEXT_UPPER: (self._uppercase_map, self._uppercase_ctrl),
-            lv.keyboard.MODE.NUMBER: (self._numbers_map, self._numbers_ctrl),
-            lv.keyboard.MODE.SPECIAL: (self._specials_map, self._specials_ctrl),
+        # Determine which layout we're switching to
+        # We need to set the map for BOTH the USER mode and the corresponding standard mode
+        # to prevent crashes if LVGL internally switches between them
+        mode_info = {
+            self.MODE_LOWERCASE: (self._lowercase_map, self._lowercase_ctrl, [self.MODE_LOWERCASE, lv.keyboard.MODE.TEXT_LOWER]),
+            self.MODE_UPPERCASE: (self._uppercase_map, self._uppercase_ctrl, [self.MODE_UPPERCASE, lv.keyboard.MODE.TEXT_UPPER]),
+            self.MODE_NUMBERS: (self._numbers_map, self._numbers_ctrl, [self.MODE_NUMBERS, lv.keyboard.MODE.NUMBER]),
+            self.MODE_SPECIALS: (self._specials_map, self._specials_ctrl, [self.MODE_SPECIALS, lv.keyboard.MODE.SPECIAL]),
+            # Also support standard LVGL modes
+            lv.keyboard.MODE.TEXT_LOWER: (self._lowercase_map, self._lowercase_ctrl, [self.MODE_LOWERCASE, lv.keyboard.MODE.TEXT_LOWER]),
+            lv.keyboard.MODE.TEXT_UPPER: (self._uppercase_map, self._uppercase_ctrl, [self.MODE_UPPERCASE, lv.keyboard.MODE.TEXT_UPPER]),
+            lv.keyboard.MODE.NUMBER: (self._numbers_map, self._numbers_ctrl, [self.MODE_NUMBERS, lv.keyboard.MODE.NUMBER]),
+            lv.keyboard.MODE.SPECIAL: (self._specials_map, self._specials_ctrl, [self.MODE_SPECIALS, lv.keyboard.MODE.SPECIAL]),
         }
 
-        if mode in mode_maps:
-            key_map, ctrl_map = mode_maps[mode]
-            # CRITICAL: Always call set_map() BEFORE set_mode()
-            # This prevents lv_keyboard_update_map() crashes
-            self._keyboard.set_map(mode, key_map, ctrl_map)
+        if mode in mode_info:
+            key_map, ctrl_map, mode_list = mode_info[mode]
+            # CRITICAL: Set the map for BOTH modes to prevent NULL pointer crashes
+            # This ensures the map is set regardless of which mode LVGL uses internally
+            for m in mode_list:
+                self._keyboard.set_map(m, key_map, ctrl_map)
 
         self._keyboard.set_mode(mode)
 
