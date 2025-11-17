@@ -29,17 +29,20 @@ class About(Activity):
         label15.set_text(f"sys.path: {sys.path}")
         import micropython
         label16 = lv.label(screen)
-        label16.set_text(f"micropython.mem_info(): {micropython.mem_info()}")
+        label16.set_text(f"micropython.opt_level(): {micropython.opt_level()}")
+        import gc
         label17 = lv.label(screen)
-        label17.set_text(f"micropython.opt_level(): {micropython.opt_level()}")
-        label18 = lv.label(screen)
-        label18.set_text(f"micropython.qstr_info(): {micropython.qstr_info()}")
+        label17.set_text(f"Memory: {gc.mem_free()} free, {gc.mem_alloc()} allocated, {gc.mem_alloc()+gc.mem_free()} total")
+        # These are always written to sys.stdout
+        #label16.set_text(f"micropython.mem_info(): {micropython.mem_info()}")
+        #label18 = lv.label(screen)
+        #label18.set_text(f"micropython.qstr_info(): {micropython.qstr_info()}")
         label19 = lv.label(screen)
         label19.set_text(f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
         try:
+            from esp32 import Partition
             label5 = lv.label(screen)
             label5.set_text("") # otherwise it will show the default "Text" if there's an exception below
-            from esp32 import Partition
             current = Partition(Partition.RUNNING)
             label5.set_text(f"Partition.RUNNING: {current}")
             next_partition = current.get_next_update()
@@ -49,9 +52,9 @@ class About(Activity):
             print(f"Partition info got exception: {e}")
         try:
             print("Trying to find out additional board info, not available on every platform...")
+            import machine
             label7 = lv.label(screen)
             label7.set_text("") # otherwise it will show the default "Text" if there's an exception below
-            import machine
             label7.set_text(f"machine.freq: {machine.freq()}")
             label8 = lv.label(screen)
             label8.set_text(f"machine.unique_id(): {machine.unique_id()}")
