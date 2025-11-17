@@ -34,7 +34,6 @@ class TestNWCWallet(unittest.TestCase):
         print(f"error_callback called, error: {error}")
         self.error_callback_called += 1
 
-
     def update_balance(self, sats):
         """
         Updates the user balance by 'sats' amount using the local API.
@@ -191,5 +190,6 @@ class TestNWCWalletMultiRelay(unittest.TestCase):
         self.assertGreaterEqual(self.redraw_payments_cb_called, 1)
         self.assertGreaterEqual(self.redraw_static_receive_code_cb_called, 1)
         print("test finished")
+
 
 
