@@ -22,7 +22,7 @@ import mpos.ui
 import mpos.config
 import sys
 import os
-from graphical_test_helper import (
+from mpos.ui.testing import (
     wait_for_render,
     capture_screenshot,
 )

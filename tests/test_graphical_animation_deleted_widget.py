@@ -19,7 +19,7 @@ import unittest
 import lvgl as lv
 import mpos.ui.anim
 import time
-from graphical_test_helper import wait_for_render
+from mpos.ui.testing import wait_for_render
 
 
 class TestAnimationDeletedWidget(unittest.TestCase):

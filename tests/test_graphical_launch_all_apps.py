@@ -12,10 +12,8 @@ import time
 
 # This is a graphical test - needs boot and main to run first
 # Add tests directory to path for helpers
-if '../tests' not in sys.path:
-    sys.path.insert(0, '../tests')
 
-from graphical_test_helper import wait_for_render
+from mpos.ui.testing import wait_for_render
 import mpos.apps
 import mpos.ui
 from mpos.content.package_manager import PackageManager

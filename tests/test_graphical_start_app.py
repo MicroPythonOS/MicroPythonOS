@@ -15,7 +15,7 @@ Usage:
 import unittest
 import mpos.apps
 import mpos.ui
-from graphical_test_helper import wait_for_render
+from mpos.ui.testing import wait_for_render
 
 
 class TestStartApp(unittest.TestCase):

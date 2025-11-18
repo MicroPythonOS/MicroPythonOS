@@ -14,7 +14,7 @@ import lvgl as lv
 import sys
 import os
 from mpos.ui.keyboard import MposKeyboard
-from graphical_test_helper import (
+from mpos.ui.testing import (
     wait_for_render,
     capture_screenshot,
 )

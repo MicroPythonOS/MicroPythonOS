@@ -11,7 +11,7 @@ Usage:
 import unittest
 import lvgl as lv
 from mpos.ui.keyboard import MposKeyboard
-from graphical_test_helper import simulate_click, wait_for_render
+from mpos.ui.testing import simulate_click, wait_for_render
 
 
 class TestMposKeyboard(unittest.TestCase):

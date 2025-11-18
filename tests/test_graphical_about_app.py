@@ -21,7 +21,7 @@ import mpos.apps
 import mpos.info
 import mpos.ui
 import os
-from graphical_test_helper import (
+from mpos.ui.testing import (
     wait_for_render,
     capture_screenshot,
     find_label_with_text,

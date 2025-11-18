@@ -6,7 +6,7 @@ import sys
 import os
 
 # Import graphical test helper
-from graphical_test_helper import (
+from mpos.ui.testing import (
     wait_for_render,
     capture_screenshot,
     find_label_with_text,

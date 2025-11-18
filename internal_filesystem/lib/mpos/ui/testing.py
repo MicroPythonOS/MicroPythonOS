@@ -1,14 +1,18 @@
 """
-Graphical testing helper module for MicroPythonOS.
+Graphical testing utilities for MicroPythonOS.
 
-This module provides utilities for graphical/visual testing that work on both
-desktop (unix/macOS) and device (ESP32).
+This module provides utilities for graphical/visual testing and UI automation
+that work on both desktop (unix/macOS) and device (ESP32). These functions can
+be used by:
+- Unit tests for verifying UI behavior
+- Apps that want to implement automation or testing features
+- Integration tests and end-to-end testing
 
-Important: Tests using this module should be run with boot and main files
-already executed (so display, theme, and UI infrastructure are initialized).
+Important: Functions in this module assume the display, theme, and UI
+infrastructure are already initialized (boot.py and main.py executed).
 
-Usage:
-    from graphical_test_helper import wait_for_render, capture_screenshot
+Usage in tests:
+    from mpos.ui.testing import wait_for_render, capture_screenshot
 
     # Start your app
     mpos.apps.start_app("com.example.myapp")
@@ -22,8 +26,18 @@ Usage:
     # Capture screenshot
     capture_screenshot("tests/screenshots/mytest.raw")
 
-    # Simulate click at coordinates
+    # Simulate user interaction
     simulate_click(160, 120)  # Click at center of 320x240 screen
+
+Usage in apps:
+    from mpos.ui.testing import simulate_click, find_label_with_text
+
+    # Automated demo mode
+    label = find_label_with_text(self.screen, "Start")
+    if label:
+        area = lv.area_t()
+        label.get_coords(area)
+        simulate_click(area.x1 + 10, area.y1 + 10)
 """
 
 import lvgl as lv
@@ -41,9 +55,15 @@ def wait_for_render(iterations=10):
 
     This processes the LVGL task handler multiple times to ensure
     all UI updates, animations, and layout changes are complete.
+    Essential for tests to avoid race conditions.
 
     Args:
         iterations: Number of task handler iterations to run (default: 10)
+
+    Example:
+        mpos.apps.start_app("com.example.myapp")
+        wait_for_render()  # Ensure UI is ready
+        assert verify_text_present(lv.screen_active(), "Welcome")
     """
     import time
     for _ in range(iterations):
@@ -52,13 +72,18 @@ def wait_for_render(iterations=10):
 
 
 def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565):
-    print(f"capture_screenshot writing to {filepath}")
     """
     Capture screenshot of current screen using LVGL snapshot.
 
     The screenshot is saved as raw binary data in the specified color format.
-    To convert RGB565 to PNG, use:
+    Useful for visual regression testing or documentation.
+
+    To convert RGB565 to PNG:
         ffmpeg -vcodec rawvideo -f rawvideo -pix_fmt rgb565 -s 320x240 -i file.raw file.png
+
+    Or use the conversion script:
+        cd tests/screenshots
+        ./convert_to_png.sh
 
     Args:
         filepath: Path where to save the raw screenshot data
@@ -71,7 +96,13 @@ def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FO
 
     Raises:
         Exception: If screenshot capture fails
+
+    Example:
+        from mpos.ui.testing import capture_screenshot
+        capture_screenshot("tests/screenshots/home.raw")
     """
+    print(f"capture_screenshot writing to {filepath}")
+
     # Calculate buffer size based on color format
     if color_format == lv.COLOR_FORMAT.RGB565:
         bytes_per_pixel = 2
@@ -99,7 +130,8 @@ def get_all_labels(obj, labels=None):
     Recursively find all label widgets in the object hierarchy.
 
     This traverses the entire widget tree starting from obj and
-    collects all LVGL label objects.
+    collects all LVGL label objects. Useful for comprehensive
+    text verification or debugging.
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
@@ -107,6 +139,10 @@ def get_all_labels(obj, labels=None):
 
     Returns:
         list: List of all label objects found in the hierarchy
+
+    Example:
+        labels = get_all_labels(lv.screen_active())
+        print(f"Found {len(labels)} labels")
     """
     if labels is None:
         labels = []
@@ -135,7 +171,8 @@ def find_label_with_text(obj, search_text):
     Find a label widget containing specific text.
 
     Searches the entire widget hierarchy for a label whose text
-    contains the search string (substring match).
+    contains the search string (substring match). Returns the
+    first match found.
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
@@ -143,6 +180,11 @@ def find_label_with_text(obj, search_text):
 
     Returns:
         LVGL label object if found, None otherwise
+
+    Example:
+        label = find_label_with_text(lv.screen_active(), "Settings")
+        if label:
+            print(f"Found Settings label at {label.get_coords()}")
     """
     labels = get_all_labels(obj)
     for label in labels:
@@ -160,12 +202,18 @@ def get_screen_text_content(obj):
     Extract all text content from all labels on screen.
 
     Useful for debugging or comprehensive text verification.
+    Returns a list of all text strings found in label widgets.
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
 
     Returns:
         list: List of all text strings found in labels
+
+    Example:
+        texts = get_screen_text_content(lv.screen_active())
+        assert "Welcome" in texts
+        assert "Version 1.0" in texts
     """
     labels = get_all_labels(obj)
     texts = []
@@ -184,7 +232,7 @@ def verify_text_present(obj, expected_text):
     Verify that expected text is present somewhere on screen.
 
     This is the primary verification method for graphical tests.
-    It searches all labels for the expected text.
+    It searches all labels for the expected text (substring match).
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
@@ -192,6 +240,10 @@ def verify_text_present(obj, expected_text):
 
     Returns:
         bool: True if text found, False otherwise
+
+    Example:
+        assert verify_text_present(lv.screen_active(), "Settings")
+        assert verify_text_present(lv.screen_active(), "Version")
     """
     return find_label_with_text(obj, expected_text) is not None
 
@@ -201,9 +253,21 @@ def print_screen_labels(obj):
     Debug helper: Print all label text found on screen.
 
     Useful for debugging tests to see what text is actually present.
+    Prints to stdout with numbered list.
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
+
+    Example:
+        # When a test fails, use this to see what's on screen
+        print_screen_labels(lv.screen_active())
+        # Output:
+        # Found 5 labels on screen:
+        #   0: MicroPythonOS
+        #   1: Version 0.3.3
+        #   2: Settings
+        #   3: About
+        #   4: WiFi
     """
     texts = get_screen_text_content(obj)
     print(f"Found {len(texts)} labels on screen:")
@@ -216,7 +280,7 @@ def _touch_read_cb(indev_drv, data):
     Internal callback for simulated touch input device.
 
     This callback is registered with LVGL and provides touch state
-    when simulate_click() is used.
+    when simulate_click() is used. Not intended for direct use.
 
     Args:
         indev_drv: Input device driver (LVGL internal)
@@ -237,6 +301,7 @@ def _ensure_touch_indev():
 
     This is called automatically by simulate_click() on first use.
     Creates a pointer-type input device that uses _touch_read_cb.
+    Not intended for direct use.
     """
     global _touch_indev
     if _touch_indev is None:
@@ -255,7 +320,13 @@ def simulate_click(x, y, press_duration_ms=50):
     processed through LVGL's normal input handling, so it triggers
     click events, focus changes, scrolling, etc. just like real input.
 
-    To find object coordinates for clicking, use:
+    Useful for:
+    - Automated testing of UI interactions
+    - Demo modes in apps
+    - Accessibility automation
+    - Integration testing
+
+    To find object coordinates for clicking:
         obj_area = lv.area_t()
         obj.get_coords(obj_area)
         center_x = (obj_area.x1 + obj_area.x2) // 2
@@ -268,13 +339,17 @@ def simulate_click(x, y, press_duration_ms=50):
         press_duration_ms: How long to hold the press (default: 50ms)
 
     Example:
+        from mpos.ui.testing import simulate_click, wait_for_render
+
         # Click at screen center (320x240)
         simulate_click(160, 120)
+        wait_for_render()
 
         # Click on a specific button
         button_area = lv.area_t()
-        button.get_coords(button_area)
+        my_button.get_coords(button_area)
         simulate_click(button_area.x1 + 10, button_area.y1 + 10)
+        wait_for_render()
     """
     global _touch_x, _touch_y, _touch_pressed
 
