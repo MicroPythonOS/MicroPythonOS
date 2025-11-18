@@ -14,3 +14,10 @@ internal_filesystem/tests
 # these tests contain actual NWC URLs:
 tests/manual_test_nwcwallet_alby.py
 tests/manual_test_nwcwallet_cashu.py
+
+# Python cache files (created by CPython when testing imports)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
