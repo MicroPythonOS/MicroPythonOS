@@ -42,7 +42,9 @@ class MockNetwork:
         def __init__(self, interface, connected=True):
             self.interface = interface
             self._connected = connected
+            self._active = True
             self._config = {}
+            self._scan_results = []  # Can be configured for testing
 
         def isconnected(self):
             """Return whether the WLAN is connected."""
@@ -51,7 +53,7 @@ class MockNetwork:
         def active(self, is_active=None):
             """Get/set whether the interface is active."""
             if is_active is None:
-                return self._connected
+                return self._active
             self._active = is_active
 
         def connect(self, ssid, password):
@@ -72,6 +74,10 @@ class MockNetwork:
             if self._connected:
                 return ('192.168.1.100', '255.255.255.0', '192.168.1.1', '8.8.8.8')
             return ('0.0.0.0', '0.0.0.0', '0.0.0.0', '0.0.0.0')
+
+        def scan(self):
+            """Scan for available networks."""
+            return self._scan_results
 
     def __init__(self, connected=True):
         """

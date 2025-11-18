@@ -51,11 +51,11 @@ except Exception as e:
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
 try:
-    import mpos.wifi
+    from mpos.net.wifi_service import WifiService
     _thread.stack_size(mpos.apps.good_stack_size())
-    _thread.start_new_thread(mpos.wifi.WifiService.auto_connect, ())
+    _thread.start_new_thread(WifiService.auto_connect, ())
 except Exception as e:
-    print(f"Couldn't start mpos.wifi.WifiService.auto_connect thread because: {e}")
+    print(f"Couldn't start WifiService.auto_connect thread because: {e}")
 
 # Start launcher so it's always at bottom of stack
 launcher_app = PackageManager.get_launcher()

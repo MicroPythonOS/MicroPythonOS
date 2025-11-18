@@ -152,7 +152,8 @@ def create_notification_bar():
     update_battery_icon() # run it immediately instead of waiting for the timer
 
     def update_wifi_icon(timer):
-        if mpos.wifi.WifiService.is_connected():
+        from mpos.net.wifi_service import WifiService
+        if WifiService.is_connected():
             wifi_icon.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)

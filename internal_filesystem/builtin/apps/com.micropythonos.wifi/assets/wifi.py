@@ -10,7 +10,7 @@ from mpos.ui.keyboard import MposKeyboard
 import mpos.config
 import mpos.ui.anim
 import mpos.ui.theme
-import mpos.wifi
+from mpos.net.wifi_service import WifiService
 
 have_network = True
 try:
@@ -69,8 +69,8 @@ class WiFi(Activity):
         global access_points
         access_points = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").get_dict("access_points")
         if len(self.ssids) == 0:
-            if mpos.wifi.WifiService.wifi_busy == False:
-                mpos.wifi.WifiService.wifi_busy = True
+            if WifiService.wifi_busy == False:
+                WifiService.wifi_busy = True
                 self.start_scan_networks()
             else:
                 self.show_error("Wifi is busy, please try again later.")
@@ -107,7 +107,7 @@ class WiFi(Activity):
             self.show_error("Wi-Fi scan failed")
         # scan done:
         self.busy_scanning = False
-        mpos.wifi.WifiService.wifi_busy = False
+        WifiService.wifi_busy = False
         self.update_ui_threadsafe_if_foreground(self.scan_button_label.set_text,self.scan_button_scan_text)
         self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
         self.update_ui_threadsafe_if_foreground(self.refresh_list)
