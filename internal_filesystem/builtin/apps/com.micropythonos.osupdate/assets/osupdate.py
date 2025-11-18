@@ -5,7 +5,7 @@ import time
 import _thread
 
 from mpos.apps import Activity
-from mpos import PackageManager
+from mpos import PackageManager, ConnectivityManager
 import mpos.info
 import mpos.ui
 
@@ -28,10 +28,10 @@ class OSUpdate(Activity):
     def __init__(self):
         super().__init__()
         # Initialize business logic components with dependency injection
-        self.network_monitor = NetworkMonitor()
         self.update_checker = UpdateChecker()
-        self.update_downloader = UpdateDownloader(network_monitor=self.network_monitor)
+        self.update_downloader = UpdateDownloader()
         self.current_state = UpdateState.IDLE
+        self.connectivity_manager = None  # Will be initialized in onStart
 
     def set_state(self, new_state):
         """Change app state and update UI accordingly."""
@@ -79,16 +79,17 @@ class OSUpdate(Activity):
         self.setContentView(self.main_screen)
 
     def onStart(self, screen):
-        # Check wifi and either start update check or wait for wifi
-        if not self.network_monitor.is_connected():
-            self.set_state(UpdateState.WAITING_WIFI)
-            # Start wifi monitoring in background
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self._wifi_wait_thread, ())
-        else:
+        # Get connectivity manager instance
+        self.connectivity_manager = ConnectivityManager.get()
+
+        # Check if online and either start update check or wait for network
+        if self.connectivity_manager.is_online():
             self.set_state(UpdateState.CHECKING_UPDATE)
-            print("Showing update info...")
+            print("OSUpdate: Online, checking for updates...")
             self.show_update_info()
+        else:
+            self.set_state(UpdateState.WAITING_WIFI)
+            print("OSUpdate: Offline, waiting for network...")
 
     def _update_ui_for_state(self):
         """Update UI elements based on current state."""
@@ -108,32 +109,49 @@ class OSUpdate(Activity):
             # Show "Check Again" button on errors
             self.check_again_button.remove_flag(lv.obj.FLAG.HIDDEN)
 
-    def _wifi_wait_thread(self):
-        """Background thread that waits for wifi connection."""
-        print("OSUpdate: waiting for wifi...")
-        check_interval = 5  # Check every 5 seconds
-        max_wait_time = 300  # 5 minutes timeout
-        elapsed = 0
+    def onResume(self, screen):
+        """Register for connectivity callbacks when app resumes."""
+        super().onResume(screen)
+        if self.connectivity_manager:
+            self.connectivity_manager.register_callback(self.network_changed)
+            # Check current state
+            self.network_changed(self.connectivity_manager.is_online())
 
-        while elapsed < max_wait_time and self.has_foreground():
-            if self.network_monitor.is_connected():
-                print("OSUpdate: wifi connected, checking for updates")
-                # Switch to checking state and start update check
+    def onPause(self, screen):
+        """Unregister connectivity callbacks when app pauses."""
+        if self.connectivity_manager:
+            self.connectivity_manager.unregister_callback(self.network_changed)
+        super().onPause(screen)
+
+    def network_changed(self, online):
+        """Callback when network connectivity changes.
+
+        Args:
+            online: True if network is online, False if offline
+        """
+        print(f"OSUpdate: network_changed, now: {'ONLINE' if online else 'OFFLINE'}")
+
+        if not online:
+            # Went offline
+            if self.current_state == UpdateState.DOWNLOADING:
+                # Download will automatically pause due to connectivity check
+                pass
+            elif self.current_state == UpdateState.CHECKING_UPDATE:
+                # Was checking for updates when network dropped
+                self.update_ui_threadsafe_if_foreground(
+                    self.set_state, UpdateState.WAITING_WIFI
+                )
+        else:
+            # Went online
+            if self.current_state == UpdateState.WAITING_WIFI:
+                # Was waiting for network, now can check for updates
                 self.update_ui_threadsafe_if_foreground(
                     self.set_state, UpdateState.CHECKING_UPDATE
                 )
                 self.show_update_info()
-                return
-
-            time.sleep(check_interval)
-            elapsed += check_interval
-
-        # Timeout or user navigated away
-        if self.has_foreground():
-            self.update_ui_threadsafe_if_foreground(
-                self.status_label.set_text,
-                "WiFi connection timeout.\nPlease check your network and restart the app."
-            )
+            elif self.current_state == UpdateState.DOWNLOAD_PAUSED:
+                # Download was paused, will auto-resume in download thread
+                pass
 
     def _get_user_friendly_error(self, error):
         """Convert technical errors into user-friendly messages with guidance."""
@@ -299,13 +317,15 @@ class OSUpdate(Activity):
                     )
 
                     # Wait for wifi to return
-                    check_interval = 5  # Check every 5 seconds
+                    # ConnectivityManager will notify us via callback when network returns
+                    print("OSUpdate: Waiting for network to return...")
+                    check_interval = 2  # Check every 2 seconds
                     max_wait = 300  # 5 minutes timeout
                     elapsed = 0
 
                     while elapsed < max_wait and self.has_foreground():
-                        if self.network_monitor.is_connected():
-                            print("OSUpdate: WiFi reconnected, resuming download")
+                        if self.connectivity_manager.is_online():
+                            print("OSUpdate: Network reconnected, resuming download")
                             self.update_ui_threadsafe_if_foreground(
                                 self.set_state, UpdateState.DOWNLOADING
                             )
@@ -315,15 +335,18 @@ class OSUpdate(Activity):
                         elapsed += check_interval
 
                     if elapsed >= max_wait:
-                        # Timeout waiting for wifi
-                        msg = f"WiFi timeout during download.\n{bytes_written}/{total_size} bytes written.\nPress Update to retry."
+                        # Timeout waiting for network
+                        msg = f"Network timeout during download.\n{bytes_written}/{total_size} bytes written.\nPress 'Update OS' to retry."
                         self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
                         self.update_ui_threadsafe_if_foreground(
                             self.install_button.remove_state, lv.STATE.DISABLED
                         )
+                        self.update_ui_threadsafe_if_foreground(
+                            self.set_state, UpdateState.ERROR
+                        )
                         return
 
-                    # If we're here, wifi is back - continue to next iteration to resume
+                    # If we're here, network is back - continue to next iteration to resume
 
                 else:
                     # Update failed with error (not pause)
@@ -378,57 +401,20 @@ class UpdateState:
     COMPLETED = "completed"
     ERROR = "error"
 
-class NetworkMonitor:
-    """Monitors network connectivity status."""
-
-    def __init__(self, network_module=None):
-        """Initialize with optional dependency injection for testing.
-
-        Args:
-            network_module: Network module (defaults to network if available)
-        """
-        self.network_module = network_module
-        if self.network_module is None:
-            try:
-                import network
-                self.network_module = network
-            except ImportError:
-                # Desktop/simulation mode - no network module
-                self.network_module = None
-
-    def is_connected(self):
-        """Check if WiFi is currently connected.
-
-        Returns:
-            bool: True if connected, False otherwise
-        """
-        if self.network_module is None:
-            # No network module available (desktop mode)
-            # Assume connected for testing purposes
-            return True
-
-        try:
-            wlan = self.network_module.WLAN(self.network_module.STA_IF)
-            return wlan.isconnected()
-        except Exception as e:
-            print(f"NetworkMonitor: Error checking connection: {e}")
-            return False
-
-
 class UpdateDownloader:
     """Handles downloading and installing OS updates."""
 
-    def __init__(self, requests_module=None, partition_module=None, network_monitor=None):
+    def __init__(self, requests_module=None, partition_module=None, connectivity_manager=None):
         """Initialize with optional dependency injection for testing.
 
         Args:
             requests_module: HTTP requests module (defaults to requests)
             partition_module: ESP32 Partition module (defaults to esp32.Partition if available)
-            network_monitor: NetworkMonitor instance for checking wifi during download
+            connectivity_manager: ConnectivityManager instance for checking network during download
         """
         self.requests = requests_module if requests_module else requests
         self.partition_module = partition_module
-        self.network_monitor = network_monitor
+        self.connectivity_manager = connectivity_manager
         self.simulate = False
 
         # Download state for pause/resume
@@ -514,9 +500,18 @@ class UpdateDownloader:
                     response.close()
                     return result
 
-                # Check wifi connection (if monitoring enabled)
-                if self.network_monitor and not self.network_monitor.is_connected():
-                    print("UpdateDownloader: WiFi lost, pausing download")
+                # Check network connection (if monitoring enabled)
+                if self.connectivity_manager:
+                    is_online = self.connectivity_manager.is_online()
+                elif ConnectivityManager._instance:
+                    # Use global instance if available
+                    is_online = ConnectivityManager._instance.is_online()
+                else:
+                    # No connectivity checking available
+                    is_online = True
+
+                if not is_online:
+                    print("UpdateDownloader: Network lost, pausing download")
                     self.is_paused = True
                     self.bytes_written_so_far = bytes_written
                     result['paused'] = True
