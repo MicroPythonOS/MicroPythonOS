@@ -1,109 +1,12 @@
 import unittest
 import sys
 
-# Mock classes for testing
-class MockNetwork:
-    """Mock network module for testing NetworkMonitor."""
+# Add parent directory to path so we can import network_test_helper
+# When running from unittest.sh, we're in internal_filesystem/, so tests/ is ../tests/
+sys.path.insert(0, '../tests')
 
-    STA_IF = 0  # Station interface constant
-
-    class MockWLAN:
-        def __init__(self, interface):
-            self.interface = interface
-            self._connected = True  # Default to connected
-
-        def isconnected(self):
-            return self._connected
-
-    def __init__(self, connected=True):
-        self._connected = connected
-
-    def WLAN(self, interface):
-        wlan = self.MockWLAN(interface)
-        wlan._connected = self._connected
-        return wlan
-
-    def set_connected(self, connected):
-        """Helper to change connection state."""
-        self._connected = connected
-
-
-class MockRaw:
-    """Mock raw response for streaming."""
-    def __init__(self, content):
-        self.content = content
-        self.position = 0
-
-    def read(self, size):
-        chunk = self.content[self.position:self.position + size]
-        self.position += len(chunk)
-        return chunk
-
-
-class MockResponse:
-    """Mock HTTP response."""
-    def __init__(self, status_code=200, text='', headers=None, content=b''):
-        self.status_code = status_code
-        self.text = text
-        self.headers = headers or {}
-        self.content = content
-        self._closed = False
-
-        # Mock raw attribute for streaming
-        self.raw = MockRaw(content)
-
-    def close(self):
-        self._closed = True
-
-
-class MockRequests:
-    """Mock requests module for testing UpdateChecker and UpdateDownloader."""
-
-    def __init__(self):
-        self.last_url = None
-        self.next_response = None
-        self.raise_exception = None
-
-    def get(self, url, stream=False, timeout=None, headers=None):
-        self.last_url = url
-
-        if self.raise_exception:
-            raise self.raise_exception
-
-        if self.next_response:
-            return self.next_response
-
-        # Default response
-        return MockResponse()
-
-    def set_next_response(self, status_code=200, text='', headers=None, content=b''):
-        """Helper to set what the next get() should return."""
-        self.next_response = MockResponse(status_code, text, headers, content)
-        return self.next_response
-
-    def set_exception(self, exception):
-        """Helper to make next get() raise an exception."""
-        self.raise_exception = exception
-
-
-class MockJSON:
-    """Mock JSON module for testing UpdateChecker."""
-
-    def __init__(self):
-        self.raise_exception = None
-
-    def loads(self, text):
-        if self.raise_exception:
-            raise self.raise_exception
-
-        # Very simple JSON parser for testing
-        # In real tests, we can just use Python's json module
-        import json
-        return json.loads(text)
-
-    def set_exception(self, exception):
-        """Helper to make loads() raise an exception."""
-        self.raise_exception = exception
+# Import network test helpers
+from network_test_helper import MockNetwork, MockRequests, MockJSON
 
 
 class MockPartition:
