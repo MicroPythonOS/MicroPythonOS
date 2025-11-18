@@ -275,6 +275,83 @@ def print_screen_labels(obj):
         print(f"  {i}: {text}")
 
 
+def get_widget_coords(widget):
+    """
+    Get the coordinates of a widget.
+
+    Returns the bounding box coordinates of the widget, useful for
+    clicking on it or verifying its position.
+
+    Args:
+        widget: LVGL widget object
+
+    Returns:
+        dict: Dictionary with keys 'x1', 'y1', 'x2', 'y2', 'center_x', 'center_y'
+              Returns None if widget is invalid or has no coordinates
+
+    Example:
+        # Find and click on a button
+        button = find_label_with_text(lv.screen_active(), "Submit")
+        if button:
+            coords = get_widget_coords(button.get_parent())  # Get parent button
+            if coords:
+                simulate_click(coords['center_x'], coords['center_y'])
+    """
+    try:
+        area = lv.area_t()
+        widget.get_coords(area)
+        return {
+            'x1': area.x1,
+            'y1': area.y1,
+            'x2': area.x2,
+            'y2': area.y2,
+            'center_x': (area.x1 + area.x2) // 2,
+            'center_y': (area.y1 + area.y2) // 2,
+            'width': area.x2 - area.x1,
+            'height': area.y2 - area.y1,
+        }
+    except:
+        return None
+
+
+def find_button_with_text(obj, search_text):
+    """
+    Find a button widget containing specific text in its label.
+
+    This is specifically for finding buttons (which contain labels as children)
+    rather than just labels. Very useful for testing UI interactions.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        search_text: Text to search for in button labels (can be substring)
+
+    Returns:
+        LVGL button object if found, None otherwise
+
+    Example:
+        submit_btn = find_button_with_text(lv.screen_active(), "Submit")
+        if submit_btn:
+            coords = get_widget_coords(submit_btn)
+            simulate_click(coords['center_x'], coords['center_y'])
+    """
+    # Find the label first
+    label = find_label_with_text(obj, search_text)
+    if label:
+        # Try to get the parent button
+        try:
+            parent = label.get_parent()
+            # Check if parent is a button
+            if parent.get_class() == lv.button_class:
+                return parent
+            # Sometimes there's an extra container layer
+            grandparent = parent.get_parent()
+            if grandparent and grandparent.get_class() == lv.button_class:
+                return grandparent
+        except:
+            pass
+    return None
+
+
 def _touch_read_cb(indev_drv, data):
     """
     Internal callback for simulated touch input device.
