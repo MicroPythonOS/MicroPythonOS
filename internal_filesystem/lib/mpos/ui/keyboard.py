@@ -115,7 +115,7 @@ class MposKeyboard:
         if not target_obj:
             return
         button = target_obj.get_selected_button()
-        if not button:
+        if button is None:
             return
         text = target_obj.get_button_text(button)
         #print(f"[KBD] btn={button}, mode={self._current_mode}, text='{text}'")

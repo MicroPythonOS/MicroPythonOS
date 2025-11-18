@@ -1,12 +1,12 @@
 """
-Test for keyboard "q" button bug.
+Test for keyboard button functionality (originally created to fix "q" button bug).
 
-This test reproduces the issue where typing "q" on the keyboard results in
-the button lighting up but no character being added to the textarea, while
-the "a" button beneath it works correctly.
+This test verifies that all keyboard buttons work correctly, including the
+'q' button which was previously broken due to button index 0 being treated
+as False in Python's truthiness check.
 
-The test uses helper functions to locate buttons by their text, get their
-coordinates, and simulate clicks using simulate_click().
+The bug was: `if not button:` would return True when button index was 0,
+causing the 'q' key to be ignored. Fixed by changing to `if button is None:`.
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_q_button_bug.py
@@ -25,8 +25,8 @@ from mpos.ui.testing import (
 )
 
 
-class TestKeyboardQButtonBug(unittest.TestCase):
-    """Test keyboard 'q' button behavior vs 'a' button."""
+class TestKeyboardQButton(unittest.TestCase):
+    """Test keyboard button functionality (especially 'q' which was at index 0)."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -40,22 +40,22 @@ class TestKeyboardQButtonBug(unittest.TestCase):
         lv.screen_load(lv.obj())
         wait_for_render(5)
 
-    def test_q_button_bug(self):
+    def test_q_button_works(self):
         """
         Test that clicking the 'q' button adds 'q' to textarea.
 
-        This test demonstrates the bug where:
-        1. Clicking 'q' button lights it up but doesn't add to textarea
-        2. Clicking 'a' button works correctly
+        This test verifies the fix for the bug where:
+        - Bug: Button index 0 ('q') was treated as False in `if not button:`
+        - Fix: Changed to `if button is None:` to properly handle index 0
 
         Steps:
         1. Create textarea and keyboard
         2. Find 'q' button index in keyboard map
         3. Get button coordinates from keyboard widget
         4. Click it using simulate_click()
-        5. Verify 'q' appears in textarea (EXPECTED TO FAIL due to bug)
+        5. Verify 'q' appears in textarea (should PASS after fix)
         6. Repeat with 'a' button
-        7. Verify 'a' appears correctly (EXPECTED TO PASS)
+        7. Verify 'a' appears correctly (should PASS)
         """
         print("\n=== Testing keyboard 'q' and 'a' button behavior ===")
 
@@ -122,14 +122,9 @@ class TestKeyboardQButtonBug(unittest.TestCase):
         text_after_q = textarea.get_text()
         print(f"Textarea after clicking 'q': '{text_after_q}'")
 
-        # THIS IS THE BUG: 'q' should be added but isn't
-        if text_after_q != "q":
-            print("BUG REPRODUCED: 'q' button was clicked but 'q' was NOT added to textarea!")
-            print("Expected: 'q'")
-            print(f"Got: '{text_after_q}'")
-
+        # Verify 'q' was added (should work after fix)
         self.assertEqual(text_after_q, "q",
-                        "Clicking 'q' button should add 'q' to textarea (BUG: This test will fail)")
+                        "Clicking 'q' button should add 'q' to textarea")
 
         # --- Test 'a' button for comparison ---
         print("\n--- Testing 'a' button (for comparison) ---")
@@ -170,13 +165,12 @@ class TestKeyboardQButtonBug(unittest.TestCase):
 
         # The 'a' button should work correctly
         self.assertEqual(text_after_a, "a",
-                        "Clicking 'a' button should add 'a' to textarea (should PASS)")
+                        "Clicking 'a' button should add 'a' to textarea")
 
         print("\nSummary:")
-        print(f"  'q' button result: '{text_after_q}' (expected 'q')")
-        print(f"  'a' button result: '{text_after_a}' (expected 'a')")
-        if text_after_q != "q" and text_after_a == "a":
-            print("  BUG CONFIRMED: 'q' doesn't work but 'a' does!")
+        print(f"  'q' button result: '{text_after_q}' (expected 'q') ✓")
+        print(f"  'a' button result: '{text_after_a}' (expected 'a') ✓")
+        print("  Both buttons work correctly!")
 
     def test_keyboard_button_discovery(self):
         """
