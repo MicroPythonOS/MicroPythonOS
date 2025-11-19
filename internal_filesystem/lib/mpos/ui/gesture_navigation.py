@@ -7,16 +7,17 @@ from .display import get_display_width, get_display_height
 downbutton = None
 backbutton = None
 down_start_x = 0
+down_start_y = 0
 back_start_y = 0
+back_start_x = 0
+short_movement_threshold = 10
 
-
-# Would be better to somehow save other events, like clicks, and pass them down to the layers below if released with x < 60
 def _back_swipe_cb(event):
     if drawer_open:
         print("ignoring back gesture because drawer is open")
         return
 
-    global backbutton, back_start_y
+    global backbutton, back_start_y, back_start_x
     event_code = event.get_code()
     indev = lv.indev_active()
     if not indev:
@@ -29,22 +30,39 @@ def _back_swipe_cb(event):
     if event_code == lv.EVENT.PRESSED:
         smooth_show(backbutton)
         back_start_y = y
+        back_start_x = x
     elif event_code == lv.EVENT.PRESSING:
         magnetic_x = round(x / 10)
         backbutton.set_pos(magnetic_x,back_start_y)
     elif event_code == lv.EVENT.RELEASED:
         smooth_hide(backbutton)
+        dx = abs(x - back_start_x)
+        dy = abs(y - back_start_y)
         if x > min(100, get_display_width() / 4):
             back_screen()
+        elif dx < short_movement_threshold and dy < short_movement_threshold:
+            # print("Short movement - treating as tap")
+            obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
+            # print(f"Found object: {obj}")
+            if obj:
+                # print(f"Simulating press/click/release on {obj}")
+                obj.send_event(lv.EVENT.PRESSED, indev)
+                obj.send_event(lv.EVENT.CLICKED, indev)
+                obj.send_event(lv.EVENT.RELEASED, indev)
+            else:
+                # print("No object found at tap location")
+                pass
+        else:
+            # print("Movement too large but not enough for back - ignoring")
+            pass
 
 
-# Would be better to somehow save other events, like clicks, and pass them down to the layers below if released with x < 60
 def _top_swipe_cb(event):
     if drawer_open:
         print("ignoring top swipe gesture because drawer is open")
         return
 
-    global downbutton, down_start_x
+    global downbutton, down_start_x, down_start_y
     event_code = event.get_code()
     indev = lv.indev_active()
     if not indev:
@@ -53,17 +71,35 @@ def _top_swipe_cb(event):
     indev.get_point(point)
     x = point.x
     y = point.y
-    #print(f"visual_back_swipe_cb event_code={event_code} and event_name={name} and pos: {x}, {y}")
+    # print(f"visual_back_swipe_cb event_code={event_code} and event_name={name} and pos: {x}, {y}")
     if event_code == lv.EVENT.PRESSED:
         smooth_show(downbutton)
         down_start_x = x
+        down_start_y = y
     elif event_code == lv.EVENT.PRESSING:
         magnetic_y = round(y/ 10)
         downbutton.set_pos(down_start_x,magnetic_y)
     elif event_code == lv.EVENT.RELEASED:
         smooth_hide(downbutton)
+        dx = abs(x - down_start_x)
+        dy = abs(y - down_start_y)
         if y > min(80, get_display_height() / 4):
             open_drawer()
+        elif dx < short_movement_threshold and dy < short_movement_threshold:
+            # print("Short movement - treating as tap")
+            obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
+            # print(f"Found object: {obj}")
+            if obj :
+                # print(f"Simulating press/click/release on {obj}")
+                obj.send_event(lv.EVENT.PRESSED, indev)
+                obj.send_event(lv.EVENT.CLICKED, indev)
+                obj.send_event(lv.EVENT.RELEASED, indev)
+            else:
+                # print("No object found at tap location")
+                pass
+        else:
+            print("Movement too large but not enough for top swipe - ignoring")
+            pass
 
 
 def handle_back_swipe():
