@@ -1,3 +1,12 @@
+0.4.1
+=====
+- MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
+- OSUpdate app: simplify by using ConnectivityManager
+- API: add facilities for instrumentation (screengrabs, mouse clicks)
+- UI: pass clicks on invisible "gesture swipe start" are to underlying widget
+- UI: only show back and down gesture icons on swipe, not on tap
+- UI: double size of back and down swipe gesture starting areas for easier gestures
+
 0.4.0
 =====
 - Add custom MposKeyboard with more than 50% bigger buttons, great for tiny touch screens!

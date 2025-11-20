@@ -11,13 +11,18 @@ down_start_y = 0
 back_start_y = 0
 back_start_x = 0
 short_movement_threshold = 10
+backbutton_visible = False
+downbutton_visible = False
+
+def is_short_movement(dx, dy):
+    return dx < short_movement_threshold and dy < short_movement_threshold
 
 def _back_swipe_cb(event):
     if drawer_open:
         print("ignoring back gesture because drawer is open")
         return
 
-    global backbutton, back_start_y, back_start_x
+    global backbutton, back_start_y, back_start_x, backbutton_visible
     event_code = event.get_code()
     indev = lv.indev_active()
     if not indev:
@@ -26,21 +31,25 @@ def _back_swipe_cb(event):
     indev.get_point(point)
     x = point.x
     y = point.y
+    dx = abs(x - back_start_x)
+    dy = abs(y - back_start_y)
     #print(f"visual_back_swipe_cb event_code={event_code} and event_name={name} and pos: {x}, {y}")
     if event_code == lv.EVENT.PRESSED:
-        smooth_show(backbutton)
         back_start_y = y
         back_start_x = x
     elif event_code == lv.EVENT.PRESSING:
-        magnetic_x = round(x / 10)
-        backbutton.set_pos(magnetic_x,back_start_y)
+        should_show = not is_short_movement(dx, dy)
+        if should_show != backbutton_visible:
+            backbutton_visible = should_show
+            smooth_show(backbutton) if should_show else smooth_hide(backbutton)
+        backbutton.set_pos(round(x / 10), back_start_y)
     elif event_code == lv.EVENT.RELEASED:
-        smooth_hide(backbutton)
-        dx = abs(x - back_start_x)
-        dy = abs(y - back_start_y)
+        if backbutton_visible:
+            backbutton_visible = False
+            smooth_hide(backbutton)
         if x > min(100, get_display_width() / 4):
             back_screen()
-        elif dx < short_movement_threshold and dy < short_movement_threshold:
+        elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
             obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
             # print(f"Found object: {obj}")
@@ -62,7 +71,7 @@ def _top_swipe_cb(event):
         print("ignoring top swipe gesture because drawer is open")
         return
 
-    global downbutton, down_start_x, down_start_y
+    global downbutton, down_start_x, down_start_y, downbutton_visible
     event_code = event.get_code()
     indev = lv.indev_active()
     if not indev:
@@ -71,21 +80,27 @@ def _top_swipe_cb(event):
     indev.get_point(point)
     x = point.x
     y = point.y
+    dx = abs(x - down_start_x)
+    dy = abs(y - down_start_y)
     # print(f"visual_back_swipe_cb event_code={event_code} and event_name={name} and pos: {x}, {y}")
     if event_code == lv.EVENT.PRESSED:
-        smooth_show(downbutton)
         down_start_x = x
         down_start_y = y
     elif event_code == lv.EVENT.PRESSING:
-        magnetic_y = round(y/ 10)
-        downbutton.set_pos(down_start_x,magnetic_y)
+        should_show = not is_short_movement(dx, dy)
+        if should_show != downbutton_visible:
+            downbutton_visible = should_show
+            smooth_show(downbutton) if should_show else smooth_hide(downbutton)
+        downbutton.set_pos(down_start_x, round(y / 10))
     elif event_code == lv.EVENT.RELEASED:
-        smooth_hide(downbutton)
+        if downbutton_visible:
+            downbutton_visible = False
+            smooth_hide(downbutton)
         dx = abs(x - down_start_x)
         dy = abs(y - down_start_y)
         if y > min(80, get_display_height() / 4):
             open_drawer()
-        elif dx < short_movement_threshold and dy < short_movement_threshold:
+        elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
             obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
             # print(f"Found object: {obj}")
@@ -105,7 +120,7 @@ def _top_swipe_cb(event):
 def handle_back_swipe():
     global backbutton
     rect = lv.obj(lv.layer_top())
-    rect.set_size(round(NOTIFICATION_BAR_HEIGHT/2), lv.layer_top().get_height()-NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
+    rect.set_size(NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     rect.set_scroll_dir(lv.DIR.NONE)
     rect.set_pos(0, NOTIFICATION_BAR_HEIGHT)
@@ -139,7 +154,7 @@ def handle_back_swipe():
 def handle_top_swipe():
     global downbutton
     rect = lv.obj(lv.layer_top())
-    rect.set_size(lv.pct(100), round(NOTIFICATION_BAR_HEIGHT*2/3))
+    rect.set_size(lv.pct(100), NOTIFICATION_BAR_HEIGHT)
     rect.set_pos(0, 0)
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     style = lv.style_t()
