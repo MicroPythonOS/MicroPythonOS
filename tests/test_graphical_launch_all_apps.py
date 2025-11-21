@@ -117,28 +117,35 @@ class TestLaunchAllApps(unittest.TestCase):
                 print(f"    Error: {fail['error']}")
             print()
 
-        # Test should detect at least one error (the intentional errortest app)
-        if len(failed_apps) > 0:
-            print(f"✓ Test successfully detected {len(failed_apps)} app(s) with errors")
+        # Separate errortest failures from other failures
+        errortest_failures = [
+            fail for fail in failed_apps
+            if 'errortest' in fail['info']['package_name'].lower()
+        ]
+        other_failures = [
+            fail for fail in failed_apps
+            if 'errortest' not in fail['info']['package_name'].lower()
+        ]
 
-            # Check if we found the errortest app
-            errortest_found = any(
-                'errortest' in fail['info']['package_name'].lower()
-                for fail in failed_apps
-            )
+        # Check if errortest app exists
+        all_app_names = [app['package_name'] for app in self.apps_to_test]
+        has_errortest = any('errortest' in name.lower() for name in all_app_names)
 
-            if errortest_found:
-                print("✓ Successfully detected the intentional error in errortest app")
+        # Verify errortest app fails if it exists
+        if has_errortest:
+            self.assertTrue(len(errortest_failures) > 0,
+                "Failed to detect error in com.micropythonos.errortest app")
+            print("✓ Successfully detected the intentional error in errortest app")
 
-            # Verify errortest was found
-            all_app_names = [app['package_name'] for app in self.apps_to_test]
-            has_errortest = any('errortest' in name.lower() for name in all_app_names)
-
-            if has_errortest:
-                self.assertTrue(errortest_found,
-                    "Failed to detect error in com.micropythonos.errortest app")
+        # Fail the test if any non-errortest apps have errors
+        if other_failures:
+            print(f"\n❌ FAIL: {len(other_failures)} non-errortest app(s) have errors:")
+            for fail in other_failures:
+                print(f"  - {fail['info']['label']} ({fail['info']['package_name']})")
+                print(f"    Error: {fail['error']}")
+            self.fail(f"{len(other_failures)} app(s) failed to launch (excluding errortest)")
         else:
-            print("⚠ Warning: No errors detected. All apps launched successfully.")
+            print("✓ All non-errortest apps launched successfully")
 
 
 class TestLaunchSpecificApps(unittest.TestCase):
