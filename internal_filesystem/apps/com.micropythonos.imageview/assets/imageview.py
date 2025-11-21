@@ -61,10 +61,12 @@ class ImageView(Activity):
     def onResume(self, screen):
         self.stopping = False
         self.images.clear()
-        for item in os.listdir(self.imagedir):
-            print(item)
-            lowercase = item.lower()
-            if lowercase.endswith(".jpg") or lowercase.endswith(".jpeg") or lowercase.endswith(".png") or lowercase.endswith(".raw") or lowercase.endswith(".gif"):
+        try:
+            for item in os.listdir(self.imagedir):
+                print(item)
+                lowercase = item.lower()
+                if not (lowercase.endswith(".jpg") or lowercase.endswith(".jpeg") or lowercase.endswith(".png") or lowercase.endswith(".raw") or lowercase.endswith(".gif")):
+                    continue
                 fullname = f"{self.imagedir}/{item}"
                 size = os.stat(fullname)[6]
                 print(f"size: {size}")
@@ -72,11 +74,14 @@ class ImageView(Activity):
                     print(f"Skipping file of size {size}")
                     continue
                 self.images.append(fullname)
-        self.images.sort()
-        # Begin with one image:
-        self.show_next_image()
-        self.stop_fullscreen()
-        #self.image_timer = lv.timer_create(self.show_next_image, 1000, None)
+
+            self.images.sort()
+            # Begin with one image:
+            self.show_next_image()
+            self.stop_fullscreen()
+            #self.image_timer = lv.timer_create(self.show_next_image, 1000, None)
+        except Exception as e:
+            print(f"ImageView encountered exception for {self.imagedir}: {e}")
 
     def onStop(self, screen):
         print("ImageView stopping")
