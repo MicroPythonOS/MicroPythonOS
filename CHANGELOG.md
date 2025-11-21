@@ -1,6 +1,9 @@
 0.4.1
 =====
 - MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
+- MposKeyboard: increase font size from 16 to 22
+- MposKeyboard: use checkbox instead of newline symbol for "OK, Ready"
+- MposKeyboard: bigger space bar
 - OSUpdate app: simplify by using ConnectivityManager
 - API: add facilities for instrumentation (screengrabs, mouse clicks)
 - API: move WifiService to mpos.net

@@ -33,8 +33,8 @@ class MposKeyboard:
     # Keyboard layout labels
     LABEL_NUMBERS_SPECIALS = "?123"
     LABEL_SPECIALS = "=\<"
-    LABEL_LETTERS = "Abc" # using abc here will trigger the default lv.keyboard() mode switch
-    LABEL_SPACE = "     "
+    LABEL_LETTERS = "Abc"
+    LABEL_SPACE = " "
 
     # Keyboard modes - use USER modes for our API
     # We'll also register to standard modes to catch LVGL's internal switches
@@ -48,36 +48,49 @@ class MposKeyboard:
         "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
         "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
         lv.SYMBOL.UP, "z", "x", "c", "v", "b", "n", "m", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.NEW_LINE, None
+        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, None
     ]
-    _lowercase_ctrl = [10] * len(_lowercase_map)
+    _lowercase_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_lowercase_map)
+    _lowercase_ctrl[29] = lv.buttonmatrix.CTRL.WIDTH_5 # comma
+    _lowercase_ctrl[30] = lv.buttonmatrix.CTRL.WIDTH_15 # space
+    _lowercase_ctrl[31] = lv.buttonmatrix.CTRL.WIDTH_5 # dot
 
     # Uppercase letters
     _uppercase_map = [
         "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
         "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
         lv.SYMBOL.DOWN, "Z", "X", "C", "V", "B", "N", "M", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.NEW_LINE, None
+        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, None
     ]
-    _uppercase_ctrl = [10] * len(_uppercase_map)
+    _uppercase_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_uppercase_map)
+    _uppercase_ctrl[29] = lv.buttonmatrix.CTRL.WIDTH_5 # comma
+    _uppercase_ctrl[30] = lv.buttonmatrix.CTRL.WIDTH_15 # space
+    _uppercase_ctrl[31] = lv.buttonmatrix.CTRL.WIDTH_5 # dot
 
     # Numbers and common special characters
     _numbers_map = [
         "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
         "@", "#", "$", "_", "&", "-", "+", "(", ")", "/", "\n",
         LABEL_SPECIALS, "*", "\"", "'", ":", ";", "!", "?", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_LETTERS, ",", LABEL_SPACE, ".", lv.SYMBOL.NEW_LINE, None
+        LABEL_LETTERS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, None
     ]
-    _numbers_ctrl = [10] * len(_numbers_map)
+    _numbers_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_numbers_map)
+    _numbers_ctrl[30] = lv.buttonmatrix.CTRL.WIDTH_5 # comma
+    _numbers_ctrl[31] = lv.buttonmatrix.CTRL.WIDTH_15 # space
+    _numbers_ctrl[32] = lv.buttonmatrix.CTRL.WIDTH_5 # dot
 
     # Additional special characters with emoticons
     _specials_map = [
         "~", "`", "|", "•", ":-)", ";-)", ":-D", "\n",
         ":-(" , ":'-(", "^", "°", "=", "{", "}", "\\", "\n",
-        LABEL_NUMBERS_SPECIALS, ":-o", ":-P", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_LETTERS, "<", LABEL_SPACE, ">", lv.SYMBOL.NEW_LINE, None
+        LABEL_NUMBERS_SPECIALS, "%", ":-o", ":-P", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
+        LABEL_LETTERS, "<", LABEL_SPACE, ">", lv.SYMBOL.OK, None
     ]
-    _specials_ctrl = [10] * len(_specials_map)
+    _specials_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_specials_map)
+    _specials_ctrl[15] = lv.buttonmatrix.CTRL.WIDTH_15 # LABEL_NUMBERS_SPECIALS is pretty wide
+    _specials_ctrl[23] = lv.buttonmatrix.CTRL.WIDTH_5 # <
+    _specials_ctrl[24] = lv.buttonmatrix.CTRL.WIDTH_15 # space
+    _specials_ctrl[25] = lv.buttonmatrix.CTRL.WIDTH_5 # >
 
     # Map modes to their layouts
     mode_info = {
@@ -92,13 +105,18 @@ class MposKeyboard:
     def __init__(self, parent):
         # Create underlying LVGL keyboard widget
         self._keyboard = lv.keyboard(parent)
+        self._keyboard.set_style_text_font(lv.font_montserrat_22,0)
 
         # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
         self._textarea = None
 
         self.set_mode(self.MODE_LOWERCASE)
 
+        # Remove default event handler(s)
+        for index in range(self._keyboard.get_event_count()):
+            self._keyboard.remove_event(index)
         self._keyboard.add_event_cb(self._handle_events, lv.EVENT.ALL, None)
+
         # Apply theme fix for light mode visibility
         mpos.ui.theme.fix_keyboard_button_style(self._keyboard)
 
@@ -155,6 +173,9 @@ class MposKeyboard:
         elif text == self.LABEL_SPACE:
             # Space bar
             new_text = current_text + " "
+        elif text ==  lv.SYMBOL.OK:
+            self._keyboard.send_event(lv.EVENT.READY, None)
+            return
         elif text == lv.SYMBOL.NEW_LINE:
             # Handle newline (only for multi-line textareas)
             if ta.get_one_line():
