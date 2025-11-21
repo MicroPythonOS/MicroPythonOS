@@ -3,6 +3,7 @@
 - MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
 - OSUpdate app: simplify by using ConnectivityManager
 - API: add facilities for instrumentation (screengrabs, mouse clicks)
+- API: move WifiService to mpos.net
 - UI: pass clicks on invisible "gesture swipe start" are to underlying widget
 - UI: only show back and down gesture icons on swipe, not on tap
 - UI: double size of back and down swipe gesture starting areas for easier gestures

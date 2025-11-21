@@ -58,13 +58,6 @@ def _back_swipe_cb(event):
                 obj.send_event(lv.EVENT.PRESSED, indev)
                 obj.send_event(lv.EVENT.CLICKED, indev)
                 obj.send_event(lv.EVENT.RELEASED, indev)
-            else:
-                # print("No object found at tap location")
-                pass
-        else:
-            # print("Movement too large but not enough for back - ignoring")
-            pass
-
 
 def _top_swipe_cb(event):
     if drawer_open:
@@ -109,13 +102,6 @@ def _top_swipe_cb(event):
                 obj.send_event(lv.EVENT.PRESSED, indev)
                 obj.send_event(lv.EVENT.CLICKED, indev)
                 obj.send_event(lv.EVENT.RELEASED, indev)
-            else:
-                # print("No object found at tap location")
-                pass
-        else:
-            print("Movement too large but not enough for top swipe - ignoring")
-            pass
-
 
 def handle_back_swipe():
     global backbutton
@@ -129,18 +115,15 @@ def handle_back_swipe():
     style.set_bg_opa(lv.OPA.TRANSP)
     style.set_border_width(0)
     style.set_radius(0)
-    if False: # debug the back swipe zone with a red border
+    if False: # debug the swipe zone with a red border
         style.set_bg_opa(15)
         style.set_border_width(4)
         style.set_border_color(lv.color_hex(0xFF0000))  # Red border for visibility
         style.set_border_opa(lv.OPA._50)  # 50% opacity for the border
     rect.add_style(style, 0)
-    #rect.add_flag(lv.obj.FLAG.CLICKABLE)  # Make the object clickable
-    #rect.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)  # Allow dragging
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSING, None)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.RELEASED, None)
-    #rect.add_event_cb(back_swipe_cb, lv.EVENT.ALL, None)
     # button with label that shows up during the dragging:
     backbutton = lv.button(lv.layer_top())
     backbutton.set_pos(0, round(lv.layer_top().get_height() / 2))
@@ -160,14 +143,14 @@ def handle_top_swipe():
     style = lv.style_t()
     style.init()
     style.set_bg_opa(lv.OPA.TRANSP)
-    #style.set_bg_opa(15)
     style.set_border_width(0)
     style.set_radius(0)
-    #style.set_border_color(lv.color_hex(0xFF0000))  # White border for visibility
-    #style.set_border_opa(lv.OPA._50)  # 50% opacity for the border
+    if False: # debug the swipe zone with a red border
+        style.set_bg_opa(15)
+        style.set_border_width(4)
+        style.set_border_color(lv.color_hex(0xFF0000))  # Red border for visibility
+        style.set_border_opa(lv.OPA._50)  # 50% opacity for the border
     rect.add_style(style, 0)
-    #rect.add_flag(lv.obj.FLAG.CLICKABLE)  # Make the object clickable
-    #rect.add_flag(lv.obj.FLAG.GESTURE_BUBBLE)  # Allow dragging
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSING, None)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.RELEASED, None)
