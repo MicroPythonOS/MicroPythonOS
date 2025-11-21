@@ -1,12 +1,16 @@
 0.4.1
 =====
 - MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
-- MposKeyboard: increase font size from 16 to 22
+- MposKeyboard: increase font size from 16 to 20
 - MposKeyboard: use checkbox instead of newline symbol for "OK, Ready"
 - MposKeyboard: bigger space bar
 - OSUpdate app: simplify by using ConnectivityManager
+- ImageView app: improve error handling
+- Settings app: tweak font size
 - API: add facilities for instrumentation (screengrabs, mouse clicks)
 - API: move WifiService to mpos.net
+- API: remove fonts to reduce size
+- API: replace font_montserrat_28 with font_montserrat_28_compressed to reduce size
 - UI: pass clicks on invisible "gesture swipe start" are to underlying widget
 - UI: only show back and down gesture icons on swipe, not on tap
 - UI: double size of back and down swipe gesture starting areas for easier gestures
