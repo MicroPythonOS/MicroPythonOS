@@ -13,11 +13,12 @@ ifneq ($(UNAME_S),Darwin)
 endif
 
 SRC_USERMOD_C += $(MOD_DIR)/src/quirc_decode.c
-
 SRC_USERMOD_C += $(MOD_DIR)/quirc/lib/identify.c
 SRC_USERMOD_C += $(MOD_DIR)/quirc/lib/version_db.c
 SRC_USERMOD_C += $(MOD_DIR)/quirc/lib/decode.c
 SRC_USERMOD_C += $(MOD_DIR)/quirc/lib/quirc.c
+
+#SRC_USERMOD_C += $(MOD_DIR)/src/font_Noto_Sans_sat_emojis_compressed.c
 
 CFLAGS+= -I/usr/include
 

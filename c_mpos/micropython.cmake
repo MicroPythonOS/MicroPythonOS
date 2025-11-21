@@ -12,6 +12,7 @@ set(MPOS_C_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/version_db.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/decode.c
     ${CMAKE_CURRENT_LIST_DIR}/quirc/lib/quirc.c
+#    ${CMAKE_CURRENT_LIST_DIR}/src/font_Noto_Sans_sat_emojis_compressed.c
 )
 
 # Add our source files to the lib
