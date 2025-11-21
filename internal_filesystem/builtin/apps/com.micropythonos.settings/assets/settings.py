@@ -155,7 +155,7 @@ class SettingActivity(Activity):
         setting_label = lv.label(top_cont)
         setting_label.set_text(setting["title"])
         setting_label.align(lv.ALIGN.TOP_LEFT,0,0)
-        setting_label.set_style_text_font(lv.font_montserrat_26, 0)
+        setting_label.set_style_text_font(lv.font_montserrat_24, 0)
 
         ui = setting.get("ui")
         ui_options = setting.get("ui_options")
