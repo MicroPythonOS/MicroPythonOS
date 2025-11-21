@@ -12,6 +12,7 @@ if [ -z "$target" -o -z "$buildtype" ]; then
 	echo "Usage: $0 target buildtype [optional subtarget]"
 	echo "Usage: $0 <esp32 or unix or macOS> <dev or prod> [<waveshare-esp32-s3-touch-lcd-2 or fri3d-2024>]"
 	echo "Example: $0 unix dev"
+	echo "Example: $0 macOS dev"
 	echo "Example: $0 esp32 dev fri3d-2024"
 	echo "Example: $0 esp32 prod fri3d-2024"
 	echo "Example: $0 esp32 dev waveshare-esp32-s3-touch-lcd-2"
