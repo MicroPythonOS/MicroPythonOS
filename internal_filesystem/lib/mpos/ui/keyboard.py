@@ -105,7 +105,8 @@ class MposKeyboard:
     def __init__(self, parent):
         # Create underlying LVGL keyboard widget
         self._keyboard = lv.keyboard(parent)
-        self._keyboard.set_style_text_font(lv.font_montserrat_22,0)
+        # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
+        self._keyboard.set_style_text_font(lv.font_montserrat_20,0)
 
         # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
         self._textarea = None
