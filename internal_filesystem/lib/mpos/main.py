@@ -13,12 +13,12 @@ import sys
 if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
     board = "linux"
 elif sys.platform == "esp32":
-    board = "fri3d-2024" # default fallback
+    board = "fri3d_2024" # default fallback
     import machine
     from machine import Pin, I2C
     i2c0 = I2C(0, sda=machine.Pin(48), scl=machine.Pin(47))
     if i2c0.scan() == [21, 107]: # touch screen and IMU
-        board = "waveshare-esp32-s3-touch-lcd-2"
+        board = "waveshare_esp32_s3_touch_lcd_2"
 
 print(f"Detected hardware {board}, initializing...")
 import mpos.info
