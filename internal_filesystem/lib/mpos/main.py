@@ -13,13 +13,12 @@ import sys
 if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
     board = "linux"
 elif sys.platform == "esp32":
-    import machine
     from machine import Pin, I2C
-    i2c0 = I2C(0, sda=machine.Pin(48), scl=machine.Pin(47))
+    i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
     if i2c0.scan() == [21, 107]: # touch screen and IMU
         board = "waveshare_esp32_s3_touch_lcd_2"
     else:
-        i2c0 = I2C(0, sda=machine.Pin(9), scl=machine.Pin(18))
+        i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
         if i2c0.scan() == [107]: # only IMU
             board = "fri3d_2024"
         else:
