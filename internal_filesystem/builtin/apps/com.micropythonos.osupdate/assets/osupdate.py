@@ -609,7 +609,7 @@ class UpdateChecker:
         Returns:
             str: Full URL to update JSON file
         """
-        if hardware_id == "waveshare-esp32-s3-touch-lcd-2":
+        if hardware_id == "waveshare_esp32_s3_touch_lcd_2":
             # First supported device - no hardware ID in URL
             infofile = "osupdate.json"
         else:

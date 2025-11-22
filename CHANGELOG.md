@@ -5,6 +5,7 @@
 - MposKeyboard: use checkbox instead of newline symbol for "OK, Ready"
 - MposKeyboard: bigger space bar
 - OSUpdate app: simplify by using ConnectivityManager
+- OSUpdate app: adapt to new device IDs
 - ImageView app: improve error handling
 - Settings app: tweak font size
 - Settings app: add "format internal data partition" option
