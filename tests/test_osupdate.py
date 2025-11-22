@@ -55,15 +55,15 @@ class TestUpdateChecker(unittest.TestCase):
 
     def test_get_update_url_waveshare(self):
         """Test URL generation for waveshare hardware."""
-        url = self.checker.get_update_url("waveshare-esp32-s3-touch-lcd-2")
+        url = self.checker.get_update_url("waveshare_esp32_s3_touch_lcd_2")
 
         self.assertEqual(url, "https://updates.micropythonos.com/osupdate.json")
 
     def test_get_update_url_other_hardware(self):
         """Test URL generation for other hardware."""
-        url = self.checker.get_update_url("fri3d-2024")
+        url = self.checker.get_update_url("fri3d_2024")
 
-        self.assertEqual(url, "https://updates.micropythonos.com/osupdate_fri3d-2024.json")
+        self.assertEqual(url, "https://updates.micropythonos.com/osupdate_fri3d_2024.json")
 
     def test_fetch_update_info_success(self):
         """Test successful update info fetch."""
@@ -78,7 +78,7 @@ class TestUpdateChecker(unittest.TestCase):
             text=json.dumps(update_data)
         )
 
-        result = self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+        result = self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
         self.assertEqual(result["version"], "0.3.3")
         self.assertEqual(result["download_url"], "https://example.com/update.bin")
@@ -90,7 +90,7 @@ class TestUpdateChecker(unittest.TestCase):
 
         # MicroPython doesn't have ConnectionError, so catch generic Exception
         try:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
             self.fail("Should have raised an exception for HTTP 404")
         except Exception as e:
             # Should be a ConnectionError, but we accept any exception with HTTP status
@@ -104,7 +104,7 @@ class TestUpdateChecker(unittest.TestCase):
         )
 
         with self.assertRaises(ValueError) as cm:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
         self.assertIn("Invalid JSON", str(cm.exception))
 
@@ -117,7 +117,7 @@ class TestUpdateChecker(unittest.TestCase):
         )
 
         with self.assertRaises(ValueError) as cm:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
         self.assertIn("missing required fields", str(cm.exception))
         self.assertIn("version", str(cm.exception))
@@ -131,7 +131,7 @@ class TestUpdateChecker(unittest.TestCase):
         )
 
         with self.assertRaises(ValueError) as cm:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
 
         self.assertIn("download_url", str(cm.exception))
 
@@ -158,7 +158,7 @@ class TestUpdateChecker(unittest.TestCase):
         self.mock_requests.set_exception(Exception("Timeout"))
 
         try:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
             self.fail("Should have raised an exception for timeout")
         except Exception as e:
             self.assertIn("Timeout", str(e))
@@ -168,7 +168,7 @@ class TestUpdateChecker(unittest.TestCase):
         self.mock_requests.set_exception(Exception("Connection refused"))
 
         try:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
             self.fail("Should have raised an exception")
         except Exception as e:
             self.assertIn("Connection refused", str(e))
@@ -178,7 +178,7 @@ class TestUpdateChecker(unittest.TestCase):
         self.mock_requests.set_next_response(status_code=200, text='')
 
         try:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
             self.fail("Should have raised an exception for empty response")
         except Exception:
             pass  # Expected to fail
@@ -188,7 +188,7 @@ class TestUpdateChecker(unittest.TestCase):
         self.mock_requests.set_next_response(status_code=500)
 
         try:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
             self.fail("Should have raised an exception for HTTP 500")
         except Exception as e:
             self.assertIn("500", str(e))
@@ -202,7 +202,7 @@ class TestUpdateChecker(unittest.TestCase):
         )
 
         try:
-            self.checker.fetch_update_info("waveshare-esp32-s3-touch-lcd-2")
+            self.checker.fetch_update_info("waveshare_esp32_s3_touch_lcd_2")
             self.fail("Should have raised exception for missing changelog")
         except ValueError as e:
             self.assertIn("changelog", str(e))
