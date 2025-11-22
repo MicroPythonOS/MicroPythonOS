@@ -125,9 +125,56 @@ def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FO
     return buffer
 
 
+def get_all_widgets_with_text(obj, widgets=None):
+    """
+    Recursively find all widgets that have text in the object hierarchy.
+
+    This traverses the entire widget tree starting from obj and
+    collects all widgets that have a get_text() method and return
+    non-empty text. This includes labels, checkboxes, buttons with
+    text, etc.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        widgets: Internal accumulator list (leave as None)
+
+    Returns:
+        list: List of all widgets with text found in the hierarchy
+
+    Example:
+        widgets = get_all_widgets_with_text(lv.screen_active())
+        print(f"Found {len(widgets)} widgets with text")
+    """
+    if widgets is None:
+        widgets = []
+
+    # Check if this object has text
+    try:
+        if hasattr(obj, 'get_text'):
+            text = obj.get_text()
+            if text:  # Only add if text is non-empty
+                widgets.append(obj)
+    except:
+        pass  # Error getting text or no get_text method
+
+    # Recursively check children
+    try:
+        child_count = obj.get_child_count()
+        for i in range(child_count):
+            child = obj.get_child(i)
+            get_all_widgets_with_text(child, widgets)
+    except:
+        pass  # No children or error accessing them
+
+    return widgets
+
+
 def get_all_labels(obj, labels=None):
     """
     Recursively find all label widgets in the object hierarchy.
+
+    DEPRECATED: Use get_all_widgets_with_text() instead for better
+    compatibility with all text-containing widgets (labels, checkboxes, etc.)
 
     This traverses the entire widget tree starting from obj and
     collects all LVGL label objects. Useful for comprehensive
@@ -144,82 +191,65 @@ def get_all_labels(obj, labels=None):
         labels = get_all_labels(lv.screen_active())
         print(f"Found {len(labels)} labels")
     """
-    if labels is None:
-        labels = []
-
-    # Check if this object is a label
-    try:
-        if obj.get_class() == lv.label_class:
-            labels.append(obj)
-    except:
-        pass  # Not a label or no get_class method
-
-    # Recursively check children
-    try:
-        child_count = obj.get_child_count()
-        for i in range(child_count):
-            child = obj.get_child(i)
-            get_all_labels(child, labels)
-    except:
-        pass  # No children or error accessing them
-
-    return labels
+    # For backwards compatibility, use the new function
+    return get_all_widgets_with_text(obj, labels)
 
 
 def find_label_with_text(obj, search_text):
     """
-    Find a label widget containing specific text.
+    Find a widget containing specific text.
 
-    Searches the entire widget hierarchy for a label whose text
-    contains the search string (substring match). Returns the
-    first match found.
+    Searches the entire widget hierarchy for any widget (label, checkbox,
+    button, etc.) whose text contains the search string (substring match).
+    Returns the first match found.
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
         search_text: Text to search for (can be substring)
 
     Returns:
-        LVGL label object if found, None otherwise
+        LVGL widget object if found, None otherwise
 
     Example:
-        label = find_label_with_text(lv.screen_active(), "Settings")
-        if label:
-            print(f"Found Settings label at {label.get_coords()}")
+        widget = find_label_with_text(lv.screen_active(), "Settings")
+        if widget:
+            print(f"Found Settings widget at {widget.get_coords()}")
     """
-    labels = get_all_labels(obj)
-    for label in labels:
+    widgets = get_all_widgets_with_text(obj)
+    for widget in widgets:
         try:
-            text = label.get_text()
+            text = widget.get_text()
             if search_text in text:
-                return label
+                return widget
         except:
-            pass  # Error getting text from this label
+            pass  # Error getting text from this widget
     return None
 
 
 def get_screen_text_content(obj):
     """
-    Extract all text content from all labels on screen.
+    Extract all text content from all widgets on screen.
 
     Useful for debugging or comprehensive text verification.
-    Returns a list of all text strings found in label widgets.
+    Returns a list of all text strings found in any widgets with text
+    (labels, checkboxes, buttons, etc.).
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
 
     Returns:
-        list: List of all text strings found in labels
+        list: List of all text strings found in widgets
 
     Example:
         texts = get_screen_text_content(lv.screen_active())
         assert "Welcome" in texts
         assert "Version 1.0" in texts
     """
-    labels = get_all_labels(obj)
+    widgets = get_all_widgets_with_text(obj)
     texts = []
-    for label in labels:
+    for widget in widgets:
         try:
-            text = label.get_text()
+            text = widget.get_text()
             if text:
                 texts.append(text)
         except:
@@ -250,10 +280,11 @@ def verify_text_present(obj, expected_text):
 
 def print_screen_labels(obj):
     """
-    Debug helper: Print all label text found on screen.
+    Debug helper: Print all text found on screen from any widget.
 
     Useful for debugging tests to see what text is actually present.
-    Prints to stdout with numbered list.
+    Prints to stdout with numbered list. Includes text from labels,
+    checkboxes, buttons, and any other widgets with text.
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
@@ -262,15 +293,15 @@ def print_screen_labels(obj):
         # When a test fails, use this to see what's on screen
         print_screen_labels(lv.screen_active())
         # Output:
-        # Found 5 labels on screen:
+        # Found 5 text widgets on screen:
         #   0: MicroPythonOS
         #   1: Version 0.3.3
         #   2: Settings
-        #   3: About
+        #   3: Force Update (checkbox)
         #   4: WiFi
     """
     texts = get_screen_text_content(obj)
-    print(f"Found {len(texts)} labels on screen:")
+    print(f"Found {len(texts)} text widgets on screen:")
     for i, text in enumerate(texts):
         print(f"  {i}: {text}")
 
