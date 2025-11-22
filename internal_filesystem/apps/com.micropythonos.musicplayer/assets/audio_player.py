@@ -285,14 +285,3 @@ class AudioPlayer:
                 cls._i2s = None
 
 
-
-def optional_viper(func):
-    """Decorator to apply @micropython.viper if possible."""
-    try:
-        @micropython.viper
-        @func  # Wait, no—see below for proper chaining
-        def wrapped(*args, **kwargs):
-            return func(*args, **kwargs)
-        return wrapped
-    except SyntaxError:
-        return func  # Fallback to original
