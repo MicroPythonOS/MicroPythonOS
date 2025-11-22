@@ -7,6 +7,7 @@
 - OSUpdate app: simplify by using ConnectivityManager
 - ImageView app: improve error handling
 - Settings app: tweak font size
+- Settings app: add "format internal data partition" option
 - API: add facilities for instrumentation (screengrabs, mouse clicks)
 - API: move WifiService to mpos.net
 - API: remove fonts to reduce size
