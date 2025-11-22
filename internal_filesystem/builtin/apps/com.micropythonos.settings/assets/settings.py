@@ -45,6 +45,7 @@ class SettingsActivity(Activity):
             # Advanced settings, alphabetically:
             {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
             {"title": "Restart to Bootloader", "key": "boot_mode", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")]}, # special that doesn't get saved
+            {"title": "Format internal data partition", "key": "format_internal_data_partition", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")]}, # special that doesn't get saved
             # This is currently only in the drawer but would make sense to have it here for completeness:
             #{"title": "Display Brightness", "key": "display_brightness", "value_label": None, "cont": None, "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)
@@ -151,11 +152,12 @@ class SettingActivity(Activity):
         top_cont.set_style_pad_all(mpos.ui.pct_of_display_width(1), 0)
         top_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
         top_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, 0)
+        top_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
         setting_label = lv.label(top_cont)
         setting_label.set_text(setting["title"])
         setting_label.align(lv.ALIGN.TOP_LEFT,0,0)
-        setting_label.set_style_text_font(lv.font_montserrat_24, 0)
+        setting_label.set_style_text_font(lv.font_montserrat_20, 0)
 
         ui = setting.get("ui")
         ui_options = setting.get("ui_options")
@@ -295,11 +297,34 @@ class SettingActivity(Activity):
         self.startActivityForResult(Intent(activity_class=CameraApp).putExtra("scanqr_mode", True), self.gotqr_result_callback)
 
     def save_setting(self, setting):
-        if setting["key"] == "boot_mode" and self.radio_container: # special case that isn't saved
-            if self.active_radio_index == 1:
+        # Check special cases that aren't saved
+        if self.radio_container and self.active_radio_index == 1:
+            if setting["key"] == "boot_mode":
                 from mpos.bootloader import ResetIntoBootloader
                 intent = Intent(activity_class=ResetIntoBootloader)
                 self.startActivity(intent)
+                return
+            elif setting["key"] == "format_internal_data_partition":
+                # Inspired by lvgl_micropython/lib/micropython/ports/esp32/modules/inisetup.py
+                try:
+                    import vfs
+                    from flashbdev import bdev
+                except Exception as e:
+                    print(f"Could not format internal data partition because: {e}")
+                    self.finish() # would be nice to show the error instead of silently returning
+                    return
+                if bdev.info()[4] == "vfs":
+                    print(f"Formatting {bdev} as LittleFS2")
+                    vfs.VfsLfs2.mkfs(bdev)
+                    fs = vfs.VfsLfs2(bdev)
+                elif bdev.info()[4] == "ffat":
+                    print(f"Formatting {bdev} as FAT")
+                    vfs.VfsFat.mkfs(bdev)
+                    fs = vfs.VfsFat(bdev)
+                print(f"Mounting {fs} at /")
+                vfs.mount(fs, "/")
+                print("Done formatting, returning...")
+                self.finish() # would be nice to show a "FormatInternalDataPartition" activity
                 return
 
         ui = setting.get("ui")
