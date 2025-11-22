@@ -3,17 +3,10 @@ import lcd_bus
 import lvgl as lv
 import sdl_display
 
-# Add lib/ to the path for modules, otherwise it will only search in ~/.micropython/lib and /usr/lib/micropython
-import sys
-sys.path.append('lib/')
-
 import mpos.clipboard
 import mpos.indev.mpos_sdl_keyboard
-import mpos.info
 import mpos.ui
 import mpos.ui.focus_direction
-
-mpos.info.set_hardware_id("linux-desktop")
 
 # Same as Waveshare ESP32-S3-Touch-LCD-2 and Fri3d Camp 2026 Badge
 TFT_HOR_RES=320

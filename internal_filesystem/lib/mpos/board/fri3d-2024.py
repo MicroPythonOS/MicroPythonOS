@@ -13,11 +13,9 @@ import gc
 import lvgl as lv
 import task_handler
 
-import mpos.info
 import mpos.ui
 import mpos.ui.focus_direction
 
-mpos.info.set_hardware_id("fri3d-2024")
 
 # Pin configuration
 SPI_BUS = 2

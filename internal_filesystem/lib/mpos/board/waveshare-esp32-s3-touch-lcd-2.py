@@ -11,9 +11,6 @@ import lvgl as lv
 import task_handler
 
 import mpos.ui
-import mpos.info
-
-mpos.info.set_hardware_id("waveshare-esp32-s3-touch-lcd-2")
 
 # Pin configuration
 SPI_BUS = 2
@@ -92,9 +89,7 @@ mpos.battery_voltage.init_adc(5, 262 / 100000)
 try:
     from machine import Pin, I2C
     i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
-    devices = i2c.scan()
-    print("Scan of I2C bus on scl=16, sda=21:")
-    print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
+    # Warning: don't do an i2c scan because it confuses the camera!
     camera_addr = 0x3C # for OV5640
     reg_addr = 0x3008
     reg_high = (reg_addr >> 8) & 0xFF  # 0x30

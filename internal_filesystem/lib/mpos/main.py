@@ -11,9 +11,19 @@ from mpos.content.package_manager import PackageManager
 # Auto-detect and initialize hardware
 import sys
 if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
-    import mpos.board.linux
+    board = "linux"
 elif sys.platform == "esp32":
-    print("TODO: detect which esp32 this is and then load the appropriate board")
+    board = "fri3d-2024" # default fallback
+    import machine
+    from machine import Pin, I2C
+    i2c0 = I2C(0, sda=machine.Pin(48), scl=machine.Pin(47))
+    if i2c0.scan() == [21, 107]: # touch screen and IMU
+        board = "waveshare-esp32-s3-touch-lcd-2"
+
+print(f"Detected hardware {board}, initializing...")
+import mpos.info
+mpos.info.set_hardware_id(board)
+__import__(f"mpos.board.{board}")
 
 # Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
 import mpos.fs_driver
