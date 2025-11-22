@@ -60,13 +60,12 @@ one_test() {
 		# Desktop execution
 		if [ $is_graphical -eq 1 ]; then
 			# Graphical test: include boot_unix.py and main.py
-			"$binary" -X heapsize=8M -c "$(cat boot_unix.py main.py)
-import sys ; sys.path.append('lib') ; sys.path.append(\"$tests_abs_path\")
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.append('lib/') ; import mpos.main ; import mpos.apps; sys.path.append(\"$tests_abs_path\")
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		else
 			# Regular test: no boot files
-			"$binary" -X heapsize=8M -c "import sys ; sys.path.append('lib')
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.append('lib/')
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		fi
