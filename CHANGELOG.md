@@ -1,4 +1,4 @@
-0.4.1
+0.5.0
 =====
 - MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
 - MposKeyboard: increase font size from 16 to 20
