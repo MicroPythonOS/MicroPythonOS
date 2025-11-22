@@ -61,7 +61,7 @@ class Draw(Activity):
         lv.draw_line(self.layer,dsc)
         self.canvas.finish_layer(self.layer)
 
-    @micropython.viper # make it with native compilation
+    # @micropython.viper # "invalid micropython decorator" on macOS
     def draw_rect(self, x: int, y: int):
         draw_dsc = lv.draw_rect_dsc_t()
         lv.draw_rect_dsc_t.init(draw_dsc)
