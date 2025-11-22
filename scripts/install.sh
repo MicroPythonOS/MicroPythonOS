@@ -3,19 +3,13 @@ mydir=$(dirname "$mydir")
 
 pkill -f "python.*mpremote"
 
-target="$1"
-appname="$2"
+appname="$1"
 
-if [ -z "$target" ]; then
-	echo "Usage: $0 <target> [appname]"
-	echo "Example: $0 fri3d-2024"
-	echo "Example: $0 waveshare-esp32-s3-touch-lcd-2"
-	echo "Example: $0 fri3d-2024 appstore"
-	echo "Example: $0 waveshare-esp32-s3-touch-lcd-2 imu"
-	exit 1
-fi
-
-
+echo "This script will install the important files from internal_filesystem/ on the device using mpremote.py"
+echo
+echo "Usage: $0 [appname]"
+echo "Example: $0"
+echo "Example: $0 com.micropythonos.about"
 
 mpremote=$(readlink -f "$mydir/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
 
@@ -44,17 +38,7 @@ if [ ! -z "$appname" ]; then
 	exit
 fi
 
-
-#if [ -z "$target" -o "$target" == "waveshare-esp32-s3-touch-lcd-2" ]; then
-#	$mpremote fs cp boot.py :/boot.py
-#else
-#	$mpremote fs cp boot_"$target".py :/boot.py
-#fi
-#$mpremote fs cp main.py :/main.py
-
-#$mpremote fs cp main.py :/system/button.py
-#$mpremote fs cp autorun.py :/autorun.py
-#$mpremote fs cp -r system :/
+# boot.py is not copied because it can't be overridden anyway
 
 # The issue is that this brings all the .git folders with it:
 #$mpremote fs cp -r apps :/
@@ -68,9 +52,10 @@ find apps/ -maxdepth 1 -type l | while read symlink; do
 
 done
 
+echo "Unmounting builtin/ so that it can be customized..." # not sure this is necessary
+$mpremote exec "import os ; os.umount('/builtin')"
 $mpremote fs cp -r builtin :/
 $mpremote fs cp -r lib :/
-#$mpremote fs cp -r resources :/
 
 #$mpremote fs cp -r data :/
 #$mpremote fs cp -r data/images :/data/
@@ -81,10 +66,8 @@ popd
 echo "Installing test infrastructure..."
 $mpremote fs mkdir :/tests
 $mpremote fs mkdir :/tests/screenshots
-testdir=$(readlink -f "$mydir/../tests")
-$mpremote fs cp "$testdir/graphical_test_helper.py" :/tests/graphical_test_helper.py
 
-if [ -z "$appname" ]; then
+if [ ! -z "$appname" ]; then
 	echo "Not resetting so the installed app can be used immediately."
 	$mpremote reset
 fi
