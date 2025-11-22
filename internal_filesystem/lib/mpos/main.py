@@ -1,18 +1,24 @@
 import task_handler
 import _thread
 import lvgl as lv
-
-# Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
-import mpos.fs_driver
-fs_drv = lv.fs_drv_t()
-mpos.fs_driver.fs_register(fs_drv, 'M')
-
 import mpos.apps
 import mpos.config
 import mpos.ui
 import mpos.ui.topmenu
 from mpos.ui.display import init_rootscreen
 from mpos.content.package_manager import PackageManager
+
+# Auto-detect and initialize hardware
+import sys
+if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
+    import mpos.board.linux
+elif sys.platform == "esp32":
+    print("TODO: detect which esp32 this is and then load the appropriate board")
+
+# Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
+import mpos.fs_driver
+fs_drv = lv.fs_drv_t()
+mpos.fs_driver.fs_register(fs_drv, 'M')
 
 prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
 

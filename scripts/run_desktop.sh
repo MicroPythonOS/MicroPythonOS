@@ -63,7 +63,7 @@ pushd internal_filesystem/
 		echo "Running app from $scriptdir"
 		"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat boot_unix.py main.py) ; import mpos.apps; mpos.apps.start_app('$scriptdir')"
 	else
-		"$binary" -X heapsize=$HEAPSIZE -v -i -c "$(cat boot_unix.py main.py)"
+		"$binary" -X heapsize=$HEAPSIZE -v -i -c "import sys ; sys.path.append('lib/') ; import mpos.main"
 	fi
 		
 
