@@ -45,12 +45,12 @@ if [ ! -z "$appname" ]; then
 fi
 
 
-if [ -z "$target" -o "$target" == "waveshare-esp32-s3-touch-lcd-2" ]; then
-	$mpremote fs cp boot.py :/boot.py
-else
-	$mpremote fs cp boot_"$target".py :/boot.py
-fi
-$mpremote fs cp main.py :/main.py
+#if [ -z "$target" -o "$target" == "waveshare-esp32-s3-touch-lcd-2" ]; then
+#	$mpremote fs cp boot.py :/boot.py
+#else
+#	$mpremote fs cp boot_"$target".py :/boot.py
+#fi
+#$mpremote fs cp main.py :/main.py
 
 #$mpremote fs cp main.py :/system/button.py
 #$mpremote fs cp autorun.py :/autorun.py
@@ -59,7 +59,6 @@ $mpremote fs cp main.py :/main.py
 # The issue is that this brings all the .git folders with it:
 #$mpremote fs cp -r apps :/
 
-#if false; then
 $mpremote fs mkdir :/apps
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -maxdepth 1 -type l | while read symlink; do
@@ -68,11 +67,10 @@ find apps/ -maxdepth 1 -type l | while read symlink; do
 	$mpremote fs cp -r "$symlink"/* :/"$symlink"/
 
 done
-#fi
 
 $mpremote fs cp -r builtin :/
 $mpremote fs cp -r lib :/
-$mpremote fs cp -r resources :/
+#$mpremote fs cp -r resources :/
 
 #$mpremote fs cp -r data :/
 #$mpremote fs cp -r data/images :/data/
