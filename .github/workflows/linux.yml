@@ -67,90 +67,46 @@ jobs:
             echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
             echo "Extracted version: $OS_VERSION"
 
-      - name: Build LVGL MicroPython for unix dev
+      - name: Build LVGL MicroPython for unix
         run: |
-          ./scripts/build_mpos.sh unix dev
+          ./scripts/build_mpos.sh unix
 
-      - name: Run syntax tests on unix dev
+      - name: Run syntax tests on unix
         run: |
           ./tests/syntax.sh
         continue-on-error: true
 
-      - name: Run unit tests on unix dev
+      - name: Run unit tests on unix
         run: |
           ./tests/unittest.sh
-          mv lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_amd64_linux_dev_${{ steps.version.outputs.OS_VERSION }}.elf
+          mv lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
         continue-on-error: true
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_amd64_linux_dev_${{ steps.version.outputs.OS_VERSION }}.elf
-          path: lvgl_micropython/build/MicroPythonOS_amd64_linux_dev_${{ steps.version.outputs.OS_VERSION }}.elf
+          name: MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          path: lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
           retention-days: 7
 
-      - name: Build LVGL MicroPython esp32 prod fri3d-2024
+      - name: Build LVGL MicroPython esp32
         run: |
-          ./scripts/build_mpos.sh esp32 prod fri3d-2024
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.bin
-          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.ota
+          ./scripts/build_mpos.sh esp32
+          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
+          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.bin
+          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
+          path: lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_fri3d-2024_prod_${{ steps.version.outputs.OS_VERSION }}.ota
-          retention-days: 7
-
-      - name: Build LVGL MicroPython esp32 dev fri3d-2024
-        run: |
-          ./scripts/build_mpos.sh esp32 dev fri3d-2024
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_fri3d-2024_dev_${{ steps.version.outputs.OS_VERSION }}.bin
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MicroPythonOS_fri3d-2024_dev_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_fri3d-2024_dev_${{ steps.version.outputs.OS_VERSION }}.bin
-          retention-days: 7
-
-      - name: Build LVGL MicroPython esp32 prod waveshare-esp32-s3-touch-lcd-2
-        run: |
-          ./scripts/build_mpos.sh esp32 prod waveshare-esp32-s3-touch-lcd-2
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod_${{ steps.version.outputs.OS_VERSION }}.bin
-          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod_${{ steps.version.outputs.OS_VERSION }}.ota
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod_${{ steps.version.outputs.OS_VERSION }}.bin
-          retention-days: 7
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod_${{ steps.version.outputs.OS_VERSION }}.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_prod_${{ steps.version.outputs.OS_VERSION }}.ota
-          retention-days: 7
-
-      - name: Build LVGL MicroPython esp32 dev waveshare-esp32-s3-touch-lcd-2
-        run: |
-          ./scripts/build_mpos.sh esp32 dev waveshare-esp32-s3-touch-lcd-2
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_dev_${{ steps.version.outputs.OS_VERSION }}.bin
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_dev_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_dev_${{ steps.version.outputs.OS_VERSION }}.bin
+          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
+          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
 
 
