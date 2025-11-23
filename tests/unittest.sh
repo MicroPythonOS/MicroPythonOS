@@ -60,13 +60,13 @@ one_test() {
 		# Desktop execution
 		if [ $is_graphical -eq 1 ]; then
 			# Graphical test: include boot_unix.py and main.py
-			"$binary" -X heapsize=8M -c "$(cat boot.py) ; import mpos.main ; import mpos.apps; sys.path.append(\"$tests_abs_path\")
+			"$binary" -X heapsize=8M -c "$(cat main.py) ; import mpos.main ; import mpos.apps; sys.path.append(\"$tests_abs_path\")
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
             result=$?
 		else
 			# Regular test: no boot files
-			"$binary" -X heapsize=8M -c "$(cat boot.py)
+			"$binary" -X heapsize=8M -c "$(cat main.py)
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
             result=$?
@@ -86,7 +86,7 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		echo "$test logging to $testlog"
 		if [ $is_graphical -eq 1 ]; then
 			# Graphical test: system already initialized, just add test paths
-			"$mpremote" exec "$(cat boot.py) ; sys.path.append('tests')
+			"$mpremote" exec "$(cat main.py) ; sys.path.append('tests')
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
@@ -96,7 +96,7 @@ else:
 " | tee "$testlog"
 		else
 			# Regular test: no boot files
-			"$mpremote" exec "$(cat boot.py)
+			"$mpremote" exec "$(cat main.py)
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
