@@ -79,10 +79,11 @@ def _fs_dir_open_cb(drv, path):
     #print(f"_fs_dir_open_cb for path '{path}'")
     try:
         import os # for ilistdir()
-        path = path.rstrip('/') # LittleFS handles trailing flashes fine, but vfs.VfsFat returns an [Errno 22] EINVAL
+        if path != "/":
+            path = path.rstrip('/') # LittleFS handles trailing flashes fine, but vfs.VfsFat returns an [Errno 22] EINVAL
         return {'iterator' : os.ilistdir(path)}
     except Exception as e:
-        print(f"_fs_dir_open_cb exception: {e}")
+        print(f"_fs_dir_open_cb exception for path {path}: {e}")
         return None
 
 def _fs_dir_read_cb(drv, lv_fs_dir_t, buf, btr):
