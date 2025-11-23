@@ -1,4 +1,5 @@
 import lvgl as lv
+from lvgl import LvReferenceError
 from .anim import smooth_show, smooth_hide
 from .view import back_screen
 from .topmenu import open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
@@ -16,6 +17,18 @@ downbutton_visible = False
 
 def is_short_movement(dx, dy):
     return dx < short_movement_threshold and dy < short_movement_threshold
+
+def _passthrough_click(x, y, indev):
+    obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
+    # print(f"Found object: {obj}")
+    if obj:
+        try:
+            # print(f"Simulating press/click/release on {obj}")
+            obj.send_event(lv.EVENT.PRESSED, indev)
+            obj.send_event(lv.EVENT.CLICKED, indev)
+            obj.send_event(lv.EVENT.RELEASED, indev) # gets lost
+        except LvReferenceError as e:
+            print(f"Object to click is gone: {e}")
 
 def _back_swipe_cb(event):
     if drawer_open:
@@ -51,13 +64,7 @@ def _back_swipe_cb(event):
             back_screen()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
-            obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
-            # print(f"Found object: {obj}")
-            if obj:
-                # print(f"Simulating press/click/release on {obj}")
-                obj.send_event(lv.EVENT.PRESSED, indev)
-                obj.send_event(lv.EVENT.CLICKED, indev)
-                obj.send_event(lv.EVENT.RELEASED, indev)
+            _passthrough_click(x, y, indev)
 
 def _top_swipe_cb(event):
     if drawer_open:
@@ -95,13 +102,7 @@ def _top_swipe_cb(event):
             open_drawer()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
-            obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
-            # print(f"Found object: {obj}")
-            if obj :
-                # print(f"Simulating press/click/release on {obj}")
-                obj.send_event(lv.EVENT.PRESSED, indev)
-                obj.send_event(lv.EVENT.CLICKED, indev)
-                obj.send_event(lv.EVENT.RELEASED, indev)
+            _passthrough_click(x, y, indev)
 
 def handle_back_swipe():
     global backbutton
