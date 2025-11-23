@@ -42,8 +42,9 @@ class WidgetAnimator:
     @staticmethod
     def show_widget(widget, anim_type="fade", duration=500, delay=0):
         """Show a widget with an animation (fade or slide)."""
-        # Clear HIDDEN flag to make widget visible for animation
-        widget.remove_flag(lv.obj.FLAG.HIDDEN)
+
+        lv.anim_delete(widget, None) # stop all ongoing animations to prevent visual glitches
+        widget.remove_flag(lv.obj.FLAG.HIDDEN) # Clear HIDDEN flag to make widget visible for animation
 
         if anim_type == "fade":
             # Create fade-in animation (opacity from 0 to 255)
@@ -91,9 +92,12 @@ class WidgetAnimator:
         # Store and start animation
         #self.animations[widget] = anim
         anim.start()
+        return anim
 
     @staticmethod
     def hide_widget(widget, anim_type="fade", duration=500, delay=0, hide=True):
+        lv.anim_delete(widget, None) # stop all ongoing animations to prevent visual glitches
+
         """Hide a widget with an animation (fade or slide)."""
         if anim_type == "fade":
             # Create fade-out animation (opacity from 255 to 0)
@@ -141,6 +145,7 @@ class WidgetAnimator:
         # Store and start animation
         #self.animations[widget] = anim
         anim.start()
+        return anim
 
     @staticmethod
     def hide_complete_cb(widget, original_y=None, hide=True):
@@ -152,7 +157,7 @@ class WidgetAnimator:
 
 
 def smooth_show(widget):
-    WidgetAnimator.show_widget(widget, anim_type="fade", duration=500, delay=0)
+    return WidgetAnimator.show_widget(widget, anim_type="fade", duration=500, delay=0)
 
 def smooth_hide(widget, hide=True):
-    WidgetAnimator.hide_widget(widget, anim_type="fade", duration=500, delay=0, hide=hide)
+    return WidgetAnimator.hide_widget(widget, anim_type="fade", duration=500, delay=0, hide=hide)
