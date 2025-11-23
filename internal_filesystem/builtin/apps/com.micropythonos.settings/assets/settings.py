@@ -323,7 +323,8 @@ class SettingActivity(Activity):
                     fs = vfs.VfsFat(bdev)
                 print(f"Mounting {fs} at /")
                 vfs.mount(fs, "/")
-                print("Done formatting, returning...")
+                print("Done formatting, refreshing apps...")
+                PackageManager.refresh_apps()
                 self.finish() # would be nice to show a "FormatInternalDataPartition" activity
                 return
 
