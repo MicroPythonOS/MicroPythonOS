@@ -21,15 +21,8 @@ class SDCardManager:
             print(f"SD card mounted successfully at {mount_point}")
             return True
         except OSError as e:
-            error_nr = -1
-            try:
-                error_nr = e.errno
-            except NameError as we:
-                print("Got this weird (sporadic) \"NameError: name 'errno' isn't defined\" again when parsing OSError: {we}")
-                print(f"Original exception: {e}")
-                print(dir(e))
             import errno
-            if error_nr == errno.EPERM:  # EPERM is 1, meaning already mounted
+            if e.errno == errno.EPERM:  # EPERM is 1, meaning already mounted
                 print(f"Got mount error {e} which means already mounted.")
                 return True
             else:
