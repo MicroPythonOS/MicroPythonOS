@@ -10,6 +10,7 @@
 - ImageView app: improve error handling
 - Settings app: tweak font size
 - Settings app: add 'format internal data partition' option
+- Settings app: fix checkbox handling with buttons
 - API: add facilities for instrumentation (screengrabs, mouse clicks)
 - API: move WifiService to mpos.net
 - API: remove fonts to reduce size
