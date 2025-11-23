@@ -84,6 +84,8 @@ class Activity:
 
     # Update the UI in a threadsafe way if the Activity is in the foreground
     # The call may get throttled, unless important=True is added to it.
+    # The order of these update_ui calls are not guaranteed, so a UI update might be overwritten by an "earlier" update.
+    # To avoid this, use lv.timer_create() with .set_repeat_count(1) as examplified in osupdate.py
     def update_ui_threadsafe_if_foreground(self, func, *args, important=False, **kwargs):
         self.throttle_async_call_counter += 1
         if not important and self.throttle_async_call_counter > 100: # 250 seems to be okay, so 100 is on the safe side

@@ -33,11 +33,12 @@ class OSUpdate(Activity):
         self.current_state = UpdateState.IDLE
         self.connectivity_manager = None  # Will be initialized in onStart
 
+    # This function gets called from both the main thread as the update_with_lvgl() thread
     def set_state(self, new_state):
         """Change app state and update UI accordingly."""
         print(f"OSUpdate: state change {self.current_state} -> {new_state}")
         self.current_state = new_state
-        self._update_ui_for_state()
+        self.update_ui_threadsafe_if_foreground(self._update_ui_for_state) # Since called from both threads, be threadsafe
 
     def onCreate(self):
         self.main_screen = lv.obj()
@@ -78,19 +79,6 @@ class OSUpdate(Activity):
         self.status_label.align_to(self.force_update, lv.ALIGN.OUT_BOTTOM_LEFT, 0, mpos.ui.pct_of_display_height(5))
         self.setContentView(self.main_screen)
 
-    def onStart(self, screen):
-        # Get connectivity manager instance
-        self.connectivity_manager = ConnectivityManager.get()
-
-        # Check if online and either start update check or wait for network
-        if self.connectivity_manager.is_online():
-            self.set_state(UpdateState.CHECKING_UPDATE)
-            print("OSUpdate: Online, checking for updates...")
-            self.show_update_info()
-        else:
-            self.set_state(UpdateState.WAITING_WIFI)
-            print("OSUpdate: Offline, waiting for network...")
-
     def _update_ui_for_state(self):
         """Update UI elements based on current state."""
         if self.current_state == UpdateState.WAITING_WIFI:
@@ -112,10 +100,11 @@ class OSUpdate(Activity):
     def onResume(self, screen):
         """Register for connectivity callbacks when app resumes."""
         super().onResume(screen)
-        if self.connectivity_manager:
-            self.connectivity_manager.register_callback(self.network_changed)
-            # Check current state
-            self.network_changed(self.connectivity_manager.is_online())
+        # Get connectivity manager instance
+        self.connectivity_manager = ConnectivityManager.get()
+        self.connectivity_manager.register_callback(self.network_changed)
+        # Start, based on network state:
+        self.network_changed(self.connectivity_manager.is_online())
 
     def onPause(self, screen):
         """Unregister connectivity callbacks when app pauses."""
@@ -138,17 +127,13 @@ class OSUpdate(Activity):
                 pass
             elif self.current_state == UpdateState.CHECKING_UPDATE:
                 # Was checking for updates when network dropped
-                self.update_ui_threadsafe_if_foreground(
-                    self.set_state, UpdateState.WAITING_WIFI
-                )
+                self.set_state(UpdateState.WAITING_WIFI)
         else:
             # Went online
-            if self.current_state == UpdateState.WAITING_WIFI:
+            if self.current_state == UpdateState.IDLE or self.current_state == UpdateState.WAITING_WIFI:
                 # Was waiting for network, now can check for updates
-                self.update_ui_threadsafe_if_foreground(
-                    self.set_state, UpdateState.CHECKING_UPDATE
-                )
-                self.show_update_info()
+                self.set_state(UpdateState.CHECKING_UPDATE)
+                self.schedule_show_update_info()
             elif self.current_state == UpdateState.DOWNLOAD_PAUSED:
                 # Download was paused, will auto-resume in download thread
                 pass
@@ -191,8 +176,12 @@ class OSUpdate(Activity):
         else:
             return f"An error occurred:\n{str(error)}\n\nPlease try again."
 
-    def show_update_info(self):
-        self.status_label.set_text("Checking for OS updates...")
+    # Show update info with a delay, to ensure ordering of multiple lv.async_call()
+    def schedule_show_update_info(self):
+        timer = lv.timer_create(self.show_update_info, 150, None)
+        timer.set_repeat_count(1)
+
+    def show_update_info(self, timer=None):
         hwid = mpos.info.get_hardware_id()
 
         try:
@@ -212,6 +201,7 @@ class OSUpdate(Activity):
             self.set_state(UpdateState.ERROR)
             self.status_label.set_text(self._get_user_friendly_error(e))
         except Exception as e:
+            print(f"show_update_info got exception: {e}")
             # Unexpected error
             self.set_state(UpdateState.ERROR)
             self.status_label.set_text(self._get_user_friendly_error(e))
@@ -220,9 +210,7 @@ class OSUpdate(Activity):
         self.download_update_url = download_url
 
         # Use UpdateChecker to determine if update is available
-        is_newer = self.update_checker.is_update_available(
-            version, mpos.info.CURRENT_OS_VERSION
-        )
+        is_newer = self.update_checker.is_update_available(version, mpos.info.CURRENT_OS_VERSION)
 
         if is_newer:
             label = "New"
@@ -270,7 +258,7 @@ class OSUpdate(Activity):
         print("OSUpdate: Check Again button clicked")
         self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.set_state(UpdateState.CHECKING_UPDATE)
-        self.show_update_info()
+        self.schedule_show_update_info()
 
     def progress_callback(self, percent):
         print(f"OTA Update: {percent:.1f}%")
@@ -296,12 +284,9 @@ class OSUpdate(Activity):
 
                 if result['success']:
                     # Update succeeded - set boot partition and restart
-                    self.update_ui_threadsafe_if_foreground(
-                        self.status_label.set_text,
-                        "Update finished! Restarting..."
-                    )
+                    self.update_ui_threadsafe_if_foreground(self.status_label.set_text,"Update finished! Restarting...")
                     # Small delay to show the message
-                    time.sleep_ms(500)
+                    time.sleep_ms(2000)
                     self.update_downloader.set_boot_partition_and_restart()
                     return
 
@@ -312,9 +297,7 @@ class OSUpdate(Activity):
                     percent = (bytes_written / total_size * 100) if total_size > 0 else 0
 
                     print(f"OSUpdate: Download paused at {percent:.1f}% ({bytes_written}/{total_size} bytes)")
-                    self.update_ui_threadsafe_if_foreground(
-                        self.set_state, UpdateState.DOWNLOAD_PAUSED
-                    )
+                    self.set_state(UpdateState.DOWNLOAD_PAUSED)
 
                     # Wait for wifi to return
                     # ConnectivityManager will notify us via callback when network returns
@@ -326,9 +309,7 @@ class OSUpdate(Activity):
                     while elapsed < max_wait and self.has_foreground():
                         if self.connectivity_manager.is_online():
                             print("OSUpdate: Network reconnected, resuming download")
-                            self.update_ui_threadsafe_if_foreground(
-                                self.set_state, UpdateState.DOWNLOADING
-                            )
+                            self.set_state(UpdateState.DOWNLOADING)
                             break  # Exit wait loop and retry download
 
                         time.sleep(check_interval)
@@ -338,12 +319,8 @@ class OSUpdate(Activity):
                         # Timeout waiting for network
                         msg = f"Network timeout during download.\n{bytes_written}/{total_size} bytes written.\nPress 'Update OS' to retry."
                         self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
-                        self.update_ui_threadsafe_if_foreground(
-                            self.install_button.remove_state, lv.STATE.DISABLED
-                        )
-                        self.update_ui_threadsafe_if_foreground(
-                            self.set_state, UpdateState.ERROR
-                        )
+                        self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)
+                        self.set_state(UpdateState.ERROR)
                         return
 
                     # If we're here, network is back - continue to next iteration to resume
@@ -366,26 +343,16 @@ class OSUpdate(Activity):
                             progress_info += "\n\nPress 'Update OS' to resume."
                         msg = friendly_msg + progress_info
 
-                    self.update_ui_threadsafe_if_foreground(
-                        self.set_state, UpdateState.ERROR
-                    )
+                    self.set_state(UpdateState.ERROR)
                     self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
-                    self.update_ui_threadsafe_if_foreground(
-                        self.install_button.remove_state, lv.STATE.DISABLED
-                    )  # allow retry
+                    self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)  # allow retry
                     return
 
         except Exception as e:
             msg = self._get_user_friendly_error(e) + "\n\nPress 'Update OS' to retry."
-            self.update_ui_threadsafe_if_foreground(
-                self.set_state, UpdateState.ERROR
-            )
-            self.update_ui_threadsafe_if_foreground(
-                self.status_label.set_text, msg
-            )
-            self.update_ui_threadsafe_if_foreground(
-                self.install_button.remove_state, lv.STATE.DISABLED
-            )  # allow retry
+            self.set_state(UpdateState.ERROR)
+            self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
+            self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)  # allow retry
 
 # Business Logic Classes:
 
