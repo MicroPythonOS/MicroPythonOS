@@ -87,7 +87,7 @@ if auto_start_app and launcher_app.fullname != auto_start_app:
     mpos.apps.start_app(auto_start_app)
 
 if not started_launcher:
-    print("WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
+    print(f"WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
 else:
     try:
         import ota.rollback
