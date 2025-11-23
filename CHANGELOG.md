@@ -1,8 +1,6 @@
 0.5.0
 =====
 - ESP32: one build to rule them all! Instead of 2 builds (prod/dev) per supported ESP32 board, there is now one single build that identifies and initializes the board at runtime!
-- Upgrade LVGL from 9.3 to 9.4
-- Upgrade MicroPython from 1.25.0 to 1.26.1
 - MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
 - MposKeyboard: increase font size from 16 to 20
 - MposKeyboard: use checkbox instead of newline symbol for 'OK, Ready'
