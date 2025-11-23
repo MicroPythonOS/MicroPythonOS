@@ -309,6 +309,7 @@ class SettingActivity(Activity):
                 return
             elif setting["key"] == "format_internal_data_partition":
                 # Inspired by lvgl_micropython/lib/micropython/ports/esp32/modules/inisetup.py
+                # Note: it would be nice to create a "FormatInternalDataPartition" activity with some progress or confirmation
                 try:
                     import vfs
                     from flashbdev import bdev
@@ -326,9 +327,15 @@ class SettingActivity(Activity):
                     fs = vfs.VfsFat(bdev)
                 print(f"Mounting {fs} at /")
                 vfs.mount(fs, "/")
-                print("Done formatting, refreshing apps...")
+                print("Done formatting, (re)mounting /builtin")
+                try:
+                    import freezefs_mount_builtin
+                except Exception as e:
+                    # This will throw an exception if there is already a "/builtin" folder present
+                    print("settings.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
+                print("Done mounting, refreshing apps")
                 PackageManager.refresh_apps()
-                self.finish() # would be nice to show a "FormatInternalDataPartition" activity
+                self.finish()
                 return
 
         ui = setting.get("ui")
