@@ -96,7 +96,7 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	pushd "$codebasedir"/lvgl_micropython/
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 clean BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
+	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
