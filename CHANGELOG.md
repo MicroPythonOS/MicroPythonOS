@@ -5,18 +5,18 @@
 - Upgrade MicroPython from 1.25.0 to 1.26.1
 - MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
 - MposKeyboard: increase font size from 16 to 20
-- MposKeyboard: use checkbox instead of newline symbol for "OK, Ready"
+- MposKeyboard: use checkbox instead of newline symbol for 'OK, Ready'
 - MposKeyboard: bigger space bar
 - OSUpdate app: simplify by using ConnectivityManager
 - OSUpdate app: adapt to new device IDs
 - ImageView app: improve error handling
 - Settings app: tweak font size
-- Settings app: add "format internal data partition" option
+- Settings app: add 'format internal data partition' option
 - API: add facilities for instrumentation (screengrabs, mouse clicks)
 - API: move WifiService to mpos.net
 - API: remove fonts to reduce size
 - API: replace font_montserrat_28 with font_montserrat_28_compressed to reduce size
-- UI: pass clicks on invisible "gesture swipe start" are to underlying widget
+- UI: pass clicks on invisible 'gesture swipe start' are to underlying widget
 - UI: only show back and down gesture icons on swipe, not on tap
 - UI: double size of back and down swipe gesture starting areas for easier gestures
 
