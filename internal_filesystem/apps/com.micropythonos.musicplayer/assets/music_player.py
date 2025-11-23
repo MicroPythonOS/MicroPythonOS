@@ -126,4 +126,4 @@ class FullscreenPlayer(Activity):
         if result:
             text = result
         print(f"AudioPlayer finished: {text}")
-        update_ui_threadsafe_if_foreground(self._filename_label.set_text, text)
+        self.update_ui_threadsafe_if_foreground(self._filename_label.set_text, text)
