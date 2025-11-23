@@ -15,6 +15,7 @@
 - API: move WifiService to mpos.net
 - API: remove fonts to reduce size
 - API: replace font_montserrat_28 with font_montserrat_28_compressed to reduce size
+- API: improve SD card error handling
 - UI: pass clicks on invisible 'gesture swipe start' are to underlying widget
 - UI: only show back and down gesture icons on swipe, not on tap
 - UI: double size of back and down swipe gesture starting areas for easier gestures
