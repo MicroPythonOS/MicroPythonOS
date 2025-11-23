@@ -225,6 +225,3 @@ class TestKeyboardQButton(unittest.TestCase):
         self.assertTrue(len(found_buttons) > 0,
                        "Should find at least some buttons on keyboard")
 
-
-if __name__ == "__main__":
-    unittest.main()

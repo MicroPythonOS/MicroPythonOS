@@ -145,5 +145,3 @@ class TestKeyboardCrash(unittest.TestCase):
         print("SUCCESS: Multiple keyboards work")
 
 
-if __name__ == "__main__":
-    unittest.main()

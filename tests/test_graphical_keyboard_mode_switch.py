@@ -153,5 +153,3 @@ class TestKeyboardModeSwitch(unittest.TestCase):
         print("Note: The handler filters for VALUE_CHANGED events only")
 
 
-if __name__ == "__main__":
-    unittest.main()

@@ -284,5 +284,3 @@ class TestKeyboardLayoutSwitching(unittest.TestCase):
         print("\nSUCCESS: Event handler preserves custom layout!")
 
 
-if __name__ == "__main__":
-    unittest.main()

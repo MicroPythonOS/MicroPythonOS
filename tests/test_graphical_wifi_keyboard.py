@@ -229,5 +229,3 @@ class TestWiFiKeyboard(unittest.TestCase):
         print("This prevents LVGL auto-insertion and fixes double-character bug!")
 
 
-if __name__ == "__main__":
-    unittest.main()

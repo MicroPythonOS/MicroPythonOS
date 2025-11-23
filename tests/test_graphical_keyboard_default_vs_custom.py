@@ -185,5 +185,3 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         return labels
 
 
-if __name__ == "__main__":
-    unittest.main()

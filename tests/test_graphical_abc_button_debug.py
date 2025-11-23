@@ -103,5 +103,3 @@ class TestAbcButtonDebug(unittest.TestCase):
         print("="*70)
 
 
-if __name__ == "__main__":
-    unittest.main()

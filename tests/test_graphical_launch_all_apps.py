@@ -246,5 +246,3 @@ class TestLaunchSpecificApps(unittest.TestCase):
             f"About app should load without errors: {error_msg}")
 
 
-if __name__ == '__main__':
-    unittest.main()

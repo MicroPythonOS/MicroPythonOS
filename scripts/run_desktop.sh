@@ -61,9 +61,9 @@ pushd internal_filesystem/
 	elif [ ! -z "$script" ]; then # it's an app name
 		scriptdir="$script"
 		echo "Running app from $scriptdir"
-		"$binary" -X heapsize=$HEAPSIZE  -v -i -c "import sys ; sys.path.append('lib/') ; import mpos.main ; import mpos.apps; mpos.apps.start_app('$scriptdir')"
+		"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat boot.py) ; import mpos.apps; mpos.apps.start_app('$scriptdir')"
 	else
-		"$binary" -X heapsize=$HEAPSIZE -v -i -c "import sys ; sys.path.append('lib/') ; import mpos.main"
+		"$binary" -X heapsize=$HEAPSIZE -v -i -c "$(cat boot.py)"
 	fi
 		
 

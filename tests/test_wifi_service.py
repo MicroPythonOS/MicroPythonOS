@@ -455,5 +455,3 @@ class TestWifiServiceDisconnect(unittest.TestCase):
         WifiService.disconnect(network_module=None)
 
 
-if __name__ == '__main__':
-    unittest.main()
