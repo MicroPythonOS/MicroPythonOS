@@ -5,6 +5,6 @@
 import sys
 sys.path.insert(0, 'lib')
 
-print("Passing execution over to MicroPythonOS's main.py")
+print("Passing execution over to mpos.main")
 import mpos.main
 
