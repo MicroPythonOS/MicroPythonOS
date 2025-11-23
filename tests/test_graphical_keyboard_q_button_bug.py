@@ -72,7 +72,7 @@ class TestKeyboardQButton(unittest.TestCase):
         keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        wait_for_render(10)
+        wait_for_render(20) # increased from 10 to 20 because on macOS this didnt work
 
         print(f"Initial textarea: '{textarea.get_text()}'")
         self.assertEqual(textarea.get_text(), "", "Textarea should start empty")
@@ -90,7 +90,7 @@ class TestKeyboardQButton(unittest.TestCase):
         # Click the 'q' button
         print(f"Clicking 'q' button at ({q_coords['center_x']}, {q_coords['center_y']})")
         simulate_click(q_coords['center_x'], q_coords['center_y'])
-        wait_for_render(10)
+        wait_for_render(20) # increased from 10 to 20 because on macOS this didnt work
 
         # Check textarea content
         text_after_q = textarea.get_text()
