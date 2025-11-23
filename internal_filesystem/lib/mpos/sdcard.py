@@ -21,7 +21,14 @@ class SDCardManager:
             print(f"SD card mounted successfully at {mount_point}")
             return True
         except OSError as e:
-            if e.errno == errno.EPERM:  # EPERM is 1, meaning already mounted
+            errno = -1
+            try:
+                errno = e.errno
+            except NameError as we:
+                print("Got this weird (sporadic) \"NameError: name 'errno' isn't defined\" again when parsing OSError: {we}")
+                print(f"Original exception: {e}")
+                print(dir(e))
+            if errno == errno.EPERM:  # EPERM is 1, meaning already mounted
                 print(f"Got mount error {e} which means already mounted.")
                 return True
             else:
@@ -132,7 +139,7 @@ def get():
     """Get the global SD card manager instance."""
     if _manager is None:
         print("ERROR: SDCardManager not initialized")
-        print("  - Call init(spi_bus, cs_pin) first in boot.py or main.py")
+        print("  - Call init(spi_bus, cs_pin) first in lib/mpos/board/*.py")
     return _manager
 
 def mount(mount_point):
