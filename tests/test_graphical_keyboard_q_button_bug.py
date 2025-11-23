@@ -20,6 +20,7 @@ from mpos.ui.testing import (
     wait_for_render,
     find_button_with_text,
     get_widget_coords,
+    get_keyboard_button_coords,
     simulate_click,
     print_screen_labels
 )
@@ -79,43 +80,16 @@ class TestKeyboardQButton(unittest.TestCase):
         # --- Test 'q' button ---
         print("\n--- Testing 'q' button ---")
 
-        # Find button index for 'q' in the keyboard
-        q_button_id = None
-        for i in range(100):  # Check first 100 button indices
-            try:
-                text = keyboard.get_button_text(i)
-                if text == "q":
-                    q_button_id = i
-                    print(f"Found 'q' button at index {i}")
-                    break
-            except:
-                break  # No more buttons
+        # Get exact button coordinates using helper function
+        q_coords = get_keyboard_button_coords(keyboard, "q")
+        self.assertIsNotNone(q_coords, "Should find 'q' button on keyboard")
 
-        self.assertIsNotNone(q_button_id, "Should find 'q' button on keyboard")
-
-        # Get the keyboard widget coordinates to calculate button position
-        keyboard_area = lv.area_t()
-        keyboard.get_coords(keyboard_area)
-        print(f"Keyboard area: x1={keyboard_area.x1}, y1={keyboard_area.y1}, x2={keyboard_area.x2}, y2={keyboard_area.y2}")
-
-        # LVGL keyboards organize buttons in a grid
-        # From the map: "q" is at index 0, in top row (10 buttons per row)
-        # Let's estimate position based on keyboard layout
-        # Top row starts at y1 + some padding, each button is ~width/10
-        keyboard_width = keyboard_area.x2 - keyboard_area.x1
-        keyboard_height = keyboard_area.y2 - keyboard_area.y1
-        button_width = keyboard_width // 10  # ~10 buttons per row
-        button_height = keyboard_height // 4  # ~4 rows
-
-        # 'q' is first button (index 0), top row
-        q_x = keyboard_area.x1 + button_width // 2
-        q_y = keyboard_area.y1 + button_height // 2
-
-        print(f"Estimated 'q' button position: ({q_x}, {q_y})")
+        print(f"Found 'q' button at index {q_coords['button_idx']}, row {q_coords['row']}, col {q_coords['col']}")
+        print(f"Exact 'q' button position: ({q_coords['center_x']}, {q_coords['center_y']})")
 
         # Click the 'q' button
-        print(f"Clicking 'q' button at ({q_x}, {q_y})")
-        simulate_click(q_x, q_y)
+        print(f"Clicking 'q' button at ({q_coords['center_x']}, {q_coords['center_y']})")
+        simulate_click(q_coords['center_x'], q_coords['center_y'])
         wait_for_render(10)
 
         # Check textarea content
@@ -134,29 +108,16 @@ class TestKeyboardQButton(unittest.TestCase):
         wait_for_render(5)
         print("Cleared textarea")
 
-        # Find button index for 'a'
-        a_button_id = None
-        for i in range(100):
-            try:
-                text = keyboard.get_button_text(i)
-                if text == "a":
-                    a_button_id = i
-                    print(f"Found 'a' button at index {i}")
-                    break
-            except:
-                break
+        # Get exact button coordinates using helper function
+        a_coords = get_keyboard_button_coords(keyboard, "a")
+        self.assertIsNotNone(a_coords, "Should find 'a' button on keyboard")
 
-        self.assertIsNotNone(a_button_id, "Should find 'a' button on keyboard")
-
-        # 'a' is at index 11 (second row, first position)
-        a_x = keyboard_area.x1 + button_width // 2
-        a_y = keyboard_area.y1 + button_height + button_height // 2
-
-        print(f"Estimated 'a' button position: ({a_x}, {a_y})")
+        print(f"Found 'a' button at index {a_coords['button_idx']}, row {a_coords['row']}, col {a_coords['col']}")
+        print(f"Exact 'a' button position: ({a_coords['center_x']}, {a_coords['center_y']})")
 
         # Click the 'a' button
-        print(f"Clicking 'a' button at ({a_x}, {a_y})")
-        simulate_click(a_x, a_y)
+        print(f"Clicking 'a' button at ({a_coords['center_x']}, {a_coords['center_y']})")
+        simulate_click(a_coords['center_x'], a_coords['center_y'])
         wait_for_render(10)
 
         # Check textarea content

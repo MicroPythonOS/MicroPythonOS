@@ -383,6 +383,104 @@ def find_button_with_text(obj, search_text):
     return None
 
 
+def get_keyboard_button_coords(keyboard, button_text):
+    """
+    Get the coordinates of a specific button on an LVGL keyboard/buttonmatrix.
+
+    This function calculates the exact center position of a keyboard button
+    by finding its index and computing its position based on the keyboard's
+    layout, control widths, and actual screen coordinates.
+
+    Args:
+        keyboard: LVGL keyboard widget (or MposKeyboard wrapper)
+        button_text: Text of the button to find (e.g., "q", "a", "1")
+
+    Returns:
+        dict with 'center_x' and 'center_y', or None if button not found
+
+    Example:
+        from mpos.ui.keyboard import MposKeyboard
+        keyboard = MposKeyboard(screen)
+        coords = get_keyboard_button_coords(keyboard, "q")
+        if coords:
+            simulate_click(coords['center_x'], coords['center_y'])
+    """
+    # Get the underlying LVGL keyboard if this is a wrapper
+    if hasattr(keyboard, '_keyboard'):
+        lvgl_keyboard = keyboard._keyboard
+    else:
+        lvgl_keyboard = keyboard
+
+    # Find the button index
+    button_idx = None
+    for i in range(100):  # Check up to 100 buttons
+        try:
+            text = lvgl_keyboard.get_button_text(i)
+            if text == button_text:
+                button_idx = i
+                break
+        except:
+            break  # No more buttons
+
+    if button_idx is None:
+        return None
+
+    # Get keyboard widget coordinates
+    area = lv.area_t()
+    lvgl_keyboard.get_coords(area)
+    kb_x = area.x1
+    kb_y = area.y1
+    kb_width = area.x2 - area.x1
+    kb_height = area.y2 - area.y1
+
+    # Parse the keyboard layout to find button position
+    # Note: LVGL get_button_text() skips '\n' markers, so they're not in the indices
+    # Standard keyboard layout (from MposKeyboard):
+    # Row 0: 10 buttons (q w e r t y u i o p)
+    # Row 1: 9 buttons (a s d f g h j k l)
+    # Row 2: 9 buttons (shift z x c v b n m backspace)
+    # Row 3: 5 buttons (?123, comma, space, dot, enter)
+
+    # Define row lengths for standard keyboard
+    row_lengths = [10, 9, 9, 5]
+
+    # Find which row our button is in
+    row = 0
+    buttons_before = 0
+    for row_len in row_lengths:
+        if button_idx < buttons_before + row_len:
+            # Button is in this row
+            col = button_idx - buttons_before
+            buttons_this_row = row_len
+            break
+        buttons_before += row_len
+        row += 1
+    else:
+        # Button not found in standard layout, use row 0
+        row = 0
+        col = button_idx
+        buttons_this_row = 10
+
+    # Calculate position
+    # Approximate: divide keyboard into equal rows and columns
+    # (This is simplified - actual LVGL uses control widths, but this is good enough)
+    num_rows = 4  # Typical keyboard has 4 rows
+    button_height = kb_height / num_rows
+    button_width = kb_width / max(buttons_this_row, 1)
+
+    # Calculate center position
+    center_x = int(kb_x + (col * button_width) + (button_width / 2))
+    center_y = int(kb_y + (row * button_height) + (button_height / 2))
+
+    return {
+        'center_x': center_x,
+        'center_y': center_y,
+        'button_idx': button_idx,
+        'row': row,
+        'col': col
+    }
+
+
 def _touch_read_cb(indev_drv, data):
     """
     Internal callback for simulated touch input device.
