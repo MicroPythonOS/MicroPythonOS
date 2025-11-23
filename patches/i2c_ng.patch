@@ -1,0 +1,13 @@
+--- lib/esp-idf/components/driver/i2c/i2c.c.orig	2025-11-23 11:54:37.321320078 +0100
++++ lib/esp-idf/components/driver/i2c/i2c.c	2025-11-23 11:54:54.681590547 +0100
+@@ -1715,8 +1715,8 @@
+     // So if the new I2C driver is not linked in, then `i2c_acquire_bus_handle()` should be NULL at runtime.
+     extern __attribute__((weak)) esp_err_t i2c_acquire_bus_handle(int port_num, void *i2c_new_bus, int mode);
+     if ((void *)i2c_acquire_bus_handle != NULL) {
+-        ESP_EARLY_LOGE(I2C_TAG, "CONFLICT! driver_ng is not allowed to be used with this old driver");
+-        abort();
++        ESP_EARLY_LOGE(I2C_TAG, "CONFLICT! driver_ng is not allowed to be used with this old driver BUT abort is disabled!");
++        //abort();
+     }
+     ESP_EARLY_LOGW(I2C_TAG, "This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`");
+ }
