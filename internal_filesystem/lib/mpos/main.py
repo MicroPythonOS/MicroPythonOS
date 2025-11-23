@@ -23,7 +23,7 @@ elif sys.platform == "esp32":
             board = "fri3d_2024"
         else:
             print("Unable to identify board, defaulting...")
-            board = "waveshare_esp32_s3_touch_lcd_2" # default fallback
+            board = "fri3d_2024" # default fallback
 
 print(f"Initializing {board} hardware")
 import mpos.info
