@@ -125,7 +125,7 @@ class SettingsActivity(Activity):
 # Used to edit one setting:
 class SettingActivity(Activity):
 
-    active_radio_index = 0  # Track active radio button index
+    active_radio_index = -1  # Track active radio button index
 
     # Widgets:
     keyboard = None
@@ -168,7 +168,7 @@ class SettingActivity(Activity):
             self.radio_container.set_width(lv.pct(100))
             self.radio_container.set_height(lv.SIZE_CONTENT)
             self.radio_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-            self.radio_container.add_event_cb(self.radio_event_handler, lv.EVENT.CLICKED, None)
+            self.radio_container.add_event_cb(self.radio_event_handler, lv.EVENT.VALUE_CHANGED, None)
             # Create radio buttons and check the right one
             self.active_radio_index = -1 # none
             for i, (option_text, option_value) in enumerate(ui_options):
@@ -256,19 +256,22 @@ class SettingActivity(Activity):
 
     def radio_event_handler(self, event):
         print("radio_event_handler called")
-        if self.active_radio_index >= 0:
-            print(f"removing old CHECKED state from child {self.active_radio_index}")
-            old_cb = self.radio_container.get_child(self.active_radio_index)
-            old_cb.remove_state(lv.STATE.CHECKED)
-        self.active_radio_index = -1
-        for childnr in range(self.radio_container.get_child_count()):
-            child = self.radio_container.get_child(childnr)
-            state = child.get_state()
-            print(f"radio_container child's state: {state}")
-            if state & lv.STATE.CHECKED: # State can be something like 19 = lv.STATE.HOVERED  (16) & lv.STATE.FOCUSED (2) & lv.STATE.CHECKED (1)
-                self.active_radio_index = childnr
-                break
-        print(f"active_radio_index is now {self.active_radio_index}")
+        target_obj = event.get_target_obj()
+        target_obj_state = target_obj.get_state()
+        print(f"target_obj state {target_obj.get_text()} is {target_obj_state}")
+        checked = target_obj_state & lv.STATE.CHECKED
+        if not checked:
+            print("it's not checked, nothing to do!")
+            return
+        else:
+            new_checked = target_obj.get_index()
+            print(f"new_checked: {new_checked}")
+            if self.active_radio_index >= 0:
+                old_checked = self.radio_container.get_child(self.active_radio_index)
+                old_checked.remove_state(lv.STATE.CHECKED)
+            new_checked_obj = self.radio_container.get_child(new_checked)
+            new_checked_obj.add_state(lv.STATE.CHECKED)
+            self.active_radio_index = new_checked
 
     def create_radio_button(self, parent, text, index):
         cb = lv.checkbox(parent)
