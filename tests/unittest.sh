@@ -128,7 +128,7 @@ if [ -z "$onetest" ]; then
 		one_test "$file"
 		result=$?
 		if [ $result -ne 0 ]; then
-			echo "\n\n\nWARNING: test $file got error $result !!!\n\n\n"
+			echo -e "\n\n\nWARNING: test $file got error $result !!!\n\n\n"
 			failed=$(expr $failed \+ 1)
 			exit 1
 		else
