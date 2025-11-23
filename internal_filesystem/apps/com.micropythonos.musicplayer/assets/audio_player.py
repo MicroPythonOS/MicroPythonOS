@@ -201,29 +201,22 @@ class AudioPlayer:
                 print(f"Playing {data_size} original bytes (vol {cls._volume}%) ...")
                 f.seek(data_start)
 
-                # Fallback to non-viper and non-functional code on desktop, as macOS/darwin throws "invalid micropython decorator"
+                # ----- Viper volume scaler (16-bit only) -------------------------
+                @micropython.viper # throws "invalid micropython decorator" on macOS / darwin
                 def scale_audio(buf: ptr8, num_bytes: int, scale_fixed: int):
-                    pass
-
-                try:
-                    # ----- Viper volume scaler (16-bit only) -------------------------
-                    @micropython.viper # throws "invalid micropython decorator" on macOS / darwin
-                    def scale_audio(buf: ptr8, num_bytes: int, scale_fixed: int):
-                        for i in range(0, num_bytes, 2):
-                            lo = int(buf[i])
-                            hi = int(buf[i+1])
-                            sample = (hi << 8) | lo
-                            if hi & 128:
-                                sample -= 65536
-                            sample = (sample * scale_fixed) // 32768
-                            if sample > 32767:
-                                sample = 32767
-                            elif sample < -32768:
-                                sample = -32768
-                            buf[i] = sample & 255
-                            buf[i+1] = (sample >> 8) & 255
-                except SyntaxError:
-                    print("Viper not supported (e.g., on desktop)—using plain Python.")
+                    for i in range(0, num_bytes, 2):
+                        lo = int(buf[i])
+                        hi = int(buf[i+1])
+                        sample = (hi << 8) | lo
+                        if hi & 128:
+                            sample -= 65536
+                        sample = (sample * scale_fixed) // 32768
+                        if sample > 32767:
+                            sample = 32767
+                        elif sample < -32768:
+                            sample = -32768
+                        buf[i] = sample & 255
+                        buf[i+1] = (sample >> 8) & 255
 
                 chunk_size = 4096
                 bytes_per_original_sample = (bits_per_sample // 8) * channels
