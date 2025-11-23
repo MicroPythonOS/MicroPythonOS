@@ -60,7 +60,7 @@ def _back_swipe_cb(event):
         if backbutton_visible:
             backbutton_visible = False
             smooth_hide(backbutton)
-        if x > min(100, get_display_width() / 4):
+        if x > get_display_width() / 5:
             back_screen()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
@@ -98,7 +98,7 @@ def _top_swipe_cb(event):
             smooth_hide(downbutton)
         dx = abs(x - down_start_x)
         dy = abs(y - down_start_y)
-        if y > min(80, get_display_height() / 4):
+        if y > get_display_height() / 5:
             open_drawer()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
