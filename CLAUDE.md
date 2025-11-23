@@ -243,6 +243,7 @@ Run manual tests with:
 - Tests should be runnable on desktop (unix build) without hardware dependencies
 - Use descriptive test names: `test_<what_is_being_tested>`
 - Group related tests in test classes
+- **IMPORTANT**: Do NOT end test files with `if __name__ == '__main__': unittest.main()` - the `./tests/unittest.sh` script handles running tests and capturing exit codes. Including this will interfere with test execution.
 
 **Example test structure**:
 ```python
