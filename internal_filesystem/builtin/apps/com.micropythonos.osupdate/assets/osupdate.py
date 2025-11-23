@@ -125,7 +125,7 @@ class OSUpdate(Activity):
             if self.current_state == UpdateState.DOWNLOADING:
                 # Download will automatically pause due to connectivity check
                 pass
-            elif self.current_state == UpdateState.CHECKING_UPDATE:
+            elif self.current_state == UpdateState.IDLE or self.current_state == UpdateState.CHECKING_UPDATE:
                 # Was checking for updates when network dropped
                 self.set_state(UpdateState.WAITING_WIFI)
         else:
@@ -216,7 +216,7 @@ class OSUpdate(Activity):
             label = "New"
             self.install_button.remove_state(lv.STATE.DISABLED)
         else:
-            label = "Same latest"
+            label = "No new"
             if (self.force_update.get_state() & lv.STATE.CHECKED):
                 self.install_button.remove_state(lv.STATE.DISABLED)
         label += f" version: {version}\n\nDetails:\n\n{changelog}"
