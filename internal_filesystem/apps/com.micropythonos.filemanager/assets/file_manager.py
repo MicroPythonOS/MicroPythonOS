@@ -11,13 +11,7 @@ class FileManager(Activity):
         screen = lv.obj()
         self.file_explorer = lv.file_explorer(screen)
         #self.file_explorer.set_root_path("M:data/images/")
-        #self.file_explorer.explorer_open_dir('/')
-        #self.file_explorer.explorer_open_dir('M:data/images/')
-        #self.file_explorer.explorer_open_dir('M:/')
         self.file_explorer.explorer_open_dir('M:/')
-        #self.file_explorer.explorer_open_dir('M:data/images/')
-        #self.file_explorer.explorer_open_dir('P:.') # POSIX works on desktop, fs_driver gives unicode error doesn't because it doesn't have dir_open, dir_read, dir_close but that's fixed in https://github.com/lvgl-micropython/lvgl_micropython/pull/399
-        #self.file_explorer.explorer_open_dir('P:/tmp') # POSIX works, fs_driver doesn't because it doesn't have dir_open, dir_read, dir_close
         #file_explorer.explorer_open_dir('S:/')
         #self.file_explorer.set_size(lv.pct(100), lv.pct(100))
         #file_explorer.set_mode(lv.FILE_EXPLORER.MODE.DEFAULT)  # Default browsing mode
