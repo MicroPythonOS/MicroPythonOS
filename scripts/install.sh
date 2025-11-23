@@ -29,8 +29,8 @@ if [ ! -z "$appname" ]; then
 		fi
 	fi
         $mpremote mkdir "/apps"
-        $mpremote mkdir "/builtin"
-        $mpremote mkdir "/builtin/apps"
+        #$mpremote mkdir "/builtin" # dont do this because it breaks the mount!
+        #$mpremote mkdir "/builtin/apps"
 	$mpremote fs cp -r "$appdir" :/"$target"
 	echo "start_app(\"/$appdir\")"
 	$mpremote
