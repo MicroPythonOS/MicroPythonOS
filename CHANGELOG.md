@@ -1,6 +1,6 @@
 0.5.0
 =====
-- ESP32: one build to rule them all! Instead of 2 builds (prod/dev) per supported ESP32 board, there is now one single build that identifies and initializes the board at runtime!
+- ESP32: one build to rule them all; instead of 2 builds per supported board, there is now one single build that identifies and initializes the board at runtime!
 - MposKeyboard: fix q, Q, 1 and ~ button unclickable bug
 - MposKeyboard: increase font size from 16 to 20
 - MposKeyboard: use checkbox instead of newline symbol for 'OK, Ready'
@@ -11,14 +11,16 @@
 - Settings app: tweak font size
 - Settings app: add 'format internal data partition' option
 - Settings app: fix checkbox handling with buttons
+- UI: pass clicks on invisible 'gesture swipe start' are to underlying widget
+- UI: only show back and down gesture icons on swipe, not on tap
+- UI: double size of back and down swipe gesture starting areas for easier gestures
+- UI: increase navigation gesture sensitivity
+- UI: prevent visual glitches in animations
 - API: add facilities for instrumentation (screengrabs, mouse clicks)
 - API: move WifiService to mpos.net
 - API: remove fonts to reduce size
 - API: replace font_montserrat_28 with font_montserrat_28_compressed to reduce size
 - API: improve SD card error handling
-- UI: pass clicks on invisible 'gesture swipe start' are to underlying widget
-- UI: only show back and down gesture icons on swipe, not on tap
-- UI: double size of back and down swipe gesture starting areas for easier gestures
 
 0.4.0
 =====
