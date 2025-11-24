@@ -1,7 +1,7 @@
 0.5.1
 =====
 - OSUpdate app: pause download when wifi is lost, resume when reconnected
-- Fri3d Camp 2024 Badge: workaround ADC2+WiFi conflict by disconnecting WiFi to measure battery level
+- Fri3d Camp 2024 Badge: workaround ADC2+WiFi conflict by temporarily disable WiFi to measure battery level
 
 0.5.0
 =====
