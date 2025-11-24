@@ -22,6 +22,11 @@
           "category": "default"
         }
       ]
+    },
+    {
+      "entrypoint": "assets/camera_app.py",
+      "classname": "CameraSettingsActivity",
+      "intent_filters": []
     }
   ]
 }

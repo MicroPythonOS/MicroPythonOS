@@ -160,7 +160,7 @@ class WiFi(Activity):
         
     def password_page_result_cb(self, result):
         print(f"PasswordPage finished, result: {result}")
-        if result.get("result_code"):
+        if result.get("result_code") is True:
             data = result.get("data")
             if data:
                 self.start_attempt_connecting(data.get("ssid"), data.get("password"))

@@ -30,17 +30,24 @@ typedef struct _webcam_obj_t {
     int frame_count;
     unsigned char *gray_buffer; // For grayscale
     uint16_t *rgb565_buffer;   // For RGB565
+    int input_width;           // Webcam capture width (from V4L2)
+    int input_height;          // Webcam capture height (from V4L2)
+    int output_width;          // Configurable output width (default OUTPUT_WIDTH)
+    int output_height;         // Configurable output height (default OUTPUT_HEIGHT)
 } webcam_obj_t;
 
-static void yuyv_to_rgb565_240x240(unsigned char *yuyv, uint16_t *rgb565, int in_width, int in_height) {
-    int crop_size = 480;
+static void yuyv_to_rgb565(unsigned char *yuyv, uint16_t *rgb565, int in_width, int in_height, int out_width, int out_height) {
+    // Crop to largest square that fits in the input frame
+    int crop_size = (in_width < in_height) ? in_width : in_height;
     int crop_x_offset = (in_width - crop_size) / 2;
     int crop_y_offset = (in_height - crop_size) / 2;
-    float x_ratio = (float)crop_size / OUTPUT_WIDTH;
-    float y_ratio = (float)crop_size / OUTPUT_HEIGHT;
 
-    for (int y = 0; y < OUTPUT_HEIGHT; y++) {
-        for (int x = 0; x < OUTPUT_WIDTH; x++) {
+    // Calculate scaling ratios
+    float x_ratio = (float)crop_size / out_width;
+    float y_ratio = (float)crop_size / out_height;
+
+    for (int y = 0; y < out_height; y++) {
+        for (int x = 0; x < out_width; x++) {
             int src_x = (int)(x * x_ratio) + crop_x_offset;
             int src_y = (int)(y * y_ratio) + crop_y_offset;
             int src_index = (src_y * in_width + src_x) * 2;
@@ -65,24 +72,27 @@ static void yuyv_to_rgb565_240x240(unsigned char *yuyv, uint16_t *rgb565, int in
             uint16_t g6 = (g >> 2) & 0x3F;
             uint16_t b5 = (b >> 3) & 0x1F;
 
-            rgb565[y * OUTPUT_WIDTH + x] = (r5 << 11) | (g6 << 5) | b5;
+            rgb565[y * out_width + x] = (r5 << 11) | (g6 << 5) | b5;
         }
     }
 }
 
-static void yuyv_to_grayscale_240x240(unsigned char *yuyv, unsigned char *gray, int in_width, int in_height) {
-    int crop_size = 480;
+static void yuyv_to_grayscale(unsigned char *yuyv, unsigned char *gray, int in_width, int in_height, int out_width, int out_height) {
+    // Crop to largest square that fits in the input frame
+    int crop_size = (in_width < in_height) ? in_width : in_height;
     int crop_x_offset = (in_width - crop_size) / 2;
     int crop_y_offset = (in_height - crop_size) / 2;
-    float x_ratio = (float)crop_size / OUTPUT_WIDTH;
-    float y_ratio = (float)crop_size / OUTPUT_HEIGHT;
 
-    for (int y = 0; y < OUTPUT_HEIGHT; y++) {
-        for (int x = 0; x < OUTPUT_WIDTH; x++) {
+    // Calculate scaling ratios
+    float x_ratio = (float)crop_size / out_width;
+    float y_ratio = (float)crop_size / out_height;
+
+    for (int y = 0; y < out_height; y++) {
+        for (int x = 0; x < out_width; x++) {
             int src_x = (int)(x * x_ratio) + crop_x_offset;
             int src_y = (int)(y * y_ratio) + crop_y_offset;
             int src_index = (src_y * in_width + src_x) * 2;
-            gray[y * OUTPUT_WIDTH + x] = yuyv[src_index];
+            gray[y * out_width + x] = yuyv[src_index];
         }
     }
 }
@@ -174,8 +184,22 @@ static int init_webcam(webcam_obj_t *self, const char *device) {
     }
 
     self->frame_count = 0;
-    self->gray_buffer = (unsigned char *)malloc(OUTPUT_WIDTH * OUTPUT_HEIGHT * sizeof(unsigned char));
-    self->rgb565_buffer = (uint16_t *)malloc(OUTPUT_WIDTH * OUTPUT_HEIGHT * sizeof(uint16_t));
+
+    // Store the input dimensions from V4L2 format
+    self->input_width = WIDTH;
+    self->input_height = HEIGHT;
+
+    // Initialize output dimensions with defaults if not already set
+    if (self->output_width == 0) self->output_width = OUTPUT_WIDTH;
+    if (self->output_height == 0) self->output_height = OUTPUT_HEIGHT;
+
+    WEBCAM_DEBUG_PRINT("Webcam initialized: input %dx%d, output %dx%d\n",
+                       self->input_width, self->input_height,
+                       self->output_width, self->output_height);
+
+    // Allocate buffers with configured output dimensions
+    self->gray_buffer = (unsigned char *)malloc(self->output_width * self->output_height * sizeof(unsigned char));
+    self->rgb565_buffer = (uint16_t *)malloc(self->output_width * self->output_height * sizeof(uint16_t));
     if (!self->gray_buffer || !self->rgb565_buffer) {
         WEBCAM_DEBUG_PRINT("Cannot allocate buffers: %s\n", strerror(errno));
         free(self->gray_buffer);
@@ -227,13 +251,13 @@ static mp_obj_t capture_frame(mp_obj_t self_in, mp_obj_t format) {
     }
 
     if (!self->gray_buffer) {
-        self->gray_buffer = (unsigned char *)malloc(OUTPUT_WIDTH * OUTPUT_HEIGHT * sizeof(unsigned char));
+        self->gray_buffer = (unsigned char *)malloc(self->output_width * self->output_height * sizeof(unsigned char));
         if (!self->gray_buffer) {
             mp_raise_OSError(MP_ENOMEM);
         }
     }
     if (!self->rgb565_buffer) {
-        self->rgb565_buffer = (uint16_t *)malloc(OUTPUT_WIDTH * OUTPUT_HEIGHT * sizeof(uint16_t));
+        self->rgb565_buffer = (uint16_t *)malloc(self->output_width * self->output_height * sizeof(uint16_t));
         if (!self->rgb565_buffer) {
             mp_raise_OSError(MP_ENOMEM);
         }
@@ -241,22 +265,26 @@ static mp_obj_t capture_frame(mp_obj_t self_in, mp_obj_t format) {
 
     const char *fmt = mp_obj_str_get_str(format);
     if (strcmp(fmt, "grayscale") == 0) {
-        yuyv_to_grayscale_240x240(self->buffers[buf.index], self->gray_buffer, WIDTH, HEIGHT);
+        yuyv_to_grayscale(self->buffers[buf.index], self->gray_buffer,
+                         self->input_width, self->input_height,
+                         self->output_width, self->output_height);
         // char filename[32];
         // snprintf(filename, sizeof(filename), "frame_%03d.raw", self->frame_count++);
-        // save_raw(filename, self->gray_buffer, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-        mp_obj_t result = mp_obj_new_memoryview('b', OUTPUT_WIDTH * OUTPUT_HEIGHT, self->gray_buffer);
+        // save_raw(filename, self->gray_buffer, self->output_width, self->output_height);
+        mp_obj_t result = mp_obj_new_memoryview('b', self->output_width * self->output_height, self->gray_buffer);
         res = ioctl(self->fd, VIDIOC_QBUF, &buf);
         if (res < 0) {
             mp_raise_OSError(-res);
         }
         return result;
     } else {
-        yuyv_to_rgb565_240x240(self->buffers[buf.index], self->rgb565_buffer, WIDTH, HEIGHT);
+        yuyv_to_rgb565(self->buffers[buf.index], self->rgb565_buffer,
+                      self->input_width, self->input_height,
+                      self->output_width, self->output_height);
         // char filename[32];
         // snprintf(filename, sizeof(filename), "frame_%03d.rgb565", self->frame_count++);
-        // save_raw_rgb565(filename, self->rgb565_buffer, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-        mp_obj_t result = mp_obj_new_memoryview('b', OUTPUT_WIDTH * OUTPUT_HEIGHT * 2, self->rgb565_buffer);
+        // save_raw_rgb565(filename, self->rgb565_buffer, self->output_width, self->output_height);
+        mp_obj_t result = mp_obj_new_memoryview('b', self->output_width * self->output_height * 2, self->rgb565_buffer);
         res = ioctl(self->fd, VIDIOC_QBUF, &buf);
         if (res < 0) {
             mp_raise_OSError(-res);
@@ -277,6 +305,10 @@ static mp_obj_t webcam_init(size_t n_args, const mp_obj_t *args) {
     self->fd = -1;
     self->gray_buffer = NULL;
     self->rgb565_buffer = NULL;
+    self->input_width = 0;    // Will be set from V4L2 format in init_webcam
+    self->input_height = 0;   // Will be set from V4L2 format in init_webcam
+    self->output_width = 0;   // Will use default OUTPUT_WIDTH in init_webcam
+    self->output_height = 0;  // Will use default OUTPUT_HEIGHT in init_webcam
 
     int res = init_webcam(self, device);
     if (res < 0) {
@@ -309,6 +341,65 @@ static mp_obj_t webcam_capture_frame(mp_obj_t self_in, mp_obj_t format) {
 }
 MP_DEFINE_CONST_FUN_OBJ_2(webcam_capture_frame_obj, webcam_capture_frame);
 
+static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+    // NOTE: This function only changes OUTPUT resolution (what Python receives).
+    // The INPUT resolution (what the webcam captures from V4L2) remains fixed at 640x480.
+    // The conversion functions will crop/scale from input to output resolution.
+    // TODO: Add support for changing input resolution (requires V4L2 reinit)
+
+    enum { ARG_self, ARG_output_width, ARG_output_height };
+    static const mp_arg_t allowed_args[] = {
+        { MP_QSTR_self, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
+        { MP_QSTR_output_width, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_output_height, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+    };
+
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
+    webcam_obj_t *self = MP_OBJ_TO_PTR(args[ARG_self].u_obj);
+
+    // Get new dimensions (keep current if not specified)
+    int new_width = args[ARG_output_width].u_int;
+    int new_height = args[ARG_output_height].u_int;
+
+    if (new_width == 0) new_width = self->output_width;
+    if (new_height == 0) new_height = self->output_height;
+
+    // Validate dimensions
+    if (new_width <= 0 || new_height <= 0 || new_width > 1920 || new_height > 1920) {
+        mp_raise_ValueError(MP_ERROR_TEXT("Invalid output dimensions"));
+    }
+
+    // If dimensions changed, reallocate buffers
+    if (new_width != self->output_width || new_height != self->output_height) {
+        // Free old buffers
+        free(self->gray_buffer);
+        free(self->rgb565_buffer);
+
+        // Update dimensions
+        self->output_width = new_width;
+        self->output_height = new_height;
+
+        // Allocate new buffers
+        self->gray_buffer = (unsigned char *)malloc(self->output_width * self->output_height * sizeof(unsigned char));
+        self->rgb565_buffer = (uint16_t *)malloc(self->output_width * self->output_height * sizeof(uint16_t));
+
+        if (!self->gray_buffer || !self->rgb565_buffer) {
+            free(self->gray_buffer);
+            free(self->rgb565_buffer);
+            self->gray_buffer = NULL;
+            self->rgb565_buffer = NULL;
+            mp_raise_OSError(MP_ENOMEM);
+        }
+
+        WEBCAM_DEBUG_PRINT("Webcam reconfigured to %dx%d\n", self->output_width, self->output_height);
+    }
+
+    return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_KW(webcam_reconfigure_obj, 1, webcam_reconfigure);
+
 static const mp_obj_type_t webcam_type = {
     { &mp_type_type },
     .name = MP_QSTR_Webcam,
@@ -321,6 +412,7 @@ static const mp_rom_map_elem_t mp_module_webcam_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_capture_frame), MP_ROM_PTR(&webcam_capture_frame_obj) },
     { MP_ROM_QSTR(MP_QSTR_deinit), MP_ROM_PTR(&webcam_deinit_obj) },
     { MP_ROM_QSTR(MP_QSTR_free_buffer), MP_ROM_PTR(&webcam_free_buffer_obj) },
+    { MP_ROM_QSTR(MP_QSTR_reconfigure), MP_ROM_PTR(&webcam_reconfigure_obj) },
 };
 static MP_DEFINE_CONST_DICT(mp_module_webcam_globals, mp_module_webcam_globals_table);
 

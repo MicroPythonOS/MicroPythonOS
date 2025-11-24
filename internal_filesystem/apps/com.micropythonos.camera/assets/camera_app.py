@@ -13,12 +13,17 @@ except Exception as e:
     print(f"Info: could not import webcam module: {e}")
 
 from mpos.apps import Activity
+from mpos.config import SharedPreferences
+from mpos.content.intent import Intent
 import mpos.time
 
 class CameraApp(Activity):
 
     width = 240
     height = 240
+
+    # Resolution preferences
+    prefs = None
 
     status_label_text = "No camera found."
     status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and QR size (4-12cm). Ensure proper lighting."
@@ -42,7 +47,24 @@ class CameraApp(Activity):
     status_label = None
     status_label_cont = None
 
+    def load_resolution_preference(self):
+        """Load resolution preference from SharedPreferences and update width/height."""
+        if not self.prefs:
+            self.prefs = SharedPreferences("com.micropythonos.camera")
+
+        resolution_str = self.prefs.get_string("resolution", "240x240")
+        try:
+            width_str, height_str = resolution_str.split('x')
+            self.width = int(width_str)
+            self.height = int(height_str)
+            print(f"Camera resolution loaded: {self.width}x{self.height}")
+        except Exception as e:
+            print(f"Error parsing resolution '{resolution_str}': {e}, using default 240x240")
+            self.width = 240
+            self.height = 240
+
     def onCreate(self):
+        self.load_resolution_preference()
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
         main_screen = lv.obj()
         main_screen.set_style_pad_all(0, 0)
@@ -56,6 +78,16 @@ class CameraApp(Activity):
         close_label.set_text(lv.SYMBOL.CLOSE)
         close_label.center()
         close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
+
+        # Settings button
+        settings_button = lv.button(main_screen)
+        settings_button.set_size(60,60)
+        settings_button.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        settings_label = lv.label(settings_button)
+        settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_label.center()
+        settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
+
         self.snap_button = lv.button(main_screen)
         self.snap_button.set_size(60, 60)
         self.snap_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
@@ -103,10 +135,10 @@ class CameraApp(Activity):
         self.setContentView(main_screen)
     
     def onResume(self, screen):
-        self.cam = init_internal_cam()
+        self.cam = init_internal_cam(self.width, self.height)
         if not self.cam:
             # try again because the manual i2c poweroff leaves it in a bad state
-            self.cam = init_internal_cam()
+            self.cam = init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
         else:
@@ -114,6 +146,9 @@ class CameraApp(Activity):
             try:
                 self.cam = webcam.init("/dev/video0")
                 self.use_webcam = True
+                # Reconfigure webcam to use saved resolution
+                print(f"Reconfiguring webcam to {self.width}x{self.height}")
+                webcam.reconfigure(self.cam, output_width=self.width, output_height=self.height)
             except Exception as e:
                 print(f"camera app: webcam exception: {e}")
         if self.cam:
@@ -241,7 +276,42 @@ class CameraApp(Activity):
             self.start_qr_decoding()
         else:
             self.stop_qr_decoding()
-    
+
+    def open_settings(self):
+        """Launch the camera settings activity."""
+        intent = Intent(activity_class=CameraSettingsActivity)
+        self.startActivityForResult(intent, self.handle_settings_result)
+
+    def handle_settings_result(self, result):
+        """Handle result from settings activity."""
+        if result.get("result_code") == True:
+            print("Settings changed, reloading resolution...")
+            # Reload resolution preference
+            self.load_resolution_preference()
+
+            # Recreate image descriptor with new dimensions
+            self.image_dsc["header"]["w"] = self.width
+            self.image_dsc["header"]["h"] = self.height
+            self.image_dsc["header"]["stride"] = self.width * 2
+            self.image_dsc["data_size"] = self.width * self.height * 2
+
+            # Reconfigure camera if active
+            if self.cam:
+                if self.use_webcam:
+                    print(f"Reconfiguring webcam to {self.width}x{self.height}")
+                    webcam.reconfigure(self.cam, output_width=self.width, output_height=self.height)
+                else:
+                    # For internal camera, need to reinitialize
+                    print(f"Reinitializing internal camera to {self.width}x{self.height}")
+                    if self.capture_timer:
+                        self.capture_timer.delete()
+                    self.cam.deinit()
+                    self.cam = init_internal_cam(self.width, self.height)
+                    if self.cam:
+                        self.capture_timer = lv.timer_create(self.try_capture, 100, None)
+
+                self.set_image_size()
+
     def try_capture(self, event):
         #print("capturing camera frame")
         try:
@@ -262,9 +332,36 @@ class CameraApp(Activity):
 
 
 # Non-class functions:
-def init_internal_cam():
+def init_internal_cam(width=240, height=240):
+    """Initialize internal camera with specified resolution."""
     try:
         from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
+
+        # Map resolution to FrameSize enum
+        # Format: (width, height): FrameSize
+        resolution_map = {
+            (96, 96): FrameSize.R96X96,
+            (160, 120): FrameSize.QQVGA,
+            (128, 128): FrameSize.R128X128,
+            (176, 144): FrameSize.QCIF,
+            (240, 176): FrameSize.HQVGA,
+            (240, 240): FrameSize.R240X240,
+            (320, 240): FrameSize.QVGA,
+            (320, 320): FrameSize.R320X320,
+            (400, 296): FrameSize.CIF,
+            (480, 320): FrameSize.HVGA,
+            (640, 480): FrameSize.VGA,
+            (800, 600): FrameSize.SVGA,
+            (1024, 768): FrameSize.XGA,
+            (1280, 720): FrameSize.HD,
+            (1280, 1024): FrameSize.SXGA,
+            (1600, 1200): FrameSize.UXGA,
+            (1920, 1080): FrameSize.FHD,
+        }
+
+        frame_size = resolution_map.get((width, height), FrameSize.R240X240)
+        print(f"init_internal_cam: Using FrameSize for {width}x{height}")
+
         cam = Camera(
             data_pins=[12,13,15,11,14,10,7,2],
             vsync_pin=6,
@@ -277,15 +374,9 @@ def init_internal_cam():
             powerdown_pin=-1,
             reset_pin=-1,
             pixel_format=PixelFormat.RGB565,
-            #pixel_format=PixelFormat.GRAYSCALE,
-            frame_size=FrameSize.R240X240,
-            grab_mode=GrabMode.LATEST 
+            frame_size=frame_size,
+            grab_mode=GrabMode.LATEST
         )
-        #cam.init() automatically done when creating the Camera()
-        #cam.reconfigure(frame_size=FrameSize.HVGA)
-        #frame_size=FrameSize.HVGA, # 480x320
-        #frame_size=FrameSize.QVGA, # 320x240
-        #frame_size=FrameSize.QQVGA # 160x120
         cam.set_vflip(True)
         return cam
     except Exception as e:
@@ -311,3 +402,124 @@ def remove_bom(buffer):
     if buffer.startswith(bom):
         return buffer[3:]
     return buffer
+
+
+class CameraSettingsActivity(Activity):
+    """Settings activity for camera resolution configuration."""
+
+    # Resolution options for desktop/webcam
+    WEBCAM_RESOLUTIONS = [
+        ("160x120", "160x120"),
+        ("240x240", "240x240"),  # Default
+        ("320x240", "320x240"),
+        ("480x320", "480x320"),
+        ("640x480", "640x480"),
+        ("800x600", "800x600"),
+        ("1024x768", "1024x768"),
+        ("1280x720", "1280x720"),
+    ]
+
+    # Resolution options for internal camera (ESP32) - all available FrameSize options
+    ESP32_RESOLUTIONS = [
+        ("96x96", "96x96"),
+        ("160x120", "160x120"),
+        ("128x128", "128x128"),
+        ("176x144", "176x144"),
+        ("240x176", "240x176"),
+        ("240x240", "240x240"),  # Default
+        ("320x240", "320x240"),
+        ("320x320", "320x320"),
+        ("400x296", "400x296"),
+        ("480x320", "480x320"),
+        ("640x480", "640x480"),
+        ("800x600", "800x600"),
+        ("1024x768", "1024x768"),
+        ("1280x720", "1280x720"),
+        ("1280x1024", "1280x1024"),
+        ("1600x1200", "1600x1200"),
+        ("1920x1080", "1920x1080"),
+    ]
+
+    dropdown = None
+    current_resolution = None
+
+    def onCreate(self):
+        # Load preferences
+        prefs = SharedPreferences("com.micropythonos.camera")
+        self.current_resolution = prefs.get_string("resolution", "240x240")
+
+        # Create main screen
+        screen = lv.obj()
+        screen.set_size(lv.pct(100), lv.pct(100))
+        screen.set_style_pad_all(10, 0)
+
+        # Title
+        title = lv.label(screen)
+        title.set_text("Camera Settings")
+        title.align(lv.ALIGN.TOP_MID, 0, 10)
+
+        # Resolution label
+        resolution_label = lv.label(screen)
+        resolution_label.set_text("Resolution:")
+        resolution_label.align(lv.ALIGN.TOP_LEFT, 0, 50)
+
+        # Detect if we're on desktop or ESP32 based on available modules
+        try:
+            import webcam
+            resolutions = self.WEBCAM_RESOLUTIONS
+            print("Using webcam resolutions")
+        except:
+            resolutions = self.ESP32_RESOLUTIONS
+            print("Using ESP32 camera resolutions")
+
+        # Create dropdown
+        self.dropdown = lv.dropdown(screen)
+        self.dropdown.set_size(200, 40)
+        self.dropdown.align(lv.ALIGN.TOP_LEFT, 0, 80)
+
+        # Build dropdown options string
+        options_str = "\n".join([label for label, _ in resolutions])
+        self.dropdown.set_options(options_str)
+
+        # Set current selection
+        for idx, (label, value) in enumerate(resolutions):
+            if value == self.current_resolution:
+                self.dropdown.set_selected(idx)
+                break
+
+        # Save button
+        save_button = lv.button(screen)
+        save_button.set_size(100, 50)
+        save_button.align(lv.ALIGN.BOTTOM_MID, -60, -10)
+        save_button.add_event_cb(lambda e: self.save_and_close(resolutions), lv.EVENT.CLICKED, None)
+        save_label = lv.label(save_button)
+        save_label.set_text("Save")
+        save_label.center()
+
+        # Cancel button
+        cancel_button = lv.button(screen)
+        cancel_button.set_size(100, 50)
+        cancel_button.align(lv.ALIGN.BOTTOM_MID, 60, -10)
+        cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
+        cancel_label = lv.label(cancel_button)
+        cancel_label.set_text("Cancel")
+        cancel_label.center()
+
+        self.setContentView(screen)
+
+    def save_and_close(self, resolutions):
+        """Save selected resolution and return result."""
+        selected_idx = self.dropdown.get_selected()
+        _, new_resolution = resolutions[selected_idx]
+
+        # Save to preferences
+        prefs = SharedPreferences("com.micropythonos.camera")
+        editor = prefs.edit()
+        editor.put_string("resolution", new_resolution)
+        editor.commit()
+
+        print(f"Camera resolution saved: {new_resolution}")
+
+        # Return success result
+        self.setResult(True, {"resolution": new_resolution})
+        self.finish()
