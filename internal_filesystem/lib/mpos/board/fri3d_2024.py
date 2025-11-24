@@ -260,9 +260,24 @@ indev.enable(True)  # NOQA
 # Battery voltage ADC measuring
 # NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
 # battery_voltage.py handles this automatically: disables WiFi, reads ADC, reconnects WiFi.
-# Readings are cached for 30 seconds to minimize WiFi interruptions.
 import mpos.battery_voltage
-mpos.battery_voltage.init_adc(13, 3.3 * 2 / 4095)
+"""
+best fit on battery power:
+2482 is 4.180
+2470 is 4.170
+2457 is 4.147
+2433 is 4.109
+2429 is 4.102
+2393 is 4.044
+2369 is 4.000
+2343 is 3.957
+2319 is 3.916
+2269 is 3.831
+"""
+def adc_to_voltage(adc_value):
+    return (-0.0016237 * adc_value + 8.2035)
+#mpos.battery_voltage.init_adc(13, adc_to_voltage)
+mpos.battery_voltage.init_adc(13, 1/616) # simple scaling has an error of ~0.01V vs the adc_to_voltage() method
 
 import mpos.sdcard
 mpos.sdcard.init(spi_bus, cs_pin=14)

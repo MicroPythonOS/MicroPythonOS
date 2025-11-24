@@ -87,16 +87,11 @@ def read_raw_adc(force_refresh=False):
         except ImportError:
             pass
 
-        # Check if WiFi operations are in progress
-        if WifiService and WifiService.wifi_busy:
-            raise RuntimeError("Cannot read battery voltage: WifiService is busy")
-
-    # Disable WiFi for ADC2 reading
-    wifi_was_connected = False
+    # Temporarily disable WiFi for ADC2 reading
+    was_connected = False
     if needs_wifi_disable and WifiService:
-        wifi_was_connected = WifiService.is_connected()
-        WifiService.wifi_busy = True
-        WifiService.disconnect()
+        # This will raise RuntimeError if WiFi is already busy
+        was_connected = WifiService.temporarily_disable()
         time.sleep(0.05)  # Brief delay for WiFi to fully disable
 
     try:
@@ -113,14 +108,7 @@ def read_raw_adc(force_refresh=False):
     finally:
         # Re-enable WiFi (only if we disabled it)
         if needs_wifi_disable and WifiService:
-            WifiService.wifi_busy = False
-            if wifi_was_connected:
-                # Trigger reconnection in background thread
-                try:
-                    import _thread
-                    _thread.start_new_thread(WifiService.auto_connect, ())
-                except Exception as e:
-                    print(f"battery_voltage: Failed to start reconnect thread: {e}")
+            WifiService.temporarily_enable(was_connected)
 
 
 def read_battery_voltage(force_refresh=False):

@@ -198,6 +198,63 @@ class WifiService:
             print("WifiService: Auto-connect thread finished")
 
     @staticmethod
+    def temporarily_disable(network_module=None):
+        """
+        Temporarily disable WiFi for operations that require it (e.g., ESP32-S3 ADC2).
+
+        This method sets wifi_busy flag and disconnects WiFi if connected.
+        Caller must call temporarily_enable() in a finally block.
+
+        Args:
+            network_module: Network module for dependency injection (testing)
+
+        Returns:
+            bool: True if WiFi was connected before disabling, False otherwise
+
+        Raises:
+            RuntimeError: If WiFi operations are already in progress
+        """
+        if WifiService.wifi_busy:
+            raise RuntimeError("Cannot disable WiFi: WifiService is already busy")
+
+        # Check actual connection status BEFORE setting wifi_busy
+        was_connected = False
+        if HAS_NETWORK_MODULE or network_module:
+            try:
+                net = network_module if network_module else network
+                wlan = net.WLAN(net.STA_IF)
+                was_connected = wlan.isconnected()
+            except Exception as e:
+                print(f"WifiService: Error checking connection: {e}")
+
+        # Now set busy flag and disconnect
+        WifiService.wifi_busy = True
+        WifiService.disconnect(network_module=network_module)
+
+        return was_connected
+
+    @staticmethod
+    def temporarily_enable(was_connected, network_module=None):
+        """
+        Re-enable WiFi after temporary disable operation.
+
+        Must be called in a finally block after temporarily_disable().
+
+        Args:
+            was_connected: Return value from temporarily_disable()
+            network_module: Network module for dependency injection (testing)
+        """
+        WifiService.wifi_busy = False
+
+        # Only reconnect if WiFi was connected before we disabled it
+        if was_connected:
+            try:
+                import _thread
+                _thread.start_new_thread(WifiService.auto_connect, ())
+            except Exception as e:
+                print(f"WifiService: Failed to start reconnect thread: {e}")
+
+    @staticmethod
     def is_connected(network_module=None):
         """
         Check if WiFi is currently connected.
