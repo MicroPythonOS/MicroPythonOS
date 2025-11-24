@@ -46,6 +46,7 @@ class WifiService:
     def connect(network_module=None):
         """
         Scan for available networks and connect to the first saved network found.
+        Networks are tried in order of signal strength (strongest first).
 
         Args:
             network_module: Network module for dependency injection (testing)
@@ -63,9 +64,14 @@ class WifiService:
         # Scan for available networks
         networks = wlan.scan()
 
+        # Sort networks by RSSI (signal strength) in descending order
+        # RSSI is at index 3, higher values (less negative) = stronger signal
+        networks = sorted(networks, key=lambda n: n[3], reverse=True)
+
         for n in networks:
             ssid = n[0].decode()
-            print(f"WifiService: Found network '{ssid}'")
+            rssi = n[3]
+            print(f"WifiService: Found network '{ssid}' (RSSI: {rssi} dBm)")
 
             if ssid in WifiService.access_points:
                 password = WifiService.access_points.get(ssid).get("password")

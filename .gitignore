@@ -11,6 +11,8 @@ internal_filesystem/data
 internal_filesystem/sdcard
 internal_filesystem/tests
 
+internal_filesystem_excluded/
+
 # these tests contain actual NWC URLs:
 tests/manual_test_nwcwallet_alby.py
 tests/manual_test_nwcwallet_cashu.py
@@ -21,3 +23,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+# these get created:
+c_mpos/c_mpos
