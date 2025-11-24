@@ -119,30 +119,39 @@ class TestInitADC(unittest.TestCase):
     def setUp(self):
         """Reset module state."""
         bv.adc = None
-        bv.scale_factor = 0
+        bv.conversion_func = None
         bv.adc_pin = None
 
     def test_init_adc1_pin(self):
         """Test initializing with ADC1 pin."""
-        bv.init_adc(5, 0.00161)
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00161
+
+        bv.init_adc(5, adc_to_voltage)
 
         self.assertIsNotNone(bv.adc)
-        self.assertEqual(bv.scale_factor, 0.00161)
+        self.assertEqual(bv.conversion_func, adc_to_voltage)
         self.assertEqual(bv.adc_pin, 5)
         self.assertEqual(bv.adc._atten, MockADC.ATTN_11DB)
 
     def test_init_adc2_pin(self):
         """Test initializing with ADC2 pin (should warn but work)."""
-        bv.init_adc(13, 0.00197)
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00197
+
+        bv.init_adc(13, adc_to_voltage)
 
         self.assertIsNotNone(bv.adc)
-        self.assertEqual(bv.scale_factor, 0.00197)
+        self.assertIsNotNone(bv.conversion_func)
         self.assertEqual(bv.adc_pin, 13)
 
-    def test_scale_factor_stored(self):
-        """Test that scale factor is stored correctly."""
-        bv.init_adc(5, 0.12345)
-        self.assertEqual(bv.scale_factor, 0.12345)
+    def test_conversion_func_stored(self):
+        """Test that conversion function is stored correctly."""
+        def my_conversion(adc_value):
+            return adc_value * 0.12345
+
+        bv.init_adc(5, my_conversion)
+        self.assertEqual(bv.conversion_func, my_conversion)
 
 
 class TestCaching(unittest.TestCase):
@@ -151,16 +160,18 @@ class TestCaching(unittest.TestCase):
     def setUp(self):
         """Reset module state."""
         bv.clear_cache()
-        bv.init_adc(5, 0.00161)  # Use ADC1 to avoid WiFi complexity
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00161
+        bv.init_adc(5, adc_to_voltage)  # Use ADC1 to avoid WiFi complexity
         MockWifiService.reset()
 
     def tearDown(self):
         """Clean up."""
         bv.clear_cache()
 
-    def test_cache_miss_on_first_read(self):
-        """Test that first read doesn't use cache."""
-        self.assertIsNone(bv._cached_raw_adc)
+    def test_cache_hit_on_first_read(self):
+        """Test that first read already has a cache (because of read during init) """
+        self.assertIsNotNone(bv._cached_raw_adc)
         raw = bv.read_raw_adc()
         self.assertIsNotNone(bv._cached_raw_adc)
         self.assertEqual(raw, bv._cached_raw_adc)
@@ -203,7 +214,9 @@ class TestADC1Reading(unittest.TestCase):
     def setUp(self):
         """Reset module state."""
         bv.clear_cache()
-        bv.init_adc(5, 0.00161)  # GPIO5 is ADC1
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00161
+        bv.init_adc(5, adc_to_voltage)  # GPIO5 is ADC1
         MockWifiService.reset()
         MockWifiService._connected = True
 
@@ -240,7 +253,9 @@ class TestADC2Reading(unittest.TestCase):
     def setUp(self):
         """Reset module state."""
         bv.clear_cache()
-        bv.init_adc(13, 0.00197)  # GPIO13 is ADC2
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00197
+        bv.init_adc(13, adc_to_voltage)  # GPIO13 is ADC2
         MockWifiService.reset()
 
     def tearDown(self):
@@ -308,7 +323,9 @@ class TestVoltageCalculations(unittest.TestCase):
     def setUp(self):
         """Reset module state."""
         bv.clear_cache()
-        bv.init_adc(5, 0.00161)  # ADC1 pin, scale factor for 2:1 divider
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00161
+        bv.init_adc(5, adc_to_voltage)  # ADC1 pin, scale factor for 2:1 divider
         bv.adc.set_read_value(2048)  # Mid-range
 
     def tearDown(self):
@@ -344,7 +361,8 @@ class TestVoltageCalculations(unittest.TestCase):
         """Test percentage calculation."""
         # Set voltage to mid-range between MIN and MAX
         mid_voltage = (bv.MIN_VOLTAGE + bv.MAX_VOLTAGE) / 2
-        raw_adc = mid_voltage / bv.scale_factor
+        # Inverse of conversion function: if voltage = adc * 0.00161, then adc = voltage / 0.00161
+        raw_adc = mid_voltage / 0.00161
         bv.adc.set_read_value(int(raw_adc))
         bv.clear_cache()
 
@@ -374,7 +392,9 @@ class TestAveragingLogic(unittest.TestCase):
     def setUp(self):
         """Reset module state."""
         bv.clear_cache()
-        bv.init_adc(5, 0.00161)
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00161
+        bv.init_adc(5, adc_to_voltage)
 
     def tearDown(self):
         """Clean up."""
@@ -397,7 +417,9 @@ class TestDesktopMode(unittest.TestCase):
     def setUp(self):
         """Disable ADC."""
         bv.adc = None
-        bv.scale_factor = 0.00161
+        def adc_to_voltage(adc_value):
+            return adc_value * 0.00161
+        bv.conversion_func = adc_to_voltage
 
     def test_read_raw_adc_returns_random_value(self):
         """Test that desktop mode returns random ADC value."""
