@@ -10,7 +10,8 @@ adc_pin = None
 # Cache to reduce WiFi interruptions (ADC2 requires WiFi to be disabled)
 _cached_raw_adc = None
 _last_read_time = 0
-CACHE_DURATION_MS = 30000  # 30 seconds
+CACHE_DURATION_ADC2_MS = 300000  # 300 seconds (expensive: requires WiFi disable)
+CACHE_DURATION_ADC1_MS = 30000   # 30 seconds (cheaper: no WiFi interference)
 
 
 def _is_adc2_pin(pin):
@@ -46,7 +47,7 @@ def init_adc(pinnr, sf):
 
 def read_raw_adc(force_refresh=False):
     """
-    Read raw ADC value (0-4095) with caching.
+    Read raw ADC value (0-4095) with adaptive caching.
 
     On ESP32-S3 with ADC2, WiFi is temporarily disabled during reading.
     Raises RuntimeError if WifiService is busy (connecting/scanning) when using ADC2.
@@ -69,15 +70,18 @@ def read_raw_adc(force_refresh=False):
             int(MIN_VOLTAGE / scale_factor), int(MAX_VOLTAGE / scale_factor)
         )
 
+    # Check if this is an ADC2 pin (requires WiFi disable)
+    needs_wifi_disable = adc_pin is not None and _is_adc2_pin(adc_pin)
+
+    # Use different cache durations based on cost
+    cache_duration = CACHE_DURATION_ADC2_MS if needs_wifi_disable else CACHE_DURATION_ADC1_MS
+
     # Check cache
     current_time = time.ticks_ms()
     if not force_refresh and _cached_raw_adc is not None:
         age = time.ticks_diff(current_time, _last_read_time)
-        if age < CACHE_DURATION_MS:
+        if age < cache_duration:
             return _cached_raw_adc
-
-    # Check if this is an ADC2 pin (requires WiFi disable)
-    needs_wifi_disable = adc_pin is not None and _is_adc2_pin(adc_pin)
 
     # Import WifiService only if needed
     WifiService = None

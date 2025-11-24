@@ -11,7 +11,7 @@ NOTIFICATION_BAR_HEIGHT=24
 
 CLOCK_UPDATE_INTERVAL = 1000 # 10 or even 1 ms doesn't seem to change the framerate but 100ms is enough
 WIFI_ICON_UPDATE_INTERVAL = 1500
-BATTERY_ICON_UPDATE_INTERVAL = 30000 # not too often, because on fri3d_2024, this briefly disables wifi
+BATTERY_ICON_UPDATE_INTERVAL = 15000 # not too often, but not too short, otherwise it takes a while to appear
 TEMPERATURE_UPDATE_INTERVAL = 2000
 MEMFREE_UPDATE_INTERVAL = 5000 # not too frequent because there's a forced gc.collect() to give it a reliable value
 
