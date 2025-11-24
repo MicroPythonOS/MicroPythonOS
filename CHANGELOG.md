@@ -21,6 +21,7 @@
 - API: remove fonts to reduce size
 - API: replace font_montserrat_28 with font_montserrat_28_compressed to reduce size
 - API: improve SD card error handling
+- WifiService: connect to strongest networks first
 
 0.4.0
 =====
