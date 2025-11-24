@@ -576,9 +576,13 @@ class UpdateDownloader:
             if self._is_network_error(e):
                 print(f"UpdateDownloader: Network error ({e}), pausing download")
                 self.is_paused = True
-                self.bytes_written_so_far = result.get('bytes_written', self.bytes_written_so_far)
+                # Only update bytes_written_so_far if we actually wrote bytes in this attempt
+                # Otherwise preserve the existing state (important for resume failures)
+                if result.get('bytes_written', 0) > 0:
+                    self.bytes_written_so_far = result['bytes_written']
                 result['paused'] = True
                 result['bytes_written'] = self.bytes_written_so_far
+                result['total_size'] = self.total_size_expected  # Preserve total size for UI
             else:
                 # Non-network error
                 result['error'] = str(e)

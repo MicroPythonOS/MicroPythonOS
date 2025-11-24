@@ -1,3 +1,8 @@
+0.5.1
+=====
+- OSUpdate app: pause download when wifi is lost, resume when reconnected
+- Fri3d Camp 2024 Badge: workaround ADC2+WiFi conflict by disconnecting WiFi to measure battery level
+
 0.5.0
 =====
 - ESP32: one build to rule them all; instead of 2 builds per supported board, there is now one single build that identifies and initializes the board at runtime!

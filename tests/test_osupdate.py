@@ -460,4 +460,27 @@ class TestUpdateDownloader(unittest.TestCase):
         self.assertIn('Range', last_request['headers'])
         self.assertEqual(last_request['headers']['Range'], 'bytes=8192-')
 
+    def test_resume_failure_preserves_state(self):
+        """Test that resume failures preserve download state for retry."""
+        # Simulate partial download state
+        self.downloader.bytes_written_so_far = 245760  # 60 chunks already downloaded
+        self.downloader.total_size_expected = 3391488
+
+        # Resume attempt fails immediately with EHOSTUNREACH (network not ready)
+        self.mock_requests.set_exception(OSError(-118, "EHOSTUNREACH"))
+
+        result = self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        )
+
+        # Should pause, not fail
+        self.assertFalse(result['success'])
+        self.assertTrue(result['paused'])
+        self.assertIsNone(result['error'])
+
+        # Critical: Must preserve progress for next retry
+        self.assertEqual(result['bytes_written'], 245760, "Must preserve bytes_written")
+        self.assertEqual(result['total_size'], 3391488, "Must preserve total_size")
+        self.assertEqual(self.downloader.bytes_written_so_far, 245760, "Must preserve internal state")
+
 
