@@ -128,10 +128,19 @@ class OSUpdate(Activity):
             elif self.current_state == UpdateState.IDLE or self.current_state == UpdateState.CHECKING_UPDATE:
                 # Was checking for updates when network dropped
                 self.set_state(UpdateState.WAITING_WIFI)
+            elif self.current_state == UpdateState.ERROR:
+                # Was in error state, might be network-related
+                # Update UI to show we're waiting for network
+                self.set_state(UpdateState.WAITING_WIFI)
         else:
             # Went online
             if self.current_state == UpdateState.IDLE or self.current_state == UpdateState.WAITING_WIFI:
                 # Was waiting for network, now can check for updates
+                self.set_state(UpdateState.CHECKING_UPDATE)
+                self.schedule_show_update_info()
+            elif self.current_state == UpdateState.ERROR:
+                # Was in error state (possibly network error), retry now that network is back
+                print("OSUpdate: Retrying update check after network came back online")
                 self.set_state(UpdateState.CHECKING_UPDATE)
                 self.schedule_show_update_info()
             elif self.current_state == UpdateState.DOWNLOAD_PAUSED:
@@ -193,7 +202,7 @@ class OSUpdate(Activity):
                 update_info["changelog"]
             )
         except ValueError as e:
-            # JSON parsing or validation error
+            # JSON parsing or validation error (not network related)
             self.set_state(UpdateState.ERROR)
             self.status_label.set_text(self._get_user_friendly_error(e))
         except RuntimeError as e:
@@ -202,9 +211,15 @@ class OSUpdate(Activity):
             self.status_label.set_text(self._get_user_friendly_error(e))
         except Exception as e:
             print(f"show_update_info got exception: {e}")
-            # Unexpected error
-            self.set_state(UpdateState.ERROR)
-            self.status_label.set_text(self._get_user_friendly_error(e))
+            # Check if this is a network connectivity error
+            if self.update_downloader._is_network_error(e):
+                # Network not available - wait for it to come back
+                print("OSUpdate: Network error while checking for updates, waiting for WiFi")
+                self.set_state(UpdateState.WAITING_WIFI)
+            else:
+                # Other unexpected error
+                self.set_state(UpdateState.ERROR)
+                self.status_label.set_text(self._get_user_friendly_error(e))
     
     def handle_update_info(self, version, download_url, changelog):
         self.download_update_url = download_url
@@ -286,7 +301,7 @@ class OSUpdate(Activity):
                     # Update succeeded - set boot partition and restart
                     self.update_ui_threadsafe_if_foreground(self.status_label.set_text,"Update finished! Restarting...")
                     # Small delay to show the message
-                    time.sleep_ms(2000)
+                    time.sleep(5)
                     self.update_downloader.set_boot_partition_and_restart()
                     return
 
