@@ -122,15 +122,17 @@ class MockRaw:
     Simulates the 'raw' attribute of requests.Response for chunked reading.
     """
 
-    def __init__(self, content):
+    def __init__(self, content, fail_after_bytes=None):
         """
         Initialize mock raw response.
 
         Args:
             content: Binary content to stream
+            fail_after_bytes: If set, raise OSError(-113) after reading this many bytes
         """
         self.content = content
         self.position = 0
+        self.fail_after_bytes = fail_after_bytes
 
     def read(self, size):
         """
@@ -141,7 +143,14 @@ class MockRaw:
 
         Returns:
             bytes: Chunk of data (may be smaller than size at end of stream)
+
+        Raises:
+            OSError: If fail_after_bytes is set and reached
         """
+        # Check if we should simulate network failure
+        if self.fail_after_bytes is not None and self.position >= self.fail_after_bytes:
+            raise OSError(-113, "ECONNABORTED")
+
         chunk = self.content[self.position:self.position + size]
         self.position += len(chunk)
         return chunk
@@ -154,7 +163,7 @@ class MockResponse:
     Simulates requests.Response object with status code, text, headers, etc.
     """
 
-    def __init__(self, status_code=200, text='', headers=None, content=b''):
+    def __init__(self, status_code=200, text='', headers=None, content=b'', fail_after_bytes=None):
         """
         Initialize mock response.
 
@@ -163,6 +172,7 @@ class MockResponse:
             text: Response text content (default: '')
             headers: Response headers dict (default: {})
             content: Binary response content (default: b'')
+            fail_after_bytes: If set, raise OSError after reading this many bytes
         """
         self.status_code = status_code
         self.text = text
@@ -171,7 +181,7 @@ class MockResponse:
         self._closed = False
 
         # Mock raw attribute for streaming
-        self.raw = MockRaw(content)
+        self.raw = MockRaw(content, fail_after_bytes=fail_after_bytes)
 
     def close(self):
         """Close the response."""
@@ -197,6 +207,7 @@ class MockRequests:
         self.last_headers = None
         self.last_timeout = None
         self.last_stream = None
+        self.last_request = None  # Full request info dict
         self.next_response = None
         self.raise_exception = None
         self.call_history = []
@@ -222,14 +233,17 @@ class MockRequests:
         self.last_timeout = timeout
         self.last_stream = stream
 
-        # Record call in history
-        self.call_history.append({
+        # Store full request info
+        self.last_request = {
             'method': 'GET',
             'url': url,
             'stream': stream,
             'timeout': timeout,
-            'headers': headers
-        })
+            'headers': headers or {}
+        }
+
+        # Record call in history
+        self.call_history.append(self.last_request.copy())
 
         if self.raise_exception:
             exc = self.raise_exception
@@ -287,7 +301,7 @@ class MockRequests:
 
         return MockResponse()
 
-    def set_next_response(self, status_code=200, text='', headers=None, content=b''):
+    def set_next_response(self, status_code=200, text='', headers=None, content=b'', fail_after_bytes=None):
         """
         Configure the next response to return.
 
@@ -296,11 +310,12 @@ class MockRequests:
             text: Response text (default: '')
             headers: Response headers dict (default: {})
             content: Binary response content (default: b'')
+            fail_after_bytes: If set, raise OSError after reading this many bytes
 
         Returns:
             MockResponse: The configured response object
         """
-        self.next_response = MockResponse(status_code, text, headers, content)
+        self.next_response = MockResponse(status_code, text, headers, content, fail_after_bytes=fail_after_bytes)
         return self.next_response
 
     def set_exception(self, exception):

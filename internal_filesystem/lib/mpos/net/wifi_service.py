@@ -247,7 +247,8 @@ class WifiService:
             wlan.active(False)
             print("WifiService: Disconnected and WiFi disabled")
         except Exception as e:
-            print(f"WifiService: Error disconnecting: {e}")
+            #print(f"WifiService: Error disconnecting: {e}") # probably "Wifi Not Started" so harmless
+            pass
 
     @staticmethod
     def get_saved_networks():

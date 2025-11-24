@@ -381,4 +381,83 @@ class TestUpdateDownloader(unittest.TestCase):
         self.assertEqual(result['total_size'], 8192)
         self.assertEqual(result['bytes_written'], 8192)
 
+    def test_network_error_detection_econnaborted(self):
+        """Test that ECONNABORTED error is detected as network error."""
+        error = OSError(-113, "ECONNABORTED")
+        self.assertTrue(self.downloader._is_network_error(error))
+
+    def test_network_error_detection_econnreset(self):
+        """Test that ECONNRESET error is detected as network error."""
+        error = OSError(-104, "ECONNRESET")
+        self.assertTrue(self.downloader._is_network_error(error))
+
+    def test_network_error_detection_etimedout(self):
+        """Test that ETIMEDOUT error is detected as network error."""
+        error = OSError(-110, "ETIMEDOUT")
+        self.assertTrue(self.downloader._is_network_error(error))
+
+    def test_network_error_detection_ehostunreach(self):
+        """Test that EHOSTUNREACH error is detected as network error."""
+        error = OSError(-118, "EHOSTUNREACH")
+        self.assertTrue(self.downloader._is_network_error(error))
+
+    def test_network_error_detection_by_message(self):
+        """Test that network errors are detected by message."""
+        self.assertTrue(self.downloader._is_network_error(Exception("Connection reset by peer")))
+        self.assertTrue(self.downloader._is_network_error(Exception("Connection aborted")))
+        self.assertTrue(self.downloader._is_network_error(Exception("Broken pipe")))
+
+    def test_non_network_error_not_detected(self):
+        """Test that non-network errors are not detected as network errors."""
+        self.assertFalse(self.downloader._is_network_error(ValueError("Invalid data")))
+        self.assertFalse(self.downloader._is_network_error(Exception("File not found")))
+        self.assertFalse(self.downloader._is_network_error(KeyError("missing")))
+
+    def test_download_pauses_on_network_error_during_read(self):
+        """Test that download pauses when network error occurs during read."""
+        # Set up mock to raise network error after first chunk
+        test_data = b'G' * 16384  # 4 chunks
+        self.mock_requests.set_next_response(
+            status_code=200,
+            headers={'Content-Length': '16384'},
+            content=test_data,
+            fail_after_bytes=4096  # Fail after first chunk
+        )
+
+        result = self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        )
+
+        self.assertFalse(result['success'])
+        self.assertTrue(result['paused'])
+        self.assertEqual(result['bytes_written'], 4096)  # Should have written first chunk
+        self.assertIsNone(result['error'])  # Pause, not error
+
+    def test_download_resumes_from_saved_position(self):
+        """Test that download resumes from the last written position."""
+        # Simulate partial download
+        test_data = b'H' * 12288  # 3 chunks
+        self.downloader.bytes_written_so_far = 8192  # Already downloaded 2 chunks
+        self.downloader.total_size_expected = 12288
+
+        # Server should receive Range header
+        remaining_data = b'H' * 4096  # Last chunk
+        self.mock_requests.set_next_response(
+            status_code=206,  # Partial content
+            headers={'Content-Length': '4096'},  # Remaining bytes
+            content=remaining_data
+        )
+
+        result = self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        )
+
+        self.assertTrue(result['success'])
+        self.assertEqual(result['bytes_written'], 12288)
+        # Check that Range header was set
+        last_request = self.mock_requests.last_request
+        self.assertIsNotNone(last_request)
+        self.assertIn('Range', last_request['headers'])
+        self.assertEqual(last_request['headers']['Range'], 'bytes=8192-')
+
 

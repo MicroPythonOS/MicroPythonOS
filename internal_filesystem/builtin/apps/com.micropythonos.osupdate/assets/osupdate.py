@@ -308,7 +308,9 @@ class OSUpdate(Activity):
 
                     while elapsed < max_wait and self.has_foreground():
                         if self.connectivity_manager.is_online():
-                            print("OSUpdate: Network reconnected, resuming download")
+                            print("OSUpdate: Network reconnected, waiting for stabilization...")
+                            time.sleep(2)  # Let routing table and DNS fully stabilize
+                            print("OSUpdate: Resuming download")
                             self.set_state(UpdateState.DOWNLOADING)
                             break  # Exit wait loop and retry download
 
@@ -398,6 +400,33 @@ class UpdateDownloader:
                 print("UpdateDownloader: Partition module not available, will simulate")
                 self.simulate = True
 
+    def _is_network_error(self, exception):
+        """Check if exception is a network connectivity error that should trigger pause.
+
+        Args:
+            exception: Exception to check
+
+        Returns:
+            bool: True if this is a recoverable network error
+        """
+        error_str = str(exception).lower()
+        error_repr = repr(exception).lower()
+
+        # Check for common network error codes and messages
+        # -113 = ECONNABORTED (connection aborted)
+        # -104 = ECONNRESET (connection reset by peer)
+        # -110 = ETIMEDOUT (connection timed out)
+        # -118 = EHOSTUNREACH (no route to host)
+        network_indicators = [
+            '-113', '-104', '-110', '-118',  # Error codes
+            'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
+            'connection reset', 'connection aborted',  # Error messages
+            'broken pipe', 'network unreachable', 'host unreachable'
+        ]
+
+        return any(indicator in error_str or indicator in error_repr
+                  for indicator in network_indicators)
+
     def download_and_install(self, url, progress_callback=None, should_continue_callback=None):
         """Download firmware and install to OTA partition.
 
@@ -467,18 +496,16 @@ class UpdateDownloader:
                     response.close()
                     return result
 
-                # Check network connection (if monitoring enabled)
+                # Check network connection before reading
                 if self.connectivity_manager:
                     is_online = self.connectivity_manager.is_online()
                 elif ConnectivityManager._instance:
-                    # Use global instance if available
                     is_online = ConnectivityManager._instance.is_online()
                 else:
-                    # No connectivity checking available
                     is_online = True
 
                 if not is_online:
-                    print("UpdateDownloader: Network lost, pausing download")
+                    print("UpdateDownloader: Network lost (pre-check), pausing download")
                     self.is_paused = True
                     self.bytes_written_so_far = bytes_written
                     result['paused'] = True
@@ -486,8 +513,26 @@ class UpdateDownloader:
                     response.close()
                     return result
 
-                # Read next chunk
-                chunk = response.raw.read(chunk_size)
+                # Read next chunk (may raise exception if network drops)
+                try:
+                    chunk = response.raw.read(chunk_size)
+                except Exception as read_error:
+                    # Check if this is a network error that should trigger pause
+                    if self._is_network_error(read_error):
+                        print(f"UpdateDownloader: Network error during read ({read_error}), pausing")
+                        self.is_paused = True
+                        self.bytes_written_so_far = bytes_written
+                        result['paused'] = True
+                        result['bytes_written'] = bytes_written
+                        try:
+                            response.close()
+                        except:
+                            pass
+                        return result
+                    else:
+                        # Non-network error, re-raise
+                        raise
+
                 if not chunk:
                     break
 
@@ -527,8 +572,17 @@ class UpdateDownloader:
                 print(f"UpdateDownloader: {result['error']}")
 
         except Exception as e:
-            result['error'] = str(e)
-            print(f"UpdateDownloader: Error during download: {e}") # -113 when wifi disconnected
+            # Check if this is a network error that should trigger pause
+            if self._is_network_error(e):
+                print(f"UpdateDownloader: Network error ({e}), pausing download")
+                self.is_paused = True
+                self.bytes_written_so_far = result.get('bytes_written', self.bytes_written_so_far)
+                result['paused'] = True
+                result['bytes_written'] = self.bytes_written_so_far
+            else:
+                # Non-network error
+                result['error'] = str(e)
+                print(f"UpdateDownloader: Error during download: {e}")
 
         return result
 
