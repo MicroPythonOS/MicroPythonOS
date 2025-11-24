@@ -82,7 +82,7 @@ class CameraApp(Activity):
         # Settings button
         settings_button = lv.button(main_screen)
         settings_button.set_size(60,60)
-        settings_button.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, 60)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.center()
@@ -167,7 +167,7 @@ class CameraApp(Activity):
                 self.finish()
 
 
-    def onStop(self, screen):
+    def onPause(self, screen):
         print("camera app backgrounded, cleaning up...")
         if self.capture_timer:
             self.capture_timer.delete()
@@ -289,26 +289,48 @@ class CameraApp(Activity):
             # Reload resolution preference
             self.load_resolution_preference()
 
-            # Recreate image descriptor with new dimensions
-            self.image_dsc["header"]["w"] = self.width
-            self.image_dsc["header"]["h"] = self.height
-            self.image_dsc["header"]["stride"] = self.width * 2
-            self.image_dsc["data_size"] = self.width * self.height * 2
+            # CRITICAL: Pause capture timer to prevent race conditions during reconfiguration
+            if self.capture_timer:
+                self.capture_timer.delete()
+                self.capture_timer = None
+                print("Capture timer paused")
+
+            # Clear stale data pointer to prevent segfault during LVGL rendering
+            self.image_dsc.data = None
+            self.current_cam_buffer = None
+            print("Image data cleared")
+
+            # Update image descriptor with new dimensions
+            # Note: image_dsc is an LVGL struct, use attribute access not dictionary access
+            self.image_dsc.header.w = self.width
+            self.image_dsc.header.h = self.height
+            self.image_dsc.header.stride = self.width * 2
+            self.image_dsc.data_size = self.width * self.height * 2
+            print(f"Image descriptor updated to {self.width}x{self.height}")
 
             # Reconfigure camera if active
             if self.cam:
                 if self.use_webcam:
-                    print(f"Reconfiguring webcam to {self.width}x{self.height}")
-                    webcam.reconfigure(self.cam, output_width=self.width, output_height=self.height)
+                    print(f"Reconfiguring webcam: input={self.width}x{self.height}, output={self.width}x{self.height}")
+                    # Configure both V4L2 input and output to the same resolution for best quality
+                    webcam.reconfigure(
+                        self.cam,
+                        input_width=self.width,
+                        input_height=self.height,
+                        output_width=self.width,
+                        output_height=self.height
+                    )
+                    # Resume capture timer for webcam
+                    self.capture_timer = lv.timer_create(self.try_capture, 100, None)
+                    print("Webcam reconfigured (V4L2 + output buffers), capture timer resumed")
                 else:
                     # For internal camera, need to reinitialize
                     print(f"Reinitializing internal camera to {self.width}x{self.height}")
-                    if self.capture_timer:
-                        self.capture_timer.delete()
                     self.cam.deinit()
                     self.cam = init_internal_cam(self.width, self.height)
                     if self.cam:
                         self.capture_timer = lv.timer_create(self.try_capture, 100, None)
+                        print("Internal camera reinitialized, capture timer resumed")
 
                 self.set_image_size()
 
@@ -319,14 +341,23 @@ class CameraApp(Activity):
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565")
             elif self.cam.frame_available():
                 self.current_cam_buffer = self.cam.capture()
+
             if self.current_cam_buffer and len(self.current_cam_buffer):
-                self.image_dsc.data = self.current_cam_buffer
-                #image.invalidate() # does not work so do this:
-                self.image.set_src(self.image_dsc)
-                if not self.use_webcam:
-                    self.cam.free_buffer()  # Free the old buffer
-                if self.keepliveqrdecoding:
-                    self.qrdecode_one()
+                # Defensive check: verify buffer size matches expected dimensions
+                expected_size = self.width * self.height * 2  # RGB565 = 2 bytes per pixel
+                actual_size = len(self.current_cam_buffer)
+
+                if actual_size == expected_size:
+                    self.image_dsc.data = self.current_cam_buffer
+                    #image.invalidate() # does not work so do this:
+                    self.image.set_src(self.image_dsc)
+                    if not self.use_webcam:
+                        self.cam.free_buffer()  # Free the old buffer
+                    if self.keepliveqrdecoding:
+                        self.qrdecode_one()
+                else:
+                    print(f"Warning: Buffer size mismatch! Expected {expected_size} bytes, got {actual_size} bytes")
+                    print(f"  Resolution: {self.width}x{self.height}, discarding frame")
         except Exception as e:
             print(f"Camera capture exception: {e}")
 

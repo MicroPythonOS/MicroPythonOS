@@ -50,12 +50,25 @@ static void yuyv_to_rgb565(unsigned char *yuyv, uint16_t *rgb565, int in_width, 
         for (int x = 0; x < out_width; x++) {
             int src_x = (int)(x * x_ratio) + crop_x_offset;
             int src_y = (int)(y * y_ratio) + crop_y_offset;
-            int src_index = (src_y * in_width + src_x) * 2;
 
-            int y0 = yuyv[src_index];
-            int u = yuyv[src_index + 1];
-            int v = yuyv[src_index + 3];
+            // YUYV format: Y0 U Y1 V (4 bytes for 2 pixels)
+            // Ensure we're aligned to even pixel boundary
+            int src_x_even = (src_x / 2) * 2;
+            int src_base_index = (src_y * in_width + src_x_even) * 2;
 
+            // Extract Y, U, V values
+            int y0;
+            if (src_x % 2 == 0) {
+                // Even pixel: use Y0
+                y0 = yuyv[src_base_index];
+            } else {
+                // Odd pixel: use Y1
+                y0 = yuyv[src_base_index + 2];
+            }
+            int u = yuyv[src_base_index + 1];
+            int v = yuyv[src_base_index + 3];
+
+            // YUV to RGB conversion (ITU-R BT.601)
             int c = y0 - 16;
             int d = u - 128;
             int e = v - 128;
@@ -64,10 +77,12 @@ static void yuyv_to_rgb565(unsigned char *yuyv, uint16_t *rgb565, int in_width, 
             int g = (298 * c - 100 * d - 208 * e + 128) >> 8;
             int b = (298 * c + 516 * d + 128) >> 8;
 
+            // Clamp to valid range
             r = r < 0 ? 0 : (r > 255 ? 255 : r);
             g = g < 0 ? 0 : (g > 255 ? 255 : g);
             b = b < 0 ? 0 : (b > 255 ? 255 : b);
 
+            // Convert to RGB565
             uint16_t r5 = (r >> 3) & 0x1F;
             uint16_t g6 = (g >> 2) & 0x3F;
             uint16_t b5 = (b >> 3) & 0x1F;
@@ -91,8 +106,23 @@ static void yuyv_to_grayscale(unsigned char *yuyv, unsigned char *gray, int in_w
         for (int x = 0; x < out_width; x++) {
             int src_x = (int)(x * x_ratio) + crop_x_offset;
             int src_y = (int)(y * y_ratio) + crop_y_offset;
-            int src_index = (src_y * in_width + src_x) * 2;
-            gray[y * out_width + x] = yuyv[src_index];
+
+            // YUYV format: Y0 U Y1 V (4 bytes for 2 pixels)
+            // Ensure we're aligned to even pixel boundary
+            int src_x_even = (src_x / 2) * 2;
+            int src_base_index = (src_y * in_width + src_x_even) * 2;
+
+            // Extract Y value
+            unsigned char y_val;
+            if (src_x % 2 == 0) {
+                // Even pixel: use Y0
+                y_val = yuyv[src_base_index];
+            } else {
+                // Odd pixel: use Y1
+                y_val = yuyv[src_base_index + 2];
+            }
+
+            gray[y * out_width + x] = y_val;
         }
     }
 }
@@ -342,14 +372,25 @@ static mp_obj_t webcam_capture_frame(mp_obj_t self_in, mp_obj_t format) {
 MP_DEFINE_CONST_FUN_OBJ_2(webcam_capture_frame_obj, webcam_capture_frame);
 
 static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
-    // NOTE: This function only changes OUTPUT resolution (what Python receives).
-    // The INPUT resolution (what the webcam captures from V4L2) remains fixed at 640x480.
-    // The conversion functions will crop/scale from input to output resolution.
-    // TODO: Add support for changing input resolution (requires V4L2 reinit)
+    /*
+     * Reconfigure webcam resolution.
+     *
+     * Supports changing both INPUT resolution (V4L2 capture format) and
+     * OUTPUT resolution (conversion buffers). If input resolution changes,
+     * this will stop streaming, reconfigure V4L2, and restart streaming.
+     *
+     * Parameters:
+     *   input_width, input_height: V4L2 capture resolution (optional)
+     *   output_width, output_height: Output buffer resolution (optional)
+     *
+     * If not specified, dimensions remain unchanged.
+     */
 
-    enum { ARG_self, ARG_output_width, ARG_output_height };
+    enum { ARG_self, ARG_input_width, ARG_input_height, ARG_output_width, ARG_output_height };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_self, MP_ARG_REQUIRED | MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
+        { MP_QSTR_input_width, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_input_height, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
         { MP_QSTR_output_width, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
         { MP_QSTR_output_height, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
     };
@@ -360,26 +401,135 @@ static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_m
     webcam_obj_t *self = MP_OBJ_TO_PTR(args[ARG_self].u_obj);
 
     // Get new dimensions (keep current if not specified)
-    int new_width = args[ARG_output_width].u_int;
-    int new_height = args[ARG_output_height].u_int;
+    int new_input_width = args[ARG_input_width].u_int;
+    int new_input_height = args[ARG_input_height].u_int;
+    int new_output_width = args[ARG_output_width].u_int;
+    int new_output_height = args[ARG_output_height].u_int;
 
-    if (new_width == 0) new_width = self->output_width;
-    if (new_height == 0) new_height = self->output_height;
+    if (new_input_width == 0) new_input_width = self->input_width;
+    if (new_input_height == 0) new_input_height = self->input_height;
+    if (new_output_width == 0) new_output_width = self->output_width;
+    if (new_output_height == 0) new_output_height = self->output_height;
 
     // Validate dimensions
-    if (new_width <= 0 || new_height <= 0 || new_width > 1920 || new_height > 1920) {
+    if (new_input_width <= 0 || new_input_height <= 0 || new_input_width > 1920 || new_input_height > 1920) {
+        mp_raise_ValueError(MP_ERROR_TEXT("Invalid input dimensions"));
+    }
+    if (new_output_width <= 0 || new_output_height <= 0 || new_output_width > 1920 || new_output_height > 1920) {
         mp_raise_ValueError(MP_ERROR_TEXT("Invalid output dimensions"));
     }
 
-    // If dimensions changed, reallocate buffers
-    if (new_width != self->output_width || new_height != self->output_height) {
+    bool input_changed = (new_input_width != self->input_width || new_input_height != self->input_height);
+    bool output_changed = (new_output_width != self->output_width || new_output_height != self->output_height);
+
+    // If input resolution changed, need to reconfigure V4L2
+    if (input_changed) {
+        WEBCAM_DEBUG_PRINT("Reconfiguring V4L2: %dx%d -> %dx%d\n",
+                           self->input_width, self->input_height,
+                           new_input_width, new_input_height);
+
+        // 1. Stop streaming
+        enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        if (ioctl(self->fd, VIDIOC_STREAMOFF, &type) < 0) {
+            WEBCAM_DEBUG_PRINT("STREAMOFF failed: %s\n", strerror(errno));
+            mp_raise_OSError(errno);
+        }
+
+        // 2. Unmap old buffers
+        for (int i = 0; i < NUM_BUFFERS; i++) {
+            if (self->buffers[i] != MAP_FAILED && self->buffers[i] != NULL) {
+                munmap(self->buffers[i], self->buffer_length);
+                self->buffers[i] = MAP_FAILED;
+            }
+        }
+
+        // 3. Set new V4L2 format
+        struct v4l2_format fmt = {0};
+        fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        fmt.fmt.pix.width = new_input_width;
+        fmt.fmt.pix.height = new_input_height;
+        fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+        fmt.fmt.pix.field = V4L2_FIELD_ANY;
+
+        if (ioctl(self->fd, VIDIOC_S_FMT, &fmt) < 0) {
+            WEBCAM_DEBUG_PRINT("S_FMT failed: %s\n", strerror(errno));
+            mp_raise_OSError(errno);
+        }
+
+        // Verify format was set (driver may adjust dimensions)
+        if (fmt.fmt.pix.width != new_input_width || fmt.fmt.pix.height != new_input_height) {
+            WEBCAM_DEBUG_PRINT("Warning: Driver adjusted format to %dx%d\n",
+                               fmt.fmt.pix.width, fmt.fmt.pix.height);
+            new_input_width = fmt.fmt.pix.width;
+            new_input_height = fmt.fmt.pix.height;
+        }
+
+        // 4. Request new buffers
+        struct v4l2_requestbuffers req = {0};
+        req.count = NUM_BUFFERS;
+        req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        req.memory = V4L2_MEMORY_MMAP;
+
+        if (ioctl(self->fd, VIDIOC_REQBUFS, &req) < 0) {
+            WEBCAM_DEBUG_PRINT("REQBUFS failed: %s\n", strerror(errno));
+            mp_raise_OSError(errno);
+        }
+
+        // 5. Map new buffers
+        for (int i = 0; i < NUM_BUFFERS; i++) {
+            struct v4l2_buffer buf = {0};
+            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            buf.memory = V4L2_MEMORY_MMAP;
+            buf.index = i;
+
+            if (ioctl(self->fd, VIDIOC_QUERYBUF, &buf) < 0) {
+                WEBCAM_DEBUG_PRINT("QUERYBUF failed: %s\n", strerror(errno));
+                mp_raise_OSError(errno);
+            }
+
+            self->buffer_length = buf.length;
+            self->buffers[i] = mmap(NULL, buf.length, PROT_READ | PROT_WRITE,
+                                    MAP_SHARED, self->fd, buf.m.offset);
+
+            if (self->buffers[i] == MAP_FAILED) {
+                WEBCAM_DEBUG_PRINT("mmap failed: %s\n", strerror(errno));
+                mp_raise_OSError(errno);
+            }
+        }
+
+        // 6. Queue buffers
+        for (int i = 0; i < NUM_BUFFERS; i++) {
+            struct v4l2_buffer buf = {0};
+            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+            buf.memory = V4L2_MEMORY_MMAP;
+            buf.index = i;
+
+            if (ioctl(self->fd, VIDIOC_QBUF, &buf) < 0) {
+                WEBCAM_DEBUG_PRINT("QBUF failed: %s\n", strerror(errno));
+                mp_raise_OSError(errno);
+            }
+        }
+
+        // 7. Restart streaming
+        if (ioctl(self->fd, VIDIOC_STREAMON, &type) < 0) {
+            WEBCAM_DEBUG_PRINT("STREAMON failed: %s\n", strerror(errno));
+            mp_raise_OSError(errno);
+        }
+
+        // Update stored input dimensions
+        self->input_width = new_input_width;
+        self->input_height = new_input_height;
+    }
+
+    // If output resolution changed (or input changed which may affect output), reallocate output buffers
+    if (output_changed || input_changed) {
         // Free old buffers
         free(self->gray_buffer);
         free(self->rgb565_buffer);
 
         // Update dimensions
-        self->output_width = new_width;
-        self->output_height = new_height;
+        self->output_width = new_output_width;
+        self->output_height = new_output_height;
 
         // Allocate new buffers
         self->gray_buffer = (unsigned char *)malloc(self->output_width * self->output_height * sizeof(unsigned char));
@@ -392,9 +542,11 @@ static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_m
             self->rgb565_buffer = NULL;
             mp_raise_OSError(MP_ENOMEM);
         }
-
-        WEBCAM_DEBUG_PRINT("Webcam reconfigured to %dx%d\n", self->output_width, self->output_height);
     }
+
+    WEBCAM_DEBUG_PRINT("Webcam reconfigured: input %dx%d, output %dx%d\n",
+                       self->input_width, self->input_height,
+                       self->output_width, self->output_height);
 
     return mp_const_none;
 }
