@@ -5,40 +5,153 @@ MAX_VOLTAGE = 4.15
 
 adc = None
 scale_factor = 0
+adc_pin = None
 
-# This gets called by (the device-specific) boot*.py
+# Cache to reduce WiFi interruptions (ADC2 requires WiFi to be disabled)
+_cached_raw_adc = None
+_last_read_time = 0
+CACHE_DURATION_MS = 30000  # 30 seconds
+
+
+def _is_adc2_pin(pin):
+    """Check if pin is on ADC2 (ESP32-S3: GPIO11-20)."""
+    return 11 <= pin <= 20
+
+
 def init_adc(pinnr, sf):
-    global adc, scale_factor
-    try:
-        print(f"Initializing ADC pin {pinnr} with scale_factor {scale_factor}")
-        from machine import ADC, Pin # do this inside the try because it will fail on desktop
-        adc = ADC(Pin(pinnr))
-        # Set ADC to 11dB attenuation for 0–3.3V range (common for ESP32)
-        adc.atten(ADC.ATTN_11DB)
-        scale_factor = sf
-    except Exception as e:
-        print("Info: this platform has no ADC for measuring battery voltage")
+    """
+    Initialize ADC for battery voltage monitoring.
 
-def read_battery_voltage():
+    IMPORTANT for ESP32-S3: ADC2 (GPIO11-20) doesn't work when WiFi is active!
+    Use ADC1 pins (GPIO1-10) for battery monitoring if possible.
+    If using ADC2, WiFi will be temporarily disabled during readings.
+
+    Args:
+        pinnr: GPIO pin number
+        sf: Scale factor to convert raw ADC (0-4095) to battery voltage
+    """
+    global adc, scale_factor, adc_pin
+    scale_factor = sf
+    adc_pin = pinnr
+    try:
+        print(f"Initializing ADC pin {pinnr} with scale_factor {sf}")
+        if _is_adc2_pin(pinnr):
+            print(f"  WARNING: GPIO{pinnr} is on ADC2 - WiFi will be disabled during readings")
+        from machine import ADC, Pin
+        adc = ADC(Pin(pinnr))
+        adc.atten(ADC.ATTN_11DB)  # 0-3.3V range
+    except Exception as e:
+        print(f"Info: this platform has no ADC for measuring battery voltage: {e}")
+
+
+def read_raw_adc(force_refresh=False):
+    """
+    Read raw ADC value (0-4095) with caching.
+
+    On ESP32-S3 with ADC2, WiFi is temporarily disabled during reading.
+    Raises RuntimeError if WifiService is busy (connecting/scanning) when using ADC2.
+
+    Args:
+        force_refresh: Bypass cache and force fresh reading
+
+    Returns:
+        float: Raw ADC value (0-4095)
+
+    Raises:
+        RuntimeError: If WifiService is busy (only when using ADC2)
+    """
+    global _cached_raw_adc, _last_read_time
+
+    # Desktop mode - return random value
     if not adc:
         import random
-        random_voltage = random.randint(round(MIN_VOLTAGE*100),round(MAX_VOLTAGE*100)) / 100
-        #print(f"returning random voltage: {random_voltage}")
-        return random_voltage
-    # Read raw ADC value
-    total = 0
-    # Read multiple times to try to reduce variability.
-    # Reading 10 times takes around 3ms so it's fine...
-    for _ in range(10):
-        total = total + adc.read()
-    raw_value = total / 10
-    #print(f"read_battery_voltage raw_value: {raw_value}")
-    voltage = raw_value * scale_factor
-    # Clamp to 0–4.2V range for LiPo battery
-    voltage = max(0, min(voltage, MAX_VOLTAGE))
-    return voltage
+        return random.randint(1900, 2600) if scale_factor == 0 else random.randint(
+            int(MIN_VOLTAGE / scale_factor), int(MAX_VOLTAGE / scale_factor)
+        )
 
-# Could be interesting to keep a "rolling average" of the percentage so that it doesn't fluctuate too quickly
+    # Check cache
+    current_time = time.ticks_ms()
+    if not force_refresh and _cached_raw_adc is not None:
+        age = time.ticks_diff(current_time, _last_read_time)
+        if age < CACHE_DURATION_MS:
+            return _cached_raw_adc
+
+    # Check if this is an ADC2 pin (requires WiFi disable)
+    needs_wifi_disable = adc_pin is not None and _is_adc2_pin(adc_pin)
+
+    # Import WifiService only if needed
+    WifiService = None
+    if needs_wifi_disable:
+        try:
+            from mpos.net.wifi_service import WifiService
+        except ImportError:
+            pass
+
+        # Check if WiFi operations are in progress
+        if WifiService and WifiService.wifi_busy:
+            raise RuntimeError("Cannot read battery voltage: WifiService is busy")
+
+    # Disable WiFi for ADC2 reading
+    wifi_was_connected = False
+    if needs_wifi_disable and WifiService:
+        wifi_was_connected = WifiService.is_connected()
+        WifiService.wifi_busy = True
+        WifiService.disconnect()
+        time.sleep(0.05)  # Brief delay for WiFi to fully disable
+
+    try:
+        # Read ADC (average of 10 samples)
+        total = sum(adc.read() for _ in range(10))
+        raw_value = total / 10.0
+
+        # Update cache
+        _cached_raw_adc = raw_value
+        _last_read_time = current_time
+
+        return raw_value
+
+    finally:
+        # Re-enable WiFi (only if we disabled it)
+        if needs_wifi_disable and WifiService:
+            WifiService.wifi_busy = False
+            if wifi_was_connected:
+                # Trigger reconnection in background thread
+                try:
+                    import _thread
+                    _thread.start_new_thread(WifiService.auto_connect, ())
+                except Exception as e:
+                    print(f"battery_voltage: Failed to start reconnect thread: {e}")
+
+
+def read_battery_voltage(force_refresh=False):
+    """
+    Read battery voltage in volts.
+
+    Args:
+        force_refresh: Bypass cache and force fresh reading
+
+    Returns:
+        float: Battery voltage in volts (clamped to 0-MAX_VOLTAGE)
+    """
+    raw = read_raw_adc(force_refresh)
+    voltage = raw * scale_factor
+    return max(0.0, min(voltage, MAX_VOLTAGE))
+
+
 def get_battery_percentage():
-    return (read_battery_voltage() - MIN_VOLTAGE) * 100 / (MAX_VOLTAGE - MIN_VOLTAGE)
+    """
+    Get battery charge percentage.
 
+    Returns:
+        float: Battery percentage (0-100)
+    """
+    voltage = read_battery_voltage()
+    percentage = (voltage - MIN_VOLTAGE) * 100.0 / (MAX_VOLTAGE - MIN_VOLTAGE)
+    return max(0.0, min(100.0, percentage))
+
+
+def clear_cache():
+    """Clear the battery voltage cache to force fresh reading on next call."""
+    global _cached_raw_adc, _last_read_time
+    _cached_raw_adc = None
+    _last_read_time = 0

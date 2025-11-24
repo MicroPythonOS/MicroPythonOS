@@ -11,7 +11,7 @@ NOTIFICATION_BAR_HEIGHT=24
 
 CLOCK_UPDATE_INTERVAL = 1000 # 10 or even 1 ms doesn't seem to change the framerate but 100ms is enough
 WIFI_ICON_UPDATE_INTERVAL = 1500
-BATTERY_ICON_UPDATE_INTERVAL = 5000
+BATTERY_ICON_UPDATE_INTERVAL = 30000 # not too often, because on fri3d_2024, this briefly disables wifi
 TEMPERATURE_UPDATE_INTERVAL = 2000
 MEMFREE_UPDATE_INTERVAL = 5000 # not too frequent because there's a forced gc.collect() to give it a reliable value
 
@@ -92,9 +92,10 @@ def create_notification_bar():
     temp_label = lv.label(notification_bar)
     temp_label.set_text("00°C")
     temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, mpos.ui.pct_of_display_width(7)	, 0)
-    memfree_label = lv.label(notification_bar)
-    memfree_label.set_text("")
-    memfree_label.align_to(temp_label, lv.ALIGN.OUT_RIGHT_MID, mpos.ui.pct_of_display_width(7), 0)
+    if False:
+        memfree_label = lv.label(notification_bar)
+        memfree_label.set_text("")
+        memfree_label.align_to(temp_label, lv.ALIGN.OUT_RIGHT_MID, mpos.ui.pct_of_display_width(7), 0)
     #style = lv.style_t()
     #style.init()
     #style.set_text_font(lv.font_montserrat_8)  # tiny font
@@ -134,7 +135,11 @@ def create_notification_bar():
         print("Warning: could not check WLAN status:", str(e))
     
     def update_battery_icon(timer=None):
-        percent = mpos.battery_voltage.get_battery_percentage()
+        try:
+            percent = mpos.battery_voltage.get_battery_percentage()
+        except Exception as e:
+            print(f"battery_voltage.get_battery_percentage got exception, not updating battery_icon: {e}")
+            return
         if percent > 80: # 4.1V
             battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
         elif percent > 60: # 4.0V
@@ -149,7 +154,6 @@ def create_notification_bar():
         # Percentage is not shown for now:
         #battery_label.set_text(f"{round(percent)}%")
         #battery_label.remove_flag(lv.obj.FLAG.HIDDEN)
-    update_battery_icon() # run it immediately instead of waiting for the timer
 
     def update_wifi_icon(timer):
         from mpos.net.wifi_service import WifiService
@@ -182,7 +186,7 @@ def create_notification_bar():
     
     lv.timer_create(update_time, CLOCK_UPDATE_INTERVAL, None)
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
-    lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
+    #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
     lv.timer_create(update_wifi_icon, WIFI_ICON_UPDATE_INTERVAL, None)
     lv.timer_create(update_battery_icon, BATTERY_ICON_UPDATE_INTERVAL, None)
     

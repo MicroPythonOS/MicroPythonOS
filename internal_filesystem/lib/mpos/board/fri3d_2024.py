@@ -258,8 +258,11 @@ indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
 
 # Battery voltage ADC measuring
+# NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
+# battery_voltage.py handles this automatically: disables WiFi, reads ADC, reconnects WiFi.
+# Readings are cached for 30 seconds to minimize WiFi interruptions.
 import mpos.battery_voltage
-mpos.battery_voltage.init_adc(13, 2 / 1000)
+mpos.battery_voltage.init_adc(13, 3.3 * 2 / 4095)
 
 import mpos.sdcard
 mpos.sdcard.init(spi_bus, cs_pin=14)

@@ -528,7 +528,7 @@ class UpdateDownloader:
 
         except Exception as e:
             result['error'] = str(e)
-            print(f"UpdateDownloader: Error during download: {e}")
+            print(f"UpdateDownloader: Error during download: {e}") # -113 when wifi disconnected
 
         return result
 
