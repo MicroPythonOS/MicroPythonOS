@@ -206,6 +206,7 @@ class AppDetail(Activity):
         detail_cont.set_style_pad_all(0, 0)
         detail_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         detail_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
+        detail_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         name_label = lv.label(detail_cont)
         name_label.set_text(app.name)
         name_label.set_style_text_font(lv.font_montserrat_24, 0)
