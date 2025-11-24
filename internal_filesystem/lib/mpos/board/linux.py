@@ -88,7 +88,12 @@ except Exception as e:
 
 # Simulated battery voltage ADC measuring
 import mpos.battery_voltage
-mpos.battery_voltage.init_adc(999, (3.3 / 4095) * 2)
+
+def adc_to_voltage(adc_value):
+    """Convert simulated ADC value to voltage."""
+    return adc_value * (3.3 / 4095) * 2
+
+mpos.battery_voltage.init_adc(999, adc_to_voltage)
 
 print("linux.py finished")
 

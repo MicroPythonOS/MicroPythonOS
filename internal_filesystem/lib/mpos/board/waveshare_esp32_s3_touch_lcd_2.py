@@ -81,7 +81,19 @@ mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after 
 
 # Battery voltage ADC measuring
 import mpos.battery_voltage
-mpos.battery_voltage.init_adc(5, 262 / 100000)
+
+def adc_to_voltage(adc_value):
+    """
+    Convert raw ADC value to battery voltage.
+    Currently uses simple linear scaling: voltage = adc * 0.00262
+
+    This could be improved with calibration data similar to Fri3d board.
+    To calibrate: measure actual battery voltages and corresponding ADC readings,
+    then fit a linear or polynomial function.
+    """
+    return adc_value * 0.00262
+
+mpos.battery_voltage.init_adc(5, adc_to_voltage)
 
 # On the Waveshare ESP32-S3-Touch-LCD-2, the camera is hard-wired to power on,
 # so it needs a software power off to prevent it from staying hot all the time and quickly draining the battery.

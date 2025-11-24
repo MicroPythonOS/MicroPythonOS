@@ -154,6 +154,7 @@ def create_notification_bar():
         # Percentage is not shown for now:
         #battery_label.set_text(f"{round(percent)}%")
         #battery_label.remove_flag(lv.obj.FLAG.HIDDEN)
+    update_battery_icon() # run it immediately instead of waiting for the timer
 
     def update_wifi_icon(timer):
         from mpos.net.wifi_service import WifiService

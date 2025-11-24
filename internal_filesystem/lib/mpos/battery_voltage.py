@@ -4,7 +4,7 @@ MIN_VOLTAGE = 3.15
 MAX_VOLTAGE = 4.15
 
 adc = None
-scale_factor = 0
+conversion_func = None  # Conversion function: ADC value -> voltage
 adc_pin = None
 
 # Cache to reduce WiFi interruptions (ADC2 requires WiFi to be disabled)
@@ -19,7 +19,7 @@ def _is_adc2_pin(pin):
     return 11 <= pin <= 20
 
 
-def init_adc(pinnr, sf):
+def init_adc(pinnr, adc_to_voltage_func):
     """
     Initialize ADC for battery voltage monitoring.
 
@@ -29,13 +29,16 @@ def init_adc(pinnr, sf):
 
     Args:
         pinnr: GPIO pin number
-        sf: Scale factor to convert raw ADC (0-4095) to battery voltage
+        adc_to_voltage_func: Conversion function that takes raw ADC value (0-4095)
+                             and returns battery voltage in volts
     """
-    global adc, scale_factor, adc_pin
-    scale_factor = sf
+    global adc, conversion_func, adc_pin
+
+    conversion_func = adc_to_voltage_func
     adc_pin = pinnr
+
     try:
-        print(f"Initializing ADC pin {pinnr} with scale_factor {sf}")
+        print(f"Initializing ADC pin {pinnr} with conversion function")
         if _is_adc2_pin(pinnr):
             print(f"  WARNING: GPIO{pinnr} is on ADC2 - WiFi will be disabled during readings")
         from machine import ADC, Pin
@@ -43,6 +46,9 @@ def init_adc(pinnr, sf):
         adc.atten(ADC.ATTN_11DB)  # 0-3.3V range
     except Exception as e:
         print(f"Info: this platform has no ADC for measuring battery voltage: {e}")
+
+    initial_adc_value = read_raw_adc()
+    print("Reading ADC at init to fill cache: {initial_adc_value} => {read_battery_voltage(raw_adc_value=initial_adc_value)}V => {get_battery_percentage(raw_adc_value=initial_adc_value)}%")
 
 
 def read_raw_adc(force_refresh=False):
@@ -63,12 +69,10 @@ def read_raw_adc(force_refresh=False):
     """
     global _cached_raw_adc, _last_read_time
 
-    # Desktop mode - return random value
+    # Desktop mode - return random value in typical ADC range
     if not adc:
         import random
-        return random.randint(1900, 2600) if scale_factor == 0 else random.randint(
-            int(MIN_VOLTAGE / scale_factor), int(MAX_VOLTAGE / scale_factor)
-        )
+        return random.randint(1900, 2600)
 
     # Check if this is an ADC2 pin (requires WiFi disable)
     needs_wifi_disable = adc_pin is not None and _is_adc2_pin(adc_pin)
@@ -115,7 +119,7 @@ def read_raw_adc(force_refresh=False):
             WifiService.temporarily_enable(was_connected)
 
 
-def read_battery_voltage(force_refresh=False):
+def read_battery_voltage(force_refresh=False, raw_adc_value=None):
     """
     Read battery voltage in volts.
 
@@ -125,19 +129,19 @@ def read_battery_voltage(force_refresh=False):
     Returns:
         float: Battery voltage in volts (clamped to 0-MAX_VOLTAGE)
     """
-    raw = read_raw_adc(force_refresh)
-    voltage = raw * scale_factor
+    raw = raw_adc_value if raw_adc_value else read_raw_adc(force_refresh)
+    voltage = conversion_func(raw) if conversion_func else 0.0
     return max(0.0, min(voltage, MAX_VOLTAGE))
 
 
-def get_battery_percentage():
+def get_battery_percentage(raw_adc_value=None):
     """
     Get battery charge percentage.
 
     Returns:
         float: Battery percentage (0-100)
     """
-    voltage = read_battery_voltage()
+    voltage = read_battery_voltage(raw_adc_value=raw_adc_value)
     percentage = (voltage - MIN_VOLTAGE) * 100.0 / (MAX_VOLTAGE - MIN_VOLTAGE)
     return max(0.0, min(100.0, percentage))
 
