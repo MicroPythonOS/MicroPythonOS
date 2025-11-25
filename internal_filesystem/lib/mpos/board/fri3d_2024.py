@@ -274,6 +274,7 @@ best fit on battery power:
 2343 is 3.957
 2319 is 3.916
 2269 is 3.831
+2227 is 3.769
 """
 def adc_to_voltage(adc_value):
     """

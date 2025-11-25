@@ -310,18 +310,12 @@ class CameraApp(Activity):
             # Reconfigure camera if active
             if self.cam:
                 if self.use_webcam:
-                    print(f"Reconfiguring webcam: input={self.width}x{self.height}, output={self.width}x{self.height}")
-                    # Configure both V4L2 input and output to the same resolution for best quality
-                    webcam.reconfigure(
-                        self.cam,
-                        input_width=self.width,
-                        input_height=self.height,
-                        output_width=self.width,
-                        output_height=self.height
-                    )
+                    print(f"Reconfiguring webcam to {self.width}x{self.height}")
+                    # Reconfigure webcam resolution (input and output are the same)
+                    webcam.reconfigure(self.cam, width=self.width, height=self.height)
                     # Resume capture timer for webcam
                     self.capture_timer = lv.timer_create(self.try_capture, 100, None)
-                    print("Webcam reconfigured (V4L2 + output buffers), capture timer resumed")
+                    print("Webcam reconfigured, capture timer resumed")
                 else:
                     # For internal camera, need to reinitialize
                     print(f"Reinitializing internal camera to {self.width}x{self.height}")
