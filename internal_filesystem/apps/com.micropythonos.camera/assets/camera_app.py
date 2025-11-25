@@ -401,7 +401,8 @@ def init_internal_cam(width, height):
         print(f"init_internal_cam: Using FrameSize for {width}x{height}")
 
         # Try to initialize, with one retry for I2C poweroff issue
-        for attempt in range(2):
+        max_attempts = 3
+        for attempt in range(max_attempts):
             try:
                 cam = Camera(
                     data_pins=[12,13,15,11,14,10,7,2],
@@ -421,10 +422,10 @@ def init_internal_cam(width, height):
                 cam.set_vflip(True)
                 return cam
             except Exception as e:
-                if attempt == 0:
-                    print(f"init_cam attempt {attempt + 1} failed: {e}, retrying...")
+                if attempt < max_attempts-1:
+                    print(f"init_cam attempt {attempt} failed: {e}, retrying...")
                 else:
-                    print(f"init_cam exception: {e}")
+                    print(f"init_cam final exception: {e}")
                     return None
     except Exception as e:
         print(f"init_cam exception: {e}")
