@@ -103,8 +103,12 @@ class CameraApp(Activity):
         self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
         self.qr_label.center()
         self.status_label_cont = lv.obj(self.main_screen)
-        self.status_label_cont.set_size(lv.pct(66),lv.pct(60))
-        self.status_label_cont.align(lv.ALIGN.LEFT_MID, lv.pct(5), 0)
+        width = mpos.ui.pct_of_display_width(70)
+        height = mpos.ui.pct_of_display_width(60)
+        self.status_label_cont.set_size(width,height)
+        center_w = round((mpos.ui.pct_of_display_width(100) - self.button_width - 5 - width)/2)
+        center_h = round((mpos.ui.pct_of_display_height(100) - height)/2)
+        self.status_label_cont.set_pos(center_w,center_h)
         self.status_label_cont.set_style_bg_color(lv.color_white(), 0)
         self.status_label_cont.set_style_bg_opa(66, 0)
         self.status_label_cont.set_style_border_width(0, 0)
@@ -116,7 +120,6 @@ class CameraApp(Activity):
         self.setContentView(self.main_screen)
     
     def onResume(self, screen):
-        self.create_preview_image()
         self.cam = init_internal_cam(self.width, self.height)
         if not self.cam:
             # try again because the manual i2c poweroff leaves it in a bad state
@@ -279,8 +282,8 @@ class CameraApp(Activity):
             self.stop_qr_decoding()
 
     def open_settings(self):
-        #self.main_screen.clean()
-        self.image.delete()
+        self.image_dsc.data = None
+        self.current_cam_buffer = None
         """Launch the camera settings activity."""
         intent = Intent(activity_class=CameraSettingsActivity)
         self.startActivityForResult(intent, self.handle_settings_result)

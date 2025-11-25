@@ -24,9 +24,13 @@ def get_pointer_xy():
     return -1, -1
 
 def pct_of_display_width(pct):
+    if pct == 100:
+        return _horizontal_resolution
     return round(_horizontal_resolution * pct / 100)
 
 def pct_of_display_height(pct):
+    if pct == 100:
+        return _vertical_resolution
     return round(_vertical_resolution * pct / 100)
 
 def min_resolution():
