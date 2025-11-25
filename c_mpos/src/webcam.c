@@ -31,6 +31,25 @@ typedef struct _webcam_obj_t {
     int height;                // Resolution height
 } webcam_obj_t;
 
+// Helper function to convert single YUV pixel to RGB565
+static inline uint16_t yuv_to_rgb565(int y_val, int u, int v) {
+    int c = y_val - 16;
+    int d = u - 128;
+    int e = v - 128;
+
+    int r = (298 * c + 409 * e + 128) >> 8;
+    int g = (298 * c - 100 * d - 208 * e + 128) >> 8;
+    int b = (298 * c + 516 * d + 128) >> 8;
+
+    // Clamp to valid range
+    r = r < 0 ? 0 : (r > 255 ? 255 : r);
+    g = g < 0 ? 0 : (g > 255 ? 255 : g);
+    b = b < 0 ? 0 : (b > 255 ? 255 : b);
+
+    // Convert to RGB565
+    return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
+}
+
 static void yuyv_to_rgb565(unsigned char *yuyv, uint16_t *rgb565, int width, int height) {
     // Convert YUYV to RGB565 without scaling
     // YUYV format: Y0 U Y1 V (4 bytes for 2 pixels, chroma shared)
@@ -45,43 +64,9 @@ static void yuyv_to_rgb565(unsigned char *yuyv, uint16_t *rgb565, int width, int
             int y1 = yuyv[base_index + 2];
             int v  = yuyv[base_index + 3];
 
-            // YUV to RGB conversion (ITU-R BT.601) for first pixel
-            int c = y0 - 16;
-            int d = u - 128;
-            int e = v - 128;
-
-            int r = (298 * c + 409 * e + 128) >> 8;
-            int g = (298 * c - 100 * d - 208 * e + 128) >> 8;
-            int b = (298 * c + 516 * d + 128) >> 8;
-
-            // Clamp to valid range
-            r = r < 0 ? 0 : (r > 255 ? 255 : r);
-            g = g < 0 ? 0 : (g > 255 ? 255 : g);
-            b = b < 0 ? 0 : (b > 255 ? 255 : b);
-
-            // Convert to RGB565
-            uint16_t r5 = (r >> 3) & 0x1F;
-            uint16_t g6 = (g >> 2) & 0x3F;
-            uint16_t b5 = (b >> 3) & 0x1F;
-
-            rgb565[y * width + x] = (r5 << 11) | (g6 << 5) | b5;
-
-            // Second pixel (shares U/V with first)
-            c = y1 - 16;
-
-            r = (298 * c + 409 * e + 128) >> 8;
-            g = (298 * c - 100 * d - 208 * e + 128) >> 8;
-            b = (298 * c + 516 * d + 128) >> 8;
-
-            r = r < 0 ? 0 : (r > 255 ? 255 : r);
-            g = g < 0 ? 0 : (g > 255 ? 255 : g);
-            b = b < 0 ? 0 : (b > 255 ? 255 : b);
-
-            r5 = (r >> 3) & 0x1F;
-            g6 = (g >> 2) & 0x3F;
-            b5 = (b >> 3) & 0x1F;
-
-            rgb565[y * width + x + 1] = (r5 << 11) | (g6 << 5) | b5;
+            // Convert both pixels (sharing U/V chroma)
+            rgb565[y * width + x] = yuv_to_rgb565(y0, u, v);
+            rgb565[y * width + x + 1] = yuv_to_rgb565(y1, u, v);
         }
     }
 }
@@ -98,23 +83,13 @@ static void yuyv_to_grayscale(unsigned char *yuyv, unsigned char *gray, int widt
     }
 }
 
-static void save_raw(const char *filename, unsigned char *data, int width, int height) {
+static void save_raw_generic(const char *filename, void *data, size_t elem_size, int width, int height) {
     FILE *fp = fopen(filename, "wb");
     if (!fp) {
         WEBCAM_DEBUG_PRINT("Cannot open file %s: %s\n", filename, strerror(errno));
         return;
     }
-    fwrite(data, 1, width * height, fp);
-    fclose(fp);
-}
-
-static void save_raw_rgb565(const char *filename, uint16_t *data, int width, int height) {
-    FILE *fp = fopen(filename, "wb");
-    if (!fp) {
-        WEBCAM_DEBUG_PRINT("Cannot open file %s: %s\n", filename, strerror(errno));
-        return;
-    }
-    fwrite(data, sizeof(uint16_t), width * height, fp);
+    fwrite(data, elem_size, width * height, fp);
     fclose(fp);
 }
 
@@ -162,6 +137,10 @@ static int init_webcam(webcam_obj_t *self, const char *device, int width, int he
         buf.index = i;
         if (ioctl(self->fd, VIDIOC_QUERYBUF, &buf) < 0) {
             WEBCAM_DEBUG_PRINT("Cannot query buffer: %s\n", strerror(errno));
+            // Unmap any already-mapped buffers
+            for (int j = 0; j < i; j++) {
+                munmap(self->buffers[j], self->buffer_length);
+            }
             close(self->fd);
             return -errno;
         }
@@ -169,6 +148,10 @@ static int init_webcam(webcam_obj_t *self, const char *device, int width, int he
         self->buffers[i] = mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, self->fd, buf.m.offset);
         if (self->buffers[i] == MAP_FAILED) {
             WEBCAM_DEBUG_PRINT("Cannot map buffer: %s\n", strerror(errno));
+            // Unmap any already-mapped buffers
+            for (int j = 0; j < i; j++) {
+                munmap(self->buffers[j], self->buffer_length);
+            }
             close(self->fd);
             return -errno;
         }
@@ -301,10 +284,6 @@ static mp_obj_t webcam_init(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
     webcam_obj_t *self = m_new_obj(webcam_obj_t);
     self->base.type = &webcam_type;
     self->fd = -1;
-    self->gray_buffer = NULL;
-    self->rgb565_buffer = NULL;
-    self->width = 0;   // Will be set from V4L2 format in init_webcam
-    self->height = 0;  // Will be set from V4L2 format in init_webcam
 
     int res = init_webcam(self, device, width, height);
     if (res < 0) {
@@ -380,13 +359,10 @@ static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_m
     WEBCAM_DEBUG_PRINT("Reconfiguring webcam: %dx%d -> %dx%d\n",
                        self->width, self->height, new_width, new_height);
 
-    // Remember device path before deinit (which closes fd)
-    char device[64];
-    strncpy(device, self->device, sizeof(device));
-
     // Clean shutdown and reinitialize with new resolution
+    // Note: deinit_webcam doesn't touch self->device, so it's safe to use directly
     deinit_webcam(self);
-    int res = init_webcam(self, device, new_width, new_height);
+    int res = init_webcam(self, self->device, new_width, new_height);
 
     if (res < 0) {
         mp_raise_OSError(-res);

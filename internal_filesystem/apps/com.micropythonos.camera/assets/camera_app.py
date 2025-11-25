@@ -20,6 +20,7 @@ import mpos.time
 class CameraApp(Activity):
 
     button_width = 40
+    button_height = 40
     width = 320
     height = 240
 
@@ -71,7 +72,7 @@ class CameraApp(Activity):
         # Initialize LVGL image widget
         self.create_preview_image()
         close_button = lv.button(self.main_screen)
-        close_button.set_size(self.button_width,40)
+        close_button.set_size(self.button_width, self.button_height)
         close_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         close_label = lv.label(close_button)
         close_label.set_text(lv.SYMBOL.CLOSE)
@@ -79,15 +80,15 @@ class CameraApp(Activity):
         close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
         # Settings button
         settings_button = lv.button(self.main_screen)
-        settings_button.set_size(self.button_width,40)
-        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, 50)
+        settings_button.set_size(self.button_width, self.button_height)
+        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, self.button_height + 10)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.center()
         settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
 
         self.snap_button = lv.button(self.main_screen)
-        self.snap_button.set_size(self.button_width, 40)
+        self.snap_button.set_size(self.button_width, self.button_height)
         self.snap_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
         self.snap_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.snap_button.add_event_cb(self.snap_button_click,lv.EVENT.CLICKED,None)
@@ -95,7 +96,7 @@ class CameraApp(Activity):
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
         self.qr_button = lv.button(self.main_screen)
-        self.qr_button.set_size(self.button_width, 40)
+        self.qr_button.set_size(self.button_width, self.button_height)
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.qr_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         self.qr_button.add_event_cb(self.qr_button_click,lv.EVENT.CLICKED,None)
@@ -121,9 +122,6 @@ class CameraApp(Activity):
     
     def onResume(self, screen):
         self.cam = init_internal_cam(self.width, self.height)
-        if not self.cam:
-            # try again because the manual i2c poweroff leaves it in a bad state
-            self.cam = init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
         else:
@@ -332,6 +330,11 @@ class CameraApp(Activity):
                     if self.cam:
                         self.capture_timer = lv.timer_create(self.try_capture, 100, None)
                         print("Internal camera reinitialized, capture timer resumed")
+                    else:
+                        print("ERROR: Failed to reinitialize camera after resolution change")
+                        self.status_label.set_text("Failed to reinitialize camera.\nPlease restart the app.")
+                        self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+                        return  # Don't continue if camera failed
 
                 self.set_image_size()
 
@@ -364,8 +367,11 @@ class CameraApp(Activity):
 
 
 # Non-class functions:
-def init_internal_cam(width=320, height=240):
-    """Initialize internal camera with specified resolution."""
+def init_internal_cam(width, height):
+    """Initialize internal camera with specified resolution.
+
+    Automatically retries once if initialization fails (to handle I2C poweroff issue).
+    """
     try:
         from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
 
@@ -394,23 +400,32 @@ def init_internal_cam(width=320, height=240):
         frame_size = resolution_map.get((width, height), FrameSize.QVGA)
         print(f"init_internal_cam: Using FrameSize for {width}x{height}")
 
-        cam = Camera(
-            data_pins=[12,13,15,11,14,10,7,2],
-            vsync_pin=6,
-            href_pin=4,
-            sda_pin=21,
-            scl_pin=16,
-            pclk_pin=9,
-            xclk_pin=8,
-            xclk_freq=20000000,
-            powerdown_pin=-1,
-            reset_pin=-1,
-            pixel_format=PixelFormat.RGB565,
-            frame_size=frame_size,
-            grab_mode=GrabMode.LATEST
-        )
-        cam.set_vflip(True)
-        return cam
+        # Try to initialize, with one retry for I2C poweroff issue
+        for attempt in range(2):
+            try:
+                cam = Camera(
+                    data_pins=[12,13,15,11,14,10,7,2],
+                    vsync_pin=6,
+                    href_pin=4,
+                    sda_pin=21,
+                    scl_pin=16,
+                    pclk_pin=9,
+                    xclk_pin=8,
+                    xclk_freq=20000000,
+                    powerdown_pin=-1,
+                    reset_pin=-1,
+                    pixel_format=PixelFormat.RGB565,
+                    frame_size=frame_size,
+                    grab_mode=GrabMode.LATEST
+                )
+                cam.set_vflip(True)
+                return cam
+            except Exception as e:
+                if attempt == 0:
+                    print(f"init_cam attempt {attempt + 1} failed: {e}, retrying...")
+                else:
+                    print(f"init_cam exception: {e}")
+                    return None
     except Exception as e:
         print(f"init_cam exception: {e}")
         return None
