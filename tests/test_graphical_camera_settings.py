@@ -112,8 +112,8 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         # The settings button is positioned at TOP_RIGHT with offset (0, 60)
         # On a 320x240 screen, this is approximately x=260, y=90
         # We'll click slightly inside the button to ensure we hit it
-        settings_x = 290  # Right side of screen, inside the 60px button
-        settings_y = 90   # 60px down from top, center of 60px button
+        settings_x = 300  # Right side of screen, inside the 60px button
+        settings_y = 60   # 60px down from top, center of 60px button
 
         print(f"\nClicking settings button at ({settings_x}, {settings_y})")
         simulate_click(settings_x, settings_y, press_duration_ms=100)

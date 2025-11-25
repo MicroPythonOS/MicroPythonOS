@@ -12,8 +12,6 @@
 #include "py/runtime.h"
 #include "py/mperrno.h"
 
-#define WIDTH 640
-#define HEIGHT 480
 #define NUM_BUFFERS 1
 
 #define WEBCAM_DEBUG_PRINT(...) mp_printf(&mp_plat_print, __VA_ARGS__)
@@ -285,8 +283,8 @@ static mp_obj_t webcam_init(size_t n_args, const mp_obj_t *pos_args, mp_map_t *k
     enum { ARG_device, ARG_width, ARG_height };
     static const mp_arg_t allowed_args[] = {
         { MP_QSTR_device, MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
-        { MP_QSTR_width, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = WIDTH} },
-        { MP_QSTR_height, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = HEIGHT} },
+        { MP_QSTR_width, MP_ARG_REQUIRED | MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
+        { MP_QSTR_height, MP_ARG_REQUIRED | MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = 0} },
     };
 
     mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];

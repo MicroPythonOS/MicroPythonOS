@@ -19,6 +19,7 @@ import mpos.time
 
 class CameraApp(Activity):
 
+    button_width = 40
     width = 320
     height = 240
 
@@ -70,7 +71,7 @@ class CameraApp(Activity):
         # Initialize LVGL image widget
         self.create_preview_image()
         close_button = lv.button(self.main_screen)
-        close_button.set_size(60,60)
+        close_button.set_size(self.button_width,40)
         close_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         close_label = lv.label(close_button)
         close_label.set_text(lv.SYMBOL.CLOSE)
@@ -78,15 +79,15 @@ class CameraApp(Activity):
         close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
         # Settings button
         settings_button = lv.button(self.main_screen)
-        settings_button.set_size(60,60)
-        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, 60)
+        settings_button.set_size(self.button_width,40)
+        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, 50)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.center()
         settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
 
         self.snap_button = lv.button(self.main_screen)
-        self.snap_button.set_size(60, 60)
+        self.snap_button.set_size(self.button_width, 40)
         self.snap_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
         self.snap_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.snap_button.add_event_cb(self.snap_button_click,lv.EVENT.CLICKED,None)
@@ -94,7 +95,7 @@ class CameraApp(Activity):
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
         self.qr_button = lv.button(self.main_screen)
-        self.qr_button.set_size(60, 60)
+        self.qr_button.set_size(self.button_width, 40)
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.qr_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         self.qr_button.add_event_cb(self.qr_button_click,lv.EVENT.CLICKED,None)
@@ -172,10 +173,9 @@ class CameraApp(Activity):
         print("camera app cleanup done.")
 
     def set_image_size(self):
-        #return
         disp = lv.display_get_default()
         target_h = disp.get_vertical_resolution()
-        target_w = target_h
+        target_w = disp.get_horizontal_resolution() - self.button_width - 5 # leave 5px for border
         if target_w == self.width and target_h == self.height:
             print("Target width and height are the same as native image, no scaling required.")
             return
