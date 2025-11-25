@@ -374,7 +374,7 @@ def init_internal_cam(width=320, height=240):
         resolution_map = {
             (96, 96): FrameSize.R96X96,
             (160, 120): FrameSize.QQVGA,
-            (128, 128): FrameSize.R128X128,
+            #(128, 128): FrameSize.R128X128, it's actually FrameSize.R128x128 but let's ignore it to be safe
             (176, 144): FrameSize.QCIF,
             (240, 176): FrameSize.HQVGA,
             (240, 240): FrameSize.R240X240,
