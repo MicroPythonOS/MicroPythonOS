@@ -439,13 +439,12 @@ class CameraSettingsActivity(Activity):
     # Resolution options for desktop/webcam
     WEBCAM_RESOLUTIONS = [
         ("160x120", "160x120"),
-        ("240x240", "240x240"),  # Default
+        ("320x180", "320x180"),
         ("320x240", "320x240"),
-        ("480x320", "480x320"),
-        ("640x480", "640x480"),
-        ("800x600", "800x600"),
-        ("1024x768", "1024x768"),
-        ("1280x720", "1280x720"),
+        ("640x360", "640x360"),
+        ("640x480 (30 fps)", "640x480"),
+        ("1280x720 (10 fps)", "1280x720"),
+        ("1920x1080 (5 fps)", "1920x1080"),
     ]
 
     # Resolution options for internal camera (ESP32) - all available FrameSize options
