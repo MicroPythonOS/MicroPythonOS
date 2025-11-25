@@ -22,9 +22,6 @@ class CameraApp(Activity):
     width = 320
     height = 240
 
-    # Resolution preferences
-    prefs = None
-
     status_label_text = "No camera found."
     status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and QR size (4-12cm). Ensure proper lighting."
     status_label_text_found = "Decoding QR..."
@@ -41,6 +38,7 @@ class CameraApp(Activity):
     capture_timer = None
     
     # Widgets:
+    main_screen = None
     qr_label = None
     qr_button = None
     snap_button = None
@@ -49,10 +47,8 @@ class CameraApp(Activity):
 
     def load_resolution_preference(self):
         """Load resolution preference from SharedPreferences and update width/height."""
-        if not self.prefs:
-            self.prefs = SharedPreferences("com.micropythonos.camera")
-
-        resolution_str = self.prefs.get_string("resolution", "320x240")
+        prefs = SharedPreferences("com.micropythonos.camera")
+        resolution_str = prefs.get_string("resolution", "320x240")
         try:
             width_str, height_str = resolution_str.split('x')
             self.width = int(width_str)
@@ -66,21 +62,22 @@ class CameraApp(Activity):
     def onCreate(self):
         self.load_resolution_preference()
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
-        main_screen = lv.obj()
-        main_screen.set_style_pad_all(0, 0)
-        main_screen.set_style_border_width(0, 0)
-        main_screen.set_size(lv.pct(100), lv.pct(100))
-        main_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        close_button = lv.button(main_screen)
+        self.main_screen = lv.obj()
+        self.main_screen.set_style_pad_all(0, 0)
+        self.main_screen.set_style_border_width(0, 0)
+        self.main_screen.set_size(lv.pct(100), lv.pct(100))
+        self.main_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        # Initialize LVGL image widget
+        self.create_preview_image()
+        close_button = lv.button(self.main_screen)
         close_button.set_size(60,60)
         close_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         close_label = lv.label(close_button)
         close_label.set_text(lv.SYMBOL.CLOSE)
         close_label.center()
         close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
-
         # Settings button
-        settings_button = lv.button(main_screen)
+        settings_button = lv.button(self.main_screen)
         settings_button.set_size(60,60)
         settings_button.align(lv.ALIGN.TOP_RIGHT, 0, 60)
         settings_label = lv.label(settings_button)
@@ -88,7 +85,7 @@ class CameraApp(Activity):
         settings_label.center()
         settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
 
-        self.snap_button = lv.button(main_screen)
+        self.snap_button = lv.button(self.main_screen)
         self.snap_button.set_size(60, 60)
         self.snap_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
         self.snap_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -96,7 +93,7 @@ class CameraApp(Activity):
         snap_label = lv.label(self.snap_button)
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
-        self.qr_button = lv.button(main_screen)
+        self.qr_button = lv.button(self.main_screen)
         self.qr_button.set_size(60, 60)
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.qr_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
@@ -104,24 +101,7 @@ class CameraApp(Activity):
         self.qr_label = lv.label(self.qr_button)
         self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
         self.qr_label.center()
-        # Initialize LVGL image widget
-        self.image = lv.image(main_screen)
-        self.image.align(lv.ALIGN.LEFT_MID, 0, 0)
-        # Create image descriptor once
-        self.image_dsc = lv.image_dsc_t({
-            "header": {
-                "magic": lv.IMAGE_HEADER_MAGIC,
-                "w": self.width,
-                "h": self.height,
-                "stride": self.width * 2,
-                "cf": lv.COLOR_FORMAT.RGB565
-                #"cf": lv.COLOR_FORMAT.L8
-            },
-            'data_size': self.width * self.height * 2,
-            'data': None # Will be updated per frame
-        })
-        self.image.set_src(self.image_dsc)
-        self.status_label_cont = lv.obj(main_screen)
+        self.status_label_cont = lv.obj(self.main_screen)
         self.status_label_cont.set_size(lv.pct(66),lv.pct(60))
         self.status_label_cont.align(lv.ALIGN.LEFT_MID, lv.pct(5), 0)
         self.status_label_cont.set_style_bg_color(lv.color_white(), 0)
@@ -132,9 +112,10 @@ class CameraApp(Activity):
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(100))
         self.status_label.center()
-        self.setContentView(main_screen)
+        self.setContentView(self.main_screen)
     
     def onResume(self, screen):
+        self.create_preview_image()
         self.cam = init_internal_cam(self.width, self.height)
         if not self.cam:
             # try again because the manual i2c poweroff leaves it in a bad state
@@ -191,6 +172,7 @@ class CameraApp(Activity):
         print("camera app cleanup done.")
 
     def set_image_size(self):
+        #return
         disp = lv.display_get_default()
         target_h = disp.get_vertical_resolution()
         target_w = target_h
@@ -204,6 +186,26 @@ class CameraApp(Activity):
         self.image.set_size(target_w, target_h)
         #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
         self.image.set_scale(min(scale_factor_w,scale_factor_h))
+
+    def create_preview_image(self):
+        self.image = lv.image(self.main_screen)
+        self.image.align(lv.ALIGN.LEFT_MID, 0, 0)
+        # Create image descriptor once
+        self.image_dsc = lv.image_dsc_t({
+            "header": {
+                "magic": lv.IMAGE_HEADER_MAGIC,
+                "w": self.width,
+                "h": self.height,
+                "stride": self.width * 2,
+                "cf": lv.COLOR_FORMAT.RGB565
+                #"cf": lv.COLOR_FORMAT.L8
+            },
+            'data_size': self.width * self.height * 2,
+            'data': None # Will be updated per frame
+        })
+        self.image.set_src(self.image_dsc)
+        #self.image.set_size(160, 120)
+
 
     def qrdecode_one(self):
         try:
@@ -277,11 +279,14 @@ class CameraApp(Activity):
             self.stop_qr_decoding()
 
     def open_settings(self):
+        #self.main_screen.clean()
+        self.image.delete()
         """Launch the camera settings activity."""
         intent = Intent(activity_class=CameraSettingsActivity)
         self.startActivityForResult(intent, self.handle_settings_result)
 
     def handle_settings_result(self, result):
+        print(f"handle_settings_result: {result}")
         """Handle result from settings activity."""
         if result.get("result_code") == True:
             print("Settings changed, reloading resolution...")
@@ -495,7 +500,7 @@ class CameraSettingsActivity(Activity):
         except:
             resolutions = self.ESP32_RESOLUTIONS
             print("Using ESP32 camera resolutions")
-
+	
         # Create dropdown
         self.dropdown = lv.dropdown(screen)
         self.dropdown.set_size(200, 40)
