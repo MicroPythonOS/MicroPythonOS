@@ -19,7 +19,7 @@ import mpos.time
 
 class CameraApp(Activity):
 
-    width = 240
+    width = 320
     height = 240
 
     # Resolution preferences
@@ -52,15 +52,15 @@ class CameraApp(Activity):
         if not self.prefs:
             self.prefs = SharedPreferences("com.micropythonos.camera")
 
-        resolution_str = self.prefs.get_string("resolution", "240x240")
+        resolution_str = self.prefs.get_string("resolution", "320x240")
         try:
             width_str, height_str = resolution_str.split('x')
             self.width = int(width_str)
             self.height = int(height_str)
             print(f"Camera resolution loaded: {self.width}x{self.height}")
         except Exception as e:
-            print(f"Error parsing resolution '{resolution_str}': {e}, using default 240x240")
-            self.width = 240
+            print(f"Error parsing resolution '{resolution_str}': {e}, using default 320x240")
+            self.width = 320
             self.height = 240
 
     def onCreate(self):
@@ -356,7 +356,7 @@ class CameraApp(Activity):
 
 
 # Non-class functions:
-def init_internal_cam(width=240, height=240):
+def init_internal_cam(width=320, height=240):
     """Initialize internal camera with specified resolution."""
     try:
         from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
@@ -383,7 +383,7 @@ def init_internal_cam(width=240, height=240):
             (1920, 1080): FrameSize.FHD,
         }
 
-        frame_size = resolution_map.get((width, height), FrameSize.R240X240)
+        frame_size = resolution_map.get((width, height), FrameSize.QVGA)
         print(f"init_internal_cam: Using FrameSize for {width}x{height}")
 
         cam = Camera(
@@ -470,7 +470,7 @@ class CameraSettingsActivity(Activity):
     def onCreate(self):
         # Load preferences
         prefs = SharedPreferences("com.micropythonos.camera")
-        self.current_resolution = prefs.get_string("resolution", "240x240")
+        self.current_resolution = prefs.get_string("resolution", "320x240")
 
         # Create main screen
         screen = lv.obj()
