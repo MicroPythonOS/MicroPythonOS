@@ -144,11 +144,10 @@ class CameraApp(Activity):
         else:
             print("camera app: no internal camera found, trying webcam on /dev/video0")
             try:
-                self.cam = webcam.init("/dev/video0")
+                # Initialize webcam with desired resolution directly
+                print(f"Initializing webcam at {self.width}x{self.height}")
+                self.cam = webcam.init("/dev/video0", width=self.width, height=self.height)
                 self.use_webcam = True
-                # Reconfigure webcam to use saved resolution
-                print(f"Reconfiguring webcam to {self.width}x{self.height}")
-                webcam.reconfigure(self.cam, output_width=self.width, output_height=self.height)
             except Exception as e:
                 print(f"camera app: webcam exception: {e}")
         if self.cam:

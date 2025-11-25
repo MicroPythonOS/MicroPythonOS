@@ -25,6 +25,7 @@ static const mp_obj_type_t webcam_type;
 typedef struct _webcam_obj_t {
     mp_obj_base_t base;
     int fd;
+    char device[64];           // Device path (e.g., "/dev/video0")
     void *buffers[NUM_BUFFERS];
     size_t buffer_length;
     int frame_count;
@@ -147,8 +148,11 @@ static void save_raw_rgb565(const char *filename, uint16_t *data, int width, int
     fclose(fp);
 }
 
-static int init_webcam(webcam_obj_t *self, const char *device) {
-    //WEBCAM_DEBUG_PRINT("webcam.c: init_webcam\n");
+static int init_webcam(webcam_obj_t *self, const char *device, int width, int height) {
+    // Store device path for later use (e.g., reconfigure)
+    strncpy(self->device, device, sizeof(self->device) - 1);
+    self->device[sizeof(self->device) - 1] = '\0';
+
     self->fd = open(device, O_RDWR);
     if (self->fd < 0) {
         WEBCAM_DEBUG_PRINT("Cannot open device: %s\n", strerror(errno));
@@ -157,8 +161,8 @@ static int init_webcam(webcam_obj_t *self, const char *device) {
 
     struct v4l2_format fmt = {0};
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    fmt.fmt.pix.width = WIDTH;
-    fmt.fmt.pix.height = HEIGHT;
+    fmt.fmt.pix.width = width;
+    fmt.fmt.pix.height = height;
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
     if (ioctl(self->fd, VIDIOC_S_FMT, &fmt) < 0) {
@@ -166,6 +170,10 @@ static int init_webcam(webcam_obj_t *self, const char *device) {
         close(self->fd);
         return -errno;
     }
+
+    // Store actual format (driver may adjust dimensions)
+    width = fmt.fmt.pix.width;
+    height = fmt.fmt.pix.height;
 
     struct v4l2_requestbuffers req = {0};
     req.count = NUM_BUFFERS;
@@ -215,9 +223,9 @@ static int init_webcam(webcam_obj_t *self, const char *device) {
 
     self->frame_count = 0;
 
-    // Store the input dimensions from V4L2 format
-    self->input_width = WIDTH;
-    self->input_height = HEIGHT;
+    // Store the input dimensions (actual values from V4L2, may be adjusted by driver)
+    self->input_width = width;
+    self->input_height = height;
 
     // Initialize output dimensions with defaults if not already set
     if (self->output_width == 0) self->output_width = OUTPUT_WIDTH;
@@ -323,12 +331,24 @@ static mp_obj_t capture_frame(mp_obj_t self_in, mp_obj_t format) {
     }
 }
 
-static mp_obj_t webcam_init(size_t n_args, const mp_obj_t *args) {
-    mp_arg_check_num(n_args, 0, 0, 1, false);
+static mp_obj_t webcam_init(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
+    enum { ARG_device, ARG_width, ARG_height };
+    static const mp_arg_t allowed_args[] = {
+        { MP_QSTR_device, MP_ARG_OBJ, {.u_obj = MP_OBJ_NULL} },
+        { MP_QSTR_width, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = WIDTH} },
+        { MP_QSTR_height, MP_ARG_KW_ONLY | MP_ARG_INT, {.u_int = HEIGHT} },
+    };
+
+    mp_arg_val_t args[MP_ARRAY_SIZE(allowed_args)];
+    mp_arg_parse_all(n_args, pos_args, kw_args, MP_ARRAY_SIZE(allowed_args), allowed_args, args);
+
     const char *device = "/dev/video0";
-    if (n_args == 1) {
-        device = mp_obj_str_get_str(args[0]);
+    if (args[ARG_device].u_obj != MP_OBJ_NULL) {
+        device = mp_obj_str_get_str(args[ARG_device].u_obj);
     }
+
+    int width = args[ARG_width].u_int;
+    int height = args[ARG_height].u_int;
 
     webcam_obj_t *self = m_new_obj(webcam_obj_t);
     self->base.type = &webcam_type;
@@ -340,14 +360,14 @@ static mp_obj_t webcam_init(size_t n_args, const mp_obj_t *args) {
     self->output_width = 0;   // Will use default OUTPUT_WIDTH in init_webcam
     self->output_height = 0;  // Will use default OUTPUT_HEIGHT in init_webcam
 
-    int res = init_webcam(self, device);
+    int res = init_webcam(self, device, width, height);
     if (res < 0) {
         mp_raise_OSError(-res);
     }
 
     return MP_OBJ_FROM_PTR(self);
 }
-MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(webcam_init_obj, 0, 1, webcam_init);
+MP_DEFINE_CONST_FUN_OBJ_KW(webcam_init_obj, 0, webcam_init);
 
 static mp_obj_t webcam_deinit(mp_obj_t self_in) {
     webcam_obj_t *self = MP_OBJ_TO_PTR(self_in);
@@ -373,11 +393,10 @@ MP_DEFINE_CONST_FUN_OBJ_2(webcam_capture_frame_obj, webcam_capture_frame);
 
 static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args) {
     /*
-     * Reconfigure webcam resolution.
+     * Reconfigure webcam resolution by reinitializing.
      *
-     * Supports changing both INPUT resolution (V4L2 capture format) and
-     * OUTPUT resolution (conversion buffers). If input resolution changes,
-     * this will stop streaming, reconfigure V4L2, and restart streaming.
+     * This elegantly reuses deinit_webcam() and init_webcam() instead of
+     * duplicating V4L2 setup code.
      *
      * Parameters:
      *   input_width, input_height: V4L2 capture resolution (optional)
@@ -412,141 +431,40 @@ static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_m
     if (new_output_height == 0) new_output_height = self->output_height;
 
     // Validate dimensions
-    if (new_input_width <= 0 || new_input_height <= 0 || new_input_width > 1920 || new_input_height > 1920) {
+    if (new_input_width <= 0 || new_input_height <= 0 || new_input_width > 3840 || new_input_height > 2160) {
         mp_raise_ValueError(MP_ERROR_TEXT("Invalid input dimensions"));
     }
-    if (new_output_width <= 0 || new_output_height <= 0 || new_output_width > 1920 || new_output_height > 1920) {
+    if (new_output_width <= 0 || new_output_height <= 0 || new_output_width > 3840 || new_output_height > 2160) {
         mp_raise_ValueError(MP_ERROR_TEXT("Invalid output dimensions"));
     }
 
-    bool input_changed = (new_input_width != self->input_width || new_input_height != self->input_height);
-    bool output_changed = (new_output_width != self->output_width || new_output_height != self->output_height);
-
-    // If input resolution changed, need to reconfigure V4L2
-    if (input_changed) {
-        WEBCAM_DEBUG_PRINT("Reconfiguring V4L2: %dx%d -> %dx%d\n",
-                           self->input_width, self->input_height,
-                           new_input_width, new_input_height);
-
-        // 1. Stop streaming
-        enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        if (ioctl(self->fd, VIDIOC_STREAMOFF, &type) < 0) {
-            WEBCAM_DEBUG_PRINT("STREAMOFF failed: %s\n", strerror(errno));
-            mp_raise_OSError(errno);
-        }
-
-        // 2. Unmap old buffers
-        for (int i = 0; i < NUM_BUFFERS; i++) {
-            if (self->buffers[i] != MAP_FAILED && self->buffers[i] != NULL) {
-                munmap(self->buffers[i], self->buffer_length);
-                self->buffers[i] = MAP_FAILED;
-            }
-        }
-
-        // 3. Set new V4L2 format
-        struct v4l2_format fmt = {0};
-        fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        fmt.fmt.pix.width = new_input_width;
-        fmt.fmt.pix.height = new_input_height;
-        fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
-        fmt.fmt.pix.field = V4L2_FIELD_ANY;
-
-        if (ioctl(self->fd, VIDIOC_S_FMT, &fmt) < 0) {
-            WEBCAM_DEBUG_PRINT("S_FMT failed: %s\n", strerror(errno));
-            mp_raise_OSError(errno);
-        }
-
-        // Verify format was set (driver may adjust dimensions)
-        if (fmt.fmt.pix.width != new_input_width || fmt.fmt.pix.height != new_input_height) {
-            WEBCAM_DEBUG_PRINT("Warning: Driver adjusted format to %dx%d\n",
-                               fmt.fmt.pix.width, fmt.fmt.pix.height);
-            new_input_width = fmt.fmt.pix.width;
-            new_input_height = fmt.fmt.pix.height;
-        }
-
-        // 4. Request new buffers
-        struct v4l2_requestbuffers req = {0};
-        req.count = NUM_BUFFERS;
-        req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        req.memory = V4L2_MEMORY_MMAP;
-
-        if (ioctl(self->fd, VIDIOC_REQBUFS, &req) < 0) {
-            WEBCAM_DEBUG_PRINT("REQBUFS failed: %s\n", strerror(errno));
-            mp_raise_OSError(errno);
-        }
-
-        // 5. Map new buffers
-        for (int i = 0; i < NUM_BUFFERS; i++) {
-            struct v4l2_buffer buf = {0};
-            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            buf.memory = V4L2_MEMORY_MMAP;
-            buf.index = i;
-
-            if (ioctl(self->fd, VIDIOC_QUERYBUF, &buf) < 0) {
-                WEBCAM_DEBUG_PRINT("QUERYBUF failed: %s\n", strerror(errno));
-                mp_raise_OSError(errno);
-            }
-
-            self->buffer_length = buf.length;
-            self->buffers[i] = mmap(NULL, buf.length, PROT_READ | PROT_WRITE,
-                                    MAP_SHARED, self->fd, buf.m.offset);
-
-            if (self->buffers[i] == MAP_FAILED) {
-                WEBCAM_DEBUG_PRINT("mmap failed: %s\n", strerror(errno));
-                mp_raise_OSError(errno);
-            }
-        }
-
-        // 6. Queue buffers
-        for (int i = 0; i < NUM_BUFFERS; i++) {
-            struct v4l2_buffer buf = {0};
-            buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-            buf.memory = V4L2_MEMORY_MMAP;
-            buf.index = i;
-
-            if (ioctl(self->fd, VIDIOC_QBUF, &buf) < 0) {
-                WEBCAM_DEBUG_PRINT("QBUF failed: %s\n", strerror(errno));
-                mp_raise_OSError(errno);
-            }
-        }
-
-        // 7. Restart streaming
-        if (ioctl(self->fd, VIDIOC_STREAMON, &type) < 0) {
-            WEBCAM_DEBUG_PRINT("STREAMON failed: %s\n", strerror(errno));
-            mp_raise_OSError(errno);
-        }
-
-        // Update stored input dimensions
-        self->input_width = new_input_width;
-        self->input_height = new_input_height;
+    // Check if anything changed
+    if (new_input_width == self->input_width &&
+        new_input_height == self->input_height &&
+        new_output_width == self->output_width &&
+        new_output_height == self->output_height) {
+        return mp_const_none;  // Nothing to do
     }
 
-    // If output resolution changed (or input changed which may affect output), reallocate output buffers
-    if (output_changed || input_changed) {
-        // Free old buffers
-        free(self->gray_buffer);
-        free(self->rgb565_buffer);
+    WEBCAM_DEBUG_PRINT("Reconfiguring webcam: %dx%d -> %dx%d (input), %dx%d -> %dx%d (output)\n",
+                       self->input_width, self->input_height, new_input_width, new_input_height,
+                       self->output_width, self->output_height, new_output_width, new_output_height);
 
-        // Update dimensions
-        self->output_width = new_output_width;
-        self->output_height = new_output_height;
+    // Remember device path before deinit (which closes fd)
+    char device[64];
+    strncpy(device, self->device, sizeof(device));
 
-        // Allocate new buffers
-        self->gray_buffer = (unsigned char *)malloc(self->output_width * self->output_height * sizeof(unsigned char));
-        self->rgb565_buffer = (uint16_t *)malloc(self->output_width * self->output_height * sizeof(uint16_t));
+    // Set desired output dimensions before reinit
+    self->output_width = new_output_width;
+    self->output_height = new_output_height;
 
-        if (!self->gray_buffer || !self->rgb565_buffer) {
-            free(self->gray_buffer);
-            free(self->rgb565_buffer);
-            self->gray_buffer = NULL;
-            self->rgb565_buffer = NULL;
-            mp_raise_OSError(MP_ENOMEM);
-        }
+    // Clean shutdown and reinitialize with new input dimensions
+    deinit_webcam(self);
+    int res = init_webcam(self, device, new_input_width, new_input_height);
+
+    if (res < 0) {
+        mp_raise_OSError(-res);
     }
-
-    WEBCAM_DEBUG_PRINT("Webcam reconfigured: input %dx%d, output %dx%d\n",
-                       self->input_width, self->input_height,
-                       self->output_width, self->output_height);
 
     return mp_const_none;
 }

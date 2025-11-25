@@ -266,6 +266,7 @@ best fit on battery power:
 2482 is 4.180
 2470 is 4.170
 2457 is 4.147
+# 2444 is 4.12
 2433 is 4.109
 2429 is 4.102
 2393 is 4.044
@@ -280,7 +281,7 @@ def adc_to_voltage(adc_value):
     Calibration data shows linear relationship: voltage = -0.0016237 * adc + 8.2035
     This is ~10x more accurate than simple scaling (error ~0.01V vs ~0.1V).
     """
-    return (-0.0016237 * adc_value + 8.2035)
+    return (0.001651* adc_value + 0.08709)
 
 mpos.battery_voltage.init_adc(13, adc_to_voltage)
 
