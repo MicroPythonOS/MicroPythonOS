@@ -65,7 +65,7 @@ class CameraApp(Activity):
         self.load_resolution_preference()
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
         self.main_screen = lv.obj()
-        self.main_screen.set_style_pad_all(0, 0)
+        self.main_screen.set_style_pad_all(1, 0)
         self.main_screen.set_style_border_width(0, 0)
         self.main_screen.set_size(lv.pct(100), lv.pct(100))
         self.main_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -651,48 +651,59 @@ class CameraSettingsActivity(Activity):
         # Create main screen
         screen = lv.obj()
         screen.set_size(lv.pct(100), lv.pct(100))
-        screen.set_style_pad_all(5, 0)
+        screen.set_style_pad_all(1, 0)
 
         # Create tabview
         tabview = lv.tabview(screen)
         tabview.set_tab_bar_size(mpos.ui.pct_of_display_height(10))
-        tabview.set_size(lv.pct(100), mpos.ui.pct_of_display_height(85))
+        tabview.set_size(lv.pct(100), mpos.ui.pct_of_display_height(80))
 
         # Create Basic tab (always)
         basic_tab = tabview.add_tab("Basic")
         self.create_basic_tab(basic_tab, prefs)
 
         # Create Advanced and Expert tabs only for ESP32 camera
-        if not self.is_webcam:
+        if not self.is_webcam or True: # for now, show all tabs
             advanced_tab = tabview.add_tab("Advanced")
             self.create_advanced_tab(advanced_tab, prefs)
 
             expert_tab = tabview.add_tab("Expert")
             self.create_expert_tab(expert_tab, prefs)
 
+            raw_tab = tabview.add_tab("Raw")
+            self.create_raw_tab(raw_tab, prefs)
+
         # Save/Cancel buttons at bottom
         button_cont = lv.obj(screen)
-        button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(15))
+        button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(20))
         button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         button_cont.set_style_border_width(0, 0)
         button_cont.set_style_bg_opa(0, 0)
 
         save_button = lv.button(button_cont)
-        save_button.set_size(100, mpos.ui.pct_of_display_height(14))
-        save_button.align(lv.ALIGN.CENTER, -60, 0)
+        save_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        save_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
         save_label = lv.label(save_button)
         save_label.set_text("Save")
         save_label.center()
 
         cancel_button = lv.button(button_cont)
-        cancel_button.set_size(100, mpos.ui.pct_of_display_height(15))
-        cancel_button.align(lv.ALIGN.CENTER, 60, 0)
+        cancel_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
         cancel_label = lv.label(cancel_button)
         cancel_label.set_text("Cancel")
         cancel_label.center()
+
+        erase_button = lv.button(button_cont)
+        erase_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
+        erase_label = lv.label(erase_button)
+        erase_label.set_text("Erase")
+        erase_label.center()
 
         self.setContentView(screen)
 
@@ -771,7 +782,8 @@ class CameraSettingsActivity(Activity):
     def create_basic_tab(self, tab, prefs):
         """Create Basic settings tab."""
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        tab.set_style_pad_all(1, 0)
 
         # Resolution dropdown
         current_resolution = prefs.get_string("resolution", "320x240")
@@ -781,8 +793,7 @@ class CameraSettingsActivity(Activity):
                 resolution_idx = idx
                 break
 
-        dropdown, cont = self.create_dropdown(tab, "Resolution:", self.resolutions,
-                                              resolution_idx, "resolution")
+        dropdown, cont = self.create_dropdown(tab, "Resolution:", self.resolutions, resolution_idx, "resolution")
         self.ui_controls["resolution"] = dropdown
 
         # Brightness
@@ -822,8 +833,9 @@ class CameraSettingsActivity(Activity):
 
     def create_advanced_tab(self, tab, prefs):
         """Create Advanced settings tab."""
-        tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        tab.set_style_pad_all(1, 0)
 
         # Auto Exposure Control (master switch)
         exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
@@ -854,7 +866,7 @@ class CameraSettingsActivity(Activity):
 
         # Auto Exposure Level
         ae_level = prefs.get_int("ae_level", 0)
-        slider, label, cont = self.create_slider(tab, "AE Level", -2, 2, ae_level, "ae_level")
+        slider, label, cont = self.create_slider(tab, "Auto Exposure Level", -2, 2, ae_level, "ae_level")
         self.ui_controls["ae_level"] = slider
 
         # Night Mode (AEC2)
@@ -931,12 +943,13 @@ class CameraSettingsActivity(Activity):
 
     def create_expert_tab(self, tab, prefs):
         """Create Expert settings tab."""
-        tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        tab.set_style_pad_all(1, 0)
 
-        # Note: Sensor detection would require camera access
+        # Note: Sensor detection isn't performed right now
         # For now, show sharpness/denoise with note
-        supports_sharpness = False  # Conservative default
+        supports_sharpness = True  # Assume yes
 
         # Sharpness
         sharpness = prefs.get_int("sharpness", 0)
@@ -965,9 +978,10 @@ class CameraSettingsActivity(Activity):
             note.align(lv.ALIGN.TOP_RIGHT, 0, 0)
 
         # JPEG Quality
-        quality = prefs.get_int("quality", 85)
-        slider, label, cont = self.create_slider(tab, "JPEG Quality", 0, 100, quality, "quality")
-        self.ui_controls["quality"] = slider
+        # Disabled because JPEG is not used right now
+        #quality = prefs.get_int("quality", 85)
+        #slider, label, cont = self.create_slider(tab, "JPEG Quality", 0, 100, quality, "quality")
+        #self.ui_controls["quality"] = slider
 
         # Color Bar
         colorbar = prefs.get_bool("colorbar", False)
@@ -998,6 +1012,17 @@ class CameraSettingsActivity(Activity):
         lenc = prefs.get_bool("lenc", True)
         checkbox, cont = self.create_checkbox(tab, "Lens Correction", lenc, "lenc")
         self.ui_controls["lenc"] = checkbox
+
+    def create_raw_tab(self, tab, prefs):
+        startX = prefs.get_bool("startX", 0)
+        #startX, cont = self.create_checkbox(tab, "Lens Correction", lenc, "lenc")
+        startX, label, cont = self.create_slider(tab, "startX", 0, 2844, startX, "startX")
+        self.ui_controls["statX"] = startX
+
+    def erase_and_close(self):
+        SharedPreferences("com.micropythonos.camera").edit().remove_all().commit()
+        self.setResult(True, {"settings_changed": True})
+        self.finish()
 
     def save_and_close(self):
         """Save all settings to SharedPreferences and return result."""

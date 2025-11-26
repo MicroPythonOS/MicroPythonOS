@@ -5,6 +5,7 @@
 - AppStore app: remove unnecessary scrollbar over publisher's name
 - OSUpdate app: pause download when wifi is lost, resume when reconnected
 - Settings app: fix un-checking of radio button
+- API: SharedPreferences: add erase_all() functionality
 
 0.5.0
 =====
