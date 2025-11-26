@@ -260,18 +260,18 @@ class SettingActivity(Activity):
         target_obj_state = target_obj.get_state()
         print(f"target_obj state {target_obj.get_text()} is {target_obj_state}")
         checked = target_obj_state & lv.STATE.CHECKED
+        current_checkbox_index = target_obj.get_index()
+        print(f"current_checkbox_index: {current_checkbox_index}")
         if not checked:
-            print("it's not checked, nothing to do!")
+            if self.active_radio_index == current_checkbox_index:
+                print(f"unchecking {current_checkbox_index}")
+                self.active_radio_index = -1 # nothing checked
             return
         else:
-            new_checked = target_obj.get_index()
-            print(f"new_checked: {new_checked}")
-            if self.active_radio_index >= 0:
+            if self.active_radio_index >= 0: # is there something to uncheck?
                 old_checked = self.radio_container.get_child(self.active_radio_index)
                 old_checked.remove_state(lv.STATE.CHECKED)
-            new_checked_obj = self.radio_container.get_child(new_checked)
-            new_checked_obj.add_state(lv.STATE.CHECKED)
-            self.active_radio_index = new_checked
+            self.active_radio_index = current_checkbox_index
 
     def create_radio_button(self, parent, text, index):
         cb = lv.checkbox(parent)
