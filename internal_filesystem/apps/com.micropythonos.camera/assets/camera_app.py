@@ -20,8 +20,8 @@ import mpos.time
 
 class CameraApp(Activity):
 
-    button_width = 40
-    button_height = 40
+    button_width = 60
+    button_height = 45
     width = 320
     height = 240
 
@@ -82,7 +82,7 @@ class CameraApp(Activity):
         # Settings button
         settings_button = lv.button(self.main_screen)
         settings_button.set_size(self.button_width, self.button_height)
-        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, self.button_height + 10)
+        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, self.button_height + 5)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.center()
@@ -98,8 +98,7 @@ class CameraApp(Activity):
         snap_label.center()
         self.zoom_button = lv.button(self.main_screen)
         self.zoom_button.set_size(self.button_width, self.button_height)
-        self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 10)
-        #self.zoom_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 5)
         self.zoom_button.add_event_cb(self.zoom_button_click,lv.EVENT.CLICKED,None)
         zoom_label = lv.label(self.zoom_button)
         zoom_label.set_text("Z")
@@ -135,7 +134,7 @@ class CameraApp(Activity):
         self.cam = init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
-            # Apply saved camera settings
+            # Apply saved camera settings, only for internal camera for now:
             apply_camera_settings(self.cam, self.use_webcam)
         else:
             print("camera app: no internal camera found, trying webcam on /dev/video0")
@@ -294,9 +293,26 @@ class CameraApp(Activity):
 
     def zoom_button_click(self, e):
         print("zooming...")
+        if self.use_webcam:
+            print("zoom_button_click is not supported for webcam")
+            return
         if self.cam:
-            # This might work as it's what works in the C code:
-            self.cam.set_res_raw(startX=0,startY=0,endX=2623,endY=1951,offsetX=992,offsetY=736,totalX=2844,totalY=2844,outputX=640,outputY=480,scale=False,binning=False)
+            prefs = SharedPreferences("com.micropythonos.camera")
+            startX = prefs.get_int("startX", CameraSettingsActivity.startX_default)
+            startY = prefs.get_int("startX", CameraSettingsActivity.startY_default)
+            endX = prefs.get_int("startX", CameraSettingsActivity.endX_default)
+            endY = prefs.get_int("startX", CameraSettingsActivity.endY_default)
+            offsetX = prefs.get_int("startX", CameraSettingsActivity.offsetX_default)
+            offsetY = prefs.get_int("startX", CameraSettingsActivity.offsetY_default)
+            totalX = prefs.get_int("startX", CameraSettingsActivity.totalX_default)
+            totalY = prefs.get_int("startX", CameraSettingsActivity.totalY_default)
+            outputX = prefs.get_int("startX", CameraSettingsActivity.outputX_default)
+            outputY = prefs.get_int("startX", CameraSettingsActivity.outputY_default)
+            scale = prefs.get_bool("scale", CameraSettingsActivity.scale_default)
+            binning = prefs.get_bool("binning", CameraSettingsActivity.binning_default)
+            # This works as it's what works in the C code:
+            result = self.cam.set_res_raw(startX,startY,endX,endY,offsetX,offsetY,totalX,totalY,outputX,outputY,scale,binning)
+            print(f"self.cam.set_res_raw returned {result}")
 
     def open_settings(self):
         self.image_dsc.data = None
@@ -401,7 +417,7 @@ def init_internal_cam(width, height):
         resolution_map = {
             (96, 96): FrameSize.R96X96,
             (160, 120): FrameSize.QQVGA,
-            #(128, 128): FrameSize.R128X128, it's actually FrameSize.R128x128 but let's ignore it to be safe
+            (128, 128): FrameSize.R128X128,
             (176, 144): FrameSize.QCIF,
             (240, 176): FrameSize.HQVGA,
             (240, 240): FrameSize.R240X240,
@@ -409,7 +425,9 @@ def init_internal_cam(width, height):
             (320, 320): FrameSize.R320X320,
             (400, 296): FrameSize.CIF,
             (480, 320): FrameSize.HVGA,
+            (480, 480): FrameSize.R480X480,
             (640, 480): FrameSize.VGA,
+            (640, 640): FrameSize.R640X640,
             (800, 600): FrameSize.SVGA,
             (1024, 768): FrameSize.XGA,
             (1280, 720): FrameSize.HD,
@@ -595,6 +613,21 @@ def apply_camera_settings(cam, use_webcam):
 class CameraSettingsActivity(Activity):
     """Settings activity for comprehensive camera configuration."""
 
+    # Original: { 2560, 1920,   0,   0, 2623, 1951, 32, 16, 2844, 1968 }
+    # Worked for digital zoom in C: { 2560, 1920, 0, 0, 2623, 1951, 992, 736, 2844, 1968 }
+    startX_default=0
+    startY_default=0
+    endX_default=2623
+    endY_default=1951
+    offsetX_default=32
+    offsetY_default=16
+    totalX_default=2844
+    totalY_default=1968
+    outputX_default=640
+    outputY_default=480
+    scale_default=False
+    binning_default=False
+
     # Resolution options for desktop/webcam
     WEBCAM_RESOLUTIONS = [
         ("160x120", "160x120"),
@@ -618,10 +651,12 @@ class CameraSettingsActivity(Activity):
         ("320x320", "320x320"),
         ("400x296", "400x296"),
         ("480x320", "480x320"),
+        ("480x480", "480x480"),
         ("640x480", "640x480"),
+        ("640x640", "640x640"),
         ("800x600", "800x600"),
         ("1024x768", "1024x768"),
-        ("1280x720", "1280x720"),
+        ("1280x720", "1280x720"), # binned 2x2
         ("1280x1024", "1280x1024"),
         ("1600x1200", "1600x1200"),
         ("1920x1080", "1920x1080"),
@@ -659,8 +694,8 @@ class CameraSettingsActivity(Activity):
 
         # Create tabview
         tabview = lv.tabview(screen)
-        tabview.set_tab_bar_size(mpos.ui.pct_of_display_height(10))
-        tabview.set_size(lv.pct(100), mpos.ui.pct_of_display_height(80))
+        tabview.set_tab_bar_size(mpos.ui.pct_of_display_height(15))
+        #tabview.set_size(lv.pct(100), mpos.ui.pct_of_display_height(80))
 
         # Create Basic tab (always)
         basic_tab = tabview.add_tab("Basic")
@@ -676,38 +711,6 @@ class CameraSettingsActivity(Activity):
 
             raw_tab = tabview.add_tab("Raw")
             self.create_raw_tab(raw_tab, prefs)
-
-        # Save/Cancel buttons at bottom
-        self.button_cont = lv.obj(screen)
-        self.button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(20))
-        self.button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
-        self.button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        self.button_cont.set_style_border_width(0, 0)
-        self.button_cont.set_style_bg_opa(0, 0)
-
-        save_button = lv.button(self.button_cont)
-        save_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
-        save_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
-        save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
-        save_label = lv.label(save_button)
-        save_label.set_text("Save")
-        save_label.center()
-
-        cancel_button = lv.button(self.button_cont)
-        cancel_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
-        cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
-        cancel_label = lv.label(cancel_button)
-        cancel_label.set_text("Cancel")
-        cancel_label.center()
-
-        erase_button = lv.button(self.button_cont)
-        erase_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
-        erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
-        erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
-        erase_label = lv.label(erase_button)
-        erase_label.set_text("Erase")
-        erase_label.center()
 
         self.setContentView(screen)
 
@@ -779,17 +782,18 @@ class CameraSettingsActivity(Activity):
 
     def create_textarea(self, parent, label_text, min_val, max_val, default_val, pref_key):
         cont = lv.obj(parent)
-        cont.set_size(lv.pct(100), 60)
+        cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
         cont.set_style_pad_all(3, 0)
 
         label = lv.label(cont)
-        label.set_text(f"{label_text}: {default_val}")
+        label.set_text(f"{label_text}:")
         label.align(lv.ALIGN.TOP_LEFT, 0, 0)
 
-        textarea = lv.textarea(parent)
-        textarea.set_width(lv.pct(90))
+        textarea = lv.textarea(cont)
+        textarea.set_width(lv.pct(50))
         textarea.set_one_line(True) # might not be good for all settings but it's good for most
         textarea.set_text(str(default_val))
+        textarea.align(lv.ALIGN.TOP_RIGHT, 0, 0)
 
         # Initialize keyboard (hidden initially)
         keyboard = MposKeyboard(parent)
@@ -803,7 +807,7 @@ class CameraSettingsActivity(Activity):
         return textarea, cont
 
     def show_keyboard(self, kbd):
-        self.button_cont.add_flag(lv.obj.FLAG.HIDDEN)
+        #self.button_cont.add_flag(lv.obj.FLAG.HIDDEN)
         mpos.ui.anim.smooth_show(kbd)
         focusgroup = lv.group_get_default()
         if focusgroup:
@@ -815,7 +819,41 @@ class CameraSettingsActivity(Activity):
 
     def hide_keyboard(self, kbd):
         mpos.ui.anim.smooth_hide(kbd)
-        self.button_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+        #self.button_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+
+    def add_buttons(self, parent):
+        # Save/Cancel buttons at bottom
+        button_cont = lv.obj(parent)
+        button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(20))
+        button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        button_cont.set_style_border_width(0, 0)
+        button_cont.set_style_bg_opa(0, 0)
+
+        save_button = lv.button(button_cont)
+        save_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        save_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
+        save_label = lv.label(save_button)
+        save_label.set_text("Save")
+        save_label.center()
+
+        cancel_button = lv.button(button_cont)
+        cancel_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
+        cancel_label = lv.label(cancel_button)
+        cancel_label.set_text("Cancel")
+        cancel_label.center()
+
+        erase_button = lv.button(button_cont)
+        erase_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
+        erase_label = lv.label(erase_button)
+        erase_label.set_text("Erase")
+        erase_label.center()
+
 
     def create_basic_tab(self, tab, prefs):
         """Create Basic settings tab."""
@@ -868,6 +906,8 @@ class CameraSettingsActivity(Activity):
         dropdown, cont = self.create_dropdown(tab, "Special Effect:", special_effect_options,
                                               special_effect, "special_effect")
         self.ui_controls["special_effect"] = dropdown
+
+        self.add_buttons(tab)
 
     def create_advanced_tab(self, tab, prefs):
         """Create Advanced settings tab."""
@@ -979,6 +1019,8 @@ class CameraSettingsActivity(Activity):
         checkbox, cont = self.create_checkbox(tab, "AWB Gain", awb_gain, "awb_gain")
         self.ui_controls["awb_gain"] = checkbox
 
+        self.add_buttons(tab)
+
     def create_expert_tab(self, tab, prefs):
         """Create Expert settings tab."""
         #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
@@ -1051,11 +1093,64 @@ class CameraSettingsActivity(Activity):
         checkbox, cont = self.create_checkbox(tab, "Lens Correction", lenc, "lenc")
         self.ui_controls["lenc"] = checkbox
 
+        self.add_buttons(tab)
+
     def create_raw_tab(self, tab, prefs):
-        startX = prefs.get_int("startX", 0)
+        tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        tab.set_style_pad_all(0, 0)
+
+        # This would be nice but does not provide adequate resolution:
         #startX, label, cont = self.create_slider(tab, "startX", 0, 2844, startX, "startX")
+
+        startX = prefs.get_int("startX", self.startX_default)
         textarea, cont = self.create_textarea(tab, "startX", 0, 2844, startX, "startX")
-        self.ui_controls["startX"] = startX
+        self.ui_controls["startX"] = textarea
+
+        startY = prefs.get_int("startY", self.startY_default)
+        textarea, cont = self.create_textarea(tab, "startY", 0, 2844, startY, "startY")
+        self.ui_controls["startY"] = textarea
+
+        endX = prefs.get_int("endX", self.endX_default)
+        textarea, cont = self.create_textarea(tab, "endX", 0, 2844, endX, "endX")
+        self.ui_controls["endX"] = textarea
+
+        endY = prefs.get_int("endY", self.endY_default)
+        textarea, cont = self.create_textarea(tab, "endY", 0, 2844, endY, "endY")
+        self.ui_controls["endY"] = textarea
+
+        offsetX = prefs.get_int("offsetX", self.offsetX_default)
+        textarea, cont = self.create_textarea(tab, "offsetX", 0, 2844, offsetX, "offsetX")
+        self.ui_controls["offsetX"] = textarea
+
+        offsetY = prefs.get_int("offsetY", self.offsetY_default)
+        textarea, cont = self.create_textarea(tab, "offsetY", 0, 2844, offsetY, "offsetY")
+        self.ui_controls["offsetY"] = textarea
+
+        totalX = prefs.get_int("totalX", self.totalX_default)
+        textarea, cont = self.create_textarea(tab, "totalX", 0, 2844, totalX, "totalX")
+        self.ui_controls["totalX"] = textarea
+
+        totalY = prefs.get_int("totalY", self.totalY_default)
+        textarea, cont = self.create_textarea(tab, "totalY", 0, 2844, totalY, "totalY")
+        self.ui_controls["totalY"] = textarea
+
+        outputX = prefs.get_int("outputX", self.outputX_default)
+        textarea, cont = self.create_textarea(tab, "outputX", 0, 2844, outputX, "outputX")
+        self.ui_controls["outputX"] = textarea
+
+        outputY = prefs.get_int("outputY", self.outputY_default)
+        textarea, cont = self.create_textarea(tab, "outputY", 0, 2844, outputY, "outputY")
+        self.ui_controls["outputY"] = textarea
+
+        scale = prefs.get_bool("scale", self.scale_default)
+        checkbox, cont = self.create_checkbox(tab, "Scale?", scale, "scale")
+        self.ui_controls["scale"] = checkbox
+
+        binning = prefs.get_bool("binning", self.binning_default)
+        checkbox, cont = self.create_checkbox(tab, "Binning?", binning, "binning")
+        self.ui_controls["binning"] = checkbox
+
+        self.add_buttons(tab)
 
     def erase_and_close(self):
         SharedPreferences("com.micropythonos.camera").edit().remove_all().commit()
@@ -1069,6 +1164,7 @@ class CameraSettingsActivity(Activity):
 
         # Save all UI control values
         for pref_key, control in self.ui_controls.items():
+            print(f"saving {pref_key} with {control}")
             control_id = id(control)
             metadata = self.control_metadata.get(control_id, {})
 
@@ -1079,8 +1175,11 @@ class CameraSettingsActivity(Activity):
                 is_checked = control.get_state() & lv.STATE.CHECKED
                 editor.put_bool(pref_key, bool(is_checked))
             elif isinstance(control, lv.textarea):
-                value = int(control.get_value())
-                editor.put_int(pref_key, value)
+                try:
+                    value = int(control.get_text())
+                    editor.put_int(pref_key, value)
+                except Exception as e:
+                    print(f"Error while trying to save {pref_key}: {e}")
             elif isinstance(control, lv.dropdown):
                 selected_idx = control.get_selected()
                 option_values = metadata.get("option_values", [])
