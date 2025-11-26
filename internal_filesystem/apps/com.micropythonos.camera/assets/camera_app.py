@@ -6,6 +6,7 @@
 # and the performance impact of converting RGB565 to grayscale is probably minimal anyway.
 
 import lvgl as lv
+from mpos.ui.keyboard import MposKeyboard
 
 try:
     import webcam
@@ -626,6 +627,9 @@ class CameraSettingsActivity(Activity):
         ("1920x1080", "1920x1080"),
     ]
 
+    # Widgets:
+    button_cont = None
+
     def __init__(self):
         super().__init__()
         self.ui_controls = {}
@@ -674,14 +678,14 @@ class CameraSettingsActivity(Activity):
             self.create_raw_tab(raw_tab, prefs)
 
         # Save/Cancel buttons at bottom
-        button_cont = lv.obj(screen)
-        button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(20))
-        button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
-        button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        button_cont.set_style_border_width(0, 0)
-        button_cont.set_style_bg_opa(0, 0)
+        self.button_cont = lv.obj(screen)
+        self.button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(20))
+        self.button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        self.button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.button_cont.set_style_border_width(0, 0)
+        self.button_cont.set_style_bg_opa(0, 0)
 
-        save_button = lv.button(button_cont)
+        save_button = lv.button(self.button_cont)
         save_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
         save_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
@@ -689,7 +693,7 @@ class CameraSettingsActivity(Activity):
         save_label.set_text("Save")
         save_label.center()
 
-        cancel_button = lv.button(button_cont)
+        cancel_button = lv.button(self.button_cont)
         cancel_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
         cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
@@ -697,7 +701,7 @@ class CameraSettingsActivity(Activity):
         cancel_label.set_text("Cancel")
         cancel_label.center()
 
-        erase_button = lv.button(button_cont)
+        erase_button = lv.button(self.button_cont)
         erase_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
         erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
@@ -729,9 +733,6 @@ class CameraSettingsActivity(Activity):
 
         slider.add_event_cb(slider_changed, lv.EVENT.VALUE_CHANGED, None)
 
-        # Store metadata separately
-        self.control_metadata[id(slider)] = {"pref_key": pref_key, "type": "slider"}
-
         return slider, label, cont
 
     def create_checkbox(self, parent, label_text, default_val, pref_key):
@@ -745,9 +746,6 @@ class CameraSettingsActivity(Activity):
         if default_val:
             checkbox.add_state(lv.STATE.CHECKED)
         checkbox.align(lv.ALIGN.LEFT_MID, 0, 0)
-
-        # Store metadata separately
-        self.control_metadata[id(checkbox)] = {"pref_key": pref_key, "type": "checkbox"}
 
         return checkbox, cont
 
@@ -778,6 +776,46 @@ class CameraSettingsActivity(Activity):
         }
 
         return dropdown, cont
+
+    def create_textarea(self, parent, label_text, min_val, max_val, default_val, pref_key):
+        cont = lv.obj(parent)
+        cont.set_size(lv.pct(100), 60)
+        cont.set_style_pad_all(3, 0)
+
+        label = lv.label(cont)
+        label.set_text(f"{label_text}: {default_val}")
+        label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+
+        textarea = lv.textarea(parent)
+        textarea.set_width(lv.pct(90))
+        textarea.set_one_line(True) # might not be good for all settings but it's good for most
+        textarea.set_text(str(default_val))
+
+        # Initialize keyboard (hidden initially)
+        keyboard = MposKeyboard(parent)
+        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        keyboard.set_textarea(textarea)
+        keyboard.add_event_cb(lambda e, kbd=keyboard: self.hide_keyboard(kbd), lv.EVENT.READY, None)
+        keyboard.add_event_cb(lambda e, kbd=keyboard: self.hide_keyboard(kbd), lv.EVENT.CANCEL, None)
+        textarea.add_event_cb(lambda e, kbd=keyboard: self.show_keyboard(kbd), lv.EVENT.CLICKED, None)
+
+        return textarea, cont
+
+    def show_keyboard(self, kbd):
+        self.button_cont.add_flag(lv.obj.FLAG.HIDDEN)
+        mpos.ui.anim.smooth_show(kbd)
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            # move the focus to the keyboard to save the user a "next" button press (optional but nice)
+            # this is focusing on the right thing (keyboard) but the focus is not "active" (shown or used) somehow
+            #print(f"current focus object: {lv.group_get_default().get_focused()}")
+            focusgroup.focus_next()
+            #print(f"current focus object: {lv.group_get_default().get_focused()}")
+
+    def hide_keyboard(self, kbd):
+        mpos.ui.anim.smooth_hide(kbd)
+        self.button_cont.remove_flag(lv.obj.FLAG.HIDDEN)
 
     def create_basic_tab(self, tab, prefs):
         """Create Basic settings tab."""
@@ -1014,10 +1052,10 @@ class CameraSettingsActivity(Activity):
         self.ui_controls["lenc"] = checkbox
 
     def create_raw_tab(self, tab, prefs):
-        startX = prefs.get_bool("startX", 0)
-        #startX, cont = self.create_checkbox(tab, "Lens Correction", lenc, "lenc")
-        startX, label, cont = self.create_slider(tab, "startX", 0, 2844, startX, "startX")
-        self.ui_controls["statX"] = startX
+        startX = prefs.get_int("startX", 0)
+        #startX, label, cont = self.create_slider(tab, "startX", 0, 2844, startX, "startX")
+        textarea, cont = self.create_textarea(tab, "startX", 0, 2844, startX, "startX")
+        self.ui_controls["startX"] = startX
 
     def erase_and_close(self):
         SharedPreferences("com.micropythonos.camera").edit().remove_all().commit()
@@ -1040,6 +1078,9 @@ class CameraSettingsActivity(Activity):
             elif isinstance(control, lv.checkbox):
                 is_checked = control.get_state() & lv.STATE.CHECKED
                 editor.put_bool(pref_key, bool(is_checked))
+            elif isinstance(control, lv.textarea):
+                value = int(control.get_value())
+                editor.put_int(pref_key, value)
             elif isinstance(control, lv.dropdown):
                 selected_idx = control.get_selected()
                 option_values = metadata.get("option_values", [])
