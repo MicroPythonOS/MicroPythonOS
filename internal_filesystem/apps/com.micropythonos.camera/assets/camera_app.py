@@ -95,6 +95,16 @@ class CameraApp(Activity):
         snap_label = lv.label(self.snap_button)
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
+        self.zoom_button = lv.button(self.main_screen)
+        self.zoom_button.set_size(self.button_width, self.button_height)
+        self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 10)
+        #self.zoom_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.zoom_button.add_event_cb(self.zoom_button_click,lv.EVENT.CLICKED,None)
+        zoom_label = lv.label(self.zoom_button)
+        zoom_label.set_text("Z")
+        zoom_label.center()
+
+
         self.qr_button = lv.button(self.main_screen)
         self.qr_button.set_size(self.button_width, self.button_height)
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -278,6 +288,12 @@ class CameraApp(Activity):
             self.start_qr_decoding()
         else:
             self.stop_qr_decoding()
+
+    def zoom_button_click(self, e):
+        print("zooming...")
+        if self.cam:
+            # This might work as it's what works in the C code:
+            self.cam.set_res_raw(startX=0,startY=0,endX=2623,endY=1951,offsetX=992,offsetY=736,totalX=2844,totalY=2844,outputX=640,outputY=480,scale=False,binning=False)
 
     def open_settings(self):
         self.image_dsc.data = None
