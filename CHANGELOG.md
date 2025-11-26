@@ -1,9 +1,10 @@
 0.5.1
 =====
-- OSUpdate app: pause download when wifi is lost, resume when reconnected
 - Fri3d Camp 2024 Badge: workaround ADC2+WiFi conflict by temporarily disable WiFi to measure battery level
-- Fri3d Camp 2024 Badge: improve battery monitor calibration
+- Fri3d Camp 2024 Badge: improve battery monitor calibration to fix 0.1V delta
 - AppStore app: remove unnecessary scrollbar over publisher's name
+- OSUpdate app: pause download when wifi is lost, resume when reconnected
+- Settings app: fix un-checking of radio button
 
 0.5.0
 =====
