@@ -653,15 +653,10 @@ class CameraSettingsActivity(Activity):
         screen.set_size(lv.pct(100), lv.pct(100))
         screen.set_style_pad_all(5, 0)
 
-        # Title
-        title = lv.label(screen)
-        title.set_text("Camera Settings")
-        title.align(lv.ALIGN.TOP_MID, 0, 5)
-
         # Create tabview
         tabview = lv.tabview(screen)
-        tabview.set_size(lv.pct(100), lv.pct(82))
-        tabview.align(lv.ALIGN.TOP_MID, 0, 30)
+        tabview.set_tab_bar_size(mpos.ui.pct_of_display_height(10))
+        tabview.set_size(lv.pct(100), mpos.ui.pct_of_display_height(85))
 
         # Create Basic tab (always)
         basic_tab = tabview.add_tab("Basic")
@@ -677,13 +672,14 @@ class CameraSettingsActivity(Activity):
 
         # Save/Cancel buttons at bottom
         button_cont = lv.obj(screen)
-        button_cont.set_size(lv.pct(100), 50)
+        button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(15))
+        button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         button_cont.set_style_border_width(0, 0)
         button_cont.set_style_bg_opa(0, 0)
 
         save_button = lv.button(button_cont)
-        save_button.set_size(100, 40)
+        save_button.set_size(100, mpos.ui.pct_of_display_height(14))
         save_button.align(lv.ALIGN.CENTER, -60, 0)
         save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
         save_label = lv.label(save_button)
@@ -691,7 +687,7 @@ class CameraSettingsActivity(Activity):
         save_label.center()
 
         cancel_button = lv.button(button_cont)
-        cancel_button.set_size(100, 40)
+        cancel_button.set_size(100, mpos.ui.pct_of_display_height(15))
         cancel_button.align(lv.ALIGN.CENTER, 60, 0)
         cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
         cancel_label = lv.label(cancel_button)
@@ -703,7 +699,7 @@ class CameraSettingsActivity(Activity):
     def create_slider(self, parent, label_text, min_val, max_val, default_val, pref_key):
         """Create slider with label showing current value."""
         cont = lv.obj(parent)
-        cont.set_size(lv.pct(95), 50)
+        cont.set_size(lv.pct(100), 60)
         cont.set_style_pad_all(3, 0)
 
         label = lv.label(cont)
@@ -714,7 +710,7 @@ class CameraSettingsActivity(Activity):
         slider.set_size(lv.pct(90), 15)
         slider.set_range(min_val, max_val)
         slider.set_value(default_val, False)
-        slider.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        slider.align(lv.ALIGN.BOTTOM_MID, 0, -10)
 
         def slider_changed(e):
             val = slider.get_value()
@@ -730,7 +726,7 @@ class CameraSettingsActivity(Activity):
     def create_checkbox(self, parent, label_text, default_val, pref_key):
         """Create checkbox with label."""
         cont = lv.obj(parent)
-        cont.set_size(lv.pct(95), 35)
+        cont.set_size(lv.pct(100), 35)
         cont.set_style_pad_all(3, 0)
 
         checkbox = lv.checkbox(cont)
@@ -747,7 +743,7 @@ class CameraSettingsActivity(Activity):
     def create_dropdown(self, parent, label_text, options, default_idx, pref_key):
         """Create dropdown with label."""
         cont = lv.obj(parent)
-        cont.set_size(lv.pct(95), 60)
+        cont.set_size(lv.pct(100), 60)
         cont.set_style_pad_all(3, 0)
 
         label = lv.label(cont)
@@ -774,8 +770,8 @@ class CameraSettingsActivity(Activity):
 
     def create_basic_tab(self, tab, prefs):
         """Create Basic settings tab."""
+        tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
-        tab.set_style_pad_all(5, 0)
 
         # Resolution dropdown
         current_resolution = prefs.get_string("resolution", "320x240")
@@ -827,7 +823,7 @@ class CameraSettingsActivity(Activity):
     def create_advanced_tab(self, tab, prefs):
         """Create Advanced settings tab."""
         tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
-        tab.set_style_pad_all(5, 0)
+        tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
         # Auto Exposure Control (master switch)
         exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
@@ -936,7 +932,7 @@ class CameraSettingsActivity(Activity):
     def create_expert_tab(self, tab, prefs):
         """Create Expert settings tab."""
         tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
-        tab.set_style_pad_all(5, 0)
+        tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
         # Note: Sensor detection would require camera access
         # For now, show sharpness/denoise with note
