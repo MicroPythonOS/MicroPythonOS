@@ -134,6 +134,8 @@ class CameraApp(Activity):
         self.cam = init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
+            # Apply saved camera settings
+            apply_camera_settings(self.cam, self.use_webcam)
         else:
             print("camera app: no internal camera found, trying webcam on /dev/video0")
             try:
@@ -344,6 +346,8 @@ class CameraApp(Activity):
                     self.cam.deinit()
                     self.cam = init_internal_cam(self.width, self.height)
                     if self.cam:
+                        # Apply all camera settings
+                        apply_camera_settings(self.cam, self.use_webcam)
                         self.capture_timer = lv.timer_create(self.try_capture, 100, None)
                         print("Internal camera reinitialized, capture timer resumed")
                     else:
@@ -468,8 +472,127 @@ def remove_bom(buffer):
     return buffer
 
 
+def apply_camera_settings(cam, use_webcam):
+    """Apply all saved camera settings from SharedPreferences to ESP32 camera.
+
+    Only applies settings when use_webcam is False (ESP32 camera).
+    Settings are applied in dependency order (master switches before dependent values).
+
+    Args:
+        cam: Camera object
+        use_webcam: Boolean indicating if using webcam
+    """
+    if not cam or use_webcam:
+        print("apply_camera_settings: Skipping (no camera or webcam mode)")
+        return
+
+    prefs = SharedPreferences("com.micropythonos.camera")
+
+    try:
+        # Basic image adjustments
+        brightness = prefs.get_int("brightness", 0)
+        cam.set_brightness(brightness)
+
+        contrast = prefs.get_int("contrast", 0)
+        cam.set_contrast(contrast)
+
+        saturation = prefs.get_int("saturation", 0)
+        cam.set_saturation(saturation)
+
+        # Orientation
+        hmirror = prefs.get_bool("hmirror", False)
+        cam.set_hmirror(hmirror)
+
+        vflip = prefs.get_bool("vflip", True)
+        cam.set_vflip(vflip)
+
+        # Special effect
+        special_effect = prefs.get_int("special_effect", 0)
+        cam.set_special_effect(special_effect)
+
+        # Exposure control (apply master switch first, then manual value)
+        exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
+        cam.set_exposure_ctrl(exposure_ctrl)
+
+        if not exposure_ctrl:
+            aec_value = prefs.get_int("aec_value", 300)
+            cam.set_aec_value(aec_value)
+
+        ae_level = prefs.get_int("ae_level", 0)
+        cam.set_ae_level(ae_level)
+
+        aec2 = prefs.get_bool("aec2", False)
+        cam.set_aec2(aec2)
+
+        # Gain control (apply master switch first, then manual value)
+        gain_ctrl = prefs.get_bool("gain_ctrl", True)
+        cam.set_gain_ctrl(gain_ctrl)
+
+        if not gain_ctrl:
+            agc_gain = prefs.get_int("agc_gain", 0)
+            cam.set_agc_gain(agc_gain)
+
+        gainceiling = prefs.get_int("gainceiling", 0)
+        cam.set_gainceiling(gainceiling)
+
+        # White balance (apply master switch first, then mode)
+        whitebal = prefs.get_bool("whitebal", True)
+        cam.set_whitebal(whitebal)
+
+        if not whitebal:
+            wb_mode = prefs.get_int("wb_mode", 0)
+            cam.set_wb_mode(wb_mode)
+
+        awb_gain = prefs.get_bool("awb_gain", True)
+        cam.set_awb_gain(awb_gain)
+
+        # Sensor-specific settings (try/except for unsupported sensors)
+        try:
+            sharpness = prefs.get_int("sharpness", 0)
+            cam.set_sharpness(sharpness)
+        except:
+            pass  # Not supported on OV2640
+
+        try:
+            denoise = prefs.get_int("denoise", 0)
+            cam.set_denoise(denoise)
+        except:
+            pass  # Not supported on OV2640
+
+        # Advanced corrections
+        colorbar = prefs.get_bool("colorbar", False)
+        cam.set_colorbar(colorbar)
+
+        dcw = prefs.get_bool("dcw", True)
+        cam.set_dcw(dcw)
+
+        bpc = prefs.get_bool("bpc", False)
+        cam.set_bpc(bpc)
+
+        wpc = prefs.get_bool("wpc", True)
+        cam.set_wpc(wpc)
+
+        raw_gma = prefs.get_bool("raw_gma", True)
+        cam.set_raw_gma(raw_gma)
+
+        lenc = prefs.get_bool("lenc", True)
+        cam.set_lenc(lenc)
+
+        # JPEG quality (only relevant for JPEG format)
+        try:
+            quality = prefs.get_int("quality", 85)
+            cam.set_quality(quality)
+        except:
+            pass  # Not in JPEG mode
+
+        print("Camera settings applied successfully")
+
+    except Exception as e:
+        print(f"Error applying camera settings: {e}")
+
+
 class CameraSettingsActivity(Activity):
-    """Settings activity for camera resolution configuration."""
+    """Settings activity for comprehensive camera configuration."""
 
     # Resolution options for desktop/webcam
     WEBCAM_RESOLUTIONS = [
@@ -482,14 +605,14 @@ class CameraSettingsActivity(Activity):
         ("1920x1080 (5 fps)", "1920x1080"),
     ]
 
-    # Resolution options for internal camera (ESP32) - all available FrameSize options
+    # Resolution options for internal camera (ESP32)
     ESP32_RESOLUTIONS = [
         ("96x96", "96x96"),
         ("160x120", "160x120"),
         ("128x128", "128x128"),
         ("176x144", "176x144"),
         ("240x176", "240x176"),
-        ("240x240", "240x240"),  # Default
+        ("240x240", "240x240"),
         ("320x240", "320x240"),
         ("320x320", "320x320"),
         ("400x296", "400x296"),
@@ -503,66 +626,73 @@ class CameraSettingsActivity(Activity):
         ("1920x1080", "1920x1080"),
     ]
 
-    dropdown = None
-    current_resolution = None
+    def __init__(self):
+        super().__init__()
+        self.ui_controls = {}
+        self.control_metadata = {}  # Store pref_key and option_values for each control
+        self.dependent_controls = {}
+        self.is_webcam = False
+        self.resolutions = []
 
     def onCreate(self):
         # Load preferences
         prefs = SharedPreferences("com.micropythonos.camera")
-        self.current_resolution = prefs.get_string("resolution", "320x240")
+
+        # Detect platform (webcam vs ESP32)
+        try:
+            import webcam
+            self.is_webcam = True
+            self.resolutions = self.WEBCAM_RESOLUTIONS
+            print("Using webcam resolutions")
+        except:
+            self.resolutions = self.ESP32_RESOLUTIONS
+            print("Using ESP32 camera resolutions")
 
         # Create main screen
         screen = lv.obj()
         screen.set_size(lv.pct(100), lv.pct(100))
-        screen.set_style_pad_all(10, 0)
+        screen.set_style_pad_all(5, 0)
 
         # Title
         title = lv.label(screen)
         title.set_text("Camera Settings")
-        title.align(lv.ALIGN.TOP_MID, 0, 10)
+        title.align(lv.ALIGN.TOP_MID, 0, 5)
 
-        # Resolution label
-        resolution_label = lv.label(screen)
-        resolution_label.set_text("Resolution:")
-        resolution_label.align(lv.ALIGN.TOP_LEFT, 0, 50)
+        # Create tabview
+        tabview = lv.tabview(screen)
+        tabview.set_size(lv.pct(100), lv.pct(82))
+        tabview.align(lv.ALIGN.TOP_MID, 0, 30)
 
-        # Detect if we're on desktop or ESP32 based on available modules
-        try:
-            import webcam
-            resolutions = self.WEBCAM_RESOLUTIONS
-            print("Using webcam resolutions")
-        except:
-            resolutions = self.ESP32_RESOLUTIONS
-            print("Using ESP32 camera resolutions")
-	
-        # Create dropdown
-        self.dropdown = lv.dropdown(screen)
-        self.dropdown.set_size(200, 40)
-        self.dropdown.align(lv.ALIGN.TOP_LEFT, 0, 80)
+        # Create Basic tab (always)
+        basic_tab = tabview.add_tab("Basic")
+        self.create_basic_tab(basic_tab, prefs)
 
-        # Build dropdown options string
-        options_str = "\n".join([label for label, _ in resolutions])
-        self.dropdown.set_options(options_str)
+        # Create Advanced and Expert tabs only for ESP32 camera
+        if not self.is_webcam:
+            advanced_tab = tabview.add_tab("Advanced")
+            self.create_advanced_tab(advanced_tab, prefs)
 
-        # Set current selection
-        for idx, (label, value) in enumerate(resolutions):
-            if value == self.current_resolution:
-                self.dropdown.set_selected(idx)
-                break
+            expert_tab = tabview.add_tab("Expert")
+            self.create_expert_tab(expert_tab, prefs)
 
-        # Save button
-        save_button = lv.button(screen)
-        save_button.set_size(100, 50)
-        save_button.align(lv.ALIGN.BOTTOM_MID, -60, -10)
-        save_button.add_event_cb(lambda e: self.save_and_close(resolutions), lv.EVENT.CLICKED, None)
+        # Save/Cancel buttons at bottom
+        button_cont = lv.obj(screen)
+        button_cont.set_size(lv.pct(100), 50)
+        button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        button_cont.set_style_border_width(0, 0)
+        button_cont.set_style_bg_opa(0, 0)
+
+        save_button = lv.button(button_cont)
+        save_button.set_size(100, 40)
+        save_button.align(lv.ALIGN.CENTER, -60, 0)
+        save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
         save_label = lv.label(save_button)
         save_label.set_text("Save")
         save_label.center()
 
-        # Cancel button
-        cancel_button = lv.button(screen)
-        cancel_button.set_size(100, 50)
-        cancel_button.align(lv.ALIGN.BOTTOM_MID, 60, -10)
+        cancel_button = lv.button(button_cont)
+        cancel_button.set_size(100, 40)
+        cancel_button.align(lv.ALIGN.CENTER, 60, 0)
         cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
         cancel_label = lv.label(cancel_button)
         cancel_label.set_text("Cancel")
@@ -570,19 +700,340 @@ class CameraSettingsActivity(Activity):
 
         self.setContentView(screen)
 
-    def save_and_close(self, resolutions):
-        """Save selected resolution and return result."""
-        selected_idx = self.dropdown.get_selected()
-        _, new_resolution = resolutions[selected_idx]
+    def create_slider(self, parent, label_text, min_val, max_val, default_val, pref_key):
+        """Create slider with label showing current value."""
+        cont = lv.obj(parent)
+        cont.set_size(lv.pct(95), 50)
+        cont.set_style_pad_all(3, 0)
 
-        # Save to preferences
+        label = lv.label(cont)
+        label.set_text(f"{label_text}: {default_val}")
+        label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+
+        slider = lv.slider(cont)
+        slider.set_size(lv.pct(90), 15)
+        slider.set_range(min_val, max_val)
+        slider.set_value(default_val, False)
+        slider.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+
+        def slider_changed(e):
+            val = slider.get_value()
+            label.set_text(f"{label_text}: {val}")
+
+        slider.add_event_cb(slider_changed, lv.EVENT.VALUE_CHANGED, None)
+
+        # Store metadata separately
+        self.control_metadata[id(slider)] = {"pref_key": pref_key, "type": "slider"}
+
+        return slider, label, cont
+
+    def create_checkbox(self, parent, label_text, default_val, pref_key):
+        """Create checkbox with label."""
+        cont = lv.obj(parent)
+        cont.set_size(lv.pct(95), 35)
+        cont.set_style_pad_all(3, 0)
+
+        checkbox = lv.checkbox(cont)
+        checkbox.set_text(label_text)
+        if default_val:
+            checkbox.add_state(lv.STATE.CHECKED)
+        checkbox.align(lv.ALIGN.LEFT_MID, 0, 0)
+
+        # Store metadata separately
+        self.control_metadata[id(checkbox)] = {"pref_key": pref_key, "type": "checkbox"}
+
+        return checkbox, cont
+
+    def create_dropdown(self, parent, label_text, options, default_idx, pref_key):
+        """Create dropdown with label."""
+        cont = lv.obj(parent)
+        cont.set_size(lv.pct(95), 60)
+        cont.set_style_pad_all(3, 0)
+
+        label = lv.label(cont)
+        label.set_text(label_text)
+        label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+
+        dropdown = lv.dropdown(cont)
+        dropdown.set_size(lv.pct(90), 30)
+        dropdown.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+
+        options_str = "\n".join([text for text, _ in options])
+        dropdown.set_options(options_str)
+        dropdown.set_selected(default_idx)
+
+        # Store metadata separately
+        option_values = [val for _, val in options]
+        self.control_metadata[id(dropdown)] = {
+            "pref_key": pref_key,
+            "type": "dropdown",
+            "option_values": option_values
+        }
+
+        return dropdown, cont
+
+    def create_basic_tab(self, tab, prefs):
+        """Create Basic settings tab."""
+        tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        tab.set_style_pad_all(5, 0)
+
+        # Resolution dropdown
+        current_resolution = prefs.get_string("resolution", "320x240")
+        resolution_idx = 0
+        for idx, (_, value) in enumerate(self.resolutions):
+            if value == current_resolution:
+                resolution_idx = idx
+                break
+
+        dropdown, cont = self.create_dropdown(tab, "Resolution:", self.resolutions,
+                                              resolution_idx, "resolution")
+        self.ui_controls["resolution"] = dropdown
+
+        # Brightness
+        brightness = prefs.get_int("brightness", 0)
+        slider, label, cont = self.create_slider(tab, "Brightness", -2, 2, brightness, "brightness")
+        self.ui_controls["brightness"] = slider
+
+        # Contrast
+        contrast = prefs.get_int("contrast", 0)
+        slider, label, cont = self.create_slider(tab, "Contrast", -2, 2, contrast, "contrast")
+        self.ui_controls["contrast"] = slider
+
+        # Saturation
+        saturation = prefs.get_int("saturation", 0)
+        slider, label, cont = self.create_slider(tab, "Saturation", -2, 2, saturation, "saturation")
+        self.ui_controls["saturation"] = slider
+
+        # Horizontal Mirror
+        hmirror = prefs.get_bool("hmirror", False)
+        checkbox, cont = self.create_checkbox(tab, "Horizontal Mirror", hmirror, "hmirror")
+        self.ui_controls["hmirror"] = checkbox
+
+        # Vertical Flip
+        vflip = prefs.get_bool("vflip", True)
+        checkbox, cont = self.create_checkbox(tab, "Vertical Flip", vflip, "vflip")
+        self.ui_controls["vflip"] = checkbox
+
+        # Special Effect
+        special_effect_options = [
+            ("None", 0), ("Negative", 1), ("B&W", 2),
+            ("Reddish", 3), ("Greenish", 4), ("Blue", 5), ("Retro", 6)
+        ]
+        special_effect = prefs.get_int("special_effect", 0)
+        dropdown, cont = self.create_dropdown(tab, "Special Effect:", special_effect_options,
+                                              special_effect, "special_effect")
+        self.ui_controls["special_effect"] = dropdown
+
+    def create_advanced_tab(self, tab, prefs):
+        """Create Advanced settings tab."""
+        tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        tab.set_style_pad_all(5, 0)
+
+        # Auto Exposure Control (master switch)
+        exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
+        checkbox, cont = self.create_checkbox(tab, "Auto Exposure", exposure_ctrl, "exposure_ctrl")
+        self.ui_controls["exposure_ctrl"] = checkbox
+
+        # Manual Exposure Value (dependent)
+        aec_value = prefs.get_int("aec_value", 300)
+        slider, label, cont = self.create_slider(tab, "Manual Exposure", 0, 1200, aec_value, "aec_value")
+        self.ui_controls["aec_value"] = slider
+
+        # Set initial state
+        if exposure_ctrl:
+            slider.add_state(lv.STATE.DISABLED)
+            slider.set_style_bg_opa(128, 0)
+
+        # Add dependency handler
+        def exposure_ctrl_changed(e):
+            is_auto = checkbox.get_state() & lv.STATE.CHECKED
+            if is_auto:
+                slider.add_state(lv.STATE.DISABLED)
+                slider.set_style_bg_opa(128, 0)
+            else:
+                slider.remove_state(lv.STATE.DISABLED)
+                slider.set_style_bg_opa(255, 0)
+
+        checkbox.add_event_cb(exposure_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
+
+        # Auto Exposure Level
+        ae_level = prefs.get_int("ae_level", 0)
+        slider, label, cont = self.create_slider(tab, "AE Level", -2, 2, ae_level, "ae_level")
+        self.ui_controls["ae_level"] = slider
+
+        # Night Mode (AEC2)
+        aec2 = prefs.get_bool("aec2", False)
+        checkbox, cont = self.create_checkbox(tab, "Night Mode (AEC2)", aec2, "aec2")
+        self.ui_controls["aec2"] = checkbox
+
+        # Auto Gain Control (master switch)
+        gain_ctrl = prefs.get_bool("gain_ctrl", True)
+        checkbox, cont = self.create_checkbox(tab, "Auto Gain", gain_ctrl, "gain_ctrl")
+        self.ui_controls["gain_ctrl"] = checkbox
+
+        # Manual Gain Value (dependent)
+        agc_gain = prefs.get_int("agc_gain", 0)
+        slider, label, cont = self.create_slider(tab, "Manual Gain", 0, 30, agc_gain, "agc_gain")
+        self.ui_controls["agc_gain"] = slider
+
+        if gain_ctrl:
+            slider.add_state(lv.STATE.DISABLED)
+            slider.set_style_bg_opa(128, 0)
+
+        def gain_ctrl_changed(e):
+            is_auto = checkbox.get_state() & lv.STATE.CHECKED
+            gain_slider = self.ui_controls["agc_gain"]
+            if is_auto:
+                gain_slider.add_state(lv.STATE.DISABLED)
+                gain_slider.set_style_bg_opa(128, 0)
+            else:
+                gain_slider.remove_state(lv.STATE.DISABLED)
+                gain_slider.set_style_bg_opa(255, 0)
+
+        checkbox.add_event_cb(gain_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
+
+        # Gain Ceiling
+        gainceiling_options = [
+            ("2X", 0), ("4X", 1), ("8X", 2), ("16X", 3),
+            ("32X", 4), ("64X", 5), ("128X", 6)
+        ]
+        gainceiling = prefs.get_int("gainceiling", 0)
+        dropdown, cont = self.create_dropdown(tab, "Gain Ceiling:", gainceiling_options,
+                                              gainceiling, "gainceiling")
+        self.ui_controls["gainceiling"] = dropdown
+
+        # Auto White Balance (master switch)
+        whitebal = prefs.get_bool("whitebal", True)
+        checkbox, cont = self.create_checkbox(tab, "Auto White Balance", whitebal, "whitebal")
+        self.ui_controls["whitebal"] = checkbox
+
+        # White Balance Mode (dependent)
+        wb_mode_options = [
+            ("Auto", 0), ("Sunny", 1), ("Cloudy", 2), ("Office", 3), ("Home", 4)
+        ]
+        wb_mode = prefs.get_int("wb_mode", 0)
+        dropdown, cont = self.create_dropdown(tab, "WB Mode:", wb_mode_options, wb_mode, "wb_mode")
+        self.ui_controls["wb_mode"] = dropdown
+
+        if whitebal:
+            dropdown.add_state(lv.STATE.DISABLED)
+
+        def whitebal_changed(e):
+            is_auto = checkbox.get_state() & lv.STATE.CHECKED
+            wb_dropdown = self.ui_controls["wb_mode"]
+            if is_auto:
+                wb_dropdown.add_state(lv.STATE.DISABLED)
+            else:
+                wb_dropdown.remove_state(lv.STATE.DISABLED)
+
+        checkbox.add_event_cb(whitebal_changed, lv.EVENT.VALUE_CHANGED, None)
+
+        # AWB Gain
+        awb_gain = prefs.get_bool("awb_gain", True)
+        checkbox, cont = self.create_checkbox(tab, "AWB Gain", awb_gain, "awb_gain")
+        self.ui_controls["awb_gain"] = checkbox
+
+    def create_expert_tab(self, tab, prefs):
+        """Create Expert settings tab."""
+        tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        tab.set_style_pad_all(5, 0)
+
+        # Note: Sensor detection would require camera access
+        # For now, show sharpness/denoise with note
+        supports_sharpness = False  # Conservative default
+
+        # Sharpness
+        sharpness = prefs.get_int("sharpness", 0)
+        slider, label, cont = self.create_slider(tab, "Sharpness", -3, 3, sharpness, "sharpness")
+        self.ui_controls["sharpness"] = slider
+
+        if not supports_sharpness:
+            slider.add_state(lv.STATE.DISABLED)
+            slider.set_style_bg_opa(128, 0)
+            note = lv.label(cont)
+            note.set_text("(Not available on this sensor)")
+            note.set_style_text_color(lv.color_hex(0x808080), 0)
+            note.align(lv.ALIGN.TOP_RIGHT, 0, 0)
+
+        # Denoise
+        denoise = prefs.get_int("denoise", 0)
+        slider, label, cont = self.create_slider(tab, "Denoise", 0, 8, denoise, "denoise")
+        self.ui_controls["denoise"] = slider
+
+        if not supports_sharpness:
+            slider.add_state(lv.STATE.DISABLED)
+            slider.set_style_bg_opa(128, 0)
+            note = lv.label(cont)
+            note.set_text("(Not available on this sensor)")
+            note.set_style_text_color(lv.color_hex(0x808080), 0)
+            note.align(lv.ALIGN.TOP_RIGHT, 0, 0)
+
+        # JPEG Quality
+        quality = prefs.get_int("quality", 85)
+        slider, label, cont = self.create_slider(tab, "JPEG Quality", 0, 100, quality, "quality")
+        self.ui_controls["quality"] = slider
+
+        # Color Bar
+        colorbar = prefs.get_bool("colorbar", False)
+        checkbox, cont = self.create_checkbox(tab, "Color Bar Test", colorbar, "colorbar")
+        self.ui_controls["colorbar"] = checkbox
+
+        # DCW Mode
+        dcw = prefs.get_bool("dcw", True)
+        checkbox, cont = self.create_checkbox(tab, "DCW Mode", dcw, "dcw")
+        self.ui_controls["dcw"] = checkbox
+
+        # Black Point Compensation
+        bpc = prefs.get_bool("bpc", False)
+        checkbox, cont = self.create_checkbox(tab, "Black Point Compensation", bpc, "bpc")
+        self.ui_controls["bpc"] = checkbox
+
+        # White Point Compensation
+        wpc = prefs.get_bool("wpc", True)
+        checkbox, cont = self.create_checkbox(tab, "White Point Compensation", wpc, "wpc")
+        self.ui_controls["wpc"] = checkbox
+
+        # Raw Gamma Mode
+        raw_gma = prefs.get_bool("raw_gma", True)
+        checkbox, cont = self.create_checkbox(tab, "Raw Gamma Mode", raw_gma, "raw_gma")
+        self.ui_controls["raw_gma"] = checkbox
+
+        # Lens Correction
+        lenc = prefs.get_bool("lenc", True)
+        checkbox, cont = self.create_checkbox(tab, "Lens Correction", lenc, "lenc")
+        self.ui_controls["lenc"] = checkbox
+
+    def save_and_close(self):
+        """Save all settings to SharedPreferences and return result."""
         prefs = SharedPreferences("com.micropythonos.camera")
         editor = prefs.edit()
-        editor.put_string("resolution", new_resolution)
-        editor.commit()
 
-        print(f"Camera resolution saved: {new_resolution}")
+        # Save all UI control values
+        for pref_key, control in self.ui_controls.items():
+            control_id = id(control)
+            metadata = self.control_metadata.get(control_id, {})
+
+            if isinstance(control, lv.slider):
+                value = control.get_value()
+                editor.put_int(pref_key, value)
+            elif isinstance(control, lv.checkbox):
+                is_checked = control.get_state() & lv.STATE.CHECKED
+                editor.put_bool(pref_key, bool(is_checked))
+            elif isinstance(control, lv.dropdown):
+                selected_idx = control.get_selected()
+                option_values = metadata.get("option_values", [])
+                if pref_key == "resolution":
+                    # Resolution stored as string
+                    value = option_values[selected_idx]
+                    editor.put_string(pref_key, value)
+                else:
+                    # Other dropdowns store integer enum values
+                    value = option_values[selected_idx]
+                    editor.put_int(pref_key, value)
+
+        editor.commit()
+        print("Camera settings saved")
 
         # Return success result
-        self.setResult(True, {"resolution": new_resolution})
+        self.setResult(True, {"settings_changed": True})
         self.finish()

@@ -73,25 +73,22 @@ The OS supports:
 The main build script is `scripts/build_mpos.sh`:
 
 ```bash
-# Development build (no frozen filesystem, requires ./scripts/install.sh after flashing)
-./scripts/build_mpos.sh unix dev
+# Build for desktop (Linux)
+./scripts/build_mpos.sh unix
 
-# Production build (with frozen filesystem)
-./scripts/build_mpos.sh unix prod
+# Build for desktop (macOS)
+./scripts/build_mpos.sh macOS
 
-# ESP32 builds (specify hardware variant)
-./scripts/build_mpos.sh esp32 dev waveshare-esp32-s3-touch-lcd-2
-./scripts/build_mpos.sh esp32 prod fri3d-2024
+# Build for ESP32-S3 hardware (works on both waveshare and fri3d variants)
+./scripts/build_mpos.sh esp32
 ```
 
-**Build types**:
-- `dev`: No preinstalled files or builtin filesystem. Boots to black screen until you run `./scripts/install.sh`
-- `prod`: Files from `manifest*.py` are frozen into firmware. Run `./scripts/freezefs_mount_builtin.sh` before building
-
 **Targets**:
-- `esp32`: ESP32-S3 hardware (requires subtarget: `waveshare-esp32-s3-touch-lcd-2` or `fri3d-2024`)
+- `esp32`: ESP32-S3 hardware (supports waveshare-esp32-s3-touch-lcd-2 and fri3d-2024)
 - `unix`: Linux desktop
 - `macOS`: macOS desktop
+
+**Note**: The build system automatically includes the frozen filesystem with all built-in apps and libraries. No separate dev/prod distinction exists anymore.
 
 The build system uses `lvgl_micropython/make.py` which wraps MicroPython's build system. It:
 1. Fetches SDL tags for desktop builds
@@ -312,10 +309,10 @@ See `internal_filesystem/apps/com.micropythonos.helloworld/` for a minimal examp
 For rapid iteration on desktop:
 ```bash
 # Build desktop version (only needed once)
-./scripts/build_mpos.sh unix dev
+./scripts/build_mpos.sh unix
 
 # Install filesystem to device (run after code changes)
-./scripts/install.sh waveshare-esp32-s3-touch-lcd-2
+./scripts/install.sh
 
 # Or run directly on desktop
 ./scripts/run_desktop.sh com.example.myapp
