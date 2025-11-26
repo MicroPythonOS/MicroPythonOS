@@ -193,6 +193,10 @@ class Editor:
             pass
         return self
 
+    def remove_all(self):
+        self.temp_data = {}
+        return self
+
     def apply(self):
         """Save changes to the file asynchronously (emulated)."""
         self.preferences.data = self.temp_data.copy()
