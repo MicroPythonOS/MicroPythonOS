@@ -31,6 +31,7 @@ class CameraApp(Activity):
 
     cam = None
     current_cam_buffer = None # Holds the current memoryview to prevent garbage collection
+    current_cam_buffer_copy = None # Holds a copy so that the memoryview can be free'd
 
     image = None
     image_dsc = None
@@ -188,7 +189,8 @@ class CameraApp(Activity):
     def set_image_size(self):
         disp = lv.display_get_default()
         target_h = disp.get_vertical_resolution()
-        target_w = disp.get_horizontal_resolution() - self.button_width - 5 # leave 5px for border
+        #target_w = disp.get_horizontal_resolution() - self.button_width - 5 # leave 5px for border
+        target_w = target_h # leave 5px for border
         if target_w == self.width and target_h == self.height:
             print("Target width and height are the same as native image, no scaling required.")
             return
@@ -225,7 +227,7 @@ class CameraApp(Activity):
             import qrdecode
             import utime
             before = utime.ticks_ms()
-            result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
+            result = qrdecode.qrdecode_rgb565(self.current_cam_buffer_copy, self.width, self.height)
             after = utime.ticks_ms()
             #result = bytearray("INSERT_QR_HERE", "utf-8")
             if not result:
@@ -261,12 +263,12 @@ class CameraApp(Activity):
             os.mkdir("data/images")
         except OSError:
             pass
-        if self.current_cam_buffer is not None:
+        if self.current_cam_buffer_copy is not None:
             filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_RGB565.raw"
             try:
                 with open(filename, 'wb') as f:
-                    f.write(self.current_cam_buffer)
-                print(f"Successfully wrote current_cam_buffer to {filename}")
+                    f.write(self.current_cam_buffer_copy)
+                print(f"Successfully wrote current_cam_buffer_copy to {filename}")
             except OSError as e:
                 print(f"Error writing to file: {e}")
     
@@ -380,16 +382,19 @@ class CameraApp(Activity):
         try:
             if self.use_webcam:
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565")
+                self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
             elif self.cam.frame_available():
                 self.current_cam_buffer = self.cam.capture()
+                self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
+                self.cam.free_buffer()
 
-            if self.current_cam_buffer and len(self.current_cam_buffer):
+            if self.current_cam_buffer_copy and len(self.current_cam_buffer_copy):
                 # Defensive check: verify buffer size matches expected dimensions
                 expected_size = self.width * self.height * 2  # RGB565 = 2 bytes per pixel
-                actual_size = len(self.current_cam_buffer)
+                actual_size = len(self.current_cam_buffer_copy)
 
                 if actual_size == expected_size:
-                    self.image_dsc.data = self.current_cam_buffer
+                    self.image_dsc.data = self.current_cam_buffer_copy
                     #image.invalidate() # does not work so do this:
                     self.image.set_src(self.image_dsc)
                     if not self.use_webcam:
@@ -456,7 +461,8 @@ def init_internal_cam(width, height):
                     reset_pin=-1,
                     pixel_format=PixelFormat.RGB565,
                     frame_size=frame_size,
-                    grab_mode=GrabMode.LATEST
+                    grab_mode=GrabMode.WHEN_EMPTY,
+                    fb_count=1
                 )
                 cam.set_vflip(True)
                 return cam
@@ -899,7 +905,7 @@ class CameraSettingsActivity(Activity):
 
         # Special Effect
         special_effect_options = [
-            ("None", 0), ("Negative", 1), ("B&W", 2),
+            ("None", 0), ("Negative", 1), ("Grayscale", 2),
             ("Reddish", 3), ("Greenish", 4), ("Blue", 5), ("Retro", 6)
         ]
         special_effect = prefs.get_int("special_effect", 0)
@@ -1070,7 +1076,7 @@ class CameraSettingsActivity(Activity):
 
         # DCW Mode
         dcw = prefs.get_bool("dcw", True)
-        checkbox, cont = self.create_checkbox(tab, "DCW Mode", dcw, "dcw")
+        checkbox, cont = self.create_checkbox(tab, "Downsize Crop Window", dcw, "dcw")
         self.ui_controls["dcw"] = checkbox
 
         # Black Point Compensation
