@@ -151,12 +151,32 @@ static mp_obj_t qrdecode_rgb565(mp_uint_t n_args, const mp_obj_t *args) {
         free(gray_buffer);
     } else {
         QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Exception caught, freeing gray_buffer\n");
-        free(gray_buffer);
+        // Cleanup
+        if (gray_buffer) {
+            free(gray_buffer);
+            gray_buffer = NULL;
+        }
+        //mp_raise_TypeError(MP_ERROR_TEXT("qrdecode_rgb565: failed to decode QR code"));
         // Re-raising the exception results in an Unhandled exception in thread started by <function qrdecode_live at 0x7f6f55af0680>
         // which isn't caught, even when catching Exception, so this looks like a bug in MicroPython...
-        //nlr_pop();
-        //nlr_raise(exception_handler.ret_val);
+        nlr_pop();
+        nlr_raise(exception_handler.ret_val);
+        // Re-raise the original exception with optional additional message
+        /*
+        mp_raise_msg_and_obj(
+            mp_obj_exception_get_type(exception_handler.ret_val),
+            MP_OBJ_NEW_QSTR(qstr_from_str("qrdecode_rgb565: failed during processing")),
+            exception_handler.ret_val
+        );
+        */
+        // Re-raise as new exception of same type, with message + original as arg
+        // (embeds original for traceback chaining)
+        // crashes:
+        //const mp_obj_type_t *exc_type = mp_obj_get_type(exception_handler.ret_val);
+        //mp_raise_msg_varg(exc_type, MP_ERROR_TEXT("qrdecode_rgb565: failed during processing: %q"), exception_handler.ret_val);
     }
+
+        //nlr_pop(); maybe it needs to be done after instead of before the re-raise?
 
     return result;
 }

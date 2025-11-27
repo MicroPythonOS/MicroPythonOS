@@ -227,7 +227,7 @@ class CameraApp(Activity):
             import qrdecode
             import utime
             before = utime.ticks_ms()
-            result = qrdecode.qrdecode_rgb565(self.current_cam_buffer_copy, self.width, self.height)
+            result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
             after = utime.ticks_ms()
             #result = bytearray("INSERT_QR_HERE", "utf-8")
             if not result:
@@ -263,12 +263,12 @@ class CameraApp(Activity):
             os.mkdir("data/images")
         except OSError:
             pass
-        if self.current_cam_buffer_copy is not None:
+        if self.current_cam_buffer is not None:
             filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_RGB565.raw"
             try:
                 with open(filename, 'wb') as f:
-                    f.write(self.current_cam_buffer_copy)
-                print(f"Successfully wrote current_cam_buffer_copy to {filename}")
+                    f.write(self.current_cam_buffer)
+                print(f"Successfully wrote current_cam_buffer to {filename}")
             except OSError as e:
                 print(f"Error writing to file: {e}")
     
@@ -382,25 +382,30 @@ class CameraApp(Activity):
         try:
             if self.use_webcam:
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565")
-                self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
+                #self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
             elif self.cam.frame_available():
+                self.cam.free_buffer()
                 self.current_cam_buffer = self.cam.capture()
-                self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
+                #self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
                 self.cam.free_buffer()
 
-            if self.current_cam_buffer_copy and len(self.current_cam_buffer_copy):
+            if self.current_cam_buffer and len(self.current_cam_buffer):
                 # Defensive check: verify buffer size matches expected dimensions
                 expected_size = self.width * self.height * 2  # RGB565 = 2 bytes per pixel
-                actual_size = len(self.current_cam_buffer_copy)
+                actual_size = len(self.current_cam_buffer)
 
                 if actual_size == expected_size:
-                    self.image_dsc.data = self.current_cam_buffer_copy
+                    #self.image_dsc.data = self.current_cam_buffer_copy
+                    self.image_dsc.data = self.current_cam_buffer
                     #image.invalidate() # does not work so do this:
                     self.image.set_src(self.image_dsc)
                     if not self.use_webcam:
                         self.cam.free_buffer()  # Free the old buffer
-                    if self.keepliveqrdecoding:
-                        self.qrdecode_one()
+                    try:
+                        if self.keepliveqrdecoding:
+                            self.qrdecode_one()
+                    except Exception as qre:
+                        print(f"try_capture: qrdecode_one got exception: {qre}")
                 else:
                     print(f"Warning: Buffer size mismatch! Expected {expected_size} bytes, got {actual_size} bytes")
                     print(f"  Resolution: {self.width}x{self.height}, discarding frame")
@@ -433,8 +438,12 @@ def init_internal_cam(width, height):
             (480, 480): FrameSize.R480X480,
             (640, 480): FrameSize.VGA,
             (640, 640): FrameSize.R640X640,
+            (720, 720): FrameSize.R720X720,
             (800, 600): FrameSize.SVGA,
+            (800, 800): FrameSize.R800X800,
+            (960, 960): FrameSize.R960X960,
             (1024, 768): FrameSize.XGA,
+            (1024,1024): FrameSize.R1024X1024,
             (1280, 720): FrameSize.HD,
             (1280, 1024): FrameSize.SXGA,
             (1600, 1200): FrameSize.UXGA,
@@ -660,9 +669,13 @@ class CameraSettingsActivity(Activity):
         ("480x480", "480x480"),
         ("640x480", "640x480"),
         ("640x640", "640x640"),
+        ("720x720", "720x720"),
         ("800x600", "800x600"),
-        ("1024x768", "1024x768"),
-        ("1280x720", "1280x720"), # binned 2x2
+        ("800x800", "800x800"),
+        ("960x960", "960x960"),
+        ("1024x768",  "1024x768"),
+        ("1024x1024","1024x1024"),
+        ("1280x720",  "1280x720"), # binned 2x2 (in default ov5640.c)
         ("1280x1024", "1280x1024"),
         ("1600x1200", "1600x1200"),
         ("1920x1080", "1920x1080"),
