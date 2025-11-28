@@ -64,7 +64,7 @@ int quirc_resize(struct quirc *q, int w, int h)
 
 	/*
 	 * alloc a new buffer for q->image. We avoid realloc(3) because we want
-	 * on failure to be leave `q` in a consistant, unmodified state.
+	 * on failure to be leaving `q` in a consistent, unmodified state.
 	 */
 	image = ps_malloc(w * h);
 	if (!image)
@@ -72,7 +72,7 @@ int quirc_resize(struct quirc *q, int w, int h)
 
 	/* compute the "old" (i.e. currently allocated) and the "new"
 	   (i.e. requested) image dimensions */
-	size_t olddim = q->w * q->h;
+	size_t olddim = q->w * q->h; // these are initialized to 0 by quirc_new()
 	size_t newdim = w * h;
 	size_t min = (olddim < newdim ? olddim : newdim);
 
