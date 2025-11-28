@@ -25,7 +25,7 @@ class CameraApp(Activity):
 
     button_width = 60
     button_height = 45
-    graymode = True
+    colormode = False
 
     status_label_text = "No camera found."
     status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and QR size (4-12cm). Ensure proper lighting."
@@ -56,6 +56,7 @@ class CameraApp(Activity):
         """Load resolution preference from SharedPreferences and update width/height."""
         prefs = SharedPreferences("com.micropythonos.camera")
         resolution_str = prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
+        self.colormode = prefs.get_bool("colormode", False)
         try:
             width_str, height_str = resolution_str.split('x')
             self.width = int(width_str)
@@ -397,8 +398,8 @@ class CameraApp(Activity):
                     self.image_dsc.data = self.current_cam_buffer
                     #image.invalidate() # does not work so do this:
                     self.image.set_src(self.image_dsc)
-                    #if not self.use_webcam:
-                    #    self.cam.free_buffer()  # Free the old buffer
+                    if not self.use_webcam:
+                        self.cam.free_buffer()  # Free the old buffer
                     try:
                         if self.keepliveqrdecoding:
                             self.qrdecode_one()
@@ -882,6 +883,11 @@ class CameraSettingsActivity(Activity):
         #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
         tab.set_style_pad_all(1, 0)
 
+        # Color Mode
+        colormode = prefs.get_bool("colormode", False)
+        checkbox, cont = self.create_checkbox(tab, "Color Mode (slower)", colormode, "colormode")
+        self.ui_controls["colormode"] = checkbox
+
         # Resolution dropdown
         current_resolution = prefs.get_string("resolution", "320x240")
         resolution_idx = 0
@@ -918,6 +924,14 @@ class CameraSettingsActivity(Activity):
         checkbox, cont = self.create_checkbox(tab, "Vertical Flip", vflip, "vflip")
         self.ui_controls["vflip"] = checkbox
 
+        self.add_buttons(tab)
+
+    def create_advanced_tab(self, tab, prefs):
+        """Create Advanced settings tab."""
+        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        tab.set_style_pad_all(1, 0)
+
         # Special Effect
         special_effect_options = [
             ("None", 0), ("Negative", 1), ("Grayscale", 2),
@@ -927,14 +941,6 @@ class CameraSettingsActivity(Activity):
         dropdown, cont = self.create_dropdown(tab, "Special Effect:", special_effect_options,
                                               special_effect, "special_effect")
         self.ui_controls["special_effect"] = dropdown
-
-        self.add_buttons(tab)
-
-    def create_advanced_tab(self, tab, prefs):
-        """Create Advanced settings tab."""
-        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
-        tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tab.set_style_pad_all(1, 0)
 
         # Auto Exposure Control (master switch)
         exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
