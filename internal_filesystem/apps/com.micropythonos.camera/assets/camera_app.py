@@ -61,7 +61,6 @@ class CameraApp(Activity):
             self.height = self.DEFAULT_HEIGHT
 
     def onCreate(self):
-        self.load_resolution_preference()
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(1, 0)
@@ -127,11 +126,12 @@ class CameraApp(Activity):
         self.setContentView(self.main_screen)
     
     def onResume(self, screen):
+        self.load_resolution_preference() # needs to be done BEFORE the camera is initialized
         self.cam = init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
             # Apply saved camera settings, only for internal camera for now:
-            apply_camera_settings(self.cam, self.use_webcam)
+            apply_camera_settings(self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
         else:
             print("camera app: no internal camera found, trying webcam on /dev/video0")
             try:
@@ -296,70 +296,14 @@ class CameraApp(Activity):
             outputY = prefs.get_int("startX", CameraSettingsActivity.outputY_default)
             scale = prefs.get_bool("scale", CameraSettingsActivity.scale_default)
             binning = prefs.get_bool("binning", CameraSettingsActivity.binning_default)
-            # This works as it's what works in the C code:
             result = self.cam.set_res_raw(startX,startY,endX,endY,offsetX,offsetY,totalX,totalY,outputX,outputY,scale,binning)
             print(f"self.cam.set_res_raw returned {result}")
 
     def open_settings(self):
         self.image_dsc.data = None
         self.current_cam_buffer = None
-        """Launch the camera settings activity."""
         intent = Intent(activity_class=CameraSettingsActivity)
-        self.startActivityForResult(intent, self.handle_settings_result)
-
-    def handle_settings_result(self, result):
-        print(f"handle_settings_result: {result}")
-        """Handle result from settings activity."""
-        if result.get("result_code") == True:
-            print("Settings changed, reloading resolution...")
-            # Reload resolution preference
-            self.load_resolution_preference()
-
-            # CRITICAL: Pause capture timer to prevent race conditions during reconfiguration
-            if self.capture_timer:
-                self.capture_timer.delete()
-                self.capture_timer = None
-                print("Capture timer paused")
-
-            # Clear stale data pointer to prevent segfault during LVGL rendering
-            self.image_dsc.data = None
-            self.current_cam_buffer = None
-            print("Image data cleared")
-
-            # Update image descriptor with new dimensions
-            # Note: image_dsc is an LVGL struct, use attribute access not dictionary access
-            self.image_dsc.header.w = self.width
-            self.image_dsc.header.h = self.height
-            self.image_dsc.header.stride = self.width * (2 if self.colormode else 1)
-            self.image_dsc.data_size = self.width * self.height * (2 if self.colormode else 1)
-            print(f"Image descriptor updated to {self.width}x{self.height}")
-
-            # Reconfigure camera if active
-            if self.cam:
-                if self.use_webcam:
-                    print(f"Reconfiguring webcam to {self.width}x{self.height}")
-                    # Reconfigure webcam resolution (input and output are the same)
-                    webcam.reconfigure(self.cam, width=self.width, height=self.height)
-                    # Resume capture timer for webcam
-                    self.capture_timer = lv.timer_create(self.try_capture, 100, None)
-                    print("Webcam reconfigured, capture timer resumed")
-                else:
-                    # For internal camera, need to reinitialize
-                    print(f"Reinitializing internal camera to {self.width}x{self.height}")
-                    self.cam.deinit()
-                    self.cam = init_internal_cam(self.width, self.height)
-                    if self.cam:
-                        # Apply all camera settings
-                        apply_camera_settings(self.cam, self.use_webcam)
-                        self.capture_timer = lv.timer_create(self.try_capture, 100, None)
-                        print("Internal camera reinitialized, capture timer resumed")
-                    else:
-                        print("ERROR: Failed to reinitialize camera after resolution change")
-                        self.status_label.set_text("Failed to reinitialize camera.\nPlease restart the app.")
-                        self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
-                        return  # Don't continue if camera failed
-
-                self.update_preview_image()
+        self.startActivity(intent)
 
     def try_capture(self, event):
         #print("capturing camera frame")
