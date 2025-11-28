@@ -849,7 +849,6 @@ class CameraSettingsActivity(Activity):
 
     def create_advanced_tab(self, tab, prefs):
         """Create Advanced settings tab."""
-        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         tab.set_style_pad_all(1, 0)
 
@@ -860,27 +859,23 @@ class CameraSettingsActivity(Activity):
 
         # Manual Exposure Value (dependent)
         aec_value = prefs.get_int("aec_value", 300)
-        me_slider, label, cont = self.create_slider(tab, "Manual Exposure", 0, 1200, aec_value, "aec_value")
+        me_slider, label, me_cont = self.create_slider(tab, "Manual Exposure", 0, 1200, aec_value, "aec_value")
         self.ui_controls["aec_value"] = me_slider
 
         # Auto Exposure Level (dependent)
         ae_level = prefs.get_int("ae_level", 0)
-        ae_slider, label, cont = self.create_slider(tab, "Auto Exposure Level", -2, 2, ae_level, "ae_level")
+        ae_slider, label, ae_cont = self.create_slider(tab, "Auto Exposure Level", -2, 2, ae_level, "ae_level")
         self.ui_controls["ae_level"] = ae_slider
 
         # Add dependency handler
         def exposure_ctrl_changed(e=None):
             is_auto = aec_checkbox.get_state() & lv.STATE.CHECKED
             if is_auto:
-                me_slider.add_state(lv.STATE.DISABLED)
-                me_slider.set_style_opa(128, 0)
-                ae_slider.remove_state(lv.STATE.DISABLED)
-                ae_slider.set_style_opa(255, 0)
+                mpos.ui.anim.smooth_hide(me_cont, duration=1000)
+                mpos.ui.anim.smooth_show(ae_cont, delay=1000)
             else:
-                me_slider.remove_state(lv.STATE.DISABLED)
-                me_slider.set_style_opa(255, 0)
-                ae_slider.add_state(lv.STATE.DISABLED)
-                ae_slider.set_style_opa(128, 0)
+                mpos.ui.anim.smooth_hide(ae_cont, duration=1000)
+                mpos.ui.anim.smooth_show(me_cont, delay=1000)
 
         aec_checkbox.add_event_cb(exposure_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
         exposure_ctrl_changed()
@@ -897,24 +892,19 @@ class CameraSettingsActivity(Activity):
 
         # Manual Gain Value (dependent)
         agc_gain = prefs.get_int("agc_gain", 0)
-        slider, label, cont = self.create_slider(tab, "Manual Gain", 0, 30, agc_gain, "agc_gain")
+        slider, label, agc_cont = self.create_slider(tab, "Manual Gain", 0, 30, agc_gain, "agc_gain")
         self.ui_controls["agc_gain"] = slider
 
-        if gain_ctrl:
-            slider.add_state(lv.STATE.DISABLED)
-            slider.set_style_opa(128, 0)
-
-        def gain_ctrl_changed(e):
+        def gain_ctrl_changed(e=None):
             is_auto = agc_checkbox.get_state() & lv.STATE.CHECKED
             gain_slider = self.ui_controls["agc_gain"]
             if is_auto:
-                gain_slider.add_state(lv.STATE.DISABLED)
-                gain_slider.set_style_opa(128, 0)
+                mpos.ui.anim.smooth_hide(agc_cont, duration=1000)
             else:
-                gain_slider.remove_state(lv.STATE.DISABLED)
-                gain_slider.set_style_opa(255, 0)
+                mpos.ui.anim.smooth_show(agc_cont, duration=1000)
 
         agc_checkbox.add_event_cb(gain_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
+        gain_ctrl_changed()
 
         # Gain Ceiling
         gainceiling_options = [
@@ -935,21 +925,17 @@ class CameraSettingsActivity(Activity):
             ("Auto", 0), ("Sunny", 1), ("Cloudy", 2), ("Office", 3), ("Home", 4)
         ]
         wb_mode = prefs.get_int("wb_mode", 0)
-        dropdown, cont = self.create_dropdown(tab, "WB Mode:", wb_mode_options, wb_mode, "wb_mode")
-        self.ui_controls["wb_mode"] = dropdown
+        wb_dropdown, wb_cont = self.create_dropdown(tab, "WB Mode:", wb_mode_options, wb_mode, "wb_mode")
+        self.ui_controls["wb_mode"] = wb_dropdown
 
-        if whitebal:
-            dropdown.add_state(lv.STATE.DISABLED)
-
-        def whitebal_changed(e):
+        def whitebal_changed(e=None):
             is_auto = wbcheckbox.get_state() & lv.STATE.CHECKED
-            wb_dropdown = self.ui_controls["wb_mode"]
             if is_auto:
-                wb_dropdown.add_state(lv.STATE.DISABLED)
+                mpos.ui.anim.smooth_hide(wb_cont, duration=1000)
             else:
-                wb_dropdown.remove_state(lv.STATE.DISABLED)
-
+                mpos.ui.anim.smooth_show(wb_cont, duration=1000)
         wbcheckbox.add_event_cb(whitebal_changed, lv.EVENT.VALUE_CHANGED, None)
+        whitebal_changed()
 
         # AWB Gain
         awb_gain = prefs.get_bool("awb_gain", True)
@@ -974,35 +960,15 @@ class CameraSettingsActivity(Activity):
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         tab.set_style_pad_all(1, 0)
 
-        # Note: Sensor detection isn't performed right now
-        # For now, show sharpness/denoise with note
-        supports_sharpness = True  # Assume yes
-
         # Sharpness
         sharpness = prefs.get_int("sharpness", 0)
         slider, label, cont = self.create_slider(tab, "Sharpness", -3, 3, sharpness, "sharpness")
         self.ui_controls["sharpness"] = slider
 
-        if not supports_sharpness:
-            slider.add_state(lv.STATE.DISABLED)
-            slider.set_style_opa(128, 0)
-            note = lv.label(cont)
-            note.set_text("(Not available on this sensor)")
-            note.set_style_text_color(lv.color_hex(0x808080), 0)
-            note.align(lv.ALIGN.TOP_RIGHT, 0, 0)
-
         # Denoise
         denoise = prefs.get_int("denoise", 0)
         slider, label, cont = self.create_slider(tab, "Denoise", 0, 8, denoise, "denoise")
         self.ui_controls["denoise"] = slider
-
-        if not supports_sharpness:
-            slider.add_state(lv.STATE.DISABLED)
-            slider.set_style_opa(128, 0)
-            note = lv.label(cont)
-            note.set_text("(Not available on this sensor)")
-            note.set_style_text_color(lv.color_hex(0x808080), 0)
-            note.align(lv.ALIGN.TOP_RIGHT, 0, 0)
 
         # JPEG Quality
         # Disabled because JPEG is not used right now

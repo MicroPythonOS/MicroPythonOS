@@ -41,19 +41,18 @@ class WidgetAnimator:
     # show_widget and hide_widget could have a (lambda) callback that sets the final state (eg: drawer_open) at the end
     @staticmethod
     def show_widget(widget, anim_type="fade", duration=500, delay=0):
-        """Show a widget with an animation (fade or slide)."""
-
         lv.anim_delete(widget, None) # stop all ongoing animations to prevent visual glitches
-        widget.remove_flag(lv.obj.FLAG.HIDDEN) # Clear HIDDEN flag to make widget visible for animation
+        anim = lv.anim_t()
+        anim.init()
+        anim.set_var(widget)
+        anim.set_delay(delay)
+        anim.set_duration(duration)
+        # Clear HIDDEN flag to make widget visible for animation:
+        anim.set_start_cb(lambda *args: safe_widget_access(lambda: widget.remove_flag(lv.obj.FLAG.HIDDEN)))
 
         if anim_type == "fade":
             # Create fade-in animation (opacity from 0 to 255)
-            anim = lv.anim_t()
-            anim.init()
-            anim.set_var(widget)
             anim.set_values(0, 255)
-            anim.set_duration(duration)
-            anim.set_delay(delay)
             anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_style_opa(value, 0)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Ensure opacity is reset after animation
@@ -63,50 +62,38 @@ class WidgetAnimator:
             # Create slide-down animation (y from -height to original y)
             original_y = widget.get_y()
             height = widget.get_height()
-            anim = lv.anim_t()
-            anim.init()
-            anim.set_var(widget)
             anim.set_values(original_y - height, original_y)
-            anim.set_duration(duration)
-            anim.set_delay(delay)
             anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Reset y position after animation
             anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_y(original_y)))
-        elif anim_type == "slide_up":
+        else: # "slide_up":
             # Create slide-up animation (y from +height to original y)
             # Seems to cause scroll bars to be added somehow if done to a keyboard at the bottom of the screen...
             original_y = widget.get_y()
             height = widget.get_height()
-            anim = lv.anim_t()
-            anim.init()
-            anim.set_var(widget)
             anim.set_values(original_y + height, original_y)
-            anim.set_duration(duration)
-            anim.set_delay(delay)
             anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Reset y position after animation
             anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_y(original_y)))
 
-        # Store and start animation
-        #self.animations[widget] = anim
         anim.start()
         return anim
 
     @staticmethod
     def hide_widget(widget, anim_type="fade", duration=500, delay=0, hide=True):
         lv.anim_delete(widget, None) # stop all ongoing animations to prevent visual glitches
+        anim = lv.anim_t()
+        anim.init()
+        anim.set_var(widget)
+        anim.set_duration(duration)
+        anim.set_delay(delay)
 
         """Hide a widget with an animation (fade or slide)."""
         if anim_type == "fade":
             # Create fade-out animation (opacity from 255 to 0)
-            anim = lv.anim_t()
-            anim.init()
-            anim.set_var(widget)
             anim.set_values(255, 0)
-            anim.set_duration(duration)
-            anim.set_delay(delay)
             anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_style_opa(value, 0)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Set HIDDEN flag after animation
@@ -116,34 +103,22 @@ class WidgetAnimator:
             # Seems to cause scroll bars to be added somehow if done to a keyboard at the bottom of the screen...
             original_y = widget.get_y()
             height = widget.get_height()
-            anim = lv.anim_t()
-            anim.init()
-            anim.set_var(widget)
             anim.set_values(original_y, original_y + height)
-            anim.set_duration(duration)
-            anim.set_delay(delay)
             anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Set HIDDEN flag after animation
             anim.set_completed_cb(lambda *args: safe_widget_access(lambda: WidgetAnimator.hide_complete_cb(widget, original_y, hide)))
-        elif anim_type == "slide_up":
+        else: # "slide_up":
             print("hide with slide_up")
             # Create slide-up animation (y from original y to -height)
             original_y = widget.get_y()
             height = widget.get_height()
-            anim = lv.anim_t()
-            anim.init()
-            anim.set_var(widget)
             anim.set_values(original_y, original_y - height)
-            anim.set_duration(duration)
-            anim.set_delay(delay)
             anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Set HIDDEN flag after animation
             anim.set_completed_cb(lambda *args: safe_widget_access(lambda: WidgetAnimator.hide_complete_cb(widget, original_y, hide)))
 
-        # Store and start animation
-        #self.animations[widget] = anim
         anim.start()
         return anim
 
@@ -156,8 +131,8 @@ class WidgetAnimator:
             widget.set_y(original_y) # in case it shifted slightly due to rounding etc
 
 
-def smooth_show(widget):
-    return WidgetAnimator.show_widget(widget, anim_type="fade", duration=500, delay=0)
+def smooth_show(widget, duration=500, delay=0):
+    return WidgetAnimator.show_widget(widget, anim_type="fade", duration=duration, delay=delay)
 
-def smooth_hide(widget, hide=True):
-    return WidgetAnimator.hide_widget(widget, anim_type="fade", duration=500, delay=0, hide=hide)
+def smooth_hide(widget, hide=True, duration=500, delay=0):
+    return WidgetAnimator.hide_widget(widget, anim_type="fade", duration=duration, delay=delay, hide=hide)
