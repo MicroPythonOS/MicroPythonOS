@@ -143,8 +143,7 @@ class CameraApp(Activity):
                 print(f"camera app: webcam exception: {e}")
         if self.cam:
             print("Camera app initialized, continuing...")
-            self.create_preview_image()
-            self.set_image_size()
+            self.update_preview_image()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
             if self.scanqr_mode or self.keepliveqrdecoding:
@@ -181,21 +180,7 @@ class CameraApp(Activity):
                 print(f"Warning: powering off camera got exception: {e}")
         print("camera app cleanup done.")
 
-    def set_image_size(self):
-        disp = lv.display_get_default()
-        target_h = disp.get_vertical_resolution()
-        #target_w = disp.get_horizontal_resolution() - self.button_width - 5 # leave 5px for border
-        target_w = target_h # square
-        print(f"scaling to size: {target_w}x{target_h}")
-        scale_factor_w = round(target_w * 256 / self.width)
-        scale_factor_h = round(target_h * 256 / self.height)
-        print(f"scale_factors: {scale_factor_w},{scale_factor_h}")
-        self.image.set_size(target_w, target_h)
-        #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
-        self.image.set_scale(min(scale_factor_w,scale_factor_h))
-
-    def create_preview_image(self):
-        # Create image descriptor once
+    def update_preview_image(self):
         self.image_dsc = lv.image_dsc_t({
             "header": {
                 "magic": lv.IMAGE_HEADER_MAGIC,
@@ -208,7 +193,17 @@ class CameraApp(Activity):
             'data': None # Will be updated per frame
         })
         self.image.set_src(self.image_dsc)
-
+        disp = lv.display_get_default()
+        target_h = disp.get_vertical_resolution()
+        #target_w = disp.get_horizontal_resolution() - self.button_width - 5 # leave 5px for border
+        target_w = target_h # square
+        print(f"scaling to size: {target_w}x{target_h}")
+        scale_factor_w = round(target_w * 256 / self.width)
+        scale_factor_h = round(target_h * 256 / self.height)
+        print(f"scale_factors: {scale_factor_w},{scale_factor_h}")
+        self.image.set_size(target_w, target_h)
+        #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
+        self.image.set_scale(min(scale_factor_w,scale_factor_h))
 
     def qrdecode_one(self):
         try:
@@ -364,8 +359,7 @@ class CameraApp(Activity):
                         self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
                         return  # Don't continue if camera failed
 
-                self.create_preview_image()
-                self.set_image_size()
+                self.update_preview_image()
 
     def try_capture(self, event):
         #print("capturing camera frame")
