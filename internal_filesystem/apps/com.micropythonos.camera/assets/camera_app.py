@@ -20,10 +20,12 @@ import mpos.time
 
 class CameraApp(Activity):
 
+    DEFAULT_WIDTH = 320 # 240 would be better but webcam doesn't support this (yet)
+    DEFAULT_HEIGHT = 240
+
     button_width = 60
     button_height = 45
-    width = 320
-    height = 240
+    graymode = True
 
     status_label_text = "No camera found."
     status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and QR size (4-12cm). Ensure proper lighting."
@@ -31,7 +33,8 @@ class CameraApp(Activity):
 
     cam = None
     current_cam_buffer = None # Holds the current memoryview to prevent garbage collection
-    current_cam_buffer_copy = None # Holds a copy so that the memoryview can be free'd
+    width = None
+    height = None
 
     image = None
     image_dsc = None
@@ -52,7 +55,7 @@ class CameraApp(Activity):
     def load_resolution_preference(self):
         """Load resolution preference from SharedPreferences and update width/height."""
         prefs = SharedPreferences("com.micropythonos.camera")
-        resolution_str = prefs.get_string("resolution", "320x240")
+        resolution_str = prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
         try:
             width_str, height_str = resolution_str.split('x')
             self.width = int(width_str)
@@ -60,8 +63,8 @@ class CameraApp(Activity):
             print(f"Camera resolution loaded: {self.width}x{self.height}")
         except Exception as e:
             print(f"Error parsing resolution '{resolution_str}': {e}, using default 320x240")
-            self.width = 320
-            self.height = 240
+            self.width = self.DEFAULT_WIDTH
+            self.height = self.DEFAULT_HEIGHT
 
     def onCreate(self):
         self.load_resolution_preference()
@@ -88,7 +91,6 @@ class CameraApp(Activity):
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.center()
         settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
-
         self.snap_button = lv.button(self.main_screen)
         self.snap_button.set_size(self.button_width, self.button_height)
         self.snap_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
@@ -104,8 +106,6 @@ class CameraApp(Activity):
         zoom_label = lv.label(self.zoom_button)
         zoom_label.set_text("Z")
         zoom_label.center()
-
-
         self.qr_button = lv.button(self.main_screen)
         self.qr_button.set_size(self.button_width, self.button_height)
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -161,7 +161,6 @@ class CameraApp(Activity):
             if self.scanqr_mode:
                 self.finish()
 
-
     def onPause(self, screen):
         print("camera app backgrounded, cleaning up...")
         if self.capture_timer:
@@ -208,11 +207,13 @@ class CameraApp(Activity):
                 "magic": lv.IMAGE_HEADER_MAGIC,
                 "w": self.width,
                 "h": self.height,
-                "stride": self.width * 2,
-                "cf": lv.COLOR_FORMAT.RGB565
-                #"cf": lv.COLOR_FORMAT.L8
+                #"stride": self.width * 2, # RGB565
+                "stride": self.width, # RGB565
+                #"cf": lv.COLOR_FORMAT.RGB565
+                "cf": lv.COLOR_FORMAT.L8
             },
-            'data_size': self.width * self.height * 2,
+            #'data_size': self.width * self.height * 2, # RGB565
+            'data_size': self.width * self.height, # gray
             'data': None # Will be updated per frame
         })
         self.image.set_src(self.image_dsc)
@@ -224,7 +225,7 @@ class CameraApp(Activity):
             import qrdecode
             import utime
             before = utime.ticks_ms()
-            result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
+            result = qrdecode.qrdecode(self.current_cam_buffer, self.width, self.height)
             after = utime.ticks_ms()
             #result = bytearray("INSERT_QR_HERE", "utf-8")
             if not result:
@@ -343,8 +344,10 @@ class CameraApp(Activity):
             # Note: image_dsc is an LVGL struct, use attribute access not dictionary access
             self.image_dsc.header.w = self.width
             self.image_dsc.header.h = self.height
-            self.image_dsc.header.stride = self.width * 2
-            self.image_dsc.data_size = self.width * self.height * 2
+            #self.image_dsc.header.stride = self.width * 2 # RGB565
+            #self.image_dsc.data_size = self.width * self.height * 2 #RGB565
+            self.image_dsc.header.stride = self.width
+            self.image_dsc.data_size = self.width * self.height
             print(f"Image descriptor updated to {self.width}x{self.height}")
 
             # Reconfigure camera if active
@@ -379,25 +382,23 @@ class CameraApp(Activity):
         try:
             if self.use_webcam:
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565")
-                #self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
             elif self.cam.frame_available():
                 self.cam.free_buffer()
                 self.current_cam_buffer = self.cam.capture()
-                #self.current_cam_buffer_copy = bytes(self.current_cam_buffer)
-                self.cam.free_buffer()
+                #self.cam.free_buffer()
 
             if self.current_cam_buffer and len(self.current_cam_buffer):
                 # Defensive check: verify buffer size matches expected dimensions
-                expected_size = self.width * self.height * 2  # RGB565 = 2 bytes per pixel
+                #expected_size = self.width * self.height * 2  # RGB565 = 2 bytes per pixel
+                expected_size = self.width * self.height  # Grayscale = 1 byte per pixel
                 actual_size = len(self.current_cam_buffer)
 
                 if actual_size == expected_size:
-                    #self.image_dsc.data = self.current_cam_buffer_copy
                     self.image_dsc.data = self.current_cam_buffer
                     #image.invalidate() # does not work so do this:
                     self.image.set_src(self.image_dsc)
-                    if not self.use_webcam:
-                        self.cam.free_buffer()  # Free the old buffer
+                    #if not self.use_webcam:
+                    #    self.cam.free_buffer()  # Free the old buffer
                     try:
                         if self.keepliveqrdecoding:
                             self.qrdecode_one()
@@ -443,6 +444,7 @@ def init_internal_cam(width, height):
             (1024,1024): FrameSize.R1024X1024,
             (1280, 720): FrameSize.HD,
             (1280, 1024): FrameSize.SXGA,
+            (1280, 1280): FrameSize.R1280X1280,
             (1600, 1200): FrameSize.UXGA,
             (1920, 1080): FrameSize.FHD,
         }
@@ -465,7 +467,8 @@ def init_internal_cam(width, height):
                     xclk_freq=20000000,
                     powerdown_pin=-1,
                     reset_pin=-1,
-                    pixel_format=PixelFormat.RGB565,
+                    #pixel_format=PixelFormat.RGB565,
+                    pixel_format=PixelFormat.GRAYSCALE,
                     frame_size=frame_size,
                     grab_mode=GrabMode.WHEN_EMPTY,
                     fb_count=1
@@ -674,6 +677,7 @@ class CameraSettingsActivity(Activity):
         ("1024x1024","1024x1024"),
         ("1280x720",  "1280x720"), # binned 2x2 (in default ov5640.c)
         ("1280x1024", "1280x1024"),
+        ("1280x1280", "1280x1280"),
         ("1600x1200", "1600x1200"),
         ("1920x1080", "1920x1080"),
     ]
@@ -933,30 +937,30 @@ class CameraSettingsActivity(Activity):
 
         # Auto Exposure Control (master switch)
         exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
-        checkbox, cont = self.create_checkbox(tab, "Auto Exposure", exposure_ctrl, "exposure_ctrl")
-        self.ui_controls["exposure_ctrl"] = checkbox
+        aec_checkbox, cont = self.create_checkbox(tab, "Auto Exposure", exposure_ctrl, "exposure_ctrl")
+        self.ui_controls["exposure_ctrl"] = aec_checkbox
 
         # Manual Exposure Value (dependent)
         aec_value = prefs.get_int("aec_value", 300)
-        slider, label, cont = self.create_slider(tab, "Manual Exposure", 0, 1200, aec_value, "aec_value")
-        self.ui_controls["aec_value"] = slider
+        me_slider, label, cont = self.create_slider(tab, "Manual Exposure", 0, 1200, aec_value, "aec_value")
+        self.ui_controls["aec_value"] = me_slider
 
         # Set initial state
         if exposure_ctrl:
-            slider.add_state(lv.STATE.DISABLED)
-            slider.set_style_bg_opa(128, 0)
+            me_slider.add_state(lv.STATE.DISABLED)
+            me_slider.set_style_bg_opa(128, 0)
 
         # Add dependency handler
         def exposure_ctrl_changed(e):
-            is_auto = checkbox.get_state() & lv.STATE.CHECKED
+            is_auto = aec_checkbox.get_state() & lv.STATE.CHECKED
             if is_auto:
-                slider.add_state(lv.STATE.DISABLED)
-                slider.set_style_bg_opa(128, 0)
+                me_slider.add_state(lv.STATE.DISABLED)
+                me_slider.set_style_bg_opa(128, 0)
             else:
-                slider.remove_state(lv.STATE.DISABLED)
-                slider.set_style_bg_opa(255, 0)
+                me_slider.remove_state(lv.STATE.DISABLED)
+                me_slider.set_style_bg_opa(255, 0)
 
-        checkbox.add_event_cb(exposure_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
+        aec_checkbox.add_event_cb(exposure_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
 
         # Auto Exposure Level
         ae_level = prefs.get_int("ae_level", 0)
@@ -970,8 +974,8 @@ class CameraSettingsActivity(Activity):
 
         # Auto Gain Control (master switch)
         gain_ctrl = prefs.get_bool("gain_ctrl", True)
-        checkbox, cont = self.create_checkbox(tab, "Auto Gain", gain_ctrl, "gain_ctrl")
-        self.ui_controls["gain_ctrl"] = checkbox
+        agc_checkbox, cont = self.create_checkbox(tab, "Auto Gain", gain_ctrl, "gain_ctrl")
+        self.ui_controls["gain_ctrl"] = agc_checkbox
 
         # Manual Gain Value (dependent)
         agc_gain = prefs.get_int("agc_gain", 0)
@@ -983,7 +987,7 @@ class CameraSettingsActivity(Activity):
             slider.set_style_bg_opa(128, 0)
 
         def gain_ctrl_changed(e):
-            is_auto = checkbox.get_state() & lv.STATE.CHECKED
+            is_auto = agc_checkbox.get_state() & lv.STATE.CHECKED
             gain_slider = self.ui_controls["agc_gain"]
             if is_auto:
                 gain_slider.add_state(lv.STATE.DISABLED)
@@ -992,7 +996,7 @@ class CameraSettingsActivity(Activity):
                 gain_slider.remove_state(lv.STATE.DISABLED)
                 gain_slider.set_style_bg_opa(255, 0)
 
-        checkbox.add_event_cb(gain_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
+        agc_checkbox.add_event_cb(gain_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
 
         # Gain Ceiling
         gainceiling_options = [
@@ -1000,14 +1004,13 @@ class CameraSettingsActivity(Activity):
             ("32X", 4), ("64X", 5), ("128X", 6)
         ]
         gainceiling = prefs.get_int("gainceiling", 0)
-        dropdown, cont = self.create_dropdown(tab, "Gain Ceiling:", gainceiling_options,
-                                              gainceiling, "gainceiling")
+        dropdown, cont = self.create_dropdown(tab, "Gain Ceiling:", gainceiling_options, gainceiling, "gainceiling")
         self.ui_controls["gainceiling"] = dropdown
 
         # Auto White Balance (master switch)
         whitebal = prefs.get_bool("whitebal", True)
-        checkbox, cont = self.create_checkbox(tab, "Auto White Balance", whitebal, "whitebal")
-        self.ui_controls["whitebal"] = checkbox
+        wbcheckbox, cont = self.create_checkbox(tab, "Auto White Balance", whitebal, "whitebal")
+        self.ui_controls["whitebal"] = wbcheckbox
 
         # White Balance Mode (dependent)
         wb_mode_options = [
@@ -1021,14 +1024,14 @@ class CameraSettingsActivity(Activity):
             dropdown.add_state(lv.STATE.DISABLED)
 
         def whitebal_changed(e):
-            is_auto = checkbox.get_state() & lv.STATE.CHECKED
+            is_auto = wbcheckbox.get_state() & lv.STATE.CHECKED
             wb_dropdown = self.ui_controls["wb_mode"]
             if is_auto:
                 wb_dropdown.add_state(lv.STATE.DISABLED)
             else:
                 wb_dropdown.remove_state(lv.STATE.DISABLED)
 
-        checkbox.add_event_cb(whitebal_changed, lv.EVENT.VALUE_CHANGED, None)
+        wbcheckbox.add_event_cb(whitebal_changed, lv.EVENT.VALUE_CHANGED, None)
 
         # AWB Gain
         awb_gain = prefs.get_bool("awb_gain", True)
