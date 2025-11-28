@@ -56,12 +56,15 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
     //QRDECODE_DEBUG_PRINT("qrdecode: Resized quirc object\n");
 
     uint8_t *image = quirc_begin(qr, NULL, NULL);
-    //memcpy(image, bufinfo.buf, width * height);
-    uint8_t *temp_image = image;
-    //image = bufinfo.buf; // use existing buffer, rather than memcpy - but this doesnt find any images anymore :-/
-    qr->image = bufinfo.buf; // if this works then we can also eliminate quirc's ps_alloc()
+    memcpy(image, bufinfo.buf, width * height);
+    // would be nice to be able to use the existing buffer (bufinfo.buf) here, avoiding memcpy,
+    // but that buffer is also being filled by image capture and displayed by lvgl
+    // and that becomes unstable... it shows black artifacts and crashes sometimes...
+    //uint8_t *temp_image = image;
+    //image = bufinfo.buf;
+    //qr->image = bufinfo.buf; // if this works then we can also eliminate quirc's ps_alloc()
     quirc_end(qr);
-    qr->image = temp_image; // restore, because quirc will try to free it
+    //qr->image = temp_image; // restore, because quirc will try to free it
 
     /*
     // Pointer swap - NO memcpy, NO internal.h needed
