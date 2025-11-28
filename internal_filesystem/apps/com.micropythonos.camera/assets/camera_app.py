@@ -1,10 +1,3 @@
-# This code grabs images from the camera in RGB565 format (2 bytes per pixel)
-# and sends that to the QR decoder if QR decoding is enabled.
-# The QR decoder then converts the RGB565 to grayscale, as that's what quirc operates on.
-# It would be slightly more efficient to capture the images from the camera in L8/grayscale format,
-# or in YUV format and discarding the U and V planes, but then the image will be gray (not great UX)
-# and the performance impact of converting RGB565 to grayscale is probably minimal anyway.
-
 import lvgl as lv
 from mpos.ui.keyboard import MposKeyboard
 
@@ -76,7 +69,8 @@ class CameraApp(Activity):
         self.main_screen.set_size(lv.pct(100), lv.pct(100))
         self.main_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         # Initialize LVGL image widget
-        self.create_preview_image()
+        self.image = lv.image(self.main_screen)
+        self.image.align(lv.ALIGN.LEFT_MID, 0, 0)
         close_button = lv.button(self.main_screen)
         close_button.set_size(self.button_width, self.button_height)
         close_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
@@ -149,6 +143,7 @@ class CameraApp(Activity):
                 print(f"camera app: webcam exception: {e}")
         if self.cam:
             print("Camera app initialized, continuing...")
+            self.create_preview_image()
             self.set_image_size()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
@@ -200,25 +195,19 @@ class CameraApp(Activity):
         self.image.set_scale(min(scale_factor_w,scale_factor_h))
 
     def create_preview_image(self):
-        self.image = lv.image(self.main_screen)
-        self.image.align(lv.ALIGN.LEFT_MID, 0, 0)
         # Create image descriptor once
         self.image_dsc = lv.image_dsc_t({
             "header": {
                 "magic": lv.IMAGE_HEADER_MAGIC,
                 "w": self.width,
                 "h": self.height,
-                #"stride": self.width * 2, # RGB565
-                "stride": self.width, # RGB565
-                #"cf": lv.COLOR_FORMAT.RGB565
-                "cf": lv.COLOR_FORMAT.L8
+                "stride": self.width * (2 if self.colormode else 1),
+                "cf": lv.COLOR_FORMAT.RGB565 if self.colormode else lv.COLOR_FORMAT.L8
             },
-            #'data_size': self.width * self.height * 2, # RGB565
-            'data_size': self.width * self.height, # gray
+            'data_size': self.width * self.height * (2 if self.colormode else 1),
             'data': None # Will be updated per frame
         })
         self.image.set_src(self.image_dsc)
-        #self.image.set_size(160, 120)
 
 
     def qrdecode_one(self):
@@ -263,7 +252,8 @@ class CameraApp(Activity):
         except OSError:
             pass
         if self.current_cam_buffer is not None:
-            filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_RGB565.raw"
+            colorname = "RGB565" if self.colormode else "GRAY"
+            filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
             try:
                 with open(filename, 'wb') as f:
                     f.write(self.current_cam_buffer)
@@ -345,10 +335,8 @@ class CameraApp(Activity):
             # Note: image_dsc is an LVGL struct, use attribute access not dictionary access
             self.image_dsc.header.w = self.width
             self.image_dsc.header.h = self.height
-            #self.image_dsc.header.stride = self.width * 2 # RGB565
-            #self.image_dsc.data_size = self.width * self.height * 2 #RGB565
-            self.image_dsc.header.stride = self.width
-            self.image_dsc.data_size = self.width * self.height
+            self.image_dsc.header.stride = self.width * (2 if self.colormode else 1)
+            self.image_dsc.data_size = self.width * self.height * (2 if self.colormode else 1)
             print(f"Image descriptor updated to {self.width}x{self.height}")
 
             # Reconfigure camera if active
@@ -376,13 +364,14 @@ class CameraApp(Activity):
                         self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
                         return  # Don't continue if camera failed
 
+                self.create_preview_image()
                 self.set_image_size()
 
     def try_capture(self, event):
         #print("capturing camera frame")
         try:
             if self.use_webcam:
-                self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565")
+                self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
             elif self.cam.frame_available():
                 #self.cam.free_buffer()
                 self.current_cam_buffer = self.cam.capture()
@@ -390,13 +379,12 @@ class CameraApp(Activity):
 
             if self.current_cam_buffer and len(self.current_cam_buffer):
                 # Defensive check: verify buffer size matches expected dimensions
-                #expected_size = self.width * self.height * 2  # RGB565 = 2 bytes per pixel
-                expected_size = self.width * self.height  # Grayscale = 1 byte per pixel
+                expected_size = self.width * self.height * (2 if self.colormode else 1)
                 actual_size = len(self.current_cam_buffer)
 
                 if actual_size == expected_size:
                     self.image_dsc.data = self.current_cam_buffer
-                    #image.invalidate() # does not work so do this:
+                    #self.image.invalidate() # does not work so do this:
                     self.image.set_src(self.image_dsc)
                     if not self.use_webcam:
                         self.cam.free_buffer()  # Free the old buffer
@@ -468,8 +456,7 @@ def init_internal_cam(width, height):
                     xclk_freq=20000000,
                     powerdown_pin=-1,
                     reset_pin=-1,
-                    #pixel_format=PixelFormat.RGB565,
-                    pixel_format=PixelFormat.GRAYSCALE,
+                    pixel_format=PixelFormat.RGB565 if self.colormode else PixelFormat.GRAYSCALE,
                     frame_size=frame_size,
                     #grab_mode=GrabMode.WHEN_EMPTY,
                     grab_mode=GrabMode.LATEST,
