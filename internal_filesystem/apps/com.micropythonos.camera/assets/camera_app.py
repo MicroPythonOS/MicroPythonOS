@@ -151,7 +151,7 @@ class CameraApp(Activity):
             self.set_image_size()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
-            if self.scanqr_mode:
+            if self.scanqr_mode or self.keepliveqrdecoding:
                 self.start_qr_decoding()
             else:
                 self.qr_button.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -383,7 +383,7 @@ class CameraApp(Activity):
             if self.use_webcam:
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565")
             elif self.cam.frame_available():
-                self.cam.free_buffer()
+                #self.cam.free_buffer()
                 self.current_cam_buffer = self.cam.capture()
                 #self.cam.free_buffer()
 
@@ -470,7 +470,8 @@ def init_internal_cam(width, height):
                     #pixel_format=PixelFormat.RGB565,
                     pixel_format=PixelFormat.GRAYSCALE,
                     frame_size=frame_size,
-                    grab_mode=GrabMode.WHEN_EMPTY,
+                    #grab_mode=GrabMode.WHEN_EMPTY,
+                    grab_mode=GrabMode.LATEST,
                     fb_count=1
                 )
                 cam.set_vflip(True)
