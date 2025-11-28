@@ -118,7 +118,7 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
     free(data);
     free(code);
     quirc_destroy(qr);
-    QRDECODE_DEBUG_PRINT("qrdecode: Freed data, code, and quirc object, returning result\n");
+    //QRDECODE_DEBUG_PRINT("qrdecode: Freed data, code, and quirc object, returning result\n");
     return result;
 }
 

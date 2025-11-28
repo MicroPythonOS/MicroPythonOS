@@ -552,6 +552,12 @@ def apply_camera_settings(cam, use_webcam):
         print(f"Error applying camera settings: {e}")
 
 
+
+
+
+
+
+
 class CameraSettingsActivity(Activity):
     """Settings activity for comprehensive camera configuration."""
 
@@ -656,8 +662,8 @@ class CameraSettingsActivity(Activity):
             expert_tab = tabview.add_tab("Expert")
             self.create_expert_tab(expert_tab, prefs)
 
-            raw_tab = tabview.add_tab("Raw")
-            self.create_raw_tab(raw_tab, prefs)
+            #raw_tab = tabview.add_tab("Raw")
+            #self.create_raw_tab(raw_tab, prefs)
 
         self.setContentView(screen)
 
@@ -754,19 +760,10 @@ class CameraSettingsActivity(Activity):
         return textarea, cont
 
     def show_keyboard(self, kbd):
-        #self.button_cont.add_flag(lv.obj.FLAG.HIDDEN)
         mpos.ui.anim.smooth_show(kbd)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            # move the focus to the keyboard to save the user a "next" button press (optional but nice)
-            # this is focusing on the right thing (keyboard) but the focus is not "active" (shown or used) somehow
-            #print(f"current focus object: {lv.group_get_default().get_focused()}")
-            focusgroup.focus_next()
-            #print(f"current focus object: {lv.group_get_default().get_focused()}")
 
     def hide_keyboard(self, kbd):
         mpos.ui.anim.smooth_hide(kbd)
-        #self.button_cont.remove_flag(lv.obj.FLAG.HIDDEN)
 
     def add_buttons(self, parent):
         # Save/Cancel buttons at bottom
@@ -775,7 +772,6 @@ class CameraSettingsActivity(Activity):
         button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         button_cont.set_style_border_width(0, 0)
-        button_cont.set_style_bg_opa(0, 0)
 
         save_button = lv.button(button_cont)
         save_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
@@ -857,16 +853,6 @@ class CameraSettingsActivity(Activity):
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         tab.set_style_pad_all(1, 0)
 
-        # Special Effect
-        special_effect_options = [
-            ("None", 0), ("Negative", 1), ("Grayscale", 2),
-            ("Reddish", 3), ("Greenish", 4), ("Blue", 5), ("Retro", 6)
-        ]
-        special_effect = prefs.get_int("special_effect", 0)
-        dropdown, cont = self.create_dropdown(tab, "Special Effect:", special_effect_options,
-                                              special_effect, "special_effect")
-        self.ui_controls["special_effect"] = dropdown
-
         # Auto Exposure Control (master switch)
         exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
         aec_checkbox, cont = self.create_checkbox(tab, "Auto Exposure", exposure_ctrl, "exposure_ctrl")
@@ -877,27 +863,27 @@ class CameraSettingsActivity(Activity):
         me_slider, label, cont = self.create_slider(tab, "Manual Exposure", 0, 1200, aec_value, "aec_value")
         self.ui_controls["aec_value"] = me_slider
 
-        # Set initial state
-        if exposure_ctrl:
-            me_slider.add_state(lv.STATE.DISABLED)
-            me_slider.set_style_bg_opa(128, 0)
+        # Auto Exposure Level (dependent)
+        ae_level = prefs.get_int("ae_level", 0)
+        ae_slider, label, cont = self.create_slider(tab, "Auto Exposure Level", -2, 2, ae_level, "ae_level")
+        self.ui_controls["ae_level"] = ae_slider
 
         # Add dependency handler
-        def exposure_ctrl_changed(e):
+        def exposure_ctrl_changed(e=None):
             is_auto = aec_checkbox.get_state() & lv.STATE.CHECKED
             if is_auto:
                 me_slider.add_state(lv.STATE.DISABLED)
-                me_slider.set_style_bg_opa(128, 0)
+                me_slider.set_style_opa(128, 0)
+                ae_slider.remove_state(lv.STATE.DISABLED)
+                ae_slider.set_style_opa(255, 0)
             else:
                 me_slider.remove_state(lv.STATE.DISABLED)
-                me_slider.set_style_bg_opa(255, 0)
+                me_slider.set_style_opa(255, 0)
+                ae_slider.add_state(lv.STATE.DISABLED)
+                ae_slider.set_style_opa(128, 0)
 
         aec_checkbox.add_event_cb(exposure_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
-
-        # Auto Exposure Level
-        ae_level = prefs.get_int("ae_level", 0)
-        slider, label, cont = self.create_slider(tab, "Auto Exposure Level", -2, 2, ae_level, "ae_level")
-        self.ui_controls["ae_level"] = slider
+        exposure_ctrl_changed()
 
         # Night Mode (AEC2)
         aec2 = prefs.get_bool("aec2", False)
@@ -916,17 +902,17 @@ class CameraSettingsActivity(Activity):
 
         if gain_ctrl:
             slider.add_state(lv.STATE.DISABLED)
-            slider.set_style_bg_opa(128, 0)
+            slider.set_style_opa(128, 0)
 
         def gain_ctrl_changed(e):
             is_auto = agc_checkbox.get_state() & lv.STATE.CHECKED
             gain_slider = self.ui_controls["agc_gain"]
             if is_auto:
                 gain_slider.add_state(lv.STATE.DISABLED)
-                gain_slider.set_style_bg_opa(128, 0)
+                gain_slider.set_style_opa(128, 0)
             else:
                 gain_slider.remove_state(lv.STATE.DISABLED)
-                gain_slider.set_style_bg_opa(255, 0)
+                gain_slider.set_style_opa(255, 0)
 
         agc_checkbox.add_event_cb(gain_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
 
@@ -972,6 +958,16 @@ class CameraSettingsActivity(Activity):
 
         self.add_buttons(tab)
 
+        # Special Effect
+        special_effect_options = [
+            ("None", 0), ("Negative", 1), ("Grayscale", 2),
+            ("Reddish", 3), ("Greenish", 4), ("Blue", 5), ("Retro", 6)
+        ]
+        special_effect = prefs.get_int("special_effect", 0)
+        dropdown, cont = self.create_dropdown(tab, "Special Effect:", special_effect_options,
+                                              special_effect, "special_effect")
+        self.ui_controls["special_effect"] = dropdown
+
     def create_expert_tab(self, tab, prefs):
         """Create Expert settings tab."""
         #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
@@ -989,7 +985,7 @@ class CameraSettingsActivity(Activity):
 
         if not supports_sharpness:
             slider.add_state(lv.STATE.DISABLED)
-            slider.set_style_bg_opa(128, 0)
+            slider.set_style_opa(128, 0)
             note = lv.label(cont)
             note.set_text("(Not available on this sensor)")
             note.set_style_text_color(lv.color_hex(0x808080), 0)
@@ -1002,7 +998,7 @@ class CameraSettingsActivity(Activity):
 
         if not supports_sharpness:
             slider.add_state(lv.STATE.DISABLED)
-            slider.set_style_bg_opa(128, 0)
+            slider.set_style_opa(128, 0)
             note = lv.label(cont)
             note.set_text("(Not available on this sensor)")
             note.set_style_text_color(lv.color_hex(0x808080), 0)
