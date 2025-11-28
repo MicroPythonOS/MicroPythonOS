@@ -190,10 +190,7 @@ class CameraApp(Activity):
         disp = lv.display_get_default()
         target_h = disp.get_vertical_resolution()
         #target_w = disp.get_horizontal_resolution() - self.button_width - 5 # leave 5px for border
-        target_w = target_h # leave 5px for border
-        if target_w == self.width and target_h == self.height:
-            print("Target width and height are the same as native image, no scaling required.")
-            return
+        target_w = target_h # square
         print(f"scaling to size: {target_w}x{target_h}")
         scale_factor_w = round(target_w * 256 / self.width)
         scale_factor_h = round(target_h * 256 / self.height)
