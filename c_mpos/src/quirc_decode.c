@@ -17,6 +17,7 @@ size_t uxTaskGetStackHighWaterMark(void * unused) {
 #endif
 
 #include "../quirc/lib/quirc.h"
+#include "../quirc/lib/quirc_internal.h"  // Exposes full struct quirc
 
 #define QRDECODE_DEBUG_PRINT(...) mp_printf(&mp_plat_print, __VA_ARGS__)
 
@@ -46,23 +47,39 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
     if (!qr) {
         mp_raise_OSError(MP_ENOMEM);
     }
-    QRDECODE_DEBUG_PRINT("qrdecode: Allocated quirc object\n");
+    //QRDECODE_DEBUG_PRINT("qrdecode: Allocated quirc object\n");
 
     if (quirc_resize(qr, width, height) < 0) {
         quirc_destroy(qr);
         mp_raise_OSError(MP_ENOMEM);
     }
-    QRDECODE_DEBUG_PRINT("qrdecode: Resized quirc object\n");
+    //QRDECODE_DEBUG_PRINT("qrdecode: Resized quirc object\n");
 
-    uint8_t *image;
-    image = quirc_begin(qr, NULL, NULL);
-    memcpy(image, bufinfo.buf, width * height);
+    uint8_t *image = quirc_begin(qr, NULL, NULL);
+    //memcpy(image, bufinfo.buf, width * height);
+    uint8_t *temp_image = image;
+    //image = bufinfo.buf; // use existing buffer, rather than memcpy - but this doesnt find any images anymore :-/
+    qr->image = bufinfo.buf; // if this works then we can also eliminate quirc's ps_alloc()
     quirc_end(qr);
+    qr->image = temp_image; // restore, because quirc will try to free it
+
+    /*
+    // Pointer swap - NO memcpy, NO internal.h needed
+    uint8_t *quirc_buffer = quirc_begin(qr, NULL, NULL);
+    uint8_t *saved_bufinfo = bufinfo.buf;
+    bufinfo.buf = quirc_buffer;  // quirc now uses your buffer
+    quirc_end(qr);               // QR detection works!
+    // Restore your buffer pointer
+    //bufinfo.buf = saved_bufinfo;
+    */
+
+    // now num_grids is set, as well as others, probably
 
     int count = quirc_count(qr);
     if (count == 0) {
+        // Restore your buffer pointer
         quirc_destroy(qr);
-        QRDECODE_DEBUG_PRINT("qrdecode: No QR code found, freed quirc object\n");
+        //QRDECODE_DEBUG_PRINT("qrdecode: No QR code found, freed quirc object\n");
         mp_raise_ValueError(MP_ERROR_TEXT("no QR code found"));
     }
 
@@ -71,8 +88,10 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
         quirc_destroy(qr);
         mp_raise_OSError(MP_ENOMEM);
     }
-    QRDECODE_DEBUG_PRINT("qrdecode: Allocated quirc_code\n");
+    //QRDECODE_DEBUG_PRINT("qrdecode: Allocated quirc_code\n");
     quirc_extract(qr, 0, code);
+    // the code struct now contains the corners of the QR code, as well as the bitmap of the values
+    // this could be used to display debug info to the user - they might even be able to see which modules are being misidentified!
 
     struct quirc_data *data = (struct quirc_data *)malloc(sizeof(struct quirc_data));
     if (!data) {
@@ -80,7 +99,7 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
         quirc_destroy(qr);
         mp_raise_OSError(MP_ENOMEM);
     }
-    QRDECODE_DEBUG_PRINT("qrdecode: Allocated quirc_data\n");
+    //QRDECODE_DEBUG_PRINT("qrdecode: Allocated quirc_data\n");
 
     int err = quirc_decode(code, data);
     if (err != QUIRC_SUCCESS) {
