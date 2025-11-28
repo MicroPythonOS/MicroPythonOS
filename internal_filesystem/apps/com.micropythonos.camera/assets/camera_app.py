@@ -45,21 +45,6 @@ class CameraApp(Activity):
     status_label = None
     status_label_cont = None
 
-    def load_resolution_preference(self):
-        """Load resolution preference from SharedPreferences and update width/height."""
-        prefs = SharedPreferences("com.micropythonos.camera")
-        resolution_str = prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
-        self.colormode = prefs.get_bool("colormode", False)
-        try:
-            width_str, height_str = resolution_str.split('x')
-            self.width = int(width_str)
-            self.height = int(height_str)
-            print(f"Camera resolution loaded: {self.width}x{self.height}")
-        except Exception as e:
-            print(f"Error parsing resolution '{resolution_str}': {e}, using default 320x240")
-            self.width = self.DEFAULT_WIDTH
-            self.height = self.DEFAULT_HEIGHT
-
     def onCreate(self):
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
         self.main_screen = lv.obj()
@@ -179,6 +164,21 @@ class CameraApp(Activity):
             except Exception as e:
                 print(f"Warning: powering off camera got exception: {e}")
         print("camera app cleanup done.")
+
+    def load_resolution_preference(self):
+        """Load resolution preference from SharedPreferences and update width/height."""
+        prefs = SharedPreferences("com.micropythonos.camera")
+        resolution_str = prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
+        self.colormode = prefs.get_bool("colormode", False)
+        try:
+            width_str, height_str = resolution_str.split('x')
+            self.width = int(width_str)
+            self.height = int(height_str)
+            print(f"Camera resolution loaded: {self.width}x{self.height}")
+        except Exception as e:
+            print(f"Error parsing resolution '{resolution_str}': {e}, using default 320x240")
+            self.width = self.DEFAULT_WIDTH
+            self.height = self.DEFAULT_HEIGHT
 
     def update_preview_image(self):
         self.image_dsc = lv.image_dsc_t({
