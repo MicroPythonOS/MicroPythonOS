@@ -143,7 +143,9 @@ def get_battery_percentage(raw_adc_value=None):
     """
     voltage = read_battery_voltage(raw_adc_value=raw_adc_value)
     percentage = (voltage - MIN_VOLTAGE) * 100.0 / (MAX_VOLTAGE - MIN_VOLTAGE)
-    return abs(min(100.0, percentage)) # limit to 100.0% and make sure it's positive
+    print(f"percentage = {percentage}")
+    print(f"min = {min(100.0, percentage)}")
+    return max(0,min(100.0, percentage)) # limit to 100.0% and make sure it's positive
 
 
 def clear_cache():

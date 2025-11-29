@@ -11,9 +11,10 @@ Usage:
 
 import unittest
 import lvgl as lv
+import time
 import mpos.ui.anim
 from mpos.ui.keyboard import MposKeyboard
-
+from mpos.ui.testing import wait_for_render
 
 class TestKeyboardAnimation(unittest.TestCase):
     """Test MposKeyboard compatibility with animation system."""
@@ -86,6 +87,7 @@ class TestKeyboardAnimation(unittest.TestCase):
         # This should work without raising AttributeError
         try:
             mpos.ui.anim.smooth_show(keyboard)
+            wait_for_render(100)
             print("smooth_show called successfully")
         except AttributeError as e:
             self.fail(f"smooth_show raised AttributeError: {e}\n"
@@ -144,6 +146,7 @@ class TestKeyboardAnimation(unittest.TestCase):
         # Show keyboard (simulates textarea click)
         try:
             mpos.ui.anim.smooth_show(keyboard)
+            wait_for_render(100)
         except AttributeError as e:
             self.fail(f"Failed during smooth_show: {e}")
 
@@ -153,6 +156,7 @@ class TestKeyboardAnimation(unittest.TestCase):
         # Hide keyboard (simulates pressing Enter)
         try:
             mpos.ui.anim.smooth_hide(keyboard)
+            wait_for_render(100)
         except AttributeError as e:
             self.fail(f"Failed during smooth_hide: {e}")
 

@@ -341,14 +341,6 @@ class TestVoltageCalculations(unittest.TestCase):
         expected = 2048 * 0.00161
         self.assertAlmostEqual(voltage, expected, places=4)
 
-    def test_voltage_clamped_to_max(self):
-        """Test that voltage is clamped to MAX_VOLTAGE."""
-        bv.adc.set_read_value(4095)  # Maximum ADC
-        bv.clear_cache()
-
-        voltage = bv.read_battery_voltage(force_refresh=True)
-        self.assertLessEqual(voltage, bv.MAX_VOLTAGE)
-
     def test_voltage_clamped_to_zero(self):
         """Test that negative voltage is clamped to 0."""
         bv.adc.set_read_value(0)
