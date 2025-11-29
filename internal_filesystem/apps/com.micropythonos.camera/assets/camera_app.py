@@ -29,6 +29,7 @@ class CameraApp(Activity):
     status_label_text_found = "Found QR, trying to decode... hold still..."
 
     cam = None
+    current_cam_buffer = None # Holds the current memoryview to prevent garba
     width = None
     height = None
 
@@ -171,7 +172,6 @@ class CameraApp(Activity):
                 i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
             except Exception as e:
                 print(f"Warning: powering off camera got exception: {e}")
-        self.image_dsc.data = None
         print("camera app cleanup done.")
 
     def parse_camera_init_preferences(self):
@@ -213,19 +213,16 @@ class CameraApp(Activity):
         self.image.set_scale(min(scale_factor_w,scale_factor_h))
 
     def qrdecode_one(self):
-        if self.image_dsc.data is None:
-            print("qrdecode_one: can't decode empty image")
-            return
         try:
             import qrdecode
             import utime
             before = time.ticks_ms()
             if self.colormode:
-                result = qrdecode.qrdecode_rgb565(self.image_dsc.data, self.width, self.height)
+                result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
             else:
-                result = qrdecode.qrdecode(self.image_dsc.data, self.width, self.height)
+                result = qrdecode.qrdecode(self.current_cam_buffer, self.width, self.height)
             after = time.ticks_ms()
-            #result = bytearray("INSERT_QR_HERE", "utf-8")
+            #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
             if not result:
                 self.status_label.set_text(self.status_label_text_searching)
             else:
@@ -259,14 +256,14 @@ class CameraApp(Activity):
             os.mkdir("data/images")
         except OSError:
             pass
-        if self.image_dsc.data is None:
+        if self.current_cam_buffer is None:
             print("snap_button_click: won't save empty image")
             return
         colorname = "RGB565" if self.colormode else "GRAY"
         filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
         try:
             with open(filename, 'wb') as f:
-                f.write(self.image_dsc.data)
+                f.write(self.current_cam_buffer)
             print(f"Successfully wrote image to {filename}")
         except OSError as e:
             print(f"Error writing to file: {e}")
@@ -321,12 +318,14 @@ class CameraApp(Activity):
         #print("capturing camera frame")
         try:
             if self.use_webcam:
-                self.image_dsc.data = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
+                self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
             elif self.cam.frame_available():
-                self.image_dsc.data = self.cam.capture()
+                self.current_cam_buffer = self.cam.capture()
         except Exception as e:
             print(f"Camera capture exception: {e}")
+            return
         # Display the image:
+        self.image_dsc.data = self.current_cam_buffer
         #self.image.invalidate() # does not work so do this:
         self.image.set_src(self.image_dsc)
         if not self.use_webcam:
