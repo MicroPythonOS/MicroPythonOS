@@ -120,11 +120,11 @@ class CameraApp(Activity):
     def onResume(self, screen):
         self.parse_camera_init_preferences()
         # Init camera:
-        self.cam = init_internal_cam(self.width, self.height)
+        self.cam = self.init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
             # Apply saved camera settings, only for internal camera for now:
-            apply_camera_settings(self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
+            self.apply_camera_settings(self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
         else:
             print("camera app: no internal camera found, trying webcam on /dev/video0")
             try:
@@ -227,8 +227,8 @@ class CameraApp(Activity):
                 self.status_label.set_text(self.status_label_text_searching)
             else:
                 print(f"SUCCESSFUL QR DECODE TOOK: {after-before}ms")
-                result = remove_bom(result)
-                result = print_qr_buffer(result)
+                result = self.remove_bom(result)
+                result = self.print_qr_buffer(result)
                 print(f"QR decoding found: {result}")
                 if self.scanqr_mode:
                     self.setResult(True, result)
@@ -336,214 +336,214 @@ class CameraApp(Activity):
         except Exception as qre:
             print(f"try_capture: qrdecode_one got exception: {qre}")
 
+    def init_internal_cam(self, width, height):
+        """Initialize internal camera with specified resolution.
+    
+        Automatically retries once if initialization fails (to handle I2C poweroff issue).
+        """
+        try:
+            from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
+    
+            # Map resolution to FrameSize enum
+            # Format: (width, height): FrameSize
+            resolution_map = {
+                (96, 96): FrameSize.R96X96,
+                (160, 120): FrameSize.QQVGA,
+                (128, 128): FrameSize.R128X128,
+                (176, 144): FrameSize.QCIF,
+                (240, 176): FrameSize.HQVGA,
+                (240, 240): FrameSize.R240X240,
+                (320, 240): FrameSize.QVGA,
+                (320, 320): FrameSize.R320X320,
+                (400, 296): FrameSize.CIF,
+                (480, 320): FrameSize.HVGA,
+                (480, 480): FrameSize.R480X480,
+                (640, 480): FrameSize.VGA,
+                (640, 640): FrameSize.R640X640,
+                (720, 720): FrameSize.R720X720,
+                (800, 600): FrameSize.SVGA,
+                (800, 800): FrameSize.R800X800,
+                (960, 960): FrameSize.R960X960,
+                (1024, 768): FrameSize.XGA,
+                (1024,1024): FrameSize.R1024X1024,
+                (1280, 720): FrameSize.HD,
+                (1280, 1024): FrameSize.SXGA,
+                (1280, 1280): FrameSize.R1280X1280,
+                (1600, 1200): FrameSize.UXGA,
+                (1920, 1080): FrameSize.FHD,
+            }
+    
+            frame_size = resolution_map.get((width, height), FrameSize.QVGA)
+            print(f"init_internal_cam: Using FrameSize for {width}x{height}")
+    
+            # Try to initialize, with one retry for I2C poweroff issue
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    cam = Camera(
+                        data_pins=[12,13,15,11,14,10,7,2],
+                        vsync_pin=6,
+                        href_pin=4,
+                        sda_pin=21,
+                        scl_pin=16,
+                        pclk_pin=9,
+                        xclk_pin=8,
+                        xclk_freq=20000000,
+                        powerdown_pin=-1,
+                        reset_pin=-1,
+                        pixel_format=PixelFormat.RGB565 if self.colormode else PixelFormat.GRAYSCALE,
+                        frame_size=frame_size,
+                        #grab_mode=GrabMode.WHEN_EMPTY,
+                        grab_mode=GrabMode.LATEST,
+                        fb_count=1
+                    )
+                    cam.set_vflip(True)
+                    return cam
+                except Exception as e:
+                    if attempt < max_attempts-1:
+                        print(f"init_cam attempt {attempt} failed: {e}, retrying...")
+                    else:
+                        print(f"init_cam final exception: {e}")
+                        return None
+        except Exception as e:
+            print(f"init_cam exception: {e}")
+            return None
 
-# Non-class functions:
-def init_internal_cam(width, height):
-    """Initialize internal camera with specified resolution.
-
-    Automatically retries once if initialization fails (to handle I2C poweroff issue).
-    """
-    try:
-        from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
-
-        # Map resolution to FrameSize enum
-        # Format: (width, height): FrameSize
-        resolution_map = {
-            (96, 96): FrameSize.R96X96,
-            (160, 120): FrameSize.QQVGA,
-            (128, 128): FrameSize.R128X128,
-            (176, 144): FrameSize.QCIF,
-            (240, 176): FrameSize.HQVGA,
-            (240, 240): FrameSize.R240X240,
-            (320, 240): FrameSize.QVGA,
-            (320, 320): FrameSize.R320X320,
-            (400, 296): FrameSize.CIF,
-            (480, 320): FrameSize.HVGA,
-            (480, 480): FrameSize.R480X480,
-            (640, 480): FrameSize.VGA,
-            (640, 640): FrameSize.R640X640,
-            (720, 720): FrameSize.R720X720,
-            (800, 600): FrameSize.SVGA,
-            (800, 800): FrameSize.R800X800,
-            (960, 960): FrameSize.R960X960,
-            (1024, 768): FrameSize.XGA,
-            (1024,1024): FrameSize.R1024X1024,
-            (1280, 720): FrameSize.HD,
-            (1280, 1024): FrameSize.SXGA,
-            (1280, 1280): FrameSize.R1280X1280,
-            (1600, 1200): FrameSize.UXGA,
-            (1920, 1080): FrameSize.FHD,
-        }
-
-        frame_size = resolution_map.get((width, height), FrameSize.QVGA)
-        print(f"init_internal_cam: Using FrameSize for {width}x{height}")
-
-        # Try to initialize, with one retry for I2C poweroff issue
-        max_attempts = 3
-        for attempt in range(max_attempts):
+    def print_qr_buffer(self, buffer):
+        try:
+            # Try to decode buffer as a UTF-8 string
+            result = buffer.decode('utf-8')
+            # Check if the string is printable (ASCII printable characters)
+            if all(32 <= ord(c) <= 126 for c in result):
+                return result
+        except Exception as e:
+            pass
+        # If not a valid string or not printable, convert to hex
+        hex_str = ' '.join([f'{b:02x}' for b in buffer])
+        return hex_str.lower()
+    
+    # Byte-Order-Mark is added sometimes
+    def remove_bom(self, buffer):
+        bom = b'\xEF\xBB\xBF'
+        if buffer.startswith(bom):
+            return buffer[3:]
+        return buffer
+    
+    
+    def apply_camera_settings(self, cam, use_webcam):
+        """Apply all saved camera settings to the camera.
+    
+        Only applies settings when use_webcam is False (ESP32 camera).
+        Settings are applied in dependency order (master switches before dependent values).
+    
+        Args:
+            cam: Camera object
+            use_webcam: Boolean indicating if using webcam
+        """
+        if not cam or use_webcam:
+            print("apply_camera_settings: Skipping (no camera or webcam mode)")
+            return
+    
+        try:
+            # Basic image adjustments
+            brightness = self.prefs.get_int("brightness", 0)
+            cam.set_brightness(brightness)
+    
+            contrast = self.prefs.get_int("contrast", 0)
+            cam.set_contrast(contrast)
+    
+            saturation = self.prefs.get_int("saturation", 0)
+            cam.set_saturation(saturation)
+    
+            # Orientation
+            hmirror = self.prefs.get_bool("hmirror", False)
+            cam.set_hmirror(hmirror)
+    
+            vflip = self.prefs.get_bool("vflip", True)
+            cam.set_vflip(vflip)
+    
+            # Special effect
+            special_effect = self.prefs.get_int("special_effect", 0)
+            cam.set_special_effect(special_effect)
+    
+            # Exposure control (apply master switch first, then manual value)
+            exposure_ctrl = self.prefs.get_bool("exposure_ctrl", True)
+            cam.set_exposure_ctrl(exposure_ctrl)
+    
+            if not exposure_ctrl:
+                aec_value = self.prefs.get_int("aec_value", 300)
+                cam.set_aec_value(aec_value)
+    
+            ae_level = self.prefs.get_int("ae_level", 0)
+            cam.set_ae_level(ae_level)
+    
+            aec2 = self.prefs.get_bool("aec2", False)
+            cam.set_aec2(aec2)
+    
+            # Gain control (apply master switch first, then manual value)
+            gain_ctrl = self.prefs.get_bool("gain_ctrl", True)
+            cam.set_gain_ctrl(gain_ctrl)
+    
+            if not gain_ctrl:
+                agc_gain = self.prefs.get_int("agc_gain", 0)
+                cam.set_agc_gain(agc_gain)
+    
+            gainceiling = self.prefs.get_int("gainceiling", 0)
+            cam.set_gainceiling(gainceiling)
+    
+            # White balance (apply master switch first, then mode)
+            whitebal = self.prefs.get_bool("whitebal", True)
+            cam.set_whitebal(whitebal)
+    
+            if not whitebal:
+                wb_mode = self.prefs.get_int("wb_mode", 0)
+                cam.set_wb_mode(wb_mode)
+    
+            awb_gain = self.prefs.get_bool("awb_gain", True)
+            cam.set_awb_gain(awb_gain)
+    
+            # Sensor-specific settings (try/except for unsupported sensors)
             try:
-                cam = Camera(
-                    data_pins=[12,13,15,11,14,10,7,2],
-                    vsync_pin=6,
-                    href_pin=4,
-                    sda_pin=21,
-                    scl_pin=16,
-                    pclk_pin=9,
-                    xclk_pin=8,
-                    xclk_freq=20000000,
-                    powerdown_pin=-1,
-                    reset_pin=-1,
-                    pixel_format=PixelFormat.RGB565 if self.colormode else PixelFormat.GRAYSCALE,
-                    frame_size=frame_size,
-                    #grab_mode=GrabMode.WHEN_EMPTY,
-                    grab_mode=GrabMode.LATEST,
-                    fb_count=1
-                )
-                cam.set_vflip(True)
-                return cam
-            except Exception as e:
-                if attempt < max_attempts-1:
-                    print(f"init_cam attempt {attempt} failed: {e}, retrying...")
-                else:
-                    print(f"init_cam final exception: {e}")
-                    return None
-    except Exception as e:
-        print(f"init_cam exception: {e}")
-        return None
-
-def print_qr_buffer(buffer):
-    try:
-        # Try to decode buffer as a UTF-8 string
-        result = buffer.decode('utf-8')
-        # Check if the string is printable (ASCII printable characters)
-        if all(32 <= ord(c) <= 126 for c in result):
-            return result
-    except Exception as e:
-        pass
-    # If not a valid string or not printable, convert to hex
-    hex_str = ' '.join([f'{b:02x}' for b in buffer])
-    return hex_str.lower()
-
-# Byte-Order-Mark is added sometimes
-def remove_bom(buffer):
-    bom = b'\xEF\xBB\xBF'
-    if buffer.startswith(bom):
-        return buffer[3:]
-    return buffer
-
-
-def apply_camera_settings(cam, use_webcam):
-    """Apply all saved camera settings to the camera.
-
-    Only applies settings when use_webcam is False (ESP32 camera).
-    Settings are applied in dependency order (master switches before dependent values).
-
-    Args:
-        cam: Camera object
-        use_webcam: Boolean indicating if using webcam
-    """
-    if not cam or use_webcam:
-        print("apply_camera_settings: Skipping (no camera or webcam mode)")
-        return
-
-    try:
-        # Basic image adjustments
-        brightness = self.prefs.get_int("brightness", 0)
-        cam.set_brightness(brightness)
-
-        contrast = self.prefs.get_int("contrast", 0)
-        cam.set_contrast(contrast)
-
-        saturation = self.prefs.get_int("saturation", 0)
-        cam.set_saturation(saturation)
-
-        # Orientation
-        hmirror = self.prefs.get_bool("hmirror", False)
-        cam.set_hmirror(hmirror)
-
-        vflip = self.prefs.get_bool("vflip", True)
-        cam.set_vflip(vflip)
-
-        # Special effect
-        special_effect = self.prefs.get_int("special_effect", 0)
-        cam.set_special_effect(special_effect)
-
-        # Exposure control (apply master switch first, then manual value)
-        exposure_ctrl = self.prefs.get_bool("exposure_ctrl", True)
-        cam.set_exposure_ctrl(exposure_ctrl)
-
-        if not exposure_ctrl:
-            aec_value = self.prefs.get_int("aec_value", 300)
-            cam.set_aec_value(aec_value)
-
-        ae_level = self.prefs.get_int("ae_level", 0)
-        cam.set_ae_level(ae_level)
-
-        aec2 = self.prefs.get_bool("aec2", False)
-        cam.set_aec2(aec2)
-
-        # Gain control (apply master switch first, then manual value)
-        gain_ctrl = self.prefs.get_bool("gain_ctrl", True)
-        cam.set_gain_ctrl(gain_ctrl)
-
-        if not gain_ctrl:
-            agc_gain = self.prefs.get_int("agc_gain", 0)
-            cam.set_agc_gain(agc_gain)
-
-        gainceiling = self.prefs.get_int("gainceiling", 0)
-        cam.set_gainceiling(gainceiling)
-
-        # White balance (apply master switch first, then mode)
-        whitebal = self.prefs.get_bool("whitebal", True)
-        cam.set_whitebal(whitebal)
-
-        if not whitebal:
-            wb_mode = self.prefs.get_int("wb_mode", 0)
-            cam.set_wb_mode(wb_mode)
-
-        awb_gain = self.prefs.get_bool("awb_gain", True)
-        cam.set_awb_gain(awb_gain)
-
-        # Sensor-specific settings (try/except for unsupported sensors)
-        try:
-            sharpness = self.prefs.get_int("sharpness", 0)
-            cam.set_sharpness(sharpness)
-        except:
-            pass  # Not supported on OV2640
-
-        try:
-            denoise = self.prefs.get_int("denoise", 0)
-            cam.set_denoise(denoise)
-        except:
-            pass  # Not supported on OV2640
-
-        # Advanced corrections
-        colorbar = self.prefs.get_bool("colorbar", False)
-        cam.set_colorbar(colorbar)
-
-        dcw = self.prefs.get_bool("dcw", True)
-        cam.set_dcw(dcw)
-
-        bpc = self.prefs.get_bool("bpc", False)
-        cam.set_bpc(bpc)
-
-        wpc = self.prefs.get_bool("wpc", True)
-        cam.set_wpc(wpc)
-
-        raw_gma = self.prefs.get_bool("raw_gma", True)
-        cam.set_raw_gma(raw_gma)
-
-        lenc = self.prefs.get_bool("lenc", True)
-        cam.set_lenc(lenc)
-
-        # JPEG quality (only relevant for JPEG format)
-        try:
-            quality = self.prefs.get_int("quality", 85)
-            cam.set_quality(quality)
-        except:
-            pass  # Not in JPEG mode
-
-        print("Camera settings applied successfully")
-
-    except Exception as e:
-        print(f"Error applying camera settings: {e}")
+                sharpness = self.prefs.get_int("sharpness", 0)
+                cam.set_sharpness(sharpness)
+            except:
+                pass  # Not supported on OV2640
+    
+            try:
+                denoise = self.prefs.get_int("denoise", 0)
+                cam.set_denoise(denoise)
+            except:
+                pass  # Not supported on OV2640
+    
+            # Advanced corrections
+            colorbar = self.prefs.get_bool("colorbar", False)
+            cam.set_colorbar(colorbar)
+    
+            dcw = self.prefs.get_bool("dcw", True)
+            cam.set_dcw(dcw)
+    
+            bpc = self.prefs.get_bool("bpc", False)
+            cam.set_bpc(bpc)
+    
+            wpc = self.prefs.get_bool("wpc", True)
+            cam.set_wpc(wpc)
+    
+            raw_gma = self.prefs.get_bool("raw_gma", True)
+            print(f"applying raw_gma: {raw_gma}")
+            cam.set_raw_gma(raw_gma)
+    
+            lenc = self.prefs.get_bool("lenc", True)
+            cam.set_lenc(lenc)
+    
+            # JPEG quality (only relevant for JPEG format)
+            try:
+                quality = self.prefs.get_int("quality", 85)
+                cam.set_quality(quality)
+            except:
+                pass  # Not in JPEG mode
+    
+            print("Camera settings applied successfully")
+    
+        except Exception as e:
+            print(f"Error applying camera settings: {e}")
+    
