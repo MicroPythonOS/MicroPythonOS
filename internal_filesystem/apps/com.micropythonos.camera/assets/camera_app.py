@@ -28,7 +28,6 @@ class CameraApp(Activity):
     status_label_text_found = "Found QR, trying to decode... hold still..."
 
     cam = None
-    current_cam_buffer = None # Holds the current memoryview to prevent garbage collection
     width = None
     height = None
 
@@ -171,6 +170,7 @@ class CameraApp(Activity):
                 i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
             except Exception as e:
                 print(f"Warning: powering off camera got exception: {e}")
+        self.image_dsc.data = None
         print("camera app cleanup done.")
 
     def parse_camera_init_preferences(self):
@@ -212,11 +212,14 @@ class CameraApp(Activity):
         self.image.set_scale(min(scale_factor_w,scale_factor_h))
 
     def qrdecode_one(self):
+        if self.image_dsc.data is None:
+            print("qrdecode_one: can't decode empty image")
+            return
         try:
             import qrdecode
             import utime
             before = time.ticks_ms()
-            result = qrdecode.qrdecode(self.current_cam_buffer, self.width, self.height)
+            result = qrdecode.qrdecode(self.image_dsc.data, self.width, self.height)
             after = time.ticks_ms()
             #result = bytearray("INSERT_QR_HERE", "utf-8")
             if not result:
@@ -252,15 +255,17 @@ class CameraApp(Activity):
             os.mkdir("data/images")
         except OSError:
             pass
-        if self.current_cam_buffer is not None:
-            colorname = "RGB565" if self.colormode else "GRAY"
-            filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
-            try:
-                with open(filename, 'wb') as f:
-                    f.write(self.current_cam_buffer)
-                print(f"Successfully wrote current_cam_buffer to {filename}")
-            except OSError as e:
-                print(f"Error writing to file: {e}")
+        if self.image_dsc.data is None:
+            print("snap_button_click: won't save empty image")
+            return
+        colorname = "RGB565" if self.colormode else "GRAY"
+        filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
+        try:
+            with open(filename, 'wb') as f:
+                f.write(self.image_dsc.data)
+            print(f"Successfully wrote image to {filename}")
+        except OSError as e:
+            print(f"Error writing to file: {e}")
     
     def start_qr_decoding(self):
         print("Activating live QR decoding...")
@@ -305,8 +310,6 @@ class CameraApp(Activity):
             print(f"self.cam.set_res_raw returned {result}")
 
     def open_settings(self):
-        self.image_dsc.data = None
-        self.current_cam_buffer = None
         intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 
@@ -314,31 +317,21 @@ class CameraApp(Activity):
         #print("capturing camera frame")
         try:
             if self.use_webcam:
-                self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
+                self.image_dsc.data = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
             elif self.cam.frame_available():
-                self.current_cam_buffer = self.cam.capture()
-
-            if self.current_cam_buffer and len(self.current_cam_buffer):
-                # Defensive check: verify buffer size matches expected dimensions
-                expected_size = self.width * self.height * (2 if self.colormode else 1)
-                actual_size = len(self.current_cam_buffer)
-
-                if actual_size == expected_size:
-                    self.image_dsc.data = self.current_cam_buffer
-                    #self.image.invalidate() # does not work so do this:
-                    self.image.set_src(self.image_dsc)
-                    if not self.use_webcam:
-                        self.cam.free_buffer()  # Free the old buffer, otherwise the camera doesn't provide a new one
-                    try:
-                        if self.keepliveqrdecoding:
-                            self.qrdecode_one()
-                    except Exception as qre:
-                        print(f"try_capture: qrdecode_one got exception: {qre}")
-                else:
-                    print(f"Warning: Buffer size mismatch! Expected {expected_size} bytes, got {actual_size} bytes")
-                    print(f"  Resolution: {self.width}x{self.height}, discarding frame")
+                self.image_dsc.data = self.cam.capture()
         except Exception as e:
             print(f"Camera capture exception: {e}")
+        # Display the image:
+        #self.image.invalidate() # does not work so do this:
+        self.image.set_src(self.image_dsc)
+        if not self.use_webcam:
+            self.cam.free_buffer()  # Free the old buffer, otherwise the camera doesn't provide a new one
+        try:
+            if self.keepliveqrdecoding:
+                self.qrdecode_one()
+        except Exception as qre:
+            print(f"try_capture: qrdecode_one got exception: {qre}")
 
 
 # Non-class functions:
