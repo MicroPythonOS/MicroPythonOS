@@ -15,14 +15,17 @@ class CameraApp(Activity):
 
     DEFAULT_WIDTH = 320 # 240 would be better but webcam doesn't support this (yet)
     DEFAULT_HEIGHT = 240
+    APPNAME = "com.micropythonos.camera"
+    #DEFAULT_CONFIG = "config.json"
+    #QRCODE_CONFIG = "config_qrmode.json"
 
     button_width = 60
     button_height = 45
     colormode = False
 
     status_label_text = "No camera found."
-    status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and QR size (4-12cm). Ensure proper lighting."
-    status_label_text_found = "Decoding QR..."
+    status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and make the QR code big (4-12cm). Ensure proper lighting."
+    status_label_text_found = "Found QR, trying to decode... hold still..."
 
     cam = None
     current_cam_buffer = None # Holds the current memoryview to prevent garbage collection
@@ -167,7 +170,7 @@ class CameraApp(Activity):
 
     def load_resolution_preference(self):
         """Load resolution preference from SharedPreferences and update width/height."""
-        prefs = SharedPreferences("com.micropythonos.camera")
+        prefs = SharedPreferences(CameraApp.APPNAME)
         resolution_str = prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
         self.colormode = prefs.get_bool("colormode", False)
         try:
@@ -283,7 +286,7 @@ class CameraApp(Activity):
             print("zoom_button_click is not supported for webcam")
             return
         if self.cam:
-            prefs = SharedPreferences("com.micropythonos.camera")
+            prefs = SharedPreferences(CameraApp.APPNAME)
             startX = prefs.get_int("startX", CameraSettingsActivity.startX_default)
             startY = prefs.get_int("startX", CameraSettingsActivity.startY_default)
             endX = prefs.get_int("startX", CameraSettingsActivity.endX_default)
@@ -447,7 +450,7 @@ def apply_camera_settings(cam, use_webcam):
         print("apply_camera_settings: Skipping (no camera or webcam mode)")
         return
 
-    prefs = SharedPreferences("com.micropythonos.camera")
+    prefs = SharedPreferences(CameraApp.APPNAME)
 
     try:
         # Basic image adjustments
@@ -628,7 +631,7 @@ class CameraSettingsActivity(Activity):
 
     def onCreate(self):
         # Load preferences
-        prefs = SharedPreferences("com.micropythonos.camera")
+        prefs = SharedPreferences(CameraApp.APPNAME)
 
         # Detect platform (webcam vs ESP32)
         try:
@@ -1066,13 +1069,13 @@ class CameraSettingsActivity(Activity):
         self.add_buttons(tab)
 
     def erase_and_close(self):
-        SharedPreferences("com.micropythonos.camera").edit().remove_all().commit()
+        SharedPreferences(CameraApp.APPNAME).edit().remove_all().commit()
         self.setResult(True, {"settings_changed": True})
         self.finish()
 
     def save_and_close(self):
         """Save all settings to SharedPreferences and return result."""
-        prefs = SharedPreferences("com.micropythonos.camera")
+        prefs = SharedPreferences(CameraApp.APPNAME)
         editor = prefs.edit()
 
         # Save all UI control values
