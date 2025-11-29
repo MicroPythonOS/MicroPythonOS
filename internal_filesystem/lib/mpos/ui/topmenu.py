@@ -140,15 +140,15 @@ def create_notification_bar():
         except Exception as e:
             print(f"battery_voltage.get_battery_percentage got exception, not updating battery_icon: {e}")
             return
-        if percent > 80: # 4.1V
+        if percent > 80:
             battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
-        elif percent > 60: # 4.0V
+        elif percent > 60:
             battery_icon.set_text(lv.SYMBOL.BATTERY_3)
-        elif percent > 40: # 3.9V
+        elif percent > 40:
             battery_icon.set_text(lv.SYMBOL.BATTERY_2)
-        elif percent > 20: # 3.8V
+        elif percent > 20:
             battery_icon.set_text(lv.SYMBOL.BATTERY_1)
-        else: # > 3.7V
+        else:
             battery_icon.set_text(lv.SYMBOL.BATTERY_EMPTY)
         battery_icon.remove_flag(lv.obj.FLAG.HIDDEN)
         # Percentage is not shown for now:
