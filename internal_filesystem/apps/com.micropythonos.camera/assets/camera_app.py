@@ -305,7 +305,7 @@ class CameraApp(Activity):
     def open_settings(self):
         self.image_dsc.data = None
         self.current_cam_buffer = None
-        intent = Intent(activity_class=CameraSettingsActivity)
+        intent = Intent(activity_class=CameraSettingsActivity, extras={"use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 
     def try_capture(self, event):
@@ -618,6 +618,9 @@ class CameraSettingsActivity(Activity):
         ("1920x1080", "1920x1080"),
     ]
 
+    use_webcam = False
+    scanqr_mode = False
+
     # Widgets:
     button_cont = None
 
@@ -630,18 +633,17 @@ class CameraSettingsActivity(Activity):
         self.resolutions = []
 
     def onCreate(self):
-        # Load preferences
-        prefs = SharedPreferences(CameraApp.APPNAME)
-
-        # Detect platform (webcam vs ESP32)
-        try:
-            import webcam
-            self.is_webcam = True
+        self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
+        self.use_webcam = self.getIntent().extras.get("use_webcam")
+        if self.use_webcam:
             self.resolutions = self.WEBCAM_RESOLUTIONS
             print("Using webcam resolutions")
-        except:
+        else:
             self.resolutions = self.ESP32_RESOLUTIONS
             print("Using ESP32 camera resolutions")
+
+        # Load preferences
+        prefs = SharedPreferences(CameraApp.APPNAME)
 
         # Create main screen
         screen = lv.obj()
@@ -658,7 +660,7 @@ class CameraSettingsActivity(Activity):
         self.create_basic_tab(basic_tab, prefs)
 
         # Create Advanced and Expert tabs only for ESP32 camera
-        if not self.is_webcam or True: # for now, show all tabs
+        if not self.use_webcam or True: # for now, show all tabs
             advanced_tab = tabview.add_tab("Advanced")
             self.create_advanced_tab(advanced_tab, prefs)
 
