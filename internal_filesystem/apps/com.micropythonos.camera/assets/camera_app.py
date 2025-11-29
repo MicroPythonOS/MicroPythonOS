@@ -1,4 +1,5 @@
 import lvgl as lv
+import time
 
 try:
     import webcam
@@ -16,8 +17,8 @@ class CameraApp(Activity):
     DEFAULT_WIDTH = 320 # 240 would be better but webcam doesn't support this (yet)
     DEFAULT_HEIGHT = 240
     PACKAGE = "com.micropythonos.camera"
-    #DEFAULT_CONFIG = "config.json"
-    #QRCODE_CONFIG = "config_qrmode.json"
+    CONFIGFILE = "config.json"
+    SCANQR_CONFIG = "config_scanqr_mode.json"
 
     button_width = 60
     button_height = 45
@@ -48,9 +49,9 @@ class CameraApp(Activity):
     status_label_cont = None
 
     def onCreate(self):
-        from mpos.config import SharedPreferences
-        self.prefs = SharedPreferences(self.PACKAGE)
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
+        from mpos.config import SharedPreferences
+        self.prefs = SharedPreferences(self.PACKAGE, filename=self.SCANQR_CONFIG if self.scanqr_mode else self.CONFIGFILE)
 
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(1, 0)
@@ -219,7 +220,10 @@ class CameraApp(Activity):
             import qrdecode
             import utime
             before = time.ticks_ms()
-            result = qrdecode.qrdecode(self.image_dsc.data, self.width, self.height)
+            if self.colormode:
+                result = qrdecode.qrdecode_rgb565(self.image_dsc.data, self.width, self.height)
+            else:
+                result = qrdecode.qrdecode(self.image_dsc.data, self.width, self.height)
             after = time.ticks_ms()
             #result = bytearray("INSERT_QR_HERE", "utf-8")
             if not result:

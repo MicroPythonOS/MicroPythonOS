@@ -39,10 +39,10 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
     if (width <= 0 || height <= 0) {
         mp_raise_ValueError(MP_ERROR_TEXT("width and height must be positive"));
     }
+    QRDECODE_DEBUG_PRINT("qrdecode bufsize: %u bytes\n", bufinfo.len);
     if (bufinfo.len != (size_t)(width * height)) {
         mp_raise_ValueError(MP_ERROR_TEXT("buffer size must match width * height"));
     }
-
     struct quirc *qr = quirc_new();
     if (!qr) {
         mp_raise_OSError(MP_ENOMEM);
@@ -139,6 +139,7 @@ static mp_obj_t qrdecode_rgb565(mp_uint_t n_args, const mp_obj_t *args) {
     if (width <= 0 || height <= 0) {
         mp_raise_ValueError(MP_ERROR_TEXT("width and height must be positive"));
     }
+    QRDECODE_DEBUG_PRINT("qrdecode bufsize: %u bytes\n", bufinfo.len);
     if (bufinfo.len != (size_t)(width * height * 2)) {
         mp_raise_ValueError(MP_ERROR_TEXT("buffer size must match width * height * 2 for RGB565"));
     }
