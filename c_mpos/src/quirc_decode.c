@@ -22,8 +22,8 @@ size_t uxTaskGetStackHighWaterMark(void * unused) {
 #define QRDECODE_DEBUG_PRINT(...) mp_printf(&mp_plat_print, __VA_ARGS__)
 
 static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
-    QRDECODE_DEBUG_PRINT("qrdecode: Starting\n");
-    QRDECODE_DEBUG_PRINT("qrdecode: Stack high-water mark: %u bytes\n", uxTaskGetStackHighWaterMark(NULL));
+    //QRDECODE_DEBUG_PRINT("qrdecode: Starting\n");
+    //QRDECODE_DEBUG_PRINT("qrdecode: Stack high-water mark: %u bytes\n", uxTaskGetStackHighWaterMark(NULL));
 
     if (n_args != 3) {
         mp_raise_ValueError(MP_ERROR_TEXT("quirc_decode expects 3 arguments: buffer, width, height"));
@@ -34,13 +34,13 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
 
     mp_int_t width = mp_obj_get_int(args[1]);
     mp_int_t height = mp_obj_get_int(args[2]);
-    QRDECODE_DEBUG_PRINT("qrdecode: Width=%u, Height=%u\n", width, height);
+    //QRDECODE_DEBUG_PRINT("qrdecode: Width=%u, Height=%u\n", width, height);
 
     if (width <= 0 || height <= 0) {
         mp_raise_ValueError(MP_ERROR_TEXT("width and height must be positive"));
     }
-    QRDECODE_DEBUG_PRINT("qrdecode bufsize: %u bytes\n", bufinfo.len);
     if (bufinfo.len != (size_t)(width * height)) {
+        QRDECODE_DEBUG_PRINT("qrdecode wrong bufsize: %u bytes\n", bufinfo.len);
         mp_raise_ValueError(MP_ERROR_TEXT("buffer size must match width * height"));
     }
     struct quirc *qr = quirc_new();
@@ -109,7 +109,7 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
         free(data);
         free(code);
         quirc_destroy(qr);
-        QRDECODE_DEBUG_PRINT("qrdecode: Decode failed, freed data, code, and quirc object\n");
+        //QRDECODE_DEBUG_PRINT("qrdecode: Decode failed, freed data, code, and quirc object\n");
         mp_raise_TypeError(MP_ERROR_TEXT("failed to decode QR code"));
     }
 
@@ -123,7 +123,7 @@ static mp_obj_t qrdecode(mp_uint_t n_args, const mp_obj_t *args) {
 }
 
 static mp_obj_t qrdecode_rgb565(mp_uint_t n_args, const mp_obj_t *args) {
-    QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Starting\n");
+    //QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Starting\n");
 
     if (n_args != 3) {
         mp_raise_ValueError(MP_ERROR_TEXT("qrdecode_rgb565 expects 3 arguments: buffer, width, height"));
@@ -134,13 +134,13 @@ static mp_obj_t qrdecode_rgb565(mp_uint_t n_args, const mp_obj_t *args) {
 
     mp_int_t width = mp_obj_get_int(args[1]);
     mp_int_t height = mp_obj_get_int(args[2]);
-    QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Width=%u, Height=%u\n", width, height);
+    //QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Width=%u, Height=%u\n", width, height);
 
     if (width <= 0 || height <= 0) {
         mp_raise_ValueError(MP_ERROR_TEXT("width and height must be positive"));
     }
-    QRDECODE_DEBUG_PRINT("qrdecode bufsize: %u bytes\n", bufinfo.len);
     if (bufinfo.len != (size_t)(width * height * 2)) {
+        QRDECODE_DEBUG_PRINT("qrdecode_rgb565 wrong bufsize: %u bytes\n", bufinfo.len);
         mp_raise_ValueError(MP_ERROR_TEXT("buffer size must match width * height * 2 for RGB565"));
     }
 
@@ -148,7 +148,7 @@ static mp_obj_t qrdecode_rgb565(mp_uint_t n_args, const mp_obj_t *args) {
     if (!gray_buffer) {
         mp_raise_OSError(MP_ENOMEM);
     }
-    QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Allocated gray_buffer (%u bytes)\n", width * height * sizeof(uint8_t));
+    //QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Allocated gray_buffer (%u bytes)\n", width * height * sizeof(uint8_t));
 
     uint16_t *rgb565 = (uint16_t *)bufinfo.buf;
     for (size_t i = 0; i < (size_t)(width * height); i++) {
@@ -170,10 +170,10 @@ static mp_obj_t qrdecode_rgb565(mp_uint_t n_args, const mp_obj_t *args) {
     if (nlr_push(&exception_handler) == 0) {
         result = qrdecode(3, gray_args);
         nlr_pop();
-        QRDECODE_DEBUG_PRINT("qrdecode_rgb565: qrdecode succeeded, freeing gray_buffer\n");
+        //QRDECODE_DEBUG_PRINT("qrdecode_rgb565: qrdecode succeeded, freeing gray_buffer\n");
         free(gray_buffer);
     } else {
-        QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Exception caught, freeing gray_buffer\n");
+        //QRDECODE_DEBUG_PRINT("qrdecode_rgb565: Exception caught, freeing gray_buffer\n");
         // Cleanup
         if (gray_buffer) {
             free(gray_buffer);
