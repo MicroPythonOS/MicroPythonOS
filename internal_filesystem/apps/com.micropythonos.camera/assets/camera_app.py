@@ -7,7 +7,6 @@ except Exception as e:
 
 import mpos.time
 from mpos.apps import Activity
-from mpos.config import SharedPreferences
 from mpos.content.intent import Intent
 
 from camera_settings import CameraSettingsActivity
@@ -16,7 +15,7 @@ class CameraApp(Activity):
 
     DEFAULT_WIDTH = 320 # 240 would be better but webcam doesn't support this (yet)
     DEFAULT_HEIGHT = 240
-    APPNAME = "com.micropythonos.camera"
+    PACKAGE = "com.micropythonos.camera"
     #DEFAULT_CONFIG = "config.json"
     #QRCODE_CONFIG = "config_qrmode.json"
 
@@ -50,7 +49,10 @@ class CameraApp(Activity):
     status_label_cont = None
 
     def onCreate(self):
+        from mpos.config import SharedPreferences
+        self.prefs = SharedPreferences(self.PACKAGE)
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
+
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(1, 0)
         self.main_screen.set_style_border_width(0, 0)
@@ -115,7 +117,8 @@ class CameraApp(Activity):
         self.setContentView(self.main_screen)
     
     def onResume(self, screen):
-        self.load_resolution_preference() # needs to be done BEFORE the camera is initialized
+        self.parse_camera_init_preferences()
+        # Init camera:
         self.cam = init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
@@ -130,6 +133,7 @@ class CameraApp(Activity):
                 self.use_webcam = True
             except Exception as e:
                 print(f"camera app: webcam exception: {e}")
+        # Start refreshing:
         if self.cam:
             print("Camera app initialized, continuing...")
             self.update_preview_image()
@@ -169,11 +173,9 @@ class CameraApp(Activity):
                 print(f"Warning: powering off camera got exception: {e}")
         print("camera app cleanup done.")
 
-    def load_resolution_preference(self):
-        """Load resolution preference from SharedPreferences and update width/height."""
-        prefs = SharedPreferences(CameraApp.APPNAME)
-        resolution_str = prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
-        self.colormode = prefs.get_bool("colormode", False)
+    def parse_camera_init_preferences(self):
+        resolution_str = self.prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
+        self.colormode = self.prefs.get_bool("colormode", False)
         try:
             width_str, height_str = resolution_str.split('x')
             self.width = int(width_str)
@@ -287,26 +289,25 @@ class CameraApp(Activity):
             print("zoom_button_click is not supported for webcam")
             return
         if self.cam:
-            prefs = SharedPreferences(CameraApp.APPNAME)
-            startX = prefs.get_int("startX", CameraSettingsActivity.startX_default)
-            startY = prefs.get_int("startX", CameraSettingsActivity.startY_default)
-            endX = prefs.get_int("startX", CameraSettingsActivity.endX_default)
-            endY = prefs.get_int("startX", CameraSettingsActivity.endY_default)
-            offsetX = prefs.get_int("startX", CameraSettingsActivity.offsetX_default)
-            offsetY = prefs.get_int("startX", CameraSettingsActivity.offsetY_default)
-            totalX = prefs.get_int("startX", CameraSettingsActivity.totalX_default)
-            totalY = prefs.get_int("startX", CameraSettingsActivity.totalY_default)
-            outputX = prefs.get_int("startX", CameraSettingsActivity.outputX_default)
-            outputY = prefs.get_int("startX", CameraSettingsActivity.outputY_default)
-            scale = prefs.get_bool("scale", CameraSettingsActivity.scale_default)
-            binning = prefs.get_bool("binning", CameraSettingsActivity.binning_default)
+            startX = self.prefs.get_int("startX", CameraSettingsActivity.startX_default)
+            startY = self.prefs.get_int("startX", CameraSettingsActivity.startY_default)
+            endX = self.prefs.get_int("startX", CameraSettingsActivity.endX_default)
+            endY = self.prefs.get_int("startX", CameraSettingsActivity.endY_default)
+            offsetX = self.prefs.get_int("startX", CameraSettingsActivity.offsetX_default)
+            offsetY = self.prefs.get_int("startX", CameraSettingsActivity.offsetY_default)
+            totalX = self.prefs.get_int("startX", CameraSettingsActivity.totalX_default)
+            totalY = self.prefs.get_int("startX", CameraSettingsActivity.totalY_default)
+            outputX = self.prefs.get_int("startX", CameraSettingsActivity.outputX_default)
+            outputY = self.prefs.get_int("startX", CameraSettingsActivity.outputY_default)
+            scale = self.prefs.get_bool("scale", CameraSettingsActivity.scale_default)
+            binning = self.prefs.get_bool("binning", CameraSettingsActivity.binning_default)
             result = self.cam.set_res_raw(startX,startY,endX,endY,offsetX,offsetY,totalX,totalY,outputX,outputY,scale,binning)
             print(f"self.cam.set_res_raw returned {result}")
 
     def open_settings(self):
         self.image_dsc.data = None
         self.current_cam_buffer = None
-        intent = Intent(activity_class=CameraSettingsActivity, extras={"use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
+        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 
     def try_capture(self, event):
@@ -315,9 +316,7 @@ class CameraApp(Activity):
             if self.use_webcam:
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
             elif self.cam.frame_available():
-                #self.cam.free_buffer()
                 self.current_cam_buffer = self.cam.capture()
-                #self.cam.free_buffer()
 
             if self.current_cam_buffer and len(self.current_cam_buffer):
                 # Defensive check: verify buffer size matches expected dimensions
@@ -329,7 +328,7 @@ class CameraApp(Activity):
                     #self.image.invalidate() # does not work so do this:
                     self.image.set_src(self.image_dsc)
                     if not self.use_webcam:
-                        self.cam.free_buffer()  # Free the old buffer
+                        self.cam.free_buffer()  # Free the old buffer, otherwise the camera doesn't provide a new one
                     try:
                         if self.keepliveqrdecoding:
                             self.qrdecode_one()
@@ -438,7 +437,7 @@ def remove_bom(buffer):
 
 
 def apply_camera_settings(cam, use_webcam):
-    """Apply all saved camera settings from SharedPreferences to ESP32 camera.
+    """Apply all saved camera settings to the camera.
 
     Only applies settings when use_webcam is False (ESP32 camera).
     Settings are applied in dependency order (master switches before dependent values).
@@ -451,101 +450,99 @@ def apply_camera_settings(cam, use_webcam):
         print("apply_camera_settings: Skipping (no camera or webcam mode)")
         return
 
-    prefs = SharedPreferences(CameraApp.APPNAME)
-
     try:
         # Basic image adjustments
-        brightness = prefs.get_int("brightness", 0)
+        brightness = self.prefs.get_int("brightness", 0)
         cam.set_brightness(brightness)
 
-        contrast = prefs.get_int("contrast", 0)
+        contrast = self.prefs.get_int("contrast", 0)
         cam.set_contrast(contrast)
 
-        saturation = prefs.get_int("saturation", 0)
+        saturation = self.prefs.get_int("saturation", 0)
         cam.set_saturation(saturation)
 
         # Orientation
-        hmirror = prefs.get_bool("hmirror", False)
+        hmirror = self.prefs.get_bool("hmirror", False)
         cam.set_hmirror(hmirror)
 
-        vflip = prefs.get_bool("vflip", True)
+        vflip = self.prefs.get_bool("vflip", True)
         cam.set_vflip(vflip)
 
         # Special effect
-        special_effect = prefs.get_int("special_effect", 0)
+        special_effect = self.prefs.get_int("special_effect", 0)
         cam.set_special_effect(special_effect)
 
         # Exposure control (apply master switch first, then manual value)
-        exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
+        exposure_ctrl = self.prefs.get_bool("exposure_ctrl", True)
         cam.set_exposure_ctrl(exposure_ctrl)
 
         if not exposure_ctrl:
-            aec_value = prefs.get_int("aec_value", 300)
+            aec_value = self.prefs.get_int("aec_value", 300)
             cam.set_aec_value(aec_value)
 
-        ae_level = prefs.get_int("ae_level", 0)
+        ae_level = self.prefs.get_int("ae_level", 0)
         cam.set_ae_level(ae_level)
 
-        aec2 = prefs.get_bool("aec2", False)
+        aec2 = self.prefs.get_bool("aec2", False)
         cam.set_aec2(aec2)
 
         # Gain control (apply master switch first, then manual value)
-        gain_ctrl = prefs.get_bool("gain_ctrl", True)
+        gain_ctrl = self.prefs.get_bool("gain_ctrl", True)
         cam.set_gain_ctrl(gain_ctrl)
 
         if not gain_ctrl:
-            agc_gain = prefs.get_int("agc_gain", 0)
+            agc_gain = self.prefs.get_int("agc_gain", 0)
             cam.set_agc_gain(agc_gain)
 
-        gainceiling = prefs.get_int("gainceiling", 0)
+        gainceiling = self.prefs.get_int("gainceiling", 0)
         cam.set_gainceiling(gainceiling)
 
         # White balance (apply master switch first, then mode)
-        whitebal = prefs.get_bool("whitebal", True)
+        whitebal = self.prefs.get_bool("whitebal", True)
         cam.set_whitebal(whitebal)
 
         if not whitebal:
-            wb_mode = prefs.get_int("wb_mode", 0)
+            wb_mode = self.prefs.get_int("wb_mode", 0)
             cam.set_wb_mode(wb_mode)
 
-        awb_gain = prefs.get_bool("awb_gain", True)
+        awb_gain = self.prefs.get_bool("awb_gain", True)
         cam.set_awb_gain(awb_gain)
 
         # Sensor-specific settings (try/except for unsupported sensors)
         try:
-            sharpness = prefs.get_int("sharpness", 0)
+            sharpness = self.prefs.get_int("sharpness", 0)
             cam.set_sharpness(sharpness)
         except:
             pass  # Not supported on OV2640
 
         try:
-            denoise = prefs.get_int("denoise", 0)
+            denoise = self.prefs.get_int("denoise", 0)
             cam.set_denoise(denoise)
         except:
             pass  # Not supported on OV2640
 
         # Advanced corrections
-        colorbar = prefs.get_bool("colorbar", False)
+        colorbar = self.prefs.get_bool("colorbar", False)
         cam.set_colorbar(colorbar)
 
-        dcw = prefs.get_bool("dcw", True)
+        dcw = self.prefs.get_bool("dcw", True)
         cam.set_dcw(dcw)
 
-        bpc = prefs.get_bool("bpc", False)
+        bpc = self.prefs.get_bool("bpc", False)
         cam.set_bpc(bpc)
 
-        wpc = prefs.get_bool("wpc", True)
+        wpc = self.prefs.get_bool("wpc", True)
         cam.set_wpc(wpc)
 
-        raw_gma = prefs.get_bool("raw_gma", True)
+        raw_gma = self.prefs.get_bool("raw_gma", True)
         cam.set_raw_gma(raw_gma)
 
-        lenc = prefs.get_bool("lenc", True)
+        lenc = self.prefs.get_bool("lenc", True)
         cam.set_lenc(lenc)
 
         # JPEG quality (only relevant for JPEG format)
         try:
-            quality = prefs.get_int("quality", 85)
+            quality = self.prefs.get_int("quality", 85)
             cam.set_quality(quality)
         except:
             pass  # Not in JPEG mode
@@ -554,4 +551,3 @@ def apply_camera_settings(cam, use_webcam):
 
     except Exception as e:
         print(f"Error applying camera settings: {e}")
-

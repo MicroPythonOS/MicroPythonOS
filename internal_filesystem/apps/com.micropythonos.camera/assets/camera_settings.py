@@ -67,8 +67,10 @@ class CameraSettingsActivity(Activity):
         ("1920x1080", "1920x1080"),
     ]
 
+    # These are taken from the Intent:
     use_webcam = False
     scanqr_mode = False
+    prefs = None
 
     # Widgets:
     button_cont = None
@@ -84,15 +86,13 @@ class CameraSettingsActivity(Activity):
     def onCreate(self):
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
         self.use_webcam = self.getIntent().extras.get("use_webcam")
+        self.prefs = self.getIntent().extras.get("prefs")
         if self.use_webcam:
             self.resolutions = self.WEBCAM_RESOLUTIONS
             print("Using webcam resolutions")
         else:
             self.resolutions = self.ESP32_RESOLUTIONS
             print("Using ESP32 camera resolutions")
-
-        # Load preferences
-        prefs = SharedPreferences(self.PACKAGE)
 
         # Create main screen
         screen = lv.obj()
@@ -106,18 +106,18 @@ class CameraSettingsActivity(Activity):
 
         # Create Basic tab (always)
         basic_tab = tabview.add_tab("Basic")
-        self.create_basic_tab(basic_tab, prefs)
+        self.create_basic_tab(basic_tab, self.prefs)
 
         # Create Advanced and Expert tabs only for ESP32 camera
         if not self.use_webcam or True: # for now, show all tabs
             advanced_tab = tabview.add_tab("Advanced")
-            self.create_advanced_tab(advanced_tab, prefs)
+            self.create_advanced_tab(advanced_tab, self.prefs)
 
             expert_tab = tabview.add_tab("Expert")
-            self.create_expert_tab(expert_tab, prefs)
+            self.create_expert_tab(expert_tab, self.prefs)
 
             #raw_tab = tabview.add_tab("Raw")
-            #self.create_raw_tab(raw_tab, prefs)
+            #self.create_raw_tab(raw_tab, self.prefs)
 
         self.setContentView(screen)
 
@@ -526,8 +526,7 @@ class CameraSettingsActivity(Activity):
 
     def save_and_close(self):
         """Save all settings to SharedPreferences and return result."""
-        prefs = SharedPreferences(self.PACKAGE)
-        editor = prefs.edit()
+        editor = self.prefs.edit()
 
         # Save all UI control values
         for pref_key, control in self.ui_controls.items():
