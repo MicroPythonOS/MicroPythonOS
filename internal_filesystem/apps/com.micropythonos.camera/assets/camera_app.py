@@ -246,6 +246,7 @@ class CameraApp(Activity):
 
     def snap_button_click(self, e):
         print("Taking picture...")
+        # Would be nice to check that there's enough free space here, and show an error if not...
         import os
         try:
             os.mkdir("data")
