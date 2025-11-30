@@ -497,7 +497,7 @@ class CameraApp(Activity):
                 aec_value = self.prefs.get_int("aec_value", 300)
                 cam.set_aec_value(aec_value)
     
-            ae_level = self.prefs.get_int("ae_level", 0)
+            ae_level = self.prefs.get_int("ae_level", 2 if self.scanqr_mode else 0)
             cam.set_ae_level(ae_level)
     
             aec2 = self.prefs.get_bool("aec2", False)
@@ -530,13 +530,13 @@ class CameraApp(Activity):
                 sharpness = self.prefs.get_int("sharpness", 0)
                 cam.set_sharpness(sharpness)
             except:
-                pass  # Not supported on OV2640
+                pass  # Not supported on OV2640?
     
             try:
                 denoise = self.prefs.get_int("denoise", 0)
                 cam.set_denoise(denoise)
             except:
-                pass  # Not supported on OV2640
+                pass  # Not supported on OV2640?
     
             # Advanced corrections
             colorbar = self.prefs.get_bool("colorbar", False)
@@ -551,7 +551,7 @@ class CameraApp(Activity):
             wpc = self.prefs.get_bool("wpc", True)
             cam.set_wpc(wpc)
     
-            raw_gma = self.prefs.get_bool("raw_gma", True)
+            raw_gma = self.prefs.get_bool("raw_gma", False if self.scanqr_mode else True)
             print(f"applying raw_gma: {raw_gma}")
             cam.set_raw_gma(raw_gma)
     
