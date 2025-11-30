@@ -245,7 +245,7 @@ class CameraApp(Activity):
             self.status_label.set_text(result) # in the future, the status_label text should be copy-paste-able
 
     def snap_button_click(self, e):
-        print("Picture taken!")
+        print("Taking picture...")
         import os
         try:
             os.mkdir("data")
@@ -262,7 +262,7 @@ class CameraApp(Activity):
         filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
         try:
             with open(filename, 'wb') as f:
-                f.write(self.current_cam_buffer)
+                f.write(self.current_cam_buffer) # This takes around 17 seconds to store 921600 bytes, so ~50KB/s, so would be nice to show some progress bar
             print(f"Successfully wrote image to {filename}")
         except OSError as e:
             print(f"Error writing to file: {e}")
