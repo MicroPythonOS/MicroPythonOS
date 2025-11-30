@@ -14,15 +14,12 @@ from camera_settings import CameraSettingsActivity
 
 class CameraApp(Activity):
 
-    DEFAULT_WIDTH = 320 # 240 would be better but webcam doesn't support this (yet)
-    DEFAULT_HEIGHT = 240
     PACKAGE = "com.micropythonos.camera"
     CONFIGFILE = "config.json"
     SCANQR_CONFIG = "config_scanqr_mode.json"
 
     button_width = 60
     button_height = 45
-    colormode = False
 
     status_label_text = "No camera found."
     status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and make the QR code big (4-12cm). Ensure proper lighting."
@@ -32,17 +29,20 @@ class CameraApp(Activity):
     current_cam_buffer = None # Holds the current memoryview to prevent garba
     width = None
     height = None
+    colormode = False
 
-    image = None
     image_dsc = None
-    scanqr_mode = None
+    scanqr_mode = False
+    scanqr_intent = False
     use_webcam = False
-    keepliveqrdecoding = False
-    
     capture_timer = None
+
+    prefs = None # regular prefs
+    scanqr_prefs = None # qr code scanning prefs
     
     # Widgets:
     main_screen = None
+    image = None
     qr_label = None
     qr_button = None
     snap_button = None
@@ -50,10 +50,7 @@ class CameraApp(Activity):
     status_label_cont = None
 
     def onCreate(self):
-        self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
-        from mpos.config import SharedPreferences
-        self.prefs = SharedPreferences(self.PACKAGE, filename=self.SCANQR_CONFIG if self.scanqr_mode else self.CONFIGFILE)
-
+        self.scanqr_intent = self.getIntent().extras.get("scanqr_intent")
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(1, 0)
         self.main_screen.set_style_border_width(0, 0)
@@ -118,13 +115,31 @@ class CameraApp(Activity):
         self.setContentView(self.main_screen)
     
     def onResume(self, screen):
-        self.parse_camera_init_preferences()
+        self.load_settings_cached()
+        self.start_cam()
+        if not self.cam and self.scanqr_mode:
+            print("No camera found, stopping camera app")
+            self.finish()
+        # Camera is running and refreshing
+        self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
+        if self.scanqr_mode:
+            self.start_qr_decoding()
+        else:
+            self.qr_button.remove_flag(lv.obj.FLAG.HIDDEN)
+            self.snap_button.remove_flag(lv.obj.FLAG.HIDDEN)
+
+    def onPause(self, screen):
+        print("camera app backgrounded, cleaning up...")
+        self.stop_cam()
+        print("camera app cleanup done.")
+
+    def start_cam(self):
         # Init camera:
         self.cam = self.init_internal_cam(self.width, self.height)
         if self.cam:
             self.image.set_rotation(900) # internal camera is rotated 90 degrees
             # Apply saved camera settings, only for internal camera for now:
-            self.apply_camera_settings(self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
+            self.apply_camera_settings(self.scanqr_prefs if self.scanqr_mode else self.prefs, self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
         else:
             print("camera app: no internal camera found, trying webcam on /dev/video0")
             try:
@@ -139,19 +154,8 @@ class CameraApp(Activity):
             print("Camera app initialized, continuing...")
             self.update_preview_image()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
-            self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
-            if self.scanqr_mode or self.keepliveqrdecoding:
-                self.start_qr_decoding()
-            else:
-                self.qr_button.remove_flag(lv.obj.FLAG.HIDDEN)
-                self.snap_button.remove_flag(lv.obj.FLAG.HIDDEN)
-        else:
-            print("No camera found, stopping camera app")
-            if self.scanqr_mode:
-                self.finish()
 
-    def onPause(self, screen):
-        print("camera app backgrounded, cleaning up...")
+    def stop_cam(self):
         if self.capture_timer:
             self.capture_timer.delete()
         if self.use_webcam:
@@ -172,20 +176,24 @@ class CameraApp(Activity):
                 i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
             except Exception as e:
                 print(f"Warning: powering off camera got exception: {e}")
-        print("camera app cleanup done.")
+        print("emptying self.current_cam_buffer...")
+        self.image_dsc.data = None # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
 
-    def parse_camera_init_preferences(self):
-        resolution_str = self.prefs.get_string("resolution", f"{self.DEFAULT_WIDTH}x{self.DEFAULT_HEIGHT}")
-        self.colormode = self.prefs.get_bool("colormode", False)
-        try:
-            width_str, height_str = resolution_str.split('x')
-            self.width = int(width_str)
-            self.height = int(height_str)
-            print(f"Camera resolution loaded: {self.width}x{self.height}")
-        except Exception as e:
-            print(f"Error parsing resolution '{resolution_str}': {e}, using default 320x240")
-            self.width = self.DEFAULT_WIDTH
-            self.height = self.DEFAULT_HEIGHT
+    def load_settings_cached(self):
+        from mpos.config import SharedPreferences
+        if self.scanqr_mode:
+            print("loading scanqr settings...")
+            if not self.scanqr_prefs:
+                self.scanqr_prefs = SharedPreferences(self.PACKAGE, filename=self.SCANQR_CONFIG)
+            self.width = self.scanqr_prefs.get_int("resolution_width", CameraSettingsActivity.DEFAULT_SCANQR_WIDTH)
+            self.height = self.scanqr_prefs.get_int("resolution_height", CameraSettingsActivity.DEFAULT_SCANQR_HEIGHT)
+            self.colormode = self.scanqr_prefs.get_bool("colormode", CameraSettingsActivity.DEFAULT_SCANQR_COLORMODE)
+        else:
+            if not self.prefs:
+                self.prefs = SharedPreferences(self.PACKAGE)
+            self.width = self.prefs.get_int("resolution_width", CameraSettingsActivity.DEFAULT_WIDTH)
+            self.height = self.prefs.get_int("resolution_height", CameraSettingsActivity.DEFAULT_HEIGHT)
+            self.colormode = self.prefs.get_bool("colormode", CameraSettingsActivity.DEFAULT_COLORMODE)
 
     def update_preview_image(self):
         self.image_dsc = lv.image_dsc_t({
@@ -238,7 +246,7 @@ class CameraApp(Activity):
         result = self.print_qr_buffer(result)
         print(f"QR decoding found: {result}")
         self.stop_qr_decoding()
-        if self.scanqr_mode:
+        if self.scanqr_intent:
             self.setResult(True, result)
             self.finish()
         else:
@@ -270,21 +278,40 @@ class CameraApp(Activity):
     
     def start_qr_decoding(self):
         print("Activating live QR decoding...")
-        self.keepliveqrdecoding = True
+        self.scanqr_mode = True
+        oldwidth = self.width
+        oldheight = self.height
+        oldcolormode = self.colormode
+        # Activate QR mode settings
+        self.load_settings_cached()
+        # Check if it's necessary to restart the camera:
+        if self.width != oldwidth or self.height != oldheight or self.colormode != oldcolormode:
+            self.stop_cam()
+            self.start_cam()
         self.qr_label.set_text(lv.SYMBOL.EYE_CLOSE)
         self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
         self.status_label.set_text(self.status_label_text_searching)
     
     def stop_qr_decoding(self):
         print("Deactivating live QR decoding...")
-        self.keepliveqrdecoding = False
+        self.scanqr_mode = False
         self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
         self.status_label_text = self.status_label.get_text()
         if self.status_label_text not in (self.status_label_text_searching or self.status_label_text_found): # if it found a QR code, leave it
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
+        # Check if it's necessary to restart the camera:
+        oldwidth = self.width
+        oldheight = self.height
+        oldcolormode = self.colormode
+        # Activate non-QR mode settings
+        self.load_settings_cached()
+        # Check if it's necessary to restart the camera:
+        if self.width != oldwidth or self.height != oldheight or self.colormode != oldcolormode:
+            self.stop_cam()
+            self.start_cam()
     
     def qr_button_click(self, e):
-        if not self.keepliveqrdecoding:
+        if not self.scanqr_mode:
             self.start_qr_decoding()
         else:
             self.stop_qr_decoding()
@@ -311,11 +338,10 @@ class CameraApp(Activity):
             print(f"self.cam.set_res_raw returned {result}")
 
     def open_settings(self):
-        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
+        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 
     def try_capture(self, event):
-        #print("capturing camera frame")
         try:
             if self.use_webcam:
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
@@ -328,7 +354,7 @@ class CameraApp(Activity):
         self.image_dsc.data = self.current_cam_buffer
         #self.image.invalidate() # does not work so do this:
         self.image.set_src(self.image_dsc)
-        if self.keepliveqrdecoding:
+        if self.scanqr_mode:
             self.qrdecode_one()
         if not self.use_webcam:
             self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one

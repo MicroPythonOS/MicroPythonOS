@@ -6,12 +6,15 @@ from mpos.apps import Activity
 from mpos.config import SharedPreferences
 from mpos.content.intent import Intent
 
-#from camera_app import CameraApp
-
 class CameraSettingsActivity(Activity):
     """Settings activity for comprehensive camera configuration."""
 
-    PACKAGE = "com.micropythonos.camera"
+    DEFAULT_WIDTH = 320 # 240 would be better but webcam doesn't support this (yet)
+    DEFAULT_HEIGHT = 240
+    DEFAULT_COLORMODE = True
+    DEFAULT_SCANQR_WIDTH = 960
+    DEFAULT_SCANQR_HEIGHT = 960
+    DEFAULT_SCANQR_COLORMODE = False
 
     # Original: { 2560, 1920,   0,   0, 2623, 1951, 32, 16, 2844, 1968 }
     # Worked for digital zoom in C: { 2560, 1920, 0, 0, 2623, 1951, 992, 736, 2844, 1968 }
@@ -69,8 +72,8 @@ class CameraSettingsActivity(Activity):
 
     # These are taken from the Intent:
     use_webcam = False
-    scanqr_mode = False
     prefs = None
+    scanqr_mode = False
 
     # Widgets:
     button_cont = None
@@ -84,9 +87,9 @@ class CameraSettingsActivity(Activity):
         self.resolutions = []
 
     def onCreate(self):
-        self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
         self.use_webcam = self.getIntent().extras.get("use_webcam")
         self.prefs = self.getIntent().extras.get("prefs")
+        self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
         if self.use_webcam:
             self.resolutions = self.WEBCAM_RESOLUTIONS
             print("Using webcam resolutions")
@@ -228,23 +231,29 @@ class CameraSettingsActivity(Activity):
         button_cont.set_style_border_width(0, 0)
 
         save_button = lv.button(button_cont)
-        save_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        save_button.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
         save_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
         save_label = lv.label(save_button)
-        save_label.set_text("Save")
+        savetext = "Save"
+        if self.scanqr_mode:
+            savetext += " QR tweaks"
+        save_label.set_text(savetext)
         save_label.center()
 
         cancel_button = lv.button(button_cont)
         cancel_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
-        cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        if self.scanqr_mode:
+            cancel_button.align(lv.ALIGN.BOTTOM_MID, mpos.ui.pct_of_display_width(10), 0)
+        else:
+            cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
         cancel_label = lv.label(cancel_button)
         cancel_label.set_text("Cancel")
         cancel_label.center()
 
         erase_button = lv.button(button_cont)
-        erase_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        erase_button.set_size(mpos.ui.pct_of_display_width(20), lv.SIZE_CONTENT)
         erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
         erase_label = lv.label(erase_button)
@@ -259,16 +268,22 @@ class CameraSettingsActivity(Activity):
         tab.set_style_pad_all(1, 0)
 
         # Color Mode
-        colormode = prefs.get_bool("colormode", False)
+        colormode = prefs.get_bool("colormode", False if self.scanqr_mode else True)
         checkbox, cont = self.create_checkbox(tab, "Color Mode (slower)", colormode, "colormode")
         self.ui_controls["colormode"] = checkbox
 
         # Resolution dropdown
-        current_resolution = prefs.get_string("resolution", "320x240")
+        print(f"self.scanqr_mode: {self.scanqr_mode}")
+        current_resolution_width = prefs.get_string("resolution_width", self.DEFAULT_SCANQR_WIDTH if self.scanqr_mode else self.DEFAULT_WIDTH)
+        current_resolution_height = prefs.get_string("resolution_width", self.DEFAULT_SCANQR_HEIGHT if self.scanqr_mode else self.DEFAULT_HEIGHT)
+        dropdown_value = f"{current_resolution_width}x{current_resolution_height}"
+        print(f"looking for {dropdown_value}")
         resolution_idx = 0
         for idx, (_, value) in enumerate(self.resolutions):
-            if value == current_resolution:
+            print(f"got {value}")
+            if value == dropdown_value:
                 resolution_idx = idx
+                print(f"found it! {idx}")
                 break
 
         dropdown, cont = self.create_dropdown(tab, "Resolution:", self.resolutions, resolution_idx, "resolution")
@@ -520,7 +535,7 @@ class CameraSettingsActivity(Activity):
         self.add_buttons(tab)
 
     def erase_and_close(self):
-        SharedPreferences(self.PACKAGE).edit().remove_all().commit()
+        self.prefs.edit().remove_all().commit()
         self.setResult(True, {"settings_changed": True})
         self.finish()
 
@@ -550,9 +565,14 @@ class CameraSettingsActivity(Activity):
                 selected_idx = control.get_selected()
                 option_values = metadata.get("option_values", [])
                 if pref_key == "resolution":
-                    # Resolution stored as string
-                    value = option_values[selected_idx]
-                    editor.put_string(pref_key, value)
+                    try:
+                        # Resolution stored as 2 ints
+                        value = option_values[selected_idx]
+                        width_str, height_str = value.split('x')
+                        editor.put_int("resolution_width", int(width_str))
+                        editor.put_int("resolution_height", int(height_str))
+                    except Exception as e:
+                        print(f"Error parsing resolution '{value}': {e}")
                 else:
                     # Other dropdowns store integer enum values
                     value = option_values[selected_idx]

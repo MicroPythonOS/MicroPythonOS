@@ -28,7 +28,7 @@ class SharedPreferences:
         try:
             with open(self.filepath, 'r') as f:
                 self.data = ujson.load(f)
-                print(f"load: Loaded preferences: {self.data}")
+                print(f"load: Loaded preferences from {self.filepath}: {self.data}")
         except Exception as e:
             print(f"SharedPreferences.load didn't find preferences: {e}")
             self.data = {}
