@@ -214,28 +214,15 @@ class CameraApp(Activity):
 
     def qrdecode_one(self):
         try:
-            import qrdecode
-            import utime
+            result = None
             before = time.ticks_ms()
+            import qrdecode
             if self.colormode:
                 result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
             else:
                 result = qrdecode.qrdecode(self.current_cam_buffer, self.width, self.height)
             after = time.ticks_ms()
-            #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
-            if not result:
-                self.status_label.set_text(self.status_label_text_searching)
-            else:
-                print(f"SUCCESSFUL QR DECODE TOOK: {after-before}ms")
-                result = self.remove_bom(result)
-                result = self.print_qr_buffer(result)
-                print(f"QR decoding found: {result}")
-                if self.scanqr_mode:
-                    self.setResult(True, result)
-                    self.finish()
-                else:
-                    self.status_label.set_text(result) # in the future, the status_label text should be copy-paste-able
-                self.stop_qr_decoding()
+            print(f"qrdecode took {after-before}ms")
         except ValueError as e:
             print("QR ValueError: ", e)
             self.status_label.set_text(self.status_label_text_searching)
@@ -244,6 +231,18 @@ class CameraApp(Activity):
             self.status_label.set_text(self.status_label_text_found)
         except Exception as e:
             print("QR got other error: ", e)
+        #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
+        if result is None:
+            return
+        result = self.remove_bom(result)
+        result = self.print_qr_buffer(result)
+        print(f"QR decoding found: {result}")
+        self.stop_qr_decoding()
+        if self.scanqr_mode:
+            self.setResult(True, result)
+            self.finish()
+        else:
+            self.status_label.set_text(result) # in the future, the status_label text should be copy-paste-able
 
     def snap_button_click(self, e):
         print("Picture taken!")
@@ -280,7 +279,7 @@ class CameraApp(Activity):
         self.keepliveqrdecoding = False
         self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
         self.status_label_text = self.status_label.get_text()
-        if self.status_label_text in (self.status_label_text_searching or self.status_label_text_found): # if it found a QR code, leave it
+        if self.status_label_text not in (self.status_label_text_searching or self.status_label_text_found): # if it found a QR code, leave it
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
     
     def qr_button_click(self, e):
@@ -328,13 +327,10 @@ class CameraApp(Activity):
         self.image_dsc.data = self.current_cam_buffer
         #self.image.invalidate() # does not work so do this:
         self.image.set_src(self.image_dsc)
+        if self.keepliveqrdecoding:
+            self.qrdecode_one()
         if not self.use_webcam:
-            self.cam.free_buffer()  # Free the old buffer, otherwise the camera doesn't provide a new one
-        try:
-            if self.keepliveqrdecoding:
-                self.qrdecode_one()
-        except Exception as qre:
-            print(f"try_capture: qrdecode_one got exception: {qre}")
+            self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
 
     def init_internal_cam(self, width, height):
         """Initialize internal camera with specified resolution.
