@@ -214,7 +214,9 @@ class ImageView(Activity):
                 print(f"Raw image has width: {width}, Height: {height}, Color Format: {color_format}")
                 stride = width * 2
                 cf = lv.COLOR_FORMAT.RGB565
-                if color_format != "RGB565":
+                if color_format == "GRAY":
+                    cf = lv.COLOR_FORMAT.L8
+                else:
                     print(f"WARNING: unknown color format {color_format}, assuming RGB565...")
                 self.current_image_dsc = lv.image_dsc_t({
                     "header": {
