@@ -2,9 +2,11 @@
 =====
 - Fri3d Camp 2024 Badge: workaround ADC2+WiFi conflict by temporarily disable WiFi to measure battery level
 - Fri3d Camp 2024 Badge: improve battery monitor calibration to fix 0.1V delta
+- About app: add free, used and total storage space info
 - AppStore app: remove unnecessary scrollbar over publisher's name
 - OSUpdate app: pause download when wifi is lost, resume when reconnected
 - Settings app: fix un-checking of radio button
+- ImageView app: add support for grayscale images
 - API: SharedPreferences: add erase_all() functionality
 - API: improve and cleanup animations
 

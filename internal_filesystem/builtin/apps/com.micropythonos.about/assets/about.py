@@ -85,7 +85,26 @@ class About(Activity):
             print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
             label11 = lv.label(screen)
             label11.set_text(f"freezefs_mount_builtin exception (normal on dev builds): {e}")
-        # TODO:
-        # - add total size, used and free space on internal storage
-        # - add total size, used and free space on SD card
+        # Disk usage:
+        import os
+        stat = os.statvfs('/')
+        total_space = stat[0] * stat[2]
+        free_space = stat[0] * stat[3]
+        used_space = total_space - free_space
+        label20 = lv.label(screen)
+        label20.set_text(f"Total space in /: {total_space} bytes")
+        label21 = lv.label(screen)
+        label21.set_text(f"Free space in /: {free_space} bytes")
+        label22 = lv.label(screen)
+        label22.set_text(f"Used space in /: {used_space} bytes")
+        stat = os.statvfs('/sdcard')
+        total_space = stat[0] * stat[2]
+        free_space = stat[0] * stat[3]
+        used_space = total_space - free_space
+        label23 = lv.label(screen)
+        label23.set_text(f"Total space /sdcard: {total_space} bytes")
+        label24 = lv.label(screen)
+        label24.set_text(f"Free space /sdcard: {free_space} bytes")
+        label25 = lv.label(screen)
+        label25.set_text(f"Used space /sdcard: {used_space} bytes")
         self.setContentView(screen)
