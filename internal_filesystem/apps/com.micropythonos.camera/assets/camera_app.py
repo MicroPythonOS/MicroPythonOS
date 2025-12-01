@@ -21,9 +21,9 @@ class CameraApp(Activity):
     button_width = 75
     button_height = 50
 
-    status_label_text = "No camera found."
-    status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and make the QR code big (4-12cm). Ensure proper lighting."
-    status_label_text_found = "Found QR, trying to decode... hold still..."
+    STATUS_NO_CAMERA = "No camera found."
+    STATUS_SEARCHING_QR = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and make the QR code big (4-12cm). Ensure proper lighting."
+    STATUS_FOUND_QR = "Found QR, trying to decode... hold still..."
 
     cam = None
     current_cam_buffer = None # Holds the current memoryview to prevent garba
@@ -110,7 +110,7 @@ class CameraApp(Activity):
         self.status_label_cont.set_style_bg_opa(66, 0)
         self.status_label_cont.set_style_border_width(0, 0)
         self.status_label = lv.label(self.status_label_cont)
-        self.status_label.set_text("No camera found.")
+        self.status_label.set_text(self.STATUS_NO_CAMERA)
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(100))
         self.status_label.center()
@@ -237,10 +237,10 @@ class CameraApp(Activity):
             print(f"qrdecode took {after-before}ms")
         except ValueError as e:
             print("QR ValueError: ", e)
-            self.status_label.set_text(self.status_label_text_searching)
+            self.status_label.set_text(self.STATUS_SEARCHING_QR)
         except TypeError as e:
             print("QR TypeError: ", e)
-            self.status_label.set_text(self.status_label_text_found)
+            self.status_label.set_text(self.STATUS_FOUND_QR)
         except Exception as e:
             print("QR got other error: ", e)
         #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
@@ -308,14 +308,15 @@ class CameraApp(Activity):
             self.start_cam()
         self.qr_label.set_text(lv.SYMBOL.EYE_CLOSE)
         self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.status_label.set_text(self.status_label_text_searching)
+        self.status_label.set_text(self.STATUS_SEARCHING_QR)
     
     def stop_qr_decoding(self):
         print("Deactivating live QR decoding...")
         self.scanqr_mode = False
         self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
-        self.status_label_text = self.status_label.get_text()
-        if self.status_label_text not in (self.status_label_text_searching or self.status_label_text_found): # if it found a QR code, leave it
+        status_label_text = self.status_label.get_text()
+        if status_label_text in (self.STATUS_NO_CAMERA or self.STATUS_SEARCHING_QR or self.STATUS_FOUND_QR): # if it found a QR code, leave it
+            print(f"status label text {status_label_text} is a known message, not a QR code, hiding it...")
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
         # Check if it's necessary to restart the camera:
         oldwidth = self.width
