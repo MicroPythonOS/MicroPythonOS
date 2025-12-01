@@ -276,7 +276,7 @@ class CameraSettingsActivity(Activity):
         # Resolution dropdown
         print(f"self.scanqr_mode: {self.scanqr_mode}")
         current_resolution_width = prefs.get_string("resolution_width", self.DEFAULT_SCANQR_WIDTH if self.scanqr_mode else self.DEFAULT_WIDTH)
-        current_resolution_height = prefs.get_string("resolution_width", self.DEFAULT_SCANQR_HEIGHT if self.scanqr_mode else self.DEFAULT_HEIGHT)
+        current_resolution_height = prefs.get_string("resolution_height", self.DEFAULT_SCANQR_HEIGHT if self.scanqr_mode else self.DEFAULT_HEIGHT)
         dropdown_value = f"{current_resolution_width}x{current_resolution_height}"
         print(f"looking for {dropdown_value}")
         resolution_idx = 0

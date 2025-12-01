@@ -18,8 +18,8 @@ class CameraApp(Activity):
     CONFIGFILE = "config.json"
     SCANQR_CONFIG = "config_scanqr_mode.json"
 
-    button_width = 60
-    button_height = 45
+    button_width = 75
+    button_height = 50
 
     status_label_text = "No camera found."
     status_label_text_searching = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and make the QR code big (4-12cm). Ensure proper lighting."
@@ -68,26 +68,18 @@ class CameraApp(Activity):
         # Settings button
         settings_button = lv.button(self.main_screen)
         settings_button.set_size(self.button_width, self.button_height)
-        settings_button.align(lv.ALIGN.TOP_RIGHT, 0, self.button_height + 5)
+        settings_button.align_to(close_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.center()
         settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
-        self.snap_button = lv.button(self.main_screen)
-        self.snap_button.set_size(self.button_width, self.button_height)
-        self.snap_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
-        self.snap_button.add_flag(lv.obj.FLAG.HIDDEN)
-        self.snap_button.add_event_cb(self.snap_button_click,lv.EVENT.CLICKED,None)
-        snap_label = lv.label(self.snap_button)
-        snap_label.set_text(lv.SYMBOL.OK)
-        snap_label.center()
-        self.zoom_button = lv.button(self.main_screen)
-        self.zoom_button.set_size(self.button_width, self.button_height)
-        self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 5)
-        self.zoom_button.add_event_cb(self.zoom_button_click,lv.EVENT.CLICKED,None)
-        zoom_label = lv.label(self.zoom_button)
-        zoom_label.set_text("Z")
-        zoom_label.center()
+        #self.zoom_button = lv.button(self.main_screen)
+        #self.zoom_button.set_size(self.button_width, self.button_height)
+        #self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 5)
+        #self.zoom_button.add_event_cb(self.zoom_button_click,lv.EVENT.CLICKED,None)
+        #zoom_label = lv.label(self.zoom_button)
+        #zoom_label.set_text("Z")
+        #zoom_label.center()
         self.qr_button = lv.button(self.main_screen)
         self.qr_button.set_size(self.button_width, self.button_height)
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -96,6 +88,17 @@ class CameraApp(Activity):
         self.qr_label = lv.label(self.qr_button)
         self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
         self.qr_label.center()
+
+        self.snap_button = lv.button(self.main_screen)
+        self.snap_button.set_size(self.button_width, self.button_height)
+        self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_TOP_MID, 0, -10)
+        self.snap_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.snap_button.add_event_cb(self.snap_button_click,lv.EVENT.CLICKED,None)
+        snap_label = lv.label(self.snap_button)
+        snap_label.set_text(lv.SYMBOL.OK)
+        snap_label.center()
+
+
         self.status_label_cont = lv.obj(self.main_screen)
         width = mpos.ui.pct_of_display_width(70)
         height = mpos.ui.pct_of_display_width(60)
@@ -318,36 +321,15 @@ class CameraApp(Activity):
         else:
             self.stop_qr_decoding()
 
-    def zoom_button_click(self, e):
-        print("zooming...")
-        if self.use_webcam:
-            print("zoom_button_click is not supported for webcam")
-            return
-        if self.cam:
-            startX = self.prefs.get_int("startX", CameraSettingsActivity.startX_default)
-            startY = self.prefs.get_int("startX", CameraSettingsActivity.startY_default)
-            endX = self.prefs.get_int("startX", CameraSettingsActivity.endX_default)
-            endY = self.prefs.get_int("startX", CameraSettingsActivity.endY_default)
-            offsetX = self.prefs.get_int("startX", CameraSettingsActivity.offsetX_default)
-            offsetY = self.prefs.get_int("startX", CameraSettingsActivity.offsetY_default)
-            totalX = self.prefs.get_int("startX", CameraSettingsActivity.totalX_default)
-            totalY = self.prefs.get_int("startX", CameraSettingsActivity.totalY_default)
-            outputX = self.prefs.get_int("startX", CameraSettingsActivity.outputX_default)
-            outputY = self.prefs.get_int("startX", CameraSettingsActivity.outputY_default)
-            scale = self.prefs.get_bool("scale", CameraSettingsActivity.scale_default)
-            binning = self.prefs.get_bool("binning", CameraSettingsActivity.binning_default)
-            result = self.cam.set_res_raw(startX,startY,endX,endY,offsetX,offsetY,totalX,totalY,outputX,outputY,scale,binning)
-            print(f"self.cam.set_res_raw returned {result}")
-
     def open_settings(self):
         intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 
     def try_capture(self, event):
         try:
-            if self.use_webcam:
+            if self.use_webcam and self.cam:
                 self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
-            elif self.cam.frame_available():
+            elif self.cam and self.cam.frame_available():
                 self.current_cam_buffer = self.cam.capture()
         except Exception as e:
             print(f"Camera capture exception: {e}")
@@ -358,7 +340,7 @@ class CameraApp(Activity):
         self.image.set_src(self.image_dsc)
         if self.scanqr_mode:
             self.qrdecode_one()
-        if not self.use_webcam:
+        if not self.use_webcam and self.cam:
             self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
 
     def init_internal_cam(self, width, height):
@@ -572,3 +554,28 @@ class CameraApp(Activity):
         except Exception as e:
             print(f"Error applying camera settings: {e}")
     
+
+
+
+"""
+    def zoom_button_click_unused(self, e):
+        print("zooming...")
+        if self.use_webcam:
+            print("zoom_button_click is not supported for webcam")
+            return
+        if self.cam:
+            startX = self.prefs.get_int("startX", CameraSettingsActivity.startX_default)
+            startY = self.prefs.get_int("startX", CameraSettingsActivity.startY_default)
+            endX = self.prefs.get_int("startX", CameraSettingsActivity.endX_default)
+            endY = self.prefs.get_int("startX", CameraSettingsActivity.endY_default)
+            offsetX = self.prefs.get_int("startX", CameraSettingsActivity.offsetX_default)
+            offsetY = self.prefs.get_int("startX", CameraSettingsActivity.offsetY_default)
+            totalX = self.prefs.get_int("startX", CameraSettingsActivity.totalX_default)
+            totalY = self.prefs.get_int("startX", CameraSettingsActivity.totalY_default)
+            outputX = self.prefs.get_int("startX", CameraSettingsActivity.outputX_default)
+            outputY = self.prefs.get_int("startX", CameraSettingsActivity.outputY_default)
+            scale = self.prefs.get_bool("scale", CameraSettingsActivity.scale_default)
+            binning = self.prefs.get_bool("binning", CameraSettingsActivity.binning_default)
+            result = self.cam.set_res_raw(startX,startY,endX,endY,offsetX,offsetY,totalX,totalY,outputX,outputY,scale,binning)
+            print(f"self.cam.set_res_raw returned {result}")
+"""
