@@ -4,6 +4,10 @@
 - Fri3d Camp 2024 Badge: improve battery monitor calibration to fix 0.1V delta
 - About app: add free, used and total storage space info
 - AppStore app: remove unnecessary scrollbar over publisher's name
+- Camera app: massive overhaul!
+    - Lots of settings (basic, advanced, expert)
+    - Enable high density QR code scanning from mobile phone screens
+- ImageView app: add delete functionality
 - OSUpdate app: pause download when wifi is lost, resume when reconnected
 - Settings app: fix un-checking of radio button
 - ImageView app: add support for grayscale images

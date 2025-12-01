@@ -271,12 +271,24 @@ class CameraApp(Activity):
         if self.current_cam_buffer is None:
             print("snap_button_click: won't save empty image")
             return
+        # Check enough free space?
+        stat = os.statvfs("data/images")
+        free_space = stat[0] * stat[3]
+        size_needed = len(self.current_cam_buffer)
+        print(f"Free space {free_space} and size needed {size_needed}")
+        if free_space < size_needed:
+            self.status_label.set_text(f"Free storage space is {free_space}, need {size_needed}, not saving...")
+            self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+            return
         colorname = "RGB565" if self.colormode else "GRAY"
         filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
         try:
             with open(filename, 'wb') as f:
                 f.write(self.current_cam_buffer) # This takes around 17 seconds to store 921600 bytes, so ~50KB/s, so would be nice to show some progress bar
-            print(f"Successfully wrote image to {filename}")
+            report = f"Successfully wrote image to {filename}"
+            print(report)
+            self.status_label.set_text(report)
+            self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
         except OSError as e:
             print(f"Error writing to file: {e}")
     
