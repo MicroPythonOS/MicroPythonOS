@@ -34,6 +34,7 @@ class ImageView(Activity):
         self.label = lv.label(screen)
         self.label.set_text(f"Loading images from\n{self.imagedir}")
         self.label.align(lv.ALIGN.TOP_MID,0,0)
+        self.label.set_width(lv.pct(80))
         self.prev_button = lv.button(screen)
         self.prev_button.align(lv.ALIGN.BOTTOM_LEFT,0,0)
         self.prev_button.add_event_cb(lambda e: self.show_prev_image_if_fullscreen(),lv.EVENT.FOCUSED,None)
@@ -50,6 +51,12 @@ class ImageView(Activity):
         #self.play_button.add_event_cb(lambda e: self.play(),lv.EVENT.CLICKED,None)
         #play_label = lv.label(self.play_button)
         #play_label.set_text(lv.SYMBOL.PLAY)
+        self.delete_button = lv.button(screen)
+        self.delete_button.align(lv.ALIGN.BOTTOM_MID,0,0)
+        self.delete_button.add_event_cb(lambda e: self.delete_image(),lv.EVENT.CLICKED,None)
+        delete_label = lv.label(self.delete_button)
+        delete_label.set_text(lv.SYMBOL.TRASH)
+        delete_label.set_style_text_font(lv.font_montserrat_16, 0)
         self.next_button = lv.button(screen)
         self.next_button.align(lv.ALIGN.BOTTOM_RIGHT,0,0)
         #self.next_button.add_event_cb(self.print_events, lv.EVENT.ALL, None)
@@ -79,10 +86,12 @@ class ImageView(Activity):
                 self.images.append(fullname)
 
             self.images.sort()
-            # Begin with one image:
-            self.show_next_image()
-            self.stop_fullscreen()
-            #self.image_timer = lv.timer_create(self.show_next_image, 1000, None)
+            if len(self.images) == 0:
+                self.no_image_mode()
+            else:
+                # Begin with one image:
+                self.show_next_image()
+                self.stop_fullscreen()
         except Exception as e:
             print(f"ImageView encountered exception for {self.imagedir}: {e}")
 
@@ -93,9 +102,16 @@ class ImageView(Activity):
             print("ImageView: deleting image_timer")
             self.image_timer.delete()
 
+    def no_image_mode(self):
+        self.label.set_text(f"No images found in {self.imagedir}...")
+        mpos.ui.anim.smooth_hide(self.prev_button)
+        mpos.ui.anim.smooth_hide(self.delete_button)
+        mpos.ui.anim.smooth_hide(self.next_button)
+
     def show_prev_image(self, event=None):
         print("showing previous image...")
         if len(self.images) < 1:
+            self.no_image_mode()
             return
         if self.image_nr is None or self.image_nr == 0:
             self.image_nr = len(self.images) - 1
@@ -119,6 +135,7 @@ class ImageView(Activity):
         print("stopping fullscreen")
         mpos.ui.anim.smooth_show(self.label)
         mpos.ui.anim.smooth_show(self.prev_button)
+        mpos.ui.anim.smooth_show(self.delete_button)
         #mpos.ui.anim.smooth_show(self.play_button)
         self.play_button.add_flag(lv.obj.FLAG.HIDDEN) # make it not accepting focus
         mpos.ui.anim.smooth_show(self.next_button)
@@ -127,6 +144,7 @@ class ImageView(Activity):
         print("starting fullscreen")
         mpos.ui.anim.smooth_hide(self.label)
         mpos.ui.anim.smooth_hide(self.prev_button, hide=False)
+        mpos.ui.anim.smooth_hide(self.delete_button, hide=False)
         #mpos.ui.anim.smooth_hide(self.play_button, hide=False)
         self.play_button.remove_flag(lv.obj.FLAG.HIDDEN) # make it accepting focus
         mpos.ui.anim.smooth_hide(self.next_button, hide=False)
@@ -170,6 +188,7 @@ class ImageView(Activity):
     def show_next_image(self, event=None):
         print("showing next image...")
         if len(self.images) < 1:
+            self.no_image_mode()
             return
         if self.image_nr is None or self.image_nr  >= len(self.images) - 1:
             self.image_nr = 0
@@ -178,6 +197,16 @@ class ImageView(Activity):
         name = self.images[self.image_nr]
         print(f"show_next_image showing {name}")
         self.show_image(name)
+
+    def delete_image(self, event=None):
+        filename = self.images[self.image_nr]
+        try:
+            os.remove(filename)
+            self.clear_image()
+            self.label.set_text(f"Deleted\n{filename}")
+            del self.images[self.image_nr]
+        except Exception as e:
+            print(f"Error deleting {filename}: {e}")
 
     def extract_dimensions_and_format(self, filename):
         # Split the filename by '_'
@@ -191,6 +220,7 @@ class ImageView(Activity):
         return width, height, color_format.upper()
 
     def show_image(self, name):
+        self.current_image = name
         try:
             self.label.set_text(name)
             self.clear_image()
@@ -220,7 +250,7 @@ class ImageView(Activity):
                 if color_format == "GRAY":
                     cf = lv.COLOR_FORMAT.L8
                     stride = width
-                else:
+                elif color_format != "RGB565":
                     print(f"WARNING: unknown color format {color_format}, assuming RGB565...")
                 self.current_image_dsc = lv.image_dsc_t({
                     "header": {
@@ -242,7 +272,7 @@ class ImageView(Activity):
         if self.fullscreen:
             pct = 100
         else:
-            pct = 90
+            pct = 70
         lvgl_w = mpos.ui.pct_of_display_width(pct)
         lvgl_h = mpos.ui.pct_of_display_height(pct)
         print(f"scaling to size: {lvgl_w}x{lvgl_h}")
@@ -265,6 +295,7 @@ class ImageView(Activity):
 
     def clear_image(self):
         """Clear current image or GIF source to free memory."""
+        self.image.set_src(None)
         #if self.current_image_dsc:
         #    self.current_image_dsc = None  # Release reference to descriptor
         #self.image.set_src(None)  # Clear image source
