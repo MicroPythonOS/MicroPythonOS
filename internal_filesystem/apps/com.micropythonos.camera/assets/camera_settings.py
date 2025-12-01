@@ -165,16 +165,17 @@ class CameraSettingsActivity(Activity):
     def create_dropdown(self, parent, label_text, options, default_idx, pref_key):
         """Create dropdown with label."""
         cont = lv.obj(parent)
-        cont.set_size(lv.pct(100), 60)
-        cont.set_style_pad_all(3, 0)
+        cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        cont.set_style_pad_all(2, 0)
 
         label = lv.label(cont)
         label.set_text(label_text)
-        label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        label.set_size(lv.pct(50), lv.SIZE_CONTENT)
+        label.align(lv.ALIGN.LEFT_MID, 0, 0)
 
         dropdown = lv.dropdown(cont)
-        dropdown.set_size(lv.pct(90), 30)
-        dropdown.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        dropdown.set_size(lv.pct(50), lv.SIZE_CONTENT)
+        dropdown.align(lv.ALIGN.RIGHT_MID, 0, 0)
 
         options_str = "\n".join([text for text, _ in options])
         dropdown.set_options(options_str)
