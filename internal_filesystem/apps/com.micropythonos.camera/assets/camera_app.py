@@ -176,8 +176,9 @@ class CameraApp(Activity):
                 i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
             except Exception as e:
                 print(f"Warning: powering off camera got exception: {e}")
-        print("emptying self.current_cam_buffer...")
-        self.image_dsc.data = None # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
+        if self.image_dsc: # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
+            print("emptying self.current_cam_buffer...")
+            self.image_dsc.data = None
 
     def load_settings_cached(self):
         from mpos.config import SharedPreferences
@@ -453,7 +454,7 @@ class CameraApp(Activity):
         return buffer
     
     
-    def apply_camera_settings(self, cam, use_webcam):
+    def apply_camera_settings(self, prefs, cam, use_webcam):
         """Apply all saved camera settings to the camera.
     
         Only applies settings when use_webcam is False (ESP32 camera).
@@ -469,101 +470,101 @@ class CameraApp(Activity):
     
         try:
             # Basic image adjustments
-            brightness = self.prefs.get_int("brightness", 0)
+            brightness = prefs.get_int("brightness", 0)
             cam.set_brightness(brightness)
     
-            contrast = self.prefs.get_int("contrast", 0)
+            contrast = prefs.get_int("contrast", 0)
             cam.set_contrast(contrast)
     
-            saturation = self.prefs.get_int("saturation", 0)
+            saturation = prefs.get_int("saturation", 0)
             cam.set_saturation(saturation)
     
             # Orientation
-            hmirror = self.prefs.get_bool("hmirror", False)
+            hmirror = prefs.get_bool("hmirror", False)
             cam.set_hmirror(hmirror)
     
-            vflip = self.prefs.get_bool("vflip", True)
+            vflip = prefs.get_bool("vflip", True)
             cam.set_vflip(vflip)
     
             # Special effect
-            special_effect = self.prefs.get_int("special_effect", 0)
+            special_effect = prefs.get_int("special_effect", 0)
             cam.set_special_effect(special_effect)
     
             # Exposure control (apply master switch first, then manual value)
-            exposure_ctrl = self.prefs.get_bool("exposure_ctrl", True)
+            exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
             cam.set_exposure_ctrl(exposure_ctrl)
     
             if not exposure_ctrl:
-                aec_value = self.prefs.get_int("aec_value", 300)
+                aec_value = prefs.get_int("aec_value", 300)
                 cam.set_aec_value(aec_value)
     
-            ae_level = self.prefs.get_int("ae_level", 2 if self.scanqr_mode else 0)
+            ae_level = prefs.get_int("ae_level", 2 if self.scanqr_mode else 0)
             cam.set_ae_level(ae_level)
     
-            aec2 = self.prefs.get_bool("aec2", False)
+            aec2 = prefs.get_bool("aec2", False)
             cam.set_aec2(aec2)
     
             # Gain control (apply master switch first, then manual value)
-            gain_ctrl = self.prefs.get_bool("gain_ctrl", True)
+            gain_ctrl = prefs.get_bool("gain_ctrl", True)
             cam.set_gain_ctrl(gain_ctrl)
     
             if not gain_ctrl:
-                agc_gain = self.prefs.get_int("agc_gain", 0)
+                agc_gain = prefs.get_int("agc_gain", 0)
                 cam.set_agc_gain(agc_gain)
     
-            gainceiling = self.prefs.get_int("gainceiling", 0)
+            gainceiling = prefs.get_int("gainceiling", 0)
             cam.set_gainceiling(gainceiling)
     
             # White balance (apply master switch first, then mode)
-            whitebal = self.prefs.get_bool("whitebal", True)
+            whitebal = prefs.get_bool("whitebal", True)
             cam.set_whitebal(whitebal)
     
             if not whitebal:
-                wb_mode = self.prefs.get_int("wb_mode", 0)
+                wb_mode = prefs.get_int("wb_mode", 0)
                 cam.set_wb_mode(wb_mode)
     
-            awb_gain = self.prefs.get_bool("awb_gain", True)
+            awb_gain = prefs.get_bool("awb_gain", True)
             cam.set_awb_gain(awb_gain)
     
             # Sensor-specific settings (try/except for unsupported sensors)
             try:
-                sharpness = self.prefs.get_int("sharpness", 0)
+                sharpness = prefs.get_int("sharpness", 0)
                 cam.set_sharpness(sharpness)
             except:
                 pass  # Not supported on OV2640?
     
             try:
-                denoise = self.prefs.get_int("denoise", 0)
+                denoise = prefs.get_int("denoise", 0)
                 cam.set_denoise(denoise)
             except:
                 pass  # Not supported on OV2640?
     
             # Advanced corrections
-            colorbar = self.prefs.get_bool("colorbar", False)
+            colorbar = prefs.get_bool("colorbar", False)
             cam.set_colorbar(colorbar)
     
-            dcw = self.prefs.get_bool("dcw", True)
+            dcw = prefs.get_bool("dcw", True)
             cam.set_dcw(dcw)
     
-            bpc = self.prefs.get_bool("bpc", False)
+            bpc = prefs.get_bool("bpc", False)
             cam.set_bpc(bpc)
     
-            wpc = self.prefs.get_bool("wpc", True)
+            wpc = prefs.get_bool("wpc", True)
             cam.set_wpc(wpc)
     
-            raw_gma = self.prefs.get_bool("raw_gma", False if self.scanqr_mode else True)
+            raw_gma = prefs.get_bool("raw_gma", False if self.scanqr_mode else True)
             print(f"applying raw_gma: {raw_gma}")
             cam.set_raw_gma(raw_gma)
     
-            lenc = self.prefs.get_bool("lenc", True)
+            lenc = prefs.get_bool("lenc", True)
             cam.set_lenc(lenc)
     
             # JPEG quality (only relevant for JPEG format)
-            try:
-                quality = self.prefs.get_int("quality", 85)
-                cam.set_quality(quality)
-            except:
-                pass  # Not in JPEG mode
+            #try:
+            #    quality = prefs.get_int("quality", 85)
+            #    cam.set_quality(quality)
+            #except:
+            #    pass  # Not in JPEG mode
     
             print("Camera settings applied successfully")
     
