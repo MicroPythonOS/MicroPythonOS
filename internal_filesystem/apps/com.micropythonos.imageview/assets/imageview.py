@@ -21,6 +21,7 @@ class ImageView(Activity):
 
     def onCreate(self):
         screen = lv.obj()
+        screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
         self.image = lv.image(screen)
         self.image.center()
         self.image.add_flag(lv.obj.FLAG.CLICKABLE)
@@ -39,6 +40,7 @@ class ImageView(Activity):
         self.prev_button.add_event_cb(lambda e: self.show_prev_image(),lv.EVENT.CLICKED,None)
         prev_label = lv.label(self.prev_button)
         prev_label.set_text(lv.SYMBOL.LEFT)
+        prev_label.set_style_text_font(lv.font_montserrat_16, 0)
         self.play_button = lv.button(screen)
         self.play_button.align(lv.ALIGN.BOTTOM_MID,0,0)
         self.play_button.set_style_opa(lv.OPA.TRANSP, 0)
@@ -55,6 +57,7 @@ class ImageView(Activity):
         self.next_button.add_event_cb(lambda e: self.show_next_image(),lv.EVENT.CLICKED,None)
         next_label = lv.label(self.next_button)
         next_label.set_text(lv.SYMBOL.RIGHT)
+        next_label.set_style_text_font(lv.font_montserrat_16, 0)
         #screen.add_event_cb(self.print_events, lv.EVENT.ALL, None)
         self.setContentView(screen)
 
@@ -216,6 +219,7 @@ class ImageView(Activity):
                 cf = lv.COLOR_FORMAT.RGB565
                 if color_format == "GRAY":
                     cf = lv.COLOR_FORMAT.L8
+                    stride = width
                 else:
                     print(f"WARNING: unknown color format {color_format}, assuming RGB565...")
                 self.current_image_dsc = lv.image_dsc_t({
