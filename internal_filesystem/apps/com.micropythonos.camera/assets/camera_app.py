@@ -260,12 +260,13 @@ class CameraApp(Activity):
         print("Taking picture...")
         # Would be nice to check that there's enough free space here, and show an error if not...
         import os
+        path = "data/images"
         try:
             os.mkdir("data")
         except OSError:
             pass
         try:
-            os.mkdir("data/images")
+            os.mkdir(path)
         except OSError:
             pass
         if self.current_cam_buffer is None:
@@ -281,7 +282,7 @@ class CameraApp(Activity):
             self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
             return
         colorname = "RGB565" if self.colormode else "GRAY"
-        filename=f"data/images/camera_capture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
+        filename=f"{path}/picture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
         try:
             with open(filename, 'wb') as f:
                 f.write(self.current_cam_buffer) # This takes around 17 seconds to store 921600 bytes, so ~50KB/s, so would be nice to show some progress bar
