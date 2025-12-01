@@ -50,7 +50,6 @@ class CameraApp(Activity):
     status_label_cont = None
 
     def onCreate(self):
-        self.scanqr_intent = self.getIntent().extras.get("scanqr_intent")
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(1, 0)
         self.main_screen.set_style_border_width(0, 0)
@@ -115,16 +114,16 @@ class CameraApp(Activity):
         self.setContentView(self.main_screen)
     
     def onResume(self, screen):
-        self.load_settings_cached()
-        self.start_cam()
-        if not self.cam and self.scanqr_mode:
-            print("No camera found, stopping camera app")
-            self.finish()
-        # Camera is running and refreshing
+        self.scanqr_intent = self.getIntent().extras.get("scanqr_intent")
         self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
-        if self.scanqr_mode:
+        if self.scanqr_mode or self.scanqr_intent:
             self.start_qr_decoding()
+            if not self.cam and self.scanqr_mode:
+                print("No camera found, stopping camera app")
+                self.finish()
         else:
+            self.load_settings_cached()
+            self.start_cam()
             self.qr_button.remove_flag(lv.obj.FLAG.HIDDEN)
             self.snap_button.remove_flag(lv.obj.FLAG.HIDDEN)
 
@@ -176,6 +175,7 @@ class CameraApp(Activity):
                 i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
             except Exception as e:
                 print(f"Warning: powering off camera got exception: {e}")
+        self.cam = None
         if self.image_dsc: # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
             print("emptying self.current_cam_buffer...")
             self.image_dsc.data = None
@@ -286,8 +286,9 @@ class CameraApp(Activity):
         # Activate QR mode settings
         self.load_settings_cached()
         # Check if it's necessary to restart the camera:
-        if self.width != oldwidth or self.height != oldheight or self.colormode != oldcolormode:
-            self.stop_cam()
+        if not self.cam or self.width != oldwidth or self.height != oldheight or self.colormode != oldcolormode:
+            if self.cam:
+                self.stop_cam()
             self.start_cam()
         self.qr_label.set_text(lv.SYMBOL.EYE_CLOSE)
         self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
