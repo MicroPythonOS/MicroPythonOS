@@ -7,14 +7,6 @@ from mpos.config import SharedPreferences
 from mpos.content.intent import Intent
 
 class CameraSettingsActivity(Activity):
-    """Settings activity for comprehensive camera configuration."""
-
-    DEFAULT_WIDTH = 240 # 240 would be better but webcam doesn't support this (yet)
-    DEFAULT_HEIGHT = 240
-    DEFAULT_COLORMODE = True
-    DEFAULT_SCANQR_WIDTH = 960
-    DEFAULT_SCANQR_HEIGHT = 960
-    DEFAULT_SCANQR_COLORMODE = False
 
     # Original: { 2560, 1920,   0,   0, 2623, 1951, 32, 16, 2844, 1968 }
     # Worked for digital zoom in C: { 2560, 1920, 0, 0, 2623, 1951, 992, 736, 2844, 1968 }
@@ -65,22 +57,22 @@ class CameraSettingsActivity(Activity):
         "lenc": True,
     }
 
-    # Normal mode specific defaults (5 settings)
+    # Normal mode specific defaults
     NORMAL_DEFAULTS = {
-        "resolution_width": DEFAULT_WIDTH,      # 240
-        "resolution_height": DEFAULT_HEIGHT,    # 240
-        "colormode": DEFAULT_COLORMODE,         # True
+        "resolution_width": 240,
+        "resolution_height": 240,
+        "colormode": True,
         "ae_level": 0,
         "raw_gma": True,
     }
 
-    # Scanqr mode specific defaults (5 settings, optimized for QR detection)
+    # Scanqr mode specific defaults
     SCANQR_DEFAULTS = {
-        "resolution_width": DEFAULT_SCANQR_WIDTH,      # 960
-        "resolution_height": DEFAULT_SCANQR_HEIGHT,    # 960
-        "colormode": DEFAULT_SCANQR_COLORMODE,         # False (grayscale)
-        "ae_level": 2,                                 # Higher exposure compensation
-        "raw_gma": False,                              # Disable gamma for better contrast
+        "resolution_width": 960,
+        "resolution_height": 960,
+        "colormode": False,
+        "ae_level": 2, # Higher auto-exposure compensation
+        "raw_gma": False, # Disable raw gamma for better contrast
     }
 
     # Resolution options for both ESP32 and webcam
