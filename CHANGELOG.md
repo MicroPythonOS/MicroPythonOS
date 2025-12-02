@@ -4,6 +4,7 @@
 - Fri3d Camp 2024 Badge: improve battery monitor calibration to fix 0.1V delta
 - API: improve and cleanup animations
 - API: SharedPreferences: add erase_all() function
+- API: add defaults handling to SharedPreferences and only save non-defaults
 - About app: add free, used and total storage space info
 - AppStore app: remove unnecessary scrollbar over publisher's name
 - Camera app: massive overhaul!

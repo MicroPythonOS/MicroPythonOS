@@ -446,6 +446,78 @@ prefs.edit().put_int("brightness", -1).commit()
 # brightness is no longer stored in config.json, saves space
 ```
 
+**Multi-mode apps with merged defaults**:
+
+Apps with multiple operating modes can define separate defaults dictionaries and merge them based on the current mode. The camera app demonstrates this pattern with normal and QR scanning modes:
+
+```python
+# Define defaults in your settings class
+class CameraSettingsActivity:
+    # Common defaults shared by all modes
+    COMMON_DEFAULTS = {
+        "brightness": 1,
+        "contrast": 0,
+        "saturation": 0,
+        "hmirror": False,
+        "vflip": True,
+        # ... 20 more common settings
+    }
+
+    # Normal mode specific defaults
+    NORMAL_DEFAULTS = {
+        "resolution_width": 240,
+        "resolution_height": 240,
+        "colormode": True,
+        "ae_level": 0,
+        "raw_gma": True,
+    }
+
+    # QR scanning mode specific defaults
+    SCANQR_DEFAULTS = {
+        "resolution_width": 960,
+        "resolution_height": 960,
+        "colormode": False,  # Grayscale for better QR detection
+        "ae_level": 2,       # Higher exposure
+        "raw_gma": False,    # Better contrast
+    }
+
+# Merge defaults based on mode when initializing
+def load_settings(self):
+    if self.scanqr_mode:
+        # Merge common + scanqr defaults
+        scanqr_defaults = {}
+        scanqr_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
+        scanqr_defaults.update(CameraSettingsActivity.SCANQR_DEFAULTS)
+        self.prefs = SharedPreferences(
+            self.PACKAGE,
+            filename="config_scanqr.json",
+            defaults=scanqr_defaults
+        )
+    else:
+        # Merge common + normal defaults
+        normal_defaults = {}
+        normal_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
+        normal_defaults.update(CameraSettingsActivity.NORMAL_DEFAULTS)
+        self.prefs = SharedPreferences(
+            self.PACKAGE,
+            defaults=normal_defaults
+        )
+
+    # Now all get_*() calls can omit default arguments
+    width = self.prefs.get_int("resolution_width")  # Mode-specific default
+    brightness = self.prefs.get_int("brightness")   # Common default
+```
+
+**Benefits of this pattern**:
+- Single source of truth for all 30 camera settings defaults
+- Mode-specific config files (`config.json`, `config_scanqr.json`)
+- ~90% reduction in config file size (only non-default values stored)
+- Eliminates hardcoded defaults throughout the codebase
+- No need to pass defaults to every `get_int()`/`get_bool()` call
+- Self-documenting code with clear defaults dictionaries
+
+**Note**: Use `dict.update()` instead of `{**dict1, **dict2}` for MicroPython compatibility (dictionary unpacking syntax not supported).
+
 **Intent system**: Launch activities and pass data
 ```python
 from mpos.content.intent import Intent

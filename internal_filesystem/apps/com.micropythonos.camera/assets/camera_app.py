@@ -188,16 +188,30 @@ class CameraApp(Activity):
         if self.scanqr_mode:
             print("loading scanqr settings...")
             if not self.scanqr_prefs:
-                self.scanqr_prefs = SharedPreferences(self.PACKAGE, filename=self.SCANQR_CONFIG)
-            self.width = self.scanqr_prefs.get_int("resolution_width", CameraSettingsActivity.DEFAULT_SCANQR_WIDTH)
-            self.height = self.scanqr_prefs.get_int("resolution_height", CameraSettingsActivity.DEFAULT_SCANQR_HEIGHT)
-            self.colormode = self.scanqr_prefs.get_bool("colormode", CameraSettingsActivity.DEFAULT_SCANQR_COLORMODE)
+                # Merge common and scanqr-specific defaults
+                scanqr_defaults = {}
+                scanqr_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
+                scanqr_defaults.update(CameraSettingsActivity.SCANQR_DEFAULTS)
+                self.scanqr_prefs = SharedPreferences(
+                    self.PACKAGE,
+                    filename=self.SCANQR_CONFIG,
+                    defaults=scanqr_defaults
+                )
+            # Defaults come from constructor, no need to pass them here
+            self.width = self.scanqr_prefs.get_int("resolution_width")
+            self.height = self.scanqr_prefs.get_int("resolution_height")
+            self.colormode = self.scanqr_prefs.get_bool("colormode")
         else:
             if not self.prefs:
-                self.prefs = SharedPreferences(self.PACKAGE)
-            self.width = self.prefs.get_int("resolution_width", CameraSettingsActivity.DEFAULT_WIDTH)
-            self.height = self.prefs.get_int("resolution_height", CameraSettingsActivity.DEFAULT_HEIGHT)
-            self.colormode = self.prefs.get_bool("colormode", CameraSettingsActivity.DEFAULT_COLORMODE)
+                # Merge common and normal-specific defaults
+                normal_defaults = {}
+                normal_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
+                normal_defaults.update(CameraSettingsActivity.NORMAL_DEFAULTS)
+                self.prefs = SharedPreferences(self.PACKAGE, defaults=normal_defaults)
+            # Defaults come from constructor, no need to pass them here
+            self.width = self.prefs.get_int("resolution_width")
+            self.height = self.prefs.get_int("resolution_height")
+            self.colormode = self.prefs.get_bool("colormode")
 
     def update_preview_image(self):
         self.image_dsc = lv.image_dsc_t({
@@ -467,93 +481,95 @@ class CameraApp(Activity):
     
         try:
             # Basic image adjustments
-            brightness = prefs.get_int("brightness", CameraSettingsActivity.DEFAULTS.get("brightness"))
+            brightness = prefs.get_int("brightness")
             cam.set_brightness(brightness)
     
-            contrast = prefs.get_int("contrast", 0)
+            contrast = prefs.get_int("contrast")
             cam.set_contrast(contrast)
     
-            saturation = prefs.get_int("saturation", 0)
+            saturation = prefs.get_int("saturation")
             cam.set_saturation(saturation)
-    
+
             # Orientation
-            hmirror = prefs.get_bool("hmirror", False)
+            hmirror = prefs.get_bool("hmirror")
             cam.set_hmirror(hmirror)
-    
-            vflip = prefs.get_bool("vflip", True)
+
+            vflip = prefs.get_bool("vflip")
             cam.set_vflip(vflip)
-    
+
             # Special effect
-            special_effect = prefs.get_int("special_effect", 0)
+            special_effect = prefs.get_int("special_effect")
             cam.set_special_effect(special_effect)
-    
+
             # Exposure control (apply master switch first, then manual value)
-            exposure_ctrl = prefs.get_bool("exposure_ctrl", True)
+            exposure_ctrl = prefs.get_bool("exposure_ctrl")
             cam.set_exposure_ctrl(exposure_ctrl)
-    
+
             if not exposure_ctrl:
-                aec_value = prefs.get_int("aec_value", 300)
+                aec_value = prefs.get_int("aec_value")
                 cam.set_aec_value(aec_value)
-    
-            ae_level = prefs.get_int("ae_level", 2 if self.scanqr_mode else 0)
+
+            # Mode-specific default comes from constructor
+            ae_level = prefs.get_int("ae_level")
             cam.set_ae_level(ae_level)
-    
-            aec2 = prefs.get_bool("aec2", False)
+
+            aec2 = prefs.get_bool("aec2")
             cam.set_aec2(aec2)
     
             # Gain control (apply master switch first, then manual value)
-            gain_ctrl = prefs.get_bool("gain_ctrl", True)
+            gain_ctrl = prefs.get_bool("gain_ctrl")
             cam.set_gain_ctrl(gain_ctrl)
-    
+
             if not gain_ctrl:
-                agc_gain = prefs.get_int("agc_gain", 0)
+                agc_gain = prefs.get_int("agc_gain")
                 cam.set_agc_gain(agc_gain)
-    
-            gainceiling = prefs.get_int("gainceiling", 0)
+
+            gainceiling = prefs.get_int("gainceiling")
             cam.set_gainceiling(gainceiling)
-    
+
             # White balance (apply master switch first, then mode)
-            whitebal = prefs.get_bool("whitebal", True)
+            whitebal = prefs.get_bool("whitebal")
             cam.set_whitebal(whitebal)
-    
+
             if not whitebal:
-                wb_mode = prefs.get_int("wb_mode", 0)
+                wb_mode = prefs.get_int("wb_mode")
                 cam.set_wb_mode(wb_mode)
-    
-            awb_gain = prefs.get_bool("awb_gain", True)
+
+            awb_gain = prefs.get_bool("awb_gain")
             cam.set_awb_gain(awb_gain)
     
             # Sensor-specific settings (try/except for unsupported sensors)
             try:
-                sharpness = prefs.get_int("sharpness", 0)
+                sharpness = prefs.get_int("sharpness")
                 cam.set_sharpness(sharpness)
             except:
                 pass  # Not supported on OV2640?
-    
+
             try:
-                denoise = prefs.get_int("denoise", 0)
+                denoise = prefs.get_int("denoise")
                 cam.set_denoise(denoise)
             except:
                 pass  # Not supported on OV2640?
-    
+
             # Advanced corrections
-            colorbar = prefs.get_bool("colorbar", False)
+            colorbar = prefs.get_bool("colorbar")
             cam.set_colorbar(colorbar)
-    
-            dcw = prefs.get_bool("dcw", True)
+
+            dcw = prefs.get_bool("dcw")
             cam.set_dcw(dcw)
-    
-            bpc = prefs.get_bool("bpc", False)
+
+            bpc = prefs.get_bool("bpc")
             cam.set_bpc(bpc)
-    
-            wpc = prefs.get_bool("wpc", True)
+
+            wpc = prefs.get_bool("wpc")
             cam.set_wpc(wpc)
-    
-            raw_gma = prefs.get_bool("raw_gma", False if self.scanqr_mode else True)
+
+            # Mode-specific default comes from constructor
+            raw_gma = prefs.get_bool("raw_gma")
             print(f"applying raw_gma: {raw_gma}")
             cam.set_raw_gma(raw_gma)
-    
-            lenc = prefs.get_bool("lenc", True)
+
+            lenc = prefs.get_bool("lenc")
             cam.set_lenc(lenc)
     
             # JPEG quality (only relevant for JPEG format)
