@@ -8,15 +8,29 @@
 #include <string.h>
 #include <errno.h>
 #include <stdint.h>
+#include <limits.h>
 #include "py/obj.h"
 #include "py/runtime.h"
 #include "py/mperrno.h"
 
 #define NUM_BUFFERS 1
+#define MAX_SUPPORTED_RESOLUTIONS 32
 
 #define WEBCAM_DEBUG_PRINT(...) mp_printf(&mp_plat_print, __VA_ARGS__)
 
 static const mp_obj_type_t webcam_type;
+
+// Resolution structure for storing supported formats
+typedef struct {
+    int width;
+    int height;
+} resolution_t;
+
+// Cache of supported resolutions from V4L2 device
+typedef struct {
+    resolution_t resolutions[MAX_SUPPORTED_RESOLUTIONS];
+    int count;
+} supported_resolutions_t;
 
 typedef struct _webcam_obj_t {
     mp_obj_base_t base;
@@ -27,8 +41,15 @@ typedef struct _webcam_obj_t {
     int frame_count;
     unsigned char *gray_buffer; // For grayscale conversion
     uint16_t *rgb565_buffer;   // For RGB565 conversion
-    int width;                 // Resolution width
-    int height;                // Resolution height
+
+    // Separate capture and output dimensions
+    int capture_width;         // What V4L2 actually captures
+    int capture_height;
+    int output_width;          // What user requested
+    int output_height;
+
+    // Supported resolutions cache
+    supported_resolutions_t supported_res;
 } webcam_obj_t;
 
 // Helper function to convert single YUV pixel to RGB565
@@ -50,35 +71,98 @@ static inline uint16_t yuv_to_rgb565(int y_val, int u, int v) {
     return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3);
 }
 
-static void yuyv_to_rgb565(unsigned char *yuyv, uint16_t *rgb565, int width, int height) {
-    // Convert YUYV to RGB565 without scaling
+static void yuyv_to_rgb565(unsigned char *yuyv, uint16_t *rgb565,
+                          int capture_width, int capture_height,
+                          int output_width, int output_height) {
+    // Convert YUYV to RGB565 with cropping or padding support
     // YUYV format: Y0 U Y1 V (4 bytes for 2 pixels, chroma shared)
 
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x += 2) {
-            // Process 2 pixels at a time (one YUYV quad)
-            int base_index = (y * width + x) * 2;
+    // Clear entire output buffer to black (RGB565 0x0000)
+    memset(rgb565, 0, output_width * output_height * sizeof(uint16_t));
 
-            int y0 = yuyv[base_index + 0];
-            int u  = yuyv[base_index + 1];
-            int y1 = yuyv[base_index + 2];
-            int v  = yuyv[base_index + 3];
+    if (output_width <= capture_width && output_height <= capture_height) {
+        // Cropping case: extract center region from capture
+        int offset_x = (capture_width - output_width) / 2;
+        int offset_y = (capture_height - output_height) / 2;
+        offset_x = (offset_x / 2) * 2;  // YUYV alignment (even offset)
 
-            // Convert both pixels (sharing U/V chroma)
-            rgb565[y * width + x] = yuv_to_rgb565(y0, u, v);
-            rgb565[y * width + x + 1] = yuv_to_rgb565(y1, u, v);
+        for (int y = 0; y < output_height; y++) {
+            for (int x = 0; x < output_width; x += 2) {
+                int src_y = offset_y + y;
+                int src_x = offset_x + x;
+                int src_index = (src_y * capture_width + src_x) * 2;
+
+                int y0 = yuyv[src_index + 0];
+                int u  = yuyv[src_index + 1];
+                int y1 = yuyv[src_index + 2];
+                int v  = yuyv[src_index + 3];
+
+                int dst_index = y * output_width + x;
+                rgb565[dst_index] = yuv_to_rgb565(y0, u, v);
+                rgb565[dst_index + 1] = yuv_to_rgb565(y1, u, v);
+            }
+        }
+    } else {
+        // Padding case: center capture in larger output buffer
+        int offset_x = (output_width - capture_width) / 2;
+        int offset_y = (output_height - capture_height) / 2;
+        offset_x = (offset_x / 2) * 2;  // YUYV alignment (even offset)
+
+        for (int y = 0; y < capture_height; y++) {
+            for (int x = 0; x < capture_width; x += 2) {
+                int src_index = (y * capture_width + x) * 2;
+
+                int y0 = yuyv[src_index + 0];
+                int u  = yuyv[src_index + 1];
+                int y1 = yuyv[src_index + 2];
+                int v  = yuyv[src_index + 3];
+
+                int dst_y = offset_y + y;
+                int dst_x = offset_x + x;
+                int dst_index = dst_y * output_width + dst_x;
+                rgb565[dst_index] = yuv_to_rgb565(y0, u, v);
+                rgb565[dst_index + 1] = yuv_to_rgb565(y1, u, v);
+            }
         }
     }
 }
 
-static void yuyv_to_grayscale(unsigned char *yuyv, unsigned char *gray, int width, int height) {
-    // Extract Y (luminance) values from YUYV without scaling
+static void yuyv_to_grayscale(unsigned char *yuyv, unsigned char *gray,
+                             int capture_width, int capture_height,
+                             int output_width, int output_height) {
+    // Extract Y (luminance) values from YUYV with cropping or padding support
     // YUYV format: Y0 U Y1 V (4 bytes for 2 pixels)
 
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            // Y values are at even indices in YUYV
-            gray[y * width + x] = yuyv[(y * width + x) * 2];
+    // Clear entire output buffer to black (0x00)
+    memset(gray, 0, output_width * output_height);
+
+    if (output_width <= capture_width && output_height <= capture_height) {
+        // Cropping case: extract center region from capture
+        int offset_x = (capture_width - output_width) / 2;
+        int offset_y = (capture_height - output_height) / 2;
+        offset_x = (offset_x / 2) * 2;  // YUYV alignment (even offset)
+
+        for (int y = 0; y < output_height; y++) {
+            for (int x = 0; x < output_width; x++) {
+                int src_y = offset_y + y;
+                int src_x = offset_x + x;
+                // Y values are at even indices in YUYV
+                gray[y * output_width + x] = yuyv[(src_y * capture_width + src_x) * 2];
+            }
+        }
+    } else {
+        // Padding case: center capture in larger output buffer
+        int offset_x = (output_width - capture_width) / 2;
+        int offset_y = (output_height - capture_height) / 2;
+        offset_x = (offset_x / 2) * 2;  // YUYV alignment (even offset)
+
+        for (int y = 0; y < capture_height; y++) {
+            for (int x = 0; x < capture_width; x++) {
+                int dst_y = offset_y + y;
+                int dst_x = offset_x + x;
+                // Y values are at even indices in YUYV
+                gray[dst_y * output_width + dst_x] = yuyv[(y * capture_width + x) * 2];
+            }
         }
     }
 }
@@ -93,7 +177,119 @@ static void save_raw_generic(const char *filename, void *data, size_t elem_size,
     fclose(fp);
 }
 
-static int init_webcam(webcam_obj_t *self, const char *device, int width, int height) {
+// Query supported YUYV resolutions from V4L2 device
+static int query_supported_resolutions(int fd, supported_resolutions_t *supported) {
+    struct v4l2_fmtdesc fmt_desc;
+    struct v4l2_frmsizeenum frmsize;
+    int found_yuyv = 0;
+
+    supported->count = 0;
+
+    // First, check if device supports YUYV format
+    memset(&fmt_desc, 0, sizeof(fmt_desc));
+    fmt_desc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    for (fmt_desc.index = 0; ; fmt_desc.index++) {
+        if (ioctl(fd, VIDIOC_ENUM_FMT, &fmt_desc) < 0) {
+            break;
+        }
+        if (fmt_desc.pixelformat == V4L2_PIX_FMT_YUYV) {
+            found_yuyv = 1;
+            break;
+        }
+    }
+
+    if (!found_yuyv) {
+        WEBCAM_DEBUG_PRINT("Warning: YUYV format not found\n");
+        return -1;
+    }
+
+    // Enumerate frame sizes for YUYV
+    memset(&frmsize, 0, sizeof(frmsize));
+    frmsize.pixel_format = V4L2_PIX_FMT_YUYV;
+
+    for (frmsize.index = 0; supported->count < MAX_SUPPORTED_RESOLUTIONS; frmsize.index++) {
+        if (ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &frmsize) < 0) {
+            break;
+        }
+
+        if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+            supported->resolutions[supported->count].width = frmsize.discrete.width;
+            supported->resolutions[supported->count].height = frmsize.discrete.height;
+            supported->count++;
+            WEBCAM_DEBUG_PRINT("  Found resolution: %dx%d\n",
+                              frmsize.discrete.width, frmsize.discrete.height);
+        }
+    }
+
+    if (supported->count == 0) {
+        WEBCAM_DEBUG_PRINT("Warning: No discrete YUYV resolutions found, using common defaults\n");
+        // Fallback to common resolutions if enumeration fails
+        const resolution_t defaults[] = {
+            {160, 120}, {320, 240}, {640, 480}, {1280, 720}, {1920, 1080}
+        };
+        for (int i = 0; i < 5 && i < MAX_SUPPORTED_RESOLUTIONS; i++) {
+            supported->resolutions[i] = defaults[i];
+            supported->count++;
+        }
+    }
+
+    WEBCAM_DEBUG_PRINT("Total supported resolutions: %d\n", supported->count);
+    return 0;
+}
+
+// Find the best capture resolution for the requested output size
+static resolution_t find_best_capture_resolution(int requested_width, int requested_height,
+                                                   supported_resolutions_t *supported) {
+    resolution_t best;
+    int found_candidate = 0;
+    int min_area = INT_MAX;
+
+    // Check for exact match first
+    for (int i = 0; i < supported->count; i++) {
+        if (supported->resolutions[i].width == requested_width &&
+            supported->resolutions[i].height == requested_height) {
+            WEBCAM_DEBUG_PRINT("Found exact resolution match: %dx%d\n",
+                              requested_width, requested_height);
+            return supported->resolutions[i];
+        }
+    }
+
+    // Find smallest resolution that contains the requested size
+    for (int i = 0; i < supported->count; i++) {
+        if (supported->resolutions[i].width >= requested_width &&
+            supported->resolutions[i].height >= requested_height) {
+            int area = supported->resolutions[i].width * supported->resolutions[i].height;
+            if (area < min_area) {
+                min_area = area;
+                best = supported->resolutions[i];
+                found_candidate = 1;
+            }
+        }
+    }
+
+    if (found_candidate) {
+        WEBCAM_DEBUG_PRINT("Best capture resolution for %dx%d: %dx%d (will crop)\n",
+                          requested_width, requested_height, best.width, best.height);
+        return best;
+    }
+
+    // No containing resolution found, use largest available (will need padding)
+    best = supported->resolutions[0];
+    for (int i = 1; i < supported->count; i++) {
+        int area = supported->resolutions[i].width * supported->resolutions[i].height;
+        int best_area = best.width * best.height;
+        if (area > best_area) {
+            best = supported->resolutions[i];
+        }
+    }
+
+    WEBCAM_DEBUG_PRINT("Warning: Requested %dx%d exceeds max supported, capturing at %dx%d (will pad with black)\n",
+                      requested_width, requested_height, best.width, best.height);
+    return best;
+}
+
+static int init_webcam(webcam_obj_t *self, const char *device, int requested_width, int requested_height) {
     // Store device path for later use (e.g., reconfigure)
     strncpy(self->device, device, sizeof(self->device) - 1);
     self->device[sizeof(self->device) - 1] = '\0';
@@ -104,10 +300,28 @@ static int init_webcam(webcam_obj_t *self, const char *device, int width, int he
         return -errno;
     }
 
+    // Query supported resolutions (first time only)
+    if (self->supported_res.count == 0) {
+        WEBCAM_DEBUG_PRINT("Querying supported resolutions...\n");
+        if (query_supported_resolutions(self->fd, &self->supported_res) < 0) {
+            // Query failed, but continue with fallback defaults
+            WEBCAM_DEBUG_PRINT("Resolution query failed, continuing with defaults\n");
+        }
+    }
+
+    // Find best capture resolution for requested output
+    resolution_t best = find_best_capture_resolution(requested_width, requested_height,
+                                                      &self->supported_res);
+
+    // Store requested output dimensions
+    self->output_width = requested_width;
+    self->output_height = requested_height;
+
+    // Configure V4L2 with capture resolution
     struct v4l2_format fmt = {0};
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    fmt.fmt.pix.width = width;
-    fmt.fmt.pix.height = height;
+    fmt.fmt.pix.width = best.width;
+    fmt.fmt.pix.height = best.height;
     fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
     if (ioctl(self->fd, VIDIOC_S_FMT, &fmt) < 0) {
@@ -116,9 +330,9 @@ static int init_webcam(webcam_obj_t *self, const char *device, int width, int he
         return -errno;
     }
 
-    // Store actual format (driver may adjust dimensions)
-    width = fmt.fmt.pix.width;
-    height = fmt.fmt.pix.height;
+    // Store actual capture dimensions (driver may adjust)
+    self->capture_width = fmt.fmt.pix.width;
+    self->capture_height = fmt.fmt.pix.height;
 
     struct v4l2_requestbuffers req = {0};
     req.count = NUM_BUFFERS;
@@ -176,17 +390,15 @@ static int init_webcam(webcam_obj_t *self, const char *device, int width, int he
 
     self->frame_count = 0;
 
-    // Store resolution (actual values from V4L2, may be adjusted by driver)
-    self->width = width;
-    self->height = height;
+    WEBCAM_DEBUG_PRINT("Webcam initialized: capture=%dx%d, output=%dx%d\n",
+                       self->capture_width, self->capture_height,
+                       self->output_width, self->output_height);
 
-    WEBCAM_DEBUG_PRINT("Webcam initialized: %dx%d\n", self->width, self->height);
-
-    // Allocate conversion buffers
-    self->gray_buffer = (unsigned char *)malloc(self->width * self->height * sizeof(unsigned char));
-    self->rgb565_buffer = (uint16_t *)malloc(self->width * self->height * sizeof(uint16_t));
+    // Allocate conversion buffers based on OUTPUT dimensions
+    self->gray_buffer = (unsigned char *)malloc(self->output_width * self->output_height * sizeof(unsigned char));
+    self->rgb565_buffer = (uint16_t *)malloc(self->output_width * self->output_height * sizeof(uint16_t));
     if (!self->gray_buffer || !self->rgb565_buffer) {
-        WEBCAM_DEBUG_PRINT("Cannot allocate buffers: %s\n", strerror(errno));
+        WEBCAM_DEBUG_PRINT("Cannot allocate conversion buffers: %s\n", strerror(errno));
         free(self->gray_buffer);
         free(self->rgb565_buffer);
         close(self->fd);
@@ -211,6 +423,9 @@ static void deinit_webcam(webcam_obj_t *self) {
     self->gray_buffer = NULL;
     free(self->rgb565_buffer);
     self->rgb565_buffer = NULL;
+
+    // Clear resolution cache (device may change on reconnect)
+    self->supported_res.count = 0;
 
     close(self->fd);
     self->fd = -1;
@@ -242,18 +457,38 @@ static mp_obj_t capture_frame(mp_obj_t self_in, mp_obj_t format) {
 
     const char *fmt = mp_obj_str_get_str(format);
     if (strcmp(fmt, "grayscale") == 0) {
-        yuyv_to_grayscale(self->buffers[buf.index], self->gray_buffer,
-                         self->width, self->height);
-        mp_obj_t result = mp_obj_new_memoryview('b', self->width * self->height, self->gray_buffer);
+        // Pass all 6 dimensions: capture (source) and output (destination)
+        yuyv_to_grayscale(
+            self->buffers[buf.index],
+            self->gray_buffer,
+            self->capture_width,   // Source dimensions
+            self->capture_height,
+            self->output_width,    // Destination dimensions
+            self->output_height
+        );
+        // Return memoryview with OUTPUT dimensions
+        mp_obj_t result = mp_obj_new_memoryview('b',
+            self->output_width * self->output_height,
+            self->gray_buffer);
         res = ioctl(self->fd, VIDIOC_QBUF, &buf);
         if (res < 0) {
             mp_raise_OSError(-res);
         }
         return result;
     } else {
-        yuyv_to_rgb565(self->buffers[buf.index], self->rgb565_buffer,
-                      self->width, self->height);
-        mp_obj_t result = mp_obj_new_memoryview('b', self->width * self->height * 2, self->rgb565_buffer);
+        // Pass all 6 dimensions: capture (source) and output (destination)
+        yuyv_to_rgb565(
+            self->buffers[buf.index],
+            self->rgb565_buffer,
+            self->capture_width,   // Source dimensions
+            self->capture_height,
+            self->output_width,    // Destination dimensions
+            self->output_height
+        );
+        // Return memoryview with OUTPUT dimensions
+        mp_obj_t result = mp_obj_new_memoryview('b',
+            self->output_width * self->output_height * 2,
+            self->rgb565_buffer);
         res = ioctl(self->fd, VIDIOC_QBUF, &buf);
         if (res < 0) {
             mp_raise_OSError(-res);
@@ -343,8 +578,8 @@ static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_m
     int new_width = args[ARG_width].u_int;
     int new_height = args[ARG_height].u_int;
 
-    if (new_width == 0) new_width = self->width;
-    if (new_height == 0) new_height = self->height;
+    if (new_width == 0) new_width = self->output_width;
+    if (new_height == 0) new_height = self->output_height;
 
     // Validate dimensions
     if (new_width <= 0 || new_height <= 0 || new_width > 3840 || new_height > 2160) {
@@ -352,12 +587,12 @@ static mp_obj_t webcam_reconfigure(size_t n_args, const mp_obj_t *pos_args, mp_m
     }
 
     // Check if anything changed
-    if (new_width == self->width && new_height == self->height) {
+    if (new_width == self->output_width && new_height == self->output_height) {
         return mp_const_none;  // Nothing to do
     }
 
     WEBCAM_DEBUG_PRINT("Reconfiguring webcam: %dx%d -> %dx%d\n",
-                       self->width, self->height, new_width, new_height);
+                       self->output_width, self->output_height, new_width, new_height);
 
     // Clean shutdown and reinitialize with new resolution
     // Note: deinit_webcam doesn't touch self->device, so it's safe to use directly

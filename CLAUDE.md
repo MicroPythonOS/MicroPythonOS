@@ -66,6 +66,52 @@ The OS supports:
 - Platform detection via `sys.platform` ("esp32" vs others)
 - Different boot files per hardware variant (boot_fri3d-2024.py, etc.)
 
+### Webcam Module (Desktop Only)
+
+The `c_mpos/src/webcam.c` module provides webcam support for desktop builds using the V4L2 API.
+
+**Resolution Adaptation**:
+- Automatically queries supported YUYV resolutions from the webcam using V4L2 API
+- Supports all 23 ESP32 camera resolutions via intelligent cropping/padding
+- **Center cropping**: When requesting smaller than available (e.g., 240x240 from 320x240)
+- **Black border padding**: When requesting larger than maximum supported
+- Always returns exactly the requested dimensions for API consistency
+
+**Behavior**:
+- On first init, queries device for supported resolutions using `VIDIOC_ENUM_FRAMESIZES`
+- Selects smallest capture resolution ≥ requested dimensions (minimizes memory/bandwidth)
+- Converts YUYV to RGB565 (color) or grayscale during capture
+- Caches supported resolutions to avoid re-querying device
+
+**Examples**:
+
+*Cropping (common case)*:
+- Request: 240x240 (not natively supported)
+- Capture: 320x240 (nearest supported YUYV resolution)
+- Process: Extract center 240x240 region
+- Result: 240x240 frame with centered content
+
+*Padding (rare case)*:
+- Request: 1920x1080
+- Capture: 1280x720 (webcam maximum)
+- Process: Center 1280x720 content in 1920x1080 buffer with black borders
+- Result: 1920x1080 frame (API contract maintained)
+
+**Performance**:
+- Exact matches use fast path (no cropping overhead)
+- Cropped resolutions add ~5-10% CPU overhead
+- Padded resolutions add ~3-5% CPU overhead (memset + center placement)
+- V4L2 buffers sized for capture resolution, conversion buffers sized for output
+
+**Implementation Details**:
+- YUYV format: 2 pixels per macropixel (4 bytes: Y0 U Y1 V)
+- Crop offsets must be even for proper YUYV alignment
+- Center crop formula: `offset = (capture_dim - output_dim) / 2`, then align to even
+- Supported resolutions cached in `supported_resolutions_t` structure
+- Separate tracking of `capture_width/height` (from V4L2) vs `output_width/height` (user requested)
+
+**File Location**: `c_mpos/src/webcam.c` (C extension module)
+
 ## Build System
 
 ### Building Firmware
