@@ -83,37 +83,9 @@ class CameraSettingsActivity(Activity):
         "raw_gma": False,                              # Disable gamma for better contrast
     }
 
-    # Resolution options for desktop/webcam
-    # Now supports all ESP32 resolutions via automatic cropping/padding
-    WEBCAM_RESOLUTIONS = [
-        ("96x96", "96x96"),
-        ("160x120", "160x120"),
-        ("128x128", "128x128"),
-        ("176x144", "176x144"),
-        ("240x176", "240x176"),
-        ("240x240", "240x240"),
-        ("320x240", "320x240"),
-        ("320x320", "320x320"),
-        ("400x296", "400x296"),
-        ("480x320", "480x320"),
-        ("480x480", "480x480"),
-        ("640x480", "640x480"),
-        ("640x640", "640x640"),
-        ("720x720", "720x720"),
-        ("800x600", "800x600"),
-        ("800x800", "800x800"),
-        ("960x960", "960x960"),
-        ("1024x768",  "1024x768"),
-        ("1024x1024","1024x1024"),
-        ("1280x720",  "1280x720"),
-        ("1280x1024", "1280x1024"),
-        ("1280x1280", "1280x1280"),
-        ("1600x1200", "1600x1200"),
-        ("1920x1080", "1920x1080"),
-    ]
-
-    # Resolution options for internal camera (ESP32)
-    ESP32_RESOLUTIONS = [
+    # Resolution options for both ESP32 and webcam
+    # Webcam supports all ESP32 resolutions via automatic cropping/padding
+    RESOLUTIONS = [
         ("96x96", "96x96"),
         ("160x120", "160x120"),
         ("128x128", "128x128"),
@@ -153,19 +125,11 @@ class CameraSettingsActivity(Activity):
         self.ui_controls = {}
         self.control_metadata = {}  # Store pref_key and option_values for each control
         self.dependent_controls = {}
-        self.is_webcam = False
-        self.resolutions = []
 
     def onCreate(self):
         self.use_webcam = self.getIntent().extras.get("use_webcam")
         self.prefs = self.getIntent().extras.get("prefs")
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
-        if self.use_webcam:
-            self.resolutions = self.WEBCAM_RESOLUTIONS
-            print("Using webcam resolutions")
-        else:
-            self.resolutions = self.ESP32_RESOLUTIONS
-            print("Using ESP32 camera resolutions")
 
         # Create main screen
         screen = lv.obj()
@@ -350,14 +314,14 @@ class CameraSettingsActivity(Activity):
         dropdown_value = f"{current_resolution_width}x{current_resolution_height}"
         print(f"looking for {dropdown_value}")
         resolution_idx = 0
-        for idx, (_, value) in enumerate(self.resolutions):
+        for idx, (_, value) in enumerate(self.RESOLUTIONS):
             print(f"got {value}")
             if value == dropdown_value:
                 resolution_idx = idx
                 print(f"found it! {idx}")
                 break
 
-        dropdown, cont = self.create_dropdown(tab, "Resolution:", self.resolutions, resolution_idx, "resolution")
+        dropdown, cont = self.create_dropdown(tab, "Resolution:", self.RESOLUTIONS, resolution_idx, "resolution")
         self.ui_controls["resolution"] = dropdown
 
         # Brightness
