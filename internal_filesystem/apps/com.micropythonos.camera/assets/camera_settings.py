@@ -9,7 +9,7 @@ from mpos.content.intent import Intent
 class CameraSettingsActivity(Activity):
     """Settings activity for comprehensive camera configuration."""
 
-    DEFAULT_WIDTH = 320 # 240 would be better but webcam doesn't support this (yet)
+    DEFAULT_WIDTH = 240 # 240 would be better but webcam doesn't support this (yet)
     DEFAULT_HEIGHT = 240
     DEFAULT_COLORMODE = True
     DEFAULT_SCANQR_WIDTH = 960
@@ -30,6 +30,10 @@ class CameraSettingsActivity(Activity):
     outputY_default=480
     scale_default=False
     binning_default=False
+
+    DEFAULTS = {
+        "brightness": 1,
+    }
 
     # Resolution options for desktop/webcam
     WEBCAM_RESOLUTIONS = [
@@ -291,7 +295,7 @@ class CameraSettingsActivity(Activity):
         self.ui_controls["resolution"] = dropdown
 
         # Brightness
-        brightness = prefs.get_int("brightness", 0)
+        brightness = prefs.get_int("brightness", self.DEFAULTS.get("brightness"))
         slider, label, cont = self.create_slider(tab, "Brightness", -2, 2, brightness, "brightness")
         self.ui_controls["brightness"] = slider
 

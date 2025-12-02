@@ -2,10 +2,11 @@ import ujson
 import os
 
 class SharedPreferences:
-    def __init__(self, appname, filename="config.json"):
-        """Initialize with appname and filename for preferences."""
+    def __init__(self, appname, filename="config.json", defaults=None):
+        """Initialize with appname, filename, and optional defaults for preferences."""
         self.appname = appname
         self.filename = filename
+        self.defaults = defaults if defaults is not None else {}
         self.filepath = f"data/{self.appname}/{self.filename}"
         self.data = {}
         self.load()
@@ -36,31 +37,80 @@ class SharedPreferences:
     def get_string(self, key, default=None):
         """Retrieve a string value for the given key, with a default if not found."""
         to_return = self.data.get(key)
-        if to_return is None and default is not None:
-            to_return = default
+        if to_return is None:
+            # Method default takes precedence
+            if default is not None:
+                to_return = default
+            # Fall back to constructor default
+            elif key in self.defaults:
+                to_return = self.defaults[key]
         return to_return
 
     def get_int(self, key, default=0):
         """Retrieve an integer value for the given key, with a default if not found."""
-        try:
-            return int(self.data.get(key, default))
-        except (TypeError, ValueError):
+        if key in self.data:
+            try:
+                return int(self.data[key])
+            except (TypeError, ValueError):
+                return default
+        # Key not in stored data, check defaults
+        # Method default takes precedence if explicitly provided (not the hardcoded 0)
+        # Otherwise use constructor default if exists
+        if default != 0:
             return default
+        if key in self.defaults:
+            try:
+                return int(self.defaults[key])
+            except (TypeError, ValueError):
+                return 0
+        return 0
 
     def get_bool(self, key, default=False):
         """Retrieve a boolean value for the given key, with a default if not found."""
-        try:
-            return bool(self.data.get(key, default))
-        except (TypeError, ValueError):
+        if key in self.data:
+            try:
+                return bool(self.data[key])
+            except (TypeError, ValueError):
+                return default
+        # Key not in stored data, check defaults
+        # Method default takes precedence if explicitly provided (not the hardcoded False)
+        # Otherwise use constructor default if exists
+        if default != False:
             return default
+        if key in self.defaults:
+            try:
+                return bool(self.defaults[key])
+            except (TypeError, ValueError):
+                return False
+        return False
 
     def get_list(self, key, default=None):
         """Retrieve a list for the given key, with a default if not found."""
-        return self.data.get(key, default if default is not None else [])
+        if key in self.data:
+            return self.data[key]
+        # Key not in stored data, check defaults
+        # Method default takes precedence if provided
+        if default is not None:
+            return default
+        # Fall back to constructor default
+        if key in self.defaults:
+            return self.defaults[key]
+        # Return empty list as hardcoded fallback
+        return []
 
     def get_dict(self, key, default=None):
         """Retrieve a dictionary for the given key, with a default if not found."""
-        return self.data.get(key, default if default is not None else {})
+        if key in self.data:
+            return self.data[key]
+        # Key not in stored data, check defaults
+        # Method default takes precedence if provided
+        if default is not None:
+            return default
+        # Fall back to constructor default
+        if key in self.defaults:
+            return self.defaults[key]
+        # Return empty dict as hardcoded fallback
+        return {}
 
     def edit(self):
         """Return an Editor object to modify preferences."""
@@ -197,14 +247,31 @@ class Editor:
         self.temp_data = {}
         return self
 
+    def _filter_defaults(self, data):
+        """Remove keys from data that match constructor defaults."""
+        if not self.preferences.defaults:
+            return data
+
+        filtered = {}
+        for key, value in data.items():
+            if key in self.preferences.defaults:
+                if value != self.preferences.defaults[key]:
+                    filtered[key] = value
+                # else: skip saving, matches default
+            else:
+                filtered[key] = value  # No default, always save
+        return filtered
+
     def apply(self):
         """Save changes to the file asynchronously (emulated)."""
-        self.preferences.data = self.temp_data.copy()
+        filtered_data = self._filter_defaults(self.temp_data)
+        self.preferences.data = filtered_data
         self.preferences.save_config()
 
     def commit(self):
         """Save changes to the file synchronously."""
-        self.preferences.data = self.temp_data.copy()
+        filtered_data = self._filter_defaults(self.temp_data)
+        self.preferences.data = filtered_data
         self.preferences.save_config()
         return True
 

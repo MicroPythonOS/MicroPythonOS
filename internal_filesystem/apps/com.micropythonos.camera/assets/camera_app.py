@@ -467,7 +467,7 @@ class CameraApp(Activity):
     
         try:
             # Basic image adjustments
-            brightness = prefs.get_int("brightness", 0)
+            brightness = prefs.get_int("brightness", CameraSettingsActivity.DEFAULTS.get("brightness"))
             cam.set_brightness(brightness)
     
             contrast = prefs.get_int("contrast", 0)

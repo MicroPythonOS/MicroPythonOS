@@ -410,7 +410,7 @@ Current stable version: 0.3.3 (as of latest CHANGELOG entry)
 ```python
 from mpos.config import SharedPreferences
 
-# Load preferences
+# Basic usage
 prefs = SharedPreferences("com.example.myapp")
 value = prefs.get_string("key", "default_value")
 number = prefs.get_int("count", 0)
@@ -422,6 +422,28 @@ editor.put_string("key", "value")
 editor.put_int("count", 42)
 editor.put_dict("data", {"key": "value"})
 editor.commit()
+
+# Using constructor defaults (reduces config file size)
+# Values matching defaults are not saved to disk
+prefs = SharedPreferences("com.example.myapp", defaults={
+    "brightness": -1,
+    "volume": 50,
+    "theme": "dark"
+})
+
+# Returns constructor default (-1) if not stored
+brightness = prefs.get_int("brightness")  # Returns -1
+
+# Method defaults override constructor defaults
+brightness = prefs.get_int("brightness", 100)  # Returns 100
+
+# Stored values override all defaults
+prefs.edit().put_int("brightness", 75).commit()
+brightness = prefs.get_int("brightness")  # Returns 75
+
+# Setting to default value removes it from storage (auto-cleanup)
+prefs.edit().put_int("brightness", -1).commit()
+# brightness is no longer stored in config.json, saves space
 ```
 
 **Intent system**: Launch activities and pass data

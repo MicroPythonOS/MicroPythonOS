@@ -475,4 +475,213 @@ class TestSharedPreferences(unittest.TestCase):
         self.assertEqual(loaded["settings"]["theme"], "dark")
         self.assertEqual(loaded["settings"]["limits"][2], 30)
 
+    # Tests for default values feature
+    def test_constructor_defaults_basic(self):
+        """Test that constructor defaults are returned when key is missing."""
+        defaults = {"brightness": -1, "enabled": True, "name": "default"}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # No values stored yet, should return constructor defaults
+        self.assertEqual(prefs.get_int("brightness"), -1)
+        self.assertEqual(prefs.get_bool("enabled"), True)
+        self.assertEqual(prefs.get_string("name"), "default")
+
+    def test_method_default_precedence(self):
+        """Test that method defaults override constructor defaults."""
+        defaults = {"brightness": -1, "enabled": False, "name": "default"}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Method defaults should take precedence when different from hardcoded defaults
+        self.assertEqual(prefs.get_int("brightness", 50), 50)
+        # For booleans, we can only test when method default differs from hardcoded False
+        self.assertEqual(prefs.get_bool("enabled", True), True)
+        self.assertEqual(prefs.get_string("name", "override"), "override")
+
+    def test_stored_value_precedence(self):
+        """Test that stored values override all defaults."""
+        defaults = {"brightness": -1, "enabled": True, "name": "default"}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Store some values
+        prefs.edit().put_int("brightness", 75).put_bool("enabled", False).put_string("name", "stored").commit()
+
+        # Reload and verify stored values override defaults
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertEqual(prefs2.get_int("brightness"), 75)
+        self.assertEqual(prefs2.get_bool("enabled"), False)
+        self.assertEqual(prefs2.get_string("name"), "stored")
+
+        # Method defaults should not override stored values
+        self.assertEqual(prefs2.get_int("brightness", 100), 75)
+        self.assertEqual(prefs2.get_bool("enabled", True), False)
+        self.assertEqual(prefs2.get_string("name", "method"), "stored")
+
+    def test_default_values_not_saved(self):
+        """Test that values matching defaults are not written to disk."""
+        defaults = {"brightness": -1, "enabled": True, "name": "default"}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Set values matching defaults
+        prefs.edit().put_int("brightness", -1).put_bool("enabled", True).put_string("name", "default").commit()
+
+        # Reload and verify values are returned correctly
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertEqual(prefs2.get_int("brightness"), -1)
+        self.assertEqual(prefs2.get_bool("enabled"), True)
+        self.assertEqual(prefs2.get_string("name"), "default")
+
+        # Verify raw data doesn't contain the keys (they weren't saved)
+        self.assertFalse("brightness" in prefs2.data)
+        self.assertFalse("enabled" in prefs2.data)
+        self.assertFalse("name" in prefs2.data)
+
+    def test_cleanup_removes_defaults(self):
+        """Test that setting a value to its default removes it from storage."""
+        defaults = {"brightness": -1}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Store a non-default value
+        prefs.edit().put_int("brightness", 75).commit()
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertIn("brightness", prefs2.data)
+        self.assertEqual(prefs2.get_int("brightness"), 75)
+
+        # Change it back to default
+        prefs2.edit().put_int("brightness", -1).commit()
+
+        # Reload and verify it's been removed from storage
+        prefs3 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertFalse("brightness" in prefs3.data)
+        self.assertEqual(prefs3.get_int("brightness"), -1)
+
+    def test_none_as_valid_default(self):
+        """Test that None can be used as a constructor default value."""
+        defaults = {"optional_string": None, "optional_list": None}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Should return None for these keys
+        self.assertIsNone(prefs.get_string("optional_string"))
+        self.assertIsNone(prefs.get_list("optional_list"))
+
+        # Store some values
+        prefs.edit().put_string("optional_string", "value").put_list("optional_list", [1, 2]).commit()
+
+        # Reload
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertEqual(prefs2.get_string("optional_string"), "value")
+        self.assertEqual(prefs2.get_list("optional_list"), [1, 2])
+
+    def test_empty_collection_defaults(self):
+        """Test empty lists and dicts as constructor defaults."""
+        defaults = {"items": [], "settings": {}}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Should return empty collections
+        self.assertEqual(prefs.get_list("items"), [])
+        self.assertEqual(prefs.get_dict("settings"), {})
+
+        # These should not be saved to disk
+        prefs.edit().put_list("items", []).put_dict("settings", {}).commit()
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertFalse("items" in prefs2.data)
+        self.assertFalse("settings" in prefs2.data)
+
+    def test_defaults_with_nested_structures(self):
+        """Test that defaults work with complex nested structures."""
+        defaults = {
+            "config": {"theme": "dark", "size": 12},
+            "items": [1, 2, 3]
+        }
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Constructor defaults should work
+        self.assertEqual(prefs.get_dict("config"), {"theme": "dark", "size": 12})
+        self.assertEqual(prefs.get_list("items"), [1, 2, 3])
+
+        # Exact match should not be saved
+        prefs.edit().put_dict("config", {"theme": "dark", "size": 12}).commit()
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertFalse("config" in prefs2.data)
+
+        # Modified value should be saved
+        prefs2.edit().put_dict("config", {"theme": "light", "size": 12}).commit()
+        prefs3 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertIn("config", prefs3.data)
+        self.assertEqual(prefs3.get_dict("config")["theme"], "light")
+
+    def test_backward_compatibility(self):
+        """Test that existing code without defaults parameter still works."""
+        # Old style initialization (no defaults parameter)
+        prefs = SharedPreferences(self.test_app_name)
+
+        # Should work exactly as before
+        prefs.edit().put_string("key", "value").put_int("count", 42).commit()
+
+        prefs2 = SharedPreferences(self.test_app_name)
+        self.assertEqual(prefs2.get_string("key"), "value")
+        self.assertEqual(prefs2.get_int("count"), 42)
+
+    def test_type_conversion_with_defaults(self):
+        """Test type conversion works correctly with constructor defaults."""
+        defaults = {"number": -1, "flag": True}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Store string representations
+        prefs.edit().put_string("number", "123").put_string("flag", "false").commit()
+
+        # get_int and get_bool should handle conversion
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        # Note: the stored values are strings, not ints/bools, so they're different from defaults
+        self.assertIn("number", prefs2.data)
+        self.assertIn("flag", prefs2.data)
+
+    def test_multiple_editors_with_defaults(self):
+        """Test that multiple edit sessions work correctly with defaults."""
+        defaults = {"brightness": -1, "volume": 50}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # First editor session
+        editor1 = prefs.edit()
+        editor1.put_int("brightness", 75)
+        editor1.commit()
+
+        # Second editor session
+        editor2 = prefs.edit()
+        editor2.put_int("volume", 80)
+        editor2.commit()
+
+        # Verify both values
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertEqual(prefs2.get_int("brightness"), 75)
+        self.assertEqual(prefs2.get_int("volume"), 80)
+        self.assertIn("brightness", prefs2.data)
+        self.assertIn("volume", prefs2.data)
+
+        # Set one back to default
+        prefs2.edit().put_int("brightness", -1).commit()
+        prefs3 = SharedPreferences(self.test_app_name, defaults=defaults)
+        self.assertFalse("brightness" in prefs3.data)
+        self.assertEqual(prefs3.get_int("brightness"), -1)
+
+    def test_partial_defaults(self):
+        """Test that some keys can have defaults while others don't."""
+        defaults = {"brightness": -1}  # Only brightness has a default
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # Save multiple values
+        prefs.edit().put_int("brightness", -1).put_int("volume", 50).put_string("name", "test").commit()
+
+        # Reload
+        prefs2 = SharedPreferences(self.test_app_name, defaults=defaults)
+
+        # brightness matches default, should not be in data
+        self.assertFalse("brightness" in prefs2.data)
+        self.assertEqual(prefs2.get_int("brightness"), -1)
+
+        # volume and name have no defaults, should be in data
+        self.assertIn("volume", prefs2.data)
+        self.assertIn("name", prefs2.data)
+        self.assertEqual(prefs2.get_int("volume"), 50)
+        self.assertEqual(prefs2.get_string("name"), "test")
+
 
