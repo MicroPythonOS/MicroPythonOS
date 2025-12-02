@@ -37,7 +37,7 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
         }
         print(f"Thread {thread_id}: starting script")
         import sys
-        path_before = sys.path
+        path_before = sys.path[:]  # Make a copy, not a reference
         if cwd:
             sys.path.append(cwd)
         try:
@@ -74,8 +74,10 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
             tb = getattr(e, '__traceback__', None)
             traceback.print_exception(type(e), e, tb)
             return False
-        print(f"Thread {thread_id}: script {compile_name} finished, restoring sys.path to {sys.path}")
-        sys.path = path_before
+        finally:
+            # Always restore sys.path, even if we return early or raise an exception
+            print(f"Thread {thread_id}: script {compile_name} finished, restoring sys.path from {sys.path} to {path_before}")
+            sys.path = path_before
         return True
     except Exception as e:
         print(f"Thread {thread_id}: error:")
