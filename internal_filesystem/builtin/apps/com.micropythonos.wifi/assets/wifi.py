@@ -237,7 +237,6 @@ class PasswordPage(Activity):
         self.password_ta.set_width(lv.pct(90))
         self.password_ta.set_one_line(True)
         self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_MID, 0, 5)
-        self.password_ta.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
         print("PasswordPage: Creating Connect button")
         self.connect_button=lv.button(password_page)
         self.connect_button.set_size(100,40)
@@ -262,15 +261,9 @@ class PasswordPage(Activity):
         self.keyboard=MposKeyboard(password_page)
         self.keyboard.align(lv.ALIGN.BOTTOM_MID,0,0)
         self.keyboard.set_textarea(self.password_ta)
-        self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.READY, None)
-        self.keyboard.add_event_cb(lambda *args: self.hide_keyboard(), lv.EVENT.CANCEL, None)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
-        self.keyboard.add_event_cb(self.handle_keyboard_events, lv.EVENT.VALUE_CHANGED, None)
         print("PasswordPage: Loading password page")
         self.setContentView(password_page)
-
-    def onStop(self, screen):
-        self.hide_keyboard()
 
     def connect_cb(self, event):
         global access_points
@@ -289,28 +282,6 @@ class PasswordPage(Activity):
     def cancel_cb(self, event):
         print("cancel_cb: Cancel button clicked")
         self.finish()
-
-    def show_keyboard(self):
-        self.connect_button.add_flag(lv.obj.FLAG.HIDDEN)
-        self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
-        mpos.ui.anim.smooth_show(self.keyboard)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.focus_next() # move the focus to the keyboard to save the user a "next" button press (optional but nice)
-
-    def hide_keyboard(self):
-        mpos.ui.anim.smooth_hide(self.keyboard)
-        self.connect_button.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
-
-    def handle_keyboard_events(self, event):
-        target_obj=event.get_target_obj() # keyboard
-        button = target_obj.get_selected_button()
-        text = target_obj.get_button_text(button)
-        #print(f"button {button} and text {text}")
-        if text == lv.SYMBOL.NEW_LINE:
-            print("Newline pressed, closing the keyboard...")
-            self.hide_keyboard()
 
     @staticmethod
     def setPassword(ssid, password):

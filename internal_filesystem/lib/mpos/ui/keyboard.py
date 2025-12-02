@@ -125,8 +125,13 @@ class MposKeyboard:
         self._keyboard.set_style_min_height(175, 0)
 
     def _handle_events(self, event):
-        # Only process VALUE_CHANGED events for actual typing
-        if event.get_code() != lv.EVENT.VALUE_CHANGED:
+        code = event.get_code()
+        #print(f"keyboard event code = {code}")
+        if code == lv.EVENT.READY or code == lv.EVENT.CANCEL:
+            self.hide_keyboard()
+            return
+        # Process VALUE_CHANGED events for actual typing
+        if code != lv.EVENT.VALUE_CHANGED:
             return
 
         # Get the pressed button and its text
@@ -207,6 +212,7 @@ class MposKeyboard:
         self._textarea = textarea
         # NOTE: We deliberately DO NOT call self._keyboard.set_textarea()
         # to avoid LVGL's automatic character insertion
+        self._textarea.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
 
     def get_textarea(self):
         """
@@ -243,3 +249,9 @@ class MposKeyboard:
         """
         # Forward to the underlying keyboard object
         return getattr(self._keyboard, name)
+
+    def show_keyboard(self):
+        mpos.ui.anim.smooth_show(self._keyboard)
+
+    def hide_keyboard(self):
+        mpos.ui.anim.smooth_hide(self._keyboard)

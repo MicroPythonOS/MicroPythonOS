@@ -1,5 +1,4 @@
 import lvgl as lv
-from mpos.ui.keyboard import MposKeyboard
 
 import mpos.ui
 from mpos.apps import Activity
@@ -233,21 +232,13 @@ class CameraSettingsActivity(Activity):
         textarea.align(lv.ALIGN.TOP_RIGHT, 0, 0)
 
         # Initialize keyboard (hidden initially)
+        from mpos.ui.keyboard import MposKeyboard
         keyboard = MposKeyboard(parent)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)
         keyboard.set_textarea(textarea)
-        keyboard.add_event_cb(lambda e, kbd=keyboard: self.hide_keyboard(kbd), lv.EVENT.READY, None)
-        keyboard.add_event_cb(lambda e, kbd=keyboard: self.hide_keyboard(kbd), lv.EVENT.CANCEL, None)
-        textarea.add_event_cb(lambda e, kbd=keyboard: self.show_keyboard(kbd), lv.EVENT.CLICKED, None)
 
         return textarea, cont
-
-    def show_keyboard(self, kbd):
-        mpos.ui.anim.smooth_show(kbd)
-
-    def hide_keyboard(self, kbd):
-        mpos.ui.anim.smooth_hide(kbd)
 
     def add_buttons(self, parent):
         # Save/Cancel buttons at bottom
