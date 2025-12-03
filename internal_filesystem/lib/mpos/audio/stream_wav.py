@@ -7,14 +7,16 @@ import os
 import time
 import sys
 
-# Volume scaling function - regular Python version
-# Note: Viper optimization removed because @micropython.viper decorator
-# causes cross-compiler errors on Unix/macOS builds even inside conditionals
-def _scale_audio(buf, num_bytes, scale_fixed):
-    """Volume scaling for 16-bit audio samples."""
+# Volume scaling function - Viper-optimized for ESP32 performance
+# NOTE: The line below is automatically commented out by build_mpos.sh during
+# Unix/macOS builds (cross-compiler doesn't support Viper), then uncommented after build.
+import micropython
+@micropython.viper
+def _scale_audio(buf: ptr8, num_bytes: int, scale_fixed: int):
+    """Fast volume scaling for 16-bit audio samples using Viper (ESP32 native code emitter)."""
     for i in range(0, num_bytes, 2):
-        lo = buf[i]
-        hi = buf[i + 1]
+        lo = int(buf[i])
+        hi = int(buf[i + 1])
         sample = (hi << 8) | lo
         if hi & 128:
             sample -= 65536

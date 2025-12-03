@@ -1,7 +1,8 @@
 0.5.1
 =====
-- Fri3d Camp 2024 Badge: workaround ADC2+WiFi conflict by temporarily disable WiFi to measure battery level
-- Fri3d Camp 2024 Badge: improve battery monitor calibration to fix 0.1V delta
+- Fri3d Camp 2024 Board: add startup light and sound
+- Fri3d Camp 2024 Board: workaround ADC2+WiFi conflict by temporarily disable WiFi to measure battery level
+- Fri3d Camp 2024 Board: improve battery monitor calibration to fix 0.1V delta
 - API: improve and cleanup animations
 - API: SharedPreferences: add erase_all() function
 - API: add defaults handling to SharedPreferences and only save non-defaults
