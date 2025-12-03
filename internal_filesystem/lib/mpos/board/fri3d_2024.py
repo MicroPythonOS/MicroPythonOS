@@ -289,4 +289,33 @@ mpos.battery_voltage.init_adc(13, adc_to_voltage)
 import mpos.sdcard
 mpos.sdcard.init(spi_bus, cs_pin=14)
 
+# === AUDIO HARDWARE ===
+from machine import PWM, Pin
+import mpos.audio.audioflinger as AudioFlinger
+
+# Initialize buzzer (GPIO 46)
+buzzer = PWM(Pin(46), freq=550, duty=0)
+
+# I2S pin configuration (GPIO 2, 47, 16)
+# Note: I2S is created per-stream, not at boot (only one instance can exist)
+i2s_pins = {
+    'sck': 2,
+    'ws': 47,
+    'sd': 16,
+}
+
+# Initialize AudioFlinger (both I2S and buzzer available)
+AudioFlinger.init(
+    device_type=AudioFlinger.DEVICE_BOTH,
+    i2s_pins=i2s_pins,
+    buzzer_instance=buzzer
+)
+
+# === LED HARDWARE ===
+import mpos.lights as LightsManager
+
+# Initialize 5 NeoPixel LEDs (GPIO 12)
+LightsManager.init(neopixel_pin=12, num_leds=5)
+
+print("Fri3d hardware: Audio and LEDs initialized")
 print("boot.py finished")

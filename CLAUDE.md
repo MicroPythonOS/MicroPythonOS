@@ -643,6 +643,212 @@ def defocus_handler(self, obj):
 - `mpos.clipboard`: System clipboard access
 - `mpos.battery_voltage`: Battery level reading (ESP32 only)
 
+## Audio System (AudioFlinger)
+
+MicroPythonOS provides a centralized audio service called **AudioFlinger** (Android-inspired) that manages audio playback across different hardware outputs.
+
+### Supported Audio Devices
+
+- **I2S**: Digital audio output for WAV file playback (Fri3d badge, Waveshare board)
+- **Buzzer**: PWM-based tone/ringtone playback (Fri3d badge only)
+- **Both**: Simultaneous I2S and buzzer support
+- **Null**: No audio (desktop/Linux)
+
+### Basic Usage
+
+**Playing WAV files**:
+```python
+import mpos.audio.audioflinger as AudioFlinger
+
+# Play music file
+success = AudioFlinger.play_wav(
+    "M:/sdcard/music/song.wav",
+    stream_type=AudioFlinger.STREAM_MUSIC,
+    volume=80,
+    on_complete=lambda msg: print(msg)
+)
+
+if not success:
+    print("Audio playback rejected (higher priority stream active)")
+```
+
+**Playing RTTTL ringtones**:
+```python
+# Play notification sound via buzzer
+rtttl = "Nokia:d=4,o=5,b=225:8e6,8d6,8f#,8g#,8c#6,8b,d,8p,8b,8a,8c#,8e"
+AudioFlinger.play_rtttl(
+    rtttl,
+    stream_type=AudioFlinger.STREAM_NOTIFICATION
+)
+```
+
+**Volume control**:
+```python
+AudioFlinger.set_volume(70)  # 0-100
+volume = AudioFlinger.get_volume()
+```
+
+**Stopping playback**:
+```python
+AudioFlinger.stop()
+```
+
+### Audio Focus Priority
+
+AudioFlinger implements priority-based audio focus (Android-inspired):
+- **STREAM_ALARM** (priority 2): Highest priority
+- **STREAM_NOTIFICATION** (priority 1): Medium priority
+- **STREAM_MUSIC** (priority 0): Lowest priority
+
+Higher priority streams automatically interrupt lower priority streams. Equal or lower priority streams are rejected while a stream is playing.
+
+### Hardware Support Matrix
+
+| Board | I2S | Buzzer | LEDs |
+|-------|-----|--------|------|
+| Fri3d 2024 Badge | ✓ (GPIO 2, 47, 16) | ✓ (GPIO 46) | ✓ (5 RGB, GPIO 12) |
+| Waveshare ESP32-S3 | ✓ (GPIO 2, 47, 16) | ✗ | ✗ |
+| Linux/macOS | ✗ | ✗ | ✗ |
+
+### Configuration
+
+Audio device preference is configured in Settings app under "Advanced Settings":
+- **Auto-detect**: Use available hardware (default)
+- **I2S (Digital Audio)**: Digital audio only
+- **Buzzer (PWM Tones)**: Tones/ringtones only
+- **Both I2S and Buzzer**: Use both devices
+- **Disabled**: No audio
+
+**Note**: Changing the audio device requires a restart to take effect.
+
+### Implementation Details
+
+- **Location**: `lib/mpos/audio/audioflinger.py`
+- **Pattern**: Module-level singleton (similar to `battery_voltage.py`)
+- **Thread-safe**: Uses locks for concurrent access
+- **Background playback**: Runs in separate thread
+- **WAV support**: 8/16/24/32-bit PCM, mono/stereo, auto-upsampling to ≥22050 Hz
+- **RTTTL parser**: Full Ring Tone Text Transfer Language support with exponential volume curve
+
+## LED Control (LightsManager)
+
+MicroPythonOS provides a simple LED control service for NeoPixel RGB LEDs (Fri3d badge only).
+
+### Basic Usage
+
+**Check availability**:
+```python
+import mpos.lights as LightsManager
+
+if LightsManager.is_available():
+    print(f"LEDs available: {LightsManager.get_led_count()}")
+```
+
+**Control individual LEDs**:
+```python
+# Set LED 0 to red (buffered)
+LightsManager.set_led(0, 255, 0, 0)
+
+# Set LED 1 to green
+LightsManager.set_led(1, 0, 255, 0)
+
+# Update hardware
+LightsManager.write()
+```
+
+**Control all LEDs**:
+```python
+# Set all LEDs to blue
+LightsManager.set_all(0, 0, 255)
+LightsManager.write()
+
+# Clear all LEDs (black)
+LightsManager.clear()
+LightsManager.write()
+```
+
+**Notification colors**:
+```python
+# Convenience method for common colors
+LightsManager.set_notification_color("red")
+LightsManager.set_notification_color("green")
+# Available: red, green, blue, yellow, orange, purple, white
+```
+
+### Custom Animations
+
+LightsManager provides one-shot control only (no built-in animations). Apps implement custom animations using the `update_frame()` pattern:
+
+```python
+import time
+import mpos.lights as LightsManager
+
+def blink_pattern():
+    for _ in range(5):
+        LightsManager.set_all(255, 0, 0)
+        LightsManager.write()
+        time.sleep_ms(200)
+
+        LightsManager.clear()
+        LightsManager.write()
+        time.sleep_ms(200)
+
+def rainbow_cycle():
+    colors = [
+        (255, 0, 0),    # Red
+        (255, 128, 0),  # Orange
+        (255, 255, 0),  # Yellow
+        (0, 255, 0),    # Green
+        (0, 0, 255),    # Blue
+    ]
+
+    for i, color in enumerate(colors):
+        LightsManager.set_led(i, *color)
+
+    LightsManager.write()
+```
+
+**For frame-based LED animations**, use the TaskHandler event system:
+
+```python
+import mpos.ui
+import time
+
+class LEDAnimationActivity(Activity):
+    last_time = 0
+    led_index = 0
+
+    def onResume(self, screen):
+        self.last_time = time.ticks_ms()
+        mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
+
+    def onPause(self, screen):
+        mpos.ui.task_handler.remove_event_cb(self.update_frame)
+        LightsManager.clear()
+        LightsManager.write()
+
+    def update_frame(self, a, b):
+        current_time = time.ticks_ms()
+        delta_time = time.ticks_diff(current_time, self.last_time) / 1000.0
+        self.last_time = current_time
+
+        # Update animation every 0.5 seconds
+        if delta_time > 0.5:
+            LightsManager.clear()
+            LightsManager.set_led(self.led_index, 0, 255, 0)
+            LightsManager.write()
+            self.led_index = (self.led_index + 1) % LightsManager.get_led_count()
+```
+
+### Implementation Details
+
+- **Location**: `lib/mpos/lights.py`
+- **Pattern**: Module-level singleton (similar to `battery_voltage.py`)
+- **Hardware**: 5 NeoPixel RGB LEDs on GPIO 12 (Fri3d badge)
+- **Buffered**: LED colors are buffered until `write()` is called
+- **Thread-safe**: No locking (single-threaded usage recommended)
+- **Desktop**: Functions return `False` (no-op) on desktop builds
+
 ## Animations and Game Loops
 
 MicroPythonOS supports frame-based animations and game loops using the TaskHandler event system. This pattern is used for games, particle effects, and smooth animations.

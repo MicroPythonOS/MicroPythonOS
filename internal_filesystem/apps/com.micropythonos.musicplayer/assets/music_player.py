@@ -1,13 +1,11 @@
 import machine
 import os
-import _thread
 import time
 
 from mpos.apps import Activity, Intent
 import mpos.sdcard
 import mpos.ui
-
-from audio_player import AudioPlayer
+import mpos.audio.audioflinger as AudioFlinger
 
 class MusicPlayer(Activity):
 
@@ -68,17 +66,17 @@ class FullscreenPlayer(Activity):
         self._filename = self.getIntent().extras.get("filename")
         qr_screen = lv.obj()
         self._slider_label=lv.label(qr_screen)
-        self._slider_label.set_text(f"Volume: {AudioPlayer.get_volume()}%")
+        self._slider_label.set_text(f"Volume: {AudioFlinger.get_volume()}%")
         self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
         self._slider=lv.slider(qr_screen)
         self._slider.set_range(0,100)
-        self._slider.set_value(AudioPlayer.get_volume(), False)
+        self._slider.set_value(AudioFlinger.get_volume(), False)
         self._slider.set_width(lv.pct(90))
         self._slider.align_to(self._slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
         def volume_slider_changed(e):
             volume_int = self._slider.get_value()
             self._slider_label.set_text(f"Volume: {volume_int}%")
-            AudioPlayer.set_volume(volume_int)
+            AudioFlinger.set_volume(volume_int)
         self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
         self._filename_label = lv.label(qr_screen)
         self._filename_label.align(lv.ALIGN.CENTER,0,0)
@@ -104,11 +102,23 @@ class FullscreenPlayer(Activity):
         if not self._filename:
             print("Not playing any file...")
         else:
-            print("Starting thread to play file {self._filename}")
-            AudioPlayer.stop_playing()
+            print(f"Playing file {self._filename}")
+            AudioFlinger.stop()
             time.sleep(0.1)
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(AudioPlayer.play_wav, (self._filename,self.player_finished,))
+
+            success = AudioFlinger.play_wav(
+                self._filename,
+                stream_type=AudioFlinger.STREAM_MUSIC,
+                on_complete=self.player_finished
+            )
+
+            if not success:
+                error_msg = "Error: Audio device unavailable or busy"
+                print(error_msg)
+                self.update_ui_threadsafe_if_foreground(
+                    self._filename_label.set_text,
+                    error_msg
+                )
 
     def focus_obj(self, obj):
         obj.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
@@ -118,7 +128,7 @@ class FullscreenPlayer(Activity):
         obj.set_style_border_width(0, lv.PART.MAIN)
 
     def stop_button_clicked(self, event):
-        AudioPlayer.stop_playing()
+        AudioFlinger.stop()
         self.finish()
 
     def player_finished(self, result=None):

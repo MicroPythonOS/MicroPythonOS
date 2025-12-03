@@ -95,6 +95,21 @@ def adc_to_voltage(adc_value):
 
 mpos.battery_voltage.init_adc(999, adc_to_voltage)
 
+# === AUDIO HARDWARE ===
+import mpos.audio.audioflinger as AudioFlinger
+
+# Note: Desktop builds have no audio hardware
+# AudioFlinger functions will return False (no-op)
+AudioFlinger.init(
+    device_type=AudioFlinger.DEVICE_NULL,
+    i2s_pins=None,
+    buzzer_instance=None
+)
+
+# === LED HARDWARE ===
+# Note: Desktop builds have no LED hardware
+# LightsManager will not be initialized (functions will return False)
+
 print("linux.py finished")
 
 

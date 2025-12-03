@@ -43,6 +43,7 @@ class SettingsActivity(Activity):
             {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors},
             {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda : mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
+            {"title": "Audio Output Device", "key": "audio_device", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
             {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
             {"title": "Restart to Bootloader", "key": "boot_mode", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")]}, # special that doesn't get saved
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")]}, # special that doesn't get saved
@@ -110,6 +111,34 @@ class SettingsActivity(Activity):
     @staticmethod
     def get_timezone_tuples():
         return [(tz, tz) for tz in mpos.time.get_timezones()]
+
+    def audio_device_changed(self):
+        """
+        Called when audio device setting changes.
+        Note: Changing device type at runtime requires a restart for full effect.
+        AudioFlinger initialization happens at boot.
+        """
+        import mpos.audio.audioflinger as AudioFlinger
+
+        new_value = self.prefs.get_string("audio_device", "auto")
+        print(f"Audio device setting changed to: {new_value}")
+        print("Note: Restart required for audio device change to take effect")
+
+        # Map setting values to device types
+        device_map = {
+            "auto": AudioFlinger.get_device_type(),  # Keep current
+            "i2s": AudioFlinger.DEVICE_I2S,
+            "buzzer": AudioFlinger.DEVICE_BUZZER,
+            "both": AudioFlinger.DEVICE_BOTH,
+            "null": AudioFlinger.DEVICE_NULL,
+        }
+
+        desired_device = device_map.get(new_value, AudioFlinger.get_device_type())
+        current_device = AudioFlinger.get_device_type()
+
+        if desired_device != current_device:
+            print(f"Desired device type ({desired_device}) differs from current ({current_device})")
+            print("Full device type change requires restart - current session continues with existing device")
 
     def focus_container(self, container):
         print(f"container {container} focused, setting border...")

@@ -110,4 +110,20 @@ try:
 except Exception as e:
     print(f"Warning: powering off camera got exception: {e}")
 
+# === AUDIO HARDWARE ===
+import mpos.audio.audioflinger as AudioFlinger
+
+# Note: Waveshare board has no buzzer or LEDs, only I2S audio
+# I2S pin configuration will be determined by the board's audio hardware
+# For now, initialize with I2S only (pins will be configured per-stream if available)
+AudioFlinger.init(
+    device_type=AudioFlinger.DEVICE_I2S,
+    i2s_pins={'sck': 2, 'ws': 47, 'sd': 16},  # Default ESP32-S3 I2S pins
+    buzzer_instance=None
+)
+
+# === LED HARDWARE ===
+# Note: Waveshare board has no NeoPixel LEDs
+# LightsManager will not be initialized (functions will return False)
+
 print("boot.py finished")
