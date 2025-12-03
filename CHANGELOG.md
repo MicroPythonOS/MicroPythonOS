@@ -6,6 +6,8 @@
 - API: SharedPreferences: add erase_all() function
 - API: add defaults handling to SharedPreferences and only save non-defaults
 - API: restore sys.path after starting app
+- API: add AudioFlinger for audio playback (i2s DAC and buzzer)
+- API: add LightsManager for multicolor LEDs
 - About app: add free, used and total storage space info
 - AppStore app: remove unnecessary scrollbar over publisher's name
 - Camera app: massive overhaul!
