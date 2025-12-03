@@ -318,4 +318,64 @@ import mpos.lights as LightsManager
 LightsManager.init(neopixel_pin=12, num_leds=5)
 
 print("Fri3d hardware: Audio and LEDs initialized")
+
+# === STARTUP "WOW" EFFECT ===
+import time
+import _thread
+
+def startup_wow_effect():
+    """
+    Epic startup effect with rainbow LED chase and upbeat startup jingle.
+    Runs in background thread to avoid blocking boot.
+    """
+    try:
+        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
+        startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
+
+        # Start the jingle
+        AudioFlinger.play_rtttl(
+            startup_jingle,
+            stream_type=AudioFlinger.STREAM_NOTIFICATION,
+            volume=60
+        )
+
+        # Rainbow colors for the 5 LEDs
+        rainbow = [
+            (255, 0, 0),    # Red
+            (255, 128, 0),  # Orange
+            (255, 255, 0),  # Yellow
+            (0, 255, 0),    # Green
+            (0, 0, 255),    # Blue
+        ]
+
+        # Rainbow sweep effect (3 passes, getting faster)
+        for pass_num in range(3):
+            for i in range(5):
+                # Light up LEDs progressively
+                for j in range(i + 1):
+                    LightsManager.set_led(j, *rainbow[j])
+                LightsManager.write()
+                time.sleep_ms(80 - pass_num * 20)  # Speed up each pass
+
+        # Flash all LEDs bright white
+        LightsManager.set_all(255, 255, 255)
+        LightsManager.write()
+        time.sleep_ms(150)
+
+        # Rainbow finale
+        for i in range(5):
+            LightsManager.set_led(i, *rainbow[i])
+        LightsManager.write()
+        time.sleep_ms(300)
+
+        # Fade out
+        LightsManager.clear()
+        LightsManager.write()
+
+    except Exception as e:
+        print(f"Startup effect error: {e}")
+
+_thread.stack_size(mpos.apps.good_stack_size())
+_thread.start_new_thread(startup_wow_effect, ())
+
 print("boot.py finished")
