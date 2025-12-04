@@ -1010,8 +1010,9 @@ def update_frame(self, a, b):
 - **Units**: Standard SI (m/s² for acceleration, deg/s for gyroscope, °C for temperature)
 - **Calibration**: Persistent via SharedPreferences (`data/com.micropythonos.sensors/config.json`)
 - **Thread-safe**: Uses locks for concurrent access
-- **Auto-detection**: Identifies IMU type via chip ID registers
+- **Auto-detection**: Identifies IMU type via chip ID registers (QMI8658: chip_id=0x05 at reg=0x00, WSEN_ISDS: chip_id=0x6A at reg=0x0F)
 - **Desktop**: Functions return `None` (graceful fallback) on desktop builds
+- **Important**: Driver constants defined with `const()` cannot be imported at runtime - SensorManager uses hardcoded values instead
 
 ### Driver Locations
 

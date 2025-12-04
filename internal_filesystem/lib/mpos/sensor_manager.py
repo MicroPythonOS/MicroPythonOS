@@ -98,7 +98,10 @@ def init(i2c_bus, address=0x6B):
     # Try QMI8658 first (Waveshare board)
     if i2c_bus:
         try:
-            from mpos.hardware.drivers.qmi8658 import QMI8658, _QMI8685_PARTID, _REG_PARTID
+            from mpos.hardware.drivers.qmi8658 import QMI8658
+            # QMI8658 constants (can't import const() values)
+            _QMI8685_PARTID = 0x05
+            _REG_PARTID = 0x00
             chip_id = i2c_bus.readfrom_mem(address, _REG_PARTID, 1)[0]
             if chip_id == _QMI8685_PARTID:
                 print("[SensorManager] Detected QMI8658 IMU")
@@ -308,7 +311,10 @@ class _QMI8658Driver(_IMUDriver):
     """Wrapper for QMI8658 IMU (Waveshare board)."""
 
     def __init__(self, i2c_bus, address):
-        from mpos.hardware.drivers.qmi8658 import QMI8658, _ACCELSCALE_RANGE_8G, _GYROSCALE_RANGE_256DPS
+        from mpos.hardware.drivers.qmi8658 import QMI8658
+        # QMI8658 scale constants (can't import const() values)
+        _ACCELSCALE_RANGE_8G = 0b10
+        _GYROSCALE_RANGE_256DPS = 0b100
         self.sensor = QMI8658(
             i2c_bus,
             address=address,

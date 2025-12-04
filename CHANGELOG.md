@@ -9,6 +9,7 @@
 - API: restore sys.path after starting app
 - API: add AudioFlinger for audio playback (i2s DAC and buzzer)
 - API: add LightsManager for multicolor LEDs
+- API: add SensorManager for IMU/accelerometers, temperature sensors etc.
 - About app: add free, used and total storage space info
 - AppStore app: remove unnecessary scrollbar over publisher's name
 - Camera app: massive overhaul!
