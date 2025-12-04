@@ -59,7 +59,7 @@ The OS supports:
 **Content Management**:
 - `PackageManager`: Install/uninstall/query apps
 - `Intent`: Launch activities with action/category filters
-- `SharedPreferences`: Per-app key-value storage (similar to Android)
+- `SharedPreferences`: Per-app key-value storage (similar to Android) - see [docs/frameworks/preferences.md](../docs/docs/frameworks/preferences.md)
 
 **Hardware Abstraction**:
 - `boot.py` configures SPI, I2C, display (ST7789), touchscreen (CST816S), and battery ADC
@@ -446,125 +446,21 @@ Current stable version: 0.3.3 (as of latest CHANGELOG entry)
 - Intent system: `internal_filesystem/lib/mpos/content/intent.py`
 - UI initialization: `internal_filesystem/main.py`
 - Hardware init: `internal_filesystem/boot.py`
-- Config/preferences: `internal_filesystem/lib/mpos/config.py`
+- Config/preferences: `internal_filesystem/lib/mpos/config.py` - see [docs/frameworks/preferences.md](../docs/docs/frameworks/preferences.md)
+- Audio system: `internal_filesystem/lib/mpos/audio/audioflinger.py` - see [docs/frameworks/audioflinger.md](../docs/docs/frameworks/audioflinger.md)
+- LED control: `internal_filesystem/lib/mpos/lights.py` - see [docs/frameworks/lights-manager.md](../docs/docs/frameworks/lights-manager.md)
+- Sensor management: `internal_filesystem/lib/mpos/sensor_manager.py` - see [docs/frameworks/sensor-manager.md](../docs/docs/frameworks/sensor-manager.md)
 - Top menu/drawer: `internal_filesystem/lib/mpos/ui/topmenu.py`
 - Activity navigation: `internal_filesystem/lib/mpos/activity_navigator.py`
-- Sensor management: `internal_filesystem/lib/mpos/sensor_manager.py`
 - IMU drivers: `internal_filesystem/lib/mpos/hardware/drivers/qmi8658.py` and `wsen_isds.py`
 
 ## Common Utilities and Helpers
 
 **SharedPreferences**: Persistent key-value storage per app
-```python
-from mpos.config import SharedPreferences
 
-# Basic usage
-prefs = SharedPreferences("com.example.myapp")
-value = prefs.get_string("key", "default_value")
-number = prefs.get_int("count", 0)
-data = prefs.get_dict("data", {})
+📖 User Documentation: See [docs/frameworks/preferences.md](../docs/docs/frameworks/preferences.md) for complete guide with constructor defaults, multi-mode patterns, and auto-cleanup behavior.
 
-# Save preferences
-editor = prefs.edit()
-editor.put_string("key", "value")
-editor.put_int("count", 42)
-editor.put_dict("data", {"key": "value"})
-editor.commit()
-
-# Using constructor defaults (reduces config file size)
-# Values matching defaults are not saved to disk
-prefs = SharedPreferences("com.example.myapp", defaults={
-    "brightness": -1,
-    "volume": 50,
-    "theme": "dark"
-})
-
-# Returns constructor default (-1) if not stored
-brightness = prefs.get_int("brightness")  # Returns -1
-
-# Method defaults override constructor defaults
-brightness = prefs.get_int("brightness", 100)  # Returns 100
-
-# Stored values override all defaults
-prefs.edit().put_int("brightness", 75).commit()
-brightness = prefs.get_int("brightness")  # Returns 75
-
-# Setting to default value removes it from storage (auto-cleanup)
-prefs.edit().put_int("brightness", -1).commit()
-# brightness is no longer stored in config.json, saves space
-```
-
-**Multi-mode apps with merged defaults**:
-
-Apps with multiple operating modes can define separate defaults dictionaries and merge them based on the current mode. The camera app demonstrates this pattern with normal and QR scanning modes:
-
-```python
-# Define defaults in your settings class
-class CameraSettingsActivity:
-    # Common defaults shared by all modes
-    COMMON_DEFAULTS = {
-        "brightness": 1,
-        "contrast": 0,
-        "saturation": 0,
-        "hmirror": False,
-        "vflip": True,
-        # ... 20 more common settings
-    }
-
-    # Normal mode specific defaults
-    NORMAL_DEFAULTS = {
-        "resolution_width": 240,
-        "resolution_height": 240,
-        "colormode": True,
-        "ae_level": 0,
-        "raw_gma": True,
-    }
-
-    # QR scanning mode specific defaults
-    SCANQR_DEFAULTS = {
-        "resolution_width": 960,
-        "resolution_height": 960,
-        "colormode": False,  # Grayscale for better QR detection
-        "ae_level": 2,       # Higher exposure
-        "raw_gma": False,    # Better contrast
-    }
-
-# Merge defaults based on mode when initializing
-def load_settings(self):
-    if self.scanqr_mode:
-        # Merge common + scanqr defaults
-        scanqr_defaults = {}
-        scanqr_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
-        scanqr_defaults.update(CameraSettingsActivity.SCANQR_DEFAULTS)
-        self.prefs = SharedPreferences(
-            self.PACKAGE,
-            filename="config_scanqr.json",
-            defaults=scanqr_defaults
-        )
-    else:
-        # Merge common + normal defaults
-        normal_defaults = {}
-        normal_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
-        normal_defaults.update(CameraSettingsActivity.NORMAL_DEFAULTS)
-        self.prefs = SharedPreferences(
-            self.PACKAGE,
-            defaults=normal_defaults
-        )
-
-    # Now all get_*() calls can omit default arguments
-    width = self.prefs.get_int("resolution_width")  # Mode-specific default
-    brightness = self.prefs.get_int("brightness")   # Common default
-```
-
-**Benefits of this pattern**:
-- Single source of truth for all 30 camera settings defaults
-- Mode-specific config files (`config.json`, `config_scanqr.json`)
-- ~90% reduction in config file size (only non-default values stored)
-- Eliminates hardcoded defaults throughout the codebase
-- No need to pass defaults to every `get_int()`/`get_bool()` call
-- Self-documenting code with clear defaults dictionaries
-
-**Note**: Use `dict.update()` instead of `{**dict1, **dict2}` for MicroPython compatibility (dictionary unpacking syntax not supported).
+**Implementation**: `lib/mpos/config.py` - SharedPreferences class with get/put methods for strings, ints, bools, lists, and dicts. Values matching constructor defaults are automatically removed from storage (space optimization).
 
 **Intent system**: Launch activities and pass data
 ```python
@@ -644,381 +540,82 @@ def defocus_handler(self, obj):
 - `mpos.sdcard.SDCardManager`: SD card mounting and management
 - `mpos.clipboard`: System clipboard access
 - `mpos.battery_voltage`: Battery level reading (ESP32 only)
-- `mpos.sensor_manager`: Unified sensor access (accelerometer, gyroscope, temperature)
+- `mpos.sensor_manager`: Unified sensor access - see [docs/frameworks/sensor-manager.md](../docs/docs/frameworks/sensor-manager.md)
+- `mpos.audio.audioflinger`: Audio playback service - see [docs/frameworks/audioflinger.md](../docs/docs/frameworks/audioflinger.md)
+- `mpos.lights`: LED control - see [docs/frameworks/lights-manager.md](../docs/docs/frameworks/lights-manager.md)
 
 ## Audio System (AudioFlinger)
 
-MicroPythonOS provides a centralized audio service called **AudioFlinger** (Android-inspired) that manages audio playback across different hardware outputs.
+MicroPythonOS provides a centralized audio service called **AudioFlinger** for managing audio playback.
 
-### Supported Audio Devices
+**📖 User Documentation**: See [docs/frameworks/audioflinger.md](../docs/docs/frameworks/audioflinger.md) for complete API reference, examples, and troubleshooting.
 
-- **I2S**: Digital audio output for WAV file playback (Fri3d badge, Waveshare board)
-- **Buzzer**: PWM-based tone/ringtone playback (Fri3d badge only)
-- **Both**: Simultaneous I2S and buzzer support
-- **Null**: No audio (desktop/Linux)
-
-### Basic Usage
-
-**Playing WAV files**:
-```python
-import mpos.audio.audioflinger as AudioFlinger
-
-# Play music file
-success = AudioFlinger.play_wav(
-    "M:/sdcard/music/song.wav",
-    stream_type=AudioFlinger.STREAM_MUSIC,
-    volume=80,
-    on_complete=lambda msg: print(msg)
-)
-
-if not success:
-    print("Audio playback rejected (higher priority stream active)")
-```
-
-**Playing RTTTL ringtones**:
-```python
-# Play notification sound via buzzer
-rtttl = "Nokia:d=4,o=5,b=225:8e6,8d6,8f#,8g#,8c#6,8b,d,8p,8b,8a,8c#,8e"
-AudioFlinger.play_rtttl(
-    rtttl,
-    stream_type=AudioFlinger.STREAM_NOTIFICATION
-)
-```
-
-**Volume control**:
-```python
-AudioFlinger.set_volume(70)  # 0-100
-volume = AudioFlinger.get_volume()
-```
-
-**Stopping playback**:
-```python
-AudioFlinger.stop()
-```
-
-### Audio Focus Priority
-
-AudioFlinger implements priority-based audio focus (Android-inspired):
-- **STREAM_ALARM** (priority 2): Highest priority
-- **STREAM_NOTIFICATION** (priority 1): Medium priority
-- **STREAM_MUSIC** (priority 0): Lowest priority
-
-Higher priority streams automatically interrupt lower priority streams. Equal or lower priority streams are rejected while a stream is playing.
-
-### Hardware Support Matrix
-
-| Board | I2S | Buzzer | LEDs |
-|-------|-----|--------|------|
-| Fri3d 2024 Badge | ✓ (GPIO 2, 47, 16) | ✓ (GPIO 46) | ✓ (5 RGB, GPIO 12) |
-| Waveshare ESP32-S3 | ✓ (GPIO 2, 47, 16) | ✗ | ✗ |
-| Linux/macOS | ✗ | ✗ | ✗ |
-
-### Configuration
-
-Audio device preference is configured in Settings app under "Advanced Settings":
-- **Auto-detect**: Use available hardware (default)
-- **I2S (Digital Audio)**: Digital audio only
-- **Buzzer (PWM Tones)**: Tones/ringtones only
-- **Both I2S and Buzzer**: Use both devices
-- **Disabled**: No audio
-
-**Note**: Changing the audio device requires a restart to take effect.
-
-### Implementation Details
+### Implementation Details (for Claude Code)
 
 - **Location**: `lib/mpos/audio/audioflinger.py`
 - **Pattern**: Module-level singleton (similar to `battery_voltage.py`)
 - **Thread-safe**: Uses locks for concurrent access
-- **Background playback**: Runs in separate thread
-- **WAV support**: 8/16/24/32-bit PCM, mono/stereo, auto-upsampling to ≥22050 Hz
-- **RTTTL parser**: Full Ring Tone Text Transfer Language support with exponential volume curve
+- **Hardware abstraction**: Supports I2S (GPIO 2, 47, 16) and Buzzer (GPIO 46 on Fri3d)
+- **Audio focus**: 3-tier priority system (ALARM > NOTIFICATION > MUSIC)
+- **Configuration**: `data/com.micropythonos.settings/config.json` key: `audio_device`
+
+### Critical Code Locations
+
+- Audio service: `lib/mpos/audio/audioflinger.py`
+- I2S implementation: `lib/mpos/audio/i2s_audio.py`
+- Buzzer implementation: `lib/mpos/audio/buzzer.py`
+- RTTTL parser: `lib/mpos/audio/rtttl.py`
+- Board init (Waveshare): `lib/mpos/board/waveshare_esp32_s3_touch_lcd_2.py` (line ~105)
+- Board init (Fri3d): `lib/mpos/board/fri3d_2024.py` (line ~300)
 
 ## LED Control (LightsManager)
 
-MicroPythonOS provides a simple LED control service for NeoPixel RGB LEDs (Fri3d badge only).
+MicroPythonOS provides LED control for NeoPixel RGB LEDs (Fri3d badge only).
 
-### Basic Usage
+**📖 User Documentation**: See [docs/frameworks/lights-manager.md](../docs/docs/frameworks/lights-manager.md) for complete API reference, animation patterns, and examples.
 
-**Check availability**:
-```python
-import mpos.lights as LightsManager
-
-if LightsManager.is_available():
-    print(f"LEDs available: {LightsManager.get_led_count()}")
-```
-
-**Control individual LEDs**:
-```python
-# Set LED 0 to red (buffered)
-LightsManager.set_led(0, 255, 0, 0)
-
-# Set LED 1 to green
-LightsManager.set_led(1, 0, 255, 0)
-
-# Update hardware
-LightsManager.write()
-```
-
-**Control all LEDs**:
-```python
-# Set all LEDs to blue
-LightsManager.set_all(0, 0, 255)
-LightsManager.write()
-
-# Clear all LEDs (black)
-LightsManager.clear()
-LightsManager.write()
-```
-
-**Notification colors**:
-```python
-# Convenience method for common colors
-LightsManager.set_notification_color("red")
-LightsManager.set_notification_color("green")
-# Available: red, green, blue, yellow, orange, purple, white
-```
-
-### Custom Animations
-
-LightsManager provides one-shot control only (no built-in animations). Apps implement custom animations using the `update_frame()` pattern:
-
-```python
-import time
-import mpos.lights as LightsManager
-
-def blink_pattern():
-    for _ in range(5):
-        LightsManager.set_all(255, 0, 0)
-        LightsManager.write()
-        time.sleep_ms(200)
-
-        LightsManager.clear()
-        LightsManager.write()
-        time.sleep_ms(200)
-
-def rainbow_cycle():
-    colors = [
-        (255, 0, 0),    # Red
-        (255, 128, 0),  # Orange
-        (255, 255, 0),  # Yellow
-        (0, 255, 0),    # Green
-        (0, 0, 255),    # Blue
-    ]
-
-    for i, color in enumerate(colors):
-        LightsManager.set_led(i, *color)
-
-    LightsManager.write()
-```
-
-**For frame-based LED animations**, use the TaskHandler event system:
-
-```python
-import mpos.ui
-import time
-
-class LEDAnimationActivity(Activity):
-    last_time = 0
-    led_index = 0
-
-    def onResume(self, screen):
-        self.last_time = time.ticks_ms()
-        mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
-
-    def onPause(self, screen):
-        mpos.ui.task_handler.remove_event_cb(self.update_frame)
-        LightsManager.clear()
-        LightsManager.write()
-
-    def update_frame(self, a, b):
-        current_time = time.ticks_ms()
-        delta_time = time.ticks_diff(current_time, self.last_time) / 1000.0
-        self.last_time = current_time
-
-        # Update animation every 0.5 seconds
-        if delta_time > 0.5:
-            LightsManager.clear()
-            LightsManager.set_led(self.led_index, 0, 255, 0)
-            LightsManager.write()
-            self.led_index = (self.led_index + 1) % LightsManager.get_led_count()
-```
-
-### Implementation Details
+### Implementation Details (for Claude Code)
 
 - **Location**: `lib/mpos/lights.py`
 - **Pattern**: Module-level singleton (similar to `battery_voltage.py`)
-- **Hardware**: 5 NeoPixel RGB LEDs on GPIO 12 (Fri3d badge)
-- **Buffered**: LED colors are buffered until `write()` is called
+- **Hardware**: 5 NeoPixel RGB LEDs on GPIO 12 (Fri3d badge only)
+- **Buffered**: LED colors buffered until `write()` is called
 - **Thread-safe**: No locking (single-threaded usage recommended)
 - **Desktop**: Functions return `False` (no-op) on desktop builds
 
+### Critical Code Locations
+
+- LED service: `lib/mpos/lights.py`
+- Board init (Fri3d): `lib/mpos/board/fri3d_2024.py` (line ~290)
+- NeoPixel dependency: Uses `neopixel` module from MicroPython
+
 ## Sensor System (SensorManager)
 
-MicroPythonOS provides a unified sensor framework called **SensorManager** (Android-inspired) that provides easy access to motion sensors (accelerometer, gyroscope) and temperature sensors across different hardware platforms.
+MicroPythonOS provides a unified sensor framework called **SensorManager** for motion sensors (accelerometer, gyroscope) and temperature sensors.
 
-### Supported Sensors
+📖 User Documentation: See [docs/frameworks/sensor-manager.md](../docs/docs/frameworks/sensor-manager.md) for complete API reference, calibration guide, game examples, and troubleshooting.
 
-**IMU Sensors:**
-- **QMI8658** (Waveshare ESP32-S3): Accelerometer, Gyroscope, Temperature
-- **WSEN_ISDS** (Fri3d Camp 2024 Badge): Accelerometer, Gyroscope
-
-**Temperature Sensors:**
-- **ESP32 MCU Temperature**: Internal SoC temperature sensor
-- **IMU Chip Temperature**: QMI8658 chip temperature
-
-### Basic Usage
-
-**Check availability and read sensors**:
-```python
-import mpos.sensor_manager as SensorManager
-
-# Check if sensors are available
-if SensorManager.is_available():
-    # Get sensors
-    accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
-    gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
-    temp = SensorManager.get_default_sensor(SensorManager.TYPE_SOC_TEMPERATURE)
-
-    # Read data (returns standard SI units)
-    accel_data = SensorManager.read_sensor(accel)  # Returns (x, y, z) in m/s²
-    gyro_data = SensorManager.read_sensor(gyro)    # Returns (x, y, z) in deg/s
-    temperature = SensorManager.read_sensor(temp)  # Returns °C
-
-    if accel_data:
-        ax, ay, az = accel_data
-        print(f"Acceleration: {ax:.2f}, {ay:.2f}, {az:.2f} m/s²")
-```
-
-### Sensor Types
-
-```python
-# Motion sensors
-SensorManager.TYPE_ACCELEROMETER    # m/s² (meters per second squared)
-SensorManager.TYPE_GYROSCOPE        # deg/s (degrees per second)
-
-# Temperature sensors
-SensorManager.TYPE_SOC_TEMPERATURE  # °C (MCU internal temperature)
-SensorManager.TYPE_IMU_TEMPERATURE  # °C (IMU chip temperature)
-```
-
-### Tilt-Controlled Game Example
-
-```python
-from mpos.app.activity import Activity
-import mpos.sensor_manager as SensorManager
-import mpos.ui
-import time
-
-class TiltBallActivity(Activity):
-    def onCreate(self):
-        self.screen = lv.obj()
-
-        # Get accelerometer
-        self.accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
-
-        # Create ball UI
-        self.ball = lv.obj(self.screen)
-        self.ball.set_size(20, 20)
-        self.ball.set_style_radius(10, 0)
-
-        # Physics state
-        self.ball_x = 160.0
-        self.ball_y = 120.0
-        self.ball_vx = 0.0
-        self.ball_vy = 0.0
-        self.last_time = time.ticks_ms()
-
-        self.setContentView(self.screen)
-
-    def onResume(self, screen):
-        self.last_time = time.ticks_ms()
-        mpos.ui.task_handler.add_event_cb(self.update_physics, 1)
-
-    def onPause(self, screen):
-        mpos.ui.task_handler.remove_event_cb(self.update_physics)
-
-    def update_physics(self, a, b):
-        current_time = time.ticks_ms()
-        delta_time = time.ticks_diff(current_time, self.last_time) / 1000.0
-        self.last_time = current_time
-
-        # Read accelerometer
-        accel = SensorManager.read_sensor(self.accel)
-        if accel:
-            ax, ay, az = accel
-
-            # Apply acceleration to velocity
-            self.ball_vx += (ax * 5.0) * delta_time
-            self.ball_vy -= (ay * 5.0) * delta_time  # Flip Y
-
-            # Update position
-            self.ball_x += self.ball_vx
-            self.ball_y += self.ball_vy
-
-            # Update ball position
-            self.ball.set_pos(int(self.ball_x), int(self.ball_y))
-```
-
-### Calibration
-
-Calibration removes sensor drift and improves accuracy. The device must be **stationary** during calibration.
-
-```python
-# Calibrate accelerometer and gyroscope
-accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
-gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
-
-# Calibrate (100 samples, device must be flat and still)
-accel_offsets = SensorManager.calibrate_sensor(accel, samples=100)
-gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=100)
-
-# Calibration is automatically saved to SharedPreferences
-# and loaded on next boot
-```
-
-### Performance Recommendations
-
-**Polling rate recommendations:**
-- **Games**: 20-30 Hz (responsive but not excessive)
-- **UI feedback**: 10-15 Hz (smooth for tilt UI)
-- **Background monitoring**: 1-5 Hz (screen rotation, pedometer)
-
-```python
-# ❌ BAD: Poll every frame (60 Hz)
-def update_frame(self, a, b):
-    accel = SensorManager.read_sensor(self.accel)  # Too frequent!
-
-# ✅ GOOD: Poll every other frame (30 Hz)
-def update_frame(self, a, b):
-    self.frame_count += 1
-    if self.frame_count % 2 == 0:
-        accel = SensorManager.read_sensor(self.accel)
-```
-
-### Hardware Support Matrix
-
-| Platform | Accelerometer | Gyroscope | IMU Temp | MCU Temp |
-|----------|---------------|-----------|----------|----------|
-| Waveshare ESP32-S3 | ✅ QMI8658 | ✅ QMI8658 | ✅ QMI8658 | ✅ ESP32 |
-| Fri3d 2024 Badge | ✅ WSEN_ISDS | ✅ WSEN_ISDS | ❌ | ✅ ESP32 |
-| Desktop/Linux | ❌ | ❌ | ❌ | ❌ |
-
-### Implementation Details
+### Implementation Details (for Claude Code)
 
 - **Location**: `lib/mpos/sensor_manager.py`
 - **Pattern**: Module-level singleton (similar to `battery_voltage.py`)
 - **Units**: Standard SI (m/s² for acceleration, deg/s for gyroscope, °C for temperature)
 - **Calibration**: Persistent via SharedPreferences (`data/com.micropythonos.sensors/config.json`)
 - **Thread-safe**: Uses locks for concurrent access
-- **Auto-detection**: Identifies IMU type via chip ID registers (QMI8658: chip_id=0x05 at reg=0x00, WSEN_ISDS: chip_id=0x6A at reg=0x0F)
+- **Auto-detection**: Identifies IMU type via chip ID registers
+  - QMI8658: chip_id=0x05 at reg=0x00
+  - WSEN_ISDS: chip_id=0x6A at reg=0x0F
 - **Desktop**: Functions return `None` (graceful fallback) on desktop builds
 - **Important**: Driver constants defined with `const()` cannot be imported at runtime - SensorManager uses hardcoded values instead
 
-### Driver Locations
+### Critical Code Locations
 
-- **QMI8658**: `lib/mpos/hardware/drivers/qmi8658.py`
-- **WSEN_ISDS**: `lib/mpos/hardware/drivers/wsen_isds.py`
-- **Board init**: `lib/mpos/board/waveshare_esp32_s3_touch_lcd_2.py` and `lib/mpos/board/fri3d_2024.py`
+- Sensor service: `lib/mpos/sensor_manager.py`
+- QMI8658 driver: `lib/mpos/hardware/drivers/qmi8658.py`
+- WSEN_ISDS driver: `lib/mpos/hardware/drivers/wsen_isds.py`
+- Board init (Waveshare): `lib/mpos/board/waveshare_esp32_s3_touch_lcd_2.py` (line ~130)
+- Board init (Fri3d): `lib/mpos/board/fri3d_2024.py` (line ~320)
+- Board init (Linux): `lib/mpos/board/linux.py` (line ~115)
 
 ## Animations and Game Loops
 
