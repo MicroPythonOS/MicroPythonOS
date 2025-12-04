@@ -449,6 +449,8 @@ Current stable version: 0.3.3 (as of latest CHANGELOG entry)
 - Config/preferences: `internal_filesystem/lib/mpos/config.py`
 - Top menu/drawer: `internal_filesystem/lib/mpos/ui/topmenu.py`
 - Activity navigation: `internal_filesystem/lib/mpos/activity_navigator.py`
+- Sensor management: `internal_filesystem/lib/mpos/sensor_manager.py`
+- IMU drivers: `internal_filesystem/lib/mpos/hardware/drivers/qmi8658.py` and `wsen_isds.py`
 
 ## Common Utilities and Helpers
 
@@ -642,6 +644,7 @@ def defocus_handler(self, obj):
 - `mpos.sdcard.SDCardManager`: SD card mounting and management
 - `mpos.clipboard`: System clipboard access
 - `mpos.battery_voltage`: Battery level reading (ESP32 only)
+- `mpos.sensor_manager`: Unified sensor access (accelerometer, gyroscope, temperature)
 
 ## Audio System (AudioFlinger)
 
@@ -848,6 +851,173 @@ class LEDAnimationActivity(Activity):
 - **Buffered**: LED colors are buffered until `write()` is called
 - **Thread-safe**: No locking (single-threaded usage recommended)
 - **Desktop**: Functions return `False` (no-op) on desktop builds
+
+## Sensor System (SensorManager)
+
+MicroPythonOS provides a unified sensor framework called **SensorManager** (Android-inspired) that provides easy access to motion sensors (accelerometer, gyroscope) and temperature sensors across different hardware platforms.
+
+### Supported Sensors
+
+**IMU Sensors:**
+- **QMI8658** (Waveshare ESP32-S3): Accelerometer, Gyroscope, Temperature
+- **WSEN_ISDS** (Fri3d Camp 2024 Badge): Accelerometer, Gyroscope
+
+**Temperature Sensors:**
+- **ESP32 MCU Temperature**: Internal SoC temperature sensor
+- **IMU Chip Temperature**: QMI8658 chip temperature
+
+### Basic Usage
+
+**Check availability and read sensors**:
+```python
+import mpos.sensor_manager as SensorManager
+
+# Check if sensors are available
+if SensorManager.is_available():
+    # Get sensors
+    accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+    gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
+    temp = SensorManager.get_default_sensor(SensorManager.TYPE_SOC_TEMPERATURE)
+
+    # Read data (returns standard SI units)
+    accel_data = SensorManager.read_sensor(accel)  # Returns (x, y, z) in m/s²
+    gyro_data = SensorManager.read_sensor(gyro)    # Returns (x, y, z) in deg/s
+    temperature = SensorManager.read_sensor(temp)  # Returns °C
+
+    if accel_data:
+        ax, ay, az = accel_data
+        print(f"Acceleration: {ax:.2f}, {ay:.2f}, {az:.2f} m/s²")
+```
+
+### Sensor Types
+
+```python
+# Motion sensors
+SensorManager.TYPE_ACCELEROMETER    # m/s² (meters per second squared)
+SensorManager.TYPE_GYROSCOPE        # deg/s (degrees per second)
+
+# Temperature sensors
+SensorManager.TYPE_SOC_TEMPERATURE  # °C (MCU internal temperature)
+SensorManager.TYPE_IMU_TEMPERATURE  # °C (IMU chip temperature)
+```
+
+### Tilt-Controlled Game Example
+
+```python
+from mpos.app.activity import Activity
+import mpos.sensor_manager as SensorManager
+import mpos.ui
+import time
+
+class TiltBallActivity(Activity):
+    def onCreate(self):
+        self.screen = lv.obj()
+
+        # Get accelerometer
+        self.accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+
+        # Create ball UI
+        self.ball = lv.obj(self.screen)
+        self.ball.set_size(20, 20)
+        self.ball.set_style_radius(10, 0)
+
+        # Physics state
+        self.ball_x = 160.0
+        self.ball_y = 120.0
+        self.ball_vx = 0.0
+        self.ball_vy = 0.0
+        self.last_time = time.ticks_ms()
+
+        self.setContentView(self.screen)
+
+    def onResume(self, screen):
+        self.last_time = time.ticks_ms()
+        mpos.ui.task_handler.add_event_cb(self.update_physics, 1)
+
+    def onPause(self, screen):
+        mpos.ui.task_handler.remove_event_cb(self.update_physics)
+
+    def update_physics(self, a, b):
+        current_time = time.ticks_ms()
+        delta_time = time.ticks_diff(current_time, self.last_time) / 1000.0
+        self.last_time = current_time
+
+        # Read accelerometer
+        accel = SensorManager.read_sensor(self.accel)
+        if accel:
+            ax, ay, az = accel
+
+            # Apply acceleration to velocity
+            self.ball_vx += (ax * 5.0) * delta_time
+            self.ball_vy -= (ay * 5.0) * delta_time  # Flip Y
+
+            # Update position
+            self.ball_x += self.ball_vx
+            self.ball_y += self.ball_vy
+
+            # Update ball position
+            self.ball.set_pos(int(self.ball_x), int(self.ball_y))
+```
+
+### Calibration
+
+Calibration removes sensor drift and improves accuracy. The device must be **stationary** during calibration.
+
+```python
+# Calibrate accelerometer and gyroscope
+accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
+
+# Calibrate (100 samples, device must be flat and still)
+accel_offsets = SensorManager.calibrate_sensor(accel, samples=100)
+gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=100)
+
+# Calibration is automatically saved to SharedPreferences
+# and loaded on next boot
+```
+
+### Performance Recommendations
+
+**Polling rate recommendations:**
+- **Games**: 20-30 Hz (responsive but not excessive)
+- **UI feedback**: 10-15 Hz (smooth for tilt UI)
+- **Background monitoring**: 1-5 Hz (screen rotation, pedometer)
+
+```python
+# ❌ BAD: Poll every frame (60 Hz)
+def update_frame(self, a, b):
+    accel = SensorManager.read_sensor(self.accel)  # Too frequent!
+
+# ✅ GOOD: Poll every other frame (30 Hz)
+def update_frame(self, a, b):
+    self.frame_count += 1
+    if self.frame_count % 2 == 0:
+        accel = SensorManager.read_sensor(self.accel)
+```
+
+### Hardware Support Matrix
+
+| Platform | Accelerometer | Gyroscope | IMU Temp | MCU Temp |
+|----------|---------------|-----------|----------|----------|
+| Waveshare ESP32-S3 | ✅ QMI8658 | ✅ QMI8658 | ✅ QMI8658 | ✅ ESP32 |
+| Fri3d 2024 Badge | ✅ WSEN_ISDS | ✅ WSEN_ISDS | ❌ | ✅ ESP32 |
+| Desktop/Linux | ❌ | ❌ | ❌ | ❌ |
+
+### Implementation Details
+
+- **Location**: `lib/mpos/sensor_manager.py`
+- **Pattern**: Module-level singleton (similar to `battery_voltage.py`)
+- **Units**: Standard SI (m/s² for acceleration, deg/s for gyroscope, °C for temperature)
+- **Calibration**: Persistent via SharedPreferences (`data/com.micropythonos.sensors/config.json`)
+- **Thread-safe**: Uses locks for concurrent access
+- **Auto-detection**: Identifies IMU type via chip ID registers
+- **Desktop**: Functions return `None` (graceful fallback) on desktop builds
+
+### Driver Locations
+
+- **QMI8658**: `lib/mpos/hardware/drivers/qmi8658.py`
+- **WSEN_ISDS**: `lib/mpos/hardware/drivers/wsen_isds.py`
+- **Board init**: `lib/mpos/board/waveshare_esp32_s3_touch_lcd_2.py` and `lib/mpos/board/fri3d_2024.py`
 
 ## Animations and Game Loops
 

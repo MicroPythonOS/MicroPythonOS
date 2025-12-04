@@ -1,8 +1,11 @@
 from mpos.apps import Activity
+import mpos.sensor_manager as SensorManager
 
 class IMU(Activity):
 
-    sensor = None
+    accel_sensor = None
+    gyro_sensor = None
+    temp_sensor = None
     refresh_timer = None
 
     # widgets:
@@ -30,12 +33,16 @@ class IMU(Activity):
         self.slidergz = lv.slider(screen)
         self.slidergz.align(lv.ALIGN.CENTER, 0, 90)
         try:
-            from machine import Pin, I2C
-            from qmi8658 import QMI8658
-            import machine
-            self.sensor = QMI8658(I2C(0, sda=machine.Pin(48), scl=machine.Pin(47)))
-            print("IMU sensor initialized")
-            #print(f"{self.sensor.temperature=} {self.sensor.acceleration=} {self.sensor.gyro=}")
+            if SensorManager.is_available():
+                self.accel_sensor = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+                self.gyro_sensor = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
+                # Get IMU temperature (not MCU temperature)
+                self.temp_sensor = SensorManager.get_default_sensor(SensorManager.TYPE_IMU_TEMPERATURE)
+                print("IMU sensors initialized via SensorManager")
+                print(f"Available sensors: {SensorManager.get_sensor_list()}")
+            else:
+                print("Warning: No IMU sensors available")
+                self.templabel.set_text("No IMU sensors available")
         except Exception as e:
             warning = f"Warning: could not initialize IMU hardware:\n{e}"
             print(warning)
@@ -68,22 +75,45 @@ class IMU(Activity):
     
     def refresh(self, timer):
         #print("refresh timer")
-        if self.sensor:
-            #print(f"{self.sensor.temperature=} {self.sensor.acceleration=} {self.sensor.gyro=}")
-            temp = self.sensor.temperature
-            ax = self.sensor.acceleration[0]
-            axp = int((ax * 100 + 100)/2)
-            ay = self.sensor.acceleration[1]
-            ayp = int((ay * 100 + 100)/2)
-            az = self.sensor.acceleration[2]
-            azp = int((az * 100 + 100)/2)
-            # values between -200 and 200 => /4 becomes -50 and 50 => +50 becomes 0 and 100
-            gx = self.convert_percentage(self.sensor.gyro[0])
-            gy = self.convert_percentage(self.sensor.gyro[1])
-            gz = self.convert_percentage(self.sensor.gyro[2])
-            self.templabel.set_text(f"IMU chip temperature: {temp:.2f}°C")
+        if self.accel_sensor and self.gyro_sensor:
+            # Read sensor data via SensorManager (returns m/s² for accel, deg/s for gyro)
+            accel = SensorManager.read_sensor(self.accel_sensor)
+            gyro = SensorManager.read_sensor(self.gyro_sensor)
+            temp = SensorManager.read_sensor(self.temp_sensor) if self.temp_sensor else None
+
+            if accel and gyro:
+                # Convert m/s² to G for display (divide by 9.80665)
+                # Range: ±8G → ±1G = ±10% of range → map to 0-100
+                ax, ay, az = accel
+                ax_g = ax / 9.80665  # Convert m/s² to G
+                ay_g = ay / 9.80665
+                az_g = az / 9.80665
+                axp = int((ax_g * 100 + 100)/2)  # Map ±1G to 0-100
+                ayp = int((ay_g * 100 + 100)/2)
+                azp = int((az_g * 100 + 100)/2)
+
+                # Gyro already in deg/s, map ±200 DPS to 0-100
+                gx, gy, gz = gyro
+                gx = self.convert_percentage(gx)
+                gy = self.convert_percentage(gy)
+                gz = self.convert_percentage(gz)
+
+                if temp is not None:
+                    self.templabel.set_text(f"IMU chip temperature: {temp:.2f}°C")
+                else:
+                    self.templabel.set_text("IMU active (no temperature sensor)")
+            else:
+                # Sensor read failed, show random data
+                import random
+                randomnr = random.randint(0,100)
+                axp = randomnr
+                ayp = 50
+                azp = 75
+                gx = 45
+                gy = 50
+                gz = 55
         else:
-            #temp = 12.34
+            # No sensors available, show random data
             import random
             randomnr = random.randint(0,100)
             axp = randomnr
@@ -92,6 +122,7 @@ class IMU(Activity):
             gx = 45
             gy = 50
             gz = 55
+
         self.sliderx.set_value(axp, False)
         self.slidery.set_value(ayp, False)
         self.sliderz.set_value(azp, False)

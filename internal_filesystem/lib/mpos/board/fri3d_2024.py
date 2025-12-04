@@ -317,7 +317,15 @@ import mpos.lights as LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12, num_leds=5)
 
-print("Fri3d hardware: Audio and LEDs initialized")
+# === SENSOR HARDWARE ===
+import mpos.sensor_manager as SensorManager
+
+# Create I2C bus for IMU (different pins from display)
+from machine import I2C
+imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
+SensorManager.init(imu_i2c, address=0x6B)
+
+print("Fri3d hardware: Audio, LEDs, and sensors initialized")
 
 # === STARTUP "WOW" EFFECT ===
 import time
@@ -375,7 +383,7 @@ def startup_wow_effect():
     except Exception as e:
         print(f"Startup effect error: {e}")
 
-_thread.stack_size(mpos.apps.good_stack_size())
+_thread.stack_size(mpos.apps.good_stack_size()) # default stack size won't work, crashes!
 _thread.start_new_thread(startup_wow_effect, ())
 
 print("boot.py finished")

@@ -163,16 +163,22 @@ def create_notification_bar():
         else:
             wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
     
-    can_check_temperature = False
-    try:
-        import esp32
-        can_check_temperature = True
-    except Exception as e:
-        print("Warning: can't check temperature sensor:", str(e))
-    
+    # Get temperature sensor via SensorManager
+    import mpos.sensor_manager as SensorManager
+    temp_sensor = None
+    if SensorManager.is_available():
+        # Prefer MCU temperature (more stable) over IMU temperature
+        temp_sensor = SensorManager.get_default_sensor(SensorManager.TYPE_SOC_TEMPERATURE)
+        if not temp_sensor:
+            temp_sensor = SensorManager.get_default_sensor(SensorManager.TYPE_IMU_TEMPERATURE)
+
     def update_temperature(timer):
-        if can_check_temperature:
-            temp_label.set_text(f"{esp32.mcu_temperature()}°C")
+        if temp_sensor:
+            temp = SensorManager.read_sensor(temp_sensor)
+            if temp is not None:
+                temp_label.set_text(f"{round(temp)}°C")
+            else:
+                temp_label.set_text("--°C")
         else:
             temp_label.set_text("42°C")
     

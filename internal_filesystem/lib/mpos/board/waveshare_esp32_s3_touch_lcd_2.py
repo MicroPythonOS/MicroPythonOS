@@ -126,4 +126,11 @@ AudioFlinger.init(
 # Note: Waveshare board has no NeoPixel LEDs
 # LightsManager will not be initialized (functions will return False)
 
+# === SENSOR HARDWARE ===
+import mpos.sensor_manager as SensorManager
+
+# IMU is on I2C0 (same bus as touch): SDA=48, SCL=47, addr=0x6B
+# i2c_bus was created on line 75 for touch, reuse it for IMU
+SensorManager.init(i2c_bus, address=0x6B)
+
 print("boot.py finished")

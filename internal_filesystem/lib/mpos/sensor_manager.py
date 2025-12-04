@@ -1,0 +1,603 @@
+"""Android-inspired SensorManager for MicroPythonOS.
+
+Provides unified access to IMU sensors (QMI8658, WSEN_ISDS) and other sensors.
+Follows module-level singleton pattern (like AudioFlinger, LightsManager).
+
+Example usage:
+    import mpos.sensor_manager as SensorManager
+
+    # In board init file:
+    SensorManager.init(i2c_bus, address=0x6B)
+
+    # In app:
+    if SensorManager.is_available():
+        accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+        ax, ay, az = SensorManager.read_sensor(accel)  # Returns m/s²
+
+MIT License
+Copyright (c) 2024 MicroPythonOS contributors
+"""
+
+import time
+try:
+    import _thread
+    _lock = _thread.allocate_lock()
+except ImportError:
+    _lock = None
+
+# Sensor type constants (matching Android SensorManager)
+TYPE_ACCELEROMETER = 1      # Units: m/s² (meters per second squared)
+TYPE_GYROSCOPE = 4          # Units: deg/s (degrees per second)
+TYPE_TEMPERATURE = 13       # Units: °C (generic, returns first available - deprecated)
+TYPE_IMU_TEMPERATURE = 14   # Units: °C (IMU chip temperature)
+TYPE_SOC_TEMPERATURE = 15   # Units: °C (MCU/SoC internal temperature)
+
+# Gravity constant for unit conversions
+_GRAVITY = 9.80665  # m/s²
+
+# Module state
+_initialized = False
+_imu_driver = None
+_sensor_list = []
+_i2c_bus = None
+_i2c_address = None
+_has_mcu_temperature = False
+
+
+class Sensor:
+    """Sensor metadata (lightweight data class, Android-inspired)."""
+
+    def __init__(self, name, sensor_type, vendor, version, max_range, resolution, power_ma):
+        """Initialize sensor metadata.
+
+        Args:
+            name: Human-readable sensor name
+            sensor_type: Sensor type constant (TYPE_ACCELEROMETER, etc.)
+            vendor: Sensor vendor/manufacturer
+            version: Driver version
+            max_range: Maximum measurement range (with units)
+            resolution: Measurement resolution (with units)
+            power_ma: Power consumption in mA (or 0 if unknown)
+        """
+        self.name = name
+        self.type = sensor_type
+        self.vendor = vendor
+        self.version = version
+        self.max_range = max_range
+        self.resolution = resolution
+        self.power = power_ma
+
+    def __repr__(self):
+        return f"Sensor({self.name}, type={self.type})"
+
+
+def init(i2c_bus, address=0x6B):
+    """Initialize SensorManager with I2C bus. Auto-detects IMU type and MCU temperature.
+
+    Tries to detect QMI8658 (chip ID 0x05) or WSEN_ISDS (WHO_AM_I 0x6A).
+    Also detects ESP32 MCU internal temperature sensor.
+    Loads calibration from SharedPreferences if available.
+
+    Args:
+        i2c_bus: machine.I2C instance (can be None if only MCU temperature needed)
+        address: I2C address (default 0x6B for both QMI8658 and WSEN_ISDS)
+
+    Returns:
+        bool: True if any sensor detected and initialized successfully
+    """
+    global _initialized, _imu_driver, _sensor_list, _i2c_bus, _i2c_address, _has_mcu_temperature
+
+    if _initialized:
+        print("[SensorManager] Already initialized")
+        return True
+
+    _i2c_bus = i2c_bus
+    _i2c_address = address
+    imu_detected = False
+
+    # Try QMI8658 first (Waveshare board)
+    if i2c_bus:
+        try:
+            from mpos.hardware.drivers.qmi8658 import QMI8658, _QMI8685_PARTID, _REG_PARTID
+            chip_id = i2c_bus.readfrom_mem(address, _REG_PARTID, 1)[0]
+            if chip_id == _QMI8685_PARTID:
+                print("[SensorManager] Detected QMI8658 IMU")
+                _imu_driver = _QMI8658Driver(i2c_bus, address)
+                _register_qmi8658_sensors()
+                _load_calibration()
+                imu_detected = True
+        except Exception as e:
+            print(f"[SensorManager] QMI8658 detection failed: {e}")
+
+        # Try WSEN_ISDS (Fri3d badge)
+        if not imu_detected:
+            try:
+                from mpos.hardware.drivers.wsen_isds import Wsen_Isds
+                chip_id = i2c_bus.readfrom_mem(address, 0x0F, 1)[0]  # WHO_AM_I register
+                if chip_id == 0x6A:  # WSEN_ISDS WHO_AM_I value
+                    print("[SensorManager] Detected WSEN_ISDS IMU")
+                    _imu_driver = _WsenISDSDriver(i2c_bus, address)
+                    _register_wsen_isds_sensors()
+                    _load_calibration()
+                    imu_detected = True
+            except Exception as e:
+                print(f"[SensorManager] WSEN_ISDS detection failed: {e}")
+
+    # Try MCU internal temperature sensor (ESP32)
+    try:
+        import esp32
+        # Test if mcu_temperature() is available
+        _ = esp32.mcu_temperature()
+        _has_mcu_temperature = True
+        _register_mcu_temperature_sensor()
+        print("[SensorManager] Detected MCU internal temperature sensor")
+    except Exception as e:
+        print(f"[SensorManager] MCU temperature not available: {e}")
+
+    _initialized = True
+
+    if not imu_detected and not _has_mcu_temperature:
+        print("[SensorManager] No sensors detected")
+        return False
+
+    return True
+
+
+def is_available():
+    """Check if sensors are available.
+
+    Returns:
+        bool: True if SensorManager is initialized with hardware
+    """
+    return _initialized and _imu_driver is not None
+
+
+def get_sensor_list():
+    """Get list of all available sensors.
+
+    Returns:
+        list: List of Sensor objects
+    """
+    return _sensor_list.copy() if _sensor_list else []
+
+
+def get_default_sensor(sensor_type):
+    """Get default sensor of given type.
+
+    Args:
+        sensor_type: Sensor type constant (TYPE_ACCELEROMETER, etc.)
+
+    Returns:
+        Sensor object or None if not available
+    """
+    for sensor in _sensor_list:
+        if sensor.type == sensor_type:
+            return sensor
+    return None
+
+
+def read_sensor(sensor):
+    """Read sensor data synchronously.
+
+    Args:
+        sensor: Sensor object from get_default_sensor()
+
+    Returns:
+        For motion sensors: tuple (x, y, z) in appropriate units
+        For scalar sensors: single value
+        None if sensor not available or error
+    """
+    if sensor is None:
+        return None
+
+    if _lock:
+        _lock.acquire()
+
+    try:
+        if sensor.type == TYPE_ACCELEROMETER:
+            if _imu_driver:
+                return _imu_driver.read_acceleration()
+        elif sensor.type == TYPE_GYROSCOPE:
+            if _imu_driver:
+                return _imu_driver.read_gyroscope()
+        elif sensor.type == TYPE_IMU_TEMPERATURE:
+            if _imu_driver:
+                return _imu_driver.read_temperature()
+        elif sensor.type == TYPE_SOC_TEMPERATURE:
+            if _has_mcu_temperature:
+                import esp32
+                return esp32.mcu_temperature()
+        elif sensor.type == TYPE_TEMPERATURE:
+            # Generic temperature - return first available (backward compatibility)
+            if _imu_driver:
+                temp = _imu_driver.read_temperature()
+                if temp is not None:
+                    return temp
+            if _has_mcu_temperature:
+                import esp32
+                return esp32.mcu_temperature()
+        return None
+    except Exception as e:
+        print(f"[SensorManager] Error reading sensor {sensor.name}: {e}")
+        return None
+    finally:
+        if _lock:
+            _lock.release()
+
+
+def calibrate_sensor(sensor, samples=100):
+    """Calibrate sensor and save to SharedPreferences.
+
+    Device must be stationary for accelerometer/gyroscope calibration.
+
+    Args:
+        sensor: Sensor object to calibrate
+        samples: Number of samples to average (default 100)
+
+    Returns:
+        tuple: Calibration offsets (x, y, z) or None if failed
+    """
+    if not is_available() or sensor is None:
+        return None
+
+    if _lock:
+        _lock.acquire()
+
+    try:
+        offsets = None
+        if sensor.type == TYPE_ACCELEROMETER:
+            offsets = _imu_driver.calibrate_accelerometer(samples)
+            print(f"[SensorManager] Accelerometer calibrated: {offsets}")
+        elif sensor.type == TYPE_GYROSCOPE:
+            offsets = _imu_driver.calibrate_gyroscope(samples)
+            print(f"[SensorManager] Gyroscope calibrated: {offsets}")
+        else:
+            print(f"[SensorManager] Sensor type {sensor.type} does not support calibration")
+            return None
+
+        # Save calibration
+        if offsets:
+            _save_calibration()
+
+        return offsets
+    except Exception as e:
+        print(f"[SensorManager] Error calibrating sensor {sensor.name}: {e}")
+        return None
+    finally:
+        if _lock:
+            _lock.release()
+
+
+# ============================================================================
+# Internal driver abstraction layer
+# ============================================================================
+
+class _IMUDriver:
+    """Base class for IMU drivers (internal use only)."""
+
+    def read_acceleration(self):
+        """Returns (x, y, z) in m/s²"""
+        raise NotImplementedError
+
+    def read_gyroscope(self):
+        """Returns (x, y, z) in deg/s"""
+        raise NotImplementedError
+
+    def read_temperature(self):
+        """Returns temperature in °C"""
+        raise NotImplementedError
+
+    def calibrate_accelerometer(self, samples):
+        """Calibrate accel, return (x, y, z) offsets in m/s²"""
+        raise NotImplementedError
+
+    def calibrate_gyroscope(self, samples):
+        """Calibrate gyro, return (x, y, z) offsets in deg/s"""
+        raise NotImplementedError
+
+    def get_calibration(self):
+        """Return dict with 'accel_offsets' and 'gyro_offsets' keys"""
+        raise NotImplementedError
+
+    def set_calibration(self, accel_offsets, gyro_offsets):
+        """Set calibration offsets from saved values"""
+        raise NotImplementedError
+
+
+class _QMI8658Driver(_IMUDriver):
+    """Wrapper for QMI8658 IMU (Waveshare board)."""
+
+    def __init__(self, i2c_bus, address):
+        from mpos.hardware.drivers.qmi8658 import QMI8658, _ACCELSCALE_RANGE_8G, _GYROSCALE_RANGE_256DPS
+        self.sensor = QMI8658(
+            i2c_bus,
+            address=address,
+            accel_scale=_ACCELSCALE_RANGE_8G,
+            gyro_scale=_GYROSCALE_RANGE_256DPS
+        )
+        # Software calibration offsets (QMI8658 has no built-in calibration)
+        self.accel_offset = [0.0, 0.0, 0.0]
+        self.gyro_offset = [0.0, 0.0, 0.0]
+
+    def read_acceleration(self):
+        """Read acceleration in m/s² (converts from G)."""
+        ax, ay, az = self.sensor.acceleration
+        # Convert G to m/s² and apply calibration
+        return (
+            (ax * _GRAVITY) - self.accel_offset[0],
+            (ay * _GRAVITY) - self.accel_offset[1],
+            (az * _GRAVITY) - self.accel_offset[2]
+        )
+
+    def read_gyroscope(self):
+        """Read gyroscope in deg/s (already in correct units)."""
+        gx, gy, gz = self.sensor.gyro
+        # Apply calibration
+        return (
+            gx - self.gyro_offset[0],
+            gy - self.gyro_offset[1],
+            gz - self.gyro_offset[2]
+        )
+
+    def read_temperature(self):
+        """Read temperature in °C."""
+        return self.sensor.temperature
+
+    def calibrate_accelerometer(self, samples):
+        """Calibrate accelerometer (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            ax, ay, az = self.sensor.acceleration
+            # Convert to m/s²
+            sum_x += ax * _GRAVITY
+            sum_y += ay * _GRAVITY
+            sum_z += az * _GRAVITY
+            time.sleep_ms(10)
+
+        # Average offsets (assuming Z-axis should read +9.8 m/s²)
+        self.accel_offset[0] = sum_x / samples
+        self.accel_offset[1] = sum_y / samples
+        self.accel_offset[2] = (sum_z / samples) - _GRAVITY  # Expect +1G on Z
+
+        return tuple(self.accel_offset)
+
+    def calibrate_gyroscope(self, samples):
+        """Calibrate gyroscope (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            gx, gy, gz = self.sensor.gyro
+            sum_x += gx
+            sum_y += gy
+            sum_z += gz
+            time.sleep_ms(10)
+
+        # Average offsets (should be 0 when stationary)
+        self.gyro_offset[0] = sum_x / samples
+        self.gyro_offset[1] = sum_y / samples
+        self.gyro_offset[2] = sum_z / samples
+
+        return tuple(self.gyro_offset)
+
+    def get_calibration(self):
+        """Get current calibration."""
+        return {
+            'accel_offsets': self.accel_offset,
+            'gyro_offsets': self.gyro_offset
+        }
+
+    def set_calibration(self, accel_offsets, gyro_offsets):
+        """Set calibration from saved values."""
+        if accel_offsets:
+            self.accel_offset = list(accel_offsets)
+        if gyro_offsets:
+            self.gyro_offset = list(gyro_offsets)
+
+
+class _WsenISDSDriver(_IMUDriver):
+    """Wrapper for WSEN_ISDS IMU (Fri3d badge)."""
+
+    def __init__(self, i2c_bus, address):
+        from mpos.hardware.drivers.wsen_isds import Wsen_Isds
+        self.sensor = Wsen_Isds(
+            i2c_bus,
+            address=address,
+            acc_range="8g",
+            acc_data_rate="104Hz",
+            gyro_range="500dps",
+            gyro_data_rate="104Hz"
+        )
+
+    def read_acceleration(self):
+        """Read acceleration in m/s² (converts from mg)."""
+        ax, ay, az = self.sensor.read_accelerations()
+        # Convert mg to m/s²: mg → g → m/s²
+        return (
+            (ax / 1000.0) * _GRAVITY,
+            (ay / 1000.0) * _GRAVITY,
+            (az / 1000.0) * _GRAVITY
+        )
+
+    def read_gyroscope(self):
+        """Read gyroscope in deg/s (converts from mdps)."""
+        gx, gy, gz = self.sensor.read_angular_velocities()
+        # Convert mdps to deg/s
+        return (
+            gx / 1000.0,
+            gy / 1000.0,
+            gz / 1000.0
+        )
+
+    def read_temperature(self):
+        """Read temperature in °C (not implemented in WSEN_ISDS driver)."""
+        # WSEN_ISDS has temperature sensor but not exposed in current driver
+        return None
+
+    def calibrate_accelerometer(self, samples):
+        """Calibrate accelerometer using hardware calibration."""
+        self.sensor.acc_calibrate(samples)
+        # Return offsets in m/s² (convert from raw offsets)
+        return (
+            (self.sensor.acc_offset_x * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY,
+            (self.sensor.acc_offset_y * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY,
+            (self.sensor.acc_offset_z * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
+        )
+
+    def calibrate_gyroscope(self, samples):
+        """Calibrate gyroscope using hardware calibration."""
+        self.sensor.gyro_calibrate(samples)
+        # Return offsets in deg/s (convert from raw offsets)
+        return (
+            (self.sensor.gyro_offset_x * self.sensor.gyro_sensitivity) / 1000.0,
+            (self.sensor.gyro_offset_y * self.sensor.gyro_sensitivity) / 1000.0,
+            (self.sensor.gyro_offset_z * self.sensor.gyro_sensitivity) / 1000.0
+        )
+
+    def get_calibration(self):
+        """Get current calibration (raw offsets from hardware)."""
+        return {
+            'accel_offsets': [
+                self.sensor.acc_offset_x,
+                self.sensor.acc_offset_y,
+                self.sensor.acc_offset_z
+            ],
+            'gyro_offsets': [
+                self.sensor.gyro_offset_x,
+                self.sensor.gyro_offset_y,
+                self.sensor.gyro_offset_z
+            ]
+        }
+
+    def set_calibration(self, accel_offsets, gyro_offsets):
+        """Set calibration from saved values (raw offsets)."""
+        if accel_offsets:
+            self.sensor.acc_offset_x = accel_offsets[0]
+            self.sensor.acc_offset_y = accel_offsets[1]
+            self.sensor.acc_offset_z = accel_offsets[2]
+        if gyro_offsets:
+            self.sensor.gyro_offset_x = gyro_offsets[0]
+            self.sensor.gyro_offset_y = gyro_offsets[1]
+            self.sensor.gyro_offset_z = gyro_offsets[2]
+
+
+# ============================================================================
+# Sensor registration (internal)
+# ============================================================================
+
+def _register_qmi8658_sensors():
+    """Register QMI8658 sensors in sensor list."""
+    global _sensor_list
+    _sensor_list = [
+        Sensor(
+            name="QMI8658 Accelerometer",
+            sensor_type=TYPE_ACCELEROMETER,
+            vendor="QST Corporation",
+            version=1,
+            max_range="±8G (78.4 m/s²)",
+            resolution="0.0024 m/s²",
+            power_ma=0.2
+        ),
+        Sensor(
+            name="QMI8658 Gyroscope",
+            sensor_type=TYPE_GYROSCOPE,
+            vendor="QST Corporation",
+            version=1,
+            max_range="±256 deg/s",
+            resolution="0.002 deg/s",
+            power_ma=0.7
+        ),
+        Sensor(
+            name="QMI8658 Temperature",
+            sensor_type=TYPE_IMU_TEMPERATURE,
+            vendor="QST Corporation",
+            version=1,
+            max_range="-40°C to +85°C",
+            resolution="0.004°C",
+            power_ma=0
+        )
+    ]
+
+
+def _register_wsen_isds_sensors():
+    """Register WSEN_ISDS sensors in sensor list."""
+    global _sensor_list
+    _sensor_list = [
+        Sensor(
+            name="WSEN_ISDS Accelerometer",
+            sensor_type=TYPE_ACCELEROMETER,
+            vendor="Würth Elektronik",
+            version=1,
+            max_range="±8G (78.4 m/s²)",
+            resolution="0.0024 m/s²",
+            power_ma=0.2
+        ),
+        Sensor(
+            name="WSEN_ISDS Gyroscope",
+            sensor_type=TYPE_GYROSCOPE,
+            vendor="Würth Elektronik",
+            version=1,
+            max_range="±500 deg/s",
+            resolution="0.0175 deg/s",
+            power_ma=0.65
+        )
+    ]
+
+
+def _register_mcu_temperature_sensor():
+    """Register MCU internal temperature sensor in sensor list."""
+    global _sensor_list
+    _sensor_list.append(
+        Sensor(
+            name="ESP32 MCU Temperature",
+            sensor_type=TYPE_SOC_TEMPERATURE,
+            vendor="Espressif",
+            version=1,
+            max_range="-40°C to +125°C",
+            resolution="0.5°C",
+            power_ma=0
+        )
+    )
+
+
+# ============================================================================
+# Calibration persistence (internal)
+# ============================================================================
+
+def _load_calibration():
+    """Load calibration from SharedPreferences."""
+    if not _imu_driver:
+        return
+
+    try:
+        from mpos.config import SharedPreferences
+        prefs = SharedPreferences("com.micropythonos.sensors")
+
+        accel_offsets = prefs.get_list("accel_offsets")
+        gyro_offsets = prefs.get_list("gyro_offsets")
+
+        if accel_offsets or gyro_offsets:
+            _imu_driver.set_calibration(accel_offsets, gyro_offsets)
+            print(f"[SensorManager] Loaded calibration: accel={accel_offsets}, gyro={gyro_offsets}")
+    except Exception as e:
+        print(f"[SensorManager] Failed to load calibration: {e}")
+
+
+def _save_calibration():
+    """Save calibration to SharedPreferences."""
+    if not _imu_driver:
+        return
+
+    try:
+        from mpos.config import SharedPreferences
+        prefs = SharedPreferences("com.micropythonos.sensors")
+        editor = prefs.edit()
+
+        cal = _imu_driver.get_calibration()
+        editor.put_list("accel_offsets", list(cal['accel_offsets']))
+        editor.put_list("gyro_offsets", list(cal['gyro_offsets']))
+        editor.commit()
+
+        print(f"[SensorManager] Saved calibration: accel={cal['accel_offsets']}, gyro={cal['gyro_offsets']}")
+    except Exception as e:
+        print(f"[SensorManager] Failed to save calibration: {e}")

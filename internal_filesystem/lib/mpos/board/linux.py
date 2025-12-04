@@ -110,6 +110,11 @@ AudioFlinger.init(
 # Note: Desktop builds have no LED hardware
 # LightsManager will not be initialized (functions will return False)
 
+# === SENSOR HARDWARE ===
+# Note: Desktop builds have no sensor hardware
+import mpos.sensor_manager as SensorManager
+# Don't call init() - SensorManager functions will return None/False
+
 print("linux.py finished")
 
 
