@@ -2,7 +2,8 @@ import lvgl as lv
 from lvgl import LvReferenceError
 from .anim import smooth_show, smooth_hide
 from .view import back_screen
-from .topmenu import open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
+from mpos.ui import topmenu as topmenu
+#from .topmenu import open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
 from .display import get_display_width, get_display_height
 
 downbutton = None
@@ -31,10 +32,6 @@ def _passthrough_click(x, y, indev):
             print(f"Object to click is gone: {e}")
 
 def _back_swipe_cb(event):
-    if drawer_open:
-        print("ignoring back gesture because drawer is open")
-        return
-
     global backbutton, back_start_y, back_start_x, backbutton_visible
     event_code = event.get_code()
     indev = lv.indev_active()
@@ -61,13 +58,16 @@ def _back_swipe_cb(event):
             backbutton_visible = False
             smooth_hide(backbutton)
         if x > get_display_width() / 5:
-            back_screen()
+            if topmenu.drawer_open :
+                topmenu.close_drawer()
+            else : 
+                back_screen()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
             _passthrough_click(x, y, indev)
 
 def _top_swipe_cb(event):
-    if drawer_open:
+    if topmenu.drawer_open:
         print("ignoring top swipe gesture because drawer is open")
         return
 
@@ -99,7 +99,7 @@ def _top_swipe_cb(event):
         dx = abs(x - down_start_x)
         dy = abs(y - down_start_y)
         if y > get_display_height() / 5:
-            open_drawer()
+            topmenu.open_drawer()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
             _passthrough_click(x, y, indev)
@@ -107,10 +107,10 @@ def _top_swipe_cb(event):
 def handle_back_swipe():
     global backbutton
     rect = lv.obj(lv.layer_top())
-    rect.set_size(NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
+    rect.set_size(topmenu.NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-topmenu.NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     rect.set_scroll_dir(lv.DIR.NONE)
-    rect.set_pos(0, NOTIFICATION_BAR_HEIGHT)
+    rect.set_pos(0, topmenu.NOTIFICATION_BAR_HEIGHT)
     style = lv.style_t()
     style.init()
     style.set_bg_opa(lv.OPA.TRANSP)
@@ -138,7 +138,7 @@ def handle_back_swipe():
 def handle_top_swipe():
     global downbutton
     rect = lv.obj(lv.layer_top())
-    rect.set_size(lv.pct(100), NOTIFICATION_BAR_HEIGHT)
+    rect.set_size(lv.pct(100), topmenu.NOTIFICATION_BAR_HEIGHT)
     rect.set_pos(0, 0)
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     style = lv.style_t()
