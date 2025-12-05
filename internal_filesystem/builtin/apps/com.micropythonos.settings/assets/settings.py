@@ -1,3 +1,4 @@
+import lvgl as lv
 from mpos.apps import Activity, Intent
 from mpos.activity_navigator import ActivityNavigator
 
@@ -6,6 +7,10 @@ from mpos import PackageManager
 import mpos.config
 import mpos.ui
 import mpos.time
+
+# Import IMU calibration activities
+from check_imu_calibration import CheckIMUCalibrationActivity
+from calibrate_imu import CalibrateIMUActivity
 
 # Used to list and edit all settings:
 class SettingsActivity(Activity):
@@ -39,6 +44,8 @@ class SettingsActivity(Activity):
         ]
         self.settings = [
             # Novice settings, alphabetically:
+            {"title": "Calibrate IMU", "key": "calibrate_imu", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CalibrateIMUActivity"},
+            {"title": "Check IMU Calibration", "key": "check_imu_calibration", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CheckIMUCalibrationActivity"},
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")]},
             {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors},
             {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda : mpos.time.refresh_timezone_preference()},
@@ -104,6 +111,20 @@ class SettingsActivity(Activity):
                 focusgroup.add_obj(setting_cont)
 
     def startSettingActivity(self, setting):
+        ui_type = setting.get("ui")
+
+        # Handle activity-based settings (NEW)
+        if ui_type == "activity":
+            activity_class_name = setting.get("activity_class")
+            if activity_class_name == "CheckIMUCalibrationActivity":
+                intent = Intent(activity_class=CheckIMUCalibrationActivity)
+                self.startActivity(intent)
+            elif activity_class_name == "CalibrateIMUActivity":
+                intent = Intent(activity_class=CalibrateIMUActivity)
+                self.startActivity(intent)
+            return
+
+        # Handle traditional settings (existing code)
         intent = Intent(activity_class=SettingActivity)
         intent.putExtra("setting", setting)
         self.startActivity(intent)

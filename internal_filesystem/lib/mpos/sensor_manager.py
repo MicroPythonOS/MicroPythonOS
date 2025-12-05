@@ -271,6 +271,238 @@ def calibrate_sensor(sensor, samples=100):
             _lock.release()
 
 
+# Helper functions for calibration quality checking (module-level to avoid nested def issues)
+def _calc_mean_variance(samples_list):
+    """Calculate mean and variance for a list of samples."""
+    if not samples_list:
+        return 0.0, 0.0
+    n = len(samples_list)
+    mean = sum(samples_list) / n
+    variance = sum((x - mean) ** 2 for x in samples_list) / n
+    return mean, variance
+
+
+def _calc_variance(samples_list):
+    """Calculate variance for a list of samples."""
+    if not samples_list:
+        return 0.0
+    n = len(samples_list)
+    mean = sum(samples_list) / n
+    return sum((x - mean) ** 2 for x in samples_list) / n
+
+
+def check_calibration_quality(samples=50):
+    """Check quality of current calibration.
+
+    Args:
+        samples: Number of samples to collect (default 50)
+
+    Returns:
+        dict with:
+            - accel_mean: (x, y, z) mean values in m/s²
+            - accel_variance: (x, y, z) variance values
+            - gyro_mean: (x, y, z) mean values in deg/s
+            - gyro_variance: (x, y, z) variance values
+            - quality_score: float 0.0-1.0 (1.0 = perfect)
+            - quality_rating: string ("Good", "Fair", "Poor")
+            - issues: list of strings describing problems
+        None if IMU not available
+    """
+    if not is_available():
+        return None
+
+    if _lock:
+        _lock.acquire()
+
+    try:
+        accel = get_default_sensor(TYPE_ACCELEROMETER)
+        gyro = get_default_sensor(TYPE_GYROSCOPE)
+
+        # Collect samples
+        accel_samples = [[], [], []]  # x, y, z lists
+        gyro_samples = [[], [], []]
+
+        for _ in range(samples):
+            if accel:
+                data = read_sensor(accel)
+                if data:
+                    ax, ay, az = data
+                    accel_samples[0].append(ax)
+                    accel_samples[1].append(ay)
+                    accel_samples[2].append(az)
+            if gyro:
+                data = read_sensor(gyro)
+                if data:
+                    gx, gy, gz = data
+                    gyro_samples[0].append(gx)
+                    gyro_samples[1].append(gy)
+                    gyro_samples[2].append(gz)
+            time.sleep_ms(10)
+
+        # Calculate statistics using module-level helper
+        accel_stats = [_calc_mean_variance(s) for s in accel_samples]
+        gyro_stats = [_calc_mean_variance(s) for s in gyro_samples]
+
+        accel_mean = tuple(s[0] for s in accel_stats)
+        accel_variance = tuple(s[1] for s in accel_stats)
+        gyro_mean = tuple(s[0] for s in gyro_stats)
+        gyro_variance = tuple(s[1] for s in gyro_stats)
+
+        # Calculate quality score (0.0 - 1.0)
+        issues = []
+        scores = []
+
+        # Check accelerometer
+        if accel:
+            # Variance check (lower is better)
+            accel_max_variance = max(accel_variance)
+            variance_score = max(0.0, 1.0 - (accel_max_variance / 1.0))  # 1.0 m/s² variance threshold
+            scores.append(variance_score)
+            if accel_max_variance > 0.5:
+                issues.append(f"High accelerometer variance: {accel_max_variance:.3f} m/s²")
+
+            # Expected values check (X≈0, Y≈0, Z≈9.8)
+            ax, ay, az = accel_mean
+            xy_error = (abs(ax) + abs(ay)) / 2.0
+            z_error = abs(az - _GRAVITY)
+            expected_score = max(0.0, 1.0 - ((xy_error + z_error) / 5.0))  # 5.0 m/s² error threshold
+            scores.append(expected_score)
+            if xy_error > 1.0:
+                issues.append(f"Accel X/Y not near zero: X={ax:.2f}, Y={ay:.2f} m/s²")
+            if z_error > 1.0:
+                issues.append(f"Accel Z not near 9.8: Z={az:.2f} m/s²")
+
+        # Check gyroscope
+        if gyro:
+            # Variance check
+            gyro_max_variance = max(gyro_variance)
+            variance_score = max(0.0, 1.0 - (gyro_max_variance / 10.0))  # 10 deg/s variance threshold
+            scores.append(variance_score)
+            if gyro_max_variance > 5.0:
+                issues.append(f"High gyroscope variance: {gyro_max_variance:.3f} deg/s")
+
+            # Expected values check (all ≈0)
+            gx, gy, gz = gyro_mean
+            error = (abs(gx) + abs(gy) + abs(gz)) / 3.0
+            expected_score = max(0.0, 1.0 - (error / 10.0))  # 10 deg/s error threshold
+            scores.append(expected_score)
+            if error > 2.0:
+                issues.append(f"Gyro not near zero: X={gx:.2f}, Y={gy:.2f}, Z={gz:.2f} deg/s")
+
+        # Overall quality score
+        quality_score = sum(scores) / len(scores) if scores else 0.0
+
+        # Rating
+        if quality_score >= 0.8:
+            quality_rating = "Good"
+        elif quality_score >= 0.5:
+            quality_rating = "Fair"
+        else:
+            quality_rating = "Poor"
+
+        return {
+            'accel_mean': accel_mean,
+            'accel_variance': accel_variance,
+            'gyro_mean': gyro_mean,
+            'gyro_variance': gyro_variance,
+            'quality_score': quality_score,
+            'quality_rating': quality_rating,
+            'issues': issues
+        }
+
+    except Exception as e:
+        print(f"[SensorManager] Error checking calibration quality: {e}")
+        return None
+    finally:
+        if _lock:
+            _lock.release()
+
+
+def check_stationarity(samples=30, variance_threshold_accel=0.5, variance_threshold_gyro=5.0):
+    """Check if device is stationary (required for calibration).
+
+    Args:
+        samples: Number of samples to collect (default 30)
+        variance_threshold_accel: Max acceptable accel variance in m/s² (default 0.5)
+        variance_threshold_gyro: Max acceptable gyro variance in deg/s (default 5.0)
+
+    Returns:
+        dict with:
+            - is_stationary: bool
+            - accel_variance: max variance across axes
+            - gyro_variance: max variance across axes
+            - message: string describing result
+        None if IMU not available
+    """
+    if not is_available():
+        return None
+
+    if _lock:
+        _lock.acquire()
+
+    try:
+        accel = get_default_sensor(TYPE_ACCELEROMETER)
+        gyro = get_default_sensor(TYPE_GYROSCOPE)
+
+        # Collect samples
+        accel_samples = [[], [], []]
+        gyro_samples = [[], [], []]
+
+        for _ in range(samples):
+            if accel:
+                data = read_sensor(accel)
+                if data:
+                    ax, ay, az = data
+                    accel_samples[0].append(ax)
+                    accel_samples[1].append(ay)
+                    accel_samples[2].append(az)
+            if gyro:
+                data = read_sensor(gyro)
+                if data:
+                    gx, gy, gz = data
+                    gyro_samples[0].append(gx)
+                    gyro_samples[1].append(gy)
+                    gyro_samples[2].append(gz)
+            time.sleep_ms(10)
+
+        # Calculate variance using module-level helper
+        accel_var = [_calc_variance(s) for s in accel_samples]
+        gyro_var = [_calc_variance(s) for s in gyro_samples]
+
+        max_accel_var = max(accel_var) if accel_var else 0.0
+        max_gyro_var = max(gyro_var) if gyro_var else 0.0
+
+        # Check thresholds
+        accel_stationary = max_accel_var < variance_threshold_accel
+        gyro_stationary = max_gyro_var < variance_threshold_gyro
+        is_stationary = accel_stationary and gyro_stationary
+
+        # Generate message
+        if is_stationary:
+            message = "Device is stationary - ready to calibrate"
+        else:
+            problems = []
+            if not accel_stationary:
+                problems.append(f"movement detected (accel variance: {max_accel_var:.3f})")
+            if not gyro_stationary:
+                problems.append(f"rotation detected (gyro variance: {max_gyro_var:.3f})")
+            message = f"Device NOT stationary: {', '.join(problems)}"
+
+        return {
+            'is_stationary': is_stationary,
+            'accel_variance': max_accel_var,
+            'gyro_variance': max_gyro_var,
+            'message': message
+        }
+
+    except Exception as e:
+        print(f"[SensorManager] Error checking stationarity: {e}")
+        return None
+    finally:
+        if _lock:
+            _lock.release()
+
+
 # ============================================================================
 # Internal driver abstraction layer
 # ============================================================================
@@ -571,16 +803,34 @@ def _register_mcu_temperature_sensor():
 # ============================================================================
 
 def _load_calibration():
-    """Load calibration from SharedPreferences."""
+    """Load calibration from SharedPreferences (with migration support)."""
     if not _imu_driver:
         return
 
     try:
         from mpos.config import SharedPreferences
-        prefs = SharedPreferences("com.micropythonos.sensors")
 
-        accel_offsets = prefs.get_list("accel_offsets")
-        gyro_offsets = prefs.get_list("gyro_offsets")
+        # Try NEW location first
+        prefs_new = SharedPreferences("com.micropythonos.settings", filename="sensors.json")
+        accel_offsets = prefs_new.get_list("accel_offsets")
+        gyro_offsets = prefs_new.get_list("gyro_offsets")
+
+        # If not found, try OLD location and migrate
+        if not accel_offsets and not gyro_offsets:
+            prefs_old = SharedPreferences("com.micropythonos.sensors")
+            accel_offsets = prefs_old.get_list("accel_offsets")
+            gyro_offsets = prefs_old.get_list("gyro_offsets")
+
+            if accel_offsets or gyro_offsets:
+                print("[SensorManager] Migrating calibration from old to new location...")
+                # Save to new location
+                editor = prefs_new.edit()
+                if accel_offsets:
+                    editor.put_list("accel_offsets", accel_offsets)
+                if gyro_offsets:
+                    editor.put_list("gyro_offsets", gyro_offsets)
+                editor.commit()
+                print("[SensorManager] Migration complete")
 
         if accel_offsets or gyro_offsets:
             _imu_driver.set_calibration(accel_offsets, gyro_offsets)
@@ -590,13 +840,14 @@ def _load_calibration():
 
 
 def _save_calibration():
-    """Save calibration to SharedPreferences."""
+    """Save calibration to SharedPreferences (new location)."""
     if not _imu_driver:
         return
 
     try:
         from mpos.config import SharedPreferences
-        prefs = SharedPreferences("com.micropythonos.sensors")
+        # NEW LOCATION: com.micropythonos.settings/sensors.json
+        prefs = SharedPreferences("com.micropythonos.settings", filename="sensors.json")
         editor = prefs.edit()
 
         cal = _imu_driver.get_calibration()
@@ -604,6 +855,6 @@ def _save_calibration():
         editor.put_list("gyro_offsets", list(cal['gyro_offsets']))
         editor.commit()
 
-        print(f"[SensorManager] Saved calibration: accel={cal['accel_offsets']}, gyro={cal['gyro_offsets']}")
+        print(f"[SensorManager] Saved calibration to settings: accel={cal['accel_offsets']}, gyro={cal['gyro_offsets']}")
     except Exception as e:
         print(f"[SensorManager] Failed to save calibration: {e}")
