@@ -17,6 +17,7 @@ from mpos.app.activity import Activity
 import mpos.ui
 import mpos.sensor_manager as SensorManager
 import mpos.apps
+from mpos.ui.testing import wait_for_render
 
 
 class CalibrationState:
@@ -246,14 +247,106 @@ class CalibrateIMUActivity(Activity):
         self.detail_label.set_text("Check IMU connection and try again")
 
     def start_calibration_process(self):
-        """Start the calibration process."""
-        self.set_state(CalibrationState.CHECKING_STATIONARITY)
+        """Start the calibration process.
 
-        # Run in background thread
-        _thread.stack_size(mpos.apps.good_stack_size())
-        _thread.start_new_thread(self.calibration_thread_func, ())
+        Note: Runs in main thread - UI will freeze during calibration (~1 second).
+        This avoids threading issues with I2C/sensor access.
+        """
+        try:
+            print("[CalibrateIMU] === Calibration started ===")
 
-    def calibration_thread_func(self):
+            # Step 1: Check stationarity
+            print("[CalibrateIMU] Step 1: Checking stationarity...")
+            self.set_state(CalibrationState.CHECKING_STATIONARITY)
+            wait_for_render()  # Let UI update
+
+            if self.is_desktop:
+                stationarity = {'is_stationary': True, 'message': 'Mock: Stationary'}
+            else:
+                print("[CalibrateIMU] Calling SensorManager.check_stationarity(samples=30)...")
+                stationarity = SensorManager.check_stationarity(samples=30)
+                print(f"[CalibrateIMU] Stationarity result: {stationarity}")
+
+            if stationarity is None or not stationarity['is_stationary']:
+                msg = stationarity['message'] if stationarity else "Stationarity check failed"
+                print(f"[CalibrateIMU] Device not stationary: {msg}")
+                self.handle_calibration_error(
+                    f"Device not stationary!\n\n{msg}\n\nPlace on flat surface and try again.")
+                return
+
+            print("[CalibrateIMU] Device is stationary, proceeding to calibration")
+
+            # Step 2: Perform calibration
+            print("[CalibrateIMU] Step 2: Performing calibration...")
+            self.set_state(CalibrationState.CALIBRATING)
+            self.status_label.set_text("Calibrating IMU...\n\nUI will freeze for ~2 seconds\nPlease wait...")
+            wait_for_render()  # Let UI update before blocking
+
+            if self.is_desktop:
+                print("[CalibrateIMU] Mock calibration (desktop)")
+                time.sleep(2)
+                accel_offsets = (0.1, -0.05, 0.15)
+                gyro_offsets = (0.2, -0.1, 0.05)
+            else:
+                # Real calibration - UI will freeze here
+                print("[CalibrateIMU] Real calibration (hardware)")
+                accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+                gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
+                print(f"[CalibrateIMU] Accel sensor: {accel}, Gyro sensor: {gyro}")
+
+                if accel:
+                    print("[CalibrateIMU] Calibrating accelerometer (100 samples)...")
+                    accel_offsets = SensorManager.calibrate_sensor(accel, samples=100)
+                    print(f"[CalibrateIMU] Accel offsets: {accel_offsets}")
+                else:
+                    accel_offsets = None
+
+                if gyro:
+                    print("[CalibrateIMU] Calibrating gyroscope (100 samples)...")
+                    gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=100)
+                    print(f"[CalibrateIMU] Gyro offsets: {gyro_offsets}")
+                else:
+                    gyro_offsets = None
+
+            # Step 3: Verify results
+            print("[CalibrateIMU] Step 3: Verifying calibration...")
+            self.set_state(CalibrationState.VERIFYING)
+            wait_for_render()
+
+            if self.is_desktop:
+                verify_quality = self.get_mock_quality(good=True)
+            else:
+                print("[CalibrateIMU] Checking calibration quality (50 samples)...")
+                verify_quality = SensorManager.check_calibration_quality(samples=50)
+                print(f"[CalibrateIMU] Verification quality: {verify_quality}")
+
+            if verify_quality is None:
+                print("[CalibrateIMU] Verification failed")
+                self.handle_calibration_error("Calibration completed but verification failed")
+                return
+
+            # Step 4: Show results
+            print("[CalibrateIMU] Step 4: Showing results...")
+            rating = verify_quality['quality_rating']
+            score = verify_quality['quality_score']
+
+            result_msg = f"Calibration successful!\n\nNew quality: {rating} ({score*100:.0f}%)"
+            if accel_offsets:
+                result_msg += f"\n\nAccel offsets:\nX:{accel_offsets[0]:.3f} Y:{accel_offsets[1]:.3f} Z:{accel_offsets[2]:.3f}"
+            if gyro_offsets:
+                result_msg += f"\n\nGyro offsets:\nX:{gyro_offsets[0]:.3f} Y:{gyro_offsets[1]:.3f} Z:{gyro_offsets[2]:.3f}"
+
+            print(f"[CalibrateIMU] Calibration complete! Result: {result_msg[:80]}")
+            self.show_calibration_complete(result_msg)
+            print("[CalibrateIMU] === Calibration finished ===")
+
+        except Exception as e:
+            print(f"[CalibrateIMU] Calibration error: {e}")
+            import sys
+            sys.print_exception(e)
+            self.handle_calibration_error(str(e))
+
+    def old_calibration_thread_func_UNUSED(self):
         """Background thread for calibration process."""
         try:
             print("[CalibrateIMU] === Calibration thread started ===")
@@ -337,8 +430,9 @@ class CalibrateIMUActivity(Activity):
             if gyro_offsets:
                 result_msg += f"\n\nGyro offsets:\nX:{gyro_offsets[0]:.3f} Y:{gyro_offsets[1]:.3f} Z:{gyro_offsets[2]:.3f}"
 
-            print(f"[CalibrateIMU] Calibration complete! Result: {result_msg[:80]}")
+            print(f"[CalibrateIMU] Calibration compl	ete! Result: {result_msg[:80]}")
             self.update_ui_threadsafe_if_foreground(self.show_calibration_complete, result_msg)
+
             print("[CalibrateIMU] === Calibration thread finished ===")
 
         except Exception as e:
@@ -346,7 +440,7 @@ class CalibrateIMUActivity(Activity):
             import sys
             sys.print_exception(e)
             self.update_ui_threadsafe_if_foreground(self.handle_calibration_error, str(e))
-
+	
     def show_calibration_complete(self, result_msg):
         """Show calibration completion message."""
         self.status_label.set_text(result_msg)
