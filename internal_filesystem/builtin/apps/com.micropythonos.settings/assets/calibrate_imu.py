@@ -143,46 +143,54 @@ class CalibrateIMUActivity(Activity):
             self.action_button_label.set_text("Check Quality")
             self.action_button.remove_state(lv.STATE.DISABLED)
             self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
+            self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.CHECKING_QUALITY:
             self.status_label.set_text("Checking current calibration...")
             self.action_button.add_state(lv.STATE.DISABLED)
             self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
             self.progress_bar.set_value(20, True)
+            self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.AWAITING_CONFIRMATION:
             # Status will be set by quality check result
             self.action_button_label.set_text("Calibrate Now")
             self.action_button.remove_state(lv.STATE.DISABLED)
             self.progress_bar.set_value(30, True)
+            self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.CHECKING_STATIONARITY:
             self.status_label.set_text("Checking if device is stationary...")
             self.detail_label.set_text("Keep device still on flat surface")
             self.action_button.add_state(lv.STATE.DISABLED)
             self.progress_bar.set_value(40, True)
+            self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.CALIBRATING:
             self.status_label.set_text("Calibrating IMU...")
             self.detail_label.set_text("Do not move device!\nCollecting samples...")
             self.action_button.add_state(lv.STATE.DISABLED)
             self.progress_bar.set_value(60, True)
+            self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.VERIFYING:
             self.status_label.set_text("Verifying calibration...")
             self.action_button.add_state(lv.STATE.DISABLED)
             self.progress_bar.set_value(90, True)
+            self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.COMPLETE:
             self.status_label.set_text("Calibration complete!")
             self.action_button_label.set_text("Done")
             self.action_button.remove_state(lv.STATE.DISABLED)
             self.progress_bar.set_value(100, True)
+            self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.ERROR:
             self.action_button_label.set_text("Retry")
             self.action_button.remove_state(lv.STATE.DISABLED)
             self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
+            self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
     def action_button_clicked(self, event):
         """Handle action button clicks based on current state."""
@@ -444,7 +452,7 @@ class CalibrateIMUActivity(Activity):
     def show_calibration_complete(self, result_msg):
         """Show calibration completion message."""
         self.status_label.set_text(result_msg)
-        self.detail_label.set_text("Calibration saved to Settings")
+        self.detail_label.set_text("Calibration saved to storage.")
         self.set_state(CalibrationState.COMPLETE)
 
     def handle_calibration_error(self, error_msg):
