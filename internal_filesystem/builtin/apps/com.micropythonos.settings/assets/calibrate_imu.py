@@ -295,15 +295,15 @@ class CalibrateIMUActivity(Activity):
                 print(f"[CalibrateIMU] Accel sensor: {accel}, Gyro sensor: {gyro}")
 
                 if accel:
-                    print("[CalibrateIMU] Calibrating accelerometer (100 samples)...")
-                    accel_offsets = SensorManager.calibrate_sensor(accel, samples=100)
+                    print("[CalibrateIMU] Calibrating accelerometer (30 samples)...")
+                    accel_offsets = SensorManager.calibrate_sensor(accel, samples=30)
                     print(f"[CalibrateIMU] Accel offsets: {accel_offsets}")
                 else:
                     accel_offsets = None
 
                 if gyro:
-                    print("[CalibrateIMU] Calibrating gyroscope (100 samples)...")
-                    gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=100)
+                    print("[CalibrateIMU] Calibrating gyroscope (30 samples)...")
+                    gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=30)
                     print(f"[CalibrateIMU] Gyro offsets: {gyro_offsets}")
                 else:
                     gyro_offsets = None

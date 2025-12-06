@@ -652,53 +652,47 @@ class _QMI8658Driver(_IMUDriver):
 
     def calibrate_accelerometer(self, samples):
         """Calibrate accelerometer (device must be stationary)."""
-        print(f"[QMI8658Driver] calibrate_accelerometer: starting with {samples} samples")
+        print(f"[QMI8658Driver] Calibrating accelerometer with {samples} samples...")
         sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
 
         for i in range(samples):
             if i % 10 == 0:
-                print(f"[QMI8658Driver] Sample {i}/{samples}: about to read acceleration...")
+                print(f"[QMI8658Driver] Accel sample {i}/{samples}")
             ax, ay, az = self.sensor.acceleration
-            if i % 10 == 0:
-                print(f"[QMI8658Driver] Sample {i}/{samples}: read complete, values=({ax:.3f}, {ay:.3f}, {az:.3f}), sleeping...")
             # Convert to m/s²
             sum_x += ax * _GRAVITY
             sum_y += ay * _GRAVITY
             sum_z += az * _GRAVITY
             time.sleep_ms(10)
-            if i % 10 == 0:
-                print(f"[QMI8658Driver] Sample {i}/{samples}: sleep complete")
 
-        print(f"[QMI8658Driver] All {samples} samples collected, calculating offsets...")
         # Average offsets (assuming Z-axis should read +9.8 m/s²)
         self.accel_offset[0] = sum_x / samples
         self.accel_offset[1] = sum_y / samples
         self.accel_offset[2] = (sum_z / samples) - _GRAVITY  # Expect +1G on Z
 
-        print(f"[QMI8658Driver] Calibration complete: offsets = {tuple(self.accel_offset)}")
+        print(f"[QMI8658Driver] Accelerometer calibration complete: offsets = {tuple(self.accel_offset)}")
         return tuple(self.accel_offset)
 
     def calibrate_gyroscope(self, samples):
         """Calibrate gyroscope (device must be stationary)."""
-        print(f"[QMI8658Driver] calibrate_gyroscope: starting with {samples} samples")
+        print(f"[QMI8658Driver] Calibrating gyroscope with {samples} samples...")
         sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
 
         for i in range(samples):
-            if i % 20 == 0:
-                print(f"[QMI8658Driver] Reading sample {i}/{samples}...")
+            if i % 10 == 0:
+                print(f"[QMI8658Driver] Gyro sample {i}/{samples}")
             gx, gy, gz = self.sensor.gyro
             sum_x += gx
             sum_y += gy
             sum_z += gz
             time.sleep_ms(10)
 
-        print(f"[QMI8658Driver] All {samples} samples collected, calculating offsets...")
         # Average offsets (should be 0 when stationary)
         self.gyro_offset[0] = sum_x / samples
         self.gyro_offset[1] = sum_y / samples
         self.gyro_offset[2] = sum_z / samples
 
-        print(f"[QMI8658Driver] Calibration complete: offsets = {tuple(self.gyro_offset)}")
+        print(f"[QMI8658Driver] Gyroscope calibration complete: offsets = {tuple(self.gyro_offset)}")
         return tuple(self.gyro_offset)
 
     def get_calibration(self):
