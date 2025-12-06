@@ -126,8 +126,9 @@ class Wsen_Isds:
             acc_range: Accelerometer range ("2g", "4g", "8g", "16g")
             acc_data_rate: Accelerometer data rate ("0", "1.6Hz", "12.5Hz", ...)
             gyro_range: Gyroscope range ("125dps", "250dps", "500dps", "1000dps", "2000dps")
-            gyro_data_rate: Gyroscope data rate ("0", "12.5Hz", "26Hz", ...)
+            gyro_data_rate: Gyroscope data rate ("0", "12.5Hz", "26Hz", ...")
         """
+        print(f"[WSEN_ISDS] __init__ called with address={hex(address)}, acc_range={acc_range}, acc_data_rate={acc_data_rate}, gyro_range={gyro_range}, gyro_data_rate={gyro_data_rate}")
         self.i2c = i2c
         self.address = address
 
@@ -149,10 +150,31 @@ class Wsen_Isds:
         self.GYRO_NUM_SAMPLES_CALIBRATION = 5
         self.GYRO_CALIBRATION_DELAY_MS = 10
 
+        print("[WSEN_ISDS] Configuring accelerometer...")
         self.set_acc_range(acc_range)
         self.set_acc_data_rate(acc_data_rate)
+        print("[WSEN_ISDS] Accelerometer configured")
+
+        print("[WSEN_ISDS] Configuring gyroscope...")
         self.set_gyro_range(gyro_range)
         self.set_gyro_data_rate(gyro_data_rate)
+        print("[WSEN_ISDS] Gyroscope configured")
+
+        # Give sensors time to stabilize and start producing data
+        # Especially important for gyroscope which may need warmup time
+        print("[WSEN_ISDS] Waiting 100ms for sensors to stabilize...")
+        time.sleep_ms(100)
+
+        # Debug: Read all control registers to see full sensor state
+        print("[WSEN_ISDS] === Sensor State After Initialization ===")
+        for reg_addr in [0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19]:
+            try:
+                reg_val = self.i2c.readfrom_mem(self.address, reg_addr, 1)[0]
+                print(f"[WSEN_ISDS]   Reg 0x{reg_addr:02x} (CTRL{reg_addr-0x0f}): 0x{reg_val:02x} = 0b{reg_val:08b}")
+            except:
+                pass
+
+        print("[WSEN_ISDS] Initialization complete")
 
     def get_chip_id(self):
         """Get chip ID for detection. Returns WHO_AM_I register value."""
@@ -166,10 +188,12 @@ class Wsen_Isds:
         opt = Wsen_Isds._options[option]
         try:
             bits = opt["val_to_bits"][value]
-            config_value = self.i2c.readfrom_mem(self.address, opt["reg"], 1)[0]
+            old_value = self.i2c.readfrom_mem(self.address, opt["reg"], 1)[0]
+            config_value = old_value
             config_value &= opt["mask"]
             config_value |= (bits << opt["shift_left"])
             self.i2c.writeto_mem(self.address, opt["reg"], bytes([config_value]))
+            print(f"[WSEN_ISDS] _write_option: {option}={value} → reg {hex(opt['reg'])}: {hex(old_value)} → {hex(config_value)}")
         except KeyError as err:
             print(f"Invalid option: {option}, or invalid option value: {value}.", err)
 
@@ -300,15 +324,19 @@ class Wsen_Isds:
 
     def _read_raw_accelerations(self):
         """Read raw accelerometer data."""
+        print("[WSEN_ISDS] _read_raw_accelerations: checking data ready...")
         if not self._acc_data_ready():
+            print("[WSEN_ISDS] _read_raw_accelerations: DATA NOT READY!")
             raise Exception("sensor data not ready")
 
+        print("[WSEN_ISDS] _read_raw_accelerations: data ready, reading registers...")
         raw = self.i2c.readfrom_mem(self.address, Wsen_Isds._REG_A_X_OUT_L, 6)
 
         raw_a_x = self._convert_from_raw(raw[0], raw[1])
         raw_a_y = self._convert_from_raw(raw[2], raw[3])
         raw_a_z = self._convert_from_raw(raw[4], raw[5])
 
+        print(f"[WSEN_ISDS] _read_raw_accelerations: raw values = ({raw_a_x}, {raw_a_y}, {raw_a_z})")
         return raw_a_x, raw_a_y, raw_a_z
 
     def gyro_calibrate(self, samples=None):
@@ -351,15 +379,19 @@ class Wsen_Isds:
 
     def _read_raw_angular_velocities(self):
         """Read raw gyroscope data."""
+        print("[WSEN_ISDS] _read_raw_angular_velocities: checking data ready...")
         if not self._gyro_data_ready():
+            print("[WSEN_ISDS] _read_raw_angular_velocities: DATA NOT READY!")
             raise Exception("sensor data not ready")
 
+        print("[WSEN_ISDS] _read_raw_angular_velocities: data ready, reading registers...")
         raw = self.i2c.readfrom_mem(self.address, Wsen_Isds._REG_G_X_OUT_L, 6)
 
         raw_g_x = self._convert_from_raw(raw[0], raw[1])
         raw_g_y = self._convert_from_raw(raw[2], raw[3])
         raw_g_z = self._convert_from_raw(raw[4], raw[5])
 
+        print(f"[WSEN_ISDS] _read_raw_angular_velocities: raw values = ({raw_g_x}, {raw_g_y}, {raw_g_z})")
         return raw_g_x, raw_g_y, raw_g_z
 
     def read_angular_velocities_accelerations(self):
@@ -426,10 +458,15 @@ class Wsen_Isds:
         Returns:
             Tuple (acc_data_ready, gyro_data_ready, temp_data_ready)
         """
-        raw = self.i2c.readfrom_mem(self.address, Wsen_Isds._ISDS_STATUS_REG, 4)
+        # STATUS_REG (0x1E) is a single byte with bit flags:
+        # Bit 0: XLDA (accelerometer data available)
+        # Bit 1: GDA (gyroscope data available)
+        # Bit 2: TDA (temperature data available)
+        status = self.i2c.readfrom_mem(self.address, Wsen_Isds._ISDS_STATUS_REG, 1)[0]
 
-        acc_data_ready = True if raw[0] == 1 else False
-        gyro_data_ready = True if raw[1] == 1 else False
-        temp_data_ready = True if raw[2] == 1 else False
+        acc_data_ready = bool(status & 0x01)   # Bit 0
+        gyro_data_ready = bool(status & 0x02)  # Bit 1
+        temp_data_ready = bool(status & 0x04)  # Bit 2
 
+        print(f"[WSEN_ISDS] Status register: 0x{status:02x} = 0b{status:08b}, acc_ready={acc_data_ready}, gyro_ready={gyro_data_ready}, temp_ready={temp_data_ready}")
         return acc_data_ready, gyro_data_ready, temp_data_ready

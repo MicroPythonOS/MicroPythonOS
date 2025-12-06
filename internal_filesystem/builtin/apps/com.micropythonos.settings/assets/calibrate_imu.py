@@ -256,57 +256,78 @@ class CalibrateIMUActivity(Activity):
     def calibration_thread_func(self):
         """Background thread for calibration process."""
         try:
+            print("[CalibrateIMU] === Calibration thread started ===")
+
             # Step 1: Check stationarity
+            print("[CalibrateIMU] Step 1: Checking stationarity...")
             if self.is_desktop:
                 stationarity = {'is_stationary': True, 'message': 'Mock: Stationary'}
             else:
+                print("[CalibrateIMU] Calling SensorManager.check_stationarity(samples=30)...")
                 stationarity = SensorManager.check_stationarity(samples=30)
+                print(f"[CalibrateIMU] Stationarity result: {stationarity}")
 
             if stationarity is None or not stationarity['is_stationary']:
                 msg = stationarity['message'] if stationarity else "Stationarity check failed"
+                print(f"[CalibrateIMU] Device not stationary: {msg}")
                 self.update_ui_threadsafe_if_foreground(self.handle_calibration_error,
                     f"Device not stationary!\n\n{msg}\n\nPlace on flat surface and try again.")
                 return
 
+            print("[CalibrateIMU] Device is stationary, proceeding to calibration")
+
             # Step 2: Perform calibration
+            print("[CalibrateIMU] Step 2: Performing calibration...")
             self.update_ui_threadsafe_if_foreground(lambda: self.set_state(CalibrationState.CALIBRATING))
             time.sleep(0.5)  # Brief pause for user to see status change
 
             if self.is_desktop:
                 # Mock calibration
+                print("[CalibrateIMU] Mock calibration (desktop)")
                 time.sleep(2)
                 accel_offsets = (0.1, -0.05, 0.15)
                 gyro_offsets = (0.2, -0.1, 0.05)
             else:
                 # Real calibration
+                print("[CalibrateIMU] Real calibration (hardware)")
                 accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
                 gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
+                print(f"[CalibrateIMU] Accel sensor: {accel}, Gyro sensor: {gyro}")
 
                 if accel:
+                    print("[CalibrateIMU] Calibrating accelerometer (100 samples)...")
                     accel_offsets = SensorManager.calibrate_sensor(accel, samples=100)
+                    print(f"[CalibrateIMU] Accel offsets: {accel_offsets}")
                 else:
                     accel_offsets = None
 
                 if gyro:
+                    print("[CalibrateIMU] Calibrating gyroscope (100 samples)...")
                     gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=100)
+                    print(f"[CalibrateIMU] Gyro offsets: {gyro_offsets}")
                 else:
                     gyro_offsets = None
 
             # Step 3: Verify results
+            print("[CalibrateIMU] Step 3: Verifying calibration...")
             self.update_ui_threadsafe_if_foreground(lambda: self.set_state(CalibrationState.VERIFYING))
             time.sleep(0.5)
 
             if self.is_desktop:
                 verify_quality = self.get_mock_quality(good=True)
             else:
+                print("[CalibrateIMU] Checking calibration quality (50 samples)...")
                 verify_quality = SensorManager.check_calibration_quality(samples=50)
+                print(f"[CalibrateIMU] Verification quality: {verify_quality}")
 
             if verify_quality is None:
+                print("[CalibrateIMU] Verification failed")
                 self.update_ui_threadsafe_if_foreground(self.handle_calibration_error,
                     "Calibration completed but verification failed")
                 return
 
             # Step 4: Show results
+            print("[CalibrateIMU] Step 4: Showing results...")
             rating = verify_quality['quality_rating']
             score = verify_quality['quality_score']
 
@@ -316,10 +337,14 @@ class CalibrateIMUActivity(Activity):
             if gyro_offsets:
                 result_msg += f"\n\nGyro offsets:\nX:{gyro_offsets[0]:.3f} Y:{gyro_offsets[1]:.3f} Z:{gyro_offsets[2]:.3f}"
 
+            print(f"[CalibrateIMU] Calibration complete! Result: {result_msg[:80]}")
             self.update_ui_threadsafe_if_foreground(self.show_calibration_complete, result_msg)
+            print("[CalibrateIMU] === Calibration thread finished ===")
 
         except Exception as e:
             print(f"[CalibrateIMU] Calibration error: {e}")
+            import sys
+            sys.print_exception(e)
             self.update_ui_threadsafe_if_foreground(self.handle_calibration_error, str(e))
 
     def show_calibration_complete(self, result_msg):

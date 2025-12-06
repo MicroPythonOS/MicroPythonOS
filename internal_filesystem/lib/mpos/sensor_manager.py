@@ -72,27 +72,55 @@ class Sensor:
 
 
 def init(i2c_bus, address=0x6B):
-    """Initialize SensorManager with I2C bus. Auto-detects IMU type and MCU temperature.
-
-    Tries to detect QMI8658 (chip ID 0x05) or WSEN_ISDS (WHO_AM_I 0x6A).
-    Also detects ESP32 MCU internal temperature sensor.
-    Loads calibration from SharedPreferences if available.
+    """Initialize SensorManager. MCU temperature initializes immediately, IMU initializes on first use.
 
     Args:
         i2c_bus: machine.I2C instance (can be None if only MCU temperature needed)
         address: I2C address (default 0x6B for both QMI8658 and WSEN_ISDS)
 
     Returns:
-        bool: True if any sensor detected and initialized successfully
+        bool: True if initialized successfully
     """
-    global _initialized, _imu_driver, _sensor_list, _i2c_bus, _i2c_address, _has_mcu_temperature
-
-    if _initialized:
-        print("[SensorManager] Already initialized")
-        return True
+    global _i2c_bus, _i2c_address, _initialized, _has_mcu_temperature
 
     _i2c_bus = i2c_bus
     _i2c_address = address
+
+    # Initialize MCU temperature sensor immediately (fast, no I2C needed)
+    try:
+        import esp32
+        # Test if mcu_temperature() is available
+        _ = esp32.mcu_temperature()
+        _has_mcu_temperature = True
+        _register_mcu_temperature_sensor()
+        print("[SensorManager] Detected MCU internal temperature sensor")
+    except Exception as e:
+        print(f"[SensorManager] MCU temperature not available: {e}")
+
+    # Mark as initialized (but IMU driver is still None - will be initialized lazily)
+    _initialized = True
+    print("[SensorManager] init() called - IMU initialization deferred until first use")
+    return True
+
+
+def _ensure_imu_initialized():
+    """Perform IMU initialization on first use (lazy initialization).
+
+    Tries to detect QMI8658 (chip ID 0x05) or WSEN_ISDS (WHO_AM_I 0x6A).
+    Loads calibration from SharedPreferences if available.
+
+    Returns:
+        bool: True if IMU detected and initialized successfully
+    """
+    global _imu_driver, _sensor_list, _i2c_bus, _i2c_address
+
+    # If already initialized, return
+    if _imu_driver is not None:
+        return True
+
+    print("[SensorManager] _ensure_imu_initialized: Starting lazy IMU initialization...")
+    i2c_bus = _i2c_bus
+    address = _i2c_address
     imu_detected = False
 
     # Try QMI8658 first (Waveshare board)
@@ -114,58 +142,60 @@ def init(i2c_bus, address=0x6B):
 
         # Try WSEN_ISDS (Fri3d badge)
         if not imu_detected:
+            print(f"[SensorManager] Trying to detect WSEN_ISDS at address {hex(address)}...")
             try:
                 from mpos.hardware.drivers.wsen_isds import Wsen_Isds
+                print("[SensorManager] Reading WHO_AM_I register (0x0F)...")
                 chip_id = i2c_bus.readfrom_mem(address, 0x0F, 1)[0]  # WHO_AM_I register
+                print(f"[SensorManager] WHO_AM_I = {hex(chip_id)}")
                 if chip_id == 0x6A:  # WSEN_ISDS WHO_AM_I value
-                    print("[SensorManager] Detected WSEN_ISDS IMU")
+                    print("[SensorManager] Detected WSEN_ISDS IMU - initializing driver...")
                     _imu_driver = _WsenISDSDriver(i2c_bus, address)
+                    print("[SensorManager] WSEN_ISDS driver initialized, registering sensors...")
                     _register_wsen_isds_sensors()
+                    print("[SensorManager] Loading calibration...")
                     _load_calibration()
                     imu_detected = True
+                    print("[SensorManager] WSEN_ISDS initialization complete!")
+                else:
+                    print(f"[SensorManager] Chip ID {hex(chip_id)} doesn't match WSEN_ISDS (expected 0x6A)")
             except Exception as e:
                 print(f"[SensorManager] WSEN_ISDS detection failed: {e}")
+                import sys
+                sys.print_exception(e)
 
-    # Try MCU internal temperature sensor (ESP32)
-    try:
-        import esp32
-        # Test if mcu_temperature() is available
-        _ = esp32.mcu_temperature()
-        _has_mcu_temperature = True
-        _register_mcu_temperature_sensor()
-        print("[SensorManager] Detected MCU internal temperature sensor")
-    except Exception as e:
-        print(f"[SensorManager] MCU temperature not available: {e}")
-
-    _initialized = True
-
-    if not imu_detected and not _has_mcu_temperature:
-        print("[SensorManager] No sensors detected")
-        return False
-
-    return True
+    print(f"[SensorManager] _ensure_imu_initialized: IMU initialization complete, success={imu_detected}")
+    return imu_detected
 
 
 def is_available():
     """Check if sensors are available.
 
+    Does NOT trigger IMU initialization (to avoid boot-time initialization).
+    Use get_default_sensor() or read_sensor() to lazily initialize IMU.
+
     Returns:
-        bool: True if SensorManager is initialized with hardware
+        bool: True if SensorManager is initialized (may only have MCU temp, not IMU)
     """
-    return _initialized and _imu_driver is not None
+    return _initialized
 
 
 def get_sensor_list():
     """Get list of all available sensors.
 
+    Performs lazy IMU initialization on first call.
+
     Returns:
         list: List of Sensor objects
     """
+    _ensure_imu_initialized()
     return _sensor_list.copy() if _sensor_list else []
 
 
 def get_default_sensor(sensor_type):
     """Get default sensor of given type.
+
+    Performs lazy IMU initialization on first call.
 
     Args:
         sensor_type: Sensor type constant (TYPE_ACCELEROMETER, etc.)
@@ -173,6 +203,10 @@ def get_default_sensor(sensor_type):
     Returns:
         Sensor object or None if not available
     """
+    # Only initialize IMU if requesting IMU sensor types
+    if sensor_type in (TYPE_ACCELEROMETER, TYPE_GYROSCOPE):
+        _ensure_imu_initialized()
+
     for sensor in _sensor_list:
         if sensor.type == sensor_type:
             return sensor
@@ -181,6 +215,8 @@ def get_default_sensor(sensor_type):
 
 def read_sensor(sensor):
     """Read sensor data synchronously.
+
+    Performs lazy IMU initialization on first call for IMU sensors.
 
     Args:
         sensor: Sensor object from get_default_sensor()
@@ -193,35 +229,58 @@ def read_sensor(sensor):
     if sensor is None:
         return None
 
+    # Only initialize IMU if reading IMU sensor
+    if sensor.type in (TYPE_ACCELEROMETER, TYPE_GYROSCOPE):
+        _ensure_imu_initialized()
+
     if _lock:
         _lock.acquire()
 
     try:
-        if sensor.type == TYPE_ACCELEROMETER:
-            if _imu_driver:
-                return _imu_driver.read_acceleration()
-        elif sensor.type == TYPE_GYROSCOPE:
-            if _imu_driver:
-                return _imu_driver.read_gyroscope()
-        elif sensor.type == TYPE_IMU_TEMPERATURE:
-            if _imu_driver:
-                return _imu_driver.read_temperature()
-        elif sensor.type == TYPE_SOC_TEMPERATURE:
-            if _has_mcu_temperature:
-                import esp32
-                return esp32.mcu_temperature()
-        elif sensor.type == TYPE_TEMPERATURE:
-            # Generic temperature - return first available (backward compatibility)
-            if _imu_driver:
-                temp = _imu_driver.read_temperature()
-                if temp is not None:
-                    return temp
-            if _has_mcu_temperature:
-                import esp32
-                return esp32.mcu_temperature()
-        return None
-    except Exception as e:
-        print(f"[SensorManager] Error reading sensor {sensor.name}: {e}")
+        # Retry logic for "sensor data not ready" (WSEN_ISDS needs time after init)
+        max_retries = 3
+        retry_delay_ms = 20  # Wait 20ms between retries
+
+        for attempt in range(max_retries):
+            try:
+                if sensor.type == TYPE_ACCELEROMETER:
+                    if _imu_driver:
+                        return _imu_driver.read_acceleration()
+                elif sensor.type == TYPE_GYROSCOPE:
+                    if _imu_driver:
+                        return _imu_driver.read_gyroscope()
+                elif sensor.type == TYPE_IMU_TEMPERATURE:
+                    if _imu_driver:
+                        return _imu_driver.read_temperature()
+                elif sensor.type == TYPE_SOC_TEMPERATURE:
+                    if _has_mcu_temperature:
+                        import esp32
+                        return esp32.mcu_temperature()
+                elif sensor.type == TYPE_TEMPERATURE:
+                    # Generic temperature - return first available (backward compatibility)
+                    if _imu_driver:
+                        temp = _imu_driver.read_temperature()
+                        if temp is not None:
+                            return temp
+                    if _has_mcu_temperature:
+                        import esp32
+                        return esp32.mcu_temperature()
+                return None
+            except Exception as e:
+                error_msg = str(e)
+                # Retry if sensor data not ready, otherwise fail immediately
+                if "data not ready" in error_msg and attempt < max_retries - 1:
+                    import time
+                    time.sleep_ms(retry_delay_ms)
+                    continue
+                else:
+                    # Final attempt failed or different error
+                    if attempt == max_retries - 1:
+                        print(f"[SensorManager] Error reading sensor {sensor.name} after {max_retries} retries: {e}")
+                    else:
+                        print(f"[SensorManager] Error reading sensor {sensor.name}: {e}")
+                    return None
+
         return None
     finally:
         if _lock:
@@ -231,6 +290,7 @@ def read_sensor(sensor):
 def calibrate_sensor(sensor, samples=100):
     """Calibrate sensor and save to SharedPreferences.
 
+    Performs lazy IMU initialization on first call.
     Device must be stationary for accelerometer/gyroscope calibration.
 
     Args:
@@ -240,18 +300,25 @@ def calibrate_sensor(sensor, samples=100):
     Returns:
         tuple: Calibration offsets (x, y, z) or None if failed
     """
+    print(f"[SensorManager] calibrate_sensor called for {sensor.name} with {samples} samples")
+    _ensure_imu_initialized()
     if not is_available() or sensor is None:
+        print("[SensorManager] calibrate_sensor: sensor not available")
         return None
 
+    print("[SensorManager] calibrate_sensor: acquiring lock...")
     if _lock:
         _lock.acquire()
+    print("[SensorManager] calibrate_sensor: lock acquired")
 
     try:
         offsets = None
         if sensor.type == TYPE_ACCELEROMETER:
+            print(f"[SensorManager] Calling _imu_driver.calibrate_accelerometer({samples})...")
             offsets = _imu_driver.calibrate_accelerometer(samples)
             print(f"[SensorManager] Accelerometer calibrated: {offsets}")
         elif sensor.type == TYPE_GYROSCOPE:
+            print(f"[SensorManager] Calling _imu_driver.calibrate_gyroscope({samples})...")
             offsets = _imu_driver.calibrate_gyroscope(samples)
             print(f"[SensorManager] Gyroscope calibrated: {offsets}")
         else:
@@ -260,15 +327,21 @@ def calibrate_sensor(sensor, samples=100):
 
         # Save calibration
         if offsets:
+            print("[SensorManager] Saving calibration...")
             _save_calibration()
+            print("[SensorManager] Calibration saved")
 
         return offsets
     except Exception as e:
         print(f"[SensorManager] Error calibrating sensor {sensor.name}: {e}")
+        import sys
+        sys.print_exception(e)
         return None
     finally:
+        print("[SensorManager] calibrate_sensor: releasing lock...")
         if _lock:
             _lock.release()
+        print("[SensorManager] calibrate_sensor: lock released")
 
 
 # Helper functions for calibration quality checking (module-level to avoid nested def issues)
@@ -294,6 +367,8 @@ def _calc_variance(samples_list):
 def check_calibration_quality(samples=50):
     """Check quality of current calibration.
 
+    Performs lazy IMU initialization on first call.
+
     Args:
         samples: Number of samples to collect (default 50)
 
@@ -308,12 +383,12 @@ def check_calibration_quality(samples=50):
             - issues: list of strings describing problems
         None if IMU not available
     """
+    _ensure_imu_initialized()
     if not is_available():
         return None
 
-    if _lock:
-        _lock.acquire()
-
+    # Don't acquire lock here - let read_sensor() handle it per-read
+    # (avoids deadlock since read_sensor also acquires the lock)
     try:
         accel = get_default_sensor(TYPE_ACCELEROMETER)
         gyro = get_default_sensor(TYPE_GYROSCOPE)
@@ -413,9 +488,6 @@ def check_calibration_quality(samples=50):
     except Exception as e:
         print(f"[SensorManager] Error checking calibration quality: {e}")
         return None
-    finally:
-        if _lock:
-            _lock.release()
 
 
 def check_stationarity(samples=30, variance_threshold_accel=0.5, variance_threshold_gyro=5.0):
@@ -434,12 +506,12 @@ def check_stationarity(samples=30, variance_threshold_accel=0.5, variance_thresh
             - message: string describing result
         None if IMU not available
     """
+    _ensure_imu_initialized()
     if not is_available():
         return None
 
-    if _lock:
-        _lock.acquire()
-
+    # Don't acquire lock here - let read_sensor() handle it per-read
+    # (avoids deadlock since read_sensor also acquires the lock)
     try:
         accel = get_default_sensor(TYPE_ACCELEROMETER)
         gyro = get_default_sensor(TYPE_GYROSCOPE)
@@ -498,9 +570,6 @@ def check_stationarity(samples=30, variance_threshold_accel=0.5, variance_thresh
     except Exception as e:
         print(f"[SensorManager] Error checking stationarity: {e}")
         return None
-    finally:
-        if _lock:
-            _lock.release()
 
 
 # ============================================================================
@@ -583,39 +652,53 @@ class _QMI8658Driver(_IMUDriver):
 
     def calibrate_accelerometer(self, samples):
         """Calibrate accelerometer (device must be stationary)."""
+        print(f"[QMI8658Driver] calibrate_accelerometer: starting with {samples} samples")
         sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
 
-        for _ in range(samples):
+        for i in range(samples):
+            if i % 10 == 0:
+                print(f"[QMI8658Driver] Sample {i}/{samples}: about to read acceleration...")
             ax, ay, az = self.sensor.acceleration
+            if i % 10 == 0:
+                print(f"[QMI8658Driver] Sample {i}/{samples}: read complete, values=({ax:.3f}, {ay:.3f}, {az:.3f}), sleeping...")
             # Convert to m/s²
             sum_x += ax * _GRAVITY
             sum_y += ay * _GRAVITY
             sum_z += az * _GRAVITY
             time.sleep_ms(10)
+            if i % 10 == 0:
+                print(f"[QMI8658Driver] Sample {i}/{samples}: sleep complete")
 
+        print(f"[QMI8658Driver] All {samples} samples collected, calculating offsets...")
         # Average offsets (assuming Z-axis should read +9.8 m/s²)
         self.accel_offset[0] = sum_x / samples
         self.accel_offset[1] = sum_y / samples
         self.accel_offset[2] = (sum_z / samples) - _GRAVITY  # Expect +1G on Z
 
+        print(f"[QMI8658Driver] Calibration complete: offsets = {tuple(self.accel_offset)}")
         return tuple(self.accel_offset)
 
     def calibrate_gyroscope(self, samples):
         """Calibrate gyroscope (device must be stationary)."""
+        print(f"[QMI8658Driver] calibrate_gyroscope: starting with {samples} samples")
         sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
 
-        for _ in range(samples):
+        for i in range(samples):
+            if i % 20 == 0:
+                print(f"[QMI8658Driver] Reading sample {i}/{samples}...")
             gx, gy, gz = self.sensor.gyro
             sum_x += gx
             sum_y += gy
             sum_z += gz
             time.sleep_ms(10)
 
+        print(f"[QMI8658Driver] All {samples} samples collected, calculating offsets...")
         # Average offsets (should be 0 when stationary)
         self.gyro_offset[0] = sum_x / samples
         self.gyro_offset[1] = sum_y / samples
         self.gyro_offset[2] = sum_z / samples
 
+        print(f"[QMI8658Driver] Calibration complete: offsets = {tuple(self.gyro_offset)}")
         return tuple(self.gyro_offset)
 
     def get_calibration(self):

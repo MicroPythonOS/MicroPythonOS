@@ -114,6 +114,33 @@ The `c_mpos/src/webcam.c` module provides webcam support for desktop builds usin
 
 ## Build System
 
+### Development Workflow (IMPORTANT)
+
+**For most development, you do NOT need to rebuild the firmware!**
+
+When you run `scripts/install.sh`, it copies files from `internal_filesystem/` to the device storage. These files override the frozen filesystem because the storage paths are first in `sys.path`. This means:
+
+```bash
+# Fast development cycle (recommended):
+# 1. Edit Python files in internal_filesystem/
+# 2. Install to device:
+./scripts/install.sh waveshare-esp32-s3-touch-lcd-2
+
+# That's it! Your changes are live on the device.
+```
+
+**You only need to rebuild firmware (`./scripts/build_mpos.sh esp32`) when:**
+- Testing the frozen `lib/` for production releases
+- Modifying C extension modules (`c_mpos/`, `secp256k1-embedded-ecdh/`)
+- Changing MicroPython core or LVGL bindings
+- Creating a fresh firmware image for distribution
+
+**Desktop development** always uses the unfrozen files, so you never need to rebuild for Python changes:
+```bash
+# Edit internal_filesystem/ files
+./scripts/run_desktop.sh  # Changes are immediately active
+```
+
 ### Building Firmware
 
 The main build script is `scripts/build_mpos.sh`:

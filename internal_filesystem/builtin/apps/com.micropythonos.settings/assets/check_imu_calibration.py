@@ -151,7 +151,8 @@ class CheckIMUCalibrationActivity(Activity):
             if self.is_desktop:
                 quality = self.get_mock_quality()
             else:
-                quality = SensorManager.check_calibration_quality(samples=30)
+                # Use only 5 samples for real-time display (faster, less blocking)
+                quality = SensorManager.check_calibration_quality(samples=5)
 
             if quality is None:
                 self.status_label.set_text("Error reading IMU")
