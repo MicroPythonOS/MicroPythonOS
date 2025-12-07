@@ -37,7 +37,7 @@ class TestIMUCalibration(unittest.TestCase):
         if sys.platform == "esp32":
             self.screenshot_dir = "tests/screenshots"
         else:
-            self.screenshot_dir = "/home/user/MicroPythonOS/tests/screenshots"
+            self.screenshot_dir = "../tests/screenshots" # it runs from internal_filesystem/
 
         # Ensure directory exists
         try:
@@ -79,22 +79,12 @@ class TestIMUCalibration(unittest.TestCase):
         simulate_click(coords['center_x'], coords['center_y'])
         wait_for_render(30)
 
-        # Verify CheckIMUCalibrationActivity loaded
-        screen = lv.screen_active()
-        self.assertTrue(verify_text_present(screen, "IMU Calibration Check"),
-                       "CheckIMUCalibrationActivity title not found")
-
-        # Wait for real-time updates to populate
-        wait_for_render(20)
-
         # Verify key elements are present
+        screen = lv.screen_active()
         print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "Quality:"),
-                       "Quality label not found")
-        self.assertTrue(verify_text_present(screen, "Accelerometer"),
-                       "Accelerometer label not found")
-        self.assertTrue(verify_text_present(screen, "Gyroscope"),
-                       "Gyroscope label not found")
+        self.assertTrue(verify_text_present(screen, "Quality:"), "Quality label not found")
+        self.assertTrue(verify_text_present(screen, "Accel."), "Accel. label not found")
+        self.assertTrue(verify_text_present(screen, "Gyro"), "Gyro label not found")
 
         # Capture screenshot
         screenshot_path = f"{self.screenshot_dir}/check_imu_calibration.raw"
@@ -191,8 +181,7 @@ class TestIMUCalibration(unittest.TestCase):
 
         # Verify Check activity loaded
         screen = lv.screen_active()
-        self.assertTrue(verify_text_present(screen, "IMU Calibration Check"),
-                       "Check activity did not load")
+        self.assertTrue(verify_text_present(screen, "on flat surface"), "Check activity did not load")
 
         # Click "Calibrate" button to navigate to Calibrate activity
         calibrate_btn = find_button_with_text(screen, "Calibrate")
