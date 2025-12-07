@@ -323,7 +323,7 @@ import mpos.sensor_manager as SensorManager
 # Create I2C bus for IMU (different pins from display)
 from machine import I2C
 imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
-SensorManager.init(imu_i2c, address=0x6B)
+SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 print("Fri3d hardware: Audio, LEDs, and sensors initialized")
 

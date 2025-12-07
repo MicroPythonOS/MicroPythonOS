@@ -49,16 +49,19 @@ class CalibrateIMUActivity(Activity):
         screen.set_style_pad_all(mpos.ui.pct_of_display_width(3), 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_flex_align(lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER)
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(screen)
 
         # Title
         self.title_label = lv.label(screen)
         self.title_label.set_text("IMU Calibration")
-        self.title_label.set_style_text_font(lv.font_montserrat_20, 0)
+        self.title_label.set_style_text_font(lv.font_montserrat_16, 0)
 
         # Status label
         self.status_label = lv.label(screen)
         self.status_label.set_text("Initializing...")
-        self.status_label.set_style_text_font(lv.font_montserrat_16, 0)
+        self.status_label.set_style_text_font(lv.font_montserrat_12, 0)
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(90))
 
@@ -71,7 +74,7 @@ class CalibrateIMUActivity(Activity):
         # Detail label (for additional info)
         self.detail_label = lv.label(screen)
         self.detail_label.set_text("")
-        self.detail_label.set_style_text_font(lv.font_montserrat_12, 0)
+        self.detail_label.set_style_text_font(lv.font_montserrat_10, 0)
         self.detail_label.set_style_text_color(lv.color_hex(0x888888), 0)
         self.detail_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.detail_label.set_width(lv.pct(90))
@@ -82,6 +85,7 @@ class CalibrateIMUActivity(Activity):
         btn_cont.set_height(lv.SIZE_CONTENT)
         btn_cont.set_style_border_width(0, 0)
         btn_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
+        btn_cont.set_style_pad_all(1,0)
         btn_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, 0)
 
         # Action button

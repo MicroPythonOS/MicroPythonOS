@@ -25,12 +25,17 @@ try:
 except ImportError:
     _lock = None
 
+
 # Sensor type constants (matching Android SensorManager)
 TYPE_ACCELEROMETER = 1      # Units: m/s² (meters per second squared)
 TYPE_GYROSCOPE = 4          # Units: deg/s (degrees per second)
 TYPE_TEMPERATURE = 13       # Units: °C (generic, returns first available - deprecated)
 TYPE_IMU_TEMPERATURE = 14   # Units: °C (IMU chip temperature)
 TYPE_SOC_TEMPERATURE = 15   # Units: °C (MCU/SoC internal temperature)
+
+# mounted_position:
+FACING_EARTH = 20 # underside of PCB, like fri3d_2024
+FACING_SKY = 21 # top of PCB, like waveshare_esp32_s3_lcd_touch_2 (default)
 
 # Gravity constant for unit conversions
 _GRAVITY = 9.80665  # m/s²
@@ -41,6 +46,7 @@ _imu_driver = None
 _sensor_list = []
 _i2c_bus = None
 _i2c_address = None
+_mounted_position = FACING_SKY
 _has_mcu_temperature = False
 
 
@@ -71,7 +77,7 @@ class Sensor:
         return f"Sensor({self.name}, type={self.type})"
 
 
-def init(i2c_bus, address=0x6B):
+def init(i2c_bus, address=0x6B, mounted_position=FACING_SKY):
     """Initialize SensorManager. MCU temperature initializes immediately, IMU initializes on first use.
 
     Args:
@@ -85,6 +91,7 @@ def init(i2c_bus, address=0x6B):
 
     _i2c_bus = i2c_bus
     _i2c_address = address
+    _mounted_position = mounted_position
 
     # Initialize MCU temperature sensor immediately (fast, no I2C needed)
     try:
@@ -218,7 +225,10 @@ def read_sensor(sensor):
             try:
                 if sensor.type == TYPE_ACCELEROMETER:
                     if _imu_driver:
-                        return _imu_driver.read_acceleration()
+                        ax, ay, az = _imu_driver.read_acceleration()
+                        if _mounted_position == SensorManager.FACING_EARTH:
+                            az += _GRAVITY
+                        return (ax, ay, az)
                 elif sensor.type == TYPE_GYROSCOPE:
                     if _imu_driver:
                         return _imu_driver.read_gyroscope()

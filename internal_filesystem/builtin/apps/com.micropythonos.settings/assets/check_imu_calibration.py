@@ -36,8 +36,12 @@ class CheckIMUCalibrationActivity(Activity):
 
     def onCreate(self):
         screen = lv.obj()
-        screen.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
+        screen.set_style_pad_all(mpos.ui.pct_of_display_width(1), 0)
+        #screen.set_style_pad_all(0, 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(screen)
         self.setContentView(screen)
 
     def onResume(self, screen):
@@ -49,11 +53,6 @@ class CheckIMUCalibrationActivity(Activity):
         # Reset widget lists
         self.accel_labels = []
         self.gyro_labels = []
-
-        # Title
-        title = lv.label(screen)
-        title.set_text("IMU Calibration Check")
-        title.set_style_text_font(lv.font_montserrat_20, 0)
 
         # Status label
         self.status_label = lv.label(screen)
@@ -68,34 +67,57 @@ class CheckIMUCalibrationActivity(Activity):
         # Quality score (large, prominent)
         self.quality_score_label = lv.label(screen)
         self.quality_score_label.set_text("Quality: --")
-        self.quality_score_label.set_style_text_font(lv.font_montserrat_20, 0)
+        self.quality_score_label.set_style_text_font(lv.font_montserrat_16, 0)
+
+        data_cont = lv.obj(screen)
+        data_cont.set_width(lv.pct(100))
+        data_cont.set_height(lv.SIZE_CONTENT)
+        data_cont.set_style_pad_all(0, 0)
+        data_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        data_cont.set_style_border_width(0, 0)
+        data_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
+        data_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, 0)
 
         # Accelerometer section
-        accel_title = lv.label(screen)
-        accel_title.set_text("Accelerometer (m/s²)")
-        accel_title.set_style_text_font(lv.font_montserrat_14, 0)
+        acc_cont = lv.obj(data_cont)
+        acc_cont.set_height(lv.SIZE_CONTENT)
+        acc_cont.set_width(lv.pct(45))
+        acc_cont.set_style_border_width(0, 0)
+        acc_cont.set_style_pad_all(0, 0)
+        acc_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+
+        accel_title = lv.label(acc_cont)
+        accel_title.set_text("Accel. (m/s^2)")
+        accel_title.set_style_text_font(lv.font_montserrat_12, 0)
 
         for axis in ['X', 'Y', 'Z']:
-            label = lv.label(screen)
+            label = lv.label(acc_cont)
             label.set_text(f"{axis}: --")
-            label.set_style_text_font(lv.font_montserrat_12, 0)
+            label.set_style_text_font(lv.font_montserrat_10, 0)
             self.accel_labels.append(label)
 
         # Gyroscope section
-        gyro_title = lv.label(screen)
-        gyro_title.set_text("Gyroscope (deg/s)")
-        gyro_title.set_style_text_font(lv.font_montserrat_14, 0)
+        gyro_cont = lv.obj(data_cont)
+        gyro_cont.set_width(mpos.ui.pct_of_display_width(45))
+        gyro_cont.set_height(lv.SIZE_CONTENT)
+        gyro_cont.set_style_border_width(0, 0)
+        gyro_cont.set_style_pad_all(0, 0)
+        gyro_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+
+        gyro_title = lv.label(gyro_cont)
+        gyro_title.set_text("Gyro (deg/s)")
+        gyro_title.set_style_text_font(lv.font_montserrat_12, 0)
 
         for axis in ['X', 'Y', 'Z']:
-            label = lv.label(screen)
+            label = lv.label(gyro_cont)
             label.set_text(f"{axis}: --")
-            label.set_style_text_font(lv.font_montserrat_12, 0)
+            label.set_style_text_font(lv.font_montserrat_10, 0)
             self.gyro_labels.append(label)
 
         # Separator
-        sep2 = lv.obj(screen)
-        sep2.set_size(lv.pct(100), 2)
-        sep2.set_style_bg_color(lv.color_hex(0x666666), 0)
+        #sep2 = lv.obj(screen)
+        #sep2.set_size(lv.pct(100), 2)
+        #sep2.set_style_bg_color(lv.color_hex(0x666666), 0)
 
         # Issues label
         self.issues_label = lv.label(screen)
@@ -107,6 +129,7 @@ class CheckIMUCalibrationActivity(Activity):
 
         # Button container
         btn_cont = lv.obj(screen)
+        btn_cont.set_style_pad_all(5, 0)
         btn_cont.set_width(lv.pct(100))
         btn_cont.set_height(lv.SIZE_CONTENT)
         btn_cont.set_style_border_width(0, 0)
