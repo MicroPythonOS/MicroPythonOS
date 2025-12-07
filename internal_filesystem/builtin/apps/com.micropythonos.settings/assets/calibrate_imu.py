@@ -34,7 +34,6 @@ class CalibrateIMUActivity(Activity):
     # Widgets
     title_label = None
     status_label = None
-    progress_bar = None
     detail_label = None
     action_button = None
     action_button_label = None
@@ -64,12 +63,6 @@ class CalibrateIMUActivity(Activity):
         self.status_label.set_style_text_font(lv.font_montserrat_12, 0)
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(90))
-
-        # Progress bar (hidden initially)
-        self.progress_bar = lv.bar(screen)
-        self.progress_bar.set_size(lv.pct(90), 20)
-        self.progress_bar.set_value(0, False)
-        self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Detail label (for additional info)
         self.detail_label = lv.label(screen)
@@ -137,29 +130,24 @@ class CalibrateIMUActivity(Activity):
             self.detail_label.set_text("Calibration will take ~1 seconds\nUI will freeze during calibration")
             self.action_button_label.set_text("Calibrate Now")
             self.action_button.remove_state(lv.STATE.DISABLED)
-            self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
             self.cancel_button.remove_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.CALIBRATING:
             self.status_label.set_text("Calibrating IMU...")
             self.detail_label.set_text("Do not move device!")
             self.action_button.add_state(lv.STATE.DISABLED)
-            self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-            self.progress_bar.set_value(50, True)
             self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.COMPLETE:
             # Status text will be set by calibration results
             self.action_button_label.set_text("Done")
             self.action_button.remove_state(lv.STATE.DISABLED)
-            self.progress_bar.set_value(100, True)
             self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
         elif self.current_state == CalibrationState.ERROR:
             # Status text will be set by error handler
             self.action_button_label.set_text("Retry")
             self.action_button.remove_state(lv.STATE.DISABLED)
-            self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
             self.cancel_button.add_flag(lv.obj.FLAG.HIDDEN)
 
     def action_button_clicked(self, event):
