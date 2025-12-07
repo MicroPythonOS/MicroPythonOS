@@ -42,7 +42,6 @@ class CheckIMUCalibrationActivity(Activity):
 
     def onResume(self, screen):
         super().onResume(screen)
-        print(f"[CheckIMU] onResume called, is_desktop={self.is_desktop}")
 
         # Clear the screen and recreate UI (to avoid stale widget references)
         screen.clean()
@@ -132,16 +131,13 @@ class CheckIMUCalibrationActivity(Activity):
 
         # Check if IMU is available
         if not self.is_desktop and not SensorManager.is_available():
-            print("[CheckIMU] IMU not available, stopping")
             self.status_label.set_text("IMU not available on this device")
             self.quality_score_label.set_text("N/A")
             return
 
         # Start real-time updates
-        print("[CheckIMU] Starting real-time updates")
         self.updating = True
         self.update_timer = lv.timer_create(self.update_display, self.UPDATE_INTERVAL, None)
-        print(f"[CheckIMU] Timer created: {self.update_timer}")
 
     def onPause(self, screen):
         # Stop updates
@@ -206,16 +202,7 @@ class CheckIMUCalibrationActivity(Activity):
 
             self.status_label.set_text("Real-time monitoring (place on flat surface)")
         except Exception as e:
-            # Log the actual error for debugging
-            print(f"[CheckIMU] Error in update_display: {e}")
-            import sys
-            sys.print_exception(e)
-            # If widgets were deleted (activity closed), stop updating
-            try:
-                self.status_label.set_text(f"Error: {str(e)}")
-            except:
-                # Widgets really were deleted
-                pass
+            # If widgets were deleted (activity closed), stop updating silently
             self.updating = False
 
     def get_mock_quality(self):

@@ -130,37 +130,19 @@ class TestIMUCalibration(unittest.TestCase):
         simulate_click(coords['center_x'], coords['center_y'])
         wait_for_render(30)
 
-        # Verify activity loaded
+        # Verify activity loaded and shows instructions
         screen = lv.screen_active()
+        print_screen_labels(screen)
         self.assertTrue(verify_text_present(screen, "IMU Calibration"),
                        "CalibrateIMUActivity title not found")
+        self.assertTrue(verify_text_present(screen, "Place device on flat"),
+                       "Instructions not shown")
 
         # Capture initial state
         screenshot_path = f"{self.screenshot_dir}/calibrate_imu_01_initial.raw"
         capture_screenshot(screenshot_path)
 
-        # Step 1: Click "Check Quality" button
-        check_btn = find_button_with_text(screen, "Check Quality")
-        self.assertIsNotNone(check_btn, "Could not find 'Check Quality' button")
-        coords = get_widget_coords(check_btn)
-        simulate_click(coords['center_x'], coords['center_y'])
-        wait_for_render(10)
-
-        # Wait for quality check to complete (mock is fast)
-        time.sleep(2.5)  # Allow thread to complete
-        wait_for_render(15)
-
-        # Verify quality check completed
-        screen = lv.screen_active()
-        print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "Current calibration:"),
-                       "Quality check results not shown")
-
-        # Capture after quality check
-        screenshot_path = f"{self.screenshot_dir}/calibrate_imu_02_quality.raw"
-        capture_screenshot(screenshot_path)
-
-        # Step 2: Click "Calibrate Now" button
+        # Click "Calibrate Now" button to start calibration
         calibrate_btn = find_button_with_text(screen, "Calibrate Now")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate Now' button")
         coords = get_widget_coords(calibrate_btn)
@@ -168,18 +150,22 @@ class TestIMUCalibration(unittest.TestCase):
         wait_for_render(10)
 
         # Wait for calibration to complete (mock takes ~3 seconds)
-        time.sleep(4.0)
-        wait_for_render(15)
+        time.sleep(3.5)
+        wait_for_render(20)
 
         # Verify calibration completed
         screen = lv.screen_active()
         print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "Calibration successful!") or
-                       verify_text_present(screen, "Calibration complete!"),
+        self.assertTrue(verify_text_present(screen, "Calibration successful!"),
                        "Calibration completion message not found")
 
+        # Verify offsets are shown
+        self.assertTrue(verify_text_present(screen, "Accel offsets") or
+                       verify_text_present(screen, "offsets"),
+                       "Calibration offsets not shown")
+
         # Capture completion state
-        screenshot_path = f"{self.screenshot_dir}/calibrate_imu_03_complete.raw"
+        screenshot_path = f"{self.screenshot_dir}/calibrate_imu_02_complete.raw"
         capture_screenshot(screenshot_path)
 
         print("=== CalibrateIMUActivity flow test complete ===")
@@ -203,18 +189,25 @@ class TestIMUCalibration(unittest.TestCase):
         simulate_click(coords['center_x'], coords['center_y'])
         wait_for_render(30)  # Wait for real-time updates
 
-        # Click "Calibrate" button
+        # Verify Check activity loaded
         screen = lv.screen_active()
+        self.assertTrue(verify_text_present(screen, "IMU Calibration Check"),
+                       "Check activity did not load")
+
+        # Click "Calibrate" button to navigate to Calibrate activity
         calibrate_btn = find_button_with_text(screen, "Calibrate")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate' button")
 
-        coords = get_widget_coords(calibrate_btn)
-        simulate_click(coords['center_x'], coords['center_y'])
-        wait_for_render(15)
+        # Use send_event instead of simulate_click (more reliable for navigation)
+        calibrate_btn.send_event(lv.EVENT.CLICKED, None)
+        wait_for_render(30)
 
         # Verify CalibrateIMUActivity loaded
         screen = lv.screen_active()
-        self.assertTrue(verify_text_present(screen, "Check Quality"),
+        print_screen_labels(screen)
+        self.assertTrue(verify_text_present(screen, "Calibrate Now"),
                        "Did not navigate to CalibrateIMUActivity")
+        self.assertTrue(verify_text_present(screen, "Place device on flat"),
+                       "CalibrateIMUActivity instructions not shown")
 
         print("=== Navigation test complete ===")
