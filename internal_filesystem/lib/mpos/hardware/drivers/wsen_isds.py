@@ -35,6 +35,8 @@ class Wsen_Isds:
     _ISDS_STATUS_REG = 0x1E  # Status data register
     _ISDS_WHO_AM_I = 0x0F    # WHO_AM_I register
 
+    _REG_TEMP_OUT_L = 0x20
+
     _REG_G_X_OUT_L = 0x22
     _REG_G_Y_OUT_L = 0x24
     _REG_G_Z_OUT_L = 0x26
@@ -354,6 +356,20 @@ class Wsen_Isds:
 
         return g_x, g_y, g_z
 
+    @property
+    def temperature(self) -> float:
+        temp_raw = self._read_raw_temperature()
+        return ((temp_raw / 256.0) + 25.0)
+
+    def _read_raw_temperature(self):
+        """Read raw temperature data."""
+        if not self._temp_data_ready():
+            raise Exception("temp sensor data not ready")
+
+        raw = self.i2c.readfrom_mem(self.address, Wsen_Isds._REG_TEMP_OUT_L, 2)
+        raw_temp = self._convert_from_raw(raw[0], raw[1])
+        return raw_temp
+
     def _read_raw_angular_velocities(self):
         """Read raw gyroscope data."""
         if not self._gyro_data_ready():
@@ -419,6 +435,10 @@ class Wsen_Isds:
     def _gyro_data_ready(self):
         """Check if gyroscope data is ready."""
         return self._get_status_reg()[1]
+
+    def _temp_data_ready(self):
+        """Check if accelerometer data is ready."""
+        return self._get_status_reg()[2]
 
     def _acc_gyro_data_ready(self):
         """Check if both accelerometer and gyroscope data are ready."""

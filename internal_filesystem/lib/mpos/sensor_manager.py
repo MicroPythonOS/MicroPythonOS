@@ -697,9 +697,7 @@ class _WsenISDSDriver(_IMUDriver):
         )
 
     def read_temperature(self):
-        """Read temperature in °C (not implemented in WSEN_ISDS driver)."""
-        # WSEN_ISDS has temperature sensor but not exposed in current driver
-        return None
+        return self.sensor.temperature
 
     def calibrate_accelerometer(self, samples):
         """Calibrate accelerometer using hardware calibration."""
@@ -807,6 +805,15 @@ def _register_wsen_isds_sensors():
             max_range="±500 deg/s",
             resolution="0.0175 deg/s",
             power_ma=0.65
+        ),
+        Sensor(
+            name="WSEN_ISDS Temperature",
+            sensor_type=TYPE_IMU_TEMPERATURE,
+            vendor="Würth Elektronik",
+            version=1,
+            max_range="-40°C to +85°C",
+            resolution="0.004°C",
+            power_ma=0
         )
     ]
 

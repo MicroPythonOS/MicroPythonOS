@@ -3,13 +3,14 @@
 - Fri3d Camp 2024 Board: add startup light and sound
 - Fri3d Camp 2024 Board: workaround ADC2+WiFi conflict by temporarily disable WiFi to measure battery level
 - Fri3d Camp 2024 Board: improve battery monitor calibration to fix 0.1V delta
+- Fri3d Camp 2024 Board: add WSEN-ISDS 6-Axis Inertial Measurement Unit (IMU) support (including temperature)
 - API: improve and cleanup animations
 - API: SharedPreferences: add erase_all() function
 - API: add defaults handling to SharedPreferences and only save non-defaults
 - API: restore sys.path after starting app
 - API: add AudioFlinger for audio playback (i2s DAC and buzzer)
 - API: add LightsManager for multicolor LEDs
-- API: add SensorManager for IMU/accelerometers, temperature sensors etc.
+- API: add SensorManager for generic handling of IMUs and temperature sensors
 - About app: add free, used and total storage space info
 - AppStore app: remove unnecessary scrollbar over publisher's name
 - Camera app: massive overhaul!
