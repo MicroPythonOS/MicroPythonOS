@@ -238,11 +238,8 @@ class CheckIMUCalibrationActivity(Activity):
 
     def start_calibration(self, event):
         """Navigate to calibration activity."""
-        print("[CheckIMU] start_calibration called!")
         from mpos.content.intent import Intent
         from calibrate_imu import CalibrateIMUActivity
 
         intent = Intent(activity_class=CalibrateIMUActivity)
-        print("[CheckIMU] Starting CalibrateIMUActivity...")
         self.startActivity(intent)
-        print("[CheckIMU] startActivity returned")
