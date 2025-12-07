@@ -38,6 +38,18 @@ class CheckIMUCalibrationActivity(Activity):
         screen = lv.obj()
         screen.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self.setContentView(screen)
+
+    def onResume(self, screen):
+        super().onResume(screen)
+        print(f"[CheckIMU] onResume called, is_desktop={self.is_desktop}")
+
+        # Clear the screen and recreate UI (to avoid stale widget references)
+        screen.clean()
+
+        # Reset widget lists
+        self.accel_labels = []
+        self.gyro_labels = []
 
         # Title
         title = lv.label(screen)
@@ -118,20 +130,18 @@ class CheckIMUCalibrationActivity(Activity):
         calibrate_label.center()
         calibrate_btn.add_event_cb(self.start_calibration, lv.EVENT.CLICKED, None)
 
-        self.setContentView(screen)
-
-    def onResume(self, screen):
-        super().onResume(screen)
-
         # Check if IMU is available
         if not self.is_desktop and not SensorManager.is_available():
+            print("[CheckIMU] IMU not available, stopping")
             self.status_label.set_text("IMU not available on this device")
             self.quality_score_label.set_text("N/A")
             return
 
         # Start real-time updates
+        print("[CheckIMU] Starting real-time updates")
         self.updating = True
         self.update_timer = lv.timer_create(self.update_display, self.UPDATE_INTERVAL, None)
+        print(f"[CheckIMU] Timer created: {self.update_timer}")
 
     def onPause(self, screen):
         # Stop updates
@@ -195,8 +205,17 @@ class CheckIMUCalibrationActivity(Activity):
             self.issues_label.set_text(issues_text)
 
             self.status_label.set_text("Real-time monitoring (place on flat surface)")
-        except:
-            # Widgets were deleted (activity closed), stop updating
+        except Exception as e:
+            # Log the actual error for debugging
+            print(f"[CheckIMU] Error in update_display: {e}")
+            import sys
+            sys.print_exception(e)
+            # If widgets were deleted (activity closed), stop updating
+            try:
+                self.status_label.set_text(f"Error: {str(e)}")
+            except:
+                # Widgets really were deleted
+                pass
             self.updating = False
 
     def get_mock_quality(self):
@@ -232,8 +251,11 @@ class CheckIMUCalibrationActivity(Activity):
 
     def start_calibration(self, event):
         """Navigate to calibration activity."""
+        print("[CheckIMU] start_calibration called!")
         from mpos.content.intent import Intent
         from calibrate_imu import CalibrateIMUActivity
 
         intent = Intent(activity_class=CalibrateIMUActivity)
+        print("[CheckIMU] Starting CalibrateIMUActivity...")
         self.startActivity(intent)
+        print("[CheckIMU] startActivity returned")

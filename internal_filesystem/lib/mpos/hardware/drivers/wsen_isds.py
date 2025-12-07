@@ -128,7 +128,6 @@ class Wsen_Isds:
             gyro_range: Gyroscope range ("125dps", "250dps", "500dps", "1000dps", "2000dps")
             gyro_data_rate: Gyroscope data rate ("0", "12.5Hz", "26Hz", ...")
         """
-        print(f"[WSEN_ISDS] __init__ called with address={hex(address)}, acc_range={acc_range}, acc_data_rate={acc_data_rate}, gyro_range={gyro_range}, gyro_data_rate={gyro_data_rate}")
         self.i2c = i2c
         self.address = address
 
@@ -150,22 +149,14 @@ class Wsen_Isds:
         self.GYRO_NUM_SAMPLES_CALIBRATION = 5
         self.GYRO_CALIBRATION_DELAY_MS = 10
 
-        print("[WSEN_ISDS] Configuring accelerometer...")
         self.set_acc_range(acc_range)
         self.set_acc_data_rate(acc_data_rate)
-        print("[WSEN_ISDS] Accelerometer configured")
 
-        print("[WSEN_ISDS] Configuring gyroscope...")
         self.set_gyro_range(gyro_range)
         self.set_gyro_data_rate(gyro_data_rate)
-        print("[WSEN_ISDS] Gyroscope configured")
 
-        # Give sensors time to stabilize and start producing data
-        # Especially important for gyroscope which may need warmup time
-        print("[WSEN_ISDS] Waiting 100ms for sensors to stabilize...")
+        # Give sensors time to stabilize
         time.sleep_ms(100)
-
-        print("[WSEN_ISDS] Initialization complete")
 
     def get_chip_id(self):
         """Get chip ID for detection. Returns WHO_AM_I register value."""
@@ -270,14 +261,11 @@ class Wsen_Isds:
         if samples is None:
             samples = self.ACC_NUM_SAMPLES_CALIBRATION
 
-        print(f"[WSEN_ISDS] Calibrating accelerometer with {samples} samples...")
         self.acc_offset_x = 0
         self.acc_offset_y = 0
         self.acc_offset_z = 0
 
-        for i in range(samples):
-            if i % 10 == 0:
-                print(f"[WSEN_ISDS] Accel sample {i}/{samples}")
+        for _ in range(samples):
             x, y, z = self._read_raw_accelerations()
             self.acc_offset_x += x
             self.acc_offset_y += y
@@ -287,7 +275,6 @@ class Wsen_Isds:
         self.acc_offset_x //= samples
         self.acc_offset_y //= samples
         self.acc_offset_z //= samples
-        print(f"[WSEN_ISDS] Accelerometer calibration complete: offsets=({self.acc_offset_x}, {self.acc_offset_y}, {self.acc_offset_z})")
 
     def _acc_calc_sensitivity(self):
         """Calculate accelerometer sensitivity based on range (in mg/digit)."""
@@ -338,14 +325,11 @@ class Wsen_Isds:
         if samples is None:
             samples = self.GYRO_NUM_SAMPLES_CALIBRATION
 
-        print(f"[WSEN_ISDS] Calibrating gyroscope with {samples} samples...")
         self.gyro_offset_x = 0
         self.gyro_offset_y = 0
         self.gyro_offset_z = 0
 
-        for i in range(samples):
-            if i % 10 == 0:
-                print(f"[WSEN_ISDS] Gyro sample {i}/{samples}")
+        for _ in range(samples):
             x, y, z = self._read_raw_angular_velocities()
             self.gyro_offset_x += x
             self.gyro_offset_y += y
@@ -355,7 +339,6 @@ class Wsen_Isds:
         self.gyro_offset_x //= samples
         self.gyro_offset_y //= samples
         self.gyro_offset_z //= samples
-        print(f"[WSEN_ISDS] Gyroscope calibration complete: offsets=({self.gyro_offset_x}, {self.gyro_offset_y}, {self.gyro_offset_z})")
 
     def read_angular_velocities(self):
         """Read calibrated gyroscope data.

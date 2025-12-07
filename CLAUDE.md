@@ -116,30 +116,40 @@ The `c_mpos/src/webcam.c` module provides webcam support for desktop builds usin
 
 ### Development Workflow (IMPORTANT)
 
-**For most development, you do NOT need to rebuild the firmware!**
+**⚠️ CRITICAL: Desktop vs Hardware Testing**
 
-When you run `scripts/install.sh`, it copies files from `internal_filesystem/` to the device storage. These files override the frozen filesystem because the storage paths are first in `sys.path`. This means:
+📖 **See**: [docs/os-development/running-on-desktop.md](../docs/docs/os-development/running-on-desktop.md) for complete guide.
 
+**Desktop testing (recommended for ALL Python development):**
 ```bash
-# Fast development cycle (recommended):
-# 1. Edit Python files in internal_filesystem/
-# 2. Install to device:
+# 1. Edit files in internal_filesystem/
+nano internal_filesystem/builtin/apps/com.micropythonos.settings/assets/settings.py
+
+# 2. Run on desktop - changes are IMMEDIATELY active!
+./scripts/run_desktop.sh
+
+# That's it! NO build, NO install needed.
+```
+
+**❌ DO NOT run `./scripts/install.sh` for desktop testing!** It's only for hardware deployment.
+
+The desktop binary runs **directly from `internal_filesystem/`**, so any Python file changes are instantly available. This is the fastest development cycle.
+
+**Hardware deployment (only after desktop testing):**
+```bash
+# Deploy to physical ESP32 device via USB/serial
 ./scripts/install.sh waveshare-esp32-s3-touch-lcd-2
-
-# That's it! Your changes are live on the device.
 ```
 
-**You only need to rebuild firmware (`./scripts/build_mpos.sh esp32`) when:**
-- Testing the frozen `lib/` for production releases
-- Modifying C extension modules (`c_mpos/`, `secp256k1-embedded-ecdh/`)
+This copies files from `internal_filesystem/` to device storage, which overrides the frozen filesystem.
+
+**When you need to rebuild firmware (`./scripts/build_mpos.sh`):**
+- Modifying C extension modules (`c_mops/`, `secp256k1-embedded-ecdh/`)
 - Changing MicroPython core or LVGL bindings
-- Creating a fresh firmware image for distribution
+- Testing frozen filesystem for production releases
+- Creating firmware for distribution
 
-**Desktop development** always uses the unfrozen files, so you never need to rebuild for Python changes:
-```bash
-# Edit internal_filesystem/ files
-./scripts/run_desktop.sh  # Changes are immediately active
-```
+**For 99% of development work on Python code**: Just edit `internal_filesystem/` and run `./scripts/run_desktop.sh`.
 
 ### Building Firmware
 

@@ -89,17 +89,13 @@ def init(i2c_bus, address=0x6B):
     # Initialize MCU temperature sensor immediately (fast, no I2C needed)
     try:
         import esp32
-        # Test if mcu_temperature() is available
         _ = esp32.mcu_temperature()
         _has_mcu_temperature = True
         _register_mcu_temperature_sensor()
-        print("[SensorManager] Detected MCU internal temperature sensor")
-    except Exception as e:
-        print(f"[SensorManager] MCU temperature not available: {e}")
+    except:
+        pass
 
-    # Mark as initialized (but IMU driver is still None - will be initialized lazily)
     _initialized = True
-    print("[SensorManager] init() called - IMU initialization deferred until first use")
     return True
 
 
@@ -112,60 +108,37 @@ def _ensure_imu_initialized():
     Returns:
         bool: True if IMU detected and initialized successfully
     """
-    global _imu_driver, _sensor_list, _i2c_bus, _i2c_address
+    global _imu_driver, _sensor_list
 
-    # If already initialized, return
-    if _imu_driver is not None:
-        return True
-
-    print("[SensorManager] _ensure_imu_initialized: Starting lazy IMU initialization...")
-    i2c_bus = _i2c_bus
-    address = _i2c_address
-    imu_detected = False
+    if not _initialized or _imu_driver is not None:
+        return _imu_driver is not None
 
     # Try QMI8658 first (Waveshare board)
-    if i2c_bus:
+    if _i2c_bus:
         try:
             from mpos.hardware.drivers.qmi8658 import QMI8658
-            # QMI8658 constants (can't import const() values)
-            _QMI8685_PARTID = 0x05
-            _REG_PARTID = 0x00
-            chip_id = i2c_bus.readfrom_mem(address, _REG_PARTID, 1)[0]
-            if chip_id == _QMI8685_PARTID:
-                print("[SensorManager] Detected QMI8658 IMU")
-                _imu_driver = _QMI8658Driver(i2c_bus, address)
+            chip_id = _i2c_bus.readfrom_mem(_i2c_address, 0x00, 1)[0]  # PARTID register
+            if chip_id == 0x05:  # QMI8685_PARTID
+                _imu_driver = _QMI8658Driver(_i2c_bus, _i2c_address)
                 _register_qmi8658_sensors()
                 _load_calibration()
-                imu_detected = True
-        except Exception as e:
-            print(f"[SensorManager] QMI8658 detection failed: {e}")
+                return True
+        except:
+            pass
 
         # Try WSEN_ISDS (Fri3d badge)
-        if not imu_detected:
-            print(f"[SensorManager] Trying to detect WSEN_ISDS at address {hex(address)}...")
-            try:
-                from mpos.hardware.drivers.wsen_isds import Wsen_Isds
-                print("[SensorManager] Reading WHO_AM_I register (0x0F)...")
-                chip_id = i2c_bus.readfrom_mem(address, 0x0F, 1)[0]  # WHO_AM_I register
-                print(f"[SensorManager] WHO_AM_I = {hex(chip_id)}")
-                if chip_id == 0x6A:  # WSEN_ISDS WHO_AM_I value
-                    print("[SensorManager] Detected WSEN_ISDS IMU - initializing driver...")
-                    _imu_driver = _WsenISDSDriver(i2c_bus, address)
-                    print("[SensorManager] WSEN_ISDS driver initialized, registering sensors...")
-                    _register_wsen_isds_sensors()
-                    print("[SensorManager] Loading calibration...")
-                    _load_calibration()
-                    imu_detected = True
-                    print("[SensorManager] WSEN_ISDS initialization complete!")
-                else:
-                    print(f"[SensorManager] Chip ID {hex(chip_id)} doesn't match WSEN_ISDS (expected 0x6A)")
-            except Exception as e:
-                print(f"[SensorManager] WSEN_ISDS detection failed: {e}")
-                import sys
-                sys.print_exception(e)
+        try:
+            from mpos.hardware.drivers.wsen_isds import Wsen_Isds
+            chip_id = _i2c_bus.readfrom_mem(_i2c_address, 0x0F, 1)[0]  # WHO_AM_I register
+            if chip_id == 0x6A:  # WSEN_ISDS WHO_AM_I
+                _imu_driver = _WsenISDSDriver(_i2c_bus, _i2c_address)
+                _register_wsen_isds_sensors()
+                _load_calibration()
+                return True
+        except:
+            pass
 
-    print(f"[SensorManager] _ensure_imu_initialized: IMU initialization complete, success={imu_detected}")
-    return imu_detected
+    return False
 
 
 def is_available():
@@ -274,11 +247,6 @@ def read_sensor(sensor):
                     time.sleep_ms(retry_delay_ms)
                     continue
                 else:
-                    # Final attempt failed or different error
-                    if attempt == max_retries - 1:
-                        print(f"[SensorManager] Error reading sensor {sensor.name} after {max_retries} retries: {e}")
-                    else:
-                        print(f"[SensorManager] Error reading sensor {sensor.name}: {e}")
                     return None
 
         return None
@@ -300,48 +268,31 @@ def calibrate_sensor(sensor, samples=100):
     Returns:
         tuple: Calibration offsets (x, y, z) or None if failed
     """
-    print(f"[SensorManager] calibrate_sensor called for {sensor.name} with {samples} samples")
     _ensure_imu_initialized()
     if not is_available() or sensor is None:
-        print("[SensorManager] calibrate_sensor: sensor not available")
         return None
 
-    print("[SensorManager] calibrate_sensor: acquiring lock...")
     if _lock:
         _lock.acquire()
-    print("[SensorManager] calibrate_sensor: lock acquired")
 
     try:
-        offsets = None
         if sensor.type == TYPE_ACCELEROMETER:
-            print(f"[SensorManager] Calling _imu_driver.calibrate_accelerometer({samples})...")
             offsets = _imu_driver.calibrate_accelerometer(samples)
-            print(f"[SensorManager] Accelerometer calibrated: {offsets}")
         elif sensor.type == TYPE_GYROSCOPE:
-            print(f"[SensorManager] Calling _imu_driver.calibrate_gyroscope({samples})...")
             offsets = _imu_driver.calibrate_gyroscope(samples)
-            print(f"[SensorManager] Gyroscope calibrated: {offsets}")
         else:
-            print(f"[SensorManager] Sensor type {sensor.type} does not support calibration")
             return None
 
-        # Save calibration
         if offsets:
-            print("[SensorManager] Saving calibration...")
             _save_calibration()
-            print("[SensorManager] Calibration saved")
 
         return offsets
     except Exception as e:
-        print(f"[SensorManager] Error calibrating sensor {sensor.name}: {e}")
-        import sys
-        sys.print_exception(e)
+        print(f"[SensorManager] Calibration error: {e}")
         return None
     finally:
-        print("[SensorManager] calibrate_sensor: releasing lock...")
         if _lock:
             _lock.release()
-        print("[SensorManager] calibrate_sensor: lock released")
 
 
 # Helper functions for calibration quality checking (module-level to avoid nested def issues)
@@ -652,14 +603,10 @@ class _QMI8658Driver(_IMUDriver):
 
     def calibrate_accelerometer(self, samples):
         """Calibrate accelerometer (device must be stationary)."""
-        print(f"[QMI8658Driver] Calibrating accelerometer with {samples} samples...")
         sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
 
-        for i in range(samples):
-            if i % 10 == 0:
-                print(f"[QMI8658Driver] Accel sample {i}/{samples}")
+        for _ in range(samples):
             ax, ay, az = self.sensor.acceleration
-            # Convert to m/s²
             sum_x += ax * _GRAVITY
             sum_y += ay * _GRAVITY
             sum_z += az * _GRAVITY
@@ -668,19 +615,15 @@ class _QMI8658Driver(_IMUDriver):
         # Average offsets (assuming Z-axis should read +9.8 m/s²)
         self.accel_offset[0] = sum_x / samples
         self.accel_offset[1] = sum_y / samples
-        self.accel_offset[2] = (sum_z / samples) - _GRAVITY  # Expect +1G on Z
+        self.accel_offset[2] = (sum_z / samples) - _GRAVITY
 
-        print(f"[QMI8658Driver] Accelerometer calibration complete: offsets = {tuple(self.accel_offset)}")
         return tuple(self.accel_offset)
 
     def calibrate_gyroscope(self, samples):
         """Calibrate gyroscope (device must be stationary)."""
-        print(f"[QMI8658Driver] Calibrating gyroscope with {samples} samples...")
         sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
 
-        for i in range(samples):
-            if i % 10 == 0:
-                print(f"[QMI8658Driver] Gyro sample {i}/{samples}")
+        for _ in range(samples):
             gx, gy, gz = self.sensor.gyro
             sum_x += gx
             sum_y += gy
@@ -692,7 +635,6 @@ class _QMI8658Driver(_IMUDriver):
         self.gyro_offset[1] = sum_y / samples
         self.gyro_offset[2] = sum_z / samples
 
-        print(f"[QMI8658Driver] Gyroscope calibration complete: offsets = {tuple(self.gyro_offset)}")
         return tuple(self.gyro_offset)
 
     def get_calibration(self):
@@ -899,7 +841,6 @@ def _load_calibration():
             gyro_offsets = prefs_old.get_list("gyro_offsets")
 
             if accel_offsets or gyro_offsets:
-                print("[SensorManager] Migrating calibration from old to new location...")
                 # Save to new location
                 editor = prefs_new.edit()
                 if accel_offsets:
@@ -907,23 +848,20 @@ def _load_calibration():
                 if gyro_offsets:
                     editor.put_list("gyro_offsets", gyro_offsets)
                 editor.commit()
-                print("[SensorManager] Migration complete")
 
         if accel_offsets or gyro_offsets:
             _imu_driver.set_calibration(accel_offsets, gyro_offsets)
-            print(f"[SensorManager] Loaded calibration: accel={accel_offsets}, gyro={gyro_offsets}")
-    except Exception as e:
-        print(f"[SensorManager] Failed to load calibration: {e}")
+    except:
+        pass
 
 
 def _save_calibration():
-    """Save calibration to SharedPreferences (new location)."""
+    """Save calibration to SharedPreferences."""
     if not _imu_driver:
         return
 
     try:
         from mpos.config import SharedPreferences
-        # NEW LOCATION: com.micropythonos.settings/sensors.json
         prefs = SharedPreferences("com.micropythonos.settings", filename="sensors.json")
         editor = prefs.edit()
 
@@ -931,7 +869,5 @@ def _save_calibration():
         editor.put_list("accel_offsets", list(cal['accel_offsets']))
         editor.put_list("gyro_offsets", list(cal['gyro_offsets']))
         editor.commit()
-
-        print(f"[SensorManager] Saved calibration to settings: accel={cal['accel_offsets']}, gyro={cal['gyro_offsets']}")
-    except Exception as e:
-        print(f"[SensorManager] Failed to save calibration: {e}")
+    except:
+        pass
