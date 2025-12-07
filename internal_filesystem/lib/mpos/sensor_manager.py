@@ -87,7 +87,7 @@ def init(i2c_bus, address=0x6B, mounted_position=FACING_SKY):
     Returns:
         bool: True if initialized successfully
     """
-    global _i2c_bus, _i2c_address, _initialized, _has_mcu_temperature
+    global _i2c_bus, _i2c_address, _initialized, _has_mcu_temperature, _mounted_position
 
     _i2c_bus = i2c_bus
     _i2c_address = address
@@ -226,7 +226,7 @@ def read_sensor(sensor):
                 if sensor.type == TYPE_ACCELEROMETER:
                     if _imu_driver:
                         ax, ay, az = _imu_driver.read_acceleration()
-                        if _mounted_position == SensorManager.FACING_EARTH:
+                        if _mounted_position == FACING_EARTH:
                             az += _GRAVITY
                         return (ax, ay, az)
                 elif sensor.type == TYPE_GYROSCOPE:

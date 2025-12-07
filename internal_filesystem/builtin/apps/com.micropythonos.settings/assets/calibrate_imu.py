@@ -85,7 +85,6 @@ class CalibrateIMUActivity(Activity):
         btn_cont.set_height(lv.SIZE_CONTENT)
         btn_cont.set_style_border_width(0, 0)
         btn_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
-        btn_cont.set_style_pad_all(1,0)
         btn_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, 0)
 
         # Action button
@@ -135,7 +134,7 @@ class CalibrateIMUActivity(Activity):
         """Update UI based on current state."""
         if self.current_state == CalibrationState.READY:
             self.status_label.set_text("Place device on flat, stable surface\n\nKeep device completely still during calibration")
-            self.detail_label.set_text("Calibration will take ~2 seconds\nUI will freeze during calibration")
+            self.detail_label.set_text("Calibration will take ~1 seconds\nUI will freeze during calibration")
             self.action_button_label.set_text("Calibrate Now")
             self.action_button.remove_state(lv.STATE.DISABLED)
             self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
@@ -187,7 +186,7 @@ class CalibrateIMUActivity(Activity):
             if self.is_desktop:
                 stationarity = {'is_stationary': True, 'message': 'Mock: Stationary'}
             else:
-                stationarity = SensorManager.check_stationarity(samples=30)
+                stationarity = SensorManager.check_stationarity(samples=25)
 
             if stationarity is None or not stationarity['is_stationary']:
                 msg = stationarity['message'] if stationarity else "Stationarity check failed"
@@ -206,12 +205,12 @@ class CalibrateIMUActivity(Activity):
                 gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
 
                 if accel:
-                    accel_offsets = SensorManager.calibrate_sensor(accel, samples=100)
+                    accel_offsets = SensorManager.calibrate_sensor(accel, samples=50)
                 else:
                     accel_offsets = None
 
                 if gyro:
-                    gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=100)
+                    gyro_offsets = SensorManager.calibrate_sensor(gyro, samples=50)
                 else:
                     gyro_offsets = None
 

@@ -116,7 +116,7 @@ import mpos.sensor_manager as SensorManager
 
 # Initialize with no I2C bus - will detect MCU temp if available
 # (On Linux desktop, this will fail gracefully but set _initialized flag)
-SensorManager.init(None)
+SensorManager.init(None, mounted_position=SensorManager.FACING_EARTH)
 
 print("linux.py finished")
 
