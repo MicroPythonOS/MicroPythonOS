@@ -113,14 +113,8 @@ except Exception as e:
 # === AUDIO HARDWARE ===
 import mpos.audio.audioflinger as AudioFlinger
 
-# Note: Waveshare board has no buzzer or LEDs, only I2S audio
-# I2S pin configuration will be determined by the board's audio hardware
-# For now, initialize with I2S only (pins will be configured per-stream if available)
-AudioFlinger.init(
-    device_type=AudioFlinger.DEVICE_I2S,
-    i2s_pins={'sck': 2, 'ws': 47, 'sd': 16},  # Default ESP32-S3 I2S pins
-    buzzer_instance=None
-)
+# Note: Waveshare board has no buzzer or I2S audio:
+AudioFlinger.init(device_type=AudioFlinger.DEVICE_NULL)
 
 # === LED HARDWARE ===
 # Note: Waveshare board has no NeoPixel LEDs
@@ -133,4 +127,4 @@ import mpos.sensor_manager as SensorManager
 # i2c_bus was created on line 75 for touch, reuse it for IMU
 SensorManager.init(i2c_bus, address=0x6B)
 
-print("boot.py finished")
+print("waveshare_esp32_s3_touch_lcd_2.py finished")

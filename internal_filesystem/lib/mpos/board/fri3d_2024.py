@@ -386,4 +386,4 @@ def startup_wow_effect():
 _thread.stack_size(mpos.apps.good_stack_size()) # default stack size won't work, crashes!
 _thread.start_new_thread(startup_wow_effect, ())
 
-print("boot.py finished")
+print("fri3d_2024.py finished")

@@ -43,15 +43,16 @@ class SettingsActivity(Activity):
             ("Turquoise", "40e0d0")
         ]
         self.settings = [
-            # Novice settings, alphabetically:
-            {"title": "Calibrate IMU", "key": "calibrate_imu", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CalibrateIMUActivity"},
-            {"title": "Check IMU Calibration", "key": "check_imu_calibration", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CheckIMUCalibrationActivity"},
+            # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")]},
             {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors},
             {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda : mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
-            {"title": "Audio Output Device", "key": "audio_device", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
+            #{"title": "Audio Output Device", "key": "audio_device", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
             {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
+            {"title": "Check IMU Calibration", "key": "check_imu_calibration", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CheckIMUCalibrationActivity"},
+            {"title": "Recalibrate IMU", "key": "calibrate_imu", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CalibrateIMUActivity"},
+            # Expert settings, alphabetically
             {"title": "Restart to Bootloader", "key": "boot_mode", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")]}, # special that doesn't get saved
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")]}, # special that doesn't get saved
             # This is currently only in the drawer but would make sense to have it here for completeness:
