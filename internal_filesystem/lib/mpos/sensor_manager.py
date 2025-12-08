@@ -40,6 +40,8 @@ FACING_SKY = 21 # top of PCB, like waveshare_esp32_s3_lcd_touch_2 (default)
 # Gravity constant for unit conversions
 _GRAVITY = 9.80665  # m/s²
 
+IMU_CALIBRATION_FILENAME = "imu_calibration.json"
+
 # Module state
 _initialized = False
 _imu_driver = None
@@ -227,7 +229,7 @@ def read_sensor(sensor):
                     if _imu_driver:
                         ax, ay, az = _imu_driver.read_acceleration()
                         if _mounted_position == FACING_EARTH:
-                            az += _GRAVITY
+                            az *= -1
                         return (ax, ay, az)
                 elif sensor.type == TYPE_GYROSCOPE:
                     if _imu_driver:
@@ -622,6 +624,9 @@ class _QMI8658Driver(_IMUDriver):
             sum_z += az * _GRAVITY
             time.sleep_ms(10)
 
+        if _mounted_position == FACING_EARTH:
+            sum_z *= -1
+
         # Average offsets (assuming Z-axis should read +9.8 m/s²)
         self.accel_offset[0] = sum_x / samples
         self.accel_offset[1] = sum_y / samples
@@ -702,12 +707,17 @@ class _WsenISDSDriver(_IMUDriver):
     def calibrate_accelerometer(self, samples):
         """Calibrate accelerometer using hardware calibration."""
         self.sensor.acc_calibrate(samples)
+        return_x = (self.sensor.acc_offset_x * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
+        return_y = (self.sensor.acc_offset_y * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
+        return_z = (self.sensor.acc_offset_z * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
+        print(f"normal return_z: {return_z}")
+        if _mounted_position == FACING_EARTH:
+            return_z *= -1
+            print(f"sensor is facing earth so returning inverse: {return_z}")
+        return_z -= _GRAVITY
+        print(f"returning: {return_x},{return_y},{return_z}")
         # Return offsets in m/s² (convert from raw offsets)
-        return (
-            (self.sensor.acc_offset_x * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY,
-            (self.sensor.acc_offset_y * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY,
-            (self.sensor.acc_offset_z * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
-        )
+        return (return_x, return_y, return_z)
 
     def calibrate_gyroscope(self, samples):
         """Calibrate gyroscope using hardware calibration."""
@@ -847,24 +857,9 @@ def _load_calibration():
         from mpos.config import SharedPreferences
 
         # Try NEW location first
-        prefs_new = SharedPreferences("com.micropythonos.settings", filename="sensors.json")
+        prefs_new = SharedPreferences("com.micropythonos.settings", filename=IMU_CALIBRATION_FILENAME)
         accel_offsets = prefs_new.get_list("accel_offsets")
         gyro_offsets = prefs_new.get_list("gyro_offsets")
-
-        # If not found, try OLD location and migrate
-        if not accel_offsets and not gyro_offsets:
-            prefs_old = SharedPreferences("com.micropythonos.sensors")
-            accel_offsets = prefs_old.get_list("accel_offsets")
-            gyro_offsets = prefs_old.get_list("gyro_offsets")
-
-            if accel_offsets or gyro_offsets:
-                # Save to new location
-                editor = prefs_new.edit()
-                if accel_offsets:
-                    editor.put_list("accel_offsets", accel_offsets)
-                if gyro_offsets:
-                    editor.put_list("gyro_offsets", gyro_offsets)
-                editor.commit()
 
         if accel_offsets or gyro_offsets:
             _imu_driver.set_calibration(accel_offsets, gyro_offsets)
@@ -879,7 +874,7 @@ def _save_calibration():
 
     try:
         from mpos.config import SharedPreferences
-        prefs = SharedPreferences("com.micropythonos.settings", filename="sensors.json")
+        prefs = SharedPreferences("com.micropythonos.settings", filename=IMU_CALIBRATION_FILENAME)
         editor = prefs.edit()
 
         cal = _imu_driver.get_calibration()
