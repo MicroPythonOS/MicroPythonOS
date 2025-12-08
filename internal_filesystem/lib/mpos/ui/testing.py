@@ -41,6 +41,7 @@ Usage in apps:
 """
 
 import lvgl as lv
+import time
 
 # Simulation globals for touch input
 _touch_x = 0
@@ -579,3 +580,42 @@ def simulate_click(x, y, press_duration_ms=50):
     # Schedule the release
     timer = lv.timer_create(release_timer_cb, press_duration_ms, None)
     timer.set_repeat_count(1)
+
+def click_button(button_text, timeout=5):
+    """Find and click a button with given text."""
+    start = time.time()
+    while time.time() - start < timeout:
+        button = find_button_with_text(lv.screen_active(), button_text)
+        if button:
+            coords = get_widget_coords(button)
+            if coords:
+                print(f"Clicking button '{button_text}' at ({coords['center_x']}, {coords['center_y']})")
+                simulate_click(coords['center_x'], coords['center_y'])
+                wait_for_render(iterations=20)
+                return True
+        wait_for_render(iterations=5)
+    print(f"ERROR: Button '{button_text}' not found after {timeout}s")
+    return False
+
+def click_label(label_text, timeout=5):
+    """Find a label with given text and click on it (or its clickable parent)."""
+    start = time.time()
+    while time.time() - start < timeout:
+        label = find_label_with_text(lv.screen_active(), label_text)
+        if label:
+            print("Scrolling label to view...")
+            label.scroll_to_view_recursive(True)
+            wait_for_render(iterations=50) # needs quite a bit of time
+            coords = get_widget_coords(label)
+            if coords:
+                print(f"Clicking label '{label_text}' at ({coords['center_x']}, {coords['center_y']})")
+                simulate_click(coords['center_x'], coords['center_y'])
+                wait_for_render(iterations=20)
+                return True
+        wait_for_render(iterations=5)
+    print(f"ERROR: Label '{label_text}' not found after {timeout}s")
+    return False
+
+def find_text_on_screen(text):
+    """Check if text is present on screen."""
+    return find_label_with_text(lv.screen_active(), text) is not None

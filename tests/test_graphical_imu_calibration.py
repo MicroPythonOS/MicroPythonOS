@@ -24,7 +24,10 @@ from mpos.ui.testing import (
     print_screen_labels,
     simulate_click,
     get_widget_coords,
-    find_button_with_text
+    find_button_with_text,
+    click_label,
+    click_button,
+    find_text_on_screen
 )
 
 
@@ -68,16 +71,9 @@ class TestIMUCalibration(unittest.TestCase):
         simulate_click(10, 10)
         wait_for_render(10)
 
-        # Find and click "Check IMU Calibration" setting
-        screen = lv.screen_active()
-        check_cal_label = find_label_with_text(screen, "Check IMU Calibration")
-        self.assertIsNotNone(check_cal_label, "Could not find 'Check IMU Calibration' setting")
-
-        # Click on the setting container
-        coords = get_widget_coords(check_cal_label.get_parent())
-        self.assertIsNotNone(coords, "Could not get coordinates of setting")
-        simulate_click(coords['center_x'], coords['center_y'])
-        wait_for_render(30)
+        print("Clicking 'Check IMU Calibration' menu item...")
+        self.assertTrue(click_label("Check IMU Calibration"), "Could not find Check IMU Calibration menu item")
+        wait_for_render(iterations=20)
 
         # Verify key elements are present
         screen = lv.screen_active()
@@ -110,15 +106,9 @@ class TestIMUCalibration(unittest.TestCase):
         simulate_click(10, 10)
         wait_for_render(10)
 
-        # Find and click "Calibrate IMU" setting
-        screen = lv.screen_active()
-        calibrate_label = find_label_with_text(screen, "Calibrate IMU")
-        self.assertIsNotNone(calibrate_label, "Could not find 'Calibrate IMU' setting")
-
-        coords = get_widget_coords(calibrate_label.get_parent())
-        self.assertIsNotNone(coords)
-        simulate_click(coords['center_x'], coords['center_y'])
-        wait_for_render(30)
+        print("Clicking 'Calibrate IMU' menu item...")
+        self.assertTrue(click_label("Calibrate IMU"), "Could not find Calibrate IMU item")
+        wait_for_render(iterations=20)
 
         # Verify activity loaded and shows instructions
         screen = lv.screen_active()
@@ -173,17 +163,12 @@ class TestIMUCalibration(unittest.TestCase):
         simulate_click(10, 10)
         wait_for_render(10)
 
-        screen = lv.screen_active()
-        check_cal_label = find_label_with_text(screen, "Check IMU Calibration")
-        coords = get_widget_coords(check_cal_label.get_parent())
-        simulate_click(coords['center_x'], coords['center_y'])
-        wait_for_render(30)  # Wait for real-time updates
-
-        # Verify Check activity loaded
-        screen = lv.screen_active()
-        self.assertTrue(verify_text_present(screen, "on flat surface"), "Check activity did not load")
+        print("Clicking 'Check IMU Calibration' menu item...")
+        self.assertTrue(click_label("Check IMU Calibration"), "Could not find Check IMU Calibration menu item")
+        wait_for_render(iterations=20)
 
         # Click "Calibrate" button to navigate to Calibrate activity
+        screen = lv.screen_active()
         calibrate_btn = find_button_with_text(screen, "Calibrate")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate' button")
 
