@@ -205,9 +205,9 @@ class CalibrateIMUActivity(Activity):
             # Step 3: Show results
             result_msg = "Calibration successful!"
             if accel_offsets:
-                result_msg += f"\n\nAccel offsets:\nX:{accel_offsets[0]:.3f} Y:{accel_offsets[1]:.3f} Z:{accel_offsets[2]:.3f}"
+                result_msg += f"\n\nAccel offsets: X:{accel_offsets[0]:.3f} Y:{accel_offsets[1]:.3f} Z:{accel_offsets[2]:.3f}"
             if gyro_offsets:
-                result_msg += f"\n\nGyro offsets:\nX:{gyro_offsets[0]:.3f} Y:{gyro_offsets[1]:.3f} Z:{gyro_offsets[2]:.3f}"
+                result_msg += f"\n\nGyro offsets: X:{gyro_offsets[0]:.3f} Y:{gyro_offsets[1]:.3f} Z:{gyro_offsets[2]:.3f}"
 
             self.show_calibration_complete(result_msg)
 
