@@ -133,15 +133,9 @@ class Wsen_Isds:
         self.i2c = i2c
         self.address = address
 
-        self.acc_offset_x = 0
-        self.acc_offset_y = 0
-        self.acc_offset_z = 0
         self.acc_range = 0
         self.acc_sensitivity = 0
 
-        self.gyro_offset_x = 0
-        self.gyro_offset_y = 0
-        self.gyro_offset_z = 0
         self.gyro_range = 0
         self.gyro_sensitivity = 0
 
@@ -261,20 +255,6 @@ class Wsen_Isds:
         else:
             print("Invalid range value:", self.acc_range)
 
-    def read_accelerations(self):
-        """Read calibrated accelerometer data.
-
-        Returns:
-            Tuple (x, y, z) in mg (milligrams)
-        """
-        raw_a_x, raw_a_y, raw_a_z = self._read_raw_accelerations()
-
-        a_x = (raw_a_x - self.acc_offset_x)
-        a_y = (raw_a_y - self.acc_offset_y)
-        a_z = (raw_a_z - self.acc_offset_z)
-
-        return a_x, a_y, a_z
-
     def _read_raw_accelerations(self):
         """Read raw accelerometer data."""
         if not self._acc_data_ready():
@@ -288,20 +268,6 @@ class Wsen_Isds:
 
         return raw_a_x * self.acc_sensitivity, raw_a_y * self.acc_sensitivity, raw_a_z * self.acc_sensitivity
 
-
-    def read_angular_velocities(self):
-        """Read calibrated gyroscope data.
-
-        Returns:
-            Tuple (x, y, z) in mdps (milli-degrees per second)
-        """
-        raw_g_x, raw_g_y, raw_g_z = self._read_raw_angular_velocities()
-
-        g_x = (raw_g_x - self.gyro_offset_x)
-        g_y = (raw_g_y - self.gyro_offset_y)
-        g_z = (raw_g_z - self.gyro_offset_z)
-
-        return g_x, g_y, g_z
 
     @property
     def temperature(self) -> float:

@@ -62,7 +62,7 @@ class CalibrateIMUActivity(Activity):
         self.status_label.set_text("Initializing...")
         self.status_label.set_style_text_font(lv.font_montserrat_12, 0)
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.status_label.set_width(lv.pct(90))
+        self.status_label.set_width(lv.pct(100))
 
         # Detail label (for additional info)
         self.detail_label = lv.label(screen)

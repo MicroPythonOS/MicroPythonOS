@@ -684,24 +684,26 @@ class _WsenISDSDriver(_IMUDriver):
         self.accel_offset = [0.0, 0.0, 0.0]
         self.gyro_offset = [0.0, 0.0, 0.0]
 
+
     def read_acceleration(self):
         """Read acceleration in m/s² (converts from mg)."""
-        ax, ay, az = self.sensor.read_accelerations()
-        # Convert mg to m/s²: mg → g → m/s²
+        ax, ay, az = self.sensor._read_raw_accelerations()
+        # Convert G to m/s² and apply calibration
         return (
-            (ax / 1000.0) * _GRAVITY,
-            (ay / 1000.0) * _GRAVITY,
-            (az / 1000.0) * _GRAVITY
+            ((ax / 1000) * _GRAVITY) - self.accel_offset[0],
+            ((ay / 1000) * _GRAVITY) - self.accel_offset[1],
+            ((az / 1000) * _GRAVITY) - self.accel_offset[2]
         )
+
 
     def read_gyroscope(self):
         """Read gyroscope in deg/s (converts from mdps)."""
-        gx, gy, gz = self.sensor.read_angular_velocities()
-        # Convert mdps to deg/s
+        gx, gy, gz = self.sensor._read_raw_angular_velocities()
+        # Convert mdps to deg/s and apply calibration
         return (
-            gx / 1000.0,
-            gy / 1000.0,
-            gz / 1000.0
+            gx / 1000.0 - self.gyro_offset[0],
+            gy / 1000.0 - self.gyro_offset[1],
+            gz / 1000.0 - self.gyro_offset[2]
         )
 
     def read_temperature(self):
@@ -722,13 +724,12 @@ class _WsenISDSDriver(_IMUDriver):
         z_offset = 0
         if _mounted_position == FACING_EARTH:
             sum_z *= -1
-            z_offset = (1000 / samples) + _GRAVITY
         print(f"sumz: {sum_z}")
 
         # Average offsets (assuming Z-axis should read +9.8 m/s²)
         self.accel_offset[0] = sum_x / samples
         self.accel_offset[1] = sum_y / samples
-        self.accel_offset[2] = (sum_z / samples) - _GRAVITY - z_offset
+        self.accel_offset[2] = (sum_z / samples) - _GRAVITY
         print(f"offsets: {self.accel_offset}")
 
         return tuple(self.accel_offset)
@@ -739,9 +740,9 @@ class _WsenISDSDriver(_IMUDriver):
 
         for _ in range(samples):
             gx, gy, gz = self.sensor._read_raw_angular_velocities()
-            sum_x += gx
-            sum_y += gy
-            sum_z += gz
+            sum_x += gx / 1000.0
+            sum_y += gy / 1000.0
+            sum_z += gz / 1000.0
             time.sleep_ms(10)
 
         # Average offsets (should be 0 when stationary)
