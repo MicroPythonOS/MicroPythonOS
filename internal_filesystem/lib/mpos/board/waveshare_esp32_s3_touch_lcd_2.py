@@ -61,11 +61,11 @@ mpos.ui.main_display = st7789.ST7789(
     frame_buffer2=fb2,
     display_width=TFT_VER_RES,
     display_height=TFT_HOR_RES,
-    backlight_pin=LCD_BL,
-    backlight_on_state=st7789.STATE_PWM,
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
+    backlight_pin=LCD_BL,
+    backlight_on_state=st7789.STATE_PWM,
 )
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
