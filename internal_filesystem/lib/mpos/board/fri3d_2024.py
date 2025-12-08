@@ -70,8 +70,8 @@ mpos.ui.main_display = st7789.ST7789(
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
-    reset_pin=LCD_RST,
-    reset_state=STATE_LOW
+    reset_pin=LCD_RST, # doesn't seem needed
+    reset_state=STATE_LOW # doesn't seem needed
 )
 
 mpos.ui.main_display.init()
