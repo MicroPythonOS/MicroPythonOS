@@ -145,12 +145,6 @@ class Wsen_Isds:
         self.gyro_range = 0
         self.gyro_sensitivity = 0
 
-        self.ACC_NUM_SAMPLES_CALIBRATION = 5
-        self.ACC_CALIBRATION_DELAY_MS = 10
-
-        self.GYRO_NUM_SAMPLES_CALIBRATION = 5
-        self.GYRO_CALIBRATION_DELAY_MS = 10
-
         self.set_acc_range(acc_range)
         self.set_acc_data_rate(acc_data_rate)
 
@@ -254,30 +248,6 @@ class Wsen_Isds:
         self._write_option('tap_double_to_int0', 1)
         self._write_option('int1_on_int0', 1)
 
-    def acc_calibrate(self, samples=None):
-        """Calibrate accelerometer by averaging samples while device is stationary.
-
-        Args:
-            samples: Number of samples to average (default: ACC_NUM_SAMPLES_CALIBRATION)
-        """
-        if samples is None:
-            samples = self.ACC_NUM_SAMPLES_CALIBRATION
-
-        self.acc_offset_x = 0
-        self.acc_offset_y = 0
-        self.acc_offset_z = 0
-
-        for _ in range(samples):
-            x, y, z = self._read_raw_accelerations()
-            self.acc_offset_x += x
-            self.acc_offset_y += y
-            self.acc_offset_z += z
-            time.sleep_ms(self.ACC_CALIBRATION_DELAY_MS)
-
-        self.acc_offset_x //= samples
-        self.acc_offset_y //= samples
-        self.acc_offset_z //= samples
-
     def _acc_calc_sensitivity(self):
         """Calculate accelerometer sensitivity based on range (in mg/digit)."""
         sensitivity_mapping = {
@@ -318,29 +288,6 @@ class Wsen_Isds:
 
         return raw_a_x * self.acc_sensitivity, raw_a_y * self.acc_sensitivity, raw_a_z * self.acc_sensitivity
 
-    def gyro_calibrate(self, samples=None):
-        """Calibrate gyroscope by averaging samples while device is stationary.
-
-        Args:
-            samples: Number of samples to average (default: GYRO_NUM_SAMPLES_CALIBRATION)
-        """
-        if samples is None:
-            samples = self.GYRO_NUM_SAMPLES_CALIBRATION
-
-        self.gyro_offset_x = 0
-        self.gyro_offset_y = 0
-        self.gyro_offset_z = 0
-
-        for _ in range(samples):
-            x, y, z = self._read_raw_angular_velocities()
-            self.gyro_offset_x += x
-            self.gyro_offset_y += y
-            self.gyro_offset_z += z
-            time.sleep_ms(self.GYRO_CALIBRATION_DELAY_MS)
-
-        self.gyro_offset_x //= samples
-        self.gyro_offset_y //= samples
-        self.gyro_offset_z //= samples
 
     def read_angular_velocities(self):
         """Read calibrated gyroscope data.
@@ -382,43 +329,6 @@ class Wsen_Isds:
         raw_g_z = self._convert_from_raw(raw[4], raw[5])
 
         return raw_g_x * self.gyro_sensitivity, raw_g_y * self.gyro_sensitivity, raw_g_z * self.gyro_sensitivity
-
-    def read_angular_velocities_accelerations(self):
-        """Read both gyroscope and accelerometer in one call.
-
-        Returns:
-            Tuple (gx, gy, gz, ax, ay, az) where gyro is in mdps, accel is in mg
-        """
-        raw_g_x, raw_g_y, raw_g_z, raw_a_x, raw_a_y, raw_a_z = \
-            self._read_raw_gyro_acc()
-
-        g_x = (raw_g_x - self.gyro_offset_x) * self.gyro_sensitivity
-        g_y = (raw_g_y - self.gyro_offset_y) * self.gyro_sensitivity
-        g_z = (raw_g_z - self.gyro_offset_z) * self.gyro_sensitivity
-
-        a_x = (raw_a_x - self.acc_offset_x) * self.acc_sensitivity
-        a_y = (raw_a_y - self.acc_offset_y) * self.acc_sensitivity
-        a_z = (raw_a_z - self.acc_offset_z) * self.acc_sensitivity
-
-        return g_x, g_y, g_z, a_x, a_y, a_z
-
-    def _read_raw_gyro_acc(self):
-        """Read raw gyroscope and accelerometer data in one call."""
-        acc_data_ready, gyro_data_ready = self._acc_gyro_data_ready()
-        if not acc_data_ready or not gyro_data_ready:
-            raise Exception("sensor data not ready")
-
-        raw = self.i2c.readfrom_mem(self.address, Wsen_Isds._REG_G_X_OUT_L, 12)
-
-        raw_g_x = self._convert_from_raw(raw[0], raw[1])
-        raw_g_y = self._convert_from_raw(raw[2], raw[3])
-        raw_g_z = self._convert_from_raw(raw[4], raw[5])
-
-        raw_a_x = self._convert_from_raw(raw[6], raw[7])
-        raw_a_y = self._convert_from_raw(raw[8], raw[9])
-        raw_a_z = self._convert_from_raw(raw[10], raw[11])
-
-        return raw_g_x, raw_g_y, raw_g_z, raw_a_x, raw_a_y, raw_a_z
 
     @staticmethod
     def _convert_from_raw(b_l, b_h):
