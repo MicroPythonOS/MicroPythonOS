@@ -21,6 +21,8 @@
 - ImageView app: add support for grayscale images
 - OSUpdate app: pause download when wifi is lost, resume when reconnected
 - Settings app: fix un-checking of radio button
+- Settings app: add IMU calibration
+- Wifi app: simplify on-screen keyboard handling, fix cancel button handling
 
 0.5.0
 =====
