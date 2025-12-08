@@ -680,6 +680,9 @@ class _WsenISDSDriver(_IMUDriver):
             gyro_range="500dps",
             gyro_data_rate="104Hz"
         )
+        # Software calibration offsets
+        self.accel_offset = [0.0, 0.0, 0.0]
+        self.gyro_offset = [0.0, 0.0, 0.0]
 
     def read_acceleration(self):
         """Read acceleration in m/s² (converts from mg)."""
@@ -705,55 +708,62 @@ class _WsenISDSDriver(_IMUDriver):
         return self.sensor.temperature
 
     def calibrate_accelerometer(self, samples):
-        """Calibrate accelerometer using hardware calibration."""
-        self.sensor.acc_calibrate(samples)
-        return_x = (self.sensor.acc_offset_x * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
-        return_y = (self.sensor.acc_offset_y * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
-        return_z = (self.sensor.acc_offset_z * self.sensor.acc_sensitivity / 1000.0) * _GRAVITY
-        print(f"normal return_z: {return_z}")
+        """Calibrate accelerometer (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            ax, ay, az = self.sensor._read_raw_accelerations()
+            sum_x += (ax / 1000.0) * _GRAVITY
+            sum_y += (ay / 1000.0) * _GRAVITY
+            sum_z += (az / 1000.0) * _GRAVITY
+            time.sleep_ms(10)
+
+        print(f"sumz: {sum_z}")
+        z_offset = 0
         if _mounted_position == FACING_EARTH:
-            return_z *= -1
-            print(f"sensor is facing earth so returning inverse: {return_z}")
-        return_z -= _GRAVITY
-        print(f"returning: {return_x},{return_y},{return_z}")
-        # Return offsets in m/s² (convert from raw offsets)
-        return (return_x, return_y, return_z)
+            sum_z *= -1
+            z_offset = (1000 / samples) + _GRAVITY
+        print(f"sumz: {sum_z}")
+
+        # Average offsets (assuming Z-axis should read +9.8 m/s²)
+        self.accel_offset[0] = sum_x / samples
+        self.accel_offset[1] = sum_y / samples
+        self.accel_offset[2] = (sum_z / samples) - _GRAVITY - z_offset
+        print(f"offsets: {self.accel_offset}")
+
+        return tuple(self.accel_offset)
 
     def calibrate_gyroscope(self, samples):
-        """Calibrate gyroscope using hardware calibration."""
-        self.sensor.gyro_calibrate(samples)
-        # Return offsets in deg/s (convert from raw offsets)
-        return (
-            (self.sensor.gyro_offset_x * self.sensor.gyro_sensitivity) / 1000.0,
-            (self.sensor.gyro_offset_y * self.sensor.gyro_sensitivity) / 1000.0,
-            (self.sensor.gyro_offset_z * self.sensor.gyro_sensitivity) / 1000.0
-        )
+        """Calibrate gyroscope (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            gx, gy, gz = self.sensor._read_raw_angular_velocities()
+            sum_x += gx
+            sum_y += gy
+            sum_z += gz
+            time.sleep_ms(10)
+
+        # Average offsets (should be 0 when stationary)
+        self.gyro_offset[0] = sum_x / samples
+        self.gyro_offset[1] = sum_y / samples
+        self.gyro_offset[2] = sum_z / samples
+
+        return tuple(self.gyro_offset)
 
     def get_calibration(self):
-        """Get current calibration (raw offsets from hardware)."""
+        """Get current calibration."""
         return {
-            'accel_offsets': [
-                self.sensor.acc_offset_x,
-                self.sensor.acc_offset_y,
-                self.sensor.acc_offset_z
-            ],
-            'gyro_offsets': [
-                self.sensor.gyro_offset_x,
-                self.sensor.gyro_offset_y,
-                self.sensor.gyro_offset_z
-            ]
+            'accel_offsets': self.accel_offset,
+            'gyro_offsets': self.gyro_offset
         }
 
     def set_calibration(self, accel_offsets, gyro_offsets):
-        """Set calibration from saved values (raw offsets)."""
+        """Set calibration from saved values."""
         if accel_offsets:
-            self.sensor.acc_offset_x = accel_offsets[0]
-            self.sensor.acc_offset_y = accel_offsets[1]
-            self.sensor.acc_offset_z = accel_offsets[2]
+            self.accel_offset = list(accel_offsets)
         if gyro_offsets:
-            self.sensor.gyro_offset_x = gyro_offsets[0]
-            self.sensor.gyro_offset_y = gyro_offsets[1]
-            self.sensor.gyro_offset_z = gyro_offsets[2]
+            self.gyro_offset = list(gyro_offsets)
 
 
 # ============================================================================

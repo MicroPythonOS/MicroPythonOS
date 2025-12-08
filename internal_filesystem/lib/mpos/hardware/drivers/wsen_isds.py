@@ -299,9 +299,9 @@ class Wsen_Isds:
         """
         raw_a_x, raw_a_y, raw_a_z = self._read_raw_accelerations()
 
-        a_x = (raw_a_x - self.acc_offset_x) * self.acc_sensitivity
-        a_y = (raw_a_y - self.acc_offset_y) * self.acc_sensitivity
-        a_z = (raw_a_z - self.acc_offset_z) * self.acc_sensitivity
+        a_x = (raw_a_x - self.acc_offset_x)
+        a_y = (raw_a_y - self.acc_offset_y)
+        a_z = (raw_a_z - self.acc_offset_z)
 
         return a_x, a_y, a_z
 
@@ -316,7 +316,7 @@ class Wsen_Isds:
         raw_a_y = self._convert_from_raw(raw[2], raw[3])
         raw_a_z = self._convert_from_raw(raw[4], raw[5])
 
-        return raw_a_x, raw_a_y, raw_a_z
+        return raw_a_x * self.acc_sensitivity, raw_a_y * self.acc_sensitivity, raw_a_z * self.acc_sensitivity
 
     def gyro_calibrate(self, samples=None):
         """Calibrate gyroscope by averaging samples while device is stationary.
@@ -350,9 +350,9 @@ class Wsen_Isds:
         """
         raw_g_x, raw_g_y, raw_g_z = self._read_raw_angular_velocities()
 
-        g_x = (raw_g_x - self.gyro_offset_x) * self.gyro_sensitivity
-        g_y = (raw_g_y - self.gyro_offset_y) * self.gyro_sensitivity
-        g_z = (raw_g_z - self.gyro_offset_z) * self.gyro_sensitivity
+        g_x = (raw_g_x - self.gyro_offset_x)
+        g_y = (raw_g_y - self.gyro_offset_y)
+        g_z = (raw_g_z - self.gyro_offset_z)
 
         return g_x, g_y, g_z
 
@@ -381,7 +381,7 @@ class Wsen_Isds:
         raw_g_y = self._convert_from_raw(raw[2], raw[3])
         raw_g_z = self._convert_from_raw(raw[4], raw[5])
 
-        return raw_g_x, raw_g_y, raw_g_z
+        return raw_g_x * self.gyro_sensitivity, raw_g_y * self.gyro_sensitivity, raw_g_z * self.gyro_sensitivity
 
     def read_angular_velocities_accelerations(self):
         """Read both gyroscope and accelerometer in one call.
