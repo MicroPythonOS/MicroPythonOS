@@ -106,7 +106,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# (cross-compiler doesn't support Viper native code emitter)
 	echo "Temporarily commenting out @micropython.viper decorator for Unix/macOS build..."
 	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
-	sed -i 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
+	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
 
 	# LV_CFLAGS are passed to USER_C_MODULES
 	# STRIP= makes it so that debug symbols are kept
@@ -117,7 +117,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 
 	# Restore @micropython.viper decorator after build
 	echo "Restoring @micropython.viper decorator..."
-	sed -i 's/^#@micropython\.viper$/@micropython.viper/' "$stream_wav_file"
+	sed -i.backup 's/^#@micropython\.viper$/@micropython.viper/' "$stream_wav_file"
 else
 	echo "invalid target $target"
 fi
