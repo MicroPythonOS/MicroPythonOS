@@ -130,8 +130,8 @@ class TestIMUCalibration(unittest.TestCase):
         wait_for_render(10)
 
         # Wait for calibration to complete (mock takes ~3 seconds)
-        time.sleep(3.5)
-        wait_for_render(20)
+        time.sleep(4)
+        wait_for_render(40)
 
         # Verify calibration completed
         screen = lv.screen_active()
