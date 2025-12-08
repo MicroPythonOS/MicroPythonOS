@@ -3,7 +3,6 @@ from lvgl import LvReferenceError
 from .anim import smooth_show, smooth_hide
 from .view import back_screen
 from mpos.ui import topmenu as topmenu
-#from .topmenu import open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
 from .display import get_display_width, get_display_height
 
 downbutton = None
