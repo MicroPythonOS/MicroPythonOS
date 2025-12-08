@@ -125,6 +125,6 @@ import mpos.sensor_manager as SensorManager
 
 # IMU is on I2C0 (same bus as touch): SDA=48, SCL=47, addr=0x6B
 # i2c_bus was created on line 75 for touch, reuse it for IMU
-SensorManager.init(i2c_bus, address=0x6B)
+SensorManager.init(i2c_bus, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 print("waveshare_esp32_s3_touch_lcd_2.py finished")
