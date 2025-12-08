@@ -11,6 +11,7 @@
 - API: add AudioFlinger for audio playback (i2s DAC and buzzer)
 - API: add LightsManager for multicolor LEDs
 - API: add SensorManager for generic handling of IMUs and temperature sensors
+- UI: back swipe gesture closes topmenu when open (thanks, @Mark19000 !)
 - About app: add free, used and total storage space info
 - AppStore app: remove unnecessary scrollbar over publisher's name
 - Camera app: massive overhaul!
