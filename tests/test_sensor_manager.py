@@ -72,7 +72,7 @@ class MockWsenIsds:
         """Return WHO_AM_I value."""
         return 0x6A
 
-    def read_accelerations(self):
+    def _read_raw_accelerations(self):
         """Return mock acceleration (in mg)."""
         return (0.0, 0.0, 1000.0)  # At rest, Z-axis = 1000 mg
 

@@ -686,8 +686,10 @@ class _WsenISDSDriver(_IMUDriver):
 
 
     def read_acceleration(self):
+
         """Read acceleration in m/s² (converts from mg)."""
         ax, ay, az = self.sensor._read_raw_accelerations()
+
         # Convert G to m/s² and apply calibration
         return (
             ((ax / 1000) * _GRAVITY) - self.accel_offset[0],
