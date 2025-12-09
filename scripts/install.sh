@@ -47,6 +47,8 @@ fi
 # The issue is that this brings all the .git folders with it:
 #$mpremote fs cp -r apps :/
 
+$mpremote fs cp -r lib :/
+
 $mpremote fs mkdir :/apps
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -maxdepth 1 -type l | while read symlink; do
@@ -59,7 +61,6 @@ done
 #echo "Unmounting builtin/ so that it can be customized..." # not sure this is necessary
 #$mpremote exec "import os ; os.umount('/builtin')"
 $mpremote fs cp -r builtin :/
-$mpremote fs cp -r lib :/
 
 #$mpremote fs cp -r data :/
 #$mpremote fs cp -r data/images :/data/

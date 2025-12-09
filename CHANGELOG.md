@@ -1,3 +1,7 @@
+0.5.2
+=====
+- AudioFlinger: optimize WAV volume scaling
+
 0.5.1
 =====
 - Fri3d Camp 2024 Board: add startup light and sound
