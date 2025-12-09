@@ -327,7 +327,7 @@ class WAVStream:
                 data_start, data_size, original_rate, channels, bits_per_sample = \
                     self._find_data_chunk(f)
 
-                # Decide playback rate (force >=22050 Hz)
+                # Decide playback rate (force >=22050 Hz) - but why?! the DAC should support down to 8kHz!
                 target_rate = 22050
                 if original_rate >= target_rate:
                     playback_rate = original_rate
