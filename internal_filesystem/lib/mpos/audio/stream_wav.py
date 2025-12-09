@@ -372,7 +372,7 @@ class WAVStream:
                 # with optimized volume scaling:
                 # 6144 => audio stutters and quasibird at ~17fps
                 # 7168 => audio slightly stutters and quasibird at ~16fps
-                # 8192 => no audio stutters and quasibird runs at ~15fps
+                # 8192 => no audio stutters and quasibird runs at ~15-17fps => this is probably best
                 # with shift volume scaling:
                 # 6144 => audio slightly stutters and quasibird at ~16fps?!
                 # 8192 => no audio stutters, quasibird runs at ~13fps?!
@@ -412,8 +412,12 @@ class WAVStream:
                         raw = self._upsample_buffer(raw, upsample_factor)
 
                     # 3. Volume scaling
-                    shift = 16 - int(self.volume / 6.25)
-                    _scale_audio_powers_of_2(raw, len(raw), shift)
+                    #shift = 16 - int(self.volume / 6.25)
+                    #_scale_audio_powers_of_2(raw, len(raw), shift)
+                    scale = self.volume / 100.0
+                    if scale < 1.0:
+                        scale_fixed = int(scale * 32768)
+                        _scale_audio_optimized(raw, len(raw), scale_fixed)
 
                     # 4. Output to I2S
                     if self._i2s:
