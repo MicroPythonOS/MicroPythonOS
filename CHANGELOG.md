@@ -1,6 +1,6 @@
 0.5.2
 =====
-- AudioFlinger: optimize WAV volume scaling
+- AudioFlinger: optimize WAV volume scaling for speed and immediately set volume
 
 0.5.1
 =====

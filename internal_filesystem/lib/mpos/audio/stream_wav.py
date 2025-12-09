@@ -323,12 +323,14 @@ class WAVStream:
                 # smaller chunk size means less jerks but buffer can run empty
                 # at 22050 Hz, 16-bit, 2-ch, 4096/4 = 1024 samples / 22050 = 46ms
                 # with rough volume scaling:
-                # 4096 => audio stutters during quasibird
+                # 4096 => audio stutters during quasibird at ~20fps
                 # 8192 => no audio stutters and quasibird runs at ~16 fps => good compromise!
                 # 16384 => no audio stutters during quasibird but low framerate (~8fps)
                 # with optimized volume scaling:
-                # 8192 => no audio stutters and quasibird runs at ~12fps
-                chunk_size = 4096*2
+                # 6144 => audio stutters and quasibird at ~17fps
+                # 7168 => audio slightly stutters and quasibird at ~16fps
+                # 8192 => no audio stutters and quasibird runs at ~15fps
+                chunk_size = 8192
                 bytes_per_original_sample = (bits_per_sample // 8) * channels
                 total_original = 0
 
