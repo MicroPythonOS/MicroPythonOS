@@ -98,6 +98,49 @@ def _scale_audio_rough(buf: ptr8, num_bytes: int, scale_fixed: int):
         buf[i] = sample & 255
         buf[i + 1] = (sample >> 8) & 255
 
+@micropython.viper
+def _scale_audio_shift(buf: ptr8, num_bytes: int, shift: int):
+    """Rough volume scaling for 16-bit audio samples using right shifts for performance."""
+    if shift <= 0:
+        return
+
+    # If shift is 16 or more, set buffer to zero (volume too low)
+    if shift >= 16:
+        for i in range(num_bytes):
+            buf[i] = 0
+        return
+
+    # Apply right shift to each 16-bit sample
+    for i in range(0, num_bytes, 2):
+        lo: int = int(buf[i])
+        hi: int = int(buf[i + 1])
+        sample: int = (hi << 8) | lo
+        if hi & 128:
+            sample -= 65536
+        sample >>= shift
+        buf[i] = sample & 255
+        buf[i + 1] = (sample >> 8) & 255
+
+@micropython.viper
+def _scale_audio_powers_of_2(buf: ptr8, num_bytes: int, shift: int):
+    if shift <= 0:
+        return
+    if shift >= 16:
+        for i in range(num_bytes):
+            buf[i] = 0
+        return
+
+    # Unroll the sign-extend + shift into one tight loop with no inner branch
+    inv_shift: int = 16 - shift
+    for i in range(0, num_bytes, 2):
+        s: int = int(buf[i]) | (int(buf[i+1]) << 8)
+        if s & 0x8000:              # only one branch, highly predictable when shift fixed shift
+            s |= -65536             # sign extend using OR (faster than subtract!)
+        s <<= inv_shift             # bring the bits we want into lower 16
+        s >>= 16                    # arithmetic shift right by 'shift' amount
+        buf[i]   = s & 0xFF
+        buf[i+1] = (s >> 8) & 0xFF
+
 class WAVStream:
     """
     WAV file playback stream with I2S output.
@@ -330,6 +373,12 @@ class WAVStream:
                 # 6144 => audio stutters and quasibird at ~17fps
                 # 7168 => audio slightly stutters and quasibird at ~16fps
                 # 8192 => no audio stutters and quasibird runs at ~15fps
+                # with shift volume scaling:
+                # 6144 => audio slightly stutters and quasibird at ~16fps?!
+                # 8192 => no audio stutters, quasibird runs at ~13fps?!
+                # with power of 2 thing:
+                # 6144 => audio sutters and quasibird at ~18fps
+                # 8192 => no audio stutters, quasibird runs at ~14fps
                 chunk_size = 8192
                 bytes_per_original_sample = (bits_per_sample // 8) * channels
                 total_original = 0
@@ -363,10 +412,8 @@ class WAVStream:
                         raw = self._upsample_buffer(raw, upsample_factor)
 
                     # 3. Volume scaling
-                    scale = self.volume / 100.0
-                    if scale < 1.0:
-                        scale_fixed = int(scale * 32768)
-                        _scale_audio_optimized(raw, len(raw), scale_fixed)
+                    shift = 16 - int(self.volume / 6.25)
+                    _scale_audio_powers_of_2(raw, len(raw), shift)
 
                     # 4. Output to I2S
                     if self._i2s:

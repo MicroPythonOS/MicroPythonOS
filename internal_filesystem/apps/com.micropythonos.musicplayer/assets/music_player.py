@@ -69,12 +69,12 @@ class FullscreenPlayer(Activity):
         self._slider_label.set_text(f"Volume: {AudioFlinger.get_volume()}%")
         self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
         self._slider=lv.slider(qr_screen)
-        self._slider.set_range(0,100)
-        self._slider.set_value(AudioFlinger.get_volume(), False)
+        self._slider.set_range(0,16)
+        self._slider.set_value(int(AudioFlinger.get_volume()/6.25), False)
         self._slider.set_width(lv.pct(90))
         self._slider.align_to(self._slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
         def volume_slider_changed(e):
-            volume_int = self._slider.get_value()
+            volume_int = self._slider.get_value()*6.25
             self._slider_label.set_text(f"Volume: {volume_int}%")
             AudioFlinger.set_volume(volume_int)
         self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
