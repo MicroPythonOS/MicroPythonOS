@@ -18,7 +18,7 @@ _device_type = DEVICE_NULL
 _i2s_pins = None          # I2S pin configuration dict (created per-stream)
 _buzzer_instance = None   # PWM buzzer instance
 _current_stream = None    # Currently playing stream
-_volume = 70              # System volume (0-100)
+_volume = 25              # System volume (0-100)
 _stream_lock = None       # Thread lock for stream management
 
 
@@ -290,6 +290,8 @@ def set_volume(volume):
     """
     global _volume
     _volume = max(0, min(100, volume))
+    if _current_stream:
+        _current_stream.set_volume(_volume)
 
 
 def get_volume():

@@ -28,6 +28,128 @@ def _scale_audio(buf: ptr8, num_bytes: int, scale_fixed: int):
         buf[i] = sample & 255
         buf[i + 1] = (sample >> 8) & 255
 
+import micropython
+@micropython.viper
+def _scale_audio_optimized(buf: ptr8, num_bytes: int, scale_fixed: int):
+    """
+    Very fast 16-bit volume scaling using only shifts + adds.
+    - 100 % and above → no change
+    - < ~12.5 %        → pure right-shift (fastest)
+    - otherwise        → high-quality shift/add approximation
+    """
+    if scale_fixed >= 32768:                    # 100 % or more
+        return
+    if scale_fixed <= 0:                        # muted
+        for i in range(num_bytes):
+            buf[i] = 0
+        return
+
+    # --------------------------------------------------------------
+    # Very low volumes → simple right-shift (super cheap)
+    # --------------------------------------------------------------
+    if scale_fixed < 4096:                      # < ~12.5 %
+        shift: int = 0
+        tmp: int = 32768
+        while tmp > scale_fixed:
+            shift += 1
+            tmp >>= 1
+        for i in range(0, num_bytes, 2):
+            lo: int = int(buf[i])
+            hi: int = int(buf[i + 1])
+            s: int = (hi << 8) | lo
+            if hi & 128:                       # sign extend
+                s -= 65536
+            s >>= shift
+            buf[i]     = s & 255
+            buf[i + 1] = (s >> 8) & 255
+        return
+
+    # --------------------------------------------------------------
+    # Medium → high volumes:  sample * scale_fixed // 32768
+    # approximated with shifts + adds only
+    # --------------------------------------------------------------
+    # Build a 16-bit mask:
+    #   bit 0  → add (s >> 15)
+    #   bit 1  → add (s >> 14)
+    #   ...
+    #   bit 15 → add s          (>> 0)
+    mask: int = 0
+    bit_value: int = 16384                     # starts at 2^-1
+    remaining: int = scale_fixed
+
+    shift_idx: int = 1                         # corresponds to >>1
+    while bit_value > 0:
+        if remaining >= bit_value:
+            mask |= (1 << (16 - shift_idx))    # correct bit position
+            remaining -= bit_value
+        bit_value >>= 1
+        shift_idx += 1
+
+    # Apply the mask
+    for i in range(0, num_bytes, 2):
+        lo: int = int(buf[i])
+        hi: int = int(buf[i + 1])
+        s: int = (hi << 8) | lo
+        if hi & 128:
+            s -= 65536
+
+        result: int = 0
+        if mask & 0x8000: result += s               # >>0
+        if mask & 0x4000: result += (s >> 1)
+        if mask & 0x2000: result += (s >> 2)
+        if mask & 0x1000: result += (s >> 3)
+        if mask & 0x0800: result += (s >> 4)
+        if mask & 0x0400: result += (s >> 5)
+        if mask & 0x0200: result += (s >> 6)
+        if mask & 0x0100: result += (s >> 7)
+        if mask & 0x0080: result += (s >> 8)
+        if mask & 0x0040: result += (s >> 9)
+        if mask & 0x0020: result += (s >>10)
+        if mask & 0x0010: result += (s >>11)
+        if mask & 0x0008: result += (s >>12)
+        if mask & 0x0004: result += (s >>13)
+        if mask & 0x0002: result += (s >>14)
+        if mask & 0x0001: result += (s >>15)
+
+        # Clamp to 16-bit signed range
+        if result > 32767:
+            result = 32767
+        elif result < -32768:
+            result = -32768
+
+        buf[i]     = result & 255
+        buf[i + 1] = (result >> 8) & 255
+
+import micropython
+@micropython.viper
+def _scale_audio_rough(buf: ptr8, num_bytes: int, scale_fixed: int):
+    """Rough volume scaling for 16-bit audio samples using right shifts for performance."""
+    if scale_fixed >= 32768:
+        return
+
+    # Determine the shift amount
+    shift: int = 0
+    threshold: int = 32768
+    while shift < 16 and scale_fixed < threshold:
+        shift += 1
+        threshold >>= 1
+
+    # If shift is 16 or more, set buffer to zero (volume too low)
+    if shift >= 16:
+        for i in range(num_bytes):
+            buf[i] = 0
+        return
+
+    # Apply right shift to each 16-bit sample
+    for i in range(0, num_bytes, 2):
+        lo: int = int(buf[i])
+        hi: int = int(buf[i + 1])
+        sample: int = (hi << 8) | lo
+        if hi & 128:
+            sample -= 65536
+        sample >>= shift
+        buf[i] = sample & 255
+        buf[i + 1] = (sample >> 8) & 255
 
 class WAVStream:
     """
@@ -251,7 +373,12 @@ class WAVStream:
                 print(f"WAVStream: Playing {data_size} bytes (volume {self.volume}%)")
                 f.seek(data_start)
 
-                chunk_size = 4096
+                # smaller chunk size means less jerks but buffer can run empty
+                # at 22050 Hz, 16-bit, 2-ch, 4096/4 = 1024 samples / 22050 = 46ms
+                # 4096 => audio stutters during quasibird
+                # 8192 => no audio stutters and quasibird runs at ~16 fps => good compromise!
+                # 16384 => no audio stutters during quasibird but low framerate (~8fps)
+                chunk_size = 4096*2
                 bytes_per_original_sample = (bits_per_sample // 8) * channels
                 total_original = 0
 
@@ -287,7 +414,7 @@ class WAVStream:
                     scale = self.volume / 100.0
                     if scale < 1.0:
                         scale_fixed = int(scale * 32768)
-                        _scale_audio(raw, len(raw), scale_fixed)
+                        _scale_audio_optimized(raw, len(raw), scale_fixed)
 
                     # 4. Output to I2S
                     if self._i2s:
@@ -313,3 +440,6 @@ class WAVStream:
             if self._i2s:
                 self._i2s.deinit()
                 self._i2s = None
+
+    def set_volume(self, vol):
+        self.volume = vol

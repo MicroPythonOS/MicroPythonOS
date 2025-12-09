@@ -229,3 +229,6 @@ class RTTTLStream:
             # Ensure buzzer is off
             self.buzzer.duty_u16(0)
             self._is_playing = False
+
+    def set_volume(self, vol):
+        self.volume = vol
