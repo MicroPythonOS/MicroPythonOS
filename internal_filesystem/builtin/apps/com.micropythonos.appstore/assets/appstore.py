@@ -76,9 +76,7 @@ class AppStore(Activity):
         print("Sort apps by app.name")
         self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
         print("Creating apps list...")
-        created_app_list_event = TaskManager.notify_event() # wait for the list to be shown before downloading the icons
-        self.update_ui_threadsafe_if_foreground(self.create_apps_list, event=created_app_list_event)
-        await created_app_list_event.wait()
+        self.update_ui_threadsafe_if_foreground(self.create_apps_list)
         await TaskManager.sleep(0.1) # give the UI time to display the app list before starting to download
         print("awaiting self.download_icons()")
         await self.download_icons()
