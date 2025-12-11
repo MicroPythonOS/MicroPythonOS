@@ -66,24 +66,27 @@ class AppStore(Activity):
                 except Exception as e:
                     print(f"Warning: could not add app from {json_url} to apps list: {e}")
         except Exception as e:
-            self.please_wait_label.set_text(f"ERROR: could not parse reponse.text JSON: {e}")
+            self.update_ui_threadsafe_if_foreground(self.please_wait_label.set_text, f"ERROR: could not parse reponse.text JSON: {e}")
             return
+        self.update_ui_threadsafe_if_foreground(self.please_wait_label.set_text, f"Download successful, building list...")
+        await TaskManager.sleep(0.1) # give the UI time to display the app list before starting to download
         print("Remove duplicates based on app.name")
         seen = set()
         self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
         print("Sort apps by app.name")
         self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
-        print("Hiding please wait label...")
-        self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
         print("Creating apps list...")
         created_app_list_event = TaskManager.notify_event() # wait for the list to be shown before downloading the icons
         self.update_ui_threadsafe_if_foreground(self.create_apps_list, event=created_app_list_event)
         await created_app_list_event.wait()
+        await TaskManager.sleep(0.1) # give the UI time to display the app list before starting to download
         print("awaiting self.download_icons()")
         await self.download_icons()
 
     def create_apps_list(self):
         print("create_apps_list")
+        print("Hiding please wait label...")
+        self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
         apps_list = lv.list(self.main_screen)
         apps_list.set_style_border_width(0, 0)
         apps_list.set_style_radius(0, 0)

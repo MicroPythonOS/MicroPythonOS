@@ -9,4 +9,5 @@ This /lib folder contains:
 - mip.install("collections") # used by aiohttp
 - mip.install("unittest")
 - mip.install("logging")
+- mip.install("aiorepl")
 
