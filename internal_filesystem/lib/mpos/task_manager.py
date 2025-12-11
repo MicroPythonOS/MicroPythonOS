@@ -1,5 +1,6 @@
 import asyncio # this is the only place where asyncio is allowed to be imported - apps should not use it directly but use this TaskManager
 import _thread
+import mpos.apps
 
 class TaskManager:
 
@@ -7,7 +8,7 @@ class TaskManager:
 
     def __init__(self):
         print("TaskManager starting asyncio_thread")
-        _thread.stack_size(1024) # tiny stack size is enough for this simple thread
+        _thread.stack_size(mpos.apps.good_stack_size()) # tiny stack size of 1024 is fine for tasks that do nothing but for real-world usage, it needs more
         _thread.start_new_thread(asyncio.run, (self._asyncio_thread(), ))
 
     async def _asyncio_thread(self):
@@ -33,3 +34,7 @@ class TaskManager:
     @staticmethod
     def sleep(s):
         return asyncio.sleep(s)
+
+    @staticmethod
+    def notify_event():
+        return asyncio.Event()
