@@ -1,6 +1,7 @@
 import task_handler
 import _thread
 import lvgl as lv
+import mpos
 import mpos.apps
 import mpos.config
 import mpos.ui
@@ -70,6 +71,8 @@ try:
 except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
+
+mpos.TaskManager()
 
 try:
     from mpos.net.wifi_service import WifiService
