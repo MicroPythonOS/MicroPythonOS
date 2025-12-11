@@ -56,15 +56,15 @@ binary=$(readlink -f "$binary")
 chmod +x "$binary"
 
 pushd internal_filesystem/
-	if [ -f "$script" ]; then
-		"$binary"  -v -i "$script"
-	elif [ ! -z "$script" ]; then # it's an app name
-		scriptdir="$script"
-		echo "Running app from $scriptdir"
-		"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat main.py) ; import mpos.apps; mpos.apps.start_app('$scriptdir')"
-	else
-		"$binary" -X heapsize=$HEAPSIZE -v -i -c "$(cat main.py)"
-	fi
-		
+
+if [ -f "$script" ]; then
+	echo "Running script $script"
+	"$binary"  -v -i "$script"
+else
+	echo "Running app $script"
+	# When $script is empty, it just doesn't find the app and stays at the launcher
+	echo '{"auto_start_app": "'$script'"}' > data/com.micropythonos.settings/config.json
+	"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat main.py)"
+fi
 
 popd
