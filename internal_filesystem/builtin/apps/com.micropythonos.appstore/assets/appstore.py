@@ -66,9 +66,9 @@ class AppStore(Activity):
                 except Exception as e:
                     print(f"Warning: could not add app from {json_url} to apps list: {e}")
         except Exception as e:
-            self.update_ui_threadsafe_if_foreground(self.please_wait_label.set_text, f"ERROR: could not parse reponse.text JSON: {e}")
+            self.please_wait_label.set_text(f"ERROR: could not parse reponse.text JSON: {e}")
             return
-        self.update_ui_threadsafe_if_foreground(self.please_wait_label.set_text, f"Download successful, building list...")
+        self.please_wait_label.set_text(f"Download successful, building list...")
         await TaskManager.sleep(0.1) # give the UI time to display the app list before starting to download
         print("Remove duplicates based on app.name")
         seen = set()
@@ -76,7 +76,7 @@ class AppStore(Activity):
         print("Sort apps by app.name")
         self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
         print("Creating apps list...")
-        self.update_ui_threadsafe_if_foreground(self.create_apps_list)
+        self.create_apps_list()
         await TaskManager.sleep(0.1) # give the UI time to display the app list before starting to download
         print("awaiting self.download_icons()")
         await self.download_icons()
@@ -151,7 +151,7 @@ class AppStore(Activity):
                         'data_size': len(app.icon_data),
                         'data': app.icon_data
                     })
-                    self.update_ui_threadsafe_if_foreground(image_icon_widget.set_src, image_dsc) # add update_ui_threadsafe() for background?
+                    image_icon_widget.set_src(image_dsc) # add update_ui_threadsafe() for background?
         print("Finished downloading icons.")
 
     def show_app_detail(self, app):
