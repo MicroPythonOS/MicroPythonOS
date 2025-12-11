@@ -73,10 +73,12 @@ class Activity:
         self.throttle_async_call_counter = 0
 
     # Execute a function if the Activity is in the foreground
-    def if_foreground(self, func, *args, **kwargs):
+    def if_foreground(self, func, *args, event=None, **kwargs):
         if self._has_foreground:
             #print(f"executing {func} with args {args} and kwargs {kwargs}")
             result = func(*args, **kwargs)
+            if event:
+                event.set()
             return result
         else:
             #print(f"[if_foreground] Skipped {func} because _has_foreground=False")
@@ -86,11 +88,11 @@ class Activity:
     # The call may get throttled, unless important=True is added to it.
     # The order of these update_ui calls are not guaranteed, so a UI update might be overwritten by an "earlier" update.
     # To avoid this, use lv.timer_create() with .set_repeat_count(1) as examplified in osupdate.py
-    def update_ui_threadsafe_if_foreground(self, func, *args, important=False, **kwargs):
+    def update_ui_threadsafe_if_foreground(self, func, *args, important=False, event=None, **kwargs):
         self.throttle_async_call_counter += 1
         if not important and self.throttle_async_call_counter > 100: # 250 seems to be okay, so 100 is on the safe side
             print(f"update_ui_threadsafe_if_foreground called more than 100 times for one UI frame, which can overflow - throttling!")
             return None
         # lv.async_call() is needed to update the UI from another thread than the main one (as LVGL is not thread safe)
-        result = lv.async_call(lambda _: self.if_foreground(func, *args, **kwargs),None)
+        result = lv.async_call(lambda _: self.if_foreground(func, *args, event=event, **kwargs), None)
         return result

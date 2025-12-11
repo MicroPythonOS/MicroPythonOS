@@ -1,6 +1,7 @@
 0.5.2
 =====
 - AudioFlinger: optimize WAV volume scaling for speed and immediately set volume
+- API: add TaskManager that wraps asyncio
 
 0.5.1
 =====

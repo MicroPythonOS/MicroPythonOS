@@ -1,3 +1,4 @@
+import aiohttp
 import lvgl as lv
 import json
 import requests
@@ -6,8 +7,10 @@ import os
 import time
 import _thread
 
+
 from mpos.apps import Activity, Intent
 from mpos.app import App
+from mpos import TaskManager
 import mpos.ui
 from mpos.content.package_manager import PackageManager
 
@@ -16,6 +19,7 @@ class AppStore(Activity):
     apps = []
     app_index_url = "https://apps.micropythonos.com/app_index.json"
     can_check_network = True
+    aiohttp_session = None # one session for the whole app is more performant
 
     # Widgets:
     main_screen = None
@@ -26,6 +30,7 @@ class AppStore(Activity):
     progress_bar = None
 
     def onCreate(self):
+        self.aiohttp_session = aiohttp.ClientSession()
         self.main_screen = lv.obj()
         self.please_wait_label = lv.label(self.main_screen)
         self.please_wait_label.set_text("Downloading app index...")
@@ -43,38 +48,39 @@ class AppStore(Activity):
         if self.can_check_network and not network.WLAN(network.STA_IF).isconnected():
             self.please_wait_label.set_text("Error: WiFi is not connected.")
         else:
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.download_app_index, (self.app_index_url,))
+            TaskManager.create_task(self.download_app_index(self.app_index_url))
 
-    def download_app_index(self, json_url):
-        try:
-            response = requests.get(json_url, timeout=10)
-        except Exception as e:
-            print("Download failed:", e)
-            self.update_ui_threadsafe_if_foreground(self.please_wait_label.set_text, f"App index download \n{json_url}\ngot error: {e}")
+    def onDestroy(self, screen):
+        await self.aiohttp_session.close()
+
+    async def download_app_index(self, json_url):
+        response = await self.download_url(json_url)
+        if not response:
+            self.please_wait_label.set_text(f"Could not download app index from\n{json_url}")
             return
-        if response and response.status_code == 200:
-            #print(f"Got response text: {response.text}")
-            try:
-                for app in json.loads(response.text):
-                    try:
-                        self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
-                    except Exception as e:
-                        print(f"Warning: could not add app from {json_url} to apps list: {e}")
-            except Exception as e:
-                print(f"ERROR: could not parse reponse.text JSON: {e}")
-            finally:
-                response.close()
-            # Remove duplicates based on app.name
-            seen = set()
-            self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
-            # Sort apps by app.name
-            self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
-            time.sleep_ms(200)
-            self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
-            self.update_ui_threadsafe_if_foreground(self.create_apps_list)
-            time.sleep(0.1) # give the UI time to display the app list before starting to download
-            self.download_icons()
+        print(f"Got response text: {response[0:20]}")
+        try:
+            for app in json.loads(response):
+                try:
+                    self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
+                except Exception as e:
+                    print(f"Warning: could not add app from {json_url} to apps list: {e}")
+        except Exception as e:
+            self.please_wait_label.set_text(f"ERROR: could not parse reponse.text JSON: {e}")
+            return
+        print("Remove duplicates based on app.name")
+        seen = set()
+        self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
+        print("Sort apps by app.name")
+        self.apps.sort(key=lambda x: x.name.lower())  # Use .lower() for case-insensitive sorting
+        print("Hiding please wait label...")
+        self.update_ui_threadsafe_if_foreground(self.please_wait_label.add_flag, lv.obj.FLAG.HIDDEN)
+        print("Creating apps list...")
+        created_app_list_event = TaskManager.notify_event() # wait for the list to be shown before downloading the icons
+        self.update_ui_threadsafe_if_foreground(self.create_apps_list, event=created_app_list_event)
+        await created_app_list_event.wait()
+        print("awaiting self.download_icons()")
+        await self.download_icons()
 
     def create_apps_list(self):
         print("create_apps_list")
@@ -119,14 +125,15 @@ class AppStore(Activity):
             desc_label.set_style_text_font(lv.font_montserrat_12, 0)
             desc_label.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
         print("create_apps_list app done")
-    
-    def download_icons(self):
+
+    async def download_icons(self):
+        print("Downloading icons...")
         for app in self.apps:
             if not self.has_foreground():
                 print(f"App is stopping, aborting icon downloads.")
                 break
-            if not app.icon_data:
-                app.icon_data = self.download_icon_data(app.icon_url)
+            #if not app.icon_data:
+            app.icon_data = await self.download_url(app.icon_url)
             if app.icon_data:
                 print("download_icons has icon_data, showing it...")
                 image_icon_widget = None
@@ -147,20 +154,16 @@ class AppStore(Activity):
         intent.putExtra("app", app)
         self.startActivity(intent)
 
-    @staticmethod
-    def download_icon_data(url):
-        print(f"Downloading icon from {url}")
+    async def download_url(self, url):
+        print(f"Downloading {url}")
+        #await TaskManager.sleep(1)
         try:
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                image_data = response.content
-                print("Downloaded image, size:", len(image_data), "bytes")
-                return image_data
-            else:
-                print("Failed to download image: Status code", response.status_code)
+            async with self.aiohttp_session.get(url) as response:
+                if response.status >= 200 and response.status < 400:
+                    return await response.read()
+            print(f"Done downloading {url}")
         except Exception as e:
-            print(f"Exception during download of icon: {e}")
-        return None
+            print(f"download_url got exception {e}")
 
 class AppDetail(Activity):
 
