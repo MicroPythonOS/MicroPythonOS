@@ -59,14 +59,14 @@ one_test() {
 	if [ -z "$ondevice" ]; then
 		# Desktop execution
 		if [ $is_graphical -eq 1 ]; then
-			# Graphical test: include boot_unix.py and main.py
-			"$binary" -X heapsize=8M -c "$(cat main.py) ; import mpos.main ; import mpos.apps; sys.path.append(\"$tests_abs_path\")
+			echo "Graphical test: include main.py"
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py) ; import mpos.apps; sys.path.append(\"$tests_abs_path\")
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
             result=$?
 		else
 			# Regular test: no boot files
-			"$binary" -X heapsize=8M -c "$(cat main.py)
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
             result=$?
@@ -86,7 +86,7 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		echo "$test logging to $testlog"
 		if [ $is_graphical -eq 1 ]; then
 			# Graphical test: system already initialized, just add test paths
-			"$mpremote" exec "$(cat main.py) ; sys.path.append('tests')
+			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py) ; sys.path.append('tests')
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
@@ -96,7 +96,7 @@ else:
 " | tee "$testlog"
 		else
 			# Regular test: no boot files
-			"$mpremote" exec "$(cat main.py)
+			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():

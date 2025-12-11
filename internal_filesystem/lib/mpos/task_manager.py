@@ -6,6 +6,7 @@ class TaskManager:
 
     task_list = [] # might be good to periodically remove tasks that are done, to prevent this list from growing huge
     keep_running = None
+    disabled = False
 
     @classmethod
     async def _asyncio_thread(cls, ms_to_sleep):
@@ -17,6 +18,9 @@ class TaskManager:
 
     @classmethod
     def start(cls):
+        if cls.disabled is True:
+            print("Not starting TaskManager because it's been disabled.")
+            return
         cls.keep_running = True
         # New thread works but LVGL isn't threadsafe so it's preferred to do this in the same thread:
         #_thread.stack_size(mpos.apps.good_stack_size())
@@ -27,6 +31,10 @@ class TaskManager:
     @classmethod
     def stop(cls):
         cls.keep_running = False
+
+    @classmethod
+    def disable(cls):
+        cls.disabled = True
 
     @classmethod
     def create_task(cls, coroutine):

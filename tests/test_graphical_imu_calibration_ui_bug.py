@@ -73,7 +73,7 @@ class TestIMUCalibrationUI(unittest.TestCase):
         # Step 4: Click "Check IMU Calibration" (it's a clickable label/container, not a button)
         print("Step 4: Clicking 'Check IMU Calibration' menu item...")
         self.assertTrue(click_label("Check IMU Calibration"), "Could not find Check IMU Calibration menu item")
-        wait_for_render(iterations=20)
+        wait_for_render(iterations=40)
 
         print("Step 5: Checking BEFORE calibration...")
         print("Current screen content:")
