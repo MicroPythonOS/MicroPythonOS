@@ -72,8 +72,6 @@ except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
-mpos.TaskManager()
-
 try:
     from mpos.net.wifi_service import WifiService
     _thread.stack_size(mpos.apps.good_stack_size())
@@ -89,11 +87,31 @@ auto_start_app = prefs.get_string("auto_start_app", None)
 if auto_start_app and launcher_app.fullname != auto_start_app:
     mpos.apps.start_app(auto_start_app)
 
-if not started_launcher:
-    print(f"WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
-else:
+# Create limited aiorepl because it's better than nothing:
+import aiorepl
+print("Starting very limited asyncio REPL task. Use sys.exit() to stop all asyncio tasks and go to real REPL...")
+mpos.TaskManager.create_task(aiorepl.task()) # only gets started when mpos.TaskManager() is created
+
+async def ota_rollback_cancel():
     try:
         import ota.rollback
         ota.rollback.cancel()
     except Exception as e:
         print("main.py: warning: could not mark this update as valid:", e)
+
+if not started_launcher:
+    print(f"WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
+else:
+    mpos.TaskManager.create_task(ota_rollback_cancel()) # only gets started when mpos.TaskManager() is created 
+
+while True:
+    try:
+        mpos.TaskManager() # do this at the end because it doesn't return
+    except KeyboardInterrupt as k:
+        print(f"mpos.TaskManager() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
+        break
+    except Exception as e:
+        print(f"mpos.TaskManager() got exception: {e}")
+        print("Restarting mpos.TaskManager() after 10 seconds...")
+        import time
+        time.sleep(10)

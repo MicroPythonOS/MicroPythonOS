@@ -130,10 +130,14 @@ class AppStore(Activity):
         print("Downloading icons...")
         for app in self.apps:
             if not self.has_foreground():
-                print(f"App is stopping, aborting icon downloads.")
+                print(f"App is stopping, aborting icon downloads.") # maybe this can continue? but then update_ui_threadsafe is needed
                 break
-            #if not app.icon_data:
-            app.icon_data = await self.download_url(app.icon_url)
+            if not app.icon_data:
+                try:
+                    app.icon_data = await TaskManager.wait_for(self.download_url(app.icon_url), 5) # max 5 seconds per icon
+                except Exception as e:
+                    print(f"Download of {app.icon_url} got exception: {e}")
+                    continue
             if app.icon_data:
                 print("download_icons has icon_data, showing it...")
                 image_icon_widget = None
@@ -146,7 +150,7 @@ class AppStore(Activity):
                         'data_size': len(app.icon_data),
                         'data': app.icon_data
                     })
-                    self.update_ui_threadsafe_if_foreground(image_icon_widget.set_src, image_dsc) # error: 'App' object has no attribute 'image'
+                    self.update_ui_threadsafe_if_foreground(image_icon_widget.set_src, image_dsc) # add update_ui_threadsafe() for background?
         print("Finished downloading icons.")
 
     def show_app_detail(self, app):
@@ -156,7 +160,7 @@ class AppStore(Activity):
 
     async def download_url(self, url):
         print(f"Downloading {url}")
-        #await TaskManager.sleep(1)
+        #await TaskManager.sleep(4) # test slowness
         try:
             async with self.aiohttp_session.get(url) as response:
                 if response.status >= 200 and response.status < 400:

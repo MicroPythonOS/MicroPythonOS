@@ -8,14 +8,17 @@ class TaskManager:
 
     def __init__(self):
         print("TaskManager starting asyncio_thread")
-        _thread.stack_size(mpos.apps.good_stack_size()) # tiny stack size of 1024 is fine for tasks that do nothing but for real-world usage, it needs more
-        _thread.start_new_thread(asyncio.run, (self._asyncio_thread(), ))
+        # tiny stack size of 1024 is fine for tasks that do nothing
+        # but for real-world usage, it needs more:
+        #_thread.stack_size(mpos.apps.good_stack_size())
+        #_thread.start_new_thread(asyncio.run, (self._asyncio_thread(100), ))
+        asyncio.run(self._asyncio_thread(10)) # this actually works, but it blocks the real REPL (aiorepl works, but that's limited)
 
-    async def _asyncio_thread(self):
+    async def _asyncio_thread(self, ms_to_sleep):
         print("asyncio_thread started")
         while True:
             #print("asyncio_thread tick")
-            await asyncio.sleep_ms(100)  # This delay determines how quickly new tasks can be started, so keep it below human reaction speed
+            await asyncio.sleep_ms(ms_to_sleep)  # This delay determines how quickly new tasks can be started, so keep it below human reaction speed
         print("WARNING: asyncio_thread exited, this shouldn't happen because now asyncio.create_task() won't work anymore!")
 
     @classmethod
@@ -38,3 +41,7 @@ class TaskManager:
     @staticmethod
     def notify_event():
         return asyncio.Event()
+
+    @staticmethod
+    def wait_for(awaitable, timeout):
+        return asyncio.wait_for(awaitable, timeout)
