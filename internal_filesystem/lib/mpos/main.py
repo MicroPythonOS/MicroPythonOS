@@ -106,14 +106,9 @@ if not started_launcher:
 else:
     mpos.TaskManager.create_task(ota_rollback_cancel()) # only gets started when mpos.TaskManager() is created 
 
-while True:
-    try:
-        mpos.TaskManager() # do this at the end because it doesn't return
-    except KeyboardInterrupt as k:
-        print(f"mpos.TaskManager() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
-        break
-    except Exception as e:
-        print(f"mpos.TaskManager() got exception: {e}")
-        print("Restarting mpos.TaskManager() after 10 seconds...")
-        import time
-        time.sleep(10)
+try:
+    mpos.TaskManager.start() # do this at the end because it doesn't return
+except KeyboardInterrupt as k:
+    print(f"mpos.TaskManager() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
+except Exception as e:
+    print(f"mpos.TaskManager() got exception: {e}")

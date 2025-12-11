@@ -5,21 +5,34 @@ import mpos.apps
 class TaskManager:
 
     task_list = [] # might be good to periodically remove tasks that are done, to prevent this list from growing huge
+    keep_running = True
 
-    def __init__(self):
-        print("TaskManager starting asyncio_thread")
-        # tiny stack size of 1024 is fine for tasks that do nothing
-        # but for real-world usage, it needs more:
-        #_thread.stack_size(mpos.apps.good_stack_size())
-        #_thread.start_new_thread(asyncio.run, (self._asyncio_thread(100), ))
-        asyncio.run(self._asyncio_thread(10)) # this actually works, but it blocks the real REPL (aiorepl works, but that's limited)
-
-    async def _asyncio_thread(self, ms_to_sleep):
+    @classmethod
+    async def _asyncio_thread(cls, ms_to_sleep):
         print("asyncio_thread started")
-        while True:
-            #print("asyncio_thread tick")
+        while TaskManager.should_keep_running() is True:
+        #while self.keep_running is True:
+            #print(f"asyncio_thread tick because {self.keep_running}")
+            print(f"asyncio_thread tick because {TaskManager.should_keep_running()}")
             await asyncio.sleep_ms(ms_to_sleep)  # This delay determines how quickly new tasks can be started, so keep it below human reaction speed
-        print("WARNING: asyncio_thread exited, this shouldn't happen because now asyncio.create_task() won't work anymore!")
+        print("WARNING: asyncio_thread exited, now asyncio.create_task() won't work anymore")
+
+    @classmethod
+    def start(cls):
+        #asyncio.run_until_complete(TaskManager._asyncio_thread(100)) # this actually works, but it blocks the real REPL (aiorepl works, but that's limited)
+        asyncio.run(TaskManager._asyncio_thread(1000)) # this actually works, but it blocks the real REPL (aiorepl works, but that's limited)
+
+    @classmethod
+    def stop(cls):
+        cls.keep_running = False
+
+    @classmethod
+    def should_keep_running(cls):
+        return cls.keep_running
+
+    @classmethod
+    def set_keep_running(cls, value):
+        cls.keep_running = value
 
     @classmethod
     def create_task(cls, coroutine):
