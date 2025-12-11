@@ -5,34 +5,28 @@ import mpos.apps
 class TaskManager:
 
     task_list = [] # might be good to periodically remove tasks that are done, to prevent this list from growing huge
-    keep_running = True
+    keep_running = None
 
     @classmethod
     async def _asyncio_thread(cls, ms_to_sleep):
         print("asyncio_thread started")
-        while TaskManager.should_keep_running() is True:
-        #while self.keep_running is True:
-            #print(f"asyncio_thread tick because {self.keep_running}")
-            print(f"asyncio_thread tick because {TaskManager.should_keep_running()}")
+        while cls.keep_running is True:
+            #print(f"asyncio_thread tick because {cls.keep_running}")
             await asyncio.sleep_ms(ms_to_sleep)  # This delay determines how quickly new tasks can be started, so keep it below human reaction speed
         print("WARNING: asyncio_thread exited, now asyncio.create_task() won't work anymore")
 
     @classmethod
     def start(cls):
-        #asyncio.run_until_complete(TaskManager._asyncio_thread(100)) # this actually works, but it blocks the real REPL (aiorepl works, but that's limited)
-        asyncio.run(TaskManager._asyncio_thread(1000)) # this actually works, but it blocks the real REPL (aiorepl works, but that's limited)
+        cls.keep_running = True
+        # New thread works but LVGL isn't threadsafe so it's preferred to do this in the same thread:
+        #_thread.stack_size(mpos.apps.good_stack_size())
+        #_thread.start_new_thread(asyncio.run, (self._asyncio_thread(100), ))
+        # Same thread works, although it blocks the real REPL, but aiorepl works:
+        asyncio.run(TaskManager._asyncio_thread(10)) # 100ms is too high, causes lag. 10ms is fine. not sure if 1ms would be better...
 
     @classmethod
     def stop(cls):
         cls.keep_running = False
-
-    @classmethod
-    def should_keep_running(cls):
-        return cls.keep_running
-
-    @classmethod
-    def set_keep_running(cls, value):
-        cls.keep_running = value
 
     @classmethod
     def create_task(cls, coroutine):
