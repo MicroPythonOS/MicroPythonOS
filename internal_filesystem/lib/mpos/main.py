@@ -89,8 +89,10 @@ if auto_start_app and launcher_app.fullname != auto_start_app:
 
 # Create limited aiorepl because it's better than nothing:
 import aiorepl
-print("Starting very limited asyncio REPL task. Use sys.exit() to stop all asyncio tasks and go to real REPL...")
-mpos.TaskManager.create_task(aiorepl.task()) # only gets started when mpos.TaskManager() is created
+async def asyncio_repl():
+    print("Starting very limited asyncio REPL task. Use sys.exit() to stop all asyncio tasks and go to real REPL...")
+    await aiorepl.task()
+mpos.TaskManager.create_task(asyncio_repl()) # only gets started when mpos.TaskManager() is created
 
 async def ota_rollback_cancel():
     try:
