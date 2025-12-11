@@ -10,7 +10,7 @@ from mpos.content.intent import Intent
 from mpos.content.package_manager import PackageManager
 
 def good_stack_size():
-    stacksize = 24*1024
+    stacksize = 24*1024 # less than 20KB crashes on desktop when doing heavy apps, like LightningPiggy's Wallet connections
     import sys
     if sys.platform == "esp32":
         stacksize = 16*1024
