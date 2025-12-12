@@ -15,8 +15,9 @@ mpremote=$(readlink -f "$mydir/../lvgl_micropython/lib/micropython/tools/mpremot
 
 pushd internal_filesystem/
 
+# Maybe also do: import mpos ; mpos.TaskManager.stop()
 echo "Disabling wifi because it writes to REPL from time to time when doing disconnect/reconnect for ADC2..."
-$mpremote exec "mpos.net.wifi_service.WifiService.disconnect()"
+$mpremote exec "import mpos ; mpos.net.wifi_service.WifiService.disconnect()"
 sleep 2
 
 if [ ! -z "$appname" ]; then
