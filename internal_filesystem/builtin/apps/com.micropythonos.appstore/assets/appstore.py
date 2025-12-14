@@ -7,17 +7,28 @@ import os
 import time
 import _thread
 
-
 from mpos.apps import Activity, Intent
 from mpos.app import App
 from mpos import TaskManager
 import mpos.ui
 from mpos.content.package_manager import PackageManager
 
-
 class AppStore(Activity):
+
+    _BADGEHUB_API_BASE_URL = "https://badgehub.p1m.nl/api/v3"
+    _BADGEHUB_LIST = "project-summaries?badge=fri3d_2024"
+    _BADGEHUB_DETAILS = "projects"
+
+    _BACKEND_API_GITHUB = "github"
+    _BACKEND_API_BADGEHUB = "badgehub"
+
     apps = []
-    app_index_url = "https://apps.micropythonos.com/app_index.json"
+    # These might become configurations:
+    #backend_api = _BACKEND_API_BADGEHUB
+    backend_api = _BACKEND_API_GITHUB
+    app_index_url_github = "https://apps.micropythonos.com/app_index.json"
+    app_index_url_badgehub = _BADGEHUB_API_BASE_URL + "/" + _BADGEHUB_LIST
+    app_detail_url_badgehub = _BADGEHUB_API_BASE_URL + "/" + _BADGEHUB_DETAILS
     can_check_network = True
     aiohttp_session = None # one session for the whole app is more performant
 
@@ -48,7 +59,10 @@ class AppStore(Activity):
         if self.can_check_network and not network.WLAN(network.STA_IF).isconnected():
             self.please_wait_label.set_text("Error: WiFi is not connected.")
         else:
-            TaskManager.create_task(self.download_app_index(self.app_index_url))
+            if self.backend_api == self._BACKEND_API_BADGEHUB:
+                TaskManager.create_task(self.download_app_index(self.app_index_url_badgehub))
+            else:
+                TaskManager.create_task(self.download_app_index(self.app_index_url_github))
 
     def onDestroy(self, screen):
         await self.aiohttp_session.close()
@@ -60,9 +74,14 @@ class AppStore(Activity):
             return
         print(f"Got response text: {response[0:20]}")
         try:
-            for app in json.loads(response):
+            parsed = json.loads(response)
+            print(f"parsed json: {parsed}")
+            for app in parsed:
                 try:
-                    self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
+                    if self.backend_api == self._BACKEND_API_BADGEHUB:
+                        self.apps.append(AppStore.badgehub_app_to_mpos_app(app))
+                    else:
+                        self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
                 except Exception as e:
                     print(f"Warning: could not add app from {json_url} to apps list: {e}")
         except Exception as e:
@@ -157,6 +176,7 @@ class AppStore(Activity):
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
         intent.putExtra("app", app)
+        intent.putExtra("appstore", self)
         self.startActivity(intent)
 
     async def download_url(self, url):
@@ -170,6 +190,86 @@ class AppStore(Activity):
         except Exception as e:
             print(f"download_url got exception {e}")
 
+    @staticmethod
+    def badgehub_app_to_mpos_app(bhapp):
+        #print(f"Converting {bhapp} to MPOS app object...")
+        name = bhapp.get("name")
+        print(f"Got app name: {name}")
+        publisher = None
+        short_description = bhapp.get("description")
+        long_description = None
+        try:
+            icon_url = bhapp.get("icon_map").get("64x64").get("url")
+        except Exception as e:
+            icon_url = None
+            print("Could not find icon_map 64x64 url")
+        download_url = None
+        fullname = bhapp.get("slug")
+        version = None
+        try:
+            category = bhapp.get("categories")[0]
+        except Exception as e:
+            category = None
+            print("Could not parse category")
+        activities = None
+        return App(name, publisher, short_description, long_description, icon_url, download_url, fullname, version, category, activities)
+
+    async def fetch_badgehub_app_details(self, app_obj):
+        details_url = self.app_detail_url_badgehub + "/" + app_obj.fullname
+        response = await self.download_url(details_url)
+        if not response:
+            print(f"Could not download app details from from\n{details_url}")
+            return
+        print(f"Got response text: {response[0:20]}")
+        try:
+            parsed = json.loads(response)
+            print(f"parsed json: {parsed}")
+            print("Using short_description as long_description because backend doesn't support it...")
+            app_obj.long_description = app_obj.short_description
+            print("Finding version number...")
+            try:
+                version = parsed.get("version")
+            except Exception as e:
+                print(f"Could not get version object from appdetails: {e}")
+                return
+            print(f"got version object: {version}")
+            # Find .mpk download URL:
+            try:
+                files = version.get("files")
+                for file in files:
+                    print(f"parsing file: {file}")
+                    ext = file.get("ext").lower()
+                    print(f"file has extension: {ext}")
+                    if ext == ".mpk":
+                        app_obj.download_url = file.get("url")
+                        break # only one .mpk per app is supported
+            except Exception as e:
+                print(f"Could not get files from version: {e}")
+            try:
+                app_metadata = version.get("app_metadata")
+            except Exception as e:
+                print(f"Could not get app_metadata object from version object: {e}")
+                return
+            try:
+                author = app_metadata.get("author")
+                print("Using author as publisher because that's all the backend supports...")
+                app_obj.publisher = author
+            except Exception as e:
+                print(f"Could not get author from version object: {e}")
+            try:
+                app_version = app_metadata.get("version")
+                print(f"what: {version.get('app_metadata')}")
+                print(f"app has app_version: {app_version}")
+                app_obj.version = app_version
+            except Exception as e:
+                print(f"Could not get version from app_metadata: {e}")
+        except Exception as e:
+            err = f"ERROR: could not parse app details JSON: {e}"
+            print(err)
+            self.please_wait_label.set_text(err)
+            return
+
+
 class AppDetail(Activity):
 
     action_label_install = "Install"
@@ -182,10 +282,19 @@ class AppDetail(Activity):
     update_button = None
     progress_bar = None
     install_label = None
+    long_desc_label = None
+    version_label = None
+    buttoncont = None
+    publisher_label = None
+
+    # Received from the Intent extras:
+    app = None
+    appstore = None
 
     def onCreate(self):
         print("Creating app detail screen...")
-        app = self.getIntent().extras.get("app")
+        self.app = self.getIntent().extras.get("app")
+        self.appstore = self.getIntent().extras.get("appstore")
         app_detail_screen = lv.obj()
         app_detail_screen.set_style_pad_all(5, 0)
         app_detail_screen.set_size(lv.pct(100), lv.pct(100))
@@ -200,10 +309,10 @@ class AppDetail(Activity):
         headercont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         icon_spacer = lv.image(headercont)
         icon_spacer.set_size(64, 64)
-        if app.icon_data:
+        if self.app.icon_data:
             image_dsc = lv.image_dsc_t({
-                'data_size': len(app.icon_data),
-                'data': app.icon_data
+                'data_size': len(self.app.icon_data),
+                'data': self.app.icon_data
             })
             icon_spacer.set_src(image_dsc)
         else:
@@ -216,54 +325,80 @@ class AppDetail(Activity):
         detail_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
         detail_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         name_label = lv.label(detail_cont)
-        name_label.set_text(app.name)
+        name_label.set_text(self.app.name)
         name_label.set_style_text_font(lv.font_montserrat_24, 0)
-        publisher_label = lv.label(detail_cont)
-        publisher_label.set_text(app.publisher)
-        publisher_label.set_style_text_font(lv.font_montserrat_16, 0)
+        self.publisher_label = lv.label(detail_cont)
+        if self.app.publisher:
+            self.publisher_label.set_text(self.app.publisher)
+        else:
+            self.publisher_label.set_text("Unknown publisher")
+        self.publisher_label.set_style_text_font(lv.font_montserrat_16, 0)
 
         self.progress_bar = lv.bar(app_detail_screen)
         self.progress_bar.set_width(lv.pct(100))
         self.progress_bar.set_range(0, 100)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         # Always have this button:
-        buttoncont = lv.obj(app_detail_screen)
-        buttoncont.set_style_border_width(0, 0)
-        buttoncont.set_style_radius(0, 0)
-        buttoncont.set_style_pad_all(0, 0)
-        buttoncont.set_flex_flow(lv.FLEX_FLOW.ROW)
-        buttoncont.set_size(lv.pct(100), lv.SIZE_CONTENT)
-        buttoncont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        print(f"Adding (un)install button for url: {app.download_url}")
+        self.buttoncont = lv.obj(app_detail_screen)
+        self.buttoncont.set_style_border_width(0, 0)
+        self.buttoncont.set_style_radius(0, 0)
+        self.buttoncont.set_style_pad_all(0, 0)
+        self.buttoncont.set_flex_flow(lv.FLEX_FLOW.ROW)
+        self.buttoncont.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        self.buttoncont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.add_action_buttons(self.buttoncont, self.app)
+        # version label:
+        self.version_label = lv.label(app_detail_screen)
+        self.version_label.set_width(lv.pct(100))
+        if self.app.version:
+            self.version_label.set_text(f"Latest version: {self.app.version}") # would be nice to make this bold if this is newer than the currently installed one
+        else:
+            self.version_label.set_text(f"Unknown version")
+        self.version_label.set_style_text_font(lv.font_montserrat_12, 0)
+        self.version_label.align_to(self.install_button, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
+        self.long_desc_label = lv.label(app_detail_screen)
+        self.long_desc_label.align_to(self.version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
+        if self.app.long_description:
+            self.long_desc_label.set_text(self.app.long_description)
+        else:
+            self.long_desc_label.set_text(self.app.short_description)
+        self.long_desc_label.set_style_text_font(lv.font_montserrat_12, 0)
+        self.long_desc_label.set_width(lv.pct(100))
+        print("Loading app detail screen...")
+        self.setContentView(app_detail_screen)
+
+    def onResume(self, screen):
+        if self.appstore.backend_api == self.appstore._BACKEND_API_BADGEHUB:
+            TaskManager.create_task(self.fetch_and_set_app_details())
+        else:
+            print("No need to fetch app details as the github app index already contains all the app data.")
+
+    def add_action_buttons(self, buttoncont, app):
+        buttoncont.clean()
+        print(f"Adding (un)install button for url: {self.app.download_url}")
         self.install_button = lv.button(buttoncont)
-        self.install_button.add_event_cb(lambda e, d=app.download_url, f=app.fullname: self.toggle_install(d,f), lv.EVENT.CLICKED, None)
+        self.install_button.add_event_cb(lambda e, a=self.app: self.toggle_install(a), lv.EVENT.CLICKED, None)
         self.install_button.set_size(lv.pct(100), 40)
         self.install_label = lv.label(self.install_button)
         self.install_label.center()
-        self.set_install_label(app.fullname)
-        if PackageManager.is_update_available(app.fullname, app.version):
+        self.set_install_label(self.app.fullname)
+        if app.version and PackageManager.is_update_available(self.app.fullname, app.version):
             self.install_button.set_size(lv.pct(47), 40) # make space for update button
             print("Update available, adding update button.")
             self.update_button = lv.button(buttoncont)
             self.update_button.set_size(lv.pct(47), 40)
-            self.update_button.add_event_cb(lambda e, d=app.download_url, f=app.fullname: self.update_button_click(d,f), lv.EVENT.CLICKED, None)
+            self.update_button.add_event_cb(lambda e, a=self.app: self.update_button_click(a), lv.EVENT.CLICKED, None)
             update_label = lv.label(self.update_button)
             update_label.set_text("Update")
             update_label.center()
-        # version label:
-        version_label = lv.label(app_detail_screen)
-        version_label.set_width(lv.pct(100))
-        version_label.set_text(f"Latest version: {app.version}") # make this bold if this is newer than the currently installed one
-        version_label.set_style_text_font(lv.font_montserrat_12, 0)
-        version_label.align_to(self.install_button, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
-        long_desc_label = lv.label(app_detail_screen)
-        long_desc_label.align_to(version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
-        long_desc_label.set_text(app.long_description)
-        long_desc_label.set_style_text_font(lv.font_montserrat_12, 0)
-        long_desc_label.set_width(lv.pct(100))
-        print("Loading app detail screen...")
-        self.setContentView(app_detail_screen)
-    
+
+    async def fetch_and_set_app_details(self):
+        await self.appstore.fetch_badgehub_app_details(self.app)
+        print(f"app has version: {self.app.version}")
+        self.version_label.set_text(self.app.version)
+        self.long_desc_label.set_text(self.app.long_description)
+        self.publisher_label.set_text(self.app.publisher)
+        self.add_action_buttons(self.buttoncont, self.app)
 
     def set_install_label(self, app_fullname):
         # Figure out whether to show:
@@ -292,8 +427,11 @@ class AppDetail(Activity):
             action_label = self.action_label_install
         self.install_label.set_text(action_label)
 
-    def toggle_install(self, download_url, fullname):
-        print(f"Install button clicked for {download_url} and fullname {fullname}")
+    def toggle_install(self, app_obj):
+        print(f"Install button clicked for {app_obj}")
+        download_url = app_obj.download_url
+        fullname = app_obj.fullname
+        print(f"With {download_url} and fullname {fullname}")
         label_text = self.install_label.get_text()
         if label_text == self.action_label_install:
             try:
@@ -309,7 +447,9 @@ class AppDetail(Activity):
             except Exception as e:
                 print("Could not start uninstall_app thread: ", e)
     
-    def update_button_click(self, download_url, fullname):
+    def update_button_click(self, app_obj):
+        download_url = app_obj.download_url
+        fullname = app_obj.fullname
         print(f"Update button clicked for {download_url} and fullname {fullname}")
         self.update_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.install_button.set_size(lv.pct(100), 40)
