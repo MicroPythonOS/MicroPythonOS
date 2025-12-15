@@ -229,7 +229,10 @@ class WebSocketApp:
 
         # Run the event loop in the main thread
         try:
-            self._loop.run_until_complete(self._async_main())
+            print("doing run_until_complete")
+            #self._loop.run_until_complete(self._async_main()) # this doesn't always finish!
+            asyncio.create_task(self._async_main())
+            print("after run_until_complete")
         except KeyboardInterrupt:
             _log_debug("run_forever got KeyboardInterrupt")
             self.close()
@@ -272,7 +275,7 @@ class WebSocketApp:
                 _log_error(f"_async_main's await self._connect_and_run() for {self.url} got exception: {e}")
                 self.has_errored = True
                 _run_callback(self.on_error, self, e)
-                if not reconnect:
+                if reconnect is not True:
                     _log_debug("No reconnect configured, breaking loop")
                     break
                 _log_debug(f"Reconnecting after error in {reconnect}s")
