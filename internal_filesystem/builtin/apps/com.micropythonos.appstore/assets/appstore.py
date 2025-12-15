@@ -196,12 +196,20 @@ class AppStore(Activity):
                         print("opened file...")
                         print(dir(response.content))
                         while True:
-                            #print("reading next chunk...")
-                            # Would be better to use (TaskManager.)wait_for() to handle timeouts:
-                            chunk = await response.content.read(chunk_size)
-                            #print(f"got chunk: {chunk}")
+                            #print("Downloading next chunk...")
+                            tries_left=3
+                            chunk = None
+                            while tries_left > 0:
+                                try:
+                                    chunk = await TaskManager.wait_for(response.content.read(chunk_size), 10)
+                                    break
+                                except Exception as e:
+                                    print(f"Waiting for response.content.read of next chunk got error: {e}")
+                                    tries_left -= 1
+                            #print(f"Downloaded chunk: {chunk}")
                             if not chunk:
-                                break
+                                print("ERROR: failed to download chunk, even with retries!")
+                                return False
                             #print("writing chunk...")
                             fd.write(chunk)
                             #print("wrote chunk")
