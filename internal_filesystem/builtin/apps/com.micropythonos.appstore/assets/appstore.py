@@ -206,15 +206,19 @@ class AppStore(Activity):
                                 except Exception as e:
                                     print(f"Waiting for response.content.read of next chunk got error: {e}")
                                     tries_left -= 1
-                            #print(f"Downloaded chunk: {chunk}")
-                            if not chunk:
+                            if tries_left == 0:
                                 print("ERROR: failed to download chunk, even with retries!")
                                 return False
-                            #print("writing chunk...")
-                            fd.write(chunk)
-                            #print("wrote chunk")
-                        print(f"Done downloading {url}")
-                        return True
+                            else:
+                                print(f"Downloaded chunk: {chunk}")
+                                if chunk:
+                                    #print("writing chunk...")
+                                    fd.write(chunk)
+                                    #print("wrote chunk")
+                                else:
+                                    print("chunk is None while there was no error so this was the last one")
+                                    print(f"Done downloading {url}")
+                                    return True
         except Exception as e:
             print(f"download_url got exception {e}")
             return False
@@ -504,6 +508,7 @@ class AppDetail(Activity):
         await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         # Download the .mpk file to temporary location
         try:
+            # Make sure there's no leftover file filling the storage
             os.remove(temp_zip_path)
         except Exception:
             pass
@@ -514,18 +519,19 @@ class AppDetail(Activity):
         self.progress_bar.set_value(40, True)
         temp_zip_path = "tmp/temp.mpk"
         print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
-        try:
-            result = await self.appstore.download_url(zip_url, outfile=temp_zip_path)
-            if result is not True:
-                print("Download failed...")
-                self.set_install_label(app_fullname)
+        result = await self.appstore.download_url(zip_url, outfile=temp_zip_path)
+        if result is not True:
+            print("Download failed...") # Would be good to show an error to the user if this failed...
+        else:
             self.progress_bar.set_value(60, True)
             print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
-        except Exception as e:
-            print("Download failed:", str(e))
-            # Would be good to show error message here if it fails...
-        # Step 2: install it:
-        PackageManager.install_mpk(temp_zip_path, dest_folder) # ERROR: temp_zip_path might not be set if download failed!
+            # Install it:
+            PackageManager.install_mpk(temp_zip_path, dest_folder)
+        # Make sure there's no leftover file filling the storage:
+        try:
+            os.remove(temp_zip_path)
+        except Exception:
+            pass
         # Success:
         await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(100, False)
