@@ -3,6 +3,7 @@
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
 testdir="$mydir"
+#testdir=/home/user/projects/MicroPythonOS/claude/MicroPythonOS/tests2
 scriptdir=$(readlink -f "$mydir"/../scripts/)
 fs="$mydir"/../internal_filesystem/
 mpremote="$mydir"/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py
@@ -124,7 +125,8 @@ if [ -z "$onetest" ]; then
 	echo "If no test is specified: run all tests from $testdir on local machine."
 	echo
 	echo "The '--ondevice' flag will run the test(s) on a connected device using mpremote.py (should be on the PATH) over a serial connection."
-	while read file; do
+	files=$(find "$testdir" -iname "test_*.py" )
+	for file in $files; do
 		one_test "$file"
 		result=$?
 		if [ $result -ne 0 ]; then
@@ -134,7 +136,7 @@ if [ -z "$onetest" ]; then
 		else
 			ran=$(expr $ran \+ 1)
 		fi
-	done < <( find "$testdir" -iname "test_*.py" )
+	done
 else
 	echo "doing $onetest"
 	one_test $(readlink -f "$onetest")
