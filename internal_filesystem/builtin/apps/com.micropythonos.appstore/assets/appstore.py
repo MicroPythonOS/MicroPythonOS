@@ -179,16 +179,39 @@ class AppStore(Activity):
         intent.putExtra("appstore", self)
         self.startActivity(intent)
 
-    async def download_url(self, url):
+    async def download_url(self, url, outfile=None):
         print(f"Downloading {url}")
         #await TaskManager.sleep(4) # test slowness
         try:
             async with self.aiohttp_session.get(url) as response:
-                if response.status >= 200 and response.status < 400:
+                if response.status < 200 or response.status >= 400:
+                    return None
+                if not outfile:
                     return await response.read()
-            print(f"Done downloading {url}")
+                else:
+                    # Would be good to check free available space first
+                    chunk_size = 1024
+                    print("headers:") ; print(response.headers)
+                    total_size = response.headers.get('Content-Length') # some servers don't send this
+                    print(f"download_url writing to {outfile} of {total_size} bytes in chunks of size {chunk_size}")
+                    with open(outfile, 'wb') as fd:
+                        print("opened file...")
+                        print(dir(response.content))
+                        while True:
+                            #print("reading next chunk...")
+                            # Would be better to use wait_for() to handle timeouts:
+                            chunk = await response.content.read(chunk_size)
+                            #print(f"got chunk: {chunk}")
+                            if not chunk:
+                                break
+                            #print("writing chunk...")
+                            fd.write(chunk)
+                            #print("wrote chunk")
+                        print(f"Done downloading {url}")
+                        return True
         except Exception as e:
             print(f"download_url got exception {e}")
+            return False
 
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
@@ -435,8 +458,7 @@ class AppDetail(Activity):
         label_text = self.install_label.get_text()
         if label_text == self.action_label_install:
             try:
-                _thread.stack_size(mpos.apps.good_stack_size())
-                _thread.start_new_thread(self.download_and_install, (download_url, f"apps/{fullname}", fullname))
+                TaskManager.create_task(self.download_and_install(download_url, f"apps/{fullname}", fullname))
             except Exception as e:
                 print("Could not start download_and_install thread: ", e)
         elif label_text == self.action_label_uninstall or label_text == self.action_label_restore:
@@ -478,48 +500,38 @@ class AppDetail(Activity):
             self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
             self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
 
-    def download_and_install(self, zip_url, dest_folder, app_fullname):
+    async def download_and_install(self, zip_url, dest_folder, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(20, True)
-        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        # Download the .mpk file to temporary location
         try:
-            # Step 1: Download the .mpk file
-            print(f"Downloading .mpk file from: {zip_url}")
-            response = requests.get(zip_url, timeout=10) # TODO: use stream=True and do it in chunks like in OSUpdate
-            if response.status_code != 200:
-                print("Download failed: Status code", response.status_code)
-                response.close()
+            os.remove(temp_zip_path)
+        except Exception:
+            pass
+        try:
+            os.mkdir("tmp")
+        except Exception:
+            pass
+        self.progress_bar.set_value(40, True)
+        temp_zip_path = "tmp/temp.mpk"
+        print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
+        try:
+            result = await self.appstore.download_url(zip_url, outfile=temp_zip_path)
+            if result is not True:
+                print("Download failed...")
                 self.set_install_label(app_fullname)
-            self.progress_bar.set_value(40, True)
-            # Save the .mpk file to a temporary location
-            try:
-                os.remove(temp_zip_path)
-            except Exception:
-                pass
-            try:
-                os.mkdir("tmp")
-            except Exception:
-                pass
-            temp_zip_path = "tmp/temp.mpk"
-            print(f"Writing to temporary mpk path: {temp_zip_path}")
-            # TODO: check free available space first!
-            with open(temp_zip_path, "wb") as f:
-                f.write(response.content)
             self.progress_bar.set_value(60, True)
-            response.close()
             print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
         except Exception as e:
             print("Download failed:", str(e))
             # Would be good to show error message here if it fails...
-        finally:
-            if 'response' in locals():
-                response.close()
         # Step 2: install it:
         PackageManager.install_mpk(temp_zip_path, dest_folder) # ERROR: temp_zip_path might not be set if download failed!
         # Success:
-        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(0, False)
