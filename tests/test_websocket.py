@@ -4,6 +4,7 @@ import _thread
 import time
 
 from mpos import App, PackageManager
+from mpos import TaskManager
 import mpos.apps
 
 from websocket import WebSocketApp
@@ -12,6 +13,8 @@ class TestMutlipleWebsocketsAsyncio(unittest.TestCase):
 
     max_allowed_connections = 3 # max that echo.websocket.org allows
 
+    #relays = ["wss://echo.websocket.org" ]
+    #relays = ["wss://echo.websocket.org", "wss://echo.websocket.org"]
     #relays = ["wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org" ] # more gives "too many requests" error
     relays = ["wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org" ] # more might give "too many requests" error
     wslist = []
@@ -51,7 +54,7 @@ class TestMutlipleWebsocketsAsyncio(unittest.TestCase):
         for ws in self.wslist:
             await ws.close()
 
-    async def main(self) -> None:
+    async def run_main(self) -> None:
         tasks = []
         self.wslist = []
         for idx, wsurl in enumerate(self.relays):
@@ -89,10 +92,12 @@ class TestMutlipleWebsocketsAsyncio(unittest.TestCase):
             await asyncio.sleep(1)
         self.assertGreaterEqual(self.on_close_called, min(len(self.relays),self.max_allowed_connections), "on_close was called for less than allowed connections")
 
-        self.assertEqual(self.on_error_called, len(self.relays) - self.max_allowed_connections, "expecting one error per failed connection")
+        self.assertEqual(self.on_error_called, max(0, len(self.relays) - self.max_allowed_connections), "expecting one error per failed connection")
 
         # Wait for *all* of them to finish (or be cancelled)
         # If this hangs, it's also a failure:
+        print(f"doing gather of tasks: {tasks}")
+        for index, task in enumerate(tasks): print(f"task {index}: ph_key:{task.ph_key} done:{task.done()} running {task.coro}")
         await asyncio.gather(*tasks, return_exceptions=True)
 
     def wait_for_ping(self):
@@ -105,12 +110,5 @@ class TestMutlipleWebsocketsAsyncio(unittest.TestCase):
             time.sleep(1)
         self.assertTrue(self.on_ping_called)
 
-    def test_it_loop(self):
-        for testnr in range(1):
-            print(f"starting iteration {testnr}")
-            asyncio.run(self.do_two())
-            print(f"finished iteration {testnr}")
-
-    def do_two(self):
-        await self.main()
-
+    def test_it(self):
+        asyncio.run(self.run_main())
