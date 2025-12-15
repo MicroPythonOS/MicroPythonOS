@@ -4,8 +4,6 @@ import json
 import requests
 import gc
 import os
-import time
-import _thread
 
 from mpos.apps import Activity, Intent
 from mpos.app import App
@@ -150,7 +148,7 @@ class AppStore(Activity):
         print("Downloading icons...")
         for app in self.apps:
             if not self.has_foreground():
-                print(f"App is stopping, aborting icon downloads.") # maybe this can continue? but then update_ui_threadsafe is needed
+                print(f"App is stopping, aborting icon downloads.") # maybe this can continue? but then update_ui_if_foreground is needed
                 break
             if not app.icon_data:
                 try:
@@ -170,7 +168,7 @@ class AppStore(Activity):
                         'data_size': len(app.icon_data),
                         'data': app.icon_data
                     })
-                    image_icon_widget.set_src(image_dsc) # add update_ui_threadsafe() for background?
+                    image_icon_widget.set_src(image_dsc) # use some kind of new update_ui_if_foreground() ?
         print("Finished downloading icons.")
 
     def show_app_detail(self, app):
@@ -199,7 +197,7 @@ class AppStore(Activity):
                         print(dir(response.content))
                         while True:
                             #print("reading next chunk...")
-                            # Would be better to use wait_for() to handle timeouts:
+                            # Would be better to use (TaskManager.)wait_for() to handle timeouts:
                             chunk = await response.content.read(chunk_size)
                             #print(f"got chunk: {chunk}")
                             if not chunk:
@@ -457,17 +455,11 @@ class AppDetail(Activity):
         print(f"With {download_url} and fullname {fullname}")
         label_text = self.install_label.get_text()
         if label_text == self.action_label_install:
-            try:
-                TaskManager.create_task(self.download_and_install(download_url, f"apps/{fullname}", fullname))
-            except Exception as e:
-                print("Could not start download_and_install thread: ", e)
+            print("Starting install task...")
+            TaskManager.create_task(self.download_and_install(download_url, f"apps/{fullname}", fullname))
         elif label_text == self.action_label_uninstall or label_text == self.action_label_restore:
-            print("Uninstalling app....")
-            try:
-                _thread.stack_size(mpos.apps.good_stack_size())
-                _thread.start_new_thread(self.uninstall_app, (fullname,))
-            except Exception as e:
-                print("Could not start uninstall_app thread: ", e)
+            print("Starting uninstall task...")
+            TaskManager.create_task(self.uninstall_app(fullname))
     
     def update_button_click(self, app_obj):
         download_url = app_obj.download_url
@@ -475,22 +467,18 @@ class AppDetail(Activity):
         print(f"Update button clicked for {download_url} and fullname {fullname}")
         self.update_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.install_button.set_size(lv.pct(100), 40)
-        try:
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.download_and_install, (download_url, f"apps/{fullname}", fullname))
-        except Exception as e:
-            print("Could not start download_and_install thread: ", e)
+        TaskManager.create_task(self.download_and_install(download_url, f"apps/{fullname}", fullname))
 
-    def uninstall_app(self, app_fullname):
+    async def uninstall_app(self, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(21, True)
-        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(42, True)
-        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         PackageManager.uninstall_app(app_fullname)
-        time.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(0, False)
@@ -505,7 +493,7 @@ class AppDetail(Activity):
         self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(20, True)
-        TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         # Download the .mpk file to temporary location
         try:
             os.remove(temp_zip_path)
@@ -531,7 +519,7 @@ class AppDetail(Activity):
         # Step 2: install it:
         PackageManager.install_mpk(temp_zip_path, dest_folder) # ERROR: temp_zip_path might not be set if download failed!
         # Success:
-        TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         self.progress_bar.set_value(100, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         self.progress_bar.set_value(0, False)
