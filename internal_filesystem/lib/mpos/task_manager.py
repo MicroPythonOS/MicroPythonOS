@@ -37,12 +37,18 @@ class TaskManager:
         cls.keep_running = False
 
     @classmethod
+    def enable(cls):
+        cls.disabled = False
+
+    @classmethod
     def disable(cls):
         cls.disabled = True
 
     @classmethod
     def create_task(cls, coroutine):
-        cls.task_list.append(asyncio.create_task(coroutine))
+        task = asyncio.create_task(coroutine)
+        cls.task_list.append(task)
+        return task
 
     @classmethod
     def list_tasks(cls):
