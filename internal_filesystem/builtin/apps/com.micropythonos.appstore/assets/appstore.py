@@ -183,45 +183,53 @@ class AppStore(Activity):
         try:
             async with self.aiohttp_session.get(url) as response:
                 if response.status < 200 or response.status >= 400:
-                    return None
-                if not outfile:
-                    return await response.read()
-                else:
-                    # Would be good to check free available space first
-                    chunk_size = 1024
-                    print("headers:") ; print(response.headers)
-                    total_size = response.headers.get('Content-Length') # some servers don't send this
-                    print(f"download_url writing to {outfile} of {total_size} bytes in chunks of size {chunk_size}")
-                    with open(outfile, 'wb') as fd:
-                        print("opened file...")
-                        print(dir(response.content))
-                        while True:
-                            #print("Downloading next chunk...")
-                            tries_left=3
-                            chunk = None
-                            while tries_left > 0:
-                                try:
-                                    chunk = await TaskManager.wait_for(response.content.read(chunk_size), 10)
-                                    break
-                                except Exception as e:
-                                    print(f"Waiting for response.content.read of next chunk got error: {e}")
-                                    tries_left -= 1
-                            if tries_left == 0:
-                                print("ERROR: failed to download chunk, even with retries!")
-                                return False
-                            else:
-                                #print(f"Downloaded chunk: {chunk}")
-                                if chunk:
-                                    #print("writing chunk...")
-                                    fd.write(chunk)
-                                    #print("wrote chunk")
-                                else:
-                                    print("chunk is None while there was no error so this was the last one")
-                                    print(f"Done downloading {url}")
-                                    return True
+                    return False if outfile else None
+
+                # Always use chunked downloading
+                chunk_size = 1024
+                print("headers:") ; print(response.headers)
+                total_size = response.headers.get('Content-Length') # some servers don't send this
+                print(f"download_url {'writing to ' + outfile if outfile else 'reading'} {total_size} bytes in chunks of size {chunk_size}")
+
+                fd = open(outfile, 'wb') if outfile else None
+                chunks = [] if not outfile else None
+
+                if fd:
+                    print("opened file...")
+
+                while True:
+                    tries_left = 3
+                    chunk = None
+                    while tries_left > 0:
+                        try:
+                            chunk = await TaskManager.wait_for(response.content.read(chunk_size), 10)
+                            break
+                        except Exception as e:
+                            print(f"Waiting for response.content.read of next chunk got error: {e}")
+                            tries_left -= 1
+
+                    if tries_left == 0:
+                        print("ERROR: failed to download chunk, even with retries!")
+                        if fd:
+                            fd.close()
+                        return False if outfile else None
+
+                    if chunk:
+                        if fd:
+                            fd.write(chunk)
+                        else:
+                            chunks.append(chunk)
+                    else:
+                        print("chunk is None while there was no error so this was the last one")
+                        print(f"Done downloading {url}")
+                        if fd:
+                            fd.close()
+                            return True
+                        else:
+                            return b''.join(chunks)
         except Exception as e:
             print(f"download_url got exception {e}")
-            return False
+            return False if outfile else None
 
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
