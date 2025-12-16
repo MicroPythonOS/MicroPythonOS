@@ -177,7 +177,7 @@ class AppStore(Activity):
         intent.putExtra("appstore", self)
         self.startActivity(intent)
 
-    async def download_url(self, url, outfile=None):
+    async def download_url(self, url, outfile=None, total_size=None):
         print(f"Downloading {url}")
         #await TaskManager.sleep(4) # test slowness
         try:
@@ -188,11 +188,13 @@ class AppStore(Activity):
                 # Always use chunked downloading
                 chunk_size = 1024
                 print("headers:") ; print(response.headers)
-                total_size = response.headers.get('Content-Length') # some servers don't send this
+                if total_size is None:
+                    total_size = response.headers.get('Content-Length') # some servers don't send this in the headers
                 print(f"download_url {'writing to ' + outfile if outfile else 'reading'} {total_size} bytes in chunks of size {chunk_size}")
 
                 fd = open(outfile, 'wb') if outfile else None
                 chunks = [] if not outfile else None
+                partial_size = 0
 
                 if fd:
                     print("opened file...")
@@ -215,6 +217,8 @@ class AppStore(Activity):
                         return False if outfile else None
 
                     if chunk:
+                        partial_size += len(chunk)
+                        print(f"progress: {partial_size} / {total_size} bytes")
                         if fd:
                             fd.write(chunk)
                         else:
@@ -283,6 +287,7 @@ class AppStore(Activity):
                     print(f"file has extension: {ext}")
                     if ext == ".mpk":
                         app_obj.download_url = file.get("url")
+                        app_obj.download_url_size = file.get("size_of_content")
                         break # only one .mpk per app is supported
             except Exception as e:
                 print(f"Could not get files from version: {e}")
@@ -476,7 +481,7 @@ class AppDetail(Activity):
         label_text = self.install_label.get_text()
         if label_text == self.action_label_install:
             print("Starting install task...")
-            TaskManager.create_task(self.download_and_install(download_url, f"apps/{fullname}", fullname))
+            TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
         elif label_text == self.action_label_uninstall or label_text == self.action_label_restore:
             print("Starting uninstall task...")
             TaskManager.create_task(self.uninstall_app(fullname))
@@ -487,7 +492,7 @@ class AppDetail(Activity):
         print(f"Update button clicked for {download_url} and fullname {fullname}")
         self.update_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.install_button.set_size(lv.pct(100), 40)
-        TaskManager.create_task(self.download_and_install(download_url, f"apps/{fullname}", fullname))
+        TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
 
     async def uninstall_app(self, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
@@ -508,7 +513,10 @@ class AppDetail(Activity):
             self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
             self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
 
-    async def download_and_install(self, zip_url, dest_folder, app_fullname):
+    async def download_and_install(self, app_obj, dest_folder):
+        zip_url = app_obj.download_url
+        app_fullname = app_obj.fullname
+        download_url_size = app_obj.download_url_size
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -527,7 +535,7 @@ class AppDetail(Activity):
         self.progress_bar.set_value(40, True)
         temp_zip_path = "tmp/temp.mpk"
         print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
-        result = await self.appstore.download_url(zip_url, outfile=temp_zip_path)
+        result = await self.appstore.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size)
         if result is not True:
             print("Download failed...") # Would be good to show an error to the user if this failed...
         else:
