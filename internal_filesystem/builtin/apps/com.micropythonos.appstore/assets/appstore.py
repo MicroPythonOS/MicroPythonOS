@@ -177,7 +177,7 @@ class AppStore(Activity):
         intent.putExtra("appstore", self)
         self.startActivity(intent)
 
-    async def download_url(self, url, outfile=None, total_size=None):
+    async def download_url(self, url, outfile=None, total_size=None, progress_callback=None):
         print(f"Downloading {url}")
         #await TaskManager.sleep(4) # test slowness
         try:
@@ -218,7 +218,11 @@ class AppStore(Activity):
 
                     if chunk:
                         partial_size += len(chunk)
-                        print(f"progress: {partial_size} / {total_size} bytes")
+                        progress_pct = round((partial_size * 100) / int(total_size))
+                        print(f"progress: {partial_size} / {total_size} bytes = {progress_pct}%")
+                        if progress_callback:
+                            await progress_callback(progress_pct)
+                            #await TaskManager.sleep(1) # test slowness
                         if fd:
                             fd.write(chunk)
                         else:
@@ -513,14 +517,26 @@ class AppDetail(Activity):
             self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
             self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
 
+    async def pcb(self, percent):
+        print(f"pcb called: {percent}")
+        scaled_percent_start = 5 # before 5% is preparation
+        scaled_percent_finished = 60 # after 60% is unzip
+        scaled_percent_diff = scaled_percent_finished - scaled_percent_start
+        scale = 100 / scaled_percent_diff # 100 / 55 = 1.81
+        scaled_percent = round(percent / scale)
+        scaled_percent += scaled_percent_start
+        self.progress_bar.set_value(scaled_percent, True)
+
     async def download_and_install(self, app_obj, dest_folder):
         zip_url = app_obj.download_url
         app_fullname = app_obj.fullname
-        download_url_size = app_obj.download_url_size
+        download_url_size = None
+        if hasattr(app_obj, "download_url_size"):
+            download_url_size = app_obj.download_url_size
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
         self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(20, True)
+        self.progress_bar.set_value(5, True)
         await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
         # Download the .mpk file to temporary location
         try:
@@ -532,17 +548,16 @@ class AppDetail(Activity):
             os.mkdir("tmp")
         except Exception:
             pass
-        self.progress_bar.set_value(40, True)
         temp_zip_path = "tmp/temp.mpk"
         print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
-        result = await self.appstore.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size)
+        result = await self.appstore.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size, progress_callback=self.pcb)
         if result is not True:
             print("Download failed...") # Would be good to show an error to the user if this failed...
         else:
-            self.progress_bar.set_value(60, True)
             print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
             # Install it:
-            PackageManager.install_mpk(temp_zip_path, dest_folder)
+            PackageManager.install_mpk(temp_zip_path, dest_folder) # 60 until 90 percent is the unzip but no progress there...
+            self.progress_bar.set_value(90, True)
         # Make sure there's no leftover file filling the storage:
         try:
             os.remove(temp_zip_path)
