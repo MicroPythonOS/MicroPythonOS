@@ -66,6 +66,10 @@ $mpremote fs cp -r builtin :/
 #$mpremote fs cp -r data :/
 #$mpremote fs cp -r data/images :/data/
 
+$mpremote fs mkdir :/data
+$mpremote fs mkdir :/data/com.micropythonos.system.wifiservice
+$mpremote fs cp ../internal_filesystem_excluded/data/com.micropythonos.system.wifiservice/config.json :/data/com.micropythonos.system.wifiservice/
+
 popd
 
 # Install test infrastructure (for running ondevice tests)

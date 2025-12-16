@@ -210,7 +210,7 @@ class AppStore(Activity):
                                 print("ERROR: failed to download chunk, even with retries!")
                                 return False
                             else:
-                                print(f"Downloaded chunk: {chunk}")
+                                #print(f"Downloaded chunk: {chunk}")
                                 if chunk:
                                     #print("writing chunk...")
                                     fd.write(chunk)

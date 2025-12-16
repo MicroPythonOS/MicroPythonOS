@@ -2,6 +2,9 @@
 =====
 - AudioFlinger: optimize WAV volume scaling for speed and immediately set volume
 - API: add TaskManager that wraps asyncio
+- AppStore app: eliminate all thread by using TaskManager
+- AppStore app: add support for BadgeHub backend
+
 
 0.5.1
 =====
