@@ -483,6 +483,8 @@ Current stable version: 0.3.3 (as of latest CHANGELOG entry)
 - Intent system: `internal_filesystem/lib/mpos/content/intent.py`
 - UI initialization: `internal_filesystem/main.py`
 - Hardware init: `internal_filesystem/boot.py`
+- Task manager: `internal_filesystem/lib/mpos/task_manager.py` - see [docs/frameworks/task-manager.md](../docs/docs/frameworks/task-manager.md)
+- Download manager: `internal_filesystem/lib/mpos/net/download_manager.py` - see [docs/frameworks/download-manager.md](../docs/docs/frameworks/download-manager.md)
 - Config/preferences: `internal_filesystem/lib/mpos/config.py` - see [docs/frameworks/preferences.md](../docs/docs/frameworks/preferences.md)
 - Audio system: `internal_filesystem/lib/mpos/audio/audioflinger.py` - see [docs/frameworks/audioflinger.md](../docs/docs/frameworks/audioflinger.md)
 - LED control: `internal_filesystem/lib/mpos/lights.py` - see [docs/frameworks/lights-manager.md](../docs/docs/frameworks/lights-manager.md)
@@ -572,6 +574,8 @@ def defocus_handler(self, obj):
 - **Connect 4** (`apps/com.micropythonos.connect4/assets/connect4.py`): Game columns are focusable
 
 **Other utilities**:
+- `mpos.TaskManager`: Async task management - see [docs/frameworks/task-manager.md](../docs/docs/frameworks/task-manager.md)
+- `mpos.DownloadManager`: HTTP download utilities - see [docs/frameworks/download-manager.md](../docs/docs/frameworks/download-manager.md)
 - `mpos.apps.good_stack_size()`: Returns appropriate thread stack size for platform (16KB ESP32, 24KB desktop)
 - `mpos.wifi`: WiFi management utilities
 - `mpos.sdcard.SDCardManager`: SD card mounting and management
@@ -580,6 +584,85 @@ def defocus_handler(self, obj):
 - `mpos.sensor_manager`: Unified sensor access - see [docs/frameworks/sensor-manager.md](../docs/docs/frameworks/sensor-manager.md)
 - `mpos.audio.audioflinger`: Audio playback service - see [docs/frameworks/audioflinger.md](../docs/docs/frameworks/audioflinger.md)
 - `mpos.lights`: LED control - see [docs/frameworks/lights-manager.md](../docs/docs/frameworks/lights-manager.md)
+
+## Task Management (TaskManager)
+
+MicroPythonOS provides a centralized async task management service called **TaskManager** for managing background operations.
+
+**📖 User Documentation**: See [docs/frameworks/task-manager.md](../docs/docs/frameworks/task-manager.md) for complete API reference, patterns, and examples.
+
+### Implementation Details (for Claude Code)
+
+- **Location**: `lib/mpos/task_manager.py`
+- **Pattern**: Wrapper around `uasyncio` module
+- **Key methods**: `create_task()`, `sleep()`, `sleep_ms()`, `wait_for()`, `notify_event()`
+- **Thread model**: All tasks run on main asyncio event loop (cooperative multitasking)
+
+### Quick Example
+
+```python
+from mpos import TaskManager, DownloadManager
+
+class MyActivity(Activity):
+    def onCreate(self):
+        # Launch background task
+        TaskManager.create_task(self.download_data())
+
+    async def download_data(self):
+        # Download with timeout
+        try:
+            data = await TaskManager.wait_for(
+                DownloadManager.download_url(url),
+                timeout=10
+            )
+            self.update_ui(data)
+        except asyncio.TimeoutError:
+            print("Download timed out")
+```
+
+### Critical Code Locations
+
+- Task manager: `lib/mpos/task_manager.py`
+- Used throughout OS for async operations (downloads, WebSockets, sensors)
+
+## HTTP Downloads (DownloadManager)
+
+MicroPythonOS provides a centralized HTTP download service called **DownloadManager** for async file downloads.
+
+**📖 User Documentation**: See [docs/frameworks/download-manager.md](../docs/docs/frameworks/download-manager.md) for complete API reference, patterns, and examples.
+
+### Implementation Details (for Claude Code)
+
+- **Location**: `lib/mpos/net/download_manager.py`
+- **Pattern**: Module-level singleton (similar to `audioflinger.py`, `battery_voltage.py`)
+- **Session management**: Automatic lifecycle (lazy init, auto-cleanup when idle)
+- **Thread-safe**: Uses `_thread.allocate_lock()` for session access
+- **Three output modes**: Memory (bytes), File (bool), Streaming (callbacks)
+- **Features**: Retry logic (3 attempts), progress tracking, resume support (Range headers)
+
+### Quick Example
+
+```python
+from mpos import DownloadManager
+
+# Download to memory
+data = await DownloadManager.download_url("https://api.example.com/data.json")
+
+# Download to file with progress
+async def on_progress(percent):
+    print(f"Progress: {percent}%")
+
+success = await DownloadManager.download_url(
+    "https://example.com/file.bin",
+    outfile="/sdcard/file.bin",
+    progress_callback=on_progress
+)
+```
+
+### Critical Code Locations
+
+- Download manager: `lib/mpos/net/download_manager.py`
+- Used by: AppStore, OSUpdate, and any app needing HTTP downloads
 
 ## Audio System (AudioFlinger)
 
