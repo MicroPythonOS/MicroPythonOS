@@ -369,7 +369,7 @@ class WAVStream:
                 # - Larger chunks = less overhead, smoother audio
                 # - 4096 bytes with async yield works well for responsiveness
                 # - The 32KB I2S buffer handles timing smoothness
-                chunk_size = 4096
+                chunk_size = 8192
                 bytes_per_original_sample = (bits_per_sample // 8) * channels
                 total_original = 0
 
