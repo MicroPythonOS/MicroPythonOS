@@ -11,7 +11,8 @@ Features:
 - Automatic session lifecycle management
 - Thread-safe session access
 - Retry logic (3 attempts per chunk, 10s timeout)
-- Progress tracking
+- Progress tracking with 2-decimal precision
+- Download speed reporting
 - Resume support via Range headers
 
 Example:
@@ -20,14 +21,18 @@ Example:
     # Download to memory
     data = await DownloadManager.download_url("https://api.example.com/data.json")
 
-    # Download to file with progress
-    async def progress(pct):
-        print(f"{pct}%")
+    # Download to file with progress and speed
+    async def on_progress(pct):
+        print(f"{pct:.2f}%")  # e.g., "45.67%"
+
+    async def on_speed(speed_bps):
+        print(f"{speed_bps / 1024:.1f} KB/s")
 
     success = await DownloadManager.download_url(
         "https://example.com/file.bin",
         outfile="/sdcard/file.bin",
-        progress_callback=progress
+        progress_callback=on_progress,
+        speed_callback=on_speed
     )
 
     # Stream processing
@@ -46,6 +51,7 @@ _DEFAULT_CHUNK_SIZE = 1024  # 1KB chunks
 _DEFAULT_TOTAL_SIZE = 100 * 1024  # 100KB default if Content-Length missing
 _MAX_RETRIES = 3  # Retry attempts per chunk
 _CHUNK_TIMEOUT_SECONDS = 10  # Timeout per chunk read
+_SPEED_UPDATE_INTERVAL_MS = 1000  # Update speed every 1 second
 
 # Module-level state (singleton pattern)
 _session = None
@@ -169,7 +175,8 @@ async def close_session():
 
 
 async def download_url(url, outfile=None, total_size=None,
-                      progress_callback=None, chunk_callback=None, headers=None):
+                      progress_callback=None, chunk_callback=None, headers=None,
+                      speed_callback=None):
     """Download a URL with flexible output modes.
 
     This async download function can be used in 3 ways:
@@ -182,11 +189,14 @@ async def download_url(url, outfile=None, total_size=None,
         outfile (str, optional): Path to write file. If None, returns bytes.
         total_size (int, optional): Expected size in bytes for progress tracking.
                                    If None, uses Content-Length header or defaults to 100KB.
-        progress_callback (coroutine, optional): async def callback(percent: int)
-                                                Called with progress 0-100.
+        progress_callback (coroutine, optional): async def callback(percent: float)
+                                                Called with progress 0.00-100.00 (2 decimal places).
+                                                Only called when progress changes by at least 0.01%.
         chunk_callback (coroutine, optional): async def callback(chunk: bytes)
                                              Called for each chunk. Cannot use with outfile.
         headers (dict, optional): HTTP headers (e.g., {'Range': 'bytes=1000-'})
+        speed_callback (coroutine, optional): async def callback(bytes_per_second: float)
+                                             Called periodically (every ~1 second) with download speed.
 
     Returns:
         bytes: Downloaded content (if outfile and chunk_callback are None)
@@ -199,14 +209,18 @@ async def download_url(url, outfile=None, total_size=None,
         # Download to memory
         data = await DownloadManager.download_url("https://example.com/file.json")
 
-        # Download to file with progress
+        # Download to file with progress and speed
         async def on_progress(percent):
-            print(f"Progress: {percent}%")
+            print(f"Progress: {percent:.2f}%")
+
+        async def on_speed(bps):
+            print(f"Speed: {bps / 1024:.1f} KB/s")
 
         success = await DownloadManager.download_url(
             "https://example.com/large.bin",
             outfile="/sdcard/large.bin",
-            progress_callback=on_progress
+            progress_callback=on_progress,
+            speed_callback=on_speed
         )
 
         # Stream processing
@@ -282,6 +296,18 @@ async def download_url(url, outfile=None, total_size=None,
             chunks = []
             partial_size = 0
             chunk_size = _DEFAULT_CHUNK_SIZE
+            
+            # Progress tracking with 2-decimal precision
+            last_progress_pct = -1.0  # Track last reported progress to avoid duplicates
+            
+            # Speed tracking
+            speed_bytes_since_last_update = 0
+            speed_last_update_time = None
+            try:
+                import time
+                speed_last_update_time = time.ticks_ms()
+            except ImportError:
+                pass  # time module not available
 
             print(f"DownloadManager: {'Writing to ' + outfile if outfile else 'Downloading'} {total_size} bytes in chunks of size {chunk_size}")
 
@@ -317,12 +343,31 @@ async def download_url(url, outfile=None, total_size=None,
                     else:
                         chunks.append(chunk_data)
 
-                    # Report progress
-                    partial_size += len(chunk_data)
-                    progress_pct = round((partial_size * 100) / int(total_size))
-                    print(f"DownloadManager: Progress: {partial_size} / {total_size} bytes = {progress_pct}%")
-                    if progress_callback:
+                    # Track bytes for speed calculation
+                    chunk_len = len(chunk_data)
+                    partial_size += chunk_len
+                    speed_bytes_since_last_update += chunk_len
+                    
+                    # Report progress with 2-decimal precision
+                    # Only call callback if progress changed by at least 0.01%
+                    progress_pct = round((partial_size * 100) / int(total_size), 2)
+                    if progress_callback and progress_pct != last_progress_pct:
+                        print(f"DownloadManager: Progress: {partial_size} / {total_size} bytes = {progress_pct:.2f}%")
                         await progress_callback(progress_pct)
+                        last_progress_pct = progress_pct
+                    
+                    # Report speed periodically
+                    if speed_callback and speed_last_update_time is not None:
+                        import time
+                        current_time = time.ticks_ms()
+                        elapsed_ms = time.ticks_diff(current_time, speed_last_update_time)
+                        if elapsed_ms >= _SPEED_UPDATE_INTERVAL_MS:
+                            # Calculate bytes per second
+                            bytes_per_second = (speed_bytes_since_last_update * 1000) / elapsed_ms
+                            await speed_callback(bytes_per_second)
+                            # Reset for next interval
+                            speed_bytes_since_last_update = 0
+                            speed_last_update_time = current_time
                 else:
                     # Chunk is None, download complete
                     print(f"DownloadManager: Finished downloading {url}")

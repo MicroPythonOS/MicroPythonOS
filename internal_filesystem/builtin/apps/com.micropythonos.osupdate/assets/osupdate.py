@@ -20,6 +20,7 @@ class OSUpdate(Activity):
     main_screen = None
     progress_label = None
     progress_bar = None
+    speed_label = None
 
     # State management
     current_state = None
@@ -249,7 +250,12 @@ class OSUpdate(Activity):
 
         self.progress_label = lv.label(self.main_screen)
         self.progress_label.set_text("OS Update: 0.00%")
-        self.progress_label.align(lv.ALIGN.CENTER, 0, 0)
+        self.progress_label.align(lv.ALIGN.CENTER, 0, -15)
+        
+        self.speed_label = lv.label(self.main_screen)
+        self.speed_label.set_text("Speed: -- KB/s")
+        self.speed_label.align(lv.ALIGN.CENTER, 0, 10)
+        
         self.progress_bar = lv.bar(self.main_screen)
         self.progress_bar.set_size(200, 20)
         self.progress_bar.align(lv.ALIGN.BOTTOM_MID, 0, -50)
@@ -273,13 +279,35 @@ class OSUpdate(Activity):
         self.schedule_show_update_info()
 
     async def async_progress_callback(self, percent):
-        """Async progress callback for DownloadManager."""
-        print(f"OTA Update: {percent:.1f}%")
+        """Async progress callback for DownloadManager.
+        
+        Args:
+            percent: Progress percentage with 2 decimal places (0.00 - 100.00)
+        """
+        print(f"OTA Update: {percent:.2f}%")
         # UI updates are safe from async context in MicroPythonOS (runs on main thread)
         if self.has_foreground():
             self.progress_bar.set_value(int(percent), True)
             self.progress_label.set_text(f"OTA Update: {percent:.2f}%")
         await TaskManager.sleep_ms(50)
+
+    async def async_speed_callback(self, bytes_per_second):
+        """Async speed callback for DownloadManager.
+        
+        Args:
+            bytes_per_second: Download speed in bytes per second
+        """
+        # Convert to human-readable format
+        if bytes_per_second >= 1024 * 1024:
+            speed_str = f"{bytes_per_second / (1024 * 1024):.1f} MB/s"
+        elif bytes_per_second >= 1024:
+            speed_str = f"{bytes_per_second / 1024:.1f} KB/s"
+        else:
+            speed_str = f"{bytes_per_second:.0f} B/s"
+        
+        print(f"Download speed: {speed_str}")
+        if self.has_foreground() and self.speed_label:
+            self.speed_label.set_text(f"Speed: {speed_str}")
 
     async def perform_update(self):
         """Download and install update using async patterns.
@@ -295,6 +323,7 @@ class OSUpdate(Activity):
                 result = await self.update_downloader.download_and_install(
                     url,
                     progress_callback=self.async_progress_callback,
+                    speed_callback=self.async_speed_callback,
                     should_continue_callback=self.has_foreground
                 )
 
@@ -531,7 +560,7 @@ class UpdateDownloader:
                 percent = (self.bytes_written_so_far / self.total_size_expected) * 100
                 await self._progress_callback(min(percent, 100.0))
 
-    async def download_and_install(self, url, progress_callback=None, should_continue_callback=None):
+    async def download_and_install(self, url, progress_callback=None, speed_callback=None, should_continue_callback=None):
         """Download firmware and install to OTA partition using async DownloadManager.
 
         Supports pause/resume on wifi loss using HTTP Range headers.
@@ -539,7 +568,9 @@ class UpdateDownloader:
         Args:
             url: URL to download firmware from
             progress_callback: Optional async callback function(percent: float)
-                Called by DownloadManager with progress 0-100
+                Called by DownloadManager with progress 0.00-100.00 (2 decimal places)
+            speed_callback: Optional async callback function(bytes_per_second: float)
+                Called periodically with download speed
             should_continue_callback: Optional callback function() -> bool
                 Returns False to cancel download
 
@@ -595,12 +626,13 @@ class UpdateDownloader:
                 self.total_size_expected = 0
 
             # Download with streaming chunk callback
-            # Progress is reported by DownloadManager via progress_callback
+            # Progress and speed are reported by DownloadManager via callbacks
             print(f"UpdateDownloader: Starting async download from {url}")
             success = await dm.download_url(
                 url,
                 chunk_callback=chunk_handler,
                 progress_callback=progress_callback,  # Let DownloadManager handle progress
+                speed_callback=speed_callback,  # Let DownloadManager handle speed
                 headers=headers
             )
 

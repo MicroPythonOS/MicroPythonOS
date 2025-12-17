@@ -699,15 +699,18 @@ class MockDownloadManager:
         self.url_received = None
         self.call_history = []
         self.chunk_size = 1024  # Default chunk size for streaming
+        self.simulated_speed_bps = 100 * 1024  # 100 KB/s default simulated speed
 
     async def download_url(self, url, outfile=None, total_size=None,
-                          progress_callback=None, chunk_callback=None, headers=None):
+                          progress_callback=None, chunk_callback=None, headers=None,
+                          speed_callback=None):
         """
         Mock async download with flexible output modes.
 
         Simulates the real DownloadManager behavior including:
         - Streaming chunks via chunk_callback
-        - Progress reporting via progress_callback (based on total size)
+        - Progress reporting via progress_callback with 2-decimal precision
+        - Speed reporting via speed_callback
         - Network failure simulation
 
         Args:
@@ -715,8 +718,11 @@ class MockDownloadManager:
             outfile: Path to write file (optional)
             total_size: Expected size for progress tracking (optional)
             progress_callback: Async callback for progress updates (optional)
+                Called with percent as float with 2 decimal places (0.00-100.00)
             chunk_callback: Async callback for streaming chunks (optional)
             headers: HTTP headers dict (optional)
+            speed_callback: Async callback for speed updates (optional)
+                Called with bytes_per_second as float
 
         Returns:
             bytes: Downloaded content (if outfile and chunk_callback are None)
@@ -732,7 +738,8 @@ class MockDownloadManager:
             'total_size': total_size,
             'headers': headers,
             'has_progress_callback': progress_callback is not None,
-            'has_chunk_callback': chunk_callback is not None
+            'has_chunk_callback': chunk_callback is not None,
+            'has_speed_callback': speed_callback is not None
         })
 
         if self.should_fail:
@@ -751,6 +758,13 @@ class MockDownloadManager:
         
         # Use provided total_size or actual data size for progress calculation
         effective_total_size = total_size if total_size else total_data_size
+        
+        # Track progress to avoid duplicate callbacks
+        last_progress_pct = -1.0
+        
+        # Track speed reporting (simulate every ~1000 bytes for testing)
+        bytes_since_speed_update = 0
+        speed_update_threshold = 1000
 
         while bytes_sent < total_data_size:
             # Check if we should simulate network failure
@@ -768,11 +782,20 @@ class MockDownloadManager:
                 chunks.append(chunk)
 
             bytes_sent += len(chunk)
+            bytes_since_speed_update += len(chunk)
             
-            # Report progress (like real DownloadManager does)
+            # Report progress with 2-decimal precision (like real DownloadManager)
+            # Only call callback if progress changed by at least 0.01%
             if progress_callback and effective_total_size > 0:
-                percent = round((bytes_sent * 100) / effective_total_size)
-                await progress_callback(percent)
+                percent = round((bytes_sent * 100) / effective_total_size, 2)
+                if percent != last_progress_pct:
+                    await progress_callback(percent)
+                    last_progress_pct = percent
+            
+            # Report speed periodically
+            if speed_callback and bytes_since_speed_update >= speed_update_threshold:
+                await speed_callback(self.simulated_speed_bps)
+                bytes_since_speed_update = 0
 
         # Return based on mode
         if outfile or chunk_callback:
