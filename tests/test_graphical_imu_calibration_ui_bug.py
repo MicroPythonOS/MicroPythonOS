@@ -50,6 +50,11 @@ class TestIMUCalibrationUI(unittest.TestCase):
         wait_for_render(iterations=30)
         print("Settings app opened\n")
     
+        # Initialize touch device with dummy click (required for simulate_click to work)
+        print("Initializing touch input device...")
+        simulate_click(10, 10)
+        wait_for_render(iterations=10)
+    
         print("Current screen content:")
         print_screen_labels(lv.screen_active())
         print()

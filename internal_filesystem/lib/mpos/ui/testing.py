@@ -518,7 +518,7 @@ def _ensure_touch_indev():
         print("Created simulated touch input device")
 
 
-def simulate_click(x, y, press_duration_ms=50):
+def simulate_click(x, y, press_duration_ms=100):
     """
     Simulate a touch/click at the specified coordinates.
 
@@ -543,7 +543,7 @@ def simulate_click(x, y, press_duration_ms=50):
     Args:
         x: X coordinate to click (in pixels)
         y: Y coordinate to click (in pixels)
-        press_duration_ms: How long to hold the press (default: 50ms)
+        press_duration_ms: How long to hold the press (default: 100ms)
 
     Example:
         from mpos.ui.testing import simulate_click, wait_for_render
@@ -568,21 +568,37 @@ def simulate_click(x, y, press_duration_ms=50):
     _touch_y = y
     _touch_pressed = True
 
-    # Process the press immediately
+    # Process the press event
+    lv.task_handler()
+    time.sleep(0.02)
     lv.task_handler()
 
-    def release_timer_cb(timer):
-        """Timer callback to release the touch press."""
-        global _touch_pressed
-        _touch_pressed = False
-        lv.task_handler()  # Process the release immediately
+    # Wait for press duration
+    time.sleep(press_duration_ms / 1000.0)
 
-    # Schedule the release
-    timer = lv.timer_create(release_timer_cb, press_duration_ms, None)
-    timer.set_repeat_count(1)
+    # Release the touch
+    _touch_pressed = False
 
-def click_button(button_text, timeout=5):
-    """Find and click a button with given text."""
+    # Process the release event - this triggers the CLICKED event
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+
+def click_button(button_text, timeout=5, use_send_event=True):
+    """Find and click a button with given text.
+    
+    Args:
+        button_text: Text to search for in button labels
+        timeout: Maximum time to wait for button to appear (default: 5s)
+        use_send_event: If True, use send_event() which is more reliable for
+                        triggering button actions. If False, use simulate_click()
+                        which simulates actual touch input. (default: True)
+    
+    Returns:
+        True if button was found and clicked, False otherwise
+    """
     start = time.time()
     while time.time() - start < timeout:
         button = find_button_with_text(lv.screen_active(), button_text)
@@ -590,28 +606,167 @@ def click_button(button_text, timeout=5):
             coords = get_widget_coords(button)
             if coords:
                 print(f"Clicking button '{button_text}' at ({coords['center_x']}, {coords['center_y']})")
-                simulate_click(coords['center_x'], coords['center_y'])
+                if use_send_event:
+                    # Use send_event for more reliable button triggering
+                    button.send_event(lv.EVENT.CLICKED, None)
+                else:
+                    # Use simulate_click for actual touch simulation
+                    simulate_click(coords['center_x'], coords['center_y'])
                 wait_for_render(iterations=20)
                 return True
         wait_for_render(iterations=5)
     print(f"ERROR: Button '{button_text}' not found after {timeout}s")
     return False
 
-def click_label(label_text, timeout=5):
-    """Find a label with given text and click on it (or its clickable parent)."""
+def click_label(label_text, timeout=5, use_send_event=True):
+    """Find a label with given text and click on it (or its clickable parent).
+    
+    This function finds a label, scrolls it into view (with multiple attempts
+    if needed), verifies it's within the visible viewport, and then clicks it.
+    If the label itself is not clickable, it will try clicking the parent container.
+    
+    Args:
+        label_text: Text to search for in labels
+        timeout: Maximum time to wait for label to appear (default: 5s)
+        use_send_event: If True, use send_event() on clickable parent which is more
+                        reliable. If False, use simulate_click(). (default: True)
+    
+    Returns:
+        True if label was found and clicked, False otherwise
+    """
     start = time.time()
     while time.time() - start < timeout:
         label = find_label_with_text(lv.screen_active(), label_text)
         if label:
-            print("Scrolling label to view...")
-            label.scroll_to_view_recursive(True)
-            wait_for_render(iterations=50) # needs quite a bit of time
+            # Get screen dimensions for viewport check
+            screen = lv.screen_active()
+            screen_coords = get_widget_coords(screen)
+            if not screen_coords:
+                screen_coords = {'x1': 0, 'y1': 0, 'x2': 320, 'y2': 240}
+            
+            # Try scrolling multiple times to ensure label is fully visible
+            max_scroll_attempts = 5
+            for scroll_attempt in range(max_scroll_attempts):
+                print(f"Scrolling label to view (attempt {scroll_attempt + 1}/{max_scroll_attempts})...")
+                label.scroll_to_view_recursive(True)
+                wait_for_render(iterations=50)  # needs quite a bit of time for scroll animation
+                
+                # Get updated coordinates after scroll
+                coords = get_widget_coords(label)
+                if not coords:
+                    break
+                
+                # Check if label center is within visible viewport
+                # Account for some margin (e.g., status bar at top, nav bar at bottom)
+                # Use a larger bottom margin to ensure the element is fully clickable
+                viewport_top = screen_coords['y1'] + 30  # Account for status bar
+                viewport_bottom = screen_coords['y2'] - 30  # Larger margin at bottom for clickability
+                viewport_left = screen_coords['x1']
+                viewport_right = screen_coords['x2']
+                
+                center_x = coords['center_x']
+                center_y = coords['center_y']
+                
+                is_visible = (viewport_left <= center_x <= viewport_right and
+                              viewport_top <= center_y <= viewport_bottom)
+                
+                if is_visible:
+                    print(f"Label '{label_text}' is visible at ({center_x}, {center_y})")
+                    
+                    # Try to find a clickable parent (container) - many UIs have clickable containers
+                    # with non-clickable labels inside. We'll click on the label's position but
+                    # the event should bubble up to the clickable parent.
+                    click_target = label
+                    clickable_parent = None
+                    click_coords = coords
+                    try:
+                        parent = label.get_parent()
+                        if parent and parent.has_flag(lv.obj.FLAG.CLICKABLE):
+                            # The parent is clickable - we can use send_event on it
+                            clickable_parent = parent
+                            parent_coords = get_widget_coords(parent)
+                            if parent_coords:
+                                print(f"Found clickable parent container: ({parent_coords['x1']}, {parent_coords['y1']}) to ({parent_coords['x2']}, {parent_coords['y2']})")
+                                # Use label's x but ensure y is within parent bounds
+                                click_x = center_x
+                                click_y = center_y
+                                # Clamp to parent bounds with some margin
+                                if click_y < parent_coords['y1'] + 5:
+                                    click_y = parent_coords['y1'] + 5
+                                if click_y > parent_coords['y2'] - 5:
+                                    click_y = parent_coords['y2'] - 5
+                                click_coords = {'center_x': click_x, 'center_y': click_y}
+                    except Exception as e:
+                        print(f"Could not check parent clickability: {e}")
+                    
+                    print(f"Clicking label '{label_text}' at ({click_coords['center_x']}, {click_coords['center_y']})")
+                    if use_send_event and clickable_parent:
+                        # Use send_event on the clickable parent for more reliable triggering
+                        print(f"Using send_event on clickable parent")
+                        clickable_parent.send_event(lv.EVENT.CLICKED, None)
+                    else:
+                        # Use simulate_click for actual touch simulation
+                        simulate_click(click_coords['center_x'], click_coords['center_y'])
+                    wait_for_render(iterations=20)
+                    return True
+                else:
+                    print(f"Label '{label_text}' at ({center_x}, {center_y}) not fully visible "
+                          f"(viewport: y={viewport_top}-{viewport_bottom}), scrolling more...")
+                    # Additional scroll - try scrolling the parent container
+                    try:
+                        parent = label.get_parent()
+                        if parent:
+                            # Try to find a scrollable ancestor
+                            scrollable = parent
+                            for _ in range(5):  # Check up to 5 levels up
+                                try:
+                                    grandparent = scrollable.get_parent()
+                                    if grandparent:
+                                        scrollable = grandparent
+                                except:
+                                    break
+                            
+                            # Scroll by a fixed amount to bring label more into view
+                            current_scroll = scrollable.get_scroll_y()
+                            if center_y > viewport_bottom:
+                                # Need to scroll down (increase scroll_y)
+                                scrollable.scroll_to_y(current_scroll + 60, True)
+                            elif center_y < viewport_top:
+                                # Need to scroll up (decrease scroll_y)
+                                scrollable.scroll_to_y(max(0, current_scroll - 60), True)
+                            wait_for_render(iterations=30)
+                    except Exception as e:
+                        print(f"Additional scroll failed: {e}")
+            
+            # If we exhausted scroll attempts, try clicking anyway
             coords = get_widget_coords(label)
             if coords:
-                print(f"Clicking label '{label_text}' at ({coords['center_x']}, {coords['center_y']})")
-                simulate_click(coords['center_x'], coords['center_y'])
+                # Try to find a clickable parent even for fallback click
+                click_coords = coords
+                try:
+                    parent = label.get_parent()
+                    if parent and parent.has_flag(lv.obj.FLAG.CLICKABLE):
+                        parent_coords = get_widget_coords(parent)
+                        if parent_coords:
+                            click_coords = parent_coords
+                            print(f"Using clickable parent for fallback click")
+                except:
+                    pass
+                
+                print(f"Clicking at ({click_coords['center_x']}, {click_coords['center_y']}) after max scroll attempts")
+                # Try to use send_event if we have a clickable parent
+                try:
+                    parent = label.get_parent()
+                    if use_send_event and parent and parent.has_flag(lv.obj.FLAG.CLICKABLE):
+                        print(f"Using send_event on clickable parent for fallback")
+                        parent.send_event(lv.EVENT.CLICKED, None)
+                    else:
+                        simulate_click(click_coords['center_x'], click_coords['center_y'])
+                except:
+                    simulate_click(click_coords['center_x'], click_coords['center_y'])
                 wait_for_render(iterations=20)
                 return True
+                
         wait_for_render(iterations=5)
     print(f"ERROR: Label '{label_text}' not found after {timeout}s")
     return False
