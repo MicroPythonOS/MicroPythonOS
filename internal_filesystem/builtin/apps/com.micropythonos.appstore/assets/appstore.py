@@ -186,6 +186,7 @@ class AppStore(Activity):
     Optionally:
     - progress_callback is called with the % (0-100) progress
     - if total_size is not provided, it will be taken from the response headers (if present) or default to 100KB
+    - a dict of headers can be passed, for example: headers['Range'] = f'bytes={self.bytes_written_so_far}-'
 
     Can return either:
     - the actual content
@@ -193,11 +194,11 @@ class AppStore(Activity):
     - True: if the URL was successfully downloaded (and written to outfile, if provided)
     - False: if the URL was not successfully download and written to outfile
     '''
-    async def download_url(self, url, outfile=None, total_size=None, progress_callback=None, chunk_callback=None):
+    async def download_url(self, url, outfile=None, total_size=None, progress_callback=None, chunk_callback=None, headers=None):
         print(f"Downloading {url}")
         #await TaskManager.sleep(4) # test slowness
         try:
-            async with self.aiohttp_session.get(url) as response:
+            async with self.aiohttp_session.get(url, headers=headers) as response:
                 if response.status < 200 or response.status >= 400:
                     return False if outfile else None
 
