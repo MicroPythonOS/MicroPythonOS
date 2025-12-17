@@ -46,6 +46,7 @@ class RecordStream:
     # Default recording parameters
     DEFAULT_SAMPLE_RATE = 16000  # 16kHz - good for voice
     DEFAULT_MAX_DURATION_MS = 60000  # 60 seconds max
+    DEFAULT_FILESIZE = 1024 * 1024 * 1024 # 1GB data size because it can't be quickly set after recording
 
     def __init__(self, file_path, duration_ms, sample_rate, i2s_pins, on_complete):
         """
@@ -128,7 +129,7 @@ class RecordStream:
         return bytes(header)
 
     @staticmethod
-    def _update_wav_header(f, data_size):
+    def _update_wav_header(file_path, data_size):
         """
         Update WAV header with final data size.
 
@@ -138,6 +139,8 @@ class RecordStream:
         """
         file_size = data_size + 36
 
+        f = open(file_path, 'r+b')
+
         # Update file size at offset 4
         f.seek(4)
         f.write(file_size.to_bytes(4, 'little'))
@@ -145,6 +148,9 @@ class RecordStream:
         # Update data size at offset 40
         f.seek(40)
         f.write(data_size.to_bytes(4, 'little'))
+
+        f.close()
+
 
     # ----------------------------------------------------------------------
     #  Desktop simulation - generate 440Hz sine wave
@@ -214,7 +220,7 @@ class RecordStream:
                     self.sample_rate,
                     num_channels=1,
                     bits_per_sample=16,
-                    data_size=0
+                    data_size=self.DEFAULT_FILESIZE
                 )
                 f.write(header)
                 print(f"RecordStream: Header written ({len(header)} bytes)")
@@ -319,23 +325,8 @@ class RecordStream:
                 f.close()
                 print(f"RecordStream: File closed in {time.ticks_diff(time.ticks_ms(), t0)}ms")
 
-            # Now reopen to update header
-            # This avoids the massive delay caused by seeking backwards in a large file
-            # on ESP32 with SD card (FAT filesystem buffering issue)
-            print(f"RecordStream: Reopening file to update WAV header...")
-            t0 = time.ticks_ms()
-            f = open(self.file_path, 'r+b')
-            print(f"RecordStream: File reopened in {time.ticks_diff(time.ticks_ms(), t0)}ms")
-
-            print(f"RecordStream: Updating WAV header with data_size={self._bytes_recorded}")
-            t0 = time.ticks_ms()
-            self._update_wav_header(f, self._bytes_recorded)
-            print(f"RecordStream: Header updated in {time.ticks_diff(time.ticks_ms(), t0)}ms")
-
-            print(f"RecordStream: Closing header file...")
-            t0 = time.ticks_ms()
-            f.close()
-            print(f"RecordStream: Header file closed in {time.ticks_diff(time.ticks_ms(), t0)}ms")
+            # Disabled because seeking takes too long on LittleFS2:
+            #self._update_wav_header(self.file_path, self._bytes_recorded)
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), start_time)
             print(f"RecordStream: Finished recording {self._bytes_recorded} bytes ({elapsed_ms}ms)")
