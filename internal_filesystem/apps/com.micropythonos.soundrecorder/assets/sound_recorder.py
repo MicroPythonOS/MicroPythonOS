@@ -120,13 +120,6 @@ class SoundRecorder(Activity):
         delete_label.set_text(lv.SYMBOL.TRASH + " Delete")
         delete_label.center()
 
-        # Add to focus group
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(self._record_button)
-            focusgroup.add_obj(self._play_button)
-            focusgroup.add_obj(self._delete_button)
-
         self.setContentView(screen)
 
     def onResume(self, screen):
