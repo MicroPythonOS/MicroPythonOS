@@ -296,12 +296,18 @@ import mpos.audio.audioflinger as AudioFlinger
 # Initialize buzzer (GPIO 46)
 buzzer = PWM(Pin(46), freq=550, duty=0)
 
-# I2S pin configuration (GPIO 2, 47, 16)
+# I2S pin configuration for audio output (DAC) and input (microphone)
 # Note: I2S is created per-stream, not at boot (only one instance can exist)
+# The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
+# See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 i2s_pins = {
-    'sck': 2,
-    'ws': 47,
-    'sd': 16,
+    # Output (DAC/speaker) pins
+    'sck': 2,       # BCK - Bit Clock for DAC output
+    'ws': 47,       # Word Select / LRCLK (shared between DAC and mic)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    # Input (microphone) pins
+    'sck_in': 17,   # SCLK - Serial Clock for microphone input
+    'sd_in': 15,    # DIN - Serial Data IN (microphone)
 }
 
 # Initialize AudioFlinger with I2S and buzzer

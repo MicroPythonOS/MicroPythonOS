@@ -98,9 +98,17 @@ mpos.battery_voltage.init_adc(999, adc_to_voltage)
 # === AUDIO HARDWARE ===
 import mpos.audio.audioflinger as AudioFlinger
 
-# Note: Desktop builds have no audio hardware
-# AudioFlinger functions will return False (no-op)
-AudioFlinger.init()
+# Desktop builds have no real audio hardware, but we simulate microphone
+# recording with a 440Hz sine wave for testing WAV file generation
+# The i2s_pins dict with 'sd_in' enables has_microphone() to return True
+i2s_pins = {
+    'sck': 0,       # Simulated - not used on desktop
+    'ws': 0,        # Simulated - not used on desktop
+    'sd': 0,        # Simulated - not used on desktop
+    'sck_in': 0,    # Simulated - not used on desktop
+    'sd_in': 0,     # Simulated - enables microphone simulation
+}
+AudioFlinger.init(i2s_pins=i2s_pins)
 
 # === LED HARDWARE ===
 # Note: Desktop builds have no LED hardware

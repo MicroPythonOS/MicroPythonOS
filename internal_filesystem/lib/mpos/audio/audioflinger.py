@@ -2,8 +2,8 @@
 # Centralized audio routing with priority-based audio focus (Android-inspired)
 # Supports I2S (digital audio) and PWM buzzer (tones/ringtones)
 #
-# Simple routing: play_wav() -> I2S, play_rtttl() -> buzzer
-# Uses _thread for non-blocking background playback (separate thread from UI)
+# Simple routing: play_wav() -> I2S, play_rtttl() -> buzzer, record_wav() -> I2S mic
+# Uses _thread for non-blocking background playback/recording (separate thread from UI)
 
 import _thread
 import mpos.apps
@@ -17,6 +17,7 @@ STREAM_ALARM = 2         # Alarms/alerts (highest priority)
 _i2s_pins = None          # I2S pin configuration dict (created per-stream)
 _buzzer_instance = None   # PWM buzzer instance
 _current_stream = None    # Currently playing stream
+_current_recording = None # Currently recording stream
 _volume = 50              # System volume (0-100)
 
 
@@ -54,6 +55,11 @@ def has_i2s():
 def has_buzzer():
     """Check if buzzer is available for RTTTL playback."""
     return _buzzer_instance is not None
+
+
+def has_microphone():
+    """Check if I2S microphone is available for recording."""
+    return _i2s_pins is not None and 'sd_in' in _i2s_pins
 
 
 def _check_audio_focus(stream_type):
@@ -193,15 +199,108 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
         return False
 
 
+def _recording_thread(stream):
+    """
+    Thread function for audio recording.
+    Runs in a separate thread to avoid blocking the UI.
+
+    Args:
+        stream: RecordStream instance
+    """
+    global _current_recording
+
+    _current_recording = stream
+
+    try:
+        # Run synchronous recording in this thread
+        stream.record()
+    except Exception as e:
+        print(f"AudioFlinger: Recording error: {e}")
+    finally:
+        # Clear current recording
+        if _current_recording == stream:
+            _current_recording = None
+
+
+def record_wav(file_path, duration_ms=None, on_complete=None, sample_rate=16000):
+    """
+    Record audio from I2S microphone to WAV file.
+
+    Args:
+        file_path: Path to save WAV file (e.g., "data/recording.wav")
+        duration_ms: Recording duration in milliseconds (None = 60 seconds default)
+        on_complete: Callback function(message) when recording finishes
+        sample_rate: Sample rate in Hz (default 16000 for voice)
+
+    Returns:
+        bool: True if recording started, False if rejected or unavailable
+    """
+    print(f"AudioFlinger.record_wav() called")
+    print(f"  file_path: {file_path}")
+    print(f"  duration_ms: {duration_ms}")
+    print(f"  sample_rate: {sample_rate}")
+    print(f"  _i2s_pins: {_i2s_pins}")
+    print(f"  has_microphone(): {has_microphone()}")
+
+    if not has_microphone():
+        print("AudioFlinger: record_wav() failed - microphone not configured")
+        return False
+
+    # Cannot record while playing (I2S can only be TX or RX, not both)
+    if is_playing():
+        print("AudioFlinger: Cannot record while playing")
+        return False
+
+    # Cannot start new recording while already recording
+    if is_recording():
+        print("AudioFlinger: Already recording")
+        return False
+
+    # Create stream and start recording in separate thread
+    try:
+        print("AudioFlinger: Importing RecordStream...")
+        from mpos.audio.stream_record import RecordStream
+
+        print("AudioFlinger: Creating RecordStream instance...")
+        stream = RecordStream(
+            file_path=file_path,
+            duration_ms=duration_ms,
+            sample_rate=sample_rate,
+            i2s_pins=_i2s_pins,
+            on_complete=on_complete
+        )
+
+        print("AudioFlinger: Starting recording thread...")
+        _thread.stack_size(mpos.apps.good_stack_size())
+        _thread.start_new_thread(_recording_thread, (stream,))
+        print("AudioFlinger: Recording thread started successfully")
+        return True
+
+    except Exception as e:
+        import sys
+        print(f"AudioFlinger: record_wav() failed: {e}")
+        sys.print_exception(e)
+        return False
+
+
 def stop():
-    """Stop current audio playback."""
-    global _current_stream
+    """Stop current audio playback or recording."""
+    global _current_stream, _current_recording
+
+    stopped = False
 
     if _current_stream:
         _current_stream.stop()
         print("AudioFlinger: Playback stopped")
-    else:
-        print("AudioFlinger: No playback to stop")
+        stopped = True
+
+    if _current_recording:
+        _current_recording.stop()
+        print("AudioFlinger: Recording stopped")
+        stopped = True
+
+    if not stopped:
+        print("AudioFlinger: No playback or recording to stop")
 
 
 def pause():
@@ -259,3 +358,13 @@ def is_playing():
         bool: True if playback active, False otherwise
     """
     return _current_stream is not None and _current_stream.is_playing()
+
+
+def is_recording():
+    """
+    Check if audio is currently being recorded.
+
+    Returns:
+        bool: True if recording active, False otherwise
+    """
+    return _current_recording is not None and _current_recording.is_recording()

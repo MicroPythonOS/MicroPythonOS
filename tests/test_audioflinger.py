@@ -142,3 +142,65 @@ class TestAudioFlinger(unittest.TestCase):
         # After init, volume should be at default (70)
         AudioFlinger.init(i2s_pins=None, buzzer_instance=None)
         self.assertEqual(AudioFlinger.get_volume(), 70)
+
+
+class TestAudioFlingerRecording(unittest.TestCase):
+    """Test cases for AudioFlinger recording functionality."""
+
+    def setUp(self):
+        """Initialize AudioFlinger with microphone before each test."""
+        self.buzzer = MockPWM(MockPin(46))
+        # I2S pins with microphone input
+        self.i2s_pins_with_mic = {'sck': 2, 'ws': 47, 'sd': 16, 'sd_in': 15}
+        # I2S pins without microphone input
+        self.i2s_pins_no_mic = {'sck': 2, 'ws': 47, 'sd': 16}
+
+        # Reset state
+        AudioFlinger._current_recording = None
+        AudioFlinger.set_volume(70)
+
+        AudioFlinger.init(
+            i2s_pins=self.i2s_pins_with_mic,
+            buzzer_instance=self.buzzer
+        )
+
+    def tearDown(self):
+        """Clean up after each test."""
+        AudioFlinger.stop()
+
+    def test_has_microphone_with_sd_in(self):
+        """Test has_microphone() returns True when sd_in pin is configured."""
+        AudioFlinger.init(i2s_pins=self.i2s_pins_with_mic, buzzer_instance=None)
+        self.assertTrue(AudioFlinger.has_microphone())
+
+    def test_has_microphone_without_sd_in(self):
+        """Test has_microphone() returns False when sd_in pin is not configured."""
+        AudioFlinger.init(i2s_pins=self.i2s_pins_no_mic, buzzer_instance=None)
+        self.assertFalse(AudioFlinger.has_microphone())
+
+    def test_has_microphone_no_i2s(self):
+        """Test has_microphone() returns False when no I2S is configured."""
+        AudioFlinger.init(i2s_pins=None, buzzer_instance=self.buzzer)
+        self.assertFalse(AudioFlinger.has_microphone())
+
+    def test_is_recording_initially_false(self):
+        """Test that is_recording() returns False initially."""
+        self.assertFalse(AudioFlinger.is_recording())
+
+    def test_record_wav_no_microphone(self):
+        """Test that record_wav() fails when no microphone is configured."""
+        AudioFlinger.init(i2s_pins=self.i2s_pins_no_mic, buzzer_instance=None)
+        result = AudioFlinger.record_wav("test.wav")
+        self.assertFalse(result)
+
+    def test_record_wav_no_i2s(self):
+        """Test that record_wav() fails when no I2S is configured."""
+        AudioFlinger.init(i2s_pins=None, buzzer_instance=self.buzzer)
+        result = AudioFlinger.record_wav("test.wav")
+        self.assertFalse(result)
+
+    def test_stop_with_no_recording(self):
+        """Test that stop() can be called when nothing is recording."""
+        # Should not raise exception
+        AudioFlinger.stop()
+        self.assertFalse(AudioFlinger.is_recording())
