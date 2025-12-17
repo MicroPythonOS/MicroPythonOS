@@ -304,9 +304,8 @@ i2s_pins = {
     'sd': 16,
 }
 
-# Initialize AudioFlinger (both I2S and buzzer available)
+# Initialize AudioFlinger with I2S and buzzer
 AudioFlinger.init(
-    device_type=AudioFlinger.DEVICE_BOTH,
     i2s_pins=i2s_pins,
     buzzer_instance=buzzer
 )

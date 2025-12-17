@@ -1,17 +1,12 @@
 # AudioFlinger - Centralized Audio Management Service for MicroPythonOS
 # Android-inspired audio routing with priority-based audio focus
+# Simple routing: play_wav() -> I2S, play_rtttl() -> buzzer
 
 from . import audioflinger
 
 # Re-export main API
 from .audioflinger import (
-    # Device types
-    DEVICE_NULL,
-    DEVICE_I2S,
-    DEVICE_BUZZER,
-    DEVICE_BOTH,
-
-    # Stream types
+    # Stream types (for priority-based audio focus)
     STREAM_MUSIC,
     STREAM_NOTIFICATION,
     STREAM_ALARM,
@@ -25,17 +20,14 @@ from .audioflinger import (
     resume,
     set_volume,
     get_volume,
-    get_device_type,
     is_playing,
+    
+    # Hardware availability checks
+    has_i2s,
+    has_buzzer,
 )
 
 __all__ = [
-    # Device types
-    'DEVICE_NULL',
-    'DEVICE_I2S',
-    'DEVICE_BUZZER',
-    'DEVICE_BOTH',
-
     # Stream types
     'STREAM_MUSIC',
     'STREAM_NOTIFICATION',
@@ -50,6 +42,7 @@ __all__ = [
     'resume',
     'set_volume',
     'get_volume',
-    'get_device_type',
     'is_playing',
+    'has_i2s',
+    'has_buzzer',
 ]

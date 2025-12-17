@@ -113,8 +113,8 @@ except Exception as e:
 # === AUDIO HARDWARE ===
 import mpos.audio.audioflinger as AudioFlinger
 
-# Note: Waveshare board has no buzzer or I2S audio:
-AudioFlinger.init(device_type=AudioFlinger.DEVICE_NULL)
+# Note: Waveshare board has no buzzer or I2S audio
+AudioFlinger.init()
 
 # === LED HARDWARE ===
 # Note: Waveshare board has no NeoPixel LEDs

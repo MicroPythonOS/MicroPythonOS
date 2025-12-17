@@ -100,11 +100,7 @@ import mpos.audio.audioflinger as AudioFlinger
 
 # Note: Desktop builds have no audio hardware
 # AudioFlinger functions will return False (no-op)
-AudioFlinger.init(
-    device_type=AudioFlinger.DEVICE_NULL,
-    i2s_pins=None,
-    buzzer_instance=None
-)
+AudioFlinger.init()
 
 # === LED HARDWARE ===
 # Note: Desktop builds have no LED hardware

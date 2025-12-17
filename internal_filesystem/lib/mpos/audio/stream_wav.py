@@ -1,12 +1,13 @@
 # WAVStream - WAV File Playback Stream for AudioFlinger
 # Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling, volume control
-# Ported from MusicPlayer's AudioPlayer class
+# Uses async playback with TaskManager for non-blocking operation
 
 import machine
 import micropython
 import os
-import time
 import sys
+
+from mpos.task_manager import TaskManager
 
 # Volume scaling function - Viper-optimized for ESP32 performance
 # NOTE: The line below is automatically commented out by build_mpos.sh during
@@ -313,8 +314,8 @@ class WAVStream:
     # ----------------------------------------------------------------------
     #  Main playback routine
     # ----------------------------------------------------------------------
-    def play(self):
-        """Main playback routine (runs in background thread)."""
+    async def play_async(self):
+        """Main async playback routine (runs as TaskManager task)."""
         self._is_playing = True
 
         try:
@@ -363,23 +364,12 @@ class WAVStream:
                 print(f"WAVStream: Playing {data_size} bytes (volume {self.volume}%)")
                 f.seek(data_start)
 
-                # smaller chunk size means less jerks but buffer can run empty
-                # at 22050 Hz, 16-bit, 2-ch, 4096/4 = 1024 samples / 22050 = 46ms
-                # with rough volume scaling:
-                # 4096 => audio stutters during quasibird at ~20fps
-                # 8192 => no audio stutters and quasibird runs at ~16 fps => good compromise!
-                # 16384 => no audio stutters during quasibird but low framerate (~8fps)
-                # with optimized volume scaling:
-                # 6144 => audio stutters and quasibird at ~17fps
-                # 7168 => audio slightly stutters and quasibird at ~16fps
-                # 8192 => no audio stutters and quasibird runs at ~15-17fps => this is probably best
-                # with shift volume scaling:
-                # 6144 => audio slightly stutters and quasibird at ~16fps?!
-                # 8192 => no audio stutters, quasibird runs at ~13fps?!
-                # with power of 2 thing:
-                # 6144 => audio sutters and quasibird at ~18fps
-                # 8192 => no audio stutters, quasibird runs at ~14fps
-                chunk_size = 8192
+                # Chunk size tuning notes:
+                # - Smaller chunks = more responsive to stop(), better async yielding
+                # - Larger chunks = less overhead, smoother audio
+                # - 4096 bytes with async yield works well for responsiveness
+                # - The 32KB I2S buffer handles timing smoothness
+                chunk_size = 4096
                 bytes_per_original_sample = (bits_per_sample // 8) * channels
                 total_original = 0
 
@@ -412,8 +402,6 @@ class WAVStream:
                         raw = self._upsample_buffer(raw, upsample_factor)
 
                     # 3. Volume scaling
-                    #shift = 16 - int(self.volume / 6.25)
-                    #_scale_audio_powers_of_2(raw, len(raw), shift)
                     scale = self.volume / 100.0
                     if scale < 1.0:
                         scale_fixed = int(scale * 32768)
@@ -425,9 +413,12 @@ class WAVStream:
                     else:
                         # Simulate playback timing if no I2S
                         num_samples = len(raw) // (2 * channels)
-                        time.sleep(num_samples / playback_rate)
+                        await TaskManager.sleep(num_samples / playback_rate)
 
                     total_original += to_read
+                    
+                    # Yield to other async tasks after each chunk
+                    await TaskManager.sleep_ms(0)
 
                 print(f"WAVStream: Finished playing {self.file_path}")
                 if self.on_complete:

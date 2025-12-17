@@ -1,12 +1,11 @@
 # AudioFlinger - Core Audio Management Service
 # Centralized audio routing with priority-based audio focus (Android-inspired)
 # Supports I2S (digital audio) and PWM buzzer (tones/ringtones)
+#
+# Simple routing: play_wav() -> I2S, play_rtttl() -> buzzer
+# Uses TaskManager (asyncio) for non-blocking background playback
 
-# Device type constants
-DEVICE_NULL = 0      # No audio hardware (desktop fallback)
-DEVICE_I2S = 1       # Digital audio output (WAV playback)
-DEVICE_BUZZER = 2    # PWM buzzer (tones/RTTTL)
-DEVICE_BOTH = 3      # Both I2S and buzzer available
+from mpos.task_manager import TaskManager
 
 # Stream type constants (priority order: higher number = higher priority)
 STREAM_MUSIC = 0         # Background music (lowest priority)
@@ -14,45 +13,47 @@ STREAM_NOTIFICATION = 1  # Notification sounds (medium priority)
 STREAM_ALARM = 2         # Alarms/alerts (highest priority)
 
 # Module-level state (singleton pattern, follows battery_voltage.py)
-_device_type = DEVICE_NULL
 _i2s_pins = None          # I2S pin configuration dict (created per-stream)
 _buzzer_instance = None   # PWM buzzer instance
 _current_stream = None    # Currently playing stream
+_current_task = None      # Currently running playback task
 _volume = 50              # System volume (0-100)
-_stream_lock = None       # Thread lock for stream management
 
 
-def init(device_type, i2s_pins=None, buzzer_instance=None):
+def init(i2s_pins=None, buzzer_instance=None):
     """
     Initialize AudioFlinger with hardware configuration.
 
     Args:
-        device_type: One of DEVICE_NULL, DEVICE_I2S, DEVICE_BUZZER, DEVICE_BOTH
-        i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers (for I2S devices)
-        buzzer_instance: PWM instance for buzzer (for buzzer devices)
+        i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers (for I2S/WAV playback)
+        buzzer_instance: PWM instance for buzzer (for RTTTL playback)
     """
-    global _device_type, _i2s_pins, _buzzer_instance, _stream_lock
+    global _i2s_pins, _buzzer_instance
 
-    _device_type = device_type
     _i2s_pins = i2s_pins
     _buzzer_instance = buzzer_instance
 
-    # Initialize thread lock for stream management
-    try:
-        import _thread
-        _stream_lock = _thread.allocate_lock()
-    except ImportError:
-        # Desktop mode - no threading support
-        _stream_lock = None
+    # Build status message
+    capabilities = []
+    if i2s_pins:
+        capabilities.append("I2S (WAV)")
+    if buzzer_instance:
+        capabilities.append("Buzzer (RTTTL)")
+    
+    if capabilities:
+        print(f"AudioFlinger initialized: {', '.join(capabilities)}")
+    else:
+        print("AudioFlinger initialized: No audio hardware")
 
-    device_names = {
-        DEVICE_NULL: "NULL (no audio)",
-        DEVICE_I2S: "I2S (digital audio)",
-        DEVICE_BUZZER: "Buzzer (PWM tones)",
-        DEVICE_BOTH: "Both (I2S + Buzzer)"
-    }
 
-    print(f"AudioFlinger initialized: {device_names.get(device_type, 'Unknown')}")
+def has_i2s():
+    """Check if I2S audio is available for WAV playback."""
+    return _i2s_pins is not None
+
+
+def has_buzzer():
+    """Check if buzzer is available for RTTTL playback."""
+    return _buzzer_instance is not None
 
 
 def _check_audio_focus(stream_type):
@@ -85,35 +86,27 @@ def _check_audio_focus(stream_type):
     return True
 
 
-def _playback_thread(stream):
+async def _playback_coroutine(stream):
     """
-    Background thread function for audio playback.
+    Async coroutine for audio playback.
 
     Args:
         stream: Stream instance (WAVStream or RTTTLStream)
     """
-    global _current_stream
+    global _current_stream, _current_task
 
-    # Acquire lock and set as current stream
-    if _stream_lock:
-        _stream_lock.acquire()
     _current_stream = stream
-    if _stream_lock:
-        _stream_lock.release()
 
     try:
-        # Run playback (blocks until complete or stopped)
-        stream.play()
+        # Run async playback
+        await stream.play_async()
     except Exception as e:
         print(f"AudioFlinger: Playback error: {e}")
     finally:
         # Clear current stream
-        if _stream_lock:
-            _stream_lock.acquire()
         if _current_stream == stream:
             _current_stream = None
-        if _stream_lock:
-            _stream_lock.release()
+            _current_task = None
 
 
 def play_wav(file_path, stream_type=STREAM_MUSIC, volume=None, on_complete=None):
@@ -129,29 +122,19 @@ def play_wav(file_path, stream_type=STREAM_MUSIC, volume=None, on_complete=None)
     Returns:
         bool: True if playback started, False if rejected or unavailable
     """
-    if _device_type not in (DEVICE_I2S, DEVICE_BOTH):
-        print("AudioFlinger: play_wav() failed - no I2S device available")
-        return False
+    global _current_task
 
     if not _i2s_pins:
-        print("AudioFlinger: play_wav() failed - I2S pins not configured")
+        print("AudioFlinger: play_wav() failed - I2S not configured")
         return False
 
     # Check audio focus
-    if _stream_lock:
-        _stream_lock.acquire()
-    can_start = _check_audio_focus(stream_type)
-    if _stream_lock:
-        _stream_lock.release()
-
-    if not can_start:
+    if not _check_audio_focus(stream_type):
         return False
 
-    # Create stream and start playback in background thread
+    # Create stream and start playback as async task
     try:
         from mpos.audio.stream_wav import WAVStream
-        import _thread
-        import mpos.apps
 
         stream = WAVStream(
             file_path=file_path,
@@ -161,8 +144,7 @@ def play_wav(file_path, stream_type=STREAM_MUSIC, volume=None, on_complete=None)
             on_complete=on_complete
         )
 
-        _thread.stack_size(mpos.apps.good_stack_size())
-        _thread.start_new_thread(_playback_thread, (stream,))
+        _current_task = TaskManager.create_task(_playback_coroutine(stream))
         return True
 
     except Exception as e:
@@ -183,29 +165,19 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
     Returns:
         bool: True if playback started, False if rejected or unavailable
     """
-    if _device_type not in (DEVICE_BUZZER, DEVICE_BOTH):
-        print("AudioFlinger: play_rtttl() failed - no buzzer device available")
-        return False
+    global _current_task
 
     if not _buzzer_instance:
-        print("AudioFlinger: play_rtttl() failed - buzzer not initialized")
+        print("AudioFlinger: play_rtttl() failed - buzzer not configured")
         return False
 
     # Check audio focus
-    if _stream_lock:
-        _stream_lock.acquire()
-    can_start = _check_audio_focus(stream_type)
-    if _stream_lock:
-        _stream_lock.release()
-
-    if not can_start:
+    if not _check_audio_focus(stream_type):
         return False
 
-    # Create stream and start playback in background thread
+    # Create stream and start playback as async task
     try:
         from mpos.audio.stream_rtttl import RTTTLStream
-        import _thread
-        import mpos.apps
 
         stream = RTTTLStream(
             rtttl_string=rtttl_string,
@@ -215,8 +187,7 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
             on_complete=on_complete
         )
 
-        _thread.stack_size(mpos.apps.good_stack_size())
-        _thread.start_new_thread(_playback_thread, (stream,))
+        _current_task = TaskManager.create_task(_playback_coroutine(stream))
         return True
 
     except Exception as e:
@@ -226,10 +197,7 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
 
 def stop():
     """Stop current audio playback."""
-    global _current_stream
-
-    if _stream_lock:
-        _stream_lock.acquire()
+    global _current_stream, _current_task
 
     if _current_stream:
         _current_stream.stop()
@@ -237,28 +205,17 @@ def stop():
     else:
         print("AudioFlinger: No playback to stop")
 
-    if _stream_lock:
-        _stream_lock.release()
-
 
 def pause():
     """
     Pause current audio playback (if supported by stream).
     Note: Most streams don't support pause, only stop.
     """
-    global _current_stream
-
-    if _stream_lock:
-        _stream_lock.acquire()
-
     if _current_stream and hasattr(_current_stream, 'pause'):
         _current_stream.pause()
         print("AudioFlinger: Playback paused")
     else:
         print("AudioFlinger: Pause not supported or no playback active")
-
-    if _stream_lock:
-        _stream_lock.release()
 
 
 def resume():
@@ -266,19 +223,11 @@ def resume():
     Resume paused audio playback (if supported by stream).
     Note: Most streams don't support resume, only play.
     """
-    global _current_stream
-
-    if _stream_lock:
-        _stream_lock.acquire()
-
     if _current_stream and hasattr(_current_stream, 'resume'):
         _current_stream.resume()
         print("AudioFlinger: Playback resumed")
     else:
         print("AudioFlinger: Resume not supported or no playback active")
-
-    if _stream_lock:
-        _stream_lock.release()
 
 
 def set_volume(volume):
@@ -304,16 +253,6 @@ def get_volume():
     return _volume
 
 
-def get_device_type():
-    """
-    Get configured audio device type.
-
-    Returns:
-        int: Device type (DEVICE_NULL, DEVICE_I2S, DEVICE_BUZZER, DEVICE_BOTH)
-    """
-    return _device_type
-
-
 def is_playing():
     """
     Check if audio is currently playing.
@@ -321,12 +260,4 @@ def is_playing():
     Returns:
         bool: True if playback active, False otherwise
     """
-    if _stream_lock:
-        _stream_lock.acquire()
-
-    result = _current_stream is not None and _current_stream.is_playing()
-
-    if _stream_lock:
-        _stream_lock.release()
-
-    return result
+    return _current_stream is not None and _current_stream.is_playing()
