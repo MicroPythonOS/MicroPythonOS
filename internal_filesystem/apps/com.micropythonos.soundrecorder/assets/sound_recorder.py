@@ -35,8 +35,13 @@ class SoundRecorder(Activity):
     """
 
     # Constants
-    MAX_DURATION_MS = 60000  # 60 seconds max recording
     RECORDINGS_DIR = "data/recordings"
+    SAMPLE_RATE = 16000  # 16kHz
+    BYTES_PER_SAMPLE = 2  # 16-bit audio
+    BYTES_PER_SECOND = SAMPLE_RATE * BYTES_PER_SAMPLE  # 32000 bytes/sec
+    MIN_DURATION_MS = 5000  # Minimum 5 seconds
+    MAX_DURATION_MS = 3600000  # Maximum 1 hour (absolute cap)
+    SAFETY_MARGIN = 0.80  # Use only 80% of available space
 
     # UI Widgets
     _status_label = None
@@ -57,6 +62,9 @@ class SoundRecorder(Activity):
     def onCreate(self):
         screen = lv.obj()
 
+        # Calculate max duration based on available storage
+        self._current_max_duration_ms = self._calculate_max_duration()
+
         # Title
         title = lv.label(screen)
         title.set_text("Sound Recorder")
@@ -69,7 +77,7 @@ class SoundRecorder(Activity):
 
         # Timer display
         self._timer_label = lv.label(screen)
-        self._timer_label.set_text("00:00 / 01:00")
+        self._timer_label.set_text(self._format_timer_text(0))
         self._timer_label.align(lv.ALIGN.CENTER, 0, -30)
         self._timer_label.set_style_text_font(lv.font_montserrat_24, 0)
 
@@ -123,6 +131,9 @@ class SoundRecorder(Activity):
 
     def onResume(self, screen):
         super().onResume(screen)
+        # Recalculate max duration (storage may have changed)
+        self._current_max_duration_ms = self._calculate_max_duration()
+        self._timer_label.set_text(self._format_timer_text(0))
         self._update_status()
         self._find_last_recording()
 
@@ -170,6 +181,57 @@ class SoundRecorder(Activity):
             print(f"SoundRecorder: Error finding recordings: {e}")
             self._last_recording = None
 
+    def _calculate_max_duration(self):
+        """
+        Calculate maximum recording duration based on available storage.
+        Returns duration in milliseconds.
+        """
+        try:
+            # Ensure recordings directory exists
+            _makedirs(self.RECORDINGS_DIR)
+
+            # Get filesystem stats for the recordings directory
+            stat = os.statvfs(self.RECORDINGS_DIR)
+
+            # Calculate free space in bytes
+            # f_bavail = free blocks available to non-superuser
+            # f_frsize = fragment size (fundamental block size)
+            free_bytes = stat[0] * stat[4]  # f_frsize * f_bavail
+
+            # Apply safety margin (use only 80% of available space)
+            usable_bytes = int(free_bytes * self.SAFETY_MARGIN)
+
+            # Calculate max duration in seconds
+            max_seconds = usable_bytes // self.BYTES_PER_SECOND
+
+            # Convert to milliseconds
+            max_ms = max_seconds * 1000
+
+            # Clamp to min/max bounds
+            max_ms = max(self.MIN_DURATION_MS, min(max_ms, self.MAX_DURATION_MS))
+
+            print(f"SoundRecorder: Free space: {free_bytes} bytes, "
+                  f"usable: {usable_bytes} bytes, max duration: {max_ms // 1000}s")
+
+            return max_ms
+
+        except Exception as e:
+            print(f"SoundRecorder: Error calculating max duration: {e}")
+            # Fall back to a conservative 60 seconds
+            return 60000
+
+    def _format_timer_text(self, elapsed_ms):
+        """Format timer display text showing elapsed / max time."""
+        elapsed_sec = elapsed_ms // 1000
+        max_sec = self._current_max_duration_ms // 1000
+
+        elapsed_min = elapsed_sec // 60
+        elapsed_sec_display = elapsed_sec % 60
+        max_min = max_sec // 60
+        max_sec_display = max_sec % 60
+
+        return f"{elapsed_min:02d}:{elapsed_sec_display:02d} / {max_min:02d}:{max_sec_display:02d}"
+
     def _generate_filename(self):
         """Generate a timestamped filename for the recording."""
         # Get current time
@@ -200,17 +262,26 @@ class SoundRecorder(Activity):
         file_path = self._generate_filename()
         print(f"SoundRecorder: Generated filename: {file_path}")
 
+        # Recalculate max duration before starting (storage may have changed)
+        self._current_max_duration_ms = self._calculate_max_duration()
+
+        if self._current_max_duration_ms < self.MIN_DURATION_MS:
+            print("SoundRecorder: Not enough storage space")
+            self._status_label.set_text("Not enough storage space")
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), 0)
+            return
+
         # Start recording
         print(f"SoundRecorder: Calling AudioFlinger.record_wav()")
         print(f"  file_path: {file_path}")
-        print(f"  duration_ms: {self.MAX_DURATION_MS}")
-        print(f"  sample_rate: 16000")
+        print(f"  duration_ms: {self._current_max_duration_ms}")
+        print(f"  sample_rate: {self.SAMPLE_RATE}")
 
         success = AudioFlinger.record_wav(
             file_path=file_path,
-            duration_ms=self.MAX_DURATION_MS,
+            duration_ms=self._current_max_duration_ms,
             on_complete=self._on_recording_complete,
-            sample_rate=16000
+            sample_rate=self.SAMPLE_RATE
         )
 
         print(f"SoundRecorder: record_wav returned: {success}")
@@ -281,7 +352,7 @@ class SoundRecorder(Activity):
         if self._timer_task:
             self._timer_task.delete()
             self._timer_task = None
-        self._timer_label.set_text("00:00 / 01:00")
+        self._timer_label.set_text(self._format_timer_text(0))
 
     def _update_timer(self, timer):
         """Update timer display (called periodically)."""
@@ -289,17 +360,7 @@ class SoundRecorder(Activity):
             return
 
         elapsed_ms = time.ticks_diff(time.ticks_ms(), self._record_start_time)
-        elapsed_sec = elapsed_ms // 1000
-        max_sec = self.MAX_DURATION_MS // 1000
-
-        elapsed_min = elapsed_sec // 60
-        elapsed_sec = elapsed_sec % 60
-        max_min = max_sec // 60
-        max_sec_display = max_sec % 60
-
-        self._timer_label.set_text(
-            f"{elapsed_min:02d}:{elapsed_sec:02d} / {max_min:02d}:{max_sec_display:02d}"
-        )
+        self._timer_label.set_text(self._format_timer_text(elapsed_ms))
 
     def _on_play_clicked(self, event):
         """Handle play button click."""
