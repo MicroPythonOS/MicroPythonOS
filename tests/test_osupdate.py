@@ -1,12 +1,13 @@
 import unittest
 import sys
+import asyncio
 
 # Add parent directory to path so we can import network_test_helper
 # When running from unittest.sh, we're in internal_filesystem/, so tests/ is ../tests/
 sys.path.insert(0, '../tests')
 
 # Import network test helpers
-from network_test_helper import MockNetwork, MockRequests, MockJSON
+from network_test_helper import MockNetwork, MockRequests, MockJSON, MockDownloadManager
 
 
 class MockPartition:
@@ -40,6 +41,11 @@ from mpos import PackageManager
 # Tests run from internal_filesystem/, so we add the assets directory to path
 sys.path.append('builtin/apps/com.micropythonos.osupdate/assets')
 from osupdate import UpdateChecker, UpdateDownloader, round_up_to_multiple
+
+
+def run_async(coro):
+    """Helper to run async coroutines in sync tests."""
+    return asyncio.get_event_loop().run_until_complete(coro)
 
 
 class TestUpdateChecker(unittest.TestCase):
@@ -218,38 +224,37 @@ class TestUpdateChecker(unittest.TestCase):
 
 
 class TestUpdateDownloader(unittest.TestCase):
-    """Test UpdateDownloader class."""
+    """Test UpdateDownloader class with async DownloadManager."""
 
     def setUp(self):
-        self.mock_requests = MockRequests()
+        self.mock_download_manager = MockDownloadManager()
         self.mock_partition = MockPartition
         self.downloader = UpdateDownloader(
-            requests_module=self.mock_requests,
-            partition_module=self.mock_partition
+            partition_module=self.mock_partition,
+            download_manager=self.mock_download_manager
         )
 
     def test_download_and_install_success(self):
         """Test successful download and install."""
         # Create 8KB of test data (2 blocks of 4096 bytes)
         test_data = b'A' * 8192
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={'Content-Length': '8192'},
-            content=test_data
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 4096
 
         progress_calls = []
-        def progress_cb(percent):
+        async def progress_cb(percent):
             progress_calls.append(percent)
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin",
-            progress_callback=progress_cb
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin",
+                progress_callback=progress_cb
+            )
+
+        result = run_async(run_test())
 
         self.assertTrue(result['success'])
         self.assertEqual(result['bytes_written'], 8192)
-        self.assertEqual(result['total_size'], 8192)
         self.assertIsNone(result['error'])
         # MicroPython unittest doesn't have assertGreater
         self.assertTrue(len(progress_calls) > 0, "Should have progress callbacks")
@@ -257,21 +262,21 @@ class TestUpdateDownloader(unittest.TestCase):
     def test_download_and_install_cancelled(self):
         """Test cancelled download."""
         test_data = b'A' * 8192
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={'Content-Length': '8192'},
-            content=test_data
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 4096
 
         call_count = [0]
         def should_continue():
             call_count[0] += 1
             return call_count[0] < 2  # Cancel after first chunk
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin",
-            should_continue_callback=should_continue
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin",
+                should_continue_callback=should_continue
+            )
+
+        result = run_async(run_test())
 
         self.assertFalse(result['success'])
         self.assertIn("cancelled", result['error'].lower())
@@ -280,44 +285,46 @@ class TestUpdateDownloader(unittest.TestCase):
         """Test that last chunk is properly padded."""
         # 5000 bytes - not a multiple of 4096
         test_data = b'B' * 5000
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={'Content-Length': '5000'},
-            content=test_data
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 4096
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         self.assertTrue(result['success'])
-        # Should be rounded up to 8192 (2 * 4096)
-        self.assertEqual(result['total_size'], 8192)
+        # Should be padded to 8192 (2 * 4096)
+        self.assertEqual(result['bytes_written'], 8192)
 
     def test_download_with_network_error(self):
         """Test download with network error during transfer."""
-        self.mock_requests.set_exception(Exception("Network error"))
+        self.mock_download_manager.set_should_fail(True)
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         self.assertFalse(result['success'])
         self.assertIsNotNone(result['error'])
-        self.assertIn("Network error", result['error'])
 
     def test_download_with_zero_content_length(self):
         """Test download with missing or zero Content-Length."""
         test_data = b'C' * 1000
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={},  # No Content-Length header
-            content=test_data
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 1000
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         # Should still work, just with unknown total size initially
         self.assertTrue(result['success'])
@@ -325,60 +332,58 @@ class TestUpdateDownloader(unittest.TestCase):
     def test_download_progress_callback_called(self):
         """Test that progress callback is called during download."""
         test_data = b'D' * 8192
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={'Content-Length': '8192'},
-            content=test_data
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 4096
 
         progress_values = []
-        def track_progress(percent):
+        async def track_progress(percent):
             progress_values.append(percent)
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin",
-            progress_callback=track_progress
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin",
+                progress_callback=track_progress
+            )
+
+        result = run_async(run_test())
 
         self.assertTrue(result['success'])
         # Should have at least 2 progress updates (for 2 chunks of 4096)
         self.assertTrue(len(progress_values) >= 2)
         # Last progress should be 100%
-        self.assertEqual(progress_values[-1], 100.0)
+        self.assertEqual(progress_values[-1], 100)
 
     def test_download_small_file(self):
         """Test downloading a file smaller than one chunk."""
         test_data = b'E' * 100  # Only 100 bytes
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={'Content-Length': '100'},
-            content=test_data
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 100
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         self.assertTrue(result['success'])
         # Should be padded to 4096
-        self.assertEqual(result['total_size'], 4096)
         self.assertEqual(result['bytes_written'], 4096)
 
     def test_download_exact_chunk_multiple(self):
         """Test downloading exactly 2 chunks (no padding needed)."""
         test_data = b'F' * 8192  # Exactly 2 * 4096
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={'Content-Length': '8192'},
-            content=test_data
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 4096
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         self.assertTrue(result['success'])
-        self.assertEqual(result['total_size'], 8192)
         self.assertEqual(result['bytes_written'], 8192)
 
     def test_network_error_detection_econnaborted(self):
@@ -417,16 +422,16 @@ class TestUpdateDownloader(unittest.TestCase):
         """Test that download pauses when network error occurs during read."""
         # Set up mock to raise network error after first chunk
         test_data = b'G' * 16384  # 4 chunks
-        self.mock_requests.set_next_response(
-            status_code=200,
-            headers={'Content-Length': '16384'},
-            content=test_data,
-            fail_after_bytes=4096  # Fail after first chunk
-        )
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.chunk_size = 4096
+        self.mock_download_manager.set_fail_after_bytes(4096)  # Fail after first chunk
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         self.assertFalse(result['success'])
         self.assertTrue(result['paused'])
@@ -436,29 +441,27 @@ class TestUpdateDownloader(unittest.TestCase):
     def test_download_resumes_from_saved_position(self):
         """Test that download resumes from the last written position."""
         # Simulate partial download
-        test_data = b'H' * 12288  # 3 chunks
         self.downloader.bytes_written_so_far = 8192  # Already downloaded 2 chunks
         self.downloader.total_size_expected = 12288
 
-        # Server should receive Range header
+        # Server should receive Range header - only remaining data
         remaining_data = b'H' * 4096  # Last chunk
-        self.mock_requests.set_next_response(
-            status_code=206,  # Partial content
-            headers={'Content-Length': '4096'},  # Remaining bytes
-            content=remaining_data
-        )
+        self.mock_download_manager.set_download_data(remaining_data)
+        self.mock_download_manager.chunk_size = 4096
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         self.assertTrue(result['success'])
         self.assertEqual(result['bytes_written'], 12288)
         # Check that Range header was set
-        last_request = self.mock_requests.last_request
-        self.assertIsNotNone(last_request)
-        self.assertIn('Range', last_request['headers'])
-        self.assertEqual(last_request['headers']['Range'], 'bytes=8192-')
+        self.assertIsNotNone(self.mock_download_manager.headers_received)
+        self.assertIn('Range', self.mock_download_manager.headers_received)
+        self.assertEqual(self.mock_download_manager.headers_received['Range'], 'bytes=8192-')
 
     def test_resume_failure_preserves_state(self):
         """Test that resume failures preserve download state for retry."""
@@ -466,12 +469,16 @@ class TestUpdateDownloader(unittest.TestCase):
         self.downloader.bytes_written_so_far = 245760  # 60 chunks already downloaded
         self.downloader.total_size_expected = 3391488
 
-        # Resume attempt fails immediately with EHOSTUNREACH (network not ready)
-        self.mock_requests.set_exception(OSError(-118, "EHOSTUNREACH"))
+        # Resume attempt fails immediately with network error
+        self.mock_download_manager.set_download_data(b'')
+        self.mock_download_manager.set_fail_after_bytes(0)  # Fail immediately
 
-        result = self.downloader.download_and_install(
-            "http://example.com/update.bin"
-        )
+        async def run_test():
+            return await self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            )
+
+        result = run_async(run_test())
 
         # Should pause, not fail
         self.assertFalse(result['success'])

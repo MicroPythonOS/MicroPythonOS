@@ -680,3 +680,217 @@ class MockTime:
     def clear_sleep_calls(self):
         """Clear the sleep call history."""
         self._sleep_calls = []
+
+
+class MockDownloadManager:
+    """
+    Mock DownloadManager for testing async downloads.
+
+    Simulates the mpos.DownloadManager module for testing without actual network I/O.
+    Supports chunk_callback mode for streaming downloads.
+    """
+
+    def __init__(self):
+        """Initialize mock download manager."""
+        self.download_data = b''
+        self.should_fail = False
+        self.fail_after_bytes = None
+        self.headers_received = None
+        self.url_received = None
+        self.call_history = []
+        self.chunk_size = 1024  # Default chunk size for streaming
+
+    async def download_url(self, url, outfile=None, total_size=None,
+                          progress_callback=None, chunk_callback=None, headers=None):
+        """
+        Mock async download with flexible output modes.
+
+        Simulates the real DownloadManager behavior including:
+        - Streaming chunks via chunk_callback
+        - Progress reporting via progress_callback (based on total size)
+        - Network failure simulation
+
+        Args:
+            url: URL to download
+            outfile: Path to write file (optional)
+            total_size: Expected size for progress tracking (optional)
+            progress_callback: Async callback for progress updates (optional)
+            chunk_callback: Async callback for streaming chunks (optional)
+            headers: HTTP headers dict (optional)
+
+        Returns:
+            bytes: Downloaded content (if outfile and chunk_callback are None)
+            bool: True if successful (when using outfile or chunk_callback)
+        """
+        self.url_received = url
+        self.headers_received = headers
+
+        # Record call in history
+        self.call_history.append({
+            'url': url,
+            'outfile': outfile,
+            'total_size': total_size,
+            'headers': headers,
+            'has_progress_callback': progress_callback is not None,
+            'has_chunk_callback': chunk_callback is not None
+        })
+
+        if self.should_fail:
+            if outfile or chunk_callback:
+                return False
+            return None
+
+        # Check for immediate failure (fail_after_bytes=0)
+        if self.fail_after_bytes is not None and self.fail_after_bytes == 0:
+            raise OSError(-113, "ECONNABORTED")
+
+        # Stream data in chunks
+        bytes_sent = 0
+        chunks = []
+        total_data_size = len(self.download_data)
+        
+        # Use provided total_size or actual data size for progress calculation
+        effective_total_size = total_size if total_size else total_data_size
+
+        while bytes_sent < total_data_size:
+            # Check if we should simulate network failure
+            if self.fail_after_bytes is not None and bytes_sent >= self.fail_after_bytes:
+                raise OSError(-113, "ECONNABORTED")
+
+            chunk = self.download_data[bytes_sent:bytes_sent + self.chunk_size]
+
+            if chunk_callback:
+                await chunk_callback(chunk)
+            elif outfile:
+                # For file mode, we'd write to file (mock just tracks)
+                pass
+            else:
+                chunks.append(chunk)
+
+            bytes_sent += len(chunk)
+            
+            # Report progress (like real DownloadManager does)
+            if progress_callback and effective_total_size > 0:
+                percent = round((bytes_sent * 100) / effective_total_size)
+                await progress_callback(percent)
+
+        # Return based on mode
+        if outfile or chunk_callback:
+            return True
+        else:
+            return b''.join(chunks)
+
+    def set_download_data(self, data):
+        """
+        Configure the data to return from downloads.
+
+        Args:
+            data: Bytes to return from download
+        """
+        self.download_data = data
+
+    def set_should_fail(self, should_fail):
+        """
+        Configure whether downloads should fail.
+
+        Args:
+            should_fail: True to make downloads fail
+        """
+        self.should_fail = should_fail
+
+    def set_fail_after_bytes(self, bytes_count):
+        """
+        Configure network failure after specified bytes.
+
+        Args:
+            bytes_count: Number of bytes to send before failing
+        """
+        self.fail_after_bytes = bytes_count
+
+    def clear_history(self):
+        """Clear the call history."""
+        self.call_history = []
+
+
+class MockTaskManager:
+    """
+    Mock TaskManager for testing async operations.
+
+    Provides mock implementations of TaskManager methods for testing.
+    """
+
+    def __init__(self):
+        """Initialize mock task manager."""
+        self.tasks_created = []
+        self.sleep_calls = []
+
+    @classmethod
+    def create_task(cls, coroutine):
+        """
+        Mock create_task - just runs the coroutine synchronously for testing.
+
+        Args:
+            coroutine: Coroutine to execute
+
+        Returns:
+            The coroutine (for compatibility)
+        """
+        # In tests, we typically run with asyncio.run() so just return the coroutine
+        return coroutine
+
+    @staticmethod
+    async def sleep(seconds):
+        """
+        Mock async sleep.
+
+        Args:
+            seconds: Number of seconds to sleep (ignored in mock)
+        """
+        pass  # Don't actually sleep in tests
+
+    @staticmethod
+    async def sleep_ms(milliseconds):
+        """
+        Mock async sleep in milliseconds.
+
+        Args:
+            milliseconds: Number of milliseconds to sleep (ignored in mock)
+        """
+        pass  # Don't actually sleep in tests
+
+    @staticmethod
+    async def wait_for(awaitable, timeout):
+        """
+        Mock wait_for with timeout.
+
+        Args:
+            awaitable: Coroutine to await
+            timeout: Timeout in seconds (ignored in mock)
+
+        Returns:
+            Result of the awaitable
+        """
+        return await awaitable
+
+    @staticmethod
+    def notify_event():
+        """
+        Create a mock async event.
+
+        Returns:
+            A simple mock event object
+        """
+        class MockEvent:
+            def __init__(self):
+                self._set = False
+
+            async def wait(self):
+                pass
+
+            def set(self):
+                self._set = True
+
+            def is_set(self):
+                return self._set
+
+        return MockEvent()

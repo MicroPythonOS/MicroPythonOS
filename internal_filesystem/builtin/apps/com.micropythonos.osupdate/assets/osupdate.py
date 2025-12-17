@@ -2,10 +2,9 @@ import lvgl as lv
 import requests
 import ujson
 import time
-import _thread
 
 from mpos.apps import Activity
-from mpos import PackageManager, ConnectivityManager
+from mpos import PackageManager, ConnectivityManager, TaskManager, DownloadManager
 import mpos.info
 import mpos.ui
 
@@ -256,11 +255,9 @@ class OSUpdate(Activity):
         self.progress_bar.align(lv.ALIGN.BOTTOM_MID, 0, -50)
         self.progress_bar.set_range(0, 100)
         self.progress_bar.set_value(0, False)
-        try:
-            _thread.stack_size(mpos.apps.good_stack_size())
-            _thread.start_new_thread(self.update_with_lvgl, (self.download_update_url,))
-        except Exception as e:
-            print("Could not start update_with_lvgl thread: ", e)
+        
+        # Use TaskManager instead of _thread for async download
+        TaskManager.create_task(self.perform_update())
 
     def force_update_clicked(self):
         if self.download_update_url and (self.force_update.get_state() & lv.STATE.CHECKED):
@@ -275,33 +272,36 @@ class OSUpdate(Activity):
         self.set_state(UpdateState.CHECKING_UPDATE)
         self.schedule_show_update_info()
 
-    def progress_callback(self, percent):
+    async def async_progress_callback(self, percent):
+        """Async progress callback for DownloadManager."""
         print(f"OTA Update: {percent:.1f}%")
-        self.update_ui_threadsafe_if_foreground(self.progress_bar.set_value, int(percent), True)
-        self.update_ui_threadsafe_if_foreground(self.progress_label.set_text, f"OTA Update: {percent:.2f}%")
-        time.sleep_ms(100)
+        # UI updates are safe from async context in MicroPythonOS (runs on main thread)
+        if self.has_foreground():
+            self.progress_bar.set_value(int(percent), True)
+            self.progress_label.set_text(f"OTA Update: {percent:.2f}%")
+        await TaskManager.sleep_ms(50)
 
-    # Custom OTA update with LVGL progress
-    def update_with_lvgl(self, url):
-        """Download and install update in background thread.
+    async def perform_update(self):
+        """Download and install update using async patterns.
 
         Supports automatic pause/resume on wifi loss.
         """
+        url = self.download_update_url
+        
         try:
             # Loop to handle pause/resume cycles
             while self.has_foreground():
-                # Use UpdateDownloader to handle the download
-                result = self.update_downloader.download_and_install(
+                # Use UpdateDownloader to handle the download (now async)
+                result = await self.update_downloader.download_and_install(
                     url,
-                    progress_callback=self.progress_callback,
+                    progress_callback=self.async_progress_callback,
                     should_continue_callback=self.has_foreground
                 )
 
                 if result['success']:
                     # Update succeeded - set boot partition and restart
-                    self.update_ui_threadsafe_if_foreground(self.status_label.set_text,"Update finished! Restarting...")
-                    # Small delay to show the message
-                    time.sleep(5)
+                    self.status_label.set_text("Update finished! Restarting...")
+                    await TaskManager.sleep(5)
                     self.update_downloader.set_boot_partition_and_restart()
                     return
 
@@ -314,8 +314,7 @@ class OSUpdate(Activity):
                     print(f"OSUpdate: Download paused at {percent:.1f}% ({bytes_written}/{total_size} bytes)")
                     self.set_state(UpdateState.DOWNLOAD_PAUSED)
 
-                    # Wait for wifi to return
-                    # ConnectivityManager will notify us via callback when network returns
+                    # Wait for wifi to return using async sleep
                     print("OSUpdate: Waiting for network to return...")
                     check_interval = 2  # Check every 2 seconds
                     max_wait = 300  # 5 minutes timeout
@@ -324,19 +323,19 @@ class OSUpdate(Activity):
                     while elapsed < max_wait and self.has_foreground():
                         if self.connectivity_manager.is_online():
                             print("OSUpdate: Network reconnected, waiting for stabilization...")
-                            time.sleep(2)  # Let routing table and DNS fully stabilize
+                            await TaskManager.sleep(2)  # Let routing table and DNS fully stabilize
                             print("OSUpdate: Resuming download")
                             self.set_state(UpdateState.DOWNLOADING)
                             break  # Exit wait loop and retry download
 
-                        time.sleep(check_interval)
+                        await TaskManager.sleep(check_interval)
                         elapsed += check_interval
 
                     if elapsed >= max_wait:
                         # Timeout waiting for network
                         msg = f"Network timeout during download.\n{bytes_written}/{total_size} bytes written.\nPress 'Update OS' to retry."
-                        self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
-                        self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)
+                        self.status_label.set_text(msg)
+                        self.install_button.remove_state(lv.STATE.DISABLED)
                         self.set_state(UpdateState.ERROR)
                         return
 
@@ -344,32 +343,40 @@ class OSUpdate(Activity):
 
                 else:
                     # Update failed with error (not pause)
-                    error_msg = result.get('error', 'Unknown error')
-                    bytes_written = result.get('bytes_written', 0)
-                    total_size = result.get('total_size', 0)
-
-                    if "cancelled" in error_msg.lower():
-                        msg = ("Update cancelled by user.\n\n"
-                              f"{bytes_written}/{total_size} bytes downloaded.\n"
-                              "Press 'Update OS' to resume.")
-                    else:
-                        # Use friendly error message
-                        friendly_msg = self._get_user_friendly_error(Exception(error_msg))
-                        progress_info = f"\n\nProgress: {bytes_written}/{total_size} bytes"
-                        if bytes_written > 0:
-                            progress_info += "\n\nPress 'Update OS' to resume."
-                        msg = friendly_msg + progress_info
-
-                    self.set_state(UpdateState.ERROR)
-                    self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
-                    self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)  # allow retry
+                    self._handle_update_error(result)
                     return
 
         except Exception as e:
-            msg = self._get_user_friendly_error(e) + "\n\nPress 'Update OS' to retry."
-            self.set_state(UpdateState.ERROR)
-            self.update_ui_threadsafe_if_foreground(self.status_label.set_text, msg)
-            self.update_ui_threadsafe_if_foreground(self.install_button.remove_state, lv.STATE.DISABLED)  # allow retry
+            self._handle_update_exception(e)
+
+    def _handle_update_error(self, result):
+        """Handle update error result - extracted for DRY."""
+        error_msg = result.get('error', 'Unknown error')
+        bytes_written = result.get('bytes_written', 0)
+        total_size = result.get('total_size', 0)
+
+        if "cancelled" in error_msg.lower():
+            msg = ("Update cancelled by user.\n\n"
+                  f"{bytes_written}/{total_size} bytes downloaded.\n"
+                  "Press 'Update OS' to resume.")
+        else:
+            # Use friendly error message
+            friendly_msg = self._get_user_friendly_error(Exception(error_msg))
+            progress_info = f"\n\nProgress: {bytes_written}/{total_size} bytes"
+            if bytes_written > 0:
+                progress_info += "\n\nPress 'Update OS' to resume."
+            msg = friendly_msg + progress_info
+
+        self.set_state(UpdateState.ERROR)
+        self.status_label.set_text(msg)
+        self.install_button.remove_state(lv.STATE.DISABLED)  # allow retry
+
+    def _handle_update_exception(self, e):
+        """Handle update exception - extracted for DRY."""
+        msg = self._get_user_friendly_error(e) + "\n\nPress 'Update OS' to retry."
+        self.set_state(UpdateState.ERROR)
+        self.status_label.set_text(msg)
+        self.install_button.remove_state(lv.STATE.DISABLED)  # allow retry
 
 # Business Logic Classes:
 
@@ -386,25 +393,35 @@ class UpdateState:
     ERROR = "error"
 
 class UpdateDownloader:
-    """Handles downloading and installing OS updates."""
+    """Handles downloading and installing OS updates using async DownloadManager."""
 
-    def __init__(self, requests_module=None, partition_module=None, connectivity_manager=None):
+    # Chunk size for partition writes (must be 4096 for ESP32 flash)
+    CHUNK_SIZE = 4096
+
+    def __init__(self, partition_module=None, connectivity_manager=None, download_manager=None):
         """Initialize with optional dependency injection for testing.
 
         Args:
-            requests_module: HTTP requests module (defaults to requests)
             partition_module: ESP32 Partition module (defaults to esp32.Partition if available)
             connectivity_manager: ConnectivityManager instance for checking network during download
+            download_manager: DownloadManager module for async downloads (defaults to mpos.DownloadManager)
         """
-        self.requests = requests_module if requests_module else requests
         self.partition_module = partition_module
         self.connectivity_manager = connectivity_manager
+        self.download_manager = download_manager  # For testing injection
         self.simulate = False
 
         # Download state for pause/resume
         self.is_paused = False
         self.bytes_written_so_far = 0
         self.total_size_expected = 0
+
+        # Internal state for chunk processing
+        self._current_partition = None
+        self._block_index = 0
+        self._chunk_buffer = b''
+        self._should_continue = True
+        self._progress_callback = None
 
         # Try to import Partition if not provided
         if self.partition_module is None:
@@ -442,14 +459,87 @@ class UpdateDownloader:
         return any(indicator in error_str or indicator in error_repr
                   for indicator in network_indicators)
 
-    def download_and_install(self, url, progress_callback=None, should_continue_callback=None):
-        """Download firmware and install to OTA partition.
+    def _setup_partition(self):
+        """Initialize the OTA partition for writing."""
+        if not self.simulate and self._current_partition is None:
+            current = self.partition_module(self.partition_module.RUNNING)
+            self._current_partition = current.get_next_update()
+            print(f"UpdateDownloader: Writing to partition: {self._current_partition}")
+
+    async def _process_chunk(self, chunk):
+        """Process a downloaded chunk - buffer and write to partition.
+        
+        Note: Progress reporting is handled by DownloadManager, not here.
+        This method only handles buffering and writing to partition.
+        
+        Args:
+            chunk: bytes data received from download
+        """
+        # Check if we should continue (user cancelled)
+        if not self._should_continue:
+            return
+        
+        # Check network connection
+        if self.connectivity_manager:
+            is_online = self.connectivity_manager.is_online()
+        elif ConnectivityManager._instance:
+            is_online = ConnectivityManager._instance.is_online()
+        else:
+            is_online = True
+
+        if not is_online:
+            print("UpdateDownloader: Network lost during chunk processing")
+            self.is_paused = True
+            raise OSError(-113, "Network lost during download")
+
+        # Track total bytes received
+        self._total_bytes_received += len(chunk)
+
+        # Add chunk to buffer
+        self._chunk_buffer += chunk
+
+        # Write complete 4096-byte blocks
+        while len(self._chunk_buffer) >= self.CHUNK_SIZE:
+            block = self._chunk_buffer[:self.CHUNK_SIZE]
+            self._chunk_buffer = self._chunk_buffer[self.CHUNK_SIZE:]
+
+            if not self.simulate:
+                self._current_partition.writeblocks(self._block_index, block)
+
+            self._block_index += 1
+            self.bytes_written_so_far += len(block)
+        
+        # Note: Progress is reported by DownloadManager via progress_callback parameter
+        # We don't calculate progress here to avoid duplicate/incorrect progress updates
+
+    async def _flush_buffer(self):
+        """Flush remaining buffer with padding to complete the download."""
+        if self._chunk_buffer:
+            # Pad the last chunk to 4096 bytes
+            remaining = len(self._chunk_buffer)
+            padded = self._chunk_buffer + b'\xFF' * (self.CHUNK_SIZE - remaining)
+            print(f"UpdateDownloader: Padding final chunk from {remaining} to {self.CHUNK_SIZE} bytes")
+
+            if not self.simulate:
+                self._current_partition.writeblocks(self._block_index, padded)
+
+            self.bytes_written_so_far += self.CHUNK_SIZE
+            self._chunk_buffer = b''
+
+            # Final progress update
+            if self._progress_callback and self.total_size_expected > 0:
+                percent = (self.bytes_written_so_far / self.total_size_expected) * 100
+                await self._progress_callback(min(percent, 100.0))
+
+    async def download_and_install(self, url, progress_callback=None, should_continue_callback=None):
+        """Download firmware and install to OTA partition using async DownloadManager.
 
         Supports pause/resume on wifi loss using HTTP Range headers.
 
         Args:
             url: URL to download firmware from
-            progress_callback: Optional callback function(percent: float)
+            progress_callback: Optional async callback function(percent: float)
+                Called by DownloadManager with progress 0-100
             should_continue_callback: Optional callback function() -> bool
                 Returns False to cancel download
 
@@ -460,9 +550,6 @@ class UpdateDownloader:
                 - 'total_size': int
                 - 'error': str (if success=False)
                 - 'paused': bool (if paused due to wifi loss)
-
-        Raises:
-            Exception: If download or installation fails
         """
         result = {
             'success': False,
@@ -472,135 +559,99 @@ class UpdateDownloader:
             'paused': False
         }
 
-        try:
-            # Get OTA partition
-            next_partition = None
-            if not self.simulate:
-                current = self.partition_module(self.partition_module.RUNNING)
-                next_partition = current.get_next_update()
-                print(f"UpdateDownloader: Writing to partition: {next_partition}")
+        # Store callbacks for use in _process_chunk
+        self._progress_callback = progress_callback
+        self._should_continue = True
+        self._total_bytes_received = 0
 
-            # Start download (or resume if we have bytes_written_so_far)
-            headers = {}
+        try:
+            # Setup partition
+            self._setup_partition()
+
+            # Initialize block index from resume position
+            self._block_index = self.bytes_written_so_far // self.CHUNK_SIZE
+
+            # Build headers for resume
+            headers = None
             if self.bytes_written_so_far > 0:
-                headers['Range'] = f'bytes={self.bytes_written_so_far}-'
+                headers = {'Range': f'bytes={self.bytes_written_so_far}-'}
                 print(f"UpdateDownloader: Resuming from byte {self.bytes_written_so_far}")
 
-            response = self.requests.get(url, stream=True, headers=headers)
+            # Get the download manager (use injected one for testing, or global)
+            dm = self.download_manager if self.download_manager else DownloadManager
 
-            # For initial download, get total size
+            # Create wrapper for chunk callback that checks should_continue
+            async def chunk_handler(chunk):
+                if should_continue_callback and not should_continue_callback():
+                    self._should_continue = False
+                    raise Exception("Download cancelled by user")
+                await self._process_chunk(chunk)
+
+            # For initial download, we need to get total size first
+            # DownloadManager doesn't expose Content-Length directly, so we estimate
             if self.bytes_written_so_far == 0:
-                total_size = int(response.headers.get('Content-Length', 0))
-                result['total_size'] = round_up_to_multiple(total_size, 4096)
-                self.total_size_expected = result['total_size']
+                # We'll update total_size_expected as we download
+                # For now, set a placeholder that will be updated
+                self.total_size_expected = 0
+
+            # Download with streaming chunk callback
+            # Progress is reported by DownloadManager via progress_callback
+            print(f"UpdateDownloader: Starting async download from {url}")
+            success = await dm.download_url(
+                url,
+                chunk_callback=chunk_handler,
+                progress_callback=progress_callback,  # Let DownloadManager handle progress
+                headers=headers
+            )
+
+            if success:
+                # Flush any remaining buffered data
+                await self._flush_buffer()
+
+                result['success'] = True
+                result['bytes_written'] = self.bytes_written_so_far
+                result['total_size'] = self.bytes_written_so_far  # Actual size downloaded
+
+                # Final 100% progress callback
+                if self._progress_callback:
+                    await self._progress_callback(100.0)
+
+                # Reset state for next download
+                self.is_paused = False
+                self.bytes_written_so_far = 0
+                self.total_size_expected = 0
+                self._current_partition = None
+                self._block_index = 0
+                self._chunk_buffer = b''
+                self._total_bytes_received = 0
+
+                print(f"UpdateDownloader: Download complete ({result['bytes_written']} bytes)")
             else:
-                # For resume, use the stored total size
-                # (Content-Length will be the remaining bytes, not total)
+                # Download failed but not due to exception
+                result['error'] = "Download failed"
+                result['bytes_written'] = self.bytes_written_so_far
                 result['total_size'] = self.total_size_expected
 
-            print(f"UpdateDownloader: Download target {result['total_size']} bytes")
-
-            chunk_size = 4096
-            bytes_written = self.bytes_written_so_far
-            block_index = bytes_written // chunk_size
-
-            while True:
-                # Check if we should continue (user cancelled)
-                if should_continue_callback and not should_continue_callback():
-                    result['error'] = "Download cancelled by user"
-                    response.close()
-                    return result
-
-                # Check network connection before reading
-                if self.connectivity_manager:
-                    is_online = self.connectivity_manager.is_online()
-                elif ConnectivityManager._instance:
-                    is_online = ConnectivityManager._instance.is_online()
-                else:
-                    is_online = True
-
-                if not is_online:
-                    print("UpdateDownloader: Network lost (pre-check), pausing download")
-                    self.is_paused = True
-                    self.bytes_written_so_far = bytes_written
-                    result['paused'] = True
-                    result['bytes_written'] = bytes_written
-                    response.close()
-                    return result
-
-                # Read next chunk (may raise exception if network drops)
-                try:
-                    chunk = response.raw.read(chunk_size)
-                except Exception as read_error:
-                    # Check if this is a network error that should trigger pause
-                    if self._is_network_error(read_error):
-                        print(f"UpdateDownloader: Network error during read ({read_error}), pausing")
-                        self.is_paused = True
-                        self.bytes_written_so_far = bytes_written
-                        result['paused'] = True
-                        result['bytes_written'] = bytes_written
-                        try:
-                            response.close()
-                        except:
-                            pass
-                        return result
-                    else:
-                        # Non-network error, re-raise
-                        raise
-
-                if not chunk:
-                    break
-
-                # Pad last chunk if needed
-                if len(chunk) < chunk_size:
-                    print(f"UpdateDownloader: Padding chunk {block_index} from {len(chunk)} to {chunk_size} bytes")
-                    chunk = chunk + b'\xFF' * (chunk_size - len(chunk))
-
-                # Write to partition
-                if not self.simulate:
-                    next_partition.writeblocks(block_index, chunk)
-
-                bytes_written += len(chunk)
-                self.bytes_written_so_far = bytes_written
-                block_index += 1
-
-                # Update progress
-                if progress_callback and result['total_size'] > 0:
-                    percent = (bytes_written / result['total_size']) * 100
-                    progress_callback(percent)
-
-                # Small delay to avoid hogging CPU
-                time.sleep_ms(100)
-
-            response.close()
-            result['bytes_written'] = bytes_written
-
-            # Check if complete
-            if bytes_written >= result['total_size']:
-                result['success'] = True
-                self.is_paused = False
-                self.bytes_written_so_far = 0  # Reset for next download
-                self.total_size_expected = 0
-                print(f"UpdateDownloader: Download complete ({bytes_written} bytes)")
-            else:
-                result['error'] = f"Incomplete download: {bytes_written} < {result['total_size']}"
-                print(f"UpdateDownloader: {result['error']}")
-
         except Exception as e:
+            error_msg = str(e)
+            
+            # Check if cancelled by user
+            if "cancelled" in error_msg.lower():
+                result['error'] = error_msg
+                result['bytes_written'] = self.bytes_written_so_far
+                result['total_size'] = self.total_size_expected
             # Check if this is a network error that should trigger pause
-            if self._is_network_error(e):
+            elif self._is_network_error(e):
                 print(f"UpdateDownloader: Network error ({e}), pausing download")
                 self.is_paused = True
-                # Only update bytes_written_so_far if we actually wrote bytes in this attempt
-                # Otherwise preserve the existing state (important for resume failures)
-                if result.get('bytes_written', 0) > 0:
-                    self.bytes_written_so_far = result['bytes_written']
                 result['paused'] = True
                 result['bytes_written'] = self.bytes_written_so_far
-                result['total_size'] = self.total_size_expected  # Preserve total size for UI
+                result['total_size'] = self.total_size_expected
             else:
                 # Non-network error
-                result['error'] = str(e)
+                result['error'] = error_msg
+                result['bytes_written'] = self.bytes_written_so_far
+                result['total_size'] = self.total_size_expected
                 print(f"UpdateDownloader: Error during download: {e}")
 
         return result
