@@ -259,7 +259,13 @@ class RecordStream:
             start_time = time.ticks_ms()
             sample_offset = 0  # For sine wave phase continuity
 
-            print(f"RecordStream: max_bytes={max_bytes}, chunk_size={chunk_size}")
+            # Flush every ~2 seconds of audio (64KB at 16kHz 16-bit mono)
+            # This spreads out the filesystem write overhead
+            flush_interval_bytes = 64 * 1024
+            bytes_since_flush = 0
+            last_flush_time = start_time
+
+            print(f"RecordStream: max_bytes={max_bytes}, chunk_size={chunk_size}, flush_interval={flush_interval_bytes}")
 
             # Open file for appending audio data (append mode to avoid seek issues)
             print(f"RecordStream: Opening file for audio data...")
@@ -296,9 +302,19 @@ class RecordStream:
                     if num_read > 0:
                         f.write(buf[:num_read])
                         self._bytes_recorded += num_read
+                        bytes_since_flush += num_read
+
+                        # Periodic flush to spread out filesystem overhead
+                        if bytes_since_flush >= flush_interval_bytes:
+                            t0 = time.ticks_ms()
+                            f.flush()
+                            flush_time = time.ticks_diff(time.ticks_ms(), t0)
+                            print(f"RecordStream: Flushed {bytes_since_flush} bytes in {flush_time}ms")
+                            bytes_since_flush = 0
+                            last_flush_time = time.ticks_ms()
             finally:
                 # Explicitly close the file and measure time
-                print(f"RecordStream: Closing audio data file...")
+                print(f"RecordStream: Closing audio data file (remaining {bytes_since_flush} bytes)...")
                 t0 = time.ticks_ms()
                 f.close()
                 print(f"RecordStream: File closed in {time.ticks_diff(time.ticks_ms(), t0)}ms")
