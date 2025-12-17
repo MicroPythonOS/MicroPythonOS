@@ -1,4 +1,3 @@
-import aiohttp
 import lvgl as lv
 import json
 import requests
@@ -7,7 +6,7 @@ import os
 
 from mpos.apps import Activity, Intent
 from mpos.app import App
-from mpos import TaskManager
+from mpos import TaskManager, DownloadManager
 import mpos.ui
 from mpos.content.package_manager import PackageManager
 
@@ -28,7 +27,6 @@ class AppStore(Activity):
     app_index_url_badgehub = _BADGEHUB_API_BASE_URL + "/" + _BADGEHUB_LIST
     app_detail_url_badgehub = _BADGEHUB_API_BASE_URL + "/" + _BADGEHUB_DETAILS
     can_check_network = True
-    aiohttp_session = None # one session for the whole app is more performant
 
     # Widgets:
     main_screen = None
@@ -39,7 +37,6 @@ class AppStore(Activity):
     progress_bar = None
 
     def onCreate(self):
-        self.aiohttp_session = aiohttp.ClientSession()
         self.main_screen = lv.obj()
         self.please_wait_label = lv.label(self.main_screen)
         self.please_wait_label.set_text("Downloading app index...")
@@ -62,11 +59,8 @@ class AppStore(Activity):
             else:
                 TaskManager.create_task(self.download_app_index(self.app_index_url_github))
 
-    def onDestroy(self, screen):
-        await self.aiohttp_session.close()
-
     async def download_app_index(self, json_url):
-        response = await self.download_url(json_url)
+        response = await DownloadManager.download_url(json_url)
         if not response:
             self.please_wait_label.set_text(f"Could not download app index from\n{json_url}")
             return
@@ -152,7 +146,7 @@ class AppStore(Activity):
                 break
             if not app.icon_data:
                 try:
-                    app.icon_data = await TaskManager.wait_for(self.download_url(app.icon_url), 5) # max 5 seconds per icon
+                    app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5) # max 5 seconds per icon
                 except Exception as e:
                     print(f"Download of {app.icon_url} got exception: {e}")
                     continue
@@ -176,96 +170,6 @@ class AppStore(Activity):
         intent.putExtra("app", app)
         intent.putExtra("appstore", self)
         self.startActivity(intent)
-
-    '''
-    This async download function can be used in 3 ways:
-    - with just a url => returns the content
-    - with a url and an outfile => writes the content to the outfile
-    - with a url and a chunk_callback => calls the chunk_callback(chunk_data) for each chunk
-
-    Optionally:
-    - progress_callback is called with the % (0-100) progress
-    - if total_size is not provided, it will be taken from the response headers (if present) or default to 100KB
-    - a dict of headers can be passed, for example: headers['Range'] = f'bytes={self.bytes_written_so_far}-'
-
-    Can return either:
-    - the actual content
-    - None: if the content failed to download
-    - True: if the URL was successfully downloaded (and written to outfile, if provided)
-    - False: if the URL was not successfully download and written to outfile
-    '''
-    async def download_url(self, url, outfile=None, total_size=None, progress_callback=None, chunk_callback=None, headers=None):
-        print(f"Downloading {url}")
-        #await TaskManager.sleep(4) # test slowness
-        try:
-            async with self.aiohttp_session.get(url, headers=headers) as response:
-                if response.status < 200 or response.status >= 400:
-                    return False if outfile else None
-
-                # Figure out total size
-                print("headers:") ; print(response.headers)
-                if total_size is None:
-                    total_size = response.headers.get('Content-Length') # some servers don't send this in the headers
-                    if total_size is None:
-                        print("WARNING: Unable to determine total_size from server's reply and function arguments, assuming 100KB")
-                        total_size = 100 * 1024
-
-                fd = None
-                if outfile:
-                    fd = open(outfile, 'wb')
-                    if not fd:
-                        print("WARNING: could not open {outfile} for writing!")
-                        return False
-                chunks = []
-                partial_size = 0
-                chunk_size = 1024
-
-                print(f"download_url {'writing to ' + outfile if outfile else 'downloading'} {total_size} bytes in chunks of size {chunk_size}")
-
-                while True:
-                    tries_left = 3
-                    chunk_data = None
-                    while tries_left > 0:
-                        try:
-                            chunk_data = await TaskManager.wait_for(response.content.read(chunk_size), 10)
-                            break
-                        except Exception as e:
-                            print(f"Waiting for response.content.read of next chunk_data got error: {e}")
-                            tries_left -= 1
-
-                    if tries_left == 0:
-                        print("ERROR: failed to download chunk_data, even with retries!")
-                        if fd:
-                            fd.close()
-                        return False if outfile else None
-
-                    if chunk_data:
-                        # Output
-                        if fd:
-                            fd.write(chunk_data)
-                        elif chunk_callback:
-                            await chunk_callback(chunk_data)
-                        else:
-                            chunks.append(chunk_data)
-                        # Report progress
-                        partial_size += len(chunk_data)
-                        progress_pct = round((partial_size * 100) / int(total_size))
-                        print(f"progress: {partial_size} / {total_size} bytes = {progress_pct}%")
-                        if progress_callback:
-                            await progress_callback(progress_pct)
-                            #await TaskManager.sleep(1) # test slowness
-                    else:
-                        print("chunk_data is None while there was no error so this was the last one.\n Finished downloading {url}")
-                        if fd:
-                            fd.close()
-                            return True
-                        elif chunk_callback:
-                            return True
-                        else:
-                            return b''.join(chunks)
-        except Exception as e:
-            print(f"download_url got exception {e}")
-            return False if outfile else None
 
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
@@ -293,7 +197,7 @@ class AppStore(Activity):
 
     async def fetch_badgehub_app_details(self, app_obj):
         details_url = self.app_detail_url_badgehub + "/" + app_obj.fullname
-        response = await self.download_url(details_url)
+        response = await DownloadManager.download_url(details_url)
         if not response:
             print(f"Could not download app details from from\n{details_url}")
             return
@@ -578,7 +482,7 @@ class AppDetail(Activity):
             pass
         temp_zip_path = "tmp/temp.mpk"
         print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
-        result = await self.appstore.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size, progress_callback=self.pcb)
+        result = await DownloadManager.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size, progress_callback=self.pcb)
         if result is not True:
             print("Download failed...") # Would be good to show an error to the user if this failed...
         else:
