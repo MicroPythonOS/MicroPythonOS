@@ -262,9 +262,14 @@ class RecordStream:
             print(f"RecordStream: max_bytes={max_bytes}, chunk_size={chunk_size}")
 
             # Open file for appending audio data (append mode to avoid seek issues)
-            with open(self.file_path, 'ab') as f:
-                buf = bytearray(chunk_size)
+            print(f"RecordStream: Opening file for audio data...")
+            t0 = time.ticks_ms()
+            f = open(self.file_path, 'ab')
+            print(f"RecordStream: File opened in {time.ticks_diff(time.ticks_ms(), t0)}ms")
 
+            buf = bytearray(chunk_size)
+
+            try:
                 while self._keep_running and self._bytes_recorded < max_bytes:
                     # Check elapsed time
                     elapsed = time.ticks_diff(time.ticks_ms(), start_time)
@@ -291,13 +296,30 @@ class RecordStream:
                     if num_read > 0:
                         f.write(buf[:num_read])
                         self._bytes_recorded += num_read
+            finally:
+                # Explicitly close the file and measure time
+                print(f"RecordStream: Closing audio data file...")
+                t0 = time.ticks_ms()
+                f.close()
+                print(f"RecordStream: File closed in {time.ticks_diff(time.ticks_ms(), t0)}ms")
 
-            # Close the file first, then reopen to update header
+            # Now reopen to update header
             # This avoids the massive delay caused by seeking backwards in a large file
             # on ESP32 with SD card (FAT filesystem buffering issue)
+            print(f"RecordStream: Reopening file to update WAV header...")
+            t0 = time.ticks_ms()
+            f = open(self.file_path, 'r+b')
+            print(f"RecordStream: File reopened in {time.ticks_diff(time.ticks_ms(), t0)}ms")
+
             print(f"RecordStream: Updating WAV header with data_size={self._bytes_recorded}")
-            with open(self.file_path, 'r+b') as f:
-                self._update_wav_header(f, self._bytes_recorded)
+            t0 = time.ticks_ms()
+            self._update_wav_header(f, self._bytes_recorded)
+            print(f"RecordStream: Header updated in {time.ticks_diff(time.ticks_ms(), t0)}ms")
+
+            print(f"RecordStream: Closing header file...")
+            t0 = time.ticks_ms()
+            f.close()
+            print(f"RecordStream: Header file closed in {time.ticks_diff(time.ticks_ms(), t0)}ms")
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), start_time)
             print(f"RecordStream: Finished recording {self._bytes_recorded} bytes ({elapsed_ms}ms)")

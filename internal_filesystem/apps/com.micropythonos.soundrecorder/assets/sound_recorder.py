@@ -307,13 +307,17 @@ class SoundRecorder(Activity):
         AudioFlinger.stop()
         self._is_recording = False
 
-        # Update UI
-        self._record_button_label.set_text(lv.SYMBOL.AUDIO + " Record")
-        self._record_button.set_style_bg_color(lv.theme_get_color_primary(None), 0)
-        self._update_status()
+        # Show "Saving..." status immediately (file finalization takes time on SD card)
+        self._status_label.set_text("Saving...")
+        self._status_label.set_style_text_color(lv.color_hex(0xFF8800), 0)  # Orange
 
-        # Stop timer update
-        self._stop_timer_update()
+        # Disable record button while saving
+        self._record_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+        # Stop timer update but keep the elapsed time visible
+        if self._timer_task:
+            self._timer_task.delete()
+            self._timer_task = None
 
     def _on_recording_complete(self, message):
         """Callback when recording finishes."""
@@ -326,14 +330,17 @@ class SoundRecorder(Activity):
         """Update UI after recording finishes (called on main thread)."""
         self._is_recording = False
 
-        # Update UI
+        # Re-enable and reset record button
+        self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
         self._record_button_label.set_text(lv.SYMBOL.AUDIO + " Record")
         self._record_button.set_style_bg_color(lv.theme_get_color_primary(None), 0)
+
+        # Update status and find recordings
         self._update_status()
         self._find_last_recording()
 
-        # Stop timer update
-        self._stop_timer_update()
+        # Reset timer display
+        self._timer_label.set_text(self._format_timer_text(0))
 
     def _start_timer_update(self):
         """Start updating the timer display."""
