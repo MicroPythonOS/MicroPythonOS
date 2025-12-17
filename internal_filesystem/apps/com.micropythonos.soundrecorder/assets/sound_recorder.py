@@ -36,7 +36,7 @@ class SoundRecorder(Activity):
 
     # Constants
     MAX_DURATION_MS = 60000  # 60 seconds max recording
-    RECORDINGS_DIR = "data/com.micropythonos.soundrecorder/recordings"
+    RECORDINGS_DIR = "data/recordings"
 
     # UI Widgets
     _status_label = None

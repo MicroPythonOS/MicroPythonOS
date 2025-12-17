@@ -261,10 +261,8 @@ class RecordStream:
 
             print(f"RecordStream: max_bytes={max_bytes}, chunk_size={chunk_size}")
 
-            # Open file for appending audio data
-            with open(self.file_path, 'r+b') as f:
-                f.seek(44)  # Skip header
-
+            # Open file for appending audio data (append mode to avoid seek issues)
+            with open(self.file_path, 'ab') as f:
                 buf = bytearray(chunk_size)
 
                 while self._keep_running and self._bytes_recorded < max_bytes:
@@ -294,8 +292,11 @@ class RecordStream:
                         f.write(buf[:num_read])
                         self._bytes_recorded += num_read
 
-                # Update header with actual data size
-                print(f"RecordStream: Updating WAV header with data_size={self._bytes_recorded}")
+            # Close the file first, then reopen to update header
+            # This avoids the massive delay caused by seeking backwards in a large file
+            # on ESP32 with SD card (FAT filesystem buffering issue)
+            print(f"RecordStream: Updating WAV header with data_size={self._bytes_recorded}")
+            with open(self.file_path, 'r+b') as f:
                 self._update_wav_header(f, self._bytes_recorded)
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), start_time)

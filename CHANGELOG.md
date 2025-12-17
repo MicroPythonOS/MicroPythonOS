@@ -1,7 +1,7 @@
 0.5.2
 =====
 - AudioFlinger: optimize WAV volume scaling for speed and immediately set volume
-- AudioFlinger: eliminate thread by using TaskManager (asyncio)
+- AudioFlinger: add support for I2S microphone recording to WAV
 - AppStore app: eliminate all thread by using TaskManager
 - AppStore app: add support for BadgeHub backend
 - OSUpdate app: show download speed
