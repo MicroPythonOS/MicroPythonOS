@@ -1,13 +1,12 @@
 # WAVStream - WAV File Playback Stream for AudioFlinger
 # Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling, volume control
-# Uses async playback with TaskManager for non-blocking operation
+# Uses synchronous playback in a separate thread for non-blocking operation
 
 import machine
 import micropython
 import os
 import sys
-
-from mpos.task_manager import TaskManager
+import time
 
 # Volume scaling function - Viper-optimized for ESP32 performance
 # NOTE: The line below is automatically commented out by build_mpos.sh during
@@ -314,8 +313,8 @@ class WAVStream:
     # ----------------------------------------------------------------------
     #  Main playback routine
     # ----------------------------------------------------------------------
-    async def play_async(self):
-        """Main async playback routine (runs as TaskManager task)."""
+    def play(self):
+        """Main synchronous playback routine (runs in separate thread)."""
         self._is_playing = True
 
         try:
@@ -365,9 +364,8 @@ class WAVStream:
                 f.seek(data_start)
 
                 # Chunk size tuning notes:
-                # - Smaller chunks = more responsive to stop(), better async yielding
+                # - Smaller chunks = more responsive to stop()
                 # - Larger chunks = less overhead, smoother audio
-                # - 4096 bytes with async yield works well for responsiveness
                 # - The 32KB I2S buffer handles timing smoothness
                 chunk_size = 8192
                 bytes_per_original_sample = (bits_per_sample // 8) * channels
@@ -407,18 +405,15 @@ class WAVStream:
                         scale_fixed = int(scale * 32768)
                         _scale_audio_optimized(raw, len(raw), scale_fixed)
 
-                    # 4. Output to I2S
+                    # 4. Output to I2S (blocking write is OK - we're in a separate thread)
                     if self._i2s:
                         self._i2s.write(raw)
                     else:
                         # Simulate playback timing if no I2S
                         num_samples = len(raw) // (2 * channels)
-                        await TaskManager.sleep(num_samples / playback_rate)
+                        time.sleep(num_samples / playback_rate)
 
                     total_original += to_read
-                    
-                    # Yield to other async tasks after each chunk
-                    await TaskManager.sleep_ms(0)
 
                 print(f"WAVStream: Finished playing {self.file_path}")
                 if self.on_complete:

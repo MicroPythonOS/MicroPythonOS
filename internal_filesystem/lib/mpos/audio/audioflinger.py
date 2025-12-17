@@ -3,9 +3,10 @@
 # Supports I2S (digital audio) and PWM buzzer (tones/ringtones)
 #
 # Simple routing: play_wav() -> I2S, play_rtttl() -> buzzer
-# Uses TaskManager (asyncio) for non-blocking background playback
+# Uses _thread for non-blocking background playback (separate thread from UI)
 
-from mpos.task_manager import TaskManager
+import _thread
+import mpos.apps
 
 # Stream type constants (priority order: higher number = higher priority)
 STREAM_MUSIC = 0         # Background music (lowest priority)
@@ -16,7 +17,6 @@ STREAM_ALARM = 2         # Alarms/alerts (highest priority)
 _i2s_pins = None          # I2S pin configuration dict (created per-stream)
 _buzzer_instance = None   # PWM buzzer instance
 _current_stream = None    # Currently playing stream
-_current_task = None      # Currently running playback task
 _volume = 50              # System volume (0-100)
 
 
@@ -86,27 +86,27 @@ def _check_audio_focus(stream_type):
     return True
 
 
-async def _playback_coroutine(stream):
+def _playback_thread(stream):
     """
-    Async coroutine for audio playback.
+    Thread function for audio playback.
+    Runs in a separate thread to avoid blocking the UI.
 
     Args:
         stream: Stream instance (WAVStream or RTTTLStream)
     """
-    global _current_stream, _current_task
+    global _current_stream
 
     _current_stream = stream
 
     try:
-        # Run async playback
-        await stream.play_async()
+        # Run synchronous playback in this thread
+        stream.play()
     except Exception as e:
         print(f"AudioFlinger: Playback error: {e}")
     finally:
         # Clear current stream
         if _current_stream == stream:
             _current_stream = None
-            _current_task = None
 
 
 def play_wav(file_path, stream_type=STREAM_MUSIC, volume=None, on_complete=None):
@@ -122,8 +122,6 @@ def play_wav(file_path, stream_type=STREAM_MUSIC, volume=None, on_complete=None)
     Returns:
         bool: True if playback started, False if rejected or unavailable
     """
-    global _current_task
-
     if not _i2s_pins:
         print("AudioFlinger: play_wav() failed - I2S not configured")
         return False
@@ -132,7 +130,7 @@ def play_wav(file_path, stream_type=STREAM_MUSIC, volume=None, on_complete=None)
     if not _check_audio_focus(stream_type):
         return False
 
-    # Create stream and start playback as async task
+    # Create stream and start playback in separate thread
     try:
         from mpos.audio.stream_wav import WAVStream
 
@@ -144,7 +142,8 @@ def play_wav(file_path, stream_type=STREAM_MUSIC, volume=None, on_complete=None)
             on_complete=on_complete
         )
 
-        _current_task = TaskManager.create_task(_playback_coroutine(stream))
+        _thread.stack_size(mpos.apps.good_stack_size())
+        _thread.start_new_thread(_playback_thread, (stream,))
         return True
 
     except Exception as e:
@@ -165,8 +164,6 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
     Returns:
         bool: True if playback started, False if rejected or unavailable
     """
-    global _current_task
-
     if not _buzzer_instance:
         print("AudioFlinger: play_rtttl() failed - buzzer not configured")
         return False
@@ -175,7 +172,7 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
     if not _check_audio_focus(stream_type):
         return False
 
-    # Create stream and start playback as async task
+    # Create stream and start playback in separate thread
     try:
         from mpos.audio.stream_rtttl import RTTTLStream
 
@@ -187,7 +184,8 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
             on_complete=on_complete
         )
 
-        _current_task = TaskManager.create_task(_playback_coroutine(stream))
+        _thread.stack_size(mpos.apps.good_stack_size())
+        _thread.start_new_thread(_playback_thread, (stream,))
         return True
 
     except Exception as e:
@@ -197,7 +195,7 @@ def play_rtttl(rtttl_string, stream_type=STREAM_NOTIFICATION, volume=None, on_co
 
 def stop():
     """Stop current audio playback."""
-    global _current_stream, _current_task
+    global _current_stream
 
     if _current_stream:
         _current_stream.stop()

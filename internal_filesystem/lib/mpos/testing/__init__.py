@@ -30,6 +30,10 @@ from .mocks import (
     MockTask,
     MockDownloadManager,
     
+    # Threading mocks
+    MockThread,
+    MockApps,
+    
     # Network mocks
     MockNetwork,
     MockRequests,
@@ -59,6 +63,10 @@ __all__ = [
     'MockTaskManager',
     'MockTask',
     'MockDownloadManager',
+    
+    # Threading mocks
+    'MockThread',
+    'MockApps',
     
     # Network mocks
     'MockNetwork',

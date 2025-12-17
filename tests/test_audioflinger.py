@@ -7,15 +7,16 @@ from mpos.testing import (
     MockMachine,
     MockPWM,
     MockPin,
-    MockTaskManager,
-    create_mock_module,
+    MockThread,
+    MockApps,
     inject_mocks,
 )
 
 # Inject mocks before importing AudioFlinger
 inject_mocks({
     'machine': MockMachine(),
-    'mpos.task_manager': create_mock_module('mpos.task_manager', TaskManager=MockTaskManager),
+    '_thread': MockThread,
+    'mpos.apps': MockApps,
 })
 
 # Now import the module to test

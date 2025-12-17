@@ -1,10 +1,9 @@
 # RTTTLStream - RTTTL Ringtone Playback Stream for AudioFlinger
 # Ring Tone Text Transfer Language parser and player
-# Uses async playback with TaskManager for non-blocking operation
+# Uses synchronous playback in a separate thread for non-blocking operation
 
 import math
-
-from mpos.task_manager import TaskManager
+import time
 
 
 class RTTTLStream:
@@ -180,8 +179,8 @@ class RTTTLStream:
 
             yield freq, msec
 
-    async def play_async(self):
-        """Play RTTTL tune via buzzer (runs as TaskManager task)."""
+    def play(self):
+        """Play RTTTL tune via buzzer (runs in separate thread)."""
         self._is_playing = True
 
         # Calculate exponential duty cycle for perceptually linear volume
@@ -213,10 +212,10 @@ class RTTTLStream:
                     self.buzzer.duty_u16(duty)
 
                 # Play for 90% of duration, silent for 10% (note separation)
-                # Use async sleep to allow other tasks to run
-                await TaskManager.sleep_ms(int(msec * 0.9))
+                # Blocking sleep is OK - we're in a separate thread
+                time.sleep_ms(int(msec * 0.9))
                 self.buzzer.duty_u16(0)
-                await TaskManager.sleep_ms(int(msec * 0.1))
+                time.sleep_ms(int(msec * 0.1))
 
             print(f"RTTTLStream: Finished playing '{self.name}'")
             if self.on_complete:

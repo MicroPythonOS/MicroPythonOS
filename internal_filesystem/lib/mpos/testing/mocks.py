@@ -728,3 +728,56 @@ class MockDownloadManager:
     def clear_history(self):
         """Clear the call history."""
         self.call_history = []
+
+
+# =============================================================================
+# Threading Mocks
+# =============================================================================
+
+class MockThread:
+    """
+    Mock _thread module for testing threaded operations.
+    
+    Usage:
+        sys.modules['_thread'] = MockThread
+    """
+    
+    _started_threads = []
+    _stack_size = 0
+    
+    @classmethod
+    def start_new_thread(cls, func, args):
+        """Record thread start but don't actually start a thread."""
+        cls._started_threads.append((func, args))
+        return len(cls._started_threads)
+    
+    @classmethod
+    def stack_size(cls, size=None):
+        """Mock stack_size."""
+        if size is not None:
+            cls._stack_size = size
+        return cls._stack_size
+    
+    @classmethod
+    def clear_threads(cls):
+        """Clear recorded threads (for test cleanup)."""
+        cls._started_threads = []
+    
+    @classmethod
+    def get_started_threads(cls):
+        """Get list of started threads (for test assertions)."""
+        return cls._started_threads
+
+
+class MockApps:
+    """
+    Mock mpos.apps module for testing.
+    
+    Usage:
+        sys.modules['mpos.apps'] = MockApps
+    """
+    
+    @staticmethod
+    def good_stack_size():
+        """Return a reasonable stack size for testing."""
+        return 8192
