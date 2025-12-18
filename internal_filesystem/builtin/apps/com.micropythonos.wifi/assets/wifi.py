@@ -267,6 +267,11 @@ class PasswordPage(Activity):
         self.keyboard=MposKeyboard(password_page)
         self.keyboard.set_textarea(self.password_ta)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        # Hidden network:
+        cb = lv.checkbox(password_page)
+        cb.set_text("Hidden network (always try connecting)")
+        cb.set_style_margin_left(5, lv.PART.MAIN)
+        # Buttons
         buttons = lv.obj(password_page)
         # Connect button
         self.connect_button = lv.button(buttons)

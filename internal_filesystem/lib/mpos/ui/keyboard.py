@@ -101,7 +101,7 @@ class MposKeyboard:
     }
 
     _current_mode = None
-    _parent = None
+    _parent = None # used for scroll_to_y
     _saved_scroll_y = 0
     # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
     _textarea = None
@@ -112,7 +112,6 @@ class MposKeyboard:
         self._parent = parent # store it for later
         # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
         self._keyboard.set_style_text_font(lv.font_montserrat_20,0)
-        #self._keyboard.add_flag(lv.obj.FLAG.FLOATING) # removed from parent layout, immunte to scrolling
 
         self.set_mode(self.MODE_LOWERCASE)
 
@@ -255,15 +254,10 @@ class MposKeyboard:
 
     def scroll_after_show(self, timer):
         self._keyboard.scroll_to_view_recursive(True)
-        # in a flex container, this is not needed, but without it, it might be needed:
-        #self._keyboard.move_to_index(10)
-        #self._textarea.scroll_to_view_recursive(True)
-        #self._keyboard.add_flag(lv.obj.FLAG.FLOATING) # removed from parent layout, immune to scrolling
-        #self._keyboard.move_foreground() # this causes it to be moved to the bottom of the screen in a flex container
+        self._textarea.scroll_to_view_recursive(True)
 
     def scroll_back_after_hide(self, timer):
         self._parent.scroll_to_y(self._saved_scroll_y, True)
-        #self._keyboard.remove_flag(lv.obj.FLAG.FLOATING) # removed from parent layout, immune to scrolling
 
     def show_keyboard(self):
         self._saved_scroll_y = self._parent.get_scroll_y()
