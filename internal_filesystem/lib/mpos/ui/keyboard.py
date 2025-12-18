@@ -101,15 +101,18 @@ class MposKeyboard:
     }
 
     _current_mode = None
+    _parent = None
+    _saved_scroll_y = 0
+    # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
+    _textarea = None
 
     def __init__(self, parent):
         # Create underlying LVGL keyboard widget
         self._keyboard = lv.keyboard(parent)
+        self._parent = parent # store it for later
         # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
         self._keyboard.set_style_text_font(lv.font_montserrat_20,0)
-
-        # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
-        self._textarea = None
+        #self._keyboard.add_flag(lv.obj.FLAG.FLOATING) # removed from parent layout, immunte to scrolling
 
         self.set_mode(self.MODE_LOWERCASE)
 
@@ -250,8 +253,26 @@ class MposKeyboard:
         # Forward to the underlying keyboard object
         return getattr(self._keyboard, name)
 
+    def scroll_after_show(self, timer):
+        self._keyboard.scroll_to_view_recursive(True)
+        # in a flex container, this is not needed, but without it, it might be needed:
+        #self._keyboard.move_to_index(10)
+        #self._textarea.scroll_to_view_recursive(True)
+        #self._keyboard.add_flag(lv.obj.FLAG.FLOATING) # removed from parent layout, immune to scrolling
+        #self._keyboard.move_foreground() # this causes it to be moved to the bottom of the screen in a flex container
+
+    def scroll_back_after_hide(self, timer):
+        self._parent.scroll_to_y(self._saved_scroll_y, True)
+        #self._keyboard.remove_flag(lv.obj.FLAG.FLOATING) # removed from parent layout, immune to scrolling
+
     def show_keyboard(self):
-        mpos.ui.anim.smooth_show(self._keyboard)
+        self._saved_scroll_y = self._parent.get_scroll_y()
+        mpos.ui.anim.smooth_show(self._keyboard, duration=500)
+        # Scroll to view on a timer because it will be hidden initially
+        scroll_timer = lv.timer_create(self.scroll_after_show,250,None)
+        scroll_timer.set_repeat_count(1)
 
     def hide_keyboard(self):
-        mpos.ui.anim.smooth_hide(self._keyboard)
+        mpos.ui.anim.smooth_hide(self._keyboard, duration=500)
+        scroll_timer = lv.timer_create(self.scroll_back_after_hide,550,None) # do it after the hide so the scrollbars disappear automatically if not needed
+        scroll_timer.set_repeat_count(1)
