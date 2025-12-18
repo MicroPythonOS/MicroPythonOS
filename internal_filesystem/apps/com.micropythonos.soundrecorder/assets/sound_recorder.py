@@ -373,7 +373,8 @@ class SoundRecorder(Activity):
             success = AudioFlinger.play_wav(
                 self._last_recording,
                 stream_type=AudioFlinger.STREAM_MUSIC,
-                on_complete=self._on_playback_complete
+                on_complete=self._on_playback_complete,
+                volume=100
             )
 
             if success:
@@ -394,6 +395,11 @@ class SoundRecorder(Activity):
                 os.remove(self._last_recording)
                 print(f"SoundRecorder: Deleted {self._last_recording}")
                 self._find_last_recording()
+
+                # Recalculate max duration (more space available now)
+                self._current_max_duration_ms = self._calculate_max_duration()
+                self._timer_label.set_text(self._format_timer_text(0))
+
                 self._status_label.set_text("Recording deleted")
             except Exception as e:
                 print(f"SoundRecorder: Delete failed: {e}")
