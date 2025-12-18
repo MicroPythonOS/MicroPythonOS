@@ -1,4 +1,3 @@
-import ujson
 import os
 import time
 import lvgl as lv
@@ -8,8 +7,6 @@ from mpos.apps import Activity, Intent
 from mpos.ui.keyboard import MposKeyboard
 
 import mpos.config
-import mpos.ui.anim
-import mpos.ui.theme
 from mpos.net.wifi_service import WifiService
 
 have_network = True
@@ -236,23 +233,20 @@ class PasswordPage(Activity):
 
     def onCreate(self):
         password_page=lv.obj()
+        password_page.set_style_pad_all(0, lv.PART.MAIN)
         password_page.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        #password_page.set_style_pad_all(5, 5)
         self.selected_ssid = self.getIntent().extras.get("selected_ssid")
         # SSID:
         if self.selected_ssid is None:
             print("No ssid selected, the user should fill it out.")
             label=lv.label(password_page)
             label.set_text(f"Network name:")
-            label.align(lv.ALIGN.TOP_LEFT, 0, 5)
             self.ssid_ta=lv.textarea(password_page)
-            self.ssid_ta.set_width(lv.pct(100))
+            self.ssid_ta.set_width(lv.pct(90))
+            self.ssid_ta.set_style_margin_left(5, lv.PART.MAIN)
             self.ssid_ta.set_one_line(True)
             self.ssid_ta.set_placeholder_text("Enter the SSID")
-            #self.ssid_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_LEFT, 5, 5) # leave 5 margin for focus border
             self.keyboard=MposKeyboard(password_page)
-            #self.keyboard.align_to(self.ssid_ta, lv.ALIGN.OUT_BOTTOM_LEFT, -5, 5) # reset margin for focus border
-            self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             self.keyboard.set_textarea(self.ssid_ta)
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
             
@@ -260,29 +254,23 @@ class PasswordPage(Activity):
         label=lv.label(password_page)
         if self.selected_ssid is None:
             label.set_text("Password:")
-            #label.align_to(self.ssid_ta, lv.ALIGN.OUT_BOTTOM_LEFT, -5, 5) # reset margin for focus border
         else:
             label.set_text(f"Password for '{self.selected_ssid}':")
-            #label.align(lv.ALIGN.TOP_LEFT, 0, 4)
         self.password_ta=lv.textarea(password_page)
-        self.password_ta.set_width(lv.pct(100))
+        self.password_ta.set_width(lv.pct(90))
+        self.password_ta.set_style_margin_left(5, lv.PART.MAIN)
         self.password_ta.set_one_line(True)
-        #self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_LEFT, 5, 5) # leave 5 margin for focus border
         pwd = self.findSavedPassword(self.selected_ssid)
         if pwd:
             self.password_ta.set_text(pwd)
         self.password_ta.set_placeholder_text("Password")
         self.keyboard=MposKeyboard(password_page)
-        #self.keyboard.align_to(self.password_ta, lv.ALIGN.OUT_BOTTOM_LEFT, -5, 5) # reset margin for focus border
-        self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         self.keyboard.set_textarea(self.password_ta)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
         buttons = lv.obj(password_page)
-        #buttons.set_flex_flow(lv.FLEX_FLOW.ROW)
         # Connect button
         self.connect_button = lv.button(buttons)
         self.connect_button.set_size(100,40)
-        #self.connect_button.align(lv.ALIGN.left,10,-40)
         self.connect_button.align(lv.ALIGN.LEFT_MID, 0, 0)
         self.connect_button.add_event_cb(self.connect_cb,lv.EVENT.CLICKED,None)
         label=lv.label(self.connect_button)
@@ -291,7 +279,6 @@ class PasswordPage(Activity):
         # Close button
         self.cancel_button=lv.button(buttons)
         self.cancel_button.set_size(100,40)
-        #self.cancel_button.align(lv.ALIGN.BOTTOM_RIGHT,-10,-40)
         self.cancel_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
         self.cancel_button.add_event_cb(self.cancel_cb,lv.EVENT.CLICKED,None)
         label=lv.label(self.cancel_button)
@@ -299,8 +286,8 @@ class PasswordPage(Activity):
         label.center()
         buttons.set_width(lv.pct(100))
         buttons.set_height(lv.SIZE_CONTENT)
-        buttons.set_style_pad_all(5, 5)
         buttons.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        buttons.set_style_border_width(0, lv.PART.MAIN)
         self.setContentView(password_page)
 
     def connect_cb(self, event):
