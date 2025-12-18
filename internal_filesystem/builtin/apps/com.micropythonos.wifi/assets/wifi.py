@@ -23,7 +23,6 @@ access_points={}
 last_tried_ssid = ""
 last_tried_result = ""
 
-# This is basically the wifi settings app
 class WiFi(Activity):
 
     scan_button_scan_text = "Rescan"
@@ -44,23 +43,27 @@ class WiFi(Activity):
         print("wifi.py onCreate")
         main_screen = lv.obj()
         main_screen.set_style_pad_all(15, 0)
-        print("create_ui: Creating list widget")
         self.aplist=lv.list(main_screen)
         self.aplist.set_size(lv.pct(100),lv.pct(75))
         self.aplist.align(lv.ALIGN.TOP_MID,0,0)
-        print("create_ui: Creating error label")
         self.error_label=lv.label(main_screen)
         self.error_label.set_text("THIS IS ERROR TEXT THAT WILL BE SET LATER")
         self.error_label.align_to(self.aplist, lv.ALIGN.OUT_BOTTOM_MID,0,0)
         self.error_label.add_flag(lv.obj.FLAG.HIDDEN)
-        print("create_ui: Creating Scan button")
+        self.add_network_button=lv.button(main_screen)
+        self.add_network_button.set_size(lv.SIZE_CONTENT,lv.pct(15))
+        self.add_network_button.align(lv.ALIGN.BOTTOM_LEFT,0,0)
+        self.add_network_button.add_event_cb(self.add_network_callback,lv.EVENT.CLICKED,None)
+        self.add_network_button_label=lv.label(self.add_network_button)
+        self.add_network_button_label.set_text("Add network")
+        self.add_network_button_label.center()
         self.scan_button=lv.button(main_screen)
         self.scan_button.set_size(lv.SIZE_CONTENT,lv.pct(15))
-        self.scan_button.align(lv.ALIGN.BOTTOM_MID,0,0)
+        self.scan_button.align(lv.ALIGN.BOTTOM_RIGHT,0,0)
+        self.scan_button.add_event_cb(self.scan_cb,lv.EVENT.CLICKED,None)
         self.scan_button_label=lv.label(self.scan_button)
         self.scan_button_label.set_text(self.scan_button_scan_text)
         self.scan_button_label.center()
-        self.scan_button.add_event_cb(self.scan_cb,lv.EVENT.CLICKED,None)
         self.setContentView(main_screen)
 
     def onResume(self, screen):
@@ -148,6 +151,13 @@ class WiFi(Activity):
             label.set_text(status)
             label.align(lv.ALIGN.RIGHT_MID,0,0)
 
+    def add_network_callback(self, event):
+        print(f"add_network_callback clicked")
+        intent = Intent(activity_class=PasswordPage)
+        intent.putExtra("selected_ssid", None)
+        self.startActivityForResult(intent, self.password_page_result_cb)
+
+
     def scan_cb(self, event):
         print("scan_cb: Scan button clicked, refreshing list")
         self.start_scan_networks()
@@ -212,62 +222,98 @@ class WiFi(Activity):
         self.update_ui_threadsafe_if_foreground(self.refresh_list)
 
 
-
 class PasswordPage(Activity):
     # Would be good to add some validation here so the password is not too short etc...
 
     selected_ssid = None
 
     # Widgets:
+    ssid_ta = None
     password_ta=None
     keyboard=None
     connect_button=None
     cancel_button=None
 
     def onCreate(self):
-        self.selected_ssid = self.getIntent().extras.get("selected_ssid")
-        print("PasswordPage: Creating new password page")
         password_page=lv.obj()
-        print(f"show_password_page: Creating label for SSID: {self.selected_ssid}")
+        password_page.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        #password_page.set_style_pad_all(5, 5)
+        self.selected_ssid = self.getIntent().extras.get("selected_ssid")
+        # SSID:
+        if self.selected_ssid is None:
+            print("No ssid selected, the user should fill it out.")
+            label=lv.label(password_page)
+            label.set_text(f"Network name:")
+            label.align(lv.ALIGN.TOP_LEFT, 0, 5)
+            self.ssid_ta=lv.textarea(password_page)
+            self.ssid_ta.set_width(lv.pct(100))
+            self.ssid_ta.set_one_line(True)
+            self.ssid_ta.set_placeholder_text("Enter the SSID")
+            #self.ssid_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_LEFT, 5, 5) # leave 5 margin for focus border
+            self.keyboard=MposKeyboard(password_page)
+            #self.keyboard.align_to(self.ssid_ta, lv.ALIGN.OUT_BOTTOM_LEFT, -5, 5) # reset margin for focus border
+            self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+            self.keyboard.set_textarea(self.ssid_ta)
+            self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+            
+        # Password:
         label=lv.label(password_page)
-        label.set_text(f"Password for: {self.selected_ssid}")
-        label.align(lv.ALIGN.TOP_MID,0,5)
-        print("PasswordPage: Creating password textarea")
+        if self.selected_ssid is None:
+            label.set_text("Password:")
+            #label.align_to(self.ssid_ta, lv.ALIGN.OUT_BOTTOM_LEFT, -5, 5) # reset margin for focus border
+        else:
+            label.set_text(f"Password for '{self.selected_ssid}':")
+            #label.align(lv.ALIGN.TOP_LEFT, 0, 4)
         self.password_ta=lv.textarea(password_page)
-        self.password_ta.set_width(lv.pct(90))
+        self.password_ta.set_width(lv.pct(100))
         self.password_ta.set_one_line(True)
-        self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_MID, 0, 5)
-        print("PasswordPage: Creating Connect button")
-        self.connect_button=lv.button(password_page)
-        self.connect_button.set_size(100,40)
-        self.connect_button.align(lv.ALIGN.BOTTOM_LEFT,10,-40)
-        self.connect_button.add_event_cb(self.connect_cb,lv.EVENT.CLICKED,None)
-        label=lv.label(self.connect_button)
-        label.set_text("Connect")
-        label.center()
-        print("PasswordPage: Creating Cancel button")
-        self.cancel_button=lv.button(password_page)
-        self.cancel_button.set_size(100,40)
-        self.cancel_button.align(lv.ALIGN.BOTTOM_RIGHT,-10,-40)
-        self.cancel_button.add_event_cb(self.cancel_cb,lv.EVENT.CLICKED,None)
-        label=lv.label(self.cancel_button)
-        label.set_text("Close")
-        label.center()
+        #self.password_ta.align_to(label, lv.ALIGN.OUT_BOTTOM_LEFT, 5, 5) # leave 5 margin for focus border
         pwd = self.findSavedPassword(self.selected_ssid)
         if pwd:
             self.password_ta.set_text(pwd)
         self.password_ta.set_placeholder_text("Password")
-        print("PasswordPage: Creating keyboard (hidden by default)")
         self.keyboard=MposKeyboard(password_page)
-        self.keyboard.align(lv.ALIGN.BOTTOM_MID,0,0)
+        #self.keyboard.align_to(self.password_ta, lv.ALIGN.OUT_BOTTOM_LEFT, -5, 5) # reset margin for focus border
+        self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         self.keyboard.set_textarea(self.password_ta)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
-        print("PasswordPage: Loading password page")
+        buttons = lv.obj(password_page)
+        #buttons.set_flex_flow(lv.FLEX_FLOW.ROW)
+        # Connect button
+        self.connect_button = lv.button(buttons)
+        self.connect_button.set_size(100,40)
+        #self.connect_button.align(lv.ALIGN.left,10,-40)
+        self.connect_button.align(lv.ALIGN.LEFT_MID, 0, 0)
+        self.connect_button.add_event_cb(self.connect_cb,lv.EVENT.CLICKED,None)
+        label=lv.label(self.connect_button)
+        label.set_text("Connect")
+        label.center()
+        # Close button
+        self.cancel_button=lv.button(buttons)
+        self.cancel_button.set_size(100,40)
+        #self.cancel_button.align(lv.ALIGN.BOTTOM_RIGHT,-10,-40)
+        self.cancel_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+        self.cancel_button.add_event_cb(self.cancel_cb,lv.EVENT.CLICKED,None)
+        label=lv.label(self.cancel_button)
+        label.set_text("Close")
+        label.center()
+        buttons.set_width(lv.pct(100))
+        buttons.set_height(lv.SIZE_CONTENT)
+        buttons.set_style_pad_all(5, 5)
+        buttons.set_style_bg_opa(lv.OPA.TRANSP, 0)
         self.setContentView(password_page)
 
     def connect_cb(self, event):
         global access_points
         print("connect_cb: Connect button clicked")
+        if self.selected_ssid is None:
+            new_ssid = self.ssid_ta.get_text()
+            if not new_ssid:
+                print("No SSID provided, not connecting")
+                self.ssid_ta.set_style_bg_color(lv.color_hex(0xff8080), 0)
+                return
+            else:
+                self.selected_ssid = new_ssid
         password=self.password_ta.get_text()
         print(f"connect_cb: Got password: {password}")
         self.setPassword(self.selected_ssid, password)
