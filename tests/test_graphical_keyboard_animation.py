@@ -13,31 +13,11 @@ import unittest
 import lvgl as lv
 import time
 import mpos.ui.anim
-from mpos.ui.keyboard import MposKeyboard
-from mpos.ui.testing import wait_for_render
+from base import KeyboardTestBase
 
-class TestKeyboardAnimation(unittest.TestCase):
+
+class TestKeyboardAnimation(KeyboardTestBase):
     """Test MposKeyboard compatibility with animation system."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        # Create a test screen
-        self.screen = lv.obj()
-        self.screen.set_size(320, 240)
-        lv.screen_load(self.screen)
-
-        # Create textarea
-        self.textarea = lv.textarea(self.screen)
-        self.textarea.set_size(280, 40)
-        self.textarea.align(lv.ALIGN.TOP_MID, 0, 10)
-        self.textarea.set_one_line(True)
-
-        print("\n=== Animation Test Setup Complete ===")
-
-    def tearDown(self):
-        """Clean up after test."""
-        lv.screen_load(lv.obj())
-        print("=== Test Cleanup Complete ===\n")
 
     def test_keyboard_has_set_style_opa(self):
         """
@@ -47,24 +27,22 @@ class TestKeyboardAnimation(unittest.TestCase):
         """
         print("Testing that MposKeyboard has set_style_opa...")
 
-        keyboard = MposKeyboard(self.screen)
-        keyboard.set_textarea(self.textarea)
-        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self.create_keyboard_scene()
+        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Verify method exists
         self.assertTrue(
-            hasattr(keyboard, 'set_style_opa'),
+            hasattr(self.keyboard, 'set_style_opa'),
             "MposKeyboard missing set_style_opa method"
         )
         self.assertTrue(
-            callable(getattr(keyboard, 'set_style_opa')),
+            callable(getattr(self.keyboard, 'set_style_opa')),
             "MposKeyboard.set_style_opa is not callable"
         )
 
         # Try calling it (should not raise AttributeError)
         try:
-            keyboard.set_style_opa(128, 0)
+            self.keyboard.set_style_opa(128, 0)
             print("set_style_opa called successfully")
         except AttributeError as e:
             self.fail(f"set_style_opa raised AttributeError: {e}")
@@ -79,15 +57,13 @@ class TestKeyboardAnimation(unittest.TestCase):
         """
         print("Testing smooth_show animation...")
 
-        keyboard = MposKeyboard(self.screen)
-        keyboard.set_textarea(self.textarea)
-        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self.create_keyboard_scene()
+        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         # This should work without raising AttributeError
         try:
-            mpos.ui.anim.smooth_show(keyboard)
-            wait_for_render(100)
+            mpos.ui.anim.smooth_show(self.keyboard)
+            self.wait_for_render(100)
             print("smooth_show called successfully")
         except AttributeError as e:
             self.fail(f"smooth_show raised AttributeError: {e}\n"
@@ -95,7 +71,7 @@ class TestKeyboardAnimation(unittest.TestCase):
 
         # Verify keyboard is no longer hidden
         self.assertFalse(
-            keyboard.has_flag(lv.obj.FLAG.HIDDEN),
+            self.keyboard.has_flag(lv.obj.FLAG.HIDDEN),
             "Keyboard should not be hidden after smooth_show"
         )
 
@@ -109,15 +85,13 @@ class TestKeyboardAnimation(unittest.TestCase):
         """
         print("Testing smooth_hide animation...")
 
-        keyboard = MposKeyboard(self.screen)
-        keyboard.set_textarea(self.textarea)
-        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.create_keyboard_scene()
         # Start visible
-        keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
 
         # This should work without raising AttributeError
         try:
-            mpos.ui.anim.smooth_hide(keyboard)
+            mpos.ui.anim.smooth_hide(self.keyboard)
             print("smooth_hide called successfully")
         except AttributeError as e:
             self.fail(f"smooth_hide raised AttributeError: {e}\n"
@@ -135,28 +109,26 @@ class TestKeyboardAnimation(unittest.TestCase):
         """
         print("Testing full show/hide cycle...")
 
-        keyboard = MposKeyboard(self.screen)
-        keyboard.set_textarea(self.textarea)
-        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self.create_keyboard_scene()
+        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Initial state: hidden
-        self.assertTrue(keyboard.has_flag(lv.obj.FLAG.HIDDEN))
+        self.assertTrue(self.keyboard.has_flag(lv.obj.FLAG.HIDDEN))
 
         # Show keyboard (simulates textarea click)
         try:
-            mpos.ui.anim.smooth_show(keyboard)
-            wait_for_render(100)
+            mpos.ui.anim.smooth_show(self.keyboard)
+            self.wait_for_render(100)
         except AttributeError as e:
             self.fail(f"Failed during smooth_show: {e}")
 
         # Should be visible now
-        self.assertFalse(keyboard.has_flag(lv.obj.FLAG.HIDDEN))
+        self.assertFalse(self.keyboard.has_flag(lv.obj.FLAG.HIDDEN))
 
         # Hide keyboard (simulates pressing Enter)
         try:
-            mpos.ui.anim.smooth_hide(keyboard)
-            wait_for_render(100)
+            mpos.ui.anim.smooth_hide(self.keyboard)
+            self.wait_for_render(100)
         except AttributeError as e:
             self.fail(f"Failed during smooth_hide: {e}")
 
@@ -170,22 +142,19 @@ class TestKeyboardAnimation(unittest.TestCase):
         """
         print("Testing get_y and set_y methods...")
 
-        keyboard = MposKeyboard(self.screen)
-        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.create_keyboard_scene()
 
         # Verify methods exist
-        self.assertTrue(hasattr(keyboard, 'get_y'), "Missing get_y method")
-        self.assertTrue(hasattr(keyboard, 'set_y'), "Missing set_y method")
+        self.assertTrue(hasattr(self.keyboard, 'get_y'), "Missing get_y method")
+        self.assertTrue(hasattr(self.keyboard, 'set_y'), "Missing set_y method")
 
         # Try using them
         try:
-            y = keyboard.get_y()
-            keyboard.set_y(y + 10)
-            new_y = keyboard.get_y()
+            y = self.keyboard.get_y()
+            self.keyboard.set_y(y + 10)
+            new_y = self.keyboard.get_y()
             print(f"Position test: {y} -> {new_y}")
         except AttributeError as e:
             self.fail(f"Position methods raised AttributeError: {e}")
 
         print("=== Position methods test PASSED ===")
-
-

@@ -204,6 +204,50 @@ class MockTimer:
         cls._all_timers.clear()
 
 
+class MockNeoPixel:
+    """Mock neopixel.NeoPixel for testing LED operations."""
+    
+    def __init__(self, pin, num_leds, bpp=3, timing=1):
+        self.pin = pin
+        self.num_leds = num_leds
+        self.bpp = bpp
+        self.timing = timing
+        self.pixels = [(0, 0, 0)] * num_leds
+        self.write_count = 0
+    
+    def __setitem__(self, index, value):
+        """Set LED color (R, G, B) or (R, G, B, W) tuple."""
+        if 0 <= index < self.num_leds:
+            self.pixels[index] = value
+    
+    def __getitem__(self, index):
+        """Get LED color."""
+        if 0 <= index < self.num_leds:
+            return self.pixels[index]
+        return (0, 0, 0)
+    
+    def __len__(self):
+        """Return number of LEDs."""
+        return self.num_leds
+    
+    def fill(self, color):
+        """Fill all LEDs with the same color."""
+        for i in range(self.num_leds):
+            self.pixels[i] = color
+    
+    def write(self):
+        """Update hardware (mock - just increment counter)."""
+        self.write_count += 1
+    
+    def get_all_colors(self):
+        """Get all LED colors (for testing assertions)."""
+        return self.pixels.copy()
+    
+    def reset_write_count(self):
+        """Reset the write counter (for testing)."""
+        self.write_count = 0
+
+
 class MockMachine:
     """
     Mock machine module containing all hardware mocks.

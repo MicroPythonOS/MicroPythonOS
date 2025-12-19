@@ -24,6 +24,7 @@ from .mocks import (
     MockI2S,
     MockTimer,
     MockSocket,
+    MockNeoPixel,
     
     # MPOS mocks
     MockTaskManager,
@@ -58,6 +59,7 @@ __all__ = [
     'MockI2S',
     'MockTimer',
     'MockSocket',
+    'MockNeoPixel',
     
     # MPOS mocks
     'MockTaskManager',
