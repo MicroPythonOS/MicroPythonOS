@@ -23,10 +23,29 @@ class About(Activity):
         label2.set_text(f"sys.version: {sys.version}")
         label3 = lv.label(screen)
         label3.set_text(f"sys.implementation: {sys.implementation}")
+
+        sys_mpy = sys.implementation._mpy
+        label30 = lv.label(screen)
+        label30.set_text(f'mpy version: {sys_mpy & 0xff}')
+        label31 = lv.label(screen)
+        label31.set_text(f'mpy sub-version: {sys_mpy >> 8 & 3}')
+        arch = [None, 'x86', 'x64',
+            'armv6', 'armv6m', 'armv7m', 'armv7em', 'armv7emsp', 'armv7emdp',
+            'xtensa', 'xtensawin', 'rv32imc', 'rv64imc'][(sys_mpy >> 10) & 0x0F]
+        flags = ""
+        if arch:
+            flags += ' -march=' + arch
+        if (sys_mpy >> 16) != 0:
+            flags += ' -march-flags=' + (sys_mpy >> 16)
+        if len(flags) > 0:
+            label32 = lv.label(screen)
+            label32.set_text('mpy flags: ' + flags)
+
         label4 = lv.label(screen)
         label4.set_text(f"sys.platform: {sys.platform}")
         label15 = lv.label(screen)
         label15.set_text(f"sys.path: {sys.path}")
+
         import micropython
         label16 = lv.label(screen)
         label16.set_text(f"micropython.opt_level(): {micropython.opt_level()}")
