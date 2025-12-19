@@ -154,7 +154,6 @@ class WiFi(Activity):
         intent.putExtra("selected_ssid", None)
         self.startActivityForResult(intent, self.password_page_result_cb)
 
-
     def scan_cb(self, event):
         print("scan_cb: Scan button clicked, refreshing list")
         self.start_scan_networks()
@@ -163,6 +162,7 @@ class WiFi(Activity):
         print(f"select_ssid_cb: SSID selected: {ssid}")
         intent = Intent(activity_class=PasswordPage)
         intent.putExtra("selected_ssid", ssid)
+        intent.putExtra("known_password", self.findSavedPassword(ssid))
         self.startActivityForResult(intent, self.password_page_result_cb)
         
     def password_page_result_cb(self, result):
@@ -170,12 +170,21 @@ class WiFi(Activity):
         if result.get("result_code") is True:
             data = result.get("data")
             if data:
+                ssid = data.get("ssid")
+                password = data.get("password")
+                hidden = data.get("hidden")
+                self.setPassword(ssid, password, hidden)
+                global access_points
+                print(f"connect_cb: Updated access_points: {access_points}")
+                editor = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").edit()
+                editor.put_dict("access_points", access_points)
+                editor.commit()
                 self.start_attempt_connecting(data.get("ssid"), data.get("password"))
 
     def start_attempt_connecting(self, ssid, password):
         print(f"start_attempt_connecting: Attempting to connect to SSID '{ssid}' with password '{password}'")
         self.scan_button.add_state(lv.STATE.DISABLED)
-        self.scan_button_label.set_text(f"Connecting to '{ssid}'")
+        self.scan_button_label.set_text("Connecting...")
         if self.busy_connecting:
             print("Not attempting connect because busy_connecting.")
         else:
@@ -218,6 +227,27 @@ class WiFi(Activity):
         self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
         self.update_ui_threadsafe_if_foreground(self.refresh_list)
 
+    @staticmethod
+    def findSavedPassword(ssid):
+        if not access_points:
+            return None
+        ap = access_points.get(ssid)
+        if ap:
+            return ap.get("password")
+        return None
+
+    @staticmethod
+    def setPassword(ssid, password, hidden=False):
+        global access_points
+        ap = access_points.get(ssid)
+        if ap:
+            ap["password"] = password
+            if hidden is True:
+                ap["hidden"] = True
+            return
+        # if not found, then add it:
+        access_points[ssid] = { "password": password, "hidden": hidden }
+
 
 class PasswordPage(Activity):
     # Would be good to add some validation here so the password is not too short etc...
@@ -227,6 +257,7 @@ class PasswordPage(Activity):
     # Widgets:
     ssid_ta = None
     password_ta=None
+    hidden_cb = None
     keyboard=None
     connect_button=None
     cancel_button=None
@@ -236,6 +267,8 @@ class PasswordPage(Activity):
         password_page.set_style_pad_all(0, lv.PART.MAIN)
         password_page.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         self.selected_ssid = self.getIntent().extras.get("selected_ssid")
+        known_password = self.getIntent().extras.get("known_password")
+
         # SSID:
         if self.selected_ssid is None:
             print("No ssid selected, the user should fill it out.")
@@ -260,17 +293,16 @@ class PasswordPage(Activity):
         self.password_ta.set_width(lv.pct(90))
         self.password_ta.set_style_margin_left(5, lv.PART.MAIN)
         self.password_ta.set_one_line(True)
-        pwd = self.findSavedPassword(self.selected_ssid)
-        if pwd:
-            self.password_ta.set_text(pwd)
+        if known_password:
+            self.password_ta.set_text(known_password)
         self.password_ta.set_placeholder_text("Password")
         self.keyboard=MposKeyboard(password_page)
         self.keyboard.set_textarea(self.password_ta)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
         # Hidden network:
-        cb = lv.checkbox(password_page)
-        cb.set_text("Hidden network (always try connecting)")
-        cb.set_style_margin_left(5, lv.PART.MAIN)
+        self.hidden_cb = lv.checkbox(password_page)
+        self.hidden_cb.set_text("Hidden network (always try connecting)")
+        self.hidden_cb.set_style_margin_left(5, lv.PART.MAIN)
         # Buttons
         buttons = lv.obj(password_page)
         # Connect button
@@ -296,8 +328,9 @@ class PasswordPage(Activity):
         self.setContentView(password_page)
 
     def connect_cb(self, event):
-        global access_points
         print("connect_cb: Connect button clicked")
+
+        # Validate the form
         if self.selected_ssid is None:
             new_ssid = self.ssid_ta.get_text()
             if not new_ssid:
@@ -306,36 +339,13 @@ class PasswordPage(Activity):
                 return
             else:
                 self.selected_ssid = new_ssid
-        password=self.password_ta.get_text()
-        print(f"connect_cb: Got password: {password}")
-        self.setPassword(self.selected_ssid, password)
-        print(f"connect_cb: Updated access_points: {access_points}")
-        editor = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").edit()
-        editor.put_dict("access_points", access_points)
-        editor.commit()
-        self.setResult(True, {"ssid": self.selected_ssid, "password": password})
-        print("connect_cb: Restoring main_screen")
+
+        # Return the result
+        hidden_checked = True if self.hidden_cb.get_state() & lv.STATE.CHECKED else False
+        self.setResult(True, {"ssid": self.selected_ssid, "password": self.password_ta.get_text(), "hidden": hidden_checked})
+        print("connect_cb: finishing")
         self.finish()
-    
+
     def cancel_cb(self, event):
         print("cancel_cb: Cancel button clicked")
         self.finish()
-
-    @staticmethod
-    def setPassword(ssid, password):
-        global access_points
-        ap = access_points.get(ssid)
-        if ap:
-            ap["password"] = password
-            return
-        # if not found, then add it:
-        access_points[ssid] = { "password": password }
-
-    @staticmethod
-    def findSavedPassword(ssid):
-        if not access_points:
-            return None
-        ap = access_points.get(ssid)
-        if ap:
-            return ap.get("password")
-        return None
