@@ -48,7 +48,7 @@ def init_adc(pinnr, adc_to_voltage_func):
         print(f"Info: this platform has no ADC for measuring battery voltage: {e}")
 
     initial_adc_value = read_raw_adc()
-    print("Reading ADC at init to fill cache: {initial_adc_value} => {read_battery_voltage(raw_adc_value=initial_adc_value)}V => {get_battery_percentage(raw_adc_value=initial_adc_value)}%")
+    print(f"Reading ADC at init to fill cache: {initial_adc_value} => {read_battery_voltage(raw_adc_value=initial_adc_value)}V => {get_battery_percentage(raw_adc_value=initial_adc_value)}%")
 
 
 def read_raw_adc(force_refresh=False):
