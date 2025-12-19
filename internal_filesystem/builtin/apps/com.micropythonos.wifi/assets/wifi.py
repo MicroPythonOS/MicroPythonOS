@@ -338,6 +338,7 @@ class EditNetwork(Activity):
                 return
             else:
                 self.selected_ssid = new_ssid
+        # If a password is filled, then it should be at least 8 characters:
         pwd = self.password_ta.get_text()
         if len(pwd) > 0 and len(pwd) < 8:
             self.password_ta.set_style_bg_color(lv.color_hex(0xff8080), 0)
@@ -345,5 +346,5 @@ class EditNetwork(Activity):
 
         # Return the result
         hidden_checked = True if self.hidden_cb.get_state() & lv.STATE.CHECKED else False
-        self.setResult(True, {"ssid": self.selected_ssid, "password": self.password_ta.get_text(), "hidden": hidden_checked})
+        self.setResult(True, {"ssid": self.selected_ssid, "password": pwd, "hidden": hidden_checked})
         self.finish()
