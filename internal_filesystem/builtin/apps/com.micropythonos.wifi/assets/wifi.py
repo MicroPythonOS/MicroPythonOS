@@ -150,7 +150,7 @@ class WiFi(Activity):
 
     def add_network_callback(self, event):
         print(f"add_network_callback clicked")
-        intent = Intent(activity_class=PasswordPage)
+        intent = Intent(activity_class=EditNetwork)
         intent.putExtra("selected_ssid", None)
         self.startActivityForResult(intent, self.password_page_result_cb)
 
@@ -160,13 +160,13 @@ class WiFi(Activity):
 
     def select_ssid_cb(self,ssid):
         print(f"select_ssid_cb: SSID selected: {ssid}")
-        intent = Intent(activity_class=PasswordPage)
+        intent = Intent(activity_class=EditNetwork)
         intent.putExtra("selected_ssid", ssid)
         intent.putExtra("known_password", self.findSavedPassword(ssid))
         self.startActivityForResult(intent, self.password_page_result_cb)
         
     def password_page_result_cb(self, result):
-        print(f"PasswordPage finished, result: {result}")
+        print(f"EditNetwork finished, result: {result}")
         if result.get("result_code") is True:
             data = result.get("data")
             if data:
@@ -249,7 +249,7 @@ class WiFi(Activity):
         access_points[ssid] = { "password": password, "hidden": hidden }
 
 
-class PasswordPage(Activity):
+class EditNetwork(Activity):
     # Would be good to add some validation here so the password is not too short etc...
 
     selected_ssid = None
@@ -299,12 +299,18 @@ class PasswordPage(Activity):
         self.keyboard=MposKeyboard(password_page)
         self.keyboard.set_textarea(self.password_ta)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+
         # Hidden network:
         self.hidden_cb = lv.checkbox(password_page)
         self.hidden_cb.set_text("Hidden network (always try connecting)")
         self.hidden_cb.set_style_margin_left(5, lv.PART.MAIN)
-        # Buttons
+
+        # Action buttons:
         buttons = lv.obj(password_page)
+        buttons.set_width(lv.pct(100))
+        buttons.set_height(lv.SIZE_CONTENT)
+        buttons.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        buttons.set_style_border_width(0, lv.PART.MAIN)
         # Connect button
         self.connect_button = lv.button(buttons)
         self.connect_button.set_size(100,40)
@@ -317,19 +323,14 @@ class PasswordPage(Activity):
         self.cancel_button=lv.button(buttons)
         self.cancel_button.set_size(100,40)
         self.cancel_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
-        self.cancel_button.add_event_cb(self.cancel_cb,lv.EVENT.CLICKED,None)
+        self.cancel_button.add_event_cb(lambda *args: self.finish(), lv.EVENT.CLICKED, None)
         label=lv.label(self.cancel_button)
         label.set_text("Close")
         label.center()
-        buttons.set_width(lv.pct(100))
-        buttons.set_height(lv.SIZE_CONTENT)
-        buttons.set_style_bg_opa(lv.OPA.TRANSP, 0)
-        buttons.set_style_border_width(0, lv.PART.MAIN)
+
         self.setContentView(password_page)
 
     def connect_cb(self, event):
-        print("connect_cb: Connect button clicked")
-
         # Validate the form
         if self.selected_ssid is None:
             new_ssid = self.ssid_ta.get_text()
@@ -343,9 +344,4 @@ class PasswordPage(Activity):
         # Return the result
         hidden_checked = True if self.hidden_cb.get_state() & lv.STATE.CHECKED else False
         self.setResult(True, {"ssid": self.selected_ssid, "password": self.password_ta.get_text(), "hidden": hidden_checked})
-        print("connect_cb: finishing")
-        self.finish()
-
-    def cancel_cb(self, event):
-        print("cancel_cb: Cancel button clicked")
         self.finish()
