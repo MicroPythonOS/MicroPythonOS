@@ -50,6 +50,7 @@ class WifiService:
         """
         Scan for available networks and connect to the first saved network found.
         Networks are tried in order of signal strength (strongest first).
+        Hidden networks are also tried even if they don't appear in the scan.
 
         Args:
             network_module: Network module for dependency injection (testing)
@@ -64,9 +65,13 @@ class WifiService:
         # RSSI is at index 3, higher values (less negative) = stronger signal
         networks = sorted(networks, key=lambda n: n[3], reverse=True)
 
+        # Track which SSIDs we've tried (to avoid retrying hidden networks)
+        tried_ssids = set()
+
         for n in networks:
             ssid = n[0].decode()
             rssi = n[3]
+            tried_ssids.add(ssid)
             print(f"WifiService: Found network '{ssid}' (RSSI: {rssi} dBm)")
 
             if ssid in WifiService.access_points:
@@ -80,6 +85,18 @@ class WifiService:
                     print(f"WifiService: Failed to connect to '{ssid}'")
             else:
                 print(f"WifiService: Skipping '{ssid}' (not configured)")
+
+        # Try hidden networks that weren't in the scan results
+        for ssid, config in WifiService.access_points.items():
+            if config.get("hidden") and ssid not in tried_ssids:
+                password = config.get("password")
+                print(f"WifiService: Attempting hidden network '{ssid}'")
+
+                if WifiService.attempt_connecting(ssid, password, network_module=network_module):
+                    print(f"WifiService: Connected to hidden network '{ssid}'")
+                    return True
+                else:
+                    print(f"WifiService: Failed to connect to hidden network '{ssid}'")
 
         print("WifiService: No saved networks found or connected")
         return False
