@@ -254,7 +254,7 @@ class MposKeyboard:
 
     def scroll_after_show(self, timer):
         self._keyboard.scroll_to_view_recursive(True)
-        self._textarea.scroll_to_view_recursive(True)
+        #self._textarea.scroll_to_view_recursive(True) # makes sense but doesn't work and breaks the keyboard scroll
 
     def scroll_back_after_hide(self, timer):
         self._parent.scroll_to_y(self._saved_scroll_y, True)
