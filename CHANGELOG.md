@@ -6,6 +6,7 @@
 - AppStore app: add support for BadgeHub backend
 - OSUpdate app: show download speed
 - WiFi app: new "Add network" functionality for out-of-range or hidden networks
+- WiFi app: add "Forget" button to delete networks
 - API: add TaskManager that wraps asyncio
 - API: add DownloadManager that uses TaskManager
 - API: use aiorepl to eliminate another thread

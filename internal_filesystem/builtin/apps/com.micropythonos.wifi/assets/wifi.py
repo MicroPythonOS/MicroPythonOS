@@ -22,6 +22,8 @@ last_tried_result = ""
 
 class WiFi(Activity):
 
+    prefs = None
+
     scan_button_scan_text = "Rescan"
     scan_button_scanning_text = "Scanning..."
 
@@ -66,8 +68,12 @@ class WiFi(Activity):
     def onResume(self, screen):
         print("wifi.py onResume")
         super().onResume(screen)
+
+        if not self.prefs:
+            self.prefs = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice")
+
         global access_points
-        access_points = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").get_dict("access_points")
+        access_points = self.prefs.get_dict("access_points")
         if len(self.ssids) == 0:
             if WifiService.wifi_busy == False:
                 WifiService.wifi_busy = True
@@ -172,7 +178,7 @@ class WiFi(Activity):
             if data:
                 ssid = data.get("ssid")
                 global access_points
-                editor = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").edit()
+                editor = self.prefs.edit()
                 forget = data.get("forget")
                 if forget:
                     del access_points[ssid]
