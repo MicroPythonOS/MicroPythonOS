@@ -152,7 +152,7 @@ class WiFi(Activity):
         print(f"add_network_callback clicked")
         intent = Intent(activity_class=EditNetwork)
         intent.putExtra("selected_ssid", None)
-        self.startActivityForResult(intent, self.password_page_result_cb)
+        self.startActivityForResult(intent, self.edit_network_result_callback)
 
     def scan_cb(self, event):
         print("scan_cb: Scan button clicked, refreshing list")
@@ -163,23 +163,29 @@ class WiFi(Activity):
         intent = Intent(activity_class=EditNetwork)
         intent.putExtra("selected_ssid", ssid)
         intent.putExtra("known_password", self.findSavedPassword(ssid))
-        self.startActivityForResult(intent, self.password_page_result_cb)
+        self.startActivityForResult(intent, self.edit_network_result_callback)
         
-    def password_page_result_cb(self, result):
+    def edit_network_result_callback(self, result):
         print(f"EditNetwork finished, result: {result}")
         if result.get("result_code") is True:
             data = result.get("data")
             if data:
                 ssid = data.get("ssid")
-                password = data.get("password")
-                hidden = data.get("hidden")
-                self.setPassword(ssid, password, hidden)
                 global access_points
-                print(f"connect_cb: Updated access_points: {access_points}")
                 editor = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice").edit()
-                editor.put_dict("access_points", access_points)
-                editor.commit()
-                self.start_attempt_connecting(data.get("ssid"), data.get("password"))
+                forget = data.get("forget")
+                if forget:
+                    del access_points[ssid]
+                    editor.put_dict("access_points", access_points)
+                    editor.commit()
+                    self.refresh_list()
+                else: # save or update
+                    password = data.get("password")
+                    hidden = data.get("hidden")
+                    self.setPassword(ssid, password, hidden)
+                    editor.put_dict("access_points", access_points)
+                    editor.commit()
+                    self.start_attempt_connecting(ssid, password)
 
     def start_attempt_connecting(self, ssid, password):
         print(f"start_attempt_connecting: Attempting to connect to SSID '{ssid}' with password '{password}'")
@@ -310,21 +316,27 @@ class EditNetwork(Activity):
         buttons.set_height(lv.SIZE_CONTENT)
         buttons.set_style_bg_opa(lv.OPA.TRANSP, 0)
         buttons.set_style_border_width(0, lv.PART.MAIN)
-        # Connect button
-        self.connect_button = lv.button(buttons)
-        self.connect_button.set_size(100,40)
-        self.connect_button.align(lv.ALIGN.LEFT_MID, 0, 0)
-        self.connect_button.add_event_cb(self.connect_cb,lv.EVENT.CLICKED,None)
-        label=lv.label(self.connect_button)
-        label.set_text("Connect")
-        label.center()
+        # Delete button
+        if self.selected_ssid:
+            self.forget_button=lv.button(buttons)
+            self.forget_button.align(lv.ALIGN.LEFT_MID, 0, 0)
+            self.forget_button.add_event_cb(self.forget_cb, lv.EVENT.CLICKED, None)
+            label=lv.label(self.forget_button)
+            label.set_text("Forget")
+            label.center()
         # Close button
         self.cancel_button=lv.button(buttons)
-        self.cancel_button.set_size(100,40)
-        self.cancel_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+        self.cancel_button.center()
         self.cancel_button.add_event_cb(lambda *args: self.finish(), lv.EVENT.CLICKED, None)
         label=lv.label(self.cancel_button)
         label.set_text("Close")
+        label.center()
+        # Connect button
+        self.connect_button = lv.button(buttons)
+        self.connect_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+        self.connect_button.add_event_cb(self.connect_cb,lv.EVENT.CLICKED,None)
+        label=lv.label(self.connect_button)
+        label.set_text("Connect")
         label.center()
 
         self.setContentView(password_page)
@@ -347,4 +359,8 @@ class EditNetwork(Activity):
         # Return the result
         hidden_checked = True if self.hidden_cb.get_state() & lv.STATE.CHECKED else False
         self.setResult(True, {"ssid": self.selected_ssid, "password": pwd, "hidden": hidden_checked})
+        self.finish()
+
+    def forget_cb(self, event):
+        self.setResult(True, {"ssid": self.selected_ssid, "forget": True})
         self.finish()
