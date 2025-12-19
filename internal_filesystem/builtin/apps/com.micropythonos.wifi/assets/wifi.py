@@ -250,7 +250,6 @@ class WiFi(Activity):
 
 
 class EditNetwork(Activity):
-    # Would be good to add some validation here so the password is not too short etc...
 
     selected_ssid = None
 
@@ -335,11 +334,14 @@ class EditNetwork(Activity):
         if self.selected_ssid is None:
             new_ssid = self.ssid_ta.get_text()
             if not new_ssid:
-                print("No SSID provided, not connecting")
                 self.ssid_ta.set_style_bg_color(lv.color_hex(0xff8080), 0)
                 return
             else:
                 self.selected_ssid = new_ssid
+        pwd = self.password_ta.get_text()
+        if len(pwd) > 0 and len(pwd) < 8:
+            self.password_ta.set_style_bg_color(lv.color_hex(0xff8080), 0)
+            return
 
         # Return the result
         hidden_checked = True if self.hidden_cb.get_state() & lv.STATE.CHECKED else False
