@@ -68,8 +68,7 @@ class WiFi(Activity):
         WifiService.get_saved_networks()
 
         if len(self.scanned_ssids) == 0:
-            if WifiService.wifi_busy == False:
-                WifiService.wifi_busy = True
+            if not WifiService.is_busy():
                 self.start_scan_networks()
             else:
                 self.show_error("Wifi is busy, please try again later.")
@@ -93,9 +92,8 @@ class WiFi(Activity):
         except Exception as e:
             print(f"scan_networks: Scan failed: {e}")
             self.show_error("Wi-Fi scan failed")
-        # scan done:
+        # scan done - WifiService.scan_networks() manages wifi_busy flag internally
         self.busy_scanning = False
-        WifiService.wifi_busy = False
         self.update_ui_threadsafe_if_foreground(self.scan_button_label.set_text, self.scan_button_scan_text)
         self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
         self.update_ui_threadsafe_if_foreground(self.refresh_list)

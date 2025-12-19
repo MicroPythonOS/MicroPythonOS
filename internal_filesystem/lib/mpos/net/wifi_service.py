@@ -36,7 +36,7 @@ class WifiService:
     """
 
     # Class-level lock to prevent concurrent WiFi operations
-    # Used by WiFi app when scanning to avoid conflicts with connection attempts
+    # Use is_busy() to check state; operations like scan_networks() manage this automatically
     wifi_busy = False
 
     # Dictionary of saved access points {ssid: {password: "..."}}
@@ -313,6 +313,19 @@ class WifiService:
             pass
 
     @staticmethod
+    def is_busy():
+        """
+        Check if WiFi operations are currently in progress.
+        
+        Use this to check if scanning or other WiFi operations can be started.
+        Operations like scan_networks() manage the busy flag automatically.
+        
+        Returns:
+            bool: True if WiFi is busy, False if available
+        """
+        return WifiService.wifi_busy
+
+    @staticmethod
     def get_saved_networks():
         """
         Get list of saved network SSIDs.
@@ -356,22 +369,35 @@ class WifiService:
     def scan_networks(network_module=None):
         """
         Scan for available WiFi networks.
+        
+        This method manages the wifi_busy flag internally. If WiFi is already busy,
+        returns an empty list. The busy flag is automatically cleared when scanning
+        completes (even on error).
 
         Args:
             network_module: Network module for dependency injection (testing)
 
         Returns:
-            list: List of SSIDs found, or mock data on desktop
+            list: List of SSIDs found, empty list if busy, or mock data on desktop
         """
+        # Desktop mode - return mock SSIDs (no busy flag needed)
         if not HAS_NETWORK_MODULE and network_module is None:
-            # Desktop mode - return mock SSIDs
             time.sleep(1)
             return ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
 
-        networks = WifiService._scan_networks_raw(network_module)
-        # Return unique SSIDs, filtering out empty ones and invalid lengths
-        ssids = list(set(n[0].decode() for n in networks if n[0]))
-        return [s for s in ssids if 0 < len(s) <= 32]
+        # Check if already busy
+        if WifiService.wifi_busy:
+            print("WifiService: scan_networks() - WiFi is busy, returning empty list")
+            return []
+
+        WifiService.wifi_busy = True
+        try:
+            networks = WifiService._scan_networks_raw(network_module)
+            # Return unique SSIDs, filtering out empty ones and invalid lengths
+            ssids = list(set(n[0].decode() for n in networks if n[0]))
+            return [s for s in ssids if 0 < len(s) <= 32]
+        finally:
+            WifiService.wifi_busy = False
 
     @staticmethod
     def get_current_ssid(network_module=None):
