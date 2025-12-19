@@ -3,9 +3,10 @@
 - AudioFlinger: optimize WAV volume scaling for speed and immediately set volume
 - AudioFlinger: add support for I2S microphone recording to WAV
 - AppStore app: eliminate all threads by using TaskManager
-- AppStore app: add support for BadgeHub backend
+- AppStore app: add support for BadgeHub backend (not default)
 - OSUpdate app: show download speed
-- WiFi app: new "Add network" functionality for out-of-range or hidden networks
+- WiFi app: new "Add network" functionality for out-of-range networks
+- WiFi app: add support for hidden networks
 - WiFi app: add "Forget" button to delete networks
 - API: add TaskManager that wraps asyncio
 - API: add DownloadManager that uses TaskManager
