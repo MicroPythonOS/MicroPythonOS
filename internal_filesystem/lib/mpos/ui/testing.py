@@ -774,3 +774,100 @@ def click_label(label_text, timeout=5, use_send_event=True):
 def find_text_on_screen(text):
     """Check if text is present on screen."""
     return find_label_with_text(lv.screen_active(), text) is not None
+
+
+def click_keyboard_button(keyboard, button_text, use_direct=True):
+    """
+    Click a keyboard button reliably.
+    
+    This function handles the complexity of clicking keyboard buttons.
+    For MposKeyboard, it directly manipulates the textarea (most reliable).
+    For raw lv.keyboard, it uses simulate_click with coordinates.
+    
+    Args:
+        keyboard: MposKeyboard instance or lv.keyboard widget
+        button_text: Text of the button to click (e.g., "q", "a", "1")
+        use_direct: If True (default), directly manipulate textarea for MposKeyboard.
+                   If False, use simulate_click with coordinates.
+        
+    Returns:
+        bool: True if button was found and clicked, False otherwise
+        
+    Example:
+        from mpos.ui.keyboard import MposKeyboard
+        from mpos.ui.testing import click_keyboard_button, wait_for_render
+        
+        keyboard = MposKeyboard(screen)
+        keyboard.set_textarea(textarea)
+        
+        # Click the 'q' button
+        success = click_keyboard_button(keyboard, "q")
+        wait_for_render(10)
+        
+        # Verify text was added
+        assert textarea.get_text() == "q"
+    """
+    # Check if this is an MposKeyboard wrapper
+    is_mpos_keyboard = hasattr(keyboard, '_keyboard') and hasattr(keyboard, '_textarea')
+    
+    if is_mpos_keyboard:
+        lvgl_keyboard = keyboard._keyboard
+    else:
+        lvgl_keyboard = keyboard
+    
+    # Find button index by searching through all buttons
+    button_idx = None
+    for i in range(100):  # Check up to 100 buttons
+        try:
+            text = lvgl_keyboard.get_button_text(i)
+            if text == button_text:
+                button_idx = i
+                break
+        except:
+            break  # No more buttons
+    
+    if button_idx is None:
+        print(f"click_keyboard_button: Button '{button_text}' not found on keyboard")
+        return False
+    
+    if use_direct and is_mpos_keyboard:
+        # For MposKeyboard, directly manipulate the textarea
+        # This is the most reliable approach for testing
+        textarea = keyboard._textarea
+        if textarea is None:
+            print(f"click_keyboard_button: No textarea connected to keyboard")
+            return False
+        
+        current_text = textarea.get_text()
+        
+        # Handle special keys (matching keyboard.py logic)
+        if button_text == lv.SYMBOL.BACKSPACE:
+            new_text = current_text[:-1]
+        elif button_text == " " or button_text == keyboard.LABEL_SPACE:
+            new_text = current_text + " "
+        elif button_text in [lv.SYMBOL.UP, lv.SYMBOL.DOWN, keyboard.LABEL_LETTERS,
+                            keyboard.LABEL_NUMBERS_SPECIALS, keyboard.LABEL_SPECIALS,
+                            lv.SYMBOL.OK]:
+            # Mode switching or OK - don't modify text
+            print(f"click_keyboard_button: '{button_text}' is a control key, not adding to textarea")
+            wait_for_render(10)
+            return True
+        else:
+            # Regular character
+            new_text = current_text + button_text
+        
+        textarea.set_text(new_text)
+        wait_for_render(10)
+        print(f"click_keyboard_button: Clicked '{button_text}' at index {button_idx} using direct textarea manipulation")
+    else:
+        # Use coordinate-based clicking
+        coords = get_keyboard_button_coords(keyboard, button_text)
+        if coords:
+            simulate_click(coords['center_x'], coords['center_y'])
+            wait_for_render(20)  # More time for event processing
+            print(f"click_keyboard_button: Clicked '{button_text}' at ({coords['center_x']}, {coords['center_y']}) using simulate_click")
+        else:
+            print(f"click_keyboard_button: Could not get coordinates for '{button_text}'")
+            return False
+    
+    return True

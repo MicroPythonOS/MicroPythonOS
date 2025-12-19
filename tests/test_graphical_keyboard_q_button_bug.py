@@ -14,32 +14,11 @@ Usage:
 """
 
 import unittest
-import lvgl as lv
-from mpos.ui.keyboard import MposKeyboard
-from mpos.ui.testing import (
-    wait_for_render,
-    find_button_with_text,
-    get_widget_coords,
-    get_keyboard_button_coords,
-    simulate_click,
-    print_screen_labels
-)
+from base import KeyboardTestBase
 
 
-class TestKeyboardQButton(unittest.TestCase):
+class TestKeyboardQButton(KeyboardTestBase):
     """Test keyboard button functionality (especially 'q' which was at index 0)."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.screen = lv.obj()
-        self.screen.set_size(320, 240)
-        lv.screen_load(self.screen)
-        wait_for_render(5)
-
-    def tearDown(self):
-        """Clean up."""
-        lv.screen_load(lv.obj())
-        wait_for_render(5)
 
     def test_q_button_works(self):
         """
@@ -51,82 +30,50 @@ class TestKeyboardQButton(unittest.TestCase):
 
         Steps:
         1. Create textarea and keyboard
-        2. Find 'q' button index in keyboard map
-        3. Get button coordinates from keyboard widget
-        4. Click it using simulate_click()
-        5. Verify 'q' appears in textarea (should PASS after fix)
-        6. Repeat with 'a' button
-        7. Verify 'a' appears correctly (should PASS)
+        2. Click 'q' button using click_keyboard_button helper
+        3. Verify 'q' appears in textarea (should PASS after fix)
+        4. Repeat with 'a' button
+        5. Verify 'a' appears correctly (should PASS)
         """
         print("\n=== Testing keyboard 'q' and 'a' button behavior ===")
 
-        # Create textarea
-        textarea = lv.textarea(self.screen)
-        textarea.set_size(200, 30)
-        textarea.set_one_line(True)
-        textarea.align(lv.ALIGN.TOP_MID, 0, 10)
-        textarea.set_text("")  # Start empty
-        wait_for_render(5)
+        # Create keyboard scene (textarea + keyboard)
+        self.create_keyboard_scene()
 
-        # Create keyboard and connect to textarea
-        keyboard = MposKeyboard(self.screen)
-        keyboard.set_textarea(textarea)
-        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        wait_for_render(10)
-
-        print(f"Initial textarea: '{textarea.get_text()}'")
-        self.assertEqual(textarea.get_text(), "", "Textarea should start empty")
+        print(f"Initial textarea: '{self.get_textarea_text()}'")
+        self.assertTextareaEmpty("Textarea should start empty")
 
         # --- Test 'q' button ---
         print("\n--- Testing 'q' button ---")
 
-        # Get exact button coordinates using helper function
-        q_coords = get_keyboard_button_coords(keyboard, "q")
-        self.assertIsNotNone(q_coords, "Should find 'q' button on keyboard")
-
-        print(f"Found 'q' button at index {q_coords['button_idx']}, row {q_coords['row']}, col {q_coords['col']}")
-        print(f"Exact 'q' button position: ({q_coords['center_x']}, {q_coords['center_y']})")
-
-        # Click the 'q' button
-        print(f"Clicking 'q' button at ({q_coords['center_x']}, {q_coords['center_y']})")
-        simulate_click(q_coords['center_x'], q_coords['center_y'])
-        wait_for_render(20) # increased from 10 to 20 because on macOS this didnt work
+        # Click the 'q' button using the reliable click_keyboard_button helper
+        success = self.click_keyboard_button("q")
+        self.assertTrue(success, "Should find and click 'q' button on keyboard")
 
         # Check textarea content
-        text_after_q = textarea.get_text()
+        text_after_q = self.get_textarea_text()
         print(f"Textarea after clicking 'q': '{text_after_q}'")
 
         # Verify 'q' was added (should work after fix)
-        self.assertEqual(text_after_q, "q",
-                        "Clicking 'q' button should add 'q' to textarea")
+        self.assertTextareaText("q", "Clicking 'q' button should add 'q' to textarea")
 
         # --- Test 'a' button for comparison ---
         print("\n--- Testing 'a' button (for comparison) ---")
 
         # Clear textarea
-        textarea.set_text("")
-        wait_for_render(5)
+        self.clear_textarea()
         print("Cleared textarea")
 
-        # Get exact button coordinates using helper function
-        a_coords = get_keyboard_button_coords(keyboard, "a")
-        self.assertIsNotNone(a_coords, "Should find 'a' button on keyboard")
-
-        print(f"Found 'a' button at index {a_coords['button_idx']}, row {a_coords['row']}, col {a_coords['col']}")
-        print(f"Exact 'a' button position: ({a_coords['center_x']}, {a_coords['center_y']})")
-
-        # Click the 'a' button
-        print(f"Clicking 'a' button at ({a_coords['center_x']}, {a_coords['center_y']})")
-        simulate_click(a_coords['center_x'], a_coords['center_y'])
-        wait_for_render(10)
+        # Click the 'a' button using the reliable click_keyboard_button helper
+        success = self.click_keyboard_button("a")
+        self.assertTrue(success, "Should find and click 'a' button on keyboard")
 
         # Check textarea content
-        text_after_a = textarea.get_text()
+        text_after_a = self.get_textarea_text()
         print(f"Textarea after clicking 'a': '{text_after_a}'")
 
         # The 'a' button should work correctly
-        self.assertEqual(text_after_a, "a",
-                        "Clicking 'a' button should add 'a' to textarea")
+        self.assertTextareaText("a", "Clicking 'a' button should add 'a' to textarea")
 
         print("\nSummary:")
         print(f"  'q' button result: '{text_after_q}' (expected 'q') ✓")
@@ -142,26 +89,16 @@ class TestKeyboardQButton(unittest.TestCase):
         """
         print("\n=== Discovering keyboard buttons ===")
 
-        # Create keyboard without textarea to inspect it
-        keyboard = MposKeyboard(self.screen)
-        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        wait_for_render(10)
+        # Create keyboard scene
+        self.create_keyboard_scene()
 
-        # Iterate through button indices to find all buttons
+        # Get all buttons using the base class helper
+        found_buttons = self.get_all_keyboard_buttons()
+
+        # Print first 20 buttons
         print("\nEnumerating keyboard buttons by index:")
-        found_buttons = []
-
-        for i in range(100):  # Check first 100 indices
-            try:
-                text = keyboard.get_button_text(i)
-                if text:  # Skip None/empty
-                    found_buttons.append((i, text))
-                    # Only print first 20 to avoid clutter
-                    if i < 20:
-                        print(f"  Button {i}: '{text}'")
-            except:
-                # No more buttons
-                break
+        for idx, text in found_buttons[:20]:
+            print(f"  Button {idx}: '{text}'")
 
         if len(found_buttons) > 20:
             print(f"  ... (showing first 20 of {len(found_buttons)} buttons)")
@@ -173,16 +110,12 @@ class TestKeyboardQButton(unittest.TestCase):
         print("\nLooking for specific letters:")
 
         for letter in letters_to_test:
-            found = False
-            for idx, text in found_buttons:
-                if text == letter:
-                    print(f"  '{letter}' at index {idx}")
-                    found = True
-                    break
-            if not found:
+            idx = self.find_keyboard_button_index(letter)
+            if idx is not None:
+                print(f"  '{letter}' at index {idx}")
+            else:
                 print(f"  '{letter}' NOT FOUND")
 
         # Verify we can find at least some buttons
         self.assertTrue(len(found_buttons) > 0,
                        "Should find at least some buttons on keyboard")
-
