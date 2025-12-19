@@ -253,8 +253,18 @@ class MposKeyboard:
         return getattr(self._keyboard, name)
 
     def scroll_after_show(self, timer):
-        self._keyboard.scroll_to_view_recursive(True)
         #self._textarea.scroll_to_view_recursive(True) # makes sense but doesn't work and breaks the keyboard scroll
+        self._keyboard.scroll_to_view_recursive(True)
+
+    def focus_on_keyboard(self, timer):
+        # Would be good to focus on the keyboard,
+        # but somehow the focus styling is not applied,
+        # so the user doesn't see which button is selected...
+        default_group = lv.group_get_default()
+        if default_group:
+            from .focus_direction import emulate_focus_obj, move_focus_direction
+            emulate_focus_obj(default_group, self._keyboard)
+            move_focus_direction(180) # Same issue
 
     def scroll_back_after_hide(self, timer):
         self._parent.scroll_to_y(self._saved_scroll_y, True)
@@ -263,10 +273,10 @@ class MposKeyboard:
         self._saved_scroll_y = self._parent.get_scroll_y()
         mpos.ui.anim.smooth_show(self._keyboard, duration=500)
         # Scroll to view on a timer because it will be hidden initially
-        scroll_timer = lv.timer_create(self.scroll_after_show,250,None)
-        scroll_timer.set_repeat_count(1)
+        lv.timer_create(self.scroll_after_show,250,None).set_repeat_count(1)
+        #focus_timer = lv.timer_create(self.focus_on_keyboard,750,None).set_repeat_count(1)
 
     def hide_keyboard(self):
         mpos.ui.anim.smooth_hide(self._keyboard, duration=500)
-        scroll_timer = lv.timer_create(self.scroll_back_after_hide,550,None) # do it after the hide so the scrollbars disappear automatically if not needed
-        scroll_timer.set_repeat_count(1)
+        # Do this after the hide so the scrollbars disappear automatically if not needed
+        scroll_timer = lv.timer_create(self.scroll_back_after_hide,550,None).set_repeat_count(1)
