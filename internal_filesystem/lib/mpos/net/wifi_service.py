@@ -42,6 +42,9 @@ class WifiService:
     # Dictionary of saved access points {ssid: {password: "..."}}
     access_points = {}
 
+    # Desktop mode: simulated connected SSID (None = not connected)
+    _desktop_connected_ssid = None
+
     @staticmethod
     def connect(network_module=None):
         """
@@ -54,15 +57,8 @@ class WifiService:
         Returns:
             bool: True if successfully connected, False otherwise
         """
-        net = network_module if network_module else network
-        wlan = net.WLAN(net.STA_IF)
-
-        # Restart WiFi hardware in case it's in a bad state
-        wlan.active(False)
-        wlan.active(True)
-
-        # Scan for available networks
-        networks = wlan.scan()
+        # Scan for available networks using internal method
+        networks = WifiService._scan_networks_raw(network_module)
 
         # Sort networks by RSSI (signal strength) in descending order
         # RSSI is at index 3, higher values (less negative) = stronger signal
@@ -104,8 +100,17 @@ class WifiService:
         """
         print(f"WifiService: Connecting to SSID: {ssid}")
 
-        net = network_module if network_module else network
         time_mod = time_module if time_module else time
+
+        # Desktop mode - simulate successful connection
+        if not HAS_NETWORK_MODULE and network_module is None:
+            print("WifiService: Desktop mode, simulating connection...")
+            time_mod.sleep(2)
+            WifiService._desktop_connected_ssid = ssid
+            print(f"WifiService: Simulated connection to '{ssid}' successful")
+            return True
+
+        net = network_module if network_module else network
 
         try:
             wlan = net.WLAN(net.STA_IF)
@@ -323,20 +328,115 @@ class WifiService:
         return list(WifiService.access_points.keys())
 
     @staticmethod
-    def save_network(ssid, password):
+    def _scan_networks_raw(network_module=None):
+        """
+        Internal method to scan for available WiFi networks and return raw data.
+
+        Args:
+            network_module: Network module for dependency injection (testing)
+
+        Returns:
+            list: Raw network tuples from wlan.scan(), or empty list on desktop
+        """
+        if not HAS_NETWORK_MODULE and network_module is None:
+            # Desktop mode - return empty (no raw data available)
+            return []
+
+        net = network_module if network_module else network
+        wlan = net.WLAN(net.STA_IF)
+
+        # Restart WiFi hardware in case it is in a bad state (only if not connected)
+        if not wlan.isconnected():
+            wlan.active(False)
+            wlan.active(True)
+
+        return wlan.scan()
+
+    @staticmethod
+    def scan_networks(network_module=None):
+        """
+        Scan for available WiFi networks.
+
+        Args:
+            network_module: Network module for dependency injection (testing)
+
+        Returns:
+            list: List of SSIDs found, or mock data on desktop
+        """
+        if not HAS_NETWORK_MODULE and network_module is None:
+            # Desktop mode - return mock SSIDs
+            time.sleep(1)
+            return ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
+
+        networks = WifiService._scan_networks_raw(network_module)
+        # Return unique SSIDs, filtering out empty ones and invalid lengths
+        ssids = list(set(n[0].decode() for n in networks if n[0]))
+        return [s for s in ssids if 0 < len(s) <= 32]
+
+    @staticmethod
+    def get_current_ssid(network_module=None):
+        """
+        Get the SSID of the currently connected network.
+
+        Args:
+            network_module: Network module for dependency injection (testing)
+
+        Returns:
+            str or None: Current SSID if connected, None otherwise
+        """
+        if not HAS_NETWORK_MODULE and network_module is None:
+            # Desktop mode - return simulated connected SSID
+            return WifiService._desktop_connected_ssid
+
+        net = network_module if network_module else network
+        try:
+            wlan = net.WLAN(net.STA_IF)
+            if wlan.isconnected():
+                return wlan.config('essid')
+        except Exception as e:
+            print(f"WifiService: Error getting current SSID: {e}")
+        return None
+
+    @staticmethod
+    def get_network_password(ssid):
+        """
+        Get the saved password for a network.
+
+        Args:
+            ssid: Network SSID
+
+        Returns:
+            str or None: Password if found, None otherwise
+        """
+        if not WifiService.access_points:
+            WifiService.access_points = mpos.config.SharedPreferences(
+                "com.micropythonos.system.wifiservice"
+            ).get_dict("access_points")
+
+        ap = WifiService.access_points.get(ssid)
+        if ap:
+            return ap.get("password")
+        return None
+
+    @staticmethod
+    def save_network(ssid, password, hidden=False):
         """
         Save a new WiFi network credential.
 
         Args:
             ssid: Network SSID
             password: Network password
+            hidden: Whether this is a hidden network (always try connecting)
         """
         # Load current saved networks
         prefs = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice")
         access_points = prefs.get_dict("access_points")
 
         # Add or update the network
-        access_points[ssid] = {"password": password}
+        network_config = {"password": password}
+        if hidden:
+            network_config["hidden"] = True
+        access_points[ssid] = network_config
 
         # Save back to config
         editor = prefs.edit()
@@ -346,7 +446,7 @@ class WifiService:
         # Update class-level cache
         WifiService.access_points = access_points
 
-        print(f"WifiService: Saved network '{ssid}'")
+        print(f"WifiService: Saved network '{ssid}' (hidden={hidden})")
 
     @staticmethod
     def forget_network(ssid):
