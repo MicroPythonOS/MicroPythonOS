@@ -233,9 +233,7 @@ class AppStore(Activity):
                 print(f"Could not get app_metadata object from version object: {e}")
                 return
             try:
-                author = app_metadata.get("author")
-                print("Using author as publisher because that's all the backend supports...")
-                app_obj.publisher = author
+                app_obj.publisher = app_metadata.get("author")
             except Exception as e:
                 print(f"Could not get author from version object: {e}")
             try:
