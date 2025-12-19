@@ -12,7 +12,7 @@ from mpos.net.wifi_service import WifiService
 class WiFi(Activity):
 
     prefs = None
-    access_points={}
+    saved_access_points={}
     last_tried_ssid = ""
     last_tried_result = ""
     have_network = True
@@ -24,7 +24,7 @@ class WiFi(Activity):
     scan_button_scan_text = "Rescan"
     scan_button_scanning_text = "Scanning..."
 
-    ssids=[]
+    scanned_ssids=[]
     busy_scanning = False
     busy_connecting = False
     error_timer = None
@@ -69,9 +69,9 @@ class WiFi(Activity):
         if not self.prefs:
             self.prefs = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice")
 
-        self.access_points = self.prefs.get_dict("access_points")
-        print(f"loaded access points from preferences: {self.access_points}")
-        if len(self.ssids) == 0:
+        self.saved_access_points = self.prefs.get_dict("access_points")
+        print(f"loaded access points from preferences: {self.saved_access_points}")
+        if len(self.scanned_ssids) == 0:
             if WifiService.wifi_busy == False:
                 WifiService.wifi_busy = True
                 self.start_scan_networks()
@@ -99,11 +99,11 @@ class WiFi(Activity):
         try:
             if self.have_network:
                 networks = wlan.scan()
-                self.ssids = list(set(n[0].decode() for n in networks))
+                self.scanned_ssids = list(set(n[0].decode() for n in networks))
             else:
                 time.sleep(1)
-                self.ssids = ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
-            print(f"scan_networks: Found networks: {self.ssids}")
+                self.scanned_ssids = ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
+            print(f"scan_networks: Found networks: {self.scanned_ssids}")
         except Exception as e:
             print(f"scan_networks: Scan failed: {e}")
             self.show_error("Wi-Fi scan failed")
@@ -128,8 +128,7 @@ class WiFi(Activity):
         print("refresh_list: Clearing current list")
         self.aplist.clean() # this causes an issue with lost taps if an ssid is clicked that has been removed
         print("refresh_list: Populating list with scanned networks")
-        self.ssids = list(set(self.ssids + list(ssid for ssid in self.access_points)))
-        for ssid in set(self.ssids):
+        for ssid in set(self.scanned_ssids + list(ssid for ssid in self.saved_access_points)):
             if len(ssid) < 1 or len(ssid) > 32:
                 print(f"Skipping too short or long SSID: {ssid}")
                 continue
@@ -144,7 +143,7 @@ class WiFi(Activity):
             if status != "connected":
                 if self.last_tried_ssid == ssid: # implies not connected because not wlan.isconnected()
                     status = self.last_tried_result
-                elif ssid in self.access_points:
+                elif ssid in self.saved_access_points:
                     status="saved"
             label=lv.label(button)
             label.set_text(status)
@@ -177,9 +176,8 @@ class WiFi(Activity):
                 forget = data.get("forget")
                 if forget:
                     try:
-                        del self.access_points[ssid]
-                        self.ssids.remove(ssid)
-                        editor.put_dict("access_points", self.access_points)
+                        del self.saved_access_points[ssid]
+                        editor.put_dict("access_points", self.saved_access_points)
                         editor.commit()
                         self.refresh_list()
                     except Exception as e:
@@ -188,9 +186,9 @@ class WiFi(Activity):
                     password = data.get("password")
                     hidden = data.get("hidden")
                     self.setPassword(ssid, password, hidden)
-                    editor.put_dict("access_points", self.access_points)
+                    editor.put_dict("access_points", self.saved_access_points)
                     editor.commit()
-                    print(f"access points: {self.access_points}")
+                    print(f"access points: {self.saved_access_points}")
                     self.start_attempt_connecting(ssid, password)
 
     def start_attempt_connecting(self, ssid, password):
@@ -239,20 +237,20 @@ class WiFi(Activity):
         self.update_ui_threadsafe_if_foreground(self.refresh_list)
 
     def findSavedPassword(self, ssid):
-        ap = self.access_points.get(ssid)
+        ap = self.saved_access_points.get(ssid)
         if ap:
             return ap.get("password")
         return None
 
     def setPassword(self, ssid, password, hidden=False):
-        ap = self.access_points.get(ssid)
+        ap = self.saved_access_points.get(ssid)
         if ap:
             ap["password"] = password
             if hidden is True:
                 ap["hidden"] = True
             return
         # if not found, then add it:
-        self.access_points[ssid] = { "password": password, "hidden": hidden }
+        self.saved_access_points[ssid] = { "password": password, "hidden": hidden }
 
 
 class EditNetwork(Activity):
