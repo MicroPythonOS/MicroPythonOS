@@ -9,20 +9,17 @@ from mpos.ui.keyboard import MposKeyboard
 import mpos.config
 from mpos.net.wifi_service import WifiService
 
-have_network = True
-try:
-    import network
-except Exception as e:
-    have_network = False
-
-# Global variables because they're used by multiple Activities:
-access_points={}
-last_tried_ssid = ""
-last_tried_result = ""
-
 class WiFi(Activity):
 
     prefs = None
+    access_points={}
+    last_tried_ssid = ""
+    last_tried_result = ""
+    have_network = True
+    try:
+        import network
+    except Exception as e:
+        have_network = False
 
     scan_button_scan_text = "Rescan"
     scan_button_scanning_text = "Scanning..."
@@ -93,15 +90,14 @@ class WiFi(Activity):
         self.update_ui_threadsafe_if_foreground(self.error_label.add_flag,lv.obj.FLAG.HIDDEN)
 
     def scan_networks_thread(self):
-        global have_network
         print("scan_networks: Scanning for Wi-Fi networks")
-        if have_network:
+        if self.have_network:
             wlan=network.WLAN(network.STA_IF)
             if not wlan.isconnected(): # restart WiFi hardware in case it's in a bad state
                 wlan.active(False)
                 wlan.active(True)
         try:
-            if have_network:
+            if self.have_network:
                 networks = wlan.scan()
                 self.ssids = list(set(n[0].decode() for n in networks))
             else:
@@ -129,7 +125,6 @@ class WiFi(Activity):
         _thread.start_new_thread(self.scan_networks_thread, ())
 
     def refresh_list(self):
-        global have_network
         print("refresh_list: Clearing current list")
         self.aplist.clean() # this causes an issue with lost taps if an ssid is clicked that has been removed
         print("refresh_list: Populating list with scanned networks")
@@ -141,13 +136,13 @@ class WiFi(Activity):
             button=self.aplist.add_button(None,ssid)
             button.add_event_cb(lambda e, s=ssid: self.select_ssid_cb(s),lv.EVENT.CLICKED,None)
             status = ""
-            if have_network:
+            if self.have_network:
                 wlan=network.WLAN(network.STA_IF)
                 if wlan.isconnected() and wlan.config('essid')==ssid:
                     status="connected"
             if status != "connected":
-                if last_tried_ssid == ssid: # implies not connected because not wlan.isconnected()
-                    status=last_tried_result
+                if self.last_tried_ssid == ssid: # implies not connected because not wlan.isconnected()
+                    status = self.last_tried_result
                 elif ssid in access_points:
                     status="saved"
             label=lv.label(button)
@@ -177,19 +172,21 @@ class WiFi(Activity):
             data = result.get("data")
             if data:
                 ssid = data.get("ssid")
-                global access_points
                 editor = self.prefs.edit()
                 forget = data.get("forget")
                 if forget:
-                    del access_points[ssid]
-                    editor.put_dict("access_points", access_points)
-                    editor.commit()
-                    self.refresh_list()
+                    try:
+                        del access_points[ssid]
+                        editor.put_dict("access_points", self.access_points)
+                        editor.commit()
+                        self.refresh_list()
+                    except Exception as e:
+                        print(f"Error when trying to forget access point, it might not have been remembered in the first place: {e}")
                 else: # save or update
                     password = data.get("password")
                     hidden = data.get("hidden")
                     self.setPassword(ssid, password, hidden)
-                    editor.put_dict("access_points", access_points)
+                    editor.put_dict("access_points", self.access_points)
                     editor.commit()
                     self.start_attempt_connecting(ssid, password)
 
@@ -205,11 +202,10 @@ class WiFi(Activity):
             _thread.start_new_thread(self.attempt_connecting_thread, (ssid,password))
 
     def attempt_connecting_thread(self, ssid, password):
-        global last_tried_ssid, last_tried_result, have_network
         print(f"attempt_connecting_thread: Attempting to connect to SSID '{ssid}' with password '{password}'")
         result="connected"
         try:
-            if have_network:
+            if self.have_network:
                 wlan=network.WLAN(network.STA_IF)
                 wlan.disconnect()
                 wlan.connect(ssid,password)
@@ -222,43 +218,38 @@ class WiFi(Activity):
                 if not wlan.isconnected():
                     result="timeout"
             else:
-                print("Warning: not trying to connect because not have_network, just waiting a bit...")
+                print("Warning: not trying to connect because not self.have_network, just waiting a bit...")
                 time.sleep(5)
         except Exception as e:
             print(f"attempt_connecting: Connection error: {e}")
             result=f"{e}"
             self.show_error("Connecting to {ssid} failed!")
         print(f"Connecting to {ssid} got result: {result}")
-        last_tried_ssid = ssid
-        last_tried_result = result
+        self.last_tried_ssid = ssid
+        self.last_tried_result = result
         # also do a time sync, otherwise some apps (Nostr Wallet Connect) won't work:
-        if have_network and wlan.isconnected():
+        if self.have_network and wlan.isconnected():
             mpos.time.sync_time()
         self.busy_connecting=False
         self.update_ui_threadsafe_if_foreground(self.scan_button_label.set_text, self.scan_button_scan_text)
         self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
         self.update_ui_threadsafe_if_foreground(self.refresh_list)
 
-    @staticmethod
-    def findSavedPassword(ssid):
-        if not access_points:
-            return None
-        ap = access_points.get(ssid)
+    def findSavedPassword(self, ssid):
+        ap = self.access_points.get(ssid)
         if ap:
             return ap.get("password")
         return None
 
-    @staticmethod
-    def setPassword(ssid, password, hidden=False):
-        global access_points
-        ap = access_points.get(ssid)
+    def setPassword(self, ssid, password, hidden=False):
+        ap = self.access_points.get(ssid)
         if ap:
             ap["password"] = password
             if hidden is True:
                 ap["hidden"] = True
             return
         # if not found, then add it:
-        access_points[ssid] = { "password": password, "hidden": hidden }
+        self.access_points[ssid] = { "password": password, "hidden": hidden }
 
 
 class EditNetwork(Activity):
