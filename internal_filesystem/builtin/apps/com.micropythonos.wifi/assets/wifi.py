@@ -69,8 +69,8 @@ class WiFi(Activity):
         if not self.prefs:
             self.prefs = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice")
 
-        global access_points
-        access_points = self.prefs.get_dict("access_points")
+        self.access_points = self.prefs.get_dict("access_points")
+        print(f"loaded access points from preferences: {self.access_points}")
         if len(self.ssids) == 0:
             if WifiService.wifi_busy == False:
                 WifiService.wifi_busy = True
@@ -128,7 +128,8 @@ class WiFi(Activity):
         print("refresh_list: Clearing current list")
         self.aplist.clean() # this causes an issue with lost taps if an ssid is clicked that has been removed
         print("refresh_list: Populating list with scanned networks")
-        for ssid in self.ssids:
+        self.ssids = list(set(self.ssids + list(ssid for ssid in self.access_points)))
+        for ssid in set(self.ssids):
             if len(ssid) < 1 or len(ssid) > 32:
                 print(f"Skipping too short or long SSID: {ssid}")
                 continue
@@ -143,7 +144,7 @@ class WiFi(Activity):
             if status != "connected":
                 if self.last_tried_ssid == ssid: # implies not connected because not wlan.isconnected()
                     status = self.last_tried_result
-                elif ssid in access_points:
+                elif ssid in self.access_points:
                     status="saved"
             label=lv.label(button)
             label.set_text(status)
@@ -176,18 +177,20 @@ class WiFi(Activity):
                 forget = data.get("forget")
                 if forget:
                     try:
-                        del access_points[ssid]
+                        del self.access_points[ssid]
+                        self.ssids.remove(ssid)
                         editor.put_dict("access_points", self.access_points)
                         editor.commit()
                         self.refresh_list()
                     except Exception as e:
-                        print(f"Error when trying to forget access point, it might not have been remembered in the first place: {e}")
+                        print(f"WARNING: could not forget access point, maybe it wasn't remembered in the first place: {e}")
                 else: # save or update
                     password = data.get("password")
                     hidden = data.get("hidden")
                     self.setPassword(ssid, password, hidden)
                     editor.put_dict("access_points", self.access_points)
                     editor.commit()
+                    print(f"access points: {self.access_points}")
                     self.start_attempt_connecting(ssid, password)
 
     def start_attempt_connecting(self, ssid, password):
