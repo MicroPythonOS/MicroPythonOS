@@ -125,8 +125,8 @@ class TestIMUCalibration(unittest.TestCase):
         # Click "Calibrate Now" button to start calibration
         calibrate_btn = find_button_with_text(screen, "Calibrate Now")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate Now' button")
-        coords = get_widget_coords(calibrate_btn)
-        simulate_click(coords['center_x'], coords['center_y'])
+        # Use send_event instead of simulate_click (more reliable)
+        calibrate_btn.send_event(lv.EVENT.CLICKED, None)
         wait_for_render(10)
 
         # Wait for calibration to complete (mock takes ~3 seconds)

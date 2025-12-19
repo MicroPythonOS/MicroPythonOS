@@ -279,6 +279,29 @@ def verify_text_present(obj, expected_text):
     return find_label_with_text(obj, expected_text) is not None
 
 
+def text_to_hex(text):
+    """
+    Convert text to hex representation for debugging.
+    
+    Useful for identifying Unicode symbols like lv.SYMBOL.SETTINGS
+    which may not display correctly in terminal output.
+    
+    Args:
+        text: String to convert
+        
+    Returns:
+        str: Hex representation of the text bytes (UTF-8 encoded)
+        
+    Example:
+        >>> text_to_hex("⚙")  # lv.SYMBOL.SETTINGS
+        'e29a99'
+    """
+    try:
+        return text.encode('utf-8').hex()
+    except:
+        return "<encoding error>"
+
+
 def print_screen_labels(obj):
     """
     Debug helper: Print all text found on screen from any widget.
@@ -286,6 +309,10 @@ def print_screen_labels(obj):
     Useful for debugging tests to see what text is actually present.
     Prints to stdout with numbered list. Includes text from labels,
     checkboxes, buttons, and any other widgets with text.
+    
+    For each text, also prints the hex representation to help identify
+    Unicode symbols (like lv.SYMBOL.SETTINGS) that may not display
+    correctly in terminal output.
 
     Args:
         obj: LVGL object to search (typically lv.screen_active())
@@ -295,16 +322,17 @@ def print_screen_labels(obj):
         print_screen_labels(lv.screen_active())
         # Output:
         # Found 5 text widgets on screen:
-        #   0: MicroPythonOS
-        #   1: Version 0.3.3
-        #   2: Settings
-        #   3: Force Update (checkbox)
-        #   4: WiFi
+        #   0: MicroPythonOS (hex: 4d6963726f507974686f6e4f53)
+        #   1: Version 0.3.3 (hex: 56657273696f6e20302e332e33)
+        #   2: ⚙ (hex: e29a99)  <- lv.SYMBOL.SETTINGS
+        #   3: Force Update (hex: 466f7263652055706461746)
+        #   4: WiFi (hex: 57694669)
     """
     texts = get_screen_text_content(obj)
     print(f"Found {len(texts)} text widgets on screen:")
     for i, text in enumerate(texts):
-        print(f"  {i}: {text}")
+        hex_repr = text_to_hex(text)
+        print(f"  {i}: {text} (hex: {hex_repr})")
 
 
 def get_widget_coords(widget):

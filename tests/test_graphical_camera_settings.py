@@ -72,6 +72,32 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         except:
             pass  # Already on launcher or error
 
+    def _find_and_click_settings_button(self, screen, use_send_event=True):
+        """Find and click the settings button using lv.SYMBOL.SETTINGS.
+        
+        Args:
+            screen: LVGL screen object to search
+            use_send_event: If True (default), use send_event() which is more reliable.
+                           If False, use simulate_click() with coordinates.
+        
+        Returns True if button was found and clicked, False otherwise.
+        """
+        settings_button = find_button_with_text(screen, lv.SYMBOL.SETTINGS)
+        if settings_button:
+            coords = get_widget_coords(settings_button)
+            print(f"Found settings button at ({coords['center_x']}, {coords['center_y']})")
+            if use_send_event:
+                # Use send_event for more reliable button triggering
+                settings_button.send_event(lv.EVENT.CLICKED, None)
+                print("Clicked settings button using send_event()")
+            else:
+                simulate_click(coords['center_x'], coords['center_y'], press_duration_ms=100)
+                print("Clicked settings button using simulate_click()")
+            return True
+        else:
+            print("Settings button not found via lv.SYMBOL.SETTINGS")
+            return False
+
     def test_settings_button_click_no_crash(self):
         """
         Test that clicking the settings button doesn't cause a segfault.
@@ -83,7 +109,7 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         1. Start camera app
         2. Wait for camera to initialize
         3. Capture initial screenshot
-        4. Click settings button (top-right corner)
+        4. Click settings button (found dynamically by lv.SYMBOL.SETTINGS)
         5. Verify settings dialog opened
         6. If we get here without crash, test passes
         """
@@ -108,18 +134,12 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         print(f"\nCapturing initial screenshot: {screenshot_path}")
         capture_screenshot(screenshot_path, width=320, height=240)
 
-        # Find and click settings button
-        # The settings button is positioned at TOP_RIGHT with offset (0, 60)
-        # On a 320x240 screen, this is approximately x=260, y=90
-        # We'll click slightly inside the button to ensure we hit it
-        settings_x = 300  # Right side of screen, inside the 60px button
-        settings_y = 100   # 60px down from top, center of 60px button
+        # Find and click settings button dynamically
+        found = self._find_and_click_settings_button(screen)
+        self.assertTrue(found, "Settings button with lv.SYMBOL.SETTINGS not found on screen")
 
-        print(f"\nClicking settings button at ({settings_x}, {settings_y})")
-        simulate_click(settings_x, settings_y, press_duration_ms=100)
-
-        # Wait for settings dialog to appear
-        wait_for_render(iterations=20)
+        # Wait for settings dialog to appear - needs more time for Activity transition
+        wait_for_render(iterations=50)
 
         # Get screen again (might have changed after navigation)
         screen = lv.screen_active()
@@ -128,19 +148,26 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         print("\nScreen labels after clicking settings:")
         print_screen_labels(screen)
 
-        # Verify settings screen opened
-        # Look for "Camera Settings" or "resolution" text
-        has_settings_ui = (
-            verify_text_present(screen, "Camera Settings") or
-            verify_text_present(screen, "Resolution") or
-            verify_text_present(screen, "resolution") or
-            verify_text_present(screen, "Save") or
-            verify_text_present(screen, "Cancel")
-        )
+        # Verify settings screen opened by looking for the Save button
+        # This is more reliable than text search since buttons are always present
+        save_button = find_button_with_text(screen, "Save")
+        cancel_button = find_button_with_text(screen, "Cancel")
+        
+        has_settings_ui = save_button is not None or cancel_button is not None
+        
+        # Also try text-based verification as fallback
+        if not has_settings_ui:
+            has_settings_ui = (
+                verify_text_present(screen, "Camera Settings") or
+                verify_text_present(screen, "Resolution") or
+                verify_text_present(screen, "resolution") or
+                verify_text_present(screen, "Basic") or  # Tab name
+                verify_text_present(screen, "Color Mode")  # Setting name
+            )
 
         self.assertTrue(
             has_settings_ui,
-            "Settings screen did not open (no expected UI elements found)"
+            "Settings screen did not open (no Save/Cancel buttons or expected UI elements found)"
         )
 
         # Capture screenshot of settings dialog
@@ -151,15 +178,68 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         # If we got here without segfault, the test passes!
         print("\n✓ Settings button clicked successfully without crash!")
 
+    def _find_and_click_button(self, screen, text, use_send_event=True):
+        """Find and click a button by its text label.
+        
+        Args:
+            screen: LVGL screen object to search
+            text: Text to search for in button labels
+            use_send_event: If True (default), use send_event() which is more reliable.
+                           If False, use simulate_click() with coordinates.
+        
+        Returns True if button was found and clicked, False otherwise.
+        """
+        button = find_button_with_text(screen, text)
+        if button:
+            coords = get_widget_coords(button)
+            print(f"Found '{text}' button at ({coords['center_x']}, {coords['center_y']})")
+            if use_send_event:
+                # Use send_event for more reliable button triggering
+                button.send_event(lv.EVENT.CLICKED, None)
+                print(f"Clicked '{text}' button using send_event()")
+            else:
+                simulate_click(coords['center_x'], coords['center_y'], press_duration_ms=100)
+                print(f"Clicked '{text}' button using simulate_click()")
+            return True
+        else:
+            print(f"Button with text '{text}' not found")
+            return False
+
+    def _find_dropdown(self, screen):
+        """Find a dropdown widget on the screen.
+        
+        Returns the dropdown widget or None if not found.
+        """
+        def find_dropdown_recursive(obj):
+            # Check if this object is a dropdown
+            try:
+                if obj.__class__.__name__ == 'dropdown' or hasattr(obj, 'get_selected'):
+                    # Verify it's actually a dropdown by checking for dropdown-specific method
+                    if hasattr(obj, 'get_options'):
+                        return obj
+            except:
+                pass
+            
+            # Check children
+            child_count = obj.get_child_count()
+            for i in range(child_count):
+                child = obj.get_child(i)
+                result = find_dropdown_recursive(child)
+                if result:
+                    return result
+            return None
+        
+        return find_dropdown_recursive(screen)
+
     def test_resolution_change_no_crash(self):
         """
         Test that changing resolution doesn't cause a crash.
 
         This tests the full resolution change workflow:
         1. Start camera app
-        2. Open settings
-        3. Change resolution
-        4. Save settings
+        2. Open settings (found dynamically by lv.SYMBOL.SETTINGS)
+        3. Change resolution via dropdown
+        4. Save settings (found dynamically by "Save" text)
         5. Verify camera continues working
 
         This verifies fixes for:
@@ -176,61 +256,63 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         # Wait for camera to initialize
         wait_for_render(iterations=30)
 
-        # Click settings button
+        # Click settings button dynamically
+        screen = lv.screen_active()
         print("\nOpening settings...")
-        simulate_click(290, 90, press_duration_ms=100)
+        found = self._find_and_click_settings_button(screen)
+        self.assertTrue(found, "Settings button with lv.SYMBOL.SETTINGS not found on screen")
         wait_for_render(iterations=20)
 
         screen = lv.screen_active()
 
-        # Try to find the dropdown/resolution selector
-        # The CameraSettingsActivity creates a dropdown widget
-        # Let's look for any dropdown on screen
+        # Try to find the dropdown/resolution selector dynamically
         print("\nLooking for resolution dropdown...")
+        dropdown = self._find_dropdown(screen)
+        
+        if dropdown:
+            # Click the dropdown to open it
+            coords = get_widget_coords(dropdown)
+            print(f"Found dropdown at ({coords['center_x']}, {coords['center_y']})")
+            simulate_click(coords['center_x'], coords['center_y'], press_duration_ms=100)
+            wait_for_render(iterations=15)
+            
+            # Get current selection and try to change it
+            try:
+                current = dropdown.get_selected()
+                option_count = dropdown.get_option_count()
+                print(f"Dropdown has {option_count} options, current selection: {current}")
+                
+                # Select a different option (next one, or first if at end)
+                new_selection = (current + 1) % option_count
+                dropdown.set_selected(new_selection)
+                print(f"Changed selection to: {new_selection}")
+            except Exception as e:
+                print(f"Could not change dropdown selection: {e}")
+                # Fallback: click below current position to select different option
+                simulate_click(coords['center_x'], coords['center_y'] + 30, press_duration_ms=100)
+        else:
+            print("Dropdown not found, test may not fully exercise resolution change")
 
-        # Find all clickable objects (dropdowns are clickable)
-        # We'll try clicking in the middle area where the dropdown should be
-        # Dropdown is typically centered, so around x=160, y=120
-        dropdown_x = 160
-        dropdown_y = 120
-
-        print(f"Clicking dropdown area at ({dropdown_x}, {dropdown_y})")
-        simulate_click(dropdown_x, dropdown_y, press_duration_ms=100)
         wait_for_render(iterations=15)
 
-        # The dropdown should now be open showing resolution options
-        # Let's capture what we see
+        # Capture screenshot
         screenshot_path = f"{self.screenshot_dir}/camera_dropdown_open.raw"
         print(f"Capturing dropdown screenshot: {screenshot_path}")
         capture_screenshot(screenshot_path, width=320, height=240)
 
         screen = lv.screen_active()
-        print("\nScreen after opening dropdown:")
+        print("\nScreen after dropdown interaction:")
         print_screen_labels(screen)
 
-        # Try to select a different resolution
-        # Options are typically stacked vertically
-        # Let's click a bit lower to select a different option
-        option_x = 160
-        option_y = 150  # Below the current selection
-
-        print(f"\nSelecting different resolution at ({option_x}, {option_y})")
-        simulate_click(option_x, option_y, press_duration_ms=100)
-        wait_for_render(iterations=15)
-
-        # Now find and click the Save button
+        # Find and click the Save button dynamically
         print("\nLooking for Save button...")
-        save_button = find_button_with_text(lv.screen_active(), "Save")
-
-        if save_button:
-            coords = get_widget_coords(save_button)
-            print(f"Found Save button at {coords}")
-            simulate_click(coords['center_x'], coords['center_y'], press_duration_ms=100)
-        else:
-            # Fallback: Save button is typically at bottom-left
-            # Based on CameraSettingsActivity code: ALIGN.BOTTOM_LEFT
-            print("Save button not found via text, trying bottom-left corner")
-            simulate_click(80, 220, press_duration_ms=100)
+        save_found = self._find_and_click_button(lv.screen_active(), "Save")
+        
+        if not save_found:
+            # Try "OK" as alternative
+            save_found = self._find_and_click_button(lv.screen_active(), "OK")
+        
+        self.assertTrue(save_found, "Save/OK button not found on settings screen")
 
         # Wait for reconfiguration to complete
         print("\nWaiting for reconfiguration...")
@@ -244,12 +326,18 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         # If we got here without segfault, the test passes!
         print("\n✓ Resolution changed successfully without crash!")
 
-        # Verify camera is still showing something
+        # Verify camera is still showing something by checking for camera UI elements
         screen = lv.screen_active()
         # The camera app should still be active (not crashed back to launcher)
-        # We can check this by looking for camera-specific UI elements
-        # or just the fact that we haven't crashed
-
+        # Check for camera-specific buttons (close, settings, snap, qr)
+        has_camera_ui = (
+            find_button_with_text(screen, lv.SYMBOL.CLOSE) or
+            find_button_with_text(screen, lv.SYMBOL.SETTINGS) or
+            find_button_with_text(screen, lv.SYMBOL.OK) or
+            find_button_with_text(screen, lv.SYMBOL.EYE_OPEN)
+        )
+        
+        self.assertTrue(has_camera_ui, "Camera app UI not found after resolution change - app may have crashed")
         print("\n✓ Camera app still running after resolution change!")
 
 
