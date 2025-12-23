@@ -8,6 +8,7 @@ class Doom(Activity):
     configdir = retrogodir + "/config"
     bootfile = configdir + "/boot.json"
     partition_label = "prboom-go"
+    esp32_partition_type_ota_0 = 16
     #partition_label = "retro-core"
     # Widgets:
     status_label = None
@@ -22,7 +23,9 @@ class Doom(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
-        self.start_wad(self.doomdir + '/Doom v1.9 Free Shareware.zip')
+        # Do it in a separate task so the UI doesn't hang (shows progress, status_label) and the serial console keeps showing prints
+        from mpos import TaskManager
+        TaskManager.create_task(self.start_wad(self.doomdir + '/Doom v1.9 Free Shareware.zip'))
 
     def mkdir(self, dirname):
         # Would be better to only create it if it doesn't exist
@@ -32,7 +35,7 @@ class Doom(Activity):
         except Exception as e:
             self.status_label.set_text(f"Info: could not create directory {dirname} because: {e}")
 
-    def start_wad(self, wadfile):
+    async def start_wad(self, wadfile):
         self.mkdir(self.romdir)
         self.mkdir(self.doomdir)
         self.mkdir(self.retrogodir)
@@ -73,6 +76,22 @@ class Doom(Activity):
             vfs.umount('/')
         except Exception as e:
             print(f"Warning: could not unmount internal filesystem from /: {e}")
+        # Write the currently booted OTA partition number to NVS, so that retro-go's apps know where to go back to:
+        try:
+            from esp32 import NVS
+            nvs = NVS('fri3d.sys')
+            boot_partition = nvs.get_i32('boot_partition')
+            print(f"boot_partition in fri3d.sys of NVS: {boot_partition}")
+            running_partition = Partition(Partition.RUNNING)
+            running_partition_nr = running_partition.info()[1] - self.esp32_partition_type_ota_0
+            print(f"running_partition_nr: {running_partition_nr}")
+            if running_partition_nr != boot_partition:
+                print(f"setting boot_partition in fri3d.sys of NVS to {running_partition_nr}")
+                nvs.set_i32('boot_partition', running_partition_nr)
+            else:
+                print("No need to update boot_partition")
+        except Exception as e:
+            print(f"Warning: could not write currently booted partition to boot_partition in fri3d.sys of NVS: {e}")
         try:
             import machine
             machine.reset()
