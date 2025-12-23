@@ -7,8 +7,8 @@ class Doom(Activity):
     retrogodir = "/retro-go"
     configdir = retrogodir + "/config"
     bootfile = configdir + "/boot.json"
-    #partition_label = "prboom-go"
-    partition_label = "retro-core"
+    partition_label = "prboom-go"
+    #partition_label = "retro-core"
     # Widgets:
     status_label = None
 
@@ -42,17 +42,9 @@ class Doom(Activity):
             import json
             # Would be better to only write this if it differs from what's already there:
             fd = open(self.bootfile, 'w')
-            '''
             bootconfig = {
                 "BootName": "doom",
                 "BootArgs": f"/sd{wadfile}",
-                "BootSlot": -1,
-                "BootFlags": 0
-            }
-            '''
-            bootconfig = {
-                "BootName": "nes",
-                "BootArgs": "/sd/roms/nes/homebrew/Yun.zip",
                 "BootSlot": -1,
                 "BootFlags": 0
             }
