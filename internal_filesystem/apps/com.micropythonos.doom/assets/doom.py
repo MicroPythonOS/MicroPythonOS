@@ -24,18 +24,24 @@ class Doom(Activity):
         screen = lv.obj()
         screen.set_style_pad_all(15, 0)
         
+        # Create title label
+        title_label = lv.label(screen)
+        title_label.set_text("Choose your DOOM:")
+        title_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+
         # Create list widget for WAD files
         self.wadlist = lv.list(screen)
-        self.wadlist.set_size(lv.pct(100), lv.pct(85))
-        self.wadlist.align(lv.ALIGN.TOP_MID, 0, 0)
-        
+        self.wadlist.set_size(lv.pct(100), lv.pct(70))
+        self.wadlist.center()
+
         # Create status label for messages
         self.status_label = lv.label(screen)
         self.status_label.set_width(lv.pct(90))
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.status_label.align_to(self.wadlist, lv.ALIGN.OUT_BOTTOM_MID, 0, 0)
-        self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
-        
+        self.status_label.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        # Set default green color for status label
+        self.status_label.set_style_text_color(lv.color_hex(0x00FF00), 0)
+
         self.setContentView(screen)
 
     def onResume(self, screen):
@@ -69,40 +75,47 @@ class Doom(Activity):
         
         return wad_files
 
+    def get_file_size_warning(self, filepath):
+        """Get file size warning suffix if file is too small or empty"""
+        try:
+            size = os.stat(filepath)[6]  # Get file size
+            if size == 0:
+                return " (EMPTY FILE)"  # Red
+            elif size < 80 * 1024:  # 80KB
+                return " (TOO SMALL)"  # Orange
+        except Exception as e:
+            print(f"Error checking file size for {filepath}: {e}")
+        return ""
+
     def refresh_wad_list(self):
+        self.status_label.set_text(f"Listing files in: {self.bootfile_prefix + self.doomdir}")
         """Scan for WAD files and populate the list"""
         print("refresh_wad_list: Clearing current list")
         self.wadlist.clean()
-        
-        # Scan both internal storage and SD card
-        internal_wads = self.scan_wad_files(self.doomdir)
-        sdcard_wads = []
-        if self.bootfile_prefix:
-            sdcard_wads = self.scan_wad_files(self.bootfile_prefix + self.doomdir)
-        
-        # Combine and deduplicate
-        all_wads = list(set(internal_wads + sdcard_wads))
+
+        # Scan internal storage or SD card
+        all_wads = self.scan_wad_files(self.bootfile_prefix + self.doomdir)
         all_wads.sort()
-        
+
         if len(all_wads) == 0:
             self.status_label.set_text(f"No .wad or .zip files found in {self.doomdir}")
-            self.status_label.remove_flag(lv.obj.FLAG.HIDDEN)
             print("No WAD files found")
             return
-        
-        # Hide status label if we have files
-        self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
-        
+
         # If only one WAD file, auto-start it
         if len(all_wads) == 1:
             print(f"refresh_wad_list: Only one WAD file found, auto-starting: {all_wads[0]}")
             self.start_wad_file(all_wads[0])
             return
-        
+
         # Populate list with WAD files
         print(f"refresh_wad_list: Populating list with {len(all_wads)} WAD files")
+        self.status_label.set_text(f"Listed files in: {self.bootfile_prefix + self.doomdir}")
         for wad_file in all_wads:
-            button = self.wadlist.add_button(None, wad_file)
+            # Get file size warning if applicable
+            warning = self.get_file_size_warning(self.doomdir + '/' + wad_file)
+            button_text = wad_file + warning
+            button = self.wadlist.add_button(None, button_text)
             button.add_event_cb(lambda e, f=wad_file: self.start_wad_file(f), lv.EVENT.CLICKED, None)
 
     def start_wad_file(self, wad_file):
