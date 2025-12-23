@@ -110,19 +110,12 @@ class Doom(Activity):
             warning = self.get_file_size_warning(self.bootfile_prefix + self.doomdir + '/' + wad_file)
             button_text = wad_file + warning
             button = self.wadlist.add_button(None, button_text)
-            button.add_event_cb(lambda e, f=wad_file: TaskManager.create_task(self.start_wad_file(f)), lv.EVENT.CLICKED, None)
+            button.add_event_cb(lambda e, p=self.doomdir + '/' + wad_file: TaskManager.create_task(self.start_wad(self.bootfile_prefix, self.bootfile_to_write, p)), lv.EVENT.CLICKED, None)
 
         # If only one WAD file, auto-start it
         if len(all_wads) == 1:
             print(f"refresh_wad_list: Only one WAD file found, auto-starting: {all_wads[0]}")
-            TaskManager.create_task(self.start_wad_file(all_wads[0]))
-
-    async def start_wad_file(self, wad_file):
-        """Start a WAD file (called from list selection or auto-start)"""
-        print(f"start_wad_file: WAD file selected: {wad_file}")
-        wadfile_path = self.bootfile_prefix + self.doomdir + '/' + wad_file
-        # Do it in a separate task so the UI doesn't hang (shows progress, status_label) and the serial console keeps showing prints
-        await self.start_wad(self.bootfile_prefix, self.bootfile_to_write, wadfile_path)
+            TaskManager.create_task(self.start_wad(self.bootfile_prefix, self.bootfile_to_write, self.doomdir + '/' + all_wads[0]))
 
     def mkdir(self, dirname):
         # Would be better to only create it if it doesn't exist
