@@ -1,4 +1,5 @@
 from mpos.apps import Activity
+from mpos import TaskManager, sdcard
 
 class Doom(Activity):
 
@@ -8,6 +9,7 @@ class Doom(Activity):
     configdir = retrogodir + "/config"
     bootfile = configdir + "/boot.json"
     partition_label = "prboom-go"
+    mountpoint_sdcard = "/sdcard"
     esp32_partition_type_ota_0 = 16
     #partition_label = "retro-core"
     # Widgets:
@@ -24,7 +26,6 @@ class Doom(Activity):
 
     def onResume(self, screen):
         # Do it in a separate task so the UI doesn't hang (shows progress, status_label) and the serial console keeps showing prints
-        from mpos import TaskManager
         TaskManager.create_task(self.start_wad(self.doomdir + '/Doom v1.9 Free Shareware.zip'))
 
     def mkdir(self, dirname):
@@ -33,18 +34,33 @@ class Doom(Activity):
             import os
             os.mkdir(dirname)
         except Exception as e:
-            self.status_label.set_text(f"Info: could not create directory {dirname} because: {e}")
+            # Not really useful to show this in the UI, as it's usually just an "already exists" error:
+            print(f"Info: could not create directory {dirname} because: {e}")
 
     async def start_wad(self, wadfile):
-        self.mkdir(self.romdir)
-        self.mkdir(self.doomdir)
-        self.mkdir(self.retrogodir)
-        self.mkdir(self.configdir)
+        # Try to mount the SD card and if successful, use it, as retro-go can only use one or the other:
+        bootfile_prefix = ""
+        mounted_sdcard = sdcard.mount_with_optional_format(self.mountpoint_sdcard)
+        if mounted_sdcard:
+            print("sdcard is mounted, configuring it...")
+            bootfile_prefix = self.mountpoint_sdcard
+        bootfile_to_write = bootfile_prefix + self.bootfile
+        print(f"writing to {bootfile_to_write}")
+        self.status_label.set_text(f"Launching Doom with file: {bootfile_prefix}{wadfile}")
+        await TaskManager.sleep(1) # Give the user a minimal amount of time to read the filename
+
+        # Create these folders, in case the user wants to add doom later:
+        self.mkdir(bootfile_prefix + self.romdir)
+        self.mkdir(bootfile_prefix + self.doomdir)
+
+        # Create structure to place bootfile:
+        self.mkdir(bootfile_prefix + self.retrogodir)
+        self.mkdir(bootfile_prefix + self.configdir)
         try:
             import os
             import json
             # Would be better to only write this if it differs from what's already there:
-            fd = open(self.bootfile, 'w')
+            fd = open(bootfile_to_write, 'w')
             bootconfig = {
                 "BootName": "doom",
                 "BootArgs": f"/sd{wadfile}",
