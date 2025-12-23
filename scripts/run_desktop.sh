@@ -55,7 +55,7 @@ fi
 binary=$(readlink -f "$binary")
 chmod +x "$binary"
 
-pushd internal_filesystem/
+pushd "$scriptdir"/../internal_filesystem/
 
 if [ -f "$script" ]; then
 	echo "Running script $script"

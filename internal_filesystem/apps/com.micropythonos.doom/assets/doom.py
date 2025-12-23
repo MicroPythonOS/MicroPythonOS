@@ -1,3 +1,5 @@
+import lvgl as lv
+import os
 from mpos.apps import Activity
 from mpos import TaskManager, sdcard
 
@@ -14,32 +16,99 @@ class Doom(Activity):
     #partition_label = "retro-core"
     # Widgets:
     status_label = None
+    wadlist = None
+    bootfile_prefix = ""
+    bootfile_to_write = ""
 
     def onCreate(self):
         screen = lv.obj()
+        screen.set_style_pad_all(15, 0)
+        
+        # Create list widget for WAD files
+        self.wadlist = lv.list(screen)
+        self.wadlist.set_size(lv.pct(100), lv.pct(85))
+        self.wadlist.align(lv.ALIGN.TOP_MID, 0, 0)
+        
+        # Create status label for messages
         self.status_label = lv.label(screen)
         self.status_label.set_width(lv.pct(90))
-        self.status_label.set_text(f'Looking for .wad or .zip files in {self.doomdir} on internal storage and SD card...')
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.status_label.center()
+        self.status_label.align_to(self.wadlist, lv.ALIGN.OUT_BOTTOM_MID, 0, 0)
+        self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
+        
         self.setContentView(screen)
 
     def onResume(self, screen):
         # Try to mount the SD card and if successful, use it, as retro-go can only use one or the other:
-        bootfile_prefix = ""
+        self.bootfile_prefix = ""
         mounted_sdcard = sdcard.mount_with_optional_format(self.mountpoint_sdcard)
         if mounted_sdcard:
             print("sdcard is mounted, configuring it...")
-            bootfile_prefix = self.mountpoint_sdcard
-        bootfile_to_write = bootfile_prefix + self.bootfile
-        print(f"writing to {bootfile_to_write}")
+            self.bootfile_prefix = self.mountpoint_sdcard
+        self.bootfile_to_write = self.bootfile_prefix + self.bootfile
+        print(f"writing to {self.bootfile_to_write}")
+        
+        # Scan for WAD files and populate the list
+        self.refresh_wad_list()
+
+    def scan_wad_files(self, directory):
+        """Scan a directory for .wad and .zip files"""
+        wad_files = []
+        try:
+            for filename in os.listdir(directory):
+                if filename.lower().endswith(('.wad', '.zip')):
+                    wad_files.append(filename)
+            
+            # Sort the list for consistent ordering
+            wad_files.sort()
+            print(f"Found {len(wad_files)} WAD files in {directory}: {wad_files}")
+        except OSError as e:
+            print(f"Directory does not exist or cannot be read: {directory}")
+        except Exception as e:
+            print(f"Error scanning directory {directory}: {e}")
+        
+        return wad_files
+
+    def refresh_wad_list(self):
+        """Scan for WAD files and populate the list"""
+        print("refresh_wad_list: Clearing current list")
+        self.wadlist.clean()
+        
+        # Scan both internal storage and SD card
+        internal_wads = self.scan_wad_files(self.doomdir)
+        sdcard_wads = []
+        if self.bootfile_prefix:
+            sdcard_wads = self.scan_wad_files(self.bootfile_prefix + self.doomdir)
+        
+        # Combine and deduplicate
+        all_wads = list(set(internal_wads + sdcard_wads))
+        all_wads.sort()
+        
+        if len(all_wads) == 0:
+            self.status_label.set_text(f"No .wad or .zip files found in {self.doomdir}")
+            self.status_label.remove_flag(lv.obj.FLAG.HIDDEN)
+            print("No WAD files found")
+            return
+        
+        # Hide status label if we have files
+        self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
+        
+        # Populate list with WAD files
+        print(f"refresh_wad_list: Populating list with {len(all_wads)} WAD files")
+        for wad_file in all_wads:
+            button = self.wadlist.add_button(None, wad_file)
+            button.add_event_cb(lambda e, f=wad_file: self.wad_selected_cb(f), lv.EVENT.CLICKED, None)
+
+    def wad_selected_cb(self, wad_file):
+        """Handle WAD file selection from list"""
+        print(f"wad_selected_cb: WAD file selected: {wad_file}")
+        wadfile_path = self.doomdir + '/' + wad_file
         # Do it in a separate task so the UI doesn't hang (shows progress, status_label) and the serial console keeps showing prints
-        TaskManager.create_task(self.start_wad(bootfile_prefix, bootfile_to_write, self.doomdir + '/Doom v1.9 Free Shareware.zip'))
+        TaskManager.create_task(self.start_wad(self.bootfile_prefix, self.bootfile_to_write, wadfile_path))
 
     def mkdir(self, dirname):
         # Would be better to only create it if it doesn't exist
         try:
-            import os
             os.mkdir(dirname)
         except Exception as e:
             # Not really useful to show this in the UI, as it's usually just an "already exists" error:
@@ -57,7 +126,6 @@ class Doom(Activity):
         self.mkdir(bootfile_prefix + self.retrogodir)
         self.mkdir(bootfile_prefix + self.configdir)
         try:
-            import os
             import json
             # Would be better to only write this if it differs from what's already there:
             fd = open(bootfile_to_write, 'w')
