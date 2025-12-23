@@ -25,8 +25,16 @@ class Doom(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
+        # Try to mount the SD card and if successful, use it, as retro-go can only use one or the other:
+        bootfile_prefix = ""
+        mounted_sdcard = sdcard.mount_with_optional_format(self.mountpoint_sdcard)
+        if mounted_sdcard:
+            print("sdcard is mounted, configuring it...")
+            bootfile_prefix = self.mountpoint_sdcard
+        bootfile_to_write = bootfile_prefix + self.bootfile
+        print(f"writing to {bootfile_to_write}")
         # Do it in a separate task so the UI doesn't hang (shows progress, status_label) and the serial console keeps showing prints
-        TaskManager.create_task(self.start_wad(self.doomdir + '/Doom v1.9 Free Shareware.zip'))
+        TaskManager.create_task(self.start_wad(bootfile_prefix, bootfile_to_write, self.doomdir + '/Doom v1.9 Free Shareware.zip'))
 
     def mkdir(self, dirname):
         # Would be better to only create it if it doesn't exist
@@ -37,15 +45,7 @@ class Doom(Activity):
             # Not really useful to show this in the UI, as it's usually just an "already exists" error:
             print(f"Info: could not create directory {dirname} because: {e}")
 
-    async def start_wad(self, wadfile):
-        # Try to mount the SD card and if successful, use it, as retro-go can only use one or the other:
-        bootfile_prefix = ""
-        mounted_sdcard = sdcard.mount_with_optional_format(self.mountpoint_sdcard)
-        if mounted_sdcard:
-            print("sdcard is mounted, configuring it...")
-            bootfile_prefix = self.mountpoint_sdcard
-        bootfile_to_write = bootfile_prefix + self.bootfile
-        print(f"writing to {bootfile_to_write}")
+    async def start_wad(self, bootfile_prefix, bootfile_to_write, wadfile):
         self.status_label.set_text(f"Launching Doom with file: {bootfile_prefix}{wadfile}")
         await TaskManager.sleep(1) # Give the user a minimal amount of time to read the filename
 
