@@ -93,15 +93,21 @@ class Doom(Activity):
         # Hide status label if we have files
         self.status_label.add_flag(lv.obj.FLAG.HIDDEN)
         
+        # If only one WAD file, auto-start it
+        if len(all_wads) == 1:
+            print(f"refresh_wad_list: Only one WAD file found, auto-starting: {all_wads[0]}")
+            self.start_wad_file(all_wads[0])
+            return
+        
         # Populate list with WAD files
         print(f"refresh_wad_list: Populating list with {len(all_wads)} WAD files")
         for wad_file in all_wads:
             button = self.wadlist.add_button(None, wad_file)
-            button.add_event_cb(lambda e, f=wad_file: self.wad_selected_cb(f), lv.EVENT.CLICKED, None)
+            button.add_event_cb(lambda e, f=wad_file: self.start_wad_file(f), lv.EVENT.CLICKED, None)
 
-    def wad_selected_cb(self, wad_file):
-        """Handle WAD file selection from list"""
-        print(f"wad_selected_cb: WAD file selected: {wad_file}")
+    def start_wad_file(self, wad_file):
+        """Start a WAD file (called from list selection or auto-start)"""
+        print(f"start_wad_file: WAD file selected: {wad_file}")
         wadfile_path = self.doomdir + '/' + wad_file
         # Do it in a separate task so the UI doesn't hang (shows progress, status_label) and the serial console keeps showing prints
         TaskManager.create_task(self.start_wad(self.bootfile_prefix, self.bootfile_to_write, wadfile_path))
