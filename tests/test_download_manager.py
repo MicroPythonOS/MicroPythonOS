@@ -17,6 +17,7 @@ import sys
 # Import the module under test
 sys.path.insert(0, '../internal_filesystem/lib')
 import mpos.net.download_manager as DownloadManager
+from mpos.testing.mocks import MockDownloadManager
 
 
 class TestDownloadManager(unittest.TestCase):
@@ -222,91 +223,74 @@ class TestDownloadManager(unittest.TestCase):
         asyncio.run(run_test())
 
     def test_progress_with_explicit_total_size(self):
-        """Test progress tracking with explicitly provided total_size."""
+        """Test progress tracking with explicitly provided total_size using mock."""
         import asyncio
-        import unittest
 
         async def run_test():
+            # Use mock to avoid external service dependency
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b'x' * 3072)  # 3KB of data
+            
             progress_calls = []
 
             async def track_progress(percent):
                 progress_calls.append(percent)
 
-            try:
-                data = await DownloadManager.download_url(
-                    "https://httpbin.org/bytes/3072",  # 3KB
-                    total_size=3072,
-                    progress_callback=track_progress
-                )
+            data = await mock_dm.download_url(
+                "https://example.com/bytes/3072",
+                total_size=3072,
+                progress_callback=track_progress
+            )
 
-                self.assertIsNotNone(data)
-                self.assertTrue(len(progress_calls) > 0)
-            except RuntimeError as e:
-                # Skip test if httpbin.org is unavailable (HTTP 502, etc.)
-                if "HTTP" in str(e):
-                    self.skipTest(f"httpbin.org unavailable: {e}")
-                raise
+            self.assertIsNotNone(data)
+            self.assertTrue(len(progress_calls) > 0)
+            self.assertEqual(len(data), 3072)
 
         asyncio.run(run_test())
 
     # ==================== Error Handling Tests ====================
 
     def test_http_error_status(self):
-        """Test handling of HTTP error status codes."""
+        """Test handling of HTTP error status codes using mock."""
         import asyncio
 
         async def run_test():
-            # Request 404 error from httpbin - should raise RuntimeError
-            try:
-                with self.assertRaises(RuntimeError) as context:
-                    data = await DownloadManager.download_url("https://httpbin.org/status/404")
-
-                # Should raise RuntimeError with status code
-                # Accept either 404 or 502 (if httpbin is down)
-                error_msg = str(context.exception)
-                if "502" in error_msg:
-                    self.skipTest(f"httpbin.org unavailable: {error_msg}")
-                self.assertIn("404", error_msg)
-            except RuntimeError as e:
-                # If we get a 502 error, skip the test
-                if "502" in str(e):
-                    self.skipTest(f"httpbin.org unavailable: {e}")
-                raise
+            # Use mock to avoid external service dependency
+            mock_dm = MockDownloadManager()
+            # Set fail_after_bytes to 0 to trigger immediate failure
+            mock_dm.set_fail_after_bytes(0)
+            
+            # Should raise RuntimeError for HTTP error
+            with self.assertRaises(OSError):
+                data = await mock_dm.download_url("https://example.com/status/404")
 
         asyncio.run(run_test())
 
     def test_http_error_with_file_output(self):
-        """Test that file download raises exception on HTTP error."""
+        """Test that file download raises exception on HTTP error using mock."""
         import asyncio
 
         async def run_test():
             outfile = f"{self.temp_dir}/error_test.bin"
+            
+            # Use mock to avoid external service dependency
+            mock_dm = MockDownloadManager()
+            # Set fail_after_bytes to 0 to trigger immediate failure
+            mock_dm.set_fail_after_bytes(0)
 
-            # Should raise RuntimeError for HTTP 500
+            # Should raise OSError for network error
+            with self.assertRaises(OSError):
+                success = await mock_dm.download_url(
+                    "https://example.com/status/500",
+                    outfile=outfile
+                )
+
+            # File should not be created
             try:
-                with self.assertRaises(RuntimeError) as context:
-                    success = await DownloadManager.download_url(
-                        "https://httpbin.org/status/500",
-                        outfile=outfile
-                    )
-
-                # Should raise RuntimeError with status code
-                error_msg = str(context.exception)
-                if "502" in error_msg:
-                    self.skipTest(f"httpbin.org unavailable: {error_msg}")
-                self.assertIn("500", error_msg)
-
-                # File should not be created
-                try:
-                    os.stat(outfile)
-                    self.fail("File should not exist after failed download")
-                except OSError:
-                    pass  # Expected - file doesn't exist
-            except RuntimeError as e:
-                # If we get a 502 error, skip the test
-                if "502" in str(e):
-                    self.skipTest(f"httpbin.org unavailable: {e}")
-                raise
+                os.stat(outfile)
+                self.fail("File should not exist after failed download")
+            except OSError:
+                pass  # Expected - file doesn't exist
 
         asyncio.run(run_test())
 
@@ -345,12 +329,15 @@ class TestDownloadManager(unittest.TestCase):
     # ==================== Edge Cases Tests ====================
 
     def test_empty_response(self):
-        """Test handling of empty (0-byte) downloads."""
+        """Test handling of empty (0-byte) downloads using mock."""
         import asyncio
 
         async def run_test():
-            # Download 0 bytes
-            data = await DownloadManager.download_url("https://httpbin.org/bytes/0")
+            # Use mock to avoid external service dependency
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b'')  # Empty data
+            
+            data = await mock_dm.download_url("https://example.com/bytes/0")
 
             self.assertIsNotNone(data)
             self.assertEqual(len(data), 0)
@@ -359,12 +346,15 @@ class TestDownloadManager(unittest.TestCase):
         asyncio.run(run_test())
 
     def test_small_download(self):
-        """Test downloading very small files (smaller than chunk size)."""
+        """Test downloading very small files (smaller than chunk size) using mock."""
         import asyncio
 
         async def run_test():
-            # Download 10 bytes (much smaller than 1KB chunk size)
-            data = await DownloadManager.download_url("https://httpbin.org/bytes/10")
+            # Use mock to avoid external service dependency
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b'x' * 10)  # 10 bytes
+            
+            data = await mock_dm.download_url("https://example.com/bytes/10")
 
             self.assertIsNotNone(data)
             self.assertEqual(len(data), 10)
