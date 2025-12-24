@@ -462,6 +462,27 @@ class WifiService:
         return None
 
     @staticmethod
+    def get_network_hidden(ssid):
+        """
+        Get the hidden flag for a network.
+
+        Args:
+            ssid: Network SSID
+
+        Returns:
+            bool: True if network is hidden, False otherwise
+        """
+        if not WifiService.access_points:
+            WifiService.access_points = mpos.config.SharedPreferences(
+                "com.micropythonos.system.wifiservice"
+            ).get_dict("access_points")
+
+        ap = WifiService.access_points.get(ssid)
+        if ap:
+            return ap.get("hidden", False)
+        return False
+
+    @staticmethod
     def save_network(ssid, password, hidden=False):
         """
         Save a new WiFi network credential.

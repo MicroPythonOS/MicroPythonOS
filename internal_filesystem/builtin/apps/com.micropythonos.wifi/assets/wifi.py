@@ -155,6 +155,7 @@ class WiFi(Activity):
         intent = Intent(activity_class=EditNetwork)
         intent.putExtra("selected_ssid", ssid)
         intent.putExtra("known_password", WifiService.get_network_password(ssid))
+        intent.putExtra("hidden", WifiService.get_network_hidden(ssid))
         self.startActivityForResult(intent, self.edit_network_result_callback)
 
     def edit_network_result_callback(self, result):
@@ -228,6 +229,7 @@ class EditNetwork(Activity):
         password_page.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         self.selected_ssid = self.getIntent().extras.get("selected_ssid")
         known_password = self.getIntent().extras.get("known_password")
+        known_hidden = self.getIntent().extras.get("hidden", False)
 
         # SSID:
         if self.selected_ssid is None:
@@ -264,6 +266,8 @@ class EditNetwork(Activity):
         self.hidden_cb = lv.checkbox(password_page)
         self.hidden_cb.set_text("Hidden network (always try connecting)")
         self.hidden_cb.set_style_margin_left(5, lv.PART.MAIN)
+        if known_hidden:
+            self.hidden_cb.set_state(lv.STATE.CHECKED, True)
 
         # Action buttons:
         buttons = lv.obj(password_page)
