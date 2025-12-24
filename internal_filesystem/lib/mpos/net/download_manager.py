@@ -274,17 +274,38 @@ async def download_url(url, outfile=None, total_size=None,
                 print(f"DownloadManager: HTTP error {response.status}")
                 raise RuntimeError(f"HTTP {response.status}")
 
-            # Figure out total size
+            # Figure out total size and starting offset (for resume support)
             print("DownloadManager: Response headers:", response.headers)
+            resume_offset = 0  # Starting byte offset (0 for new downloads, >0 for resumed)
+            
             if total_size is None:
                 # response.headers is a dict (after parsing) or None/list (before parsing)
                 try:
                     if isinstance(response.headers, dict):
-                        content_length = response.headers.get('Content-Length')
-                        if content_length:
-                            total_size = int(content_length)
-                except (AttributeError, TypeError, ValueError) as e:
-                    print(f"DownloadManager: Could not parse Content-Length: {e}")
+                        # Check for Content-Range first (used when resuming with Range header)
+                        # Format: 'bytes 1323008-3485807/3485808'
+                        # START is the resume offset, TOTAL is the complete file size
+                        content_range = response.headers.get('Content-Range')
+                        if content_range:
+                            # Parse total size and starting offset from Content-Range header
+                            # Example: 'bytes 1323008-3485807/3485808' -> offset=1323008, total=3485808
+                            if '/' in content_range and ' ' in content_range:
+                                # Extract the range part: '1323008-3485807'
+                                range_part = content_range.split(' ')[1].split('/')[0]
+                                # Extract starting offset
+                                resume_offset = int(range_part.split('-')[0])
+                                # Extract total size
+                                total_size = int(content_range.split('/')[-1])
+                                print(f"DownloadManager: Resuming from byte {resume_offset}, total size: {total_size}")
+                        
+                        # Fall back to Content-Length if Content-Range not present
+                        if total_size is None:
+                            content_length = response.headers.get('Content-Length')
+                            if content_length:
+                                total_size = int(content_length)
+                                print(f"DownloadManager: Using Content-Length: {total_size}")
+                except (AttributeError, TypeError, ValueError, IndexError) as e:
+                    print(f"DownloadManager: Could not parse Content-Range/Content-Length: {e}")
 
                 if total_size is None:
                     print(f"DownloadManager: WARNING: Unable to determine total_size, assuming {_DEFAULT_TOTAL_SIZE} bytes")
@@ -298,7 +319,7 @@ async def download_url(url, outfile=None, total_size=None,
                     return False
 
             chunks = []
-            partial_size = 0
+            partial_size = resume_offset  # Start from resume offset for accurate progress
             chunk_size = _DEFAULT_CHUNK_SIZE
             
             # Progress tracking with 2-decimal precision
