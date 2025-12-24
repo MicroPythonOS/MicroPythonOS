@@ -1,18 +1,21 @@
 0.5.2
 =====
-- AudioFlinger: optimize WAV volume scaling for speed and immediately set volume
-- AudioFlinger: add support for I2S microphone recording to WAV
-- About app: add mpy info
-- AppStore app: eliminate all threads by using TaskManager
-- AppStore app: add support for BadgeHub backend (not default)
-- OSUpdate app: show download speed
-- WiFi app: new "Add network" functionality for out-of-range networks
-- WiFi app: add support for hidden networks
-- WiFi app: add "Forget" button to delete networks
+- Fri3d Camp 2024 Board: add I2S microphone as found on the communicator add-on
 - API: add TaskManager that wraps asyncio
 - API: add DownloadManager that uses TaskManager
 - API: use aiorepl to eliminate another thread
-
+- AudioFlinger API: add support for I2S microphone recording to WAV
+- AudioFlinger API: optimize WAV volume scaling for speed and immediately set volume
+- Rearrange automated testing facilities
+- About app: add mpy format info
+- AppStore app: eliminate all threads by using TaskManager
+- AppStore app: add experimental support for BadgeHub backend (not enabled)
+- MusicPlayer app: faster volume slider action
+- OSUpdate app: show download speed
+- SoundRecorder app: created to test AudioFlinger's new recording feature!
+- WiFi app: new "Add network" functionality for out-of-range networks
+- WiFi app: add support for hidden networks
+- WiFi app: add "Forget" button to delete networks
 
 0.5.1
 =====

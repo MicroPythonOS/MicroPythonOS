@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "WiFi Network Configuration",
 "long_description": "Scans for wireless networks, shows a list of SSIDs, allows for password entry, and connecting.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.wifi/icons/com.micropythonos.wifi_0.0.11_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.wifi/mpks/com.micropythonos.wifi_0.0.11.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.wifi/icons/com.micropythonos.wifi_0.0.12_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.wifi/mpks/com.micropythonos.wifi_0.0.12.mpk",
 "fullname": "com.micropythonos.wifi",
-"version": "0.0.11",
+"version": "0.0.12",
 "category": "networking",
 "activities": [
     {

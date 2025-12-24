@@ -229,10 +229,9 @@ class WebSocketApp:
 
         # Run the event loop in the main thread
         try:
-            print("doing run_until_complete")
+            print("websocket's run_forever creating _async_main task")
             #self._loop.run_until_complete(self._async_main()) # this doesn't always finish!
             asyncio.create_task(self._async_main())
-            print("after run_until_complete")
         except KeyboardInterrupt:
             _log_debug("run_forever got KeyboardInterrupt")
             self.close()

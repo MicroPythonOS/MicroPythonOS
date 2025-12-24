@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Store for App(lication)s",
 "long_description": "This is the place to discover, find, install, uninstall and upgrade all the apps that make your device useless.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/icons/com.micropythonos.appstore_0.0.9_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/mpks/com.micropythonos.appstore_0.0.9.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/icons/com.micropythonos.appstore_0.0.10_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.appstore/mpks/com.micropythonos.appstore_0.0.10.mpk",
 "fullname": "com.micropythonos.appstore",
-"version": "0.0.9",
+"version": "0.0.10",
 "category": "appstore",
 "activities": [
     {
