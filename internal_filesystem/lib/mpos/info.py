@@ -1,4 +1,4 @@
-CURRENT_OS_VERSION = "0.5.2"
+CURRENT_OS_VERSION = "0.5.3"
 
 # Unique string that defines the hardware, used by OSUpdate and the About app
 _hardware_id = "missing-hardware-info"
