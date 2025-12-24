@@ -22,7 +22,7 @@ sleep 2
 
 if [ ! -z "$appname" ]; then
 	echo "Installing one app: $appname"
-	appdir="apps/$appname/"
+	appdir="apps/$appname"
         target="apps/"
 	if [ ! -d "$appdir" ]; then
 		echo "$appdir doesn't exist so taking the builtin/"
@@ -36,7 +36,12 @@ if [ ! -z "$appname" ]; then
         $mpremote mkdir "/apps"
         #$mpremote mkdir "/builtin" # dont do this because it breaks the mount!
         #$mpremote mkdir "/builtin/apps"
-	$mpremote fs cp -r "$appdir" :/"$target"
+	if test -L "$appdir"; then
+		$mpremote fs mkdir :/"$appdir"
+		$mpremote fs cp -r "$appdir"/* :/"$appdir"/
+	else
+		$mpremote fs cp -r "$appdir" :/"$target"
+	fi
 	echo "start_app(\"/$appdir\")"
 	$mpremote
 	popd
