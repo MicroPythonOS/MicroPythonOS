@@ -50,14 +50,6 @@ fi
 
 $mpremote fs cp -r lib :/
 
-$mpremote fs mkdir :/apps
-$mpremote fs cp -r apps/com.micropythonos.* :/apps/
-find apps/ -maxdepth 1 -type l | while read symlink; do
-	echo "Handling symlink $symlink"
-	$mpremote fs mkdir :/"$symlink"
-	$mpremote fs cp -r "$symlink"/* :/"$symlink"/
-
-done
 
 #echo "Unmounting builtin/ so that it can be customized..." # not sure this is necessary
 #$mpremote exec "import os ; os.umount('/builtin')"
@@ -69,6 +61,15 @@ $mpremote fs cp -r builtin :/
 $mpremote fs mkdir :/data
 $mpremote fs mkdir :/data/com.micropythonos.system.wifiservice
 $mpremote fs cp ../internal_filesystem_excluded/data/com.micropythonos.system.wifiservice/config.json :/data/com.micropythonos.system.wifiservice/
+
+$mpremote fs mkdir :/apps
+$mpremote fs cp -r apps/com.micropythonos.* :/apps/
+find apps/ -maxdepth 1 -type l | while read symlink; do
+	echo "Handling symlink $symlink"
+	$mpremote fs mkdir :/"$symlink"
+	$mpremote fs cp -r "$symlink"/* :/"$symlink"/
+
+done
 
 popd
 
