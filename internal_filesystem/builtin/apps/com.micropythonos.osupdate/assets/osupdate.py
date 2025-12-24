@@ -379,7 +379,7 @@ class OSUpdate(Activity):
             self._handle_update_exception(e)
 
     def _handle_update_error(self, result):
-        """Handle update error result - extracted for DRY."""
+        print(f"Handle update error: {result}")
         error_msg = result.get('error', 'Unknown error')
         bytes_written = result.get('bytes_written', 0)
         total_size = result.get('total_size', 0)
@@ -401,7 +401,7 @@ class OSUpdate(Activity):
         self.install_button.remove_state(lv.STATE.DISABLED)  # allow retry
 
     def _handle_update_exception(self, e):
-        """Handle update exception - extracted for DRY."""
+        print(f"Handle update exception: {e}")
         msg = self._get_user_friendly_error(e) + "\n\nPress 'Update OS' to retry."
         self.set_state(UpdateState.ERROR)
         self.status_label.set_text(msg)
@@ -666,7 +666,8 @@ class UpdateDownloader:
 
         except Exception as e:
             error_msg = str(e)
-            
+            print(f"error_msg: {error_msg}")
+
             # Check if cancelled by user
             if "cancelled" in error_msg.lower():
                 result['error'] = error_msg
