@@ -478,8 +478,9 @@ class UpdateDownloader:
         # -104 = ECONNRESET (connection reset by peer)
         # -110 = ETIMEDOUT (connection timed out)
         # -118 = EHOSTUNREACH (no route to host)
+        # -202 = DNS/connection error (network not ready)
         network_indicators = [
-            '-113', '-104', '-110', '-118',  # Error codes
+            '-113', '-104', '-110', '-118', '-202',  # Error codes
             'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
             'connection reset', 'connection aborted',  # Error messages
             'broken pipe', 'network unreachable', 'host unreachable',
