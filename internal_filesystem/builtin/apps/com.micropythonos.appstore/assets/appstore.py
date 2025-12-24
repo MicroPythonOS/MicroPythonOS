@@ -60,9 +60,11 @@ class AppStore(Activity):
                 TaskManager.create_task(self.download_app_index(self.app_index_url_github))
 
     async def download_app_index(self, json_url):
-        response = await DownloadManager.download_url(json_url)
-        if not response:
-            self.please_wait_label.set_text(f"Could not download app index from\n{json_url}")
+        try:
+            response = await DownloadManager.download_url(json_url)
+        except Exception as e:
+            print(f"Failed to download app index: {e}")
+            self.please_wait_label.set_text(f"Could not download app index from\n{json_url}\nError: {e}")
             return
         print(f"Got response text: {response[0:20]}")
         try:
@@ -197,9 +199,10 @@ class AppStore(Activity):
 
     async def fetch_badgehub_app_details(self, app_obj):
         details_url = self.app_detail_url_badgehub + "/" + app_obj.fullname
-        response = await DownloadManager.download_url(details_url)
-        if not response:
-            print(f"Could not download app details from from\n{details_url}")
+        try:
+            response = await DownloadManager.download_url(details_url)
+        except Exception as e:
+            print(f"Could not download app details from {details_url}: {e}")
             return
         print(f"Got response text: {response[0:20]}")
         try:
@@ -480,14 +483,27 @@ class AppDetail(Activity):
             pass
         temp_zip_path = "tmp/temp.mpk"
         print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
-        result = await DownloadManager.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size, progress_callback=self.pcb)
-        if result is not True:
-            print("Download failed...") # Would be good to show an error to the user if this failed...
-        else:
-            print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
-            # Install it:
-            PackageManager.install_mpk(temp_zip_path, dest_folder) # 60 until 90 percent is the unzip but no progress there...
-            self.progress_bar.set_value(90, True)
+        try:
+            result = await DownloadManager.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size, progress_callback=self.pcb)
+            if result is not True:
+                print("Download failed...") # Would be good to show an error to the user if this failed...
+            else:
+                print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
+                # Install it:
+                PackageManager.install_mpk(temp_zip_path, dest_folder) # 60 until 90 percent is the unzip but no progress there...
+                self.progress_bar.set_value(90, True)
+        except Exception as e:
+            print(f"Download failed with exception: {e}")
+            self.install_label.set_text(f"Download failed")
+            self.install_button.remove_state(lv.STATE.DISABLED)
+            self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
+            self.progress_bar.set_value(0, False)
+            # Make sure there's no leftover file filling the storage:
+            try:
+                os.remove(temp_zip_path)
+            except Exception:
+                pass
+            return
         # Make sure there's no leftover file filling the storage:
         try:
             os.remove(temp_zip_path)

@@ -249,28 +249,31 @@ class TestDownloadManager(unittest.TestCase):
         import asyncio
 
         async def run_test():
-            # Request 404 error from httpbin
-            data = await DownloadManager.download_url("https://httpbin.org/status/404")
+            # Request 404 error from httpbin - should raise RuntimeError
+            with self.assertRaises(RuntimeError) as context:
+                data = await DownloadManager.download_url("https://httpbin.org/status/404")
 
-            # Should return None for memory download
-            self.assertIsNone(data)
+            # Should raise RuntimeError with status code
+            self.assertIn("404", str(context.exception))
 
         asyncio.run(run_test())
 
     def test_http_error_with_file_output(self):
-        """Test that file download returns False on HTTP error."""
+        """Test that file download raises exception on HTTP error."""
         import asyncio
 
         async def run_test():
             outfile = f"{self.temp_dir}/error_test.bin"
 
-            success = await DownloadManager.download_url(
-                "https://httpbin.org/status/500",
-                outfile=outfile
-            )
+            # Should raise RuntimeError for HTTP 500
+            with self.assertRaises(RuntimeError) as context:
+                success = await DownloadManager.download_url(
+                    "https://httpbin.org/status/500",
+                    outfile=outfile
+                )
 
-            # Should return False for file download
-            self.assertFalse(success)
+            # Should raise RuntimeError with status code
+            self.assertIn("500", str(context.exception))
 
             # File should not be created
             try:
@@ -286,14 +289,9 @@ class TestDownloadManager(unittest.TestCase):
         import asyncio
 
         async def run_test():
-            # Invalid URL should raise exception or return None
-            try:
+            # Invalid URL should raise an exception
+            with self.assertRaises(Exception):
                 data = await DownloadManager.download_url("http://invalid-url-that-does-not-exist.local/")
-                # If it doesn't raise, it should return None
-                self.assertIsNone(data)
-            except Exception:
-                # Exception is acceptable
-                pass
 
         asyncio.run(run_test())
 
@@ -372,16 +370,12 @@ class TestDownloadManager(unittest.TestCase):
             # Try to download to non-existent directory
             outfile = "/tmp/nonexistent_dir_12345/test.bin"
 
-            try:
+            # Should raise exception because directory doesn't exist
+            with self.assertRaises(Exception):
                 success = await DownloadManager.download_url(
                     "https://httpbin.org/bytes/100",
                     outfile=outfile
                 )
-                # Should fail because directory doesn't exist
-                self.assertFalse(success)
-            except Exception:
-                # Exception is acceptable
-                pass
 
         asyncio.run(run_test())
 

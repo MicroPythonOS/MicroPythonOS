@@ -482,7 +482,8 @@ class UpdateDownloader:
             '-113', '-104', '-110', '-118',  # Error codes
             'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
             'connection reset', 'connection aborted',  # Error messages
-            'broken pipe', 'network unreachable', 'host unreachable'
+            'broken pipe', 'network unreachable', 'host unreachable',
+            'failed to download chunk'  # From download_manager OSError(-110)
         ]
 
         return any(indicator in error_str or indicator in error_repr

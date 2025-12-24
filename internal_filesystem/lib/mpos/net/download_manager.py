@@ -200,10 +200,14 @@ async def download_url(url, outfile=None, total_size=None,
 
     Returns:
         bytes: Downloaded content (if outfile and chunk_callback are None)
-        bool: True if successful, False if failed (when using outfile or chunk_callback)
+        bool: True if successful (when using outfile or chunk_callback)
 
     Raises:
+        ImportError: If aiohttp module is not available
+        RuntimeError: If HTTP request fails (status code < 200 or >= 400)
+        OSError: If chunk download times out after retries or network connection is lost
         ValueError: If both outfile and chunk_callback are provided
+        Exception: Other download errors (propagated from aiohttp or chunk processing)
 
     Example:
         # Download to memory
@@ -247,7 +251,7 @@ async def download_url(url, outfile=None, total_size=None,
     session = _get_session()
     if session is None:
         print("DownloadManager: Cannot download, aiohttp not available")
-        return False if (outfile or chunk_callback) else None
+        raise ImportError("aiohttp module not available")
 
     # Increment refcount
     global _session_refcount
@@ -268,7 +272,7 @@ async def download_url(url, outfile=None, total_size=None,
         async with session.get(url, headers=headers) as response:
             if response.status < 200 or response.status >= 400:
                 print(f"DownloadManager: HTTP error {response.status}")
-                return False if (outfile or chunk_callback) else None
+                raise RuntimeError(f"HTTP {response.status}")
 
             # Figure out total size
             print("DownloadManager: Response headers:", response.headers)
@@ -332,7 +336,7 @@ async def download_url(url, outfile=None, total_size=None,
                     print("DownloadManager: ERROR: failed to download chunk after retries!")
                     if fd:
                         fd.close()
-                    return False if (outfile or chunk_callback) else None
+                    raise OSError(-110, "Failed to download chunk after retries")
 
                 if chunk_data:
                     # Output chunk
@@ -384,7 +388,7 @@ async def download_url(url, outfile=None, total_size=None,
         print(f"DownloadManager: Exception during download: {e}")
         if fd:
             fd.close()
-        return False if (outfile or chunk_callback) else None
+        raise  # Re-raise the exception instead of suppressing it
     finally:
         # Decrement refcount
         if _session_lock:
