@@ -13,9 +13,9 @@
 - MusicPlayer app: faster volume slider action
 - OSUpdate app: show download speed
 - SoundRecorder app: created to test AudioFlinger's new recording feature!
-- WiFi app: new "Add network" functionality for out-of-range networks
+- WiFi app: new 'Add network' functionality for out-of-range networks
 - WiFi app: add support for hidden networks
-- WiFi app: add "Forget" button to delete networks
+- WiFi app: add 'Forget' button to delete networks
 
 0.5.1
 =====
