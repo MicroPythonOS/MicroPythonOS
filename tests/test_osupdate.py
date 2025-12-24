@@ -9,6 +9,9 @@ sys.path.insert(0, '../tests')
 # Import network test helpers
 from network_test_helper import MockNetwork, MockRequests, MockJSON, MockDownloadManager
 
+# Import the real DownloadManager for is_network_error function
+from mpos import DownloadManager
+
 
 class MockPartition:
     """Mock ESP32 Partition for testing UpdateDownloader."""
@@ -389,34 +392,34 @@ class TestUpdateDownloader(unittest.TestCase):
     def test_network_error_detection_econnaborted(self):
         """Test that ECONNABORTED error is detected as network error."""
         error = OSError(-113, "ECONNABORTED")
-        self.assertTrue(self.downloader._is_network_error(error))
+        self.assertTrue(DownloadManager.is_network_error(error))
 
     def test_network_error_detection_econnreset(self):
         """Test that ECONNRESET error is detected as network error."""
         error = OSError(-104, "ECONNRESET")
-        self.assertTrue(self.downloader._is_network_error(error))
+        self.assertTrue(DownloadManager.is_network_error(error))
 
     def test_network_error_detection_etimedout(self):
         """Test that ETIMEDOUT error is detected as network error."""
         error = OSError(-110, "ETIMEDOUT")
-        self.assertTrue(self.downloader._is_network_error(error))
+        self.assertTrue(DownloadManager.is_network_error(error))
 
     def test_network_error_detection_ehostunreach(self):
         """Test that EHOSTUNREACH error is detected as network error."""
         error = OSError(-118, "EHOSTUNREACH")
-        self.assertTrue(self.downloader._is_network_error(error))
+        self.assertTrue(DownloadManager.is_network_error(error))
 
     def test_network_error_detection_by_message(self):
         """Test that network errors are detected by message."""
-        self.assertTrue(self.downloader._is_network_error(Exception("Connection reset by peer")))
-        self.assertTrue(self.downloader._is_network_error(Exception("Connection aborted")))
-        self.assertTrue(self.downloader._is_network_error(Exception("Broken pipe")))
+        self.assertTrue(DownloadManager.is_network_error(Exception("Connection reset by peer")))
+        self.assertTrue(DownloadManager.is_network_error(Exception("Connection aborted")))
+        self.assertTrue(DownloadManager.is_network_error(Exception("Broken pipe")))
 
     def test_non_network_error_not_detected(self):
         """Test that non-network errors are not detected as network errors."""
-        self.assertFalse(self.downloader._is_network_error(ValueError("Invalid data")))
-        self.assertFalse(self.downloader._is_network_error(Exception("File not found")))
-        self.assertFalse(self.downloader._is_network_error(KeyError("missing")))
+        self.assertFalse(DownloadManager.is_network_error(ValueError("Invalid data")))
+        self.assertFalse(DownloadManager.is_network_error(Exception("File not found")))
+        self.assertFalse(DownloadManager.is_network_error(KeyError("missing")))
 
     def test_download_pauses_on_network_error_during_read(self):
         """Test that download pauses when network error occurs during read."""
