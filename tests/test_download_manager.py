@@ -257,11 +257,21 @@ class TestDownloadManager(unittest.TestCase):
 
         async def run_test():
             # Request 404 error from httpbin - should raise RuntimeError
-            with self.assertRaises(RuntimeError) as context:
-                data = await DownloadManager.download_url("https://httpbin.org/status/404")
+            try:
+                with self.assertRaises(RuntimeError) as context:
+                    data = await DownloadManager.download_url("https://httpbin.org/status/404")
 
-            # Should raise RuntimeError with status code
-            self.assertIn("404", str(context.exception))
+                # Should raise RuntimeError with status code
+                # Accept either 404 or 502 (if httpbin is down)
+                error_msg = str(context.exception)
+                if "502" in error_msg:
+                    self.skipTest(f"httpbin.org unavailable: {error_msg}")
+                self.assertIn("404", error_msg)
+            except RuntimeError as e:
+                # If we get a 502 error, skip the test
+                if "502" in str(e):
+                    self.skipTest(f"httpbin.org unavailable: {e}")
+                raise
 
         asyncio.run(run_test())
 
@@ -273,21 +283,30 @@ class TestDownloadManager(unittest.TestCase):
             outfile = f"{self.temp_dir}/error_test.bin"
 
             # Should raise RuntimeError for HTTP 500
-            with self.assertRaises(RuntimeError) as context:
-                success = await DownloadManager.download_url(
-                    "https://httpbin.org/status/500",
-                    outfile=outfile
-                )
-
-            # Should raise RuntimeError with status code
-            self.assertIn("500", str(context.exception))
-
-            # File should not be created
             try:
-                os.stat(outfile)
-                self.fail("File should not exist after failed download")
-            except OSError:
-                pass  # Expected - file doesn't exist
+                with self.assertRaises(RuntimeError) as context:
+                    success = await DownloadManager.download_url(
+                        "https://httpbin.org/status/500",
+                        outfile=outfile
+                    )
+
+                # Should raise RuntimeError with status code
+                error_msg = str(context.exception)
+                if "502" in error_msg:
+                    self.skipTest(f"httpbin.org unavailable: {error_msg}")
+                self.assertIn("500", error_msg)
+
+                # File should not be created
+                try:
+                    os.stat(outfile)
+                    self.fail("File should not exist after failed download")
+                except OSError:
+                    pass  # Expected - file doesn't exist
+            except RuntimeError as e:
+                # If we get a 502 error, skip the test
+                if "502" in str(e):
+                    self.skipTest(f"httpbin.org unavailable: {e}")
+                raise
 
         asyncio.run(run_test())
 

@@ -38,6 +38,9 @@ fi
 binary=$(readlink -f "$binary")
 chmod +x "$binary"
 
+# make sure no autostart is configured:
+rm "$scriptdir"/../internal_filesystem/data/com.micropythonos.settings/config.json
+
 one_test() {
 	file="$1"
 	if [ ! -f "$file" ]; then
