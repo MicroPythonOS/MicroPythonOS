@@ -129,7 +129,7 @@ class TestGetResumePosition(unittest.TestCase):
 
     def setUp(self):
         """Create test directory."""
-        self.test_dir = "tmp/test_download_manager"
+        self.test_dir = "tmp_test_download_manager"
         # Handle both CPython and MicroPython
         try:
             os.makedirs(self.test_dir, exist_ok=True)
