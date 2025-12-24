@@ -13,6 +13,10 @@ _last_read_time = 0
 CACHE_DURATION_ADC1_MS = 30000   # 30 seconds (cheaper: no WiFi interference)
 CACHE_DURATION_ADC2_MS = 600000  # 600 seconds (expensive: requires WiFi disable)
 #CACHE_DURATION_ADC2_MS = CACHE_DURATION_ADC1_MS # trigger frequent disconnections for debugging OSUpdate resume
+# Or at runtime, do:
+# import mpos.battery_voltage
+# mpos.battery_voltage.CACHE_DURATION_ADC2_MS = 30000
+
 
 def _is_adc2_pin(pin):
     """Check if pin is on ADC2 (ESP32-S3: GPIO11-20)."""
