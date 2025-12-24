@@ -224,6 +224,7 @@ class TestDownloadManager(unittest.TestCase):
     def test_progress_with_explicit_total_size(self):
         """Test progress tracking with explicitly provided total_size."""
         import asyncio
+        import unittest
 
         async def run_test():
             progress_calls = []
@@ -231,14 +232,20 @@ class TestDownloadManager(unittest.TestCase):
             async def track_progress(percent):
                 progress_calls.append(percent)
 
-            data = await DownloadManager.download_url(
-                "https://httpbin.org/bytes/3072",  # 3KB
-                total_size=3072,
-                progress_callback=track_progress
-            )
+            try:
+                data = await DownloadManager.download_url(
+                    "https://httpbin.org/bytes/3072",  # 3KB
+                    total_size=3072,
+                    progress_callback=track_progress
+                )
 
-            self.assertIsNotNone(data)
-            self.assertTrue(len(progress_calls) > 0)
+                self.assertIsNotNone(data)
+                self.assertTrue(len(progress_calls) > 0)
+            except RuntimeError as e:
+                # Skip test if httpbin.org is unavailable (HTTP 502, etc.)
+                if "HTTP" in str(e):
+                    self.skipTest(f"httpbin.org unavailable: {e}")
+                raise
 
         asyncio.run(run_test())
 
