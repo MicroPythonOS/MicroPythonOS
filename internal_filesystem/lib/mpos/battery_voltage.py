@@ -11,7 +11,7 @@ adc_pin = None
 _cached_raw_adc = None
 _last_read_time = 0
 CACHE_DURATION_ADC1_MS = 30000   # 30 seconds (cheaper: no WiFi interference)
-CACHE_DURATION_ADC2_MS = 300000  # 300 seconds (expensive: requires WiFi disable)
+CACHE_DURATION_ADC2_MS = 600000  # 600 seconds (expensive: requires WiFi disable)
 #CACHE_DURATION_ADC2_MS = CACHE_DURATION_ADC1_MS # trigger frequent disconnections for debugging OSUpdate resume
 
 def _is_adc2_pin(pin):

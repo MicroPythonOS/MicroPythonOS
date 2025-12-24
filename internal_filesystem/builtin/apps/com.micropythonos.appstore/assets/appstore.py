@@ -64,7 +64,10 @@ class AppStore(Activity):
             response = await DownloadManager.download_url(json_url)
         except Exception as e:
             print(f"Failed to download app index: {e}")
-            self.please_wait_label.set_text(f"Could not download app index from\n{json_url}\nError: {e}")
+            if DownloadManager.is_network_error(e):
+                self.please_wait_label.set_text(f"Network error - check your WiFi connection\nand try again.")
+            else:
+                self.please_wait_label.set_text(f"Could not download app index from\n{json_url}\nError: {e}")
             return
         print(f"Got response text: {response[0:20]}")
         try:
@@ -203,6 +206,8 @@ class AppStore(Activity):
             response = await DownloadManager.download_url(details_url)
         except Exception as e:
             print(f"Could not download app details from {details_url}: {e}")
+            if DownloadManager.is_network_error(e):
+                print("Network error while fetching app details")
             return
         print(f"Got response text: {response[0:20]}")
         try:
@@ -494,7 +499,10 @@ class AppDetail(Activity):
                 self.progress_bar.set_value(90, True)
         except Exception as e:
             print(f"Download failed with exception: {e}")
-            self.install_label.set_text(f"Download failed")
+            if DownloadManager.is_network_error(e):
+                self.install_label.set_text(f"Network error - check WiFi")
+            else:
+                self.install_label.set_text(f"Download failed: {str(e)[:30]}")
             self.install_button.remove_state(lv.STATE.DISABLED)
             self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
             self.progress_bar.set_value(0, False)

@@ -212,7 +212,7 @@ class OSUpdate(Activity):
         except Exception as e:
             print(f"show_update_info got exception: {e}")
             # Check if this is a network connectivity error
-            if self.update_downloader._is_network_error(e):
+            if DownloadManager.is_network_error(e):
                 # Network not available - wait for it to come back
                 print("OSUpdate: Network error while checking for updates, waiting for WiFi")
                 self.set_state(UpdateState.WAITING_WIFI)
@@ -461,35 +461,6 @@ class UpdateDownloader:
                 print("UpdateDownloader: Partition module not available, will simulate")
                 self.simulate = True
 
-    def _is_network_error(self, exception):
-        """Check if exception is a network connectivity error that should trigger pause.
-
-        Args:
-            exception: Exception to check
-
-        Returns:
-            bool: True if this is a recoverable network error
-        """
-        error_str = str(exception).lower()
-        error_repr = repr(exception).lower()
-
-        # Check for common network error codes and messages
-        # -113 = ECONNABORTED (connection aborted)
-        # -104 = ECONNRESET (connection reset by peer)
-        # -110 = ETIMEDOUT (connection timed out)
-        # -118 = EHOSTUNREACH (no route to host)
-        # -202 = DNS/connection error (network not ready)
-        network_indicators = [
-            '-113', '-104', '-110', '-118', '-202',  # Error codes
-            'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
-            'connection reset', 'connection aborted',  # Error messages
-            'broken pipe', 'network unreachable', 'host unreachable',
-            'failed to download chunk'  # From download_manager OSError(-110)
-        ]
-
-        return any(indicator in error_str or indicator in error_repr
-                  for indicator in network_indicators)
-
     def _setup_partition(self):
         """Initialize the OTA partition for writing."""
         if not self.simulate and self._current_partition is None:
@@ -678,7 +649,7 @@ class UpdateDownloader:
                 result['bytes_written'] = self.bytes_written_so_far
                 result['total_size'] = self.total_size_expected
             # Check if this is a network error that should trigger pause
-            elif self._is_network_error(e):
+            elif DownloadManager.is_network_error(e):
                 print(f"UpdateDownloader: Network error ({e}), pausing download")
                 
                 # Clear buffer - we'll re-download this data on resume

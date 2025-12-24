@@ -14,6 +14,11 @@ Features:
 - Progress tracking with 2-decimal precision
 - Download speed reporting
 - Resume support via Range headers
+- Network error detection utilities
+
+Utility Functions:
+    is_network_error(exception) - Check if error is recoverable network error
+    get_resume_position(outfile) - Get file size for resume support
 
 Example:
     from mpos import DownloadManager
@@ -44,6 +49,19 @@ Example:
         "https://example.com/stream",
         chunk_callback=process_chunk
     )
+
+    # Error handling with retry
+    try:
+        await DownloadManager.download_url(url, outfile="/sdcard/file.bin")
+    except Exception as e:
+        if DownloadManager.is_network_error(e):
+            # Wait and retry with resume
+            await asyncio.sleep(2)
+            resume_from = DownloadManager.get_resume_position("/sdcard/file.bin")
+            headers = {'Range': f'bytes={resume_from}-'} if resume_from > 0 else None
+            await DownloadManager.download_url(url, outfile="/sdcard/file.bin", headers=headers)
+        else:
+            raise  # Fatal error
 """
 
 # Constants
@@ -172,6 +190,75 @@ async def close_session():
     finally:
         if _session_lock:
             _session_lock.release()
+
+
+def is_network_error(exception):
+    """Check if exception is a recoverable network error.
+    
+    Recognizes common network error codes and messages that indicate
+    temporary connectivity issues that can be retried.
+    
+    Args:
+        exception: Exception to check
+        
+    Returns:
+        bool: True if this is a network error that can be retried
+        
+    Example:
+        try:
+            await DownloadManager.download_url(url)
+        except Exception as e:
+            if DownloadManager.is_network_error(e):
+                # Retry or pause
+                await asyncio.sleep(2)
+                # retry...
+            else:
+                # Fatal error
+                raise
+    """
+    error_str = str(exception).lower()
+    error_repr = repr(exception).lower()
+    
+    # Common network error codes and messages
+    # -113 = ECONNABORTED (connection aborted)
+    # -104 = ECONNRESET (connection reset by peer)
+    # -110 = ETIMEDOUT (connection timed out)
+    # -118 = EHOSTUNREACH (no route to host)
+    # -202 = DNS/connection error (network not ready)
+    network_indicators = [
+        '-113', '-104', '-110', '-118', '-202',  # Error codes
+        'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
+        'connection reset', 'connection aborted',  # Error messages
+        'broken pipe', 'network unreachable', 'host unreachable',
+        'failed to download chunk'  # From download_manager OSError(-110)
+    ]
+    
+    return any(indicator in error_str or indicator in error_repr
+              for indicator in network_indicators)
+
+
+def get_resume_position(outfile):
+    """Get the current size of a partially downloaded file.
+    
+    Useful for implementing resume functionality with Range headers.
+    
+    Args:
+        outfile: Path to file
+        
+    Returns:
+        int: File size in bytes, or 0 if file doesn't exist
+        
+    Example:
+        resume_from = DownloadManager.get_resume_position("/sdcard/file.bin")
+        if resume_from > 0:
+            headers = {'Range': f'bytes={resume_from}-'}
+            await DownloadManager.download_url(url, outfile=outfile, headers=headers)
+    """
+    try:
+        import os
+        return os.stat(outfile)[6]  # st_size
+    except OSError:
+        return 0
 
 
 async def download_url(url, outfile=None, total_size=None,
