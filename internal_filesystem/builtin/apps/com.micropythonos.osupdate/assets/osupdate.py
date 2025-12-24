@@ -442,7 +442,8 @@ class UpdateDownloader:
 
         # Download state for pause/resume
         self.is_paused = False
-        self.bytes_written_so_far = 0
+        self.bytes_written_so_far = 0  # Bytes written to partition (in 4096-byte blocks)
+        self.bytes_received_so_far = 0  # Actual bytes received from network (for resume)
         self.total_size_expected = 0
 
         # Internal state for chunk processing
@@ -523,8 +524,9 @@ class UpdateDownloader:
             self.is_paused = True
             raise OSError(-113, "Network lost during download")
 
-        # Track total bytes received
+        # Track total bytes received (for accurate resume position)
         self._total_bytes_received += len(chunk)
+        self.bytes_received_so_far += len(chunk)
 
         # Add chunk to buffer
         self._chunk_buffer += chunk
@@ -601,14 +603,14 @@ class UpdateDownloader:
             # Setup partition
             self._setup_partition()
 
-            # Initialize block index from resume position
+            # Initialize block index from resume position (based on bytes written to partition)
             self._block_index = self.bytes_written_so_far // self.CHUNK_SIZE
 
-            # Build headers for resume
+            # Build headers for resume (based on bytes received from network)
             headers = None
-            if self.bytes_written_so_far > 0:
-                headers = {'Range': f'bytes={self.bytes_written_so_far}-'}
-                print(f"UpdateDownloader: Resuming from byte {self.bytes_written_so_far}")
+            if self.bytes_received_so_far > 0:
+                headers = {'Range': f'bytes={self.bytes_received_so_far}-'}
+                print(f"UpdateDownloader: Resuming from byte {self.bytes_received_so_far} (written: {self.bytes_written_so_far})")
 
             # Get the download manager (use injected one for testing, or global)
             dm = self.download_manager if self.download_manager else DownloadManager
@@ -622,7 +624,7 @@ class UpdateDownloader:
 
             # For initial download, we need to get total size first
             # DownloadManager doesn't expose Content-Length directly, so we estimate
-            if self.bytes_written_so_far == 0:
+            if self.bytes_received_so_far == 0:
                 # We'll update total_size_expected as we download
                 # For now, set a placeholder that will be updated
                 self.total_size_expected = 0
@@ -653,6 +655,7 @@ class UpdateDownloader:
                 # Reset state for next download
                 self.is_paused = False
                 self.bytes_written_so_far = 0
+                self.bytes_received_so_far = 0
                 self.total_size_expected = 0
                 self._current_partition = None
                 self._block_index = 0
@@ -673,19 +676,34 @@ class UpdateDownloader:
             # Check if cancelled by user
             if "cancelled" in error_msg.lower():
                 result['error'] = error_msg
-                result['bytes_written'] = self.bytes_written_so_far
+                result['bytes_written'] = self.bytes_received_so_far  # Report actual bytes received
                 result['total_size'] = self.total_size_expected
             # Check if this is a network error that should trigger pause
             elif self._is_network_error(e):
                 print(f"UpdateDownloader: Network error ({e}), pausing download")
+                
+                # Flush buffer before pausing to ensure all received data is written
+                # This prevents data loss/corruption on resume
+                if self._chunk_buffer:
+                    buffer_len = len(self._chunk_buffer)
+                    print(f"UpdateDownloader: Flushing {buffer_len} bytes from buffer before pause")
+                    # Pad to 4096 bytes and write
+                    padded = self._chunk_buffer + b'\xFF' * (self.CHUNK_SIZE - buffer_len)
+                    if not self.simulate:
+                        self._current_partition.writeblocks(self._block_index, padded)
+                    self._block_index += 1
+                    self.bytes_written_so_far += self.CHUNK_SIZE
+                    self._chunk_buffer = b''
+                    print(f"UpdateDownloader: Buffer flushed, bytes_written_so_far now: {self.bytes_written_so_far}, bytes_received: {self.bytes_received_so_far}")
+                
                 self.is_paused = True
                 result['paused'] = True
-                result['bytes_written'] = self.bytes_written_so_far
+                result['bytes_written'] = self.bytes_received_so_far  # Report actual bytes received for resume
                 result['total_size'] = self.total_size_expected
             else:
                 # Non-network error
                 result['error'] = error_msg
-                result['bytes_written'] = self.bytes_written_so_far
+                result['bytes_written'] = self.bytes_received_so_far  # Report actual bytes received
                 result['total_size'] = self.total_size_expected
                 print(f"UpdateDownloader: Error during download: {e}")
 
