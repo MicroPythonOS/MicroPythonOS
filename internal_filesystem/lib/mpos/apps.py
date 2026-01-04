@@ -18,7 +18,7 @@ def good_stack_size():
 
 # Run the script in the current thread:
 # Returns True if successful
-def execute_script(script_source, is_file, cwd=None, classname=None):
+def execute_script(script_source, is_file, classname, cwd=None):
     import utime # for timing read and compile
     thread_id = _thread.get_ident()
     compile_name = 'script' if not is_file else script_source
@@ -50,15 +50,12 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
             end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
             print(f"apps.py execute_script: exec took {end_time}ms")
             # Introspect globals
-            #classes = {k: v for k, v in script_globals.items() if isinstance(v, type)}
-            #functions = {k: v for k, v in script_globals.items() if callable(v) and not isinstance(v, type)}
-            #variables = {k: v for k, v in script_globals.items() if not callable(v)}
-            #print("Classes:", classes.keys())
-            #print("Functions:", functions.keys())
-            #print("Variables:", variables.keys())
-            if not classname:
-                print("Running without a classname isn't supported right now.")
-                return False
+            classes = {k: v for k, v in script_globals.items() if isinstance(v, type)}
+            functions = {k: v for k, v in script_globals.items() if callable(v) and not isinstance(v, type)}
+            variables = {k: v for k, v in script_globals.items() if not callable(v)}
+            print("Classes:", classes.keys()) # This lists a whole bunch of classes, including lib/mpos/ stuff
+            print("Functions:", functions.keys())
+            print("Variables:", variables.keys())
             main_activity = script_globals.get(classname)
             if main_activity:
                 start_time = utime.ticks_ms()
@@ -66,7 +63,7 @@ def execute_script(script_source, is_file, cwd=None, classname=None):
                 end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
                 print(f"execute_script: Activity.startActivity took {end_time}ms")
             else:
-                print(f"Warning: could not find app's main_activity {main_activity}")
+                print(f"Warning: could not find app's main_activity {classname}")
                 return False
         except Exception as e:
             print(f"Thread {thread_id}: exception during execution:")
@@ -125,11 +122,14 @@ def start_app(fullname):
     if not app.installed_path:
         print(f"Warning: start_app can't start {fullname} because no it doesn't have an installed_path")
         return
+    entrypoint = "assets/main.py"
+    classname = "Main"
     if not app.main_launcher_activity:
-        print(f"WARNING: start_app can't start {fullname} because it doesn't have a main_launcher_activity")
-        return
-    start_script_fullpath = f"{app.installed_path}/{app.main_launcher_activity.get('entrypoint')}"
-    result = execute_script(start_script_fullpath, True, app.installed_path + "/assets/", app.main_launcher_activity.get("classname"))
+        print(f"WARNING: app {fullname} doesn't have a main_launcher_activity, defaulting to class {classname} in {entrypoint}")
+    else:
+        entrypoint = app.main_launcher_activity.get('entrypoint')
+        classname = app.main_launcher_activity.get("classname")
+    result = execute_script(app.installed_path + "/" + entrypoint, True, classname, app.installed_path + "/assets/")
     # Launchers have the bar, other apps don't have it
     if app.is_valid_launcher():
         mpos.ui.topmenu.open_bar()

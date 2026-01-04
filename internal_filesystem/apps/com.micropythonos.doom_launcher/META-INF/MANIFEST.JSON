@@ -3,22 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Legendary 3D shooter",
 "long_description": "Plays Doom 1, 2 and modded .wad files from internal storage or SD card and plays them. Place them in the folder /roms/doom/ . Uses ducalex's retro-go port of PrBoom. Supports zipped wad files too.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.doom/icons/com.micropythonos.doom_0.0.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.doom/mpks/com.micropythonos.doom_0.0.1.mpk",
-"fullname": "com.micropythonos.doom",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.doom/icons/com.micropythonos.doom_launcher_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.doom/mpks/com.micropythonos.doom_launcher_0.0.1.mpk",
+"fullname": "com.micropythonos.doom_launcher",
 "version": "0.0.1",
 "category": "games",
-"activities": [
-    {
-      "entrypoint": "assets/main.py",
-      "classname": "Main",
-      "intent_filters": [
-        {
-          "action": "main",
-          "category": "launcher"
-        }
-      ]
-    }
-  ]
 }
 
