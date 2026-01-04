@@ -27,7 +27,6 @@ class CalibrationState:
 class CalibrateIMUActivity(Activity):
     """Guide user through IMU calibration process."""
 
-    # State
     current_state = CalibrationState.READY
 
     # Widgets

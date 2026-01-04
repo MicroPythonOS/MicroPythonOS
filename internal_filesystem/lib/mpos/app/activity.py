@@ -4,8 +4,6 @@ import time
 
 class Activity:
 
-    throttle_async_call_counter = 0
-
     def __init__(self):
         self.intent = None  # Store the intent that launched this activity
         self.result = None
@@ -19,7 +17,6 @@ class Activity:
 
     def onResume(self, screen): # app goes to foreground
         self._has_foreground = True
-        mpos.ui.task_handler.add_event_cb(self.task_handler_callback, 1)
 
     def onPause(self, screen): # app goes to background
         self._has_foreground = False
@@ -69,9 +66,6 @@ class Activity:
     def has_foreground(self):
         return self._has_foreground
 
-    def task_handler_callback(self, a, b):
-        self.throttle_async_call_counter = 0
-
     # Execute a function if the Activity is in the foreground
     def if_foreground(self, func, *args, event=None, **kwargs):
         if self._has_foreground:
@@ -85,14 +79,10 @@ class Activity:
             return None
 
     # Update the UI in a threadsafe way if the Activity is in the foreground
-    # The call may get throttled, unless important=True is added to it.
     # The order of these update_ui calls are not guaranteed, so a UI update might be overwritten by an "earlier" update.
     # To avoid this, use lv.timer_create() with .set_repeat_count(1) as examplified in osupdate.py
+    # Or avoid using threads altogether, by using TaskManager (asyncio).
     def update_ui_threadsafe_if_foreground(self, func, *args, important=False, event=None, **kwargs):
-        self.throttle_async_call_counter += 1
-        if not important and self.throttle_async_call_counter > 100: # 250 seems to be okay, so 100 is on the safe side
-            print(f"update_ui_threadsafe_if_foreground called more than 100 times for one UI frame, which can overflow - throttling!")
-            return None
         # lv.async_call() is needed to update the UI from another thread than the main one (as LVGL is not thread safe)
         result = lv.async_call(lambda _: self.if_foreground(func, *args, event=event, **kwargs), None)
         return result
