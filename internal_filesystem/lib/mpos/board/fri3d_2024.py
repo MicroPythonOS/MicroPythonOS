@@ -344,6 +344,7 @@ def startup_wow_effect():
     try:
         # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
         startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
+        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
 
         # Start the jingle
         AudioFlinger.play_rtttl(
