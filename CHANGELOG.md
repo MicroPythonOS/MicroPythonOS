@@ -1,3 +1,8 @@
+0.5.3
+=====
+- App framework: simplify MANIFEST.JSON
+- WiFi app: check "hidden" in EditNetwork
+
 0.5.2
 =====
 - Fri3d Camp 2024 Board: add I2S microphone as found on the communicator add-on
