@@ -10,8 +10,8 @@
 "category": "games",
 "activities": [
     {
-      "entrypoint": "assets/doom.py",
-      "classname": "Doom",
+      "entrypoint": "assets/main.py",
+      "classname": "Main",
       "intent_filters": [
         {
           "action": "main",
