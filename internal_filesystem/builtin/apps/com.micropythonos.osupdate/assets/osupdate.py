@@ -38,7 +38,7 @@ class OSUpdate(Activity):
         """Change app state and update UI accordingly."""
         print(f"OSUpdate: state change {self.current_state} -> {new_state}")
         self.current_state = new_state
-        self.update_ui_threadsafe_if_foreground(self._update_ui_for_state) # Since called from both threads, be threadsafe
+        self._update_ui_for_state()
 
     def onCreate(self):
         self.main_screen = lv.obj()
