@@ -3,7 +3,7 @@ import os
 from mpos.apps import Activity
 from mpos import TaskManager, sdcard
 
-class Doom(Activity):
+class Main(Activity):
 
     romdir = "/roms"
     doomdir = romdir + "/doom"

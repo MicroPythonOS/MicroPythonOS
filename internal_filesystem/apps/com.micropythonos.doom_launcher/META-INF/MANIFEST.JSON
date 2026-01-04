@@ -1,5 +1,5 @@
 {
-"name": "Doom",
+"name": "Doom Launcher",
 "publisher": "MicroPythonOS",
 "short_description": "Legendary 3D shooter",
 "long_description": "Plays Doom 1, 2 and modded .wad files from internal storage or SD card and plays them. Place them in the folder /roms/doom/ . Uses ducalex's retro-go port of PrBoom. Supports zipped wad files too.",
