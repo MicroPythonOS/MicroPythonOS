@@ -29,7 +29,6 @@ class CalibrateIMUActivity(Activity):
 
     # State
     current_state = CalibrationState.READY
-    calibration_thread = None
 
     # Widgets
     title_label = None
