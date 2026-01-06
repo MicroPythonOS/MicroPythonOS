@@ -346,11 +346,11 @@ class EditNetwork(Activity):
         if result.get("result_code"):
             data = result.get("data")
             print(f"Setting textarea data: {data}")
-            authentication_type, ssid, password, hidden = decode_wifi_qr_code(data)
+            authentication_type, ssid, password, hidden = self.decode_wifi_qr_code(data)
             if ssid and self.ssid_ta: # not always present
                 self.ssid_ta.set_text(ssid)
             if password:
-                self.password_ta.set_text(ssid)
+                self.password_ta.set_text(password)
             if hidden is True:
                 self.hidden_cb.set_state(lv.STATE.CHECKED, True)
             elif hidden is False:
@@ -358,4 +358,52 @@ class EditNetwork(Activity):
 
     @staticmethod
     def decode_wifi_qr_code(to_decode):
-        print(f"decoding {todecode}")
+        """
+        Decode a WiFi QR code string in the format:
+        WIFI:T:WPA;S:SSID;P:PASSWORD;H:hidden;
+        
+        Returns: (authentication_type, ssid, password, hidden)
+        """
+        print(f"decoding {to_decode}")
+        
+        # Initialize return values
+        authentication_type = "WPA"
+        ssid = None
+        password = None
+        hidden = False
+        
+        try:
+            # Remove the "WIFI:" prefix if present
+            if to_decode.startswith("WIFI:"):
+                to_decode = to_decode[5:]
+            
+            # Split by semicolon to get key-value pairs
+            pairs = to_decode.split(";")
+            
+            for pair in pairs:
+                if not pair:  # Skip empty strings
+                    continue
+                
+                # Split by colon to get key and value
+                if ":" not in pair:
+                    continue
+                
+                key, value = pair.split(":", 1)
+                
+                if key == "T":
+                    # Authentication type (WPA, WEP, nopass, etc.)
+                    authentication_type = value
+                elif key == "S":
+                    # SSID (network name)
+                    ssid = value
+                elif key == "P":
+                    # Password
+                    password = value
+                elif key == "H":
+                    # Hidden network (true/false)
+                    hidden = value.lower() in ("true", "1", "yes")
+        
+        except Exception as e:
+            print(f"Error decoding WiFi QR code: {e}")
+        
+        return authentication_type, ssid, password, hidden
