@@ -8,6 +8,7 @@ from mpos.ui.keyboard import MposKeyboard
 import mpos.apps
 from mpos.net.wifi_service import WifiService
 
+from camera_app import CameraApp
 
 class WiFi(Activity):
     """
@@ -222,6 +223,10 @@ class EditNetwork(Activity):
     keyboard = None
     connect_button = None
     cancel_button = None
+    forget_button = None
+
+    action_button_label_forget = "Forget"
+    action_button_label_scanqr = "Scan QR"
 
     def onCreate(self):
         password_page = lv.obj()
@@ -275,14 +280,16 @@ class EditNetwork(Activity):
         buttons.set_height(lv.SIZE_CONTENT)
         buttons.set_style_bg_opa(lv.OPA.TRANSP, 0)
         buttons.set_style_border_width(0, lv.PART.MAIN)
-        # Delete button
+        # Forget / Scan QR button
+        self.forget_button = lv.button(buttons)
+        self.forget_button.align(lv.ALIGN.LEFT_MID, 0, 0)
+        self.forget_button.add_event_cb(self.forget_cb, lv.EVENT.CLICKED, None)
+        label = lv.label(self.forget_button)
+        label.center()
         if self.selected_ssid:
-            self.forget_button = lv.button(buttons)
-            self.forget_button.align(lv.ALIGN.LEFT_MID, 0, 0)
-            self.forget_button.add_event_cb(self.forget_cb, lv.EVENT.CLICKED, None)
-            label = lv.label(self.forget_button)
-            label.set_text("Forget")
-            label.center()
+            label.set_text(self.action_button_label_forget)
+        else:
+            label.set_text(self.action_button_label_scanqr)
         # Close button
         self.cancel_button = lv.button(buttons)
         self.cancel_button.center()
@@ -321,5 +328,34 @@ class EditNetwork(Activity):
         self.finish()
 
     def forget_cb(self, event):
-        self.setResult(True, {"ssid": self.selected_ssid, "forget": True})
-        self.finish()
+        label = self.forget_button.get_child(0)
+        if not label:
+            return
+        action = label.get_text()
+        print(f"{action} button clicked")
+        if action == self.action_button_label_forget:
+            print("Closing Activity")
+            self.setResult(True, {"ssid": self.selected_ssid, "forget": True})
+            self.finish()
+        else:
+            print("Opening CameraApp")
+            self.startActivityForResult(Intent(activity_class=CameraApp).putExtra("scanqr_intent", True), self.gotqr_result_callback)
+
+    def gotqr_result_callback(self, result):
+        print(f"QR capture finished, result: {result}")
+        if result.get("result_code"):
+            data = result.get("data")
+            print(f"Setting textarea data: {data}")
+            authentication_type, ssid, password, hidden = decode_wifi_qr_code(data)
+            if ssid and self.ssid_ta: # not always present
+                self.ssid_ta.set_text(ssid)
+            if password:
+                self.password_ta.set_text(ssid)
+            if hidden is True:
+                self.hidden_cb.set_state(lv.STATE.CHECKED, True)
+            elif hidden is False:
+                self.hidden_cb.remove_state(lv.STATE.CHECKED)
+
+    @staticmethod
+    def decode_wifi_qr_code(to_decode):
+        print(f"decoding {todecode}")

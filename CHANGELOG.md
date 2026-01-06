@@ -1,7 +1,9 @@
 0.5.3
 =====
 - App framework: simplify MANIFEST.JSON
+- Simplify: don't rate-limit update_ui_threadsafe_if_foreground
 - WiFi app: check "hidden" in EditNetwork
+- Wifi app: add support for scanning wifi QR codes to "Add Network"
 
 0.5.2
 =====
