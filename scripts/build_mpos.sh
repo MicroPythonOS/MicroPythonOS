@@ -122,10 +122,11 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
 	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
 
-	if [ "$target" == "macOS" ]; then
-		echo "homebrew install rlottie fails so it runs into: fatal error: 'rlottie_capi.h' file not found on macos"
-		sed -i.backup 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+1/#define MICROPY_RLOTTIE 0/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
-		echo "After disabling MICROPY_RLOTTIE:"
+	if [ "$target" == "unix" ]; then
+		# only on unix, because on macos, homebrew install rlottie fails so the compilation runs into: fatal error: 'rlottie_capi.h' file not found on macos"
+		# and on esp32, rlottie_create_from_raw() crashes the system
+		sed -i.backup 's/#define MICROPY_RLOTTIE 0/#define MICROPY_RLOTTIE 1/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
+		echo "After enabling MICROPY_RLOTTIE:"
 		cat "$codebasedir"/lvgl_micropython/lib/lv_conf.h
 	fi
 
@@ -136,9 +137,10 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$frozenmanifest"
 	popd
 
-	if [ "$target" == "macOS" ]; then
-		sed -i.backup 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+0/#define MICROPY_RLOTTIE 1/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
-		echo "After enabling MICROPY_RLOTTIE:"
+	# Restore RLOTTIE:
+	if [ "$target" == "unix" ]; then
+		sed -i.backup 's/#define MICROPY_RLOTTIE 1/#define MICROPY_RLOTTIE 0/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
+		echo "After disabling MICROPY_RLOTTIE:"
 		cat "$codebasedir"/lvgl_micropython/lib/lv_conf.h
 	fi
 
