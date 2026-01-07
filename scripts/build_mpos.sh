@@ -42,8 +42,10 @@ else
 	echo "No need to add esp32-camera to $idfile"
 fi
 
+# Adding it doesn't hurt - it won't be used anyway as RLOTTIE is disabled in lv_conf.h
 echo "Check need to add esp_rlottie"
-if ! grep rlottie "$idfile"; then
+#if ! grep rlottie "$idfile"; then
+if false; then
 	echo "Adding esp_rlottie to $idfile"
 	echo "  esp_rlottie:
     git: https://github.com/MicroPythonOS/esp_rlottie" >> "$idfile"
@@ -122,7 +124,8 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
 	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
 
-	if [ "$target" == "unix" ]; then
+	#if [ "$target" == "unix" ]; then
+	if false; then
 		# only on unix, because on macos, homebrew install rlottie fails so the compilation runs into: fatal error: 'rlottie_capi.h' file not found on macos"
 		# and on esp32, rlottie_create_from_raw() crashes the system
 		sed -i.backup 's/#define MICROPY_RLOTTIE 0/#define MICROPY_RLOTTIE 1/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
