@@ -122,12 +122,21 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
 	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
 
+	if [ "$target" == "macOS" ]; then
+		echo "homebrew install rlottie fails so it runs into: fatal error: 'rlottie_capi.h' file not found on macos"
+		sed -i 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+1/#define MICROPY_RLOTTIE 0/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
+	fi
+
 	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
 	# STRIP= makes it so that debug symbols are kept
 	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
 	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$frozenmanifest"
 	popd
+
+	if [ "$target" == "macOS" ]; then
+		sed -i 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+0/#define MICROPY_RLOTTIE 1/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
+	fi
 
 	# Restore @micropython.viper decorator after build
 	echo "Restoring @micropython.viper decorator..."
