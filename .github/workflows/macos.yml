@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies via Homebrew
         run: |
           xcode-select --install || true # already installed on github
-          brew install pkg-config libffi ninja make SDL2 rlottie
+          brew install pkg-config libffi ninja make SDL2
 
       - name: Show version numbers
         run: |
