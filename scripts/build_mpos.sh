@@ -43,7 +43,7 @@ else
 fi
 
 echo "Check need to add esp_rlottie"
-if ! grep esp32-camera "$idfile"; then
+if ! grep rlottie "$idfile"; then
 	echo "Adding esp_rlottie to $idfile"
 	echo "  esp_rlottie:
     git: https://github.com/MicroPythonOS/esp_rlottie" >> "$idfile"
@@ -122,11 +122,11 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
 	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
 
-	# LV_CFLAGS are passed to USER_C_MODULES
+	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
 	# STRIP= makes it so that debug symbols are kept
 	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
-	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb -ljpeg" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$frozenmanifest"
+	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$frozenmanifest"
 	popd
 
 	# Restore @micropython.viper decorator after build
