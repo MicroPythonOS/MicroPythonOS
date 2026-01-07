@@ -124,7 +124,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 
 	if [ "$target" == "macOS" ]; then
 		echo "homebrew install rlottie fails so it runs into: fatal error: 'rlottie_capi.h' file not found on macos"
-		sed -i 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+1/#define MICROPY_RLOTTIE 0/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
+		sed -i '' 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+1/#define MICROPY_RLOTTIE 0/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
 	fi
 
 	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
@@ -135,7 +135,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	popd
 
 	if [ "$target" == "macOS" ]; then
-		sed -i 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+0/#define MICROPY_RLOTTIE 1/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
+		sed -i '' 's/#define[[:space:]]\+MICROPY_RLOTTIE[[:space:]]\+0/#define MICROPY_RLOTTIE 1/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
 	fi
 
 	# Restore @micropython.viper decorator after build
