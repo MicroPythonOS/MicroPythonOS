@@ -124,16 +124,23 @@ class TestLaunchAllApps(unittest.TestCase):
         ]
 
         # On macOS, musicplayer is known to fail due to @micropython.viper issue
+        # and camera app fails due to no camera hardware
         is_macos = sys.platform == 'darwin'
         musicplayer_failures = [
             fail for fail in failed_apps
             if fail['info']['package_name'] == 'com.micropythonos.musicplayer' and is_macos
         ]
+        
+        camera_failures = [
+            fail for fail in failed_apps
+            if fail['info']['package_name'] == 'com.micropythonos.camera' and is_macos
+        ]
 
         other_failures = [
             fail for fail in failed_apps
             if 'errortest' not in fail['info']['package_name'].lower() and
-               not (fail['info']['package_name'] == 'com.micropythonos.musicplayer' and is_macos)
+               not (fail['info']['package_name'] == 'com.micropythonos.musicplayer' and is_macos) and
+               not (fail['info']['package_name'] == 'com.micropythonos.camera' and is_macos)
         ]
 
         # Check if errortest app exists
@@ -149,6 +156,10 @@ class TestLaunchAllApps(unittest.TestCase):
         # Report on musicplayer failures on macOS (known issue)
         if musicplayer_failures:
             print("⚠ Skipped musicplayer failure on macOS (known @micropython.viper issue)")
+        
+        # Report on camera failures on macOS (no camera hardware)
+        if camera_failures:
+            print("⚠ Skipped camera app failure on macOS (no camera hardware available)")
 
         # Fail the test if any non-errortest apps have errors
         if other_failures:
