@@ -22,6 +22,7 @@ import lvgl as lv
 import mpos.apps
 import mpos.ui
 import os
+import sys
 from mpos.ui.testing import (
     wait_for_render,
     capture_screenshot,
@@ -33,7 +34,7 @@ from mpos.ui.testing import (
     get_widget_coords
 )
 
-
+@unittest.skipIf(sys.platform == 'darwin', "Camera tests not supported on macOS (no camera available)")
 class TestGraphicalCameraSettings(unittest.TestCase):
     """Test suite for Camera app settings verification."""
 

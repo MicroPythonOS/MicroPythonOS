@@ -69,7 +69,7 @@ $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
             result=$?
 		else
-			# Regular test: no boot files
+			echo "Regular test: no boot files"
 			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
@@ -143,7 +143,11 @@ if [ -z "$onetest" ]; then
 else
 	echo "doing $onetest"
 	one_test $(readlink -f "$onetest")
-	[ $? -ne 0 ] && failed=1
+	result=$?
+	if [ $result -ne 0 ]; then
+		echo "Test returned result: $result"
+		failed=1
+	fi
 fi
 
 
