@@ -143,8 +143,8 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# Restore RLOTTIE:
 	if [ "$target" == "unix" ]; then
 		sed -i.backup 's/#define MICROPY_RLOTTIE 1/#define MICROPY_RLOTTIE 0/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
-		echo "After disabling MICROPY_RLOTTIE:"
-		cat "$codebasedir"/lvgl_micropython/lib/lv_conf.h
+		#echo "After disabling MICROPY_RLOTTIE:"
+		#cat "$codebasedir"/lvgl_micropython/lib/lv_conf.h
 	fi
 
 	# Restore @micropython.viper decorator after build

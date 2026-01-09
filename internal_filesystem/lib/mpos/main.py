@@ -51,20 +51,27 @@ focusgroup = lv.group_get_default()
 if focusgroup: # on esp32 this may not be set
     focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
 
-# Can be passed to TaskHandler, currently unused:
+# Custom exception handler that does not deinit() the TaskHandler because then the UI hangs:
 def custom_exception_handler(e):
-    print(f"custom_exception_handler called: {e}")
-    mpos.ui.task_handler.deinit()
+    print(f"TaskHandler's custom_exception_handler called: {e}")
+    import sys
+    sys.print_exception(e)  # NOQA
+    # No need to deinit() and re-init LVGL:
+    #mpos.ui.task_handler.deinit() # default task handler does this, but then things hang
     # otherwise it does focus_next and then crashes while doing lv.deinit()
-    focusgroup.remove_all_objs()
-    focusgroup.delete()
-    lv.deinit()
+    #focusgroup.remove_all_objs()
+    #focusgroup.delete()
+    #lv.deinit()
 
 import sys
 if sys.platform == "esp32":
-    mpos.ui.task_handler = task_handler.TaskHandler(duration=5) # 1ms gives highest framerate on esp32-s3's but might have side effects?
+    mpos.ui.task_handler = task_handler.TaskHandler(duration=5, exception_hook=custom_exception_handler) # 1ms gives highest framerate on esp32-s3's but might have side effects?
 else:
-    mpos.ui.task_handler = task_handler.TaskHandler(duration=5) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
+    mpos.ui.task_handler = task_handler.TaskHandler(duration=5, exception_hook=custom_exception_handler) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
+
+# Convenient for apps to be able to access these:
+mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
+mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED
 
 try:
     import freezefs_mount_builtin

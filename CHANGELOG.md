@@ -5,6 +5,8 @@
 - WiFi app: check "hidden" in EditNetwork
 - Wifi app: add support for scanning wifi QR codes to "Add Network"
 - Improve robustness by catching unhandled app exceptions
+- Improve robustness with custom exception that does not deinit() the TaskHandler
+- Improve robustness by removing TaskHandler callback that throws an uncaught exception
 
 0.5.2
 =====
