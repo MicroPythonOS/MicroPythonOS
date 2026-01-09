@@ -13,9 +13,8 @@ class ResetIntoBootloader(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
-        # Use a timer, otherwise the UI won't have time to update:
-        timer = lv.timer_create(self.start_bootloader, 1000, None) # give it some time (at least 500ms) for the new screen animation
-        timer.set_repeat_count(1)
+        print("Starting start_bootloader time so the UI has time to update")
+        timer = lv.timer_create(self.start_bootloader, 1000, None).set_repeat_count(1)
 
     def start_bootloader(self, timer):
         try:
