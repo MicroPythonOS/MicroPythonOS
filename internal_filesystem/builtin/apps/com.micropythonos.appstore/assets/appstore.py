@@ -89,7 +89,7 @@ class AppStore(Activity):
         self.settings_button.set_size(settings_size, settings_size)
         self.settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
         self.settings_button.add_event_cb(self.settings_button_tap,lv.EVENT.CLICKED,None)
-        #self.settings_button.add_flag(lv.obj.FLAG.HIDDEN) # hide because not functional for now
+        self.settings_button.add_flag(lv.obj.FLAG.HIDDEN) # hide because not functional for now
         settings_label = lv.label(self.settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.set_style_text_font(lv.font_montserrat_24, 0)
