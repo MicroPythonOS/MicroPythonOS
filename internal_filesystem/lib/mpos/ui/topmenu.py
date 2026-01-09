@@ -350,8 +350,18 @@ def create_drawer(display=None):
             print("Entering deep sleep...")
             machine.deepsleep() # sleep forever
         else: # assume unix:
-            lv.deinit() # Deinitialize LVGL (if supported)
-            sys.exit(0)
+            import mpos ; mpos.TaskManager.stop() # fallback to a regular (non aiorepl) REPL shell
+            lv.deinit() # Deinitialize LVGL (if supported) so the window closes instead of hanging because of LvReferenceError
+            # On linux, and hopefully on macOS too, this seems to be the only way to kill the process, as sys.exit(0) just throws an exception:
+            import os
+            os.system("kill $PPID") # environment variable PPID seems to contain the process ID
+            return
+            # This is disable because it doesn't work - just throws an exception:
+            try:
+                print("Doing sys.exit(0)")
+                sys.exit(0) # throws "SystemExit: 0" exception
+            except Exception as e:
+                print(f"sys.exit(0) threw exception: {e}") # can't seem to catch it
     poweroff_btn.add_event_cb(poweroff_cb,lv.EVENT.CLICKED,None)
     # Add invisible padding at the bottom to make the drawer scrollable
     l2 = lv.label(drawer)
