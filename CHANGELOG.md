@@ -4,6 +4,7 @@
 - Simplify: don't rate-limit update_ui_threadsafe_if_foreground
 - WiFi app: check "hidden" in EditNetwork
 - Wifi app: add support for scanning wifi QR codes to "Add Network"
+- Improve robustness by catching unhandled app exceptions
 
 0.5.2
 =====

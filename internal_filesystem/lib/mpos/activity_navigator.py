@@ -50,7 +50,10 @@ class ActivityNavigator:
         activity._result_callback = result_callback  # Pass callback to activity
         start_time = utime.ticks_ms()
         mpos.ui.save_and_clear_current_focusgroup()
-        activity.onCreate()
+        try:
+            activity.onCreate()
+        except Exception as e:
+            print(f"activity.onCreate caught exception: {e}")
         end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
         print(f"apps.py _launch_activity: activity.onCreate took {end_time}ms")
         return activity

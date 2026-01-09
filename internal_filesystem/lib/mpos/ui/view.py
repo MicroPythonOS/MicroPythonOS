@@ -9,8 +9,14 @@ def setContentView(new_activity, new_screen):
     global screen_stack
     if screen_stack:
         current_activity, current_screen, current_focusgroup, _ = screen_stack[-1]
-        current_activity.onPause(current_screen)
-        current_activity.onStop(current_screen)
+        try:
+            current_activity.onPause(current_screen)
+        except Exception as e:
+            print(f"onPause caught exception: {e}")
+        try:
+            current_activity.onStop(current_screen)
+        except Exception as e:
+            print(f"onStop caught exception: {e}")
 
     from .util import close_top_layer_msgboxes
     close_top_layer_msgboxes()
@@ -18,10 +24,16 @@ def setContentView(new_activity, new_screen):
     screen_stack.append((new_activity, new_screen, lv.group_create(), None))
 
     if new_activity:
-        new_activity.onStart(new_screen)
+        try:
+            new_activity.onStart(new_screen)
+        except Exception as e:
+            print(f"onStart caught exception: {e}")
     lv.screen_load_anim(new_screen, lv.SCR_LOAD_ANIM.OVER_LEFT, 500, 0, False)
     if new_activity:
-        new_activity.onResume(new_screen)
+        try:
+            new_activity.onResume(new_screen)
+        except Exception as e:
+            print(f"onResume caught exception: {e}")
 
 def remove_and_stop_all_activities():
     global screen_stack
@@ -31,9 +43,18 @@ def remove_and_stop_all_activities():
 def remove_and_stop_current_activity():
     current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()
     if current_activity:
-        current_activity.onPause(current_screen)
-        current_activity.onStop(current_screen)
-        current_activity.onDestroy(current_screen)
+        try:
+            current_activity.onPause(current_screen)
+        except Exception as e:
+            print(f"onPause caught exception: {e}")
+        try:
+            current_activity.onStop(current_screen)
+        except Exception as e:
+            print(f"onStop caught exception: {e}")
+        try:
+            current_activity.onDestroy(current_screen)
+        except Exception as e:
+            print(f"onDestroy caught exception: {e}")
         if current_screen:
             current_screen.clean()
 
