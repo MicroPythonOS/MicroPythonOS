@@ -44,17 +44,17 @@ class SettingsActivity(Activity):
         ]
         self.settings = [
             # Basic settings, alphabetically:
-            {"title": "Light/Dark Theme", "key": "theme_light_dark", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")]},
-            {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors},
-            {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda : mpos.time.refresh_timezone_preference()},
+            {"title": "Light/Dark Theme", "key": "theme_light_dark", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
+            {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
+            {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda *args: mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
             #{"title": "Audio Output Device", "key": "audio_device", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
             {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CheckIMUCalibrationActivity"},
             {"title": "Calibrate IMU", "key": "calibrate_imu", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CalibrateIMUActivity"},
             # Expert settings, alphabetically
-            {"title": "Restart to Bootloader", "key": "boot_mode", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")]}, # special that doesn't get saved
-            {"title": "Format internal data partition", "key": "format_internal_data_partition", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")]}, # special that doesn't get saved
+            {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
+            {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
             # This is currently only in the drawer but would make sense to have it here for completeness:
             #{"title": "Display Brightness", "key": "display_brightness", "value_label": None, "cont": None, "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)
@@ -128,6 +128,7 @@ class SettingsActivity(Activity):
         # Handle traditional settings (existing code)
         intent = Intent(activity_class=SettingActivity)
         intent.putExtra("setting", setting)
+        intent.putExtra("prefs", self.prefs)
         self.startActivity(intent)
 
     @staticmethod
@@ -172,11 +173,54 @@ class SettingsActivity(Activity):
         print(f"container {container} defocused, unsetting border...")
         container.set_style_border_width(0, lv.PART.MAIN)
 
+    def reset_into_bootloader(self, new_value):
+        if new_value is not "bootloader":
+            return
+        from mpos.bootloader import ResetIntoBootloader
+        intent = Intent(activity_class=ResetIntoBootloader)
+        self.startActivity(intent)
 
-# Used to edit one setting:
+    def format_internal_data_partition(self, new_value):
+        if new_value is not "yes":
+            return
+        # Inspired by lvgl_micropython/lib/micropython/ports/esp32/modules/inisetup.py
+        # Note: it would be nice to create a "FormatInternalDataPartition" activity with some progress or confirmation
+        try:
+            import vfs
+            from flashbdev import bdev
+        except Exception as e:
+            print(f"Could not format internal data partition because: {e}")
+            return
+        if bdev.info()[4] == "vfs":
+            print(f"Formatting {bdev} as LittleFS2")
+            vfs.VfsLfs2.mkfs(bdev)
+            fs = vfs.VfsLfs2(bdev)
+        elif bdev.info()[4] == "ffat":
+            print(f"Formatting {bdev} as FAT")
+            vfs.VfsFat.mkfs(bdev)
+            fs = vfs.VfsFat(bdev)
+        print(f"Mounting {fs} at /")
+        vfs.mount(fs, "/")
+        print("Done formatting, (re)mounting /builtin")
+        try:
+            import freezefs_mount_builtin
+        except Exception as e:
+            # This will throw an exception if there is already a "/builtin" folder present
+            print("settings.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
+        print("Done mounting, refreshing apps")
+        PackageManager.refresh_apps()
+
+    def theme_changed(self, new_value):
+        mpos.ui.set_theme(self.prefs)
+
+"""
+SettingActivity is used to edit one setting.
+For now, it only supports strings.
+"""
 class SettingActivity(Activity):
 
     active_radio_index = -1  # Track active radio button index
+    prefs = None # taken from the intent
 
     # Widgets:
     keyboard = None
@@ -186,12 +230,12 @@ class SettingActivity(Activity):
 
     def __init__(self):
         super().__init__()
-        self.prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
         self.setting = None
 
     def onCreate(self):
+        self.prefs = self.getIntent().extras.get("prefs")
         setting = self.getIntent().extras.get("setting")
-        #print(f"onCreate changed_callback: {setting.get('changed_callback')}")
+
         settings_screen_detail = lv.obj()
         settings_screen_detail.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
         settings_screen_detail.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -351,44 +395,6 @@ class SettingActivity(Activity):
         self.startActivityForResult(Intent(activity_class=CameraApp).putExtra("scanqr_mode", True), self.gotqr_result_callback)
 
     def save_setting(self, setting):
-        # Check special cases that aren't saved
-        if self.radio_container and self.active_radio_index == 1:
-            if setting["key"] == "boot_mode":
-                from mpos.bootloader import ResetIntoBootloader
-                intent = Intent(activity_class=ResetIntoBootloader)
-                self.startActivity(intent)
-                return
-            elif setting["key"] == "format_internal_data_partition":
-                # Inspired by lvgl_micropython/lib/micropython/ports/esp32/modules/inisetup.py
-                # Note: it would be nice to create a "FormatInternalDataPartition" activity with some progress or confirmation
-                try:
-                    import vfs
-                    from flashbdev import bdev
-                except Exception as e:
-                    print(f"Could not format internal data partition because: {e}")
-                    self.finish() # would be nice to show the error instead of silently returning
-                    return
-                if bdev.info()[4] == "vfs":
-                    print(f"Formatting {bdev} as LittleFS2")
-                    vfs.VfsLfs2.mkfs(bdev)
-                    fs = vfs.VfsLfs2(bdev)
-                elif bdev.info()[4] == "ffat":
-                    print(f"Formatting {bdev} as FAT")
-                    vfs.VfsFat.mkfs(bdev)
-                    fs = vfs.VfsFat(bdev)
-                print(f"Mounting {fs} at /")
-                vfs.mount(fs, "/")
-                print("Done formatting, (re)mounting /builtin")
-                try:
-                    import freezefs_mount_builtin
-                except Exception as e:
-                    # This will throw an exception if there is already a "/builtin" folder present
-                    print("settings.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
-                print("Done mounting, refreshing apps")
-                PackageManager.refresh_apps()
-                self.finish()
-                return
-
         ui = setting.get("ui")
         ui_options = setting.get("ui_options")
         if ui and ui == "radiobuttons" and ui_options:
@@ -405,15 +411,20 @@ class SettingActivity(Activity):
         else:
             new_value = ""
         old_value = self.prefs.get_string(setting["key"])
-        editor = self.prefs.edit()
-        editor.put_string(setting["key"], new_value)
-        editor.commit()
+
+        # Save it
+        if setting.get("dont_persist") is not True:
+            editor = self.prefs.edit()
+            editor.put_string(setting["key"], new_value)
+            editor.commit()
+
+        # Update model for UI
         setting["value_label"].set_text(new_value if new_value else "(not set)")
+        self.finish() # the self.finish (= back action) should happen before callback, in case it happens to start a new activity
+
+        # Call changed_callback if set
         changed_callback = setting.get("changed_callback")
         #print(f"changed_callback: {changed_callback}")
         if changed_callback and old_value != new_value:
             print(f"Setting {setting['key']} changed from {old_value} to {new_value}, calling changed_callback...")
-            changed_callback()
-        if setting["key"] == "theme_light_dark" or setting["key"] == "theme_primary_color":
-            mpos.ui.set_theme(self.prefs)
-        self.finish()
+            changed_callback(new_value)
