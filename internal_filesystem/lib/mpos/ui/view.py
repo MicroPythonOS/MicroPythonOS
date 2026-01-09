@@ -1,4 +1,6 @@
 import lvgl as lv
+import sys
+
 from ..apps import restart_launcher
 from .focus import save_and_clear_current_focusgroup
 from .topmenu import open_bar
@@ -13,10 +15,12 @@ def setContentView(new_activity, new_screen):
             current_activity.onPause(current_screen)
         except Exception as e:
             print(f"onPause caught exception: {e}")
+            sys.print_exception(e)
         try:
             current_activity.onStop(current_screen)
         except Exception as e:
             print(f"onStop caught exception: {e}")
+            sys.print_exception(e)
 
     from .util import close_top_layer_msgboxes
     close_top_layer_msgboxes()
@@ -28,12 +32,14 @@ def setContentView(new_activity, new_screen):
             new_activity.onStart(new_screen)
         except Exception as e:
             print(f"onStart caught exception: {e}")
+            sys.print_exception(e)
     lv.screen_load_anim(new_screen, lv.SCR_LOAD_ANIM.OVER_LEFT, 500, 0, False)
     if new_activity:
         try:
             new_activity.onResume(new_screen)
         except Exception as e:
             print(f"onResume caught exception: {e}")
+            sys.print_exception(e)
 
 def remove_and_stop_all_activities():
     global screen_stack
@@ -47,14 +53,17 @@ def remove_and_stop_current_activity():
             current_activity.onPause(current_screen)
         except Exception as e:
             print(f"onPause caught exception: {e}")
+            sys.print_exception(e)
         try:
             current_activity.onStop(current_screen)
         except Exception as e:
             print(f"onStop caught exception: {e}")
+            sys.print_exception(e)
         try:
             current_activity.onDestroy(current_screen)
         except Exception as e:
             print(f"onDestroy caught exception: {e}")
+            sys.print_exception(e)
         if current_screen:
             current_screen.clean()
 
