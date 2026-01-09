@@ -133,6 +133,8 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		cat "$codebasedir"/lvgl_micropython/lib/lv_conf.h
 	fi
 
+	# If it's still running, kill it, otherwise "text file busy"
+	pkill -9 -f /lvgl_micropy_unix
 	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
 	# STRIP= makes it so that debug symbols are kept
 	pushd "$codebasedir"/lvgl_micropython/
