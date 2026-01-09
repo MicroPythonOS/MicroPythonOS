@@ -9,10 +9,8 @@ import mpos.ui
 import mpos.time
 
 from setting_activity import SettingActivity
-
-# Import IMU calibration activities
-from check_imu_calibration import CheckIMUCalibrationActivity
 from calibrate_imu import CalibrateIMUActivity
+from check_imu_calibration import CheckIMUCalibrationActivity
 
 # Used to list and edit all settings:
 class SettingsActivity(Activity):
@@ -52,8 +50,8 @@ class SettingsActivity(Activity):
             # Advanced settings, alphabetically:
             #{"title": "Audio Output Device", "key": "audio_device", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
             {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
-            {"title": "Check IMU Calibration", "key": "check_imu_calibration", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CheckIMUCalibrationActivity"},
-            {"title": "Calibrate IMU", "key": "calibrate_imu", "value_label": None, "cont": None, "ui": "activity", "activity_class": "CalibrateIMUActivity"},
+            {"title": "Check IMU Calibration", "key": "check_imu_calibration", "value_label": None, "cont": None, "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
+            {"title": "Calibrate IMU", "key": "calibrate_imu", "value_label": None, "cont": None, "ui": "activity", "activity_class": CalibrateIMUActivity},
             # Expert settings, alphabetically
             {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
@@ -116,19 +114,13 @@ class SettingsActivity(Activity):
     def startSettingActivity(self, setting):
         ui_type = setting.get("ui")
 
-        # Handle activity-based settings (NEW)
+        activity_class = SettingActivity
         if ui_type == "activity":
-            activity_class_name = setting.get("activity_class")
-            if activity_class_name == "CheckIMUCalibrationActivity":
-                intent = Intent(activity_class=CheckIMUCalibrationActivity)
-                self.startActivity(intent)
-            elif activity_class_name == "CalibrateIMUActivity":
-                intent = Intent(activity_class=CalibrateIMUActivity)
-                self.startActivity(intent)
-            return
+            activity_class = setting.get("activity_class")
+            if not activity_class:
+                print("ERROR: Setting is defined as 'activity' ui without 'activity_class', aborting...")
 
-        # Handle traditional settings (existing code)
-        intent = Intent(activity_class=SettingActivity)
+        intent = Intent(activity_class=activity_class)
         intent.putExtra("setting", setting)
         intent.putExtra("prefs", self.prefs)
         self.startActivity(intent)
