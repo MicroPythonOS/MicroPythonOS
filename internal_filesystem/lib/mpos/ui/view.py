@@ -80,6 +80,7 @@ def back_screen():
 
     # Load previous
     prev_activity, prev_screen, prev_focusgroup, prev_focused = screen_stack[-1]
+    print(f"back_screen got {prev_activity}, {prev_screen}, {prev_focusgroup}, {prev_focused}")
     lv.screen_load_anim(prev_screen, lv.SCR_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
 
     default_group = lv.group_get_default()
