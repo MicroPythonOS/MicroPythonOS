@@ -9,10 +9,17 @@ from mpos.app import App
 from mpos import TaskManager, DownloadManager
 import mpos.ui
 from mpos.content.package_manager import PackageManager
+from mpos.config import SharedPreferences
 
 class AppStore(Activity):
 
-    _BADGEHUB_API_BASE_URL = "https://badgehub.p1m.nl/api/v3"
+    PACKAGE = "com.micropythonos.appstore"
+
+    _GITHUB_PROD_BASE_URL = "https://apps.micropythonos.com"
+    _GITHUB_LIST = "/app_index.json"
+
+    _BADGEHUB_TEST_BASE_URL = "https://badgehub.p1m.nl/api/v3"
+    _BADGEHUB_PROD_BASE_URL = "https://badge.why2025.org/api/v3"
     _BADGEHUB_LIST = "project-summaries?badge=fri3d_2024"
     _BADGEHUB_DETAILS = "projects"
 
@@ -20,13 +27,47 @@ class AppStore(Activity):
     _BACKEND_API_BADGEHUB = "badgehub"
 
     apps = []
-    # These might become configurations:
-    #backend_api = _BACKEND_API_BADGEHUB
-    backend_api = _BACKEND_API_GITHUB
-    app_index_url_github = "https://apps.micropythonos.com/app_index.json"
-    app_index_url_badgehub = _BADGEHUB_API_BASE_URL + "/" + _BADGEHUB_LIST
-    app_detail_url_badgehub = _BADGEHUB_API_BASE_URL + "/" + _BADGEHUB_DETAILS
+
+    _DEFAULT_BACKEND = 0
+    _ICON_SIZE = 64
+
+    # Hardcoded list for now:
+    backends = [
+        ("MPOS GitHub", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
+        ("BadgeHub Test", _BACKEND_API_BADGEHUB, _BADGEHUB_TEST_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
+        ("BadgeHub Prod", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS)
+    ]
+
+    @staticmethod
+    def get_backend_urls(index):
+        backend_info = AppStore.backends[index]
+        if backend_info:
+            api = backend_info[1]
+            base_url = backend_info[2]
+            list_suffix  = backend_info[3]
+            details_suffix = backend_info[4]
+            if api == AppStore._BACKEND_API_GITHUB:
+                return (base_url + "/" + list_suffix, None)
+            else:
+                return (base_url + "/" + list_suffix, base_url + "/" + details_suffix)
+
+    @staticmethod
+    def get_backend_type(index):
+        backend_info = AppStore.backends[index]
+        if backend_info:
+            return backend_info[1]
+
+    def get_backend_urls_from_settings(self):
+        return AppStore.get_backend_urls(self.prefs.get_int("backend", self._DEFAULT_BACKEND))
+
+    def get_backend_list_url_from_settings(self):
+        return self.get_backend_urls_from_settings()[0]
+
+    def get_backend_details_url_from_settings():
+        return self.get_backend_urls_from_settings()[1]
+
     can_check_network = True
+    prefs = None
 
     # Widgets:
     main_screen = None
@@ -35,29 +76,63 @@ class AppStore(Activity):
     install_label = None
     please_wait_label = None
     progress_bar = None
+    settings_button = None
 
     def onCreate(self):
         self.main_screen = lv.obj()
         self.please_wait_label = lv.label(self.main_screen)
         self.please_wait_label.set_text("Downloading app index...")
         self.please_wait_label.center()
+        self.settings_button = lv.button(self.main_screen)
+        settings_margin = 15
+        settings_size = self._ICON_SIZE - settings_margin
+        self.settings_button.set_size(settings_size, settings_size)
+        self.settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
+        self.settings_button.add_event_cb(self.settings_button_tap,lv.EVENT.CLICKED,None)
+        #self.settings_button.add_flag(lv.obj.FLAG.HIDDEN) # hide because not functional for now
+        settings_label = lv.label(self.settings_button)
+        settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_label.set_style_text_font(lv.font_montserrat_24, 0)
+        settings_label.center()
         self.setContentView(self.main_screen)
 
     def onResume(self, screen):
         super().onResume(screen)
+        # This gets called at startup and also after closing AppStoreSettings
         if len(self.apps):
-            return # already downloaded them
+            return # already have the list (if refresh after settings is needed, finished_settings_callback will do it)
+        if self.prefs: # prefs is abused to distinguish between a fresh start and a return after AppStoreSettings
+            return # prefs is set so it's not a fresh start - it's a return after after AppStoreSettings
+        print("It's a fresh start; loading preferences and refreshing list...")
+        self.prefs = SharedPreferences(self.PACKAGE)
+        self.refresh_list()
+
+    def refresh_list(self):
         try:
             import network
         except Exception as e:
             self.can_check_network = False
         if self.can_check_network and not network.WLAN(network.STA_IF).isconnected():
+            self.please_wait_label.remove_flag(lv.obj.FLAG.HIDDEN) # make sure it's visible
             self.please_wait_label.set_text("Error: WiFi is not connected.")
         else:
-            if self.backend_api == self._BACKEND_API_BADGEHUB:
-                TaskManager.create_task(self.download_app_index(self.app_index_url_badgehub))
-            else:
-                TaskManager.create_task(self.download_app_index(self.app_index_url_github))
+            TaskManager.create_task(self.download_app_index(self.get_backend_list_url_from_settings()))
+
+    def settings_button_tap(self, event):
+        print("Settings button clicked")
+        # Handle traditional settings (existing code)
+        intent = Intent(activity_class=AppStoreSettings)
+        intent.putExtra("prefs", self.prefs)
+        intent.putExtra("setting", {"title": "Backend", "key": "backend", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(backend[0], None) for backend in AppStore.backends]},)
+        self.startActivityForResult(intent, self.finished_settings_callback)
+
+    def finished_settings_callback(self, result):
+        print(f"finished_settings_callback result: {result}")
+        if result.get("result_code") is True:
+            print("Settings updated, reloading app list...")
+            self.refresh_list()
+        else:
+            print("Settings not updated, nothing to do.")
 
     async def download_app_index(self, json_url):
         try:
@@ -75,7 +150,8 @@ class AppStore(Activity):
             print(f"parsed json: {parsed}")
             for app in parsed:
                 try:
-                    if self.backend_api == self._BACKEND_API_BADGEHUB:
+                    backend_type = AppStore.get_backend_type(self.prefs.get_int("backend", self._DEFAULT_BACKEND))
+                    if backend_type == self._BACKEND_API_BADGEHUB:
                         self.apps.append(AppStore.badgehub_app_to_mpos_app(app))
                     else:
                         self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
@@ -110,7 +186,7 @@ class AppStore(Activity):
         print("create_apps_list iterating")
         for app in self.apps:
             print(app)
-            item = apps_list.add_button(None, "Test")
+            item = apps_list.add_button(None, "")
             item.set_style_pad_all(0, 0)
             item.set_size(lv.pct(100), lv.SIZE_CONTENT)
             item.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
@@ -123,7 +199,7 @@ class AppStore(Activity):
             cont.set_style_radius(0, 0)
             cont.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
             icon_spacer = lv.image(cont)
-            icon_spacer.set_size(64, 64)
+            icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
             icon_spacer.set_src(lv.SYMBOL.REFRESH)
             icon_spacer.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
             app.image_icon_widget = icon_spacer # save it so it can be later set to the actual image
@@ -141,7 +217,9 @@ class AppStore(Activity):
             desc_label.set_text(app.short_description)
             desc_label.set_style_text_font(lv.font_montserrat_12, 0)
             desc_label.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
-        print("create_apps_list app done")
+        print("create_apps_list done")
+        # Settings button needs to float in foreground:
+        self.settings_button.move_to_index(-1)
 
     async def download_icons(self):
         print("Downloading icons...")
@@ -201,7 +279,7 @@ class AppStore(Activity):
         return App(name, publisher, short_description, long_description, icon_url, download_url, fullname, version, category, activities)
 
     async def fetch_badgehub_app_details(self, app_obj):
-        details_url = self.app_detail_url_badgehub + "/" + app_obj.fullname
+        details_url = self.get_backend_details_url_from_settings()
         try:
             response = await DownloadManager.download_url(details_url)
         except Exception as e:
@@ -356,7 +434,8 @@ class AppDetail(Activity):
         self.setContentView(app_detail_screen)
 
     def onResume(self, screen):
-        if self.appstore.backend_api == self.appstore._BACKEND_API_BADGEHUB:
+        backend_type = AppStore.get_backend_type(self.prefs.get_int("backend", self._DEFAULT_BACKEND))
+        if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
         else:
             print("No need to fetch app details as the github app index already contains all the app data.")
@@ -524,3 +603,17 @@ class AppDetail(Activity):
         self.progress_bar.set_value(0, False)
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
+
+
+class AppStoreSettings(Activity):
+    prefs = None
+
+    def onCreate(self):
+        self.prefs = self.getIntent().extras.get("prefs")
+        # Create main screen
+        screen = lv.obj()
+        screen.set_size(lv.pct(100), lv.pct(100))
+        screen.set_style_pad_all(1, 0)
+        label = lv.label(screen)
+        label.set_text("AppStoreSettings should go here.")
+        self.setContentView(screen)

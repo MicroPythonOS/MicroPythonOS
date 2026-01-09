@@ -7,6 +7,7 @@
 - Improve robustness by catching unhandled app exceptions
 - Improve robustness with custom exception that does not deinit() the TaskHandler
 - Improve robustness by removing TaskHandler callback that throws an uncaught exception
+- Make "Power Off" button on desktop exit completely
 
 0.5.2
 =====
