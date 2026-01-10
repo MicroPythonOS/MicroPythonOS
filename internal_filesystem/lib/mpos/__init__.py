@@ -13,8 +13,11 @@ from .app.activities.chooser import ChooserActivity
 from .app.activities.view import ViewActivity
 from .app.activities.share import ShareActivity
 
+from .ui.setting_activity import SettingActivity
+
 __all__ = [
     "App", "Activity", "ConnectivityManager", "DownloadManager", "Intent",
     "ActivityNavigator", "PackageManager", "TaskManager",
-    "ChooserActivity", "ViewActivity", "ShareActivity"
+    "ChooserActivity", "ViewActivity", "ShareActivity",
+    "SettingActivity"
 ]

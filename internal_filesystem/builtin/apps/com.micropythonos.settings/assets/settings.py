@@ -3,12 +3,11 @@ from mpos.apps import Activity, Intent
 from mpos.activity_navigator import ActivityNavigator
 
 from mpos.ui.keyboard import MposKeyboard
-from mpos import PackageManager
+from mpos import PackageManager, SettingActivity
 import mpos.config
 import mpos.ui
 import mpos.time
 
-from setting_activity import SettingActivity
 from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity
 

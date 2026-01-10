@@ -14,6 +14,7 @@ from .display import (
 )
 from .event import get_event_name, print_event
 from .util import shutdown, set_foreground_app, get_foreground_app
+from .setting_activity import SettingActivity
 
 __all__ = [
     "setContentView", "back_screen", "remove_and_stop_current_activity", "remove_and_stop_all_activities"
@@ -26,5 +27,6 @@ __all__ = [
     "min_resolution", "max_resolution",
     "get_pointer_xy",
     "get_event_name", "print_event",
-    "shutdown", "set_foreground_app", "get_foreground_app"
+    "shutdown", "set_foreground_app", "get_foreground_app",
+    "SettingActivity"
 ]
