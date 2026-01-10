@@ -45,6 +45,17 @@ class AppStore(Activity):
     progress_bar = None
     settings_button = None
 
+    @staticmethod
+    def _apply_default_styles(widget, border=0, radius=0, pad=0):
+        """Apply common default styles to reduce repetition"""
+        widget.set_style_border_width(border, 0)
+        widget.set_style_radius(radius, 0)
+        widget.set_style_pad_all(pad, 0)
+
+    def _add_click_handler(self, widget, callback, app):
+        """Register click handler to avoid repetition"""
+        widget.add_event_cb(lambda e, a=app: callback(a), lv.EVENT.CLICKED, None)
+
     def onCreate(self):
         self.main_screen = lv.obj()
         self.please_wait_label = lv.label(self.main_screen)
@@ -138,9 +149,7 @@ class AppStore(Activity):
         print("Hiding please wait label...")
         self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
         apps_list = lv.list(self.main_screen)
-        apps_list.set_style_border_width(0, 0)
-        apps_list.set_style_radius(0, 0)
-        apps_list.set_style_pad_all(0, 0)
+        self._apply_default_styles(apps_list)
         apps_list.set_size(lv.pct(100), lv.pct(100))
         self._icon_widgets = {} # Clear old icons
         print("create_apps_list iterating")
@@ -149,34 +158,32 @@ class AppStore(Activity):
             item = apps_list.add_button(None, "")
             item.set_style_pad_all(0, 0)
             item.set_size(lv.pct(100), lv.SIZE_CONTENT)
-            item.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
+            self._add_click_handler(item, self.show_app_detail, app)
             cont = lv.obj(item)
             cont.set_style_pad_all(0, 0)
             cont.set_flex_flow(lv.FLEX_FLOW.ROW)
             cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
             cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-            cont.set_style_border_width(0, 0)
-            cont.set_style_radius(0, 0)
-            cont.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
+            self._apply_default_styles(cont)
+            self._add_click_handler(cont, self.show_app_detail, app)
             icon_spacer = lv.image(cont)
             icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
             icon_spacer.set_src(lv.SYMBOL.REFRESH)
-            icon_spacer.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
+            self._add_click_handler(icon_spacer, self.show_app_detail, app)
             app.image_icon_widget = icon_spacer # save it so it can be later set to the actual image
             label_cont = lv.obj(cont)
-            label_cont.set_style_border_width(0, 0)
-            label_cont.set_style_radius(0, 0)
+            self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
             label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
-            label_cont.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
+            self._add_click_handler(label_cont, self.show_app_detail, app)
             name_label = lv.label(label_cont)
             name_label.set_text(app.name)
             name_label.set_style_text_font(lv.font_montserrat_16, 0)
-            name_label.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
+            self._add_click_handler(name_label, self.show_app_detail, app)
             desc_label = lv.label(label_cont)
             desc_label.set_text(app.short_description)
             desc_label.set_style_text_font(lv.font_montserrat_12, 0)
-            desc_label.add_event_cb(lambda e, a=app: self.show_app_detail(a), lv.EVENT.CLICKED, None)
+            self._add_click_handler(desc_label, self.show_app_detail, app)
         print("create_apps_list done")
         # Settings button needs to float in foreground:
         self.settings_button.move_to_index(-1)
@@ -216,93 +223,37 @@ class AppStore(Activity):
 
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
-        #print(f"Converting {bhapp} to MPOS app object...")
         name = bhapp.get("name")
         print(f"Got app name: {name}")
-        publisher = None
         short_description = bhapp.get("description")
-        long_description = None
-        try:
-            icon_url = bhapp.get("icon_map").get("64x64").get("url")
-        except Exception as e:
-            icon_url = None
-            print("Could not find icon_map 64x64 url")
-        download_url = None
         fullname = bhapp.get("slug")
-        version = None
+        # Safely extract nested icon URL
+        icon_url = None
         try:
-            category = bhapp.get("categories")[0]
-        except Exception as e:
-            category = None
+            icon_url = bhapp.get("icon_map", {}).get("64x64", {}).get("url")
+        except Exception:
+            print("Could not find icon_map 64x64 url")
+        # Safely extract first category
+        category = None
+        try:
+            category = bhapp.get("categories", [None])[0]
+        except Exception:
             print("Could not parse category")
-        activities = None
-        return App(name, publisher, short_description, long_description, icon_url, download_url, fullname, version, category, activities)
+        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None)
 
-    async def fetch_badgehub_app_details(self, app_obj):
-        details_url = self.get_backend_details_url_from_settings()
-        try:
-            response = await DownloadManager.download_url(details_url)
-        except Exception as e:
-            print(f"Could not download app details from {details_url}: {e}")
-            if DownloadManager.is_network_error(e):
-                print("Network error while fetching app details")
-            return
-        print(f"Got response text: {response[0:20]}")
-        try:
-            parsed = json.loads(response)
-            #print(f"parsed json: {parsed}")
-            print("Using short_description as long_description because backend doesn't support it...")
-            app_obj.long_description = app_obj.short_description
-            print("Finding version number...")
-            try:
-                version = parsed.get("version")
-            except Exception as e:
-                print(f"Could not get version object from appdetails: {e}")
-                return
-            print(f"got version object: {version}")
-            # Find .mpk download URL:
-            try:
-                files = version.get("files")
-                for file in files:
-                    print(f"parsing file: {file}")
-                    ext = file.get("ext").lower()
-                    print(f"file has extension: {ext}")
-                    if ext == ".mpk":
-                        app_obj.download_url = file.get("url")
-                        app_obj.download_url_size = file.get("size_of_content")
-                        break # only one .mpk per app is supported
-            except Exception as e:
-                print(f"Could not get files from version: {e}")
-            try:
-                app_metadata = version.get("app_metadata")
-            except Exception as e:
-                print(f"Could not get app_metadata object from version object: {e}")
-                return
-            try:
-                app_obj.publisher = app_metadata.get("author")
-            except Exception as e:
-                print(f"Could not get author from version object: {e}")
-            try:
-                app_version = app_metadata.get("version")
-                print(f"what: {version.get('app_metadata')}")
-                print(f"app has app_version: {app_version}")
-                app_obj.version = app_version
-            except Exception as e:
-                print(f"Could not get version from app_metadata: {e}")
-        except Exception as e:
-            err = f"ERROR: could not parse app details JSON: {e}"
-            print(err)
-            self.please_wait_label.set_text(err)
-            return
+    def _get_backend_config(self):
+        """Get backend configuration tuple (type, list_url, details_url)"""
+        pref_string = self.prefs.get_string("backend", self._DEFAULT_BACKEND)
+        return AppStore.backend_pref_string_to_backend(pref_string)
 
     def get_backend_type_from_settings(self):
-        return AppStore.backend_pref_string_to_backend(self.prefs.get_string("backend", self._DEFAULT_BACKEND))[0]
+        return self._get_backend_config()[0]
 
     def get_backend_list_url_from_settings(self):
-        return AppStore.backend_pref_string_to_backend(self.prefs.get_string("backend", self._DEFAULT_BACKEND))[1]
+        return self._get_backend_config()[1]
 
-    def get_backend_details_url_from_settings():
-        return AppStore.backend_pref_string_to_backend(self.prefs.get_string("backend", self._DEFAULT_BACKEND))[2]
+    def get_backend_details_url_from_settings(self):
+        return self._get_backend_config()[2]
 
     @staticmethod
     def get_backend_pref_string(index):

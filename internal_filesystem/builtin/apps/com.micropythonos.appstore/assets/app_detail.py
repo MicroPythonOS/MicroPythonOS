@@ -24,6 +24,36 @@ class AppDetail(Activity):
     app = None
     appstore = None
 
+    @staticmethod
+    def _apply_default_styles(widget, border=0, radius=0, pad=0):
+        """Apply common default styles to reduce repetition"""
+        widget.set_style_border_width(border, 0)
+        widget.set_style_radius(radius, 0)
+        widget.set_style_pad_all(pad, 0)
+
+    def _cleanup_temp_file(self, path="tmp/temp.mpk"):
+        """Safely remove temporary file"""
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+
+    async def _update_progress(self, value, wait=True):
+        """Update progress bar with optional wait"""
+        self.progress_bar.set_value(value, wait)
+        if wait:
+            await TaskManager.sleep(1)
+
+    def _show_progress_bar(self):
+        """Show progress bar and reset to 0"""
+        self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.progress_bar.set_value(0, False)
+
+    def _hide_progress_bar(self):
+        """Hide progress bar and reset to 0"""
+        self.progress_bar.set_value(0, False)
+        self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
+
     def onCreate(self):
         print("Creating app detail screen...")
         self.app = self.getIntent().extras.get("app")
@@ -35,8 +65,7 @@ class AppDetail(Activity):
         app_detail_screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
         headercont = lv.obj(app_detail_screen)
-        headercont.set_style_border_width(0, 0)
-        headercont.set_style_pad_all(0, 0)
+        self._apply_default_styles(headercont)
         headercont.set_flex_flow(lv.FLEX_FLOW.ROW)
         headercont.set_size(lv.pct(100), lv.SIZE_CONTENT)
         headercont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -51,9 +80,7 @@ class AppDetail(Activity):
         else:
             icon_spacer.set_src(lv.SYMBOL.IMAGE)
         detail_cont = lv.obj(headercont)
-        detail_cont.set_style_border_width(0, 0)
-        detail_cont.set_style_radius(0, 0)
-        detail_cont.set_style_pad_all(0, 0)
+        self._apply_default_styles(detail_cont)
         detail_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         detail_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
         detail_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -73,9 +100,7 @@ class AppDetail(Activity):
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
         # Always have this button:
         self.buttoncont = lv.obj(app_detail_screen)
-        self.buttoncont.set_style_border_width(0, 0)
-        self.buttoncont.set_style_radius(0, 0)
-        self.buttoncont.set_style_pad_all(0, 0)
+        self._apply_default_styles(self.buttoncont)
         self.buttoncont.set_flex_flow(lv.FLEX_FLOW.ROW)
         self.buttoncont.set_size(lv.pct(100), lv.SIZE_CONTENT)
         self.buttoncont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -127,7 +152,7 @@ class AppDetail(Activity):
             update_label.center()
 
     async def fetch_and_set_app_details(self):
-        await self.appstore.fetch_badgehub_app_details(self.app)
+        await self.fetch_badgehub_app_details(self.app)
         print(f"app has version: {self.app.version}")
         self.version_label.set_text(self.app.version)
         self.long_desc_label.set_text(self.app.long_description)
@@ -185,16 +210,12 @@ class AppDetail(Activity):
     async def uninstall_app(self, app_fullname):
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
-        self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(21, True)
-        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
-        self.progress_bar.set_value(42, True)
-        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        self._show_progress_bar()
+        await self._update_progress(21)
+        await self._update_progress(42)
         PackageManager.uninstall_app(app_fullname)
-        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
-        self.progress_bar.set_value(100, False)
-        self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(0, False)
+        await self._update_progress(100, wait=False)
+        self._hide_progress_bar()
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
         if PackageManager.is_builtin_app(app_fullname):
@@ -214,25 +235,18 @@ class AppDetail(Activity):
     async def download_and_install(self, app_obj, dest_folder):
         zip_url = app_obj.download_url
         app_fullname = app_obj.fullname
-        download_url_size = None
-        if hasattr(app_obj, "download_url_size"):
-            download_url_size = app_obj.download_url_size
+        download_url_size = getattr(app_obj, "download_url_size", None)
+        temp_zip_path = "tmp/temp.mpk"
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
-        self.progress_bar.remove_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(5, True)
-        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
+        self._show_progress_bar()
+        await self._update_progress(5)
         # Download the .mpk file to temporary location
-        try:
-            # Make sure there's no leftover file filling the storage
-            os.remove(temp_zip_path)
-        except Exception:
-            pass
+        self._cleanup_temp_file(temp_zip_path)
         try:
             os.mkdir("tmp")
         except Exception:
             pass
-        temp_zip_path = "tmp/temp.mpk"
         print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
         try:
             result = await DownloadManager.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size, progress_callback=self.pcb)
@@ -242,7 +256,7 @@ class AppDetail(Activity):
                 print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
                 # Install it:
                 PackageManager.install_mpk(temp_zip_path, dest_folder) # 60 until 90 percent is the unzip but no progress there...
-                self.progress_bar.set_value(90, True)
+                await self._update_progress(90, wait=False)
         except Exception as e:
             print(f"Download failed with exception: {e}")
             if DownloadManager.is_network_error(e):
@@ -250,23 +264,70 @@ class AppDetail(Activity):
             else:
                 self.install_label.set_text(f"Download failed: {str(e)[:30]}")
             self.install_button.remove_state(lv.STATE.DISABLED)
-            self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
-            self.progress_bar.set_value(0, False)
-            # Make sure there's no leftover file filling the storage:
-            try:
-                os.remove(temp_zip_path)
-            except Exception:
-                pass
+            self._hide_progress_bar()
+            self._cleanup_temp_file(temp_zip_path)
             return
         # Make sure there's no leftover file filling the storage:
-        try:
-            os.remove(temp_zip_path)
-        except Exception:
-            pass
+        self._cleanup_temp_file(temp_zip_path)
         # Success:
-        await TaskManager.sleep(1) # seems silly but otherwise it goes so quickly that the user can't tell something happened and gets confused
-        self.progress_bar.set_value(100, False)
-        self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
-        self.progress_bar.set_value(0, False)
+        await self._update_progress(100, wait=False)
+        self._hide_progress_bar()
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
+
+    async def fetch_badgehub_app_details(self, app_obj):
+        details_url = self.get_backend_details_url_from_settings() + "/" + app_obj.fullname
+        try:
+            response = await DownloadManager.download_url(details_url)
+        except Exception as e:
+            print(f"Could not download app details from {details_url}: {e}")
+            if DownloadManager.is_network_error(e):
+                print("Network error while fetching app details")
+            return
+        print(f"Got response text: {response[0:20]}")
+        try:
+            parsed = json.loads(response)
+            #print(f"parsed json: {parsed}")
+            print("Using short_description as long_description because backend doesn't support it...")
+            app_obj.long_description = app_obj.short_description
+            print("Finding version number...")
+            try:
+                version = parsed.get("version")
+            except Exception as e:
+                print(f"Could not get version object from appdetails: {e}")
+                return
+            print(f"got version object: {version}")
+            # Find .mpk download URL:
+            try:
+                files = version.get("files")
+                for file in files:
+                    print(f"parsing file: {file}")
+                    ext = file.get("ext").lower()
+                    print(f"file has extension: {ext}")
+                    if ext == ".mpk":
+                        app_obj.download_url = file.get("url")
+                        app_obj.download_url_size = file.get("size_of_content")
+                        break # only one .mpk per app is supported
+            except Exception as e:
+                print(f"Could not get files from version: {e}")
+            try:
+                app_metadata = version.get("app_metadata")
+            except Exception as e:
+                print(f"Could not get app_metadata object from version object: {e}")
+                return
+            try:
+                app_obj.publisher = app_metadata.get("author")
+            except Exception as e:
+                print(f"Could not get author from version object: {e}")
+            try:
+                app_version = app_metadata.get("version")
+                print(f"what: {version.get('app_metadata')}")
+                print(f"app has app_version: {app_version}")
+                app_obj.version = app_version
+            except Exception as e:
+                print(f"Could not get version from app_metadata: {e}")
+        except Exception as e:
+            err = f"ERROR: could not parse app details JSON: {e}"
+            print(err)
+            self.please_wait_label.set_text(err)
+            return
