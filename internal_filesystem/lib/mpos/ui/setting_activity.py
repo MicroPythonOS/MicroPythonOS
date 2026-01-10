@@ -1,7 +1,7 @@
 import lvgl as lv
 
 import mpos
-from mpos.apps import Activity, Intent
+from mpos.apps import Activity
 
 """
 SettingActivity is used to edit one setting.

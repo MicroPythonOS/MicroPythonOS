@@ -1,6 +1,7 @@
 # Core framework
 from .app.app import App
 from .app.activity import Activity
+from .config import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net import download_manager as DownloadManager
 from .content.intent import Intent
@@ -16,7 +17,10 @@ from .app.activities.share import ShareActivity
 from .ui.setting_activity import SettingActivity
 
 __all__ = [
-    "App", "Activity", "ConnectivityManager", "DownloadManager", "Intent",
+    "App",
+    "Activity",
+    "SharedPreferences",
+    "ConnectivityManager", "DownloadManager", "Intent",
     "ActivityNavigator", "PackageManager", "TaskManager",
     "ChooserActivity", "ViewActivity", "ShareActivity",
     "SettingActivity"
