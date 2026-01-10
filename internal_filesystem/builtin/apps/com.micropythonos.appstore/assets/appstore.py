@@ -174,6 +174,7 @@ class AppStore(Activity):
             label_cont = lv.obj(cont)
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+            label_cont.set_style_pad_ver(10, 0)  # Add vertical padding for spacing
             label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
             self._add_click_handler(label_cont, self.show_app_detail, app)
             name_label = lv.label(label_cont)
