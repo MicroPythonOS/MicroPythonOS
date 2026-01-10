@@ -6,7 +6,7 @@ import os
 
 from mpos.apps import Activity, Intent
 from mpos.app import App
-from mpos import TaskManager, DownloadManager
+from mpos import TaskManager, DownloadManager, SettingActivity
 import mpos.ui
 from mpos.content.package_manager import PackageManager
 from mpos.config import SharedPreferences
@@ -28,7 +28,6 @@ class AppStore(Activity):
 
     apps = []
 
-    _DEFAULT_BACKEND = 0
     _ICON_SIZE = 64
 
     # Hardcoded list for now:
@@ -38,33 +37,33 @@ class AppStore(Activity):
         ("BadgeHub Prod", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS)
     ]
 
+    _DEFAULT_BACKEND = _BACKEND_API_GITHUB + "," + _GITHUB_PROD_BASE_URL + "/" + _GITHUB_LIST
+
     @staticmethod
-    def get_backend_urls(index):
+    def get_backend_pref_string(index):
         backend_info = AppStore.backends[index]
         if backend_info:
             api = backend_info[1]
             base_url = backend_info[2]
             list_suffix  = backend_info[3]
             details_suffix = backend_info[4]
-            if api == AppStore._BACKEND_API_GITHUB:
-                return (base_url + "/" + list_suffix, None)
-            else:
-                return (base_url + "/" + list_suffix, base_url + "/" + details_suffix)
+            toreturn = api + "," + base_url + "/" + list_suffix
+            if api == AppStore._BACKEND_API_BADGEHUB:
+                toreturn += "," + base_url + "/" + details_suffix
+            return toreturn
 
     @staticmethod
-    def get_backend_type(index):
-        backend_info = AppStore.backends[index]
-        if backend_info:
-            return backend_info[1]
+    def backend_pref_string_to_backend(string):
+        return string.split(",")
 
-    def get_backend_urls_from_settings(self):
-        return AppStore.get_backend_urls(self.prefs.get_int("backend", self._DEFAULT_BACKEND))
+    def get_backend_type_from_settings(self):
+        return AppStore.backend_pref_string_to_backend(self.prefs.get_string("backend", self._DEFAULT_BACKEND))[0]
 
     def get_backend_list_url_from_settings(self):
-        return self.get_backend_urls_from_settings()[0]
+        return AppStore.backend_pref_string_to_backend(self.prefs.get_string("backend", self._DEFAULT_BACKEND))[1]
 
     def get_backend_details_url_from_settings():
-        return self.get_backend_urls_from_settings()[1]
+        return AppStore.backend_pref_string_to_backend(self.prefs.get_string("backend", self._DEFAULT_BACKEND))[2]
 
     can_check_network = True
     prefs = None
@@ -89,7 +88,6 @@ class AppStore(Activity):
         self.settings_button.set_size(settings_size, settings_size)
         self.settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
         self.settings_button.add_event_cb(self.settings_button_tap,lv.EVENT.CLICKED,None)
-        self.settings_button.add_flag(lv.obj.FLAG.HIDDEN) # hide because not functional for now
         settings_label = lv.label(self.settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.set_style_text_font(lv.font_montserrat_24, 0)
@@ -98,14 +96,10 @@ class AppStore(Activity):
 
     def onResume(self, screen):
         super().onResume(screen)
-        # This gets called at startup and also after closing AppStoreSettings
-        if len(self.apps):
-            return # already have the list (if refresh after settings is needed, finished_settings_callback will do it)
-        if self.prefs: # prefs is abused to distinguish between a fresh start and a return after AppStoreSettings
-            return # prefs is set so it's not a fresh start - it's a return after after AppStoreSettings
-        print("It's a fresh start; loading preferences and refreshing list...")
-        self.prefs = SharedPreferences(self.PACKAGE)
-        self.refresh_list()
+        if not self.prefs:
+            self.prefs = SharedPreferences(self.PACKAGE)
+        if not len(self.apps):
+            self.refresh_list()
 
     def refresh_list(self):
         try:
@@ -119,20 +113,18 @@ class AppStore(Activity):
             TaskManager.create_task(self.download_app_index(self.get_backend_list_url_from_settings()))
 
     def settings_button_tap(self, event):
-        print("Settings button clicked")
-        # Handle traditional settings (existing code)
-        intent = Intent(activity_class=AppStoreSettings)
+        intent = Intent(activity_class=SettingActivity)
         intent.putExtra("prefs", self.prefs)
-        intent.putExtra("setting", {"title": "Backend", "key": "backend", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(backend[0], None) for backend in AppStore.backends]},)
-        self.startActivityForResult(intent, self.finished_settings_callback)
+        intent.putExtra("setting", {"title": "AppStore Backend",
+                                    "key": "backend",
+                                    "ui": "radiobuttons",
+                                    "ui_options":  [(backend[0], AppStore.get_backend_pref_string(index)) for index, backend in enumerate(AppStore.backends)],
+                                    "changed_callback": self.backend_changed})
+        self.startActivity(intent)
 
-    def finished_settings_callback(self, result):
-        print(f"finished_settings_callback result: {result}")
-        if result.get("result_code") is True:
-            print("Settings updated, reloading app list...")
-            self.refresh_list()
-        else:
-            print("Settings not updated, nothing to do.")
+    def backend_changed(self, new_value):
+        print(f"backend changed to {new_value}, refreshing...")
+        self.refresh_list()
 
     async def download_app_index(self, json_url):
         try:
@@ -147,10 +139,11 @@ class AppStore(Activity):
         print(f"Got response text: {response[0:20]}")
         try:
             parsed = json.loads(response)
-            print(f"parsed json: {parsed}")
+            #print(f"parsed json: {parsed}")
+            self.apps.clear()
             for app in parsed:
                 try:
-                    backend_type = AppStore.get_backend_type(self.prefs.get_int("backend", self._DEFAULT_BACKEND))
+                    backend_type = self.get_backend_type_from_settings()
                     if backend_type == self._BACKEND_API_BADGEHUB:
                         self.apps.append(AppStore.badgehub_app_to_mpos_app(app))
                     else:
@@ -290,7 +283,7 @@ class AppStore(Activity):
         print(f"Got response text: {response[0:20]}")
         try:
             parsed = json.loads(response)
-            print(f"parsed json: {parsed}")
+            #print(f"parsed json: {parsed}")
             print("Using short_description as long_description because backend doesn't support it...")
             app_obj.long_description = app_obj.short_description
             print("Finding version number...")
@@ -434,7 +427,7 @@ class AppDetail(Activity):
         self.setContentView(app_detail_screen)
 
     def onResume(self, screen):
-        backend_type = AppStore.get_backend_type(self.prefs.get_int("backend", self._DEFAULT_BACKEND))
+        backend_type = self.get_backend_type_from_settings()
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
         else:
@@ -603,17 +596,3 @@ class AppDetail(Activity):
         self.progress_bar.set_value(0, False)
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
-
-
-class AppStoreSettings(Activity):
-    prefs = None
-
-    def onCreate(self):
-        self.prefs = self.getIntent().extras.get("prefs")
-        # Create main screen
-        screen = lv.obj()
-        screen.set_size(lv.pct(100), lv.pct(100))
-        screen.set_style_pad_all(1, 0)
-        label = lv.label(screen)
-        label.set_text("AppStoreSettings should go here.")
-        self.setContentView(screen)

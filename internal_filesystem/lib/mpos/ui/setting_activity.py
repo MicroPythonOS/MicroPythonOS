@@ -25,6 +25,7 @@ class SettingActivity(Activity):
     def onCreate(self):
         self.prefs = self.getIntent().extras.get("prefs")
         setting = self.getIntent().extras.get("setting")
+        print(setting)
 
         settings_screen_detail = lv.obj()
         settings_screen_detail.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
@@ -209,12 +210,15 @@ class SettingActivity(Activity):
             editor.commit()
 
         # Update model for UI
-        setting["value_label"].set_text(new_value if new_value else "(not set)")
-        self.finish() # the self.finish (= back action) should happen before callback, in case it happens to start a new activity
+        value_label = setting.get("value_label")
+        if value_label:
+            value_label.set_text(new_value if new_value else "(not set)")
+
+        # self.finish (= back action) should happen before callback, in case it happens to start a new activity
+        self.finish()
 
         # Call changed_callback if set
         changed_callback = setting.get("changed_callback")
-        #print(f"changed_callback: {changed_callback}")
         if changed_callback and old_value != new_value:
             print(f"Setting {setting['key']} changed from {old_value} to {new_value}, calling changed_callback...")
             changed_callback(new_value)
