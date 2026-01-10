@@ -144,18 +144,6 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
 
     return closest_obj
 
-
-
-
-
-
-
-
-
-
-
-
-
 # This function is missing so emulate it using focus_next():
 def emulate_focus_obj(focusgroup, target):
     if not focusgroup:
@@ -168,7 +156,7 @@ def emulate_focus_obj(focusgroup, target):
         currently_focused = focusgroup.get_focused()
         #print ("emulate_focus_obj: currently focused:") ; mpos.util.print_lvgl_widget(currently_focused)
         if currently_focused is target:
-            print("emulate_focus_obj: found target, stopping")
+            #print("emulate_focus_obj: found target, stopping")
             return
         else:
             focusgroup.focus_next()

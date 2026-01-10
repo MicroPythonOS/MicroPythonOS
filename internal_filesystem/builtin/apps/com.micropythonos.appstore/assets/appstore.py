@@ -38,6 +38,7 @@ class AppStore(Activity):
 
     # Widgets:
     main_screen = None
+    app_list = None
     update_button = None
     install_button = None
     install_label = None
@@ -146,16 +147,25 @@ class AppStore(Activity):
 
     def create_apps_list(self):
         print("create_apps_list")
+
         print("Hiding please wait label...")
         self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
-        apps_list = lv.list(self.main_screen)
-        self._apply_default_styles(apps_list)
-        apps_list.set_size(lv.pct(100), lv.pct(100))
+
+        print("Emptying focus group")
+        # removing objects or even cleaning the screen doesn't seem to empty the focus group
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.remove_all_objs()
+            focusgroup.add_obj(self.settings_button)
+
+        self.apps_list = lv.list(self.main_screen)
+        self._apply_default_styles(self.apps_list)
+        self.apps_list.set_size(lv.pct(100), lv.pct(100))
         self._icon_widgets = {} # Clear old icons
         print("create_apps_list iterating")
         for app in self.apps:
             print(app)
-            item = apps_list.add_button(None, "")
+            item = self.apps_list.add_button(None, "")
             item.set_style_pad_all(0, 0)
             item.set_size(lv.pct(100), lv.SIZE_CONTENT)
             self._add_click_handler(item, self.show_app_detail, app)
