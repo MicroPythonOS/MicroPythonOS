@@ -2,6 +2,7 @@ import lvgl as lv
 
 import mpos
 from mpos.apps import Activity
+from mpos.ui.keyboard import MposKeyboard
 
 """
 SettingActivity is used to edit one setting.
@@ -28,22 +29,22 @@ class SettingActivity(Activity):
         print(setting)
 
         settings_screen_detail = lv.obj()
-        settings_screen_detail.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
+        settings_screen_detail.set_style_pad_all(0, lv.PART.MAIN)
         settings_screen_detail.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
         top_cont = lv.obj(settings_screen_detail)
         top_cont.set_width(lv.pct(100))
-        top_cont.set_style_border_width(0, 0)
+        top_cont.set_style_border_width(0, lv.PART.MAIN)
         top_cont.set_height(lv.SIZE_CONTENT)
-        top_cont.set_style_pad_all(mpos.ui.pct_of_display_width(1), 0)
+        top_cont.set_style_pad_all(0, lv.PART.MAIN)
         top_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
-        top_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, 0)
+        top_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
         top_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
         setting_label = lv.label(top_cont)
         setting_label.set_text(setting["title"])
-        setting_label.align(lv.ALIGN.TOP_LEFT,0,0)
-        setting_label.set_style_text_font(lv.font_montserrat_20, 0)
+        setting_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        setting_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
 
         ui = setting.get("ui")
         ui_options = setting.get("ui_options")
@@ -77,34 +78,29 @@ class SettingActivity(Activity):
                 if current_setting == option_value:
                     self.dropdown.set_selected(i)
                     break # no need to check the rest because only one can be selected
-        else:
-            # Textarea for other settings
+        else: # Textarea for other settings
             self.textarea = lv.textarea(settings_screen_detail)
             self.textarea.set_width(lv.pct(100))
-            self.textarea.set_height(lv.SIZE_CONTENT)
-            self.textarea.align_to(top_cont, lv.ALIGN.OUT_BOTTOM_MID, 0, 0)
+            self.textarea.set_style_pad_all(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
+            self.textarea.set_style_margin_left(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
+            self.textarea.set_style_margin_right(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
+            self.textarea.set_one_line(True)
             if current_setting:
                 self.textarea.set_text(current_setting)
             placeholder = setting.get("placeholder")
             if placeholder:
                 self.textarea.set_placeholder_text(placeholder)
-            self.textarea.add_event_cb(lambda *args: mpos.ui.anim.smooth_show(self.keyboard), lv.EVENT.CLICKED, None) # it might be focused, but keyboard hidden (because ready/cancel clicked)
-            self.textarea.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.DEFOCUSED, None)
-            # Initialize keyboard (hidden initially)
             self.keyboard = MposKeyboard(settings_screen_detail)
-            self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
-            self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.READY, None)
-            self.keyboard.add_event_cb(lambda *args: mpos.ui.anim.smooth_hide(self.keyboard), lv.EVENT.CANCEL, None)
             self.keyboard.set_textarea(self.textarea)
 
         # Button container
         btn_cont = lv.obj(settings_screen_detail)
         btn_cont.set_width(lv.pct(100))
-        btn_cont.set_style_border_width(0, 0)
+        btn_cont.set_style_border_width(0, lv.PART.MAIN)
         btn_cont.set_height(lv.SIZE_CONTENT)
         btn_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
-        btn_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, 0)
+        btn_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
         # Save button
         save_btn = lv.button(btn_cont)
         save_btn.set_size(lv.pct(45), lv.SIZE_CONTENT)
@@ -126,11 +122,11 @@ class SettingActivity(Activity):
             cambutton.set_size(lv.pct(100), lv.pct(30))
             cambuttonlabel = lv.label(cambutton)
             cambuttonlabel.set_text("Scan data from QR code")
-            cambuttonlabel.set_style_text_font(lv.font_montserrat_18, 0)
+            cambuttonlabel.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
             cambuttonlabel.align(lv.ALIGN.TOP_MID, 0, 0)
             cambuttonlabel2 = lv.label(cambutton)
             cambuttonlabel2.set_text("Tip: Create your own QR code,\nusing https://genqrcode.com or another tool.")
-            cambuttonlabel2.set_style_text_font(lv.font_montserrat_10, 0)
+            cambuttonlabel2.set_style_text_font(lv.font_montserrat_10, lv.PART.MAIN)
             cambuttonlabel2.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             cambutton.add_event_cb(self.cambutton_cb, lv.EVENT.CLICKED, None)
 
