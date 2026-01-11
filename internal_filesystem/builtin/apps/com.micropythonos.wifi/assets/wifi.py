@@ -242,8 +242,9 @@ class EditNetwork(Activity):
             label = lv.label(password_page)
             label.set_text(f"Network name:")
             self.ssid_ta = lv.textarea(password_page)
-            self.ssid_ta.set_width(lv.pct(90))
-            self.ssid_ta.set_style_margin_left(5, lv.PART.MAIN)
+            self.ssid_ta.set_width(lv.pct(100))
+            self.ssid_ta.set_style_margin_left(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
+            self.ssid_ta.set_style_margin_right(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
             self.ssid_ta.set_one_line(True)
             self.ssid_ta.set_placeholder_text("Enter the SSID")
             self.keyboard = MposKeyboard(password_page)
@@ -257,8 +258,9 @@ class EditNetwork(Activity):
         else:
             label.set_text(f"Password for '{self.selected_ssid}':")
         self.password_ta = lv.textarea(password_page)
-        self.password_ta.set_width(lv.pct(90))
-        self.password_ta.set_style_margin_left(5, lv.PART.MAIN)
+        self.password_ta.set_width(lv.pct(100))
+        self.password_ta.set_style_margin_left(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
+        self.password_ta.set_style_margin_right(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
         self.password_ta.set_one_line(True)
         if known_password:
             self.password_ta.set_text(known_password)
@@ -270,7 +272,7 @@ class EditNetwork(Activity):
         # Hidden network:
         self.hidden_cb = lv.checkbox(password_page)
         self.hidden_cb.set_text("Hidden network (always try connecting)")
-        self.hidden_cb.set_style_margin_left(5, lv.PART.MAIN)
+        self.hidden_cb.set_style_margin_left(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
         if known_hidden:
             self.hidden_cb.set_state(lv.STATE.CHECKED, True)
 
