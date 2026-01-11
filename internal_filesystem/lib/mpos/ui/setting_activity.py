@@ -80,6 +80,7 @@ class SettingActivity(Activity):
                     self.dropdown.set_selected(i)
                     break # no need to check the rest because only one can be selected
         else: # Textarea for other settings
+            ui = "textarea"
             self.textarea = lv.textarea(settings_screen_detail)
             self.textarea.set_width(lv.pct(100))
             self.textarea.set_style_pad_all(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
@@ -117,7 +118,7 @@ class SettingActivity(Activity):
         cancel_label.center()
         cancel_btn.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
 
-        if setting.get("enable_qr"): # Scan QR button for text settings
+        if ui == "textarea": # Scan QR button for text settings
             cambutton = lv.button(settings_screen_detail)
             cambutton.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             cambutton.set_size(lv.pct(100), lv.pct(30))
