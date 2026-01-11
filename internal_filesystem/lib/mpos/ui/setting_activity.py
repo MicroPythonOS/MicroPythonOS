@@ -1,8 +1,9 @@
 import lvgl as lv
 
 import mpos
-from mpos.apps import Activity
+from mpos.apps import Activity, Intent
 from mpos.ui.keyboard import MposKeyboard
+from .camera_app import CameraApp
 
 """
 SettingActivity is used to edit one setting.
@@ -116,9 +117,9 @@ class SettingActivity(Activity):
         cancel_label.center()
         cancel_btn.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
 
-        if False: # No scan QR button for text settings because they're all short right now
+        if setting.get("enable_qr"): # Scan QR button for text settings
             cambutton = lv.button(settings_screen_detail)
-            cambutton.align(lv.ALIGN.BOTTOM_MID,0,0)
+            cambutton.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             cambutton.set_size(lv.pct(100), lv.pct(30))
             cambuttonlabel = lv.label(cambutton)
             cambuttonlabel.set_text("Scan data from QR code")
@@ -170,16 +171,16 @@ class SettingActivity(Activity):
         cb.add_style(style_radio_chk, lv.PART.INDICATOR | lv.STATE.CHECKED)
         return cb
 
-    def gotqr_result_callback_unused(self, result):
+    def gotqr_result_callback(self, result):
         print(f"QR capture finished, result: {result}")
         if result.get("result_code"):
             data = result.get("data")
             print(f"Setting textarea data: {data}")
             self.textarea.set_text(data)
 
-    def cambutton_cb_unused(self, event):
+    def cambutton_cb(self, event):
         print("cambutton clicked!")
-        self.startActivityForResult(Intent(activity_class=CameraApp).putExtra("scanqr_mode", True), self.gotqr_result_callback)
+        self.startActivityForResult(Intent(activity_class=CameraApp).putExtra("scanqr_intent", True), self.gotqr_result_callback)
 
     def save_setting(self, setting):
         ui = setting.get("ui")
