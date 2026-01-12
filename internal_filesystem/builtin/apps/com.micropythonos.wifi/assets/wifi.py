@@ -8,7 +8,7 @@ from mpos.ui.keyboard import MposKeyboard
 import mpos.apps
 from mpos.net.wifi_service import WifiService
 
-from camera_app import CameraApp
+from mpos.ui.camera_app import CameraApp
 
 class WiFi(Activity):
     """
