@@ -7,9 +7,7 @@ variance, expected value comparison, and overall quality score.
 import lvgl as lv
 import time
 import sys
-from mpos.app.activity import Activity
-import mpos.ui
-import mpos.sensor_manager as SensorManager
+from mpos import Activity, sensor_manager as SensorManager, pct_of_display_width
 
 
 class CheckIMUCalibrationActivity(Activity):
@@ -36,7 +34,7 @@ class CheckIMUCalibrationActivity(Activity):
 
     def onCreate(self):
         screen = lv.obj()
-        screen.set_style_pad_all(mpos.ui.pct_of_display_width(1), 0)
+        screen.set_style_pad_all(pct_of_display_width(1), 0)
         #screen.set_style_pad_all(0, 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         focusgroup = lv.group_get_default()
@@ -98,7 +96,7 @@ class CheckIMUCalibrationActivity(Activity):
 
         # Gyroscope section
         gyro_cont = lv.obj(data_cont)
-        gyro_cont.set_width(mpos.ui.pct_of_display_width(45))
+        gyro_cont.set_width(pct_of_display_width(45))
         gyro_cont.set_height(lv.SIZE_CONTENT)
         gyro_cont.set_style_border_width(0, 0)
         gyro_cont.set_style_pad_all(0, 0)
@@ -261,7 +259,7 @@ class CheckIMUCalibrationActivity(Activity):
 
     def start_calibration(self, event):
         """Navigate to calibration activity."""
-        from mpos.content.intent import Intent
+        from mpos import Intent
         from calibrate_imu import CalibrateIMUActivity
 
         intent = Intent(activity_class=CalibrateIMUActivity)

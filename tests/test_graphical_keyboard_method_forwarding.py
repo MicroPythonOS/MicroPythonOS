@@ -10,7 +10,7 @@ Usage:
 
 import unittest
 import lvgl as lv
-from mpos.ui.keyboard import MposKeyboard
+from mpos import MposKeyboard
 
 
 class TestMethodForwarding(unittest.TestCase):

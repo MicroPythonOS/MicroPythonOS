@@ -6,11 +6,10 @@ try:
 except Exception as e:
     print(f"Info: could not import webcam module: {e}")
 
-import mpos.time
-from mpos.apps import Activity
-from mpos.content.intent import Intent
-
+from ..time import epoch_seconds
 from .camera_settings import CameraSettingsActivity
+from .. import ui as mpos_ui
+from ..app.activity import Activity
 
 class CameraActivity(Activity):
 
@@ -100,11 +99,11 @@ class CameraActivity(Activity):
 
 
         self.status_label_cont = lv.obj(self.main_screen)
-        width = mpos.ui.pct_of_display_width(70)
-        height = mpos.ui.pct_of_display_width(60)
+        width = mpos_ui.pct_of_display_width(70)
+        height = mpos_ui.pct_of_display_width(60)
         self.status_label_cont.set_size(width,height)
-        center_w = round((mpos.ui.pct_of_display_width(100) - self.button_width - 5 - width)/2)
-        center_h = round((mpos.ui.pct_of_display_height(100) - height)/2)
+        center_w = round((mpos_ui.pct_of_display_width(100) - self.button_width - 5 - width)/2)
+        center_h = round((mpos_ui.pct_of_display_height(100) - height)/2)
         self.status_label_cont.set_pos(center_w,center_h)
         self.status_label_cont.set_style_bg_color(lv.color_white(), 0)
         self.status_label_cont.set_style_bg_opa(66, 0)
@@ -184,7 +183,7 @@ class CameraActivity(Activity):
             self.image_dsc.data = None
 
     def load_settings_cached(self):
-        from mpos.config import SharedPreferences
+        from mpos import SharedPreferences
         if self.scanqr_mode:
             print("loading scanqr settings...")
             if not self.scanqr_prefs:
@@ -296,7 +295,7 @@ class CameraActivity(Activity):
             self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
             return
         colorname = "RGB565" if self.colormode else "GRAY"
-        filename=f"{path}/picture_{mpos.time.epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
+        filename=f"{path}/picture_{epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
         try:
             with open(filename, 'wb') as f:
                 f.write(self.current_cam_buffer) # This takes around 17 seconds to store 921600 bytes, so ~50KB/s, so would be nice to show some progress bar
@@ -349,6 +348,7 @@ class CameraActivity(Activity):
             self.stop_qr_decoding()
 
     def open_settings(self):
+        from ..content.intent import Intent
         intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 

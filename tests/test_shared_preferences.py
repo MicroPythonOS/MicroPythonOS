@@ -1,6 +1,7 @@
 import unittest
 import os
-from mpos.config import SharedPreferences, Editor
+from mpos import SharedPreferences
+from mpos.config import Editor
 
 
 class TestSharedPreferences(unittest.TestCase):

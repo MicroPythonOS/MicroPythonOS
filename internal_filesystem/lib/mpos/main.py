@@ -5,9 +5,10 @@ import mpos
 import mpos.apps
 import mpos.config
 import mpos.ui
-import mpos.ui.topmenu
+from . import ui
+from .content.package_manager import PackageManager
 from mpos.ui.display import init_rootscreen
-from mpos.content.package_manager import PackageManager
+import mpos.ui.topmenu
 
 # Auto-detect and initialize hardware
 import sys

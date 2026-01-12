@@ -1,8 +1,8 @@
 import lvgl as lv
 
-import mpos
-from mpos.apps import Activity, Intent
+from ..app.activity import Activity
 from .setting_activity import SettingActivity
+import mpos.ui
 
 # Used to list and edit all settings:
 class SettingsActivity(Activity):
@@ -77,6 +77,7 @@ class SettingsActivity(Activity):
         container.set_style_border_width(0, lv.PART.MAIN)
 
     def startSettingActivity(self, setting):
+        from ..content.intent import Intent
         activity_class = SettingActivity
         if setting.get("ui") == "activity":
             activity_class = setting.get("activity_class")

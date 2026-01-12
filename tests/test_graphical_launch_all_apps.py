@@ -13,10 +13,7 @@ import time
 # This is a graphical test - needs boot and main to run first
 # Add tests directory to path for helpers
 
-from mpos.ui.testing import wait_for_render
-import mpos.apps
-import mpos.ui
-from mpos.content.package_manager import PackageManager
+from mpos import wait_for_render, apps, ui, PackageManager
 
 
 class TestLaunchAllApps(unittest.TestCase):

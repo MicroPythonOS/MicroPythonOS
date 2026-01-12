@@ -1,4 +1,4 @@
-from mpos.apps import ActivityDoesntExist # should fail here
+from mpos import ActivityDoesntExist # should fail here
 
 class Error(Activity):
 

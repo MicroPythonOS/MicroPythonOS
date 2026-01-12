@@ -1,9 +1,9 @@
 import lvgl as lv
 
-import mpos
-from mpos.apps import Activity, Intent
-from mpos.ui.keyboard import MposKeyboard
+from ..app.activity import Activity
 from .camera_activity import CameraActivity
+from .display import pct_of_display_width
+from . import anim
 
 """
 SettingActivity is used to edit one setting.
@@ -19,10 +19,6 @@ class SettingActivity(Activity):
     textarea = None
     dropdown = None
     radio_container = None
-
-    def __init__(self):
-        super().__init__()
-        self.setting = None
 
     def onCreate(self):
         self.prefs = self.getIntent().extras.get("prefs")
@@ -83,15 +79,16 @@ class SettingActivity(Activity):
             ui = "textarea"
             self.textarea = lv.textarea(settings_screen_detail)
             self.textarea.set_width(lv.pct(100))
-            self.textarea.set_style_pad_all(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
-            self.textarea.set_style_margin_left(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
-            self.textarea.set_style_margin_right(mpos.ui.pct_of_display_width(2), lv.PART.MAIN)
+            self.textarea.set_style_pad_all(pct_of_display_width(2), lv.PART.MAIN)
+            self.textarea.set_style_margin_left(pct_of_display_width(2), lv.PART.MAIN)
+            self.textarea.set_style_margin_right(pct_of_display_width(2), lv.PART.MAIN)
             self.textarea.set_one_line(True)
             if current_setting:
                 self.textarea.set_text(current_setting)
             placeholder = setting.get("placeholder")
             if placeholder:
                 self.textarea.set_placeholder_text(placeholder)
+            from mpos import MposKeyboard
             self.keyboard = MposKeyboard(settings_screen_detail)
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
             self.keyboard.set_textarea(self.textarea)
@@ -136,7 +133,7 @@ class SettingActivity(Activity):
 
     def onStop(self, screen):
         if self.keyboard:
-            mpos.ui.anim.smooth_hide(self.keyboard)
+            anim.smooth_hide(self.keyboard)
 
     def radio_event_handler(self, event):
         print("radio_event_handler called")
@@ -180,6 +177,7 @@ class SettingActivity(Activity):
             self.textarea.set_text(data)
 
     def cambutton_cb(self, event):
+        from ..content.intent import Intent
         print("cambutton clicked!")
         self.startActivityForResult(Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True), self.gotqr_result_callback)
 

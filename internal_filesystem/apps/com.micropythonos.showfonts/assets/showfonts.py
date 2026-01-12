@@ -1,4 +1,4 @@
-from mpos.apps import Activity
+from mpos import Activity
 import lvgl as lv
 
 class ShowFonts(Activity):

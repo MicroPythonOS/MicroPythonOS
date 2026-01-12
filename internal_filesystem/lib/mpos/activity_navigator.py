@@ -1,4 +1,6 @@
+import sys
 import utime
+
 from .content.intent import Intent
 from .content.package_manager import PackageManager
 
@@ -53,7 +55,8 @@ class ActivityNavigator:
         try:
             activity.onCreate()
         except Exception as e:
-            print(f"activity.onCreate caught exception: {e}")
+            print(f"activity.onCreate caught exception:")
+            sys.print_exception(e)
         end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
         print(f"apps.py _launch_activity: activity.onCreate took {end_time}ms")
         return activity

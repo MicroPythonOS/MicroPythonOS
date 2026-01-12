@@ -2,8 +2,7 @@ import machine
 import os
 import time
 
-from mpos.apps import Activity, Intent
-import mpos.sdcard
+from mpos import Activity, Intent, sdcard
 import mpos.ui
 import mpos.audio.audioflinger as AudioFlinger
 

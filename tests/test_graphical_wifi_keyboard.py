@@ -11,8 +11,7 @@ Usage:
 
 import unittest
 import lvgl as lv
-from mpos.ui.keyboard import MposKeyboard
-from mpos.ui.testing import wait_for_render
+from mpos import MposKeyboard, wait_for_render
 
 
 class TestWiFiKeyboard(unittest.TestCase):

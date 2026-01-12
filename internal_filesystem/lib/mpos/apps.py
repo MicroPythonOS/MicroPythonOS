@@ -5,9 +5,6 @@ import traceback
 
 import mpos.info
 import mpos.ui
-from mpos.app.activity import Activity
-from mpos.content.intent import Intent
-from mpos.content.package_manager import PackageManager
 
 def good_stack_size():
     stacksize = 24*1024 # less than 20KB crashes on desktop when doing heavy apps, like LightningPiggy's Wallet connections
@@ -58,6 +55,8 @@ def execute_script(script_source, is_file, classname, cwd=None):
             print("Variables:", variables.keys())
             main_activity = script_globals.get(classname)
             if main_activity:
+                from .app.activity import Activity
+                from .content.intent import Intent
                 start_time = utime.ticks_ms()
                 Activity.startActivity(None, Intent(activity_class=main_activity))
                 end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
@@ -112,6 +111,7 @@ def execute_script_new_thread(scriptname, is_file):
 
 # Returns True if successful
 def start_app(fullname):
+    from .content.package_manager import PackageManager
     mpos.ui.set_foreground_app(fullname)
     import utime
     start_time = utime.ticks_ms()
@@ -142,6 +142,7 @@ def start_app(fullname):
 
 # Starts the first launcher that's found
 def restart_launcher():
+    from .content.package_manager import PackageManager
     print("restart_launcher")
     # Stop all apps
     mpos.ui.remove_and_stop_all_activities()

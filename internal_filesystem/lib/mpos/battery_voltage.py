@@ -94,7 +94,7 @@ def read_raw_adc(force_refresh=False):
     WifiService = None
     if needs_wifi_disable:
         try:
-            from mpos.net.wifi_service import WifiService
+            from mpos import WifiService
         except ImportError:
             pass
 

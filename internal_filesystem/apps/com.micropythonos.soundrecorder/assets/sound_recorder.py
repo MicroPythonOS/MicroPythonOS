@@ -2,8 +2,7 @@
 import os
 import time
 
-from mpos.apps import Activity
-import mpos.ui
+from mpos import Activity, ui
 import mpos.audio.audioflinger as AudioFlinger
 
 

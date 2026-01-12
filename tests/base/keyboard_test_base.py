@@ -53,7 +53,7 @@ class KeyboardTestBase(GraphicalTestBase):
         Returns:
             tuple: (keyboard, textarea)
         """
-        from mpos.ui.keyboard import MposKeyboard
+        from mpos import MposKeyboard
         
         # Create textarea
         self.textarea = lv.textarea(self.screen)
@@ -84,7 +84,7 @@ class KeyboardTestBase(GraphicalTestBase):
         Returns:
             bool: True if button was clicked successfully
         """
-        from mpos.ui.testing import click_keyboard_button
+        from mpos import click_keyboard_button
         
         if self.keyboard is None:
             raise RuntimeError("No keyboard created. Call create_keyboard_scene() first.")

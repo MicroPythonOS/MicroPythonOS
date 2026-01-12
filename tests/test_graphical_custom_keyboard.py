@@ -13,11 +13,7 @@ import unittest
 import lvgl as lv
 import sys
 import os
-from mpos.ui.keyboard import MposKeyboard
-from mpos.ui.testing import (
-    wait_for_render,
-    capture_screenshot,
-)
+from mpos import MposKeyboard, wait_for_render, capture_screenshot
 
 
 class TestGraphicalMposKeyboard(unittest.TestCase):

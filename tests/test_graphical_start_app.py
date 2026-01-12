@@ -14,8 +14,7 @@ Usage:
 
 import unittest
 import mpos.apps
-import mpos.ui
-from mpos.ui.testing import wait_for_render
+from mpos import ui, wait_for_render
 
 
 class TestStartApp(unittest.TestCase):

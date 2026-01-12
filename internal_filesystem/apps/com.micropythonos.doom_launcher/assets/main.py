@@ -1,7 +1,6 @@
 import lvgl as lv
 import os
-from mpos.apps import Activity
-from mpos import TaskManager, sdcard
+from mpos import Activity, TaskManager, sdcard
 
 class Main(Activity):
 

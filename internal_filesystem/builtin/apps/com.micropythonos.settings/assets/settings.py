@@ -1,7 +1,6 @@
 import lvgl as lv
 
-from mpos.apps import Intent
-from mpos import PackageManager, SettingActivity, SettingsActivity
+from mpos import Intent, PackageManager, SettingActivity, SettingsActivity
 
 from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity

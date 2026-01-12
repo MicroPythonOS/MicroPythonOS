@@ -49,7 +49,7 @@ class TestConnectivityManagerWithNetwork(unittest.TestCase):
             del sys.modules['mpos.net.connectivity_manager']
 
         # Import fresh
-        from mpos.net.connectivity_manager import ConnectivityManager
+        from mpos import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         # Reset the singleton instance
@@ -301,7 +301,7 @@ class TestConnectivityManagerWithoutNetwork(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos.net.connectivity_manager import ConnectivityManager
+        from mpos import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         # Reset the singleton instance
@@ -382,7 +382,7 @@ class TestConnectivityManagerWaitUntilOnline(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos.net.connectivity_manager import ConnectivityManager
+        from mpos import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         ConnectivityManager._instance = None
@@ -417,7 +417,7 @@ class TestConnectivityManagerWaitUntilOnline(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos.net.connectivity_manager import ConnectivityManager
+        from mpos import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
         ConnectivityManager._instance = None
 
@@ -439,7 +439,7 @@ class TestConnectivityManagerEdgeCases(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos.net.connectivity_manager import ConnectivityManager
+        from mpos import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         ConnectivityManager._instance = None
@@ -550,7 +550,7 @@ class TestConnectivityManagerIntegration(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos.net.connectivity_manager import ConnectivityManager
+        from mpos import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         ConnectivityManager._instance = None

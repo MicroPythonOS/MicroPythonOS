@@ -23,7 +23,7 @@ import mpos.apps
 import mpos.ui
 import os
 import sys
-from mpos.ui.testing import (
+from mpos import (
     wait_for_render,
     capture_screenshot,
     find_label_with_text,

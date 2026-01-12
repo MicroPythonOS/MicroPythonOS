@@ -30,7 +30,7 @@ sys.modules['machine'] = type('module', (), {'PWM': MockPWM, 'Pin': lambda x: x}
 
 
 # Now import the module to test
-from mpos.audio.stream_rtttl import RTTTLStream
+from mpos.audio.stream_rtttl import RTTTLStream  # Keep this as-is since it's a specific internal module
 
 
 class TestRTTTL(unittest.TestCase):

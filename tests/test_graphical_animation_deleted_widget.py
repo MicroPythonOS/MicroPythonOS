@@ -19,7 +19,7 @@ import unittest
 import lvgl as lv
 import mpos.ui.anim
 import time
-from mpos.ui.testing import wait_for_render
+from mpos import wait_for_render
 
 
 class TestAnimationDeletedWidget(unittest.TestCase):
@@ -130,7 +130,7 @@ class TestAnimationDeletedWidget(unittest.TestCase):
         """
         print("Testing keyboard deletion scenario...")
 
-        from mpos.ui.keyboard import MposKeyboard
+        from mpos import MposKeyboard
 
         # Create textarea and keyboard (like QuasiNametag does)
         textarea = lv.textarea(self.screen)

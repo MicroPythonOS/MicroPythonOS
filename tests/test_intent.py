@@ -1,5 +1,5 @@
 import unittest
-from mpos.content.intent import Intent
+from mpos import Intent
 
 
 class TestIntent(unittest.TestCase):

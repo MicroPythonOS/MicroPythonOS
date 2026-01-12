@@ -1,7 +1,9 @@
-from mpos.apps import Activity
 import lvgl as lv
 
+from .app.activity import Activity
+
 class ResetIntoBootloader(Activity):
+    
     message = "Bootloader mode activated.\nYou can now install firmware over USB.\n\nReset the device to cancel."
 
     def onCreate(self):

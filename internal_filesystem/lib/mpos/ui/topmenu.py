@@ -1,12 +1,11 @@
 import lvgl as lv
 
-import mpos.ui
 import mpos.time
 import mpos.battery_voltage
-from .display import (get_display_width, get_display_height)
+from .display import (get_display_width, get_display_height, pct_of_display_width, pct_of_display_height, get_pointer_xy)
 from .util import (get_foreground_app)
-
-from mpos.ui.anim import WidgetAnimator
+from . import focus_direction
+from .anim import WidgetAnimator
 
 NOTIFICATION_BAR_HEIGHT=24
 
@@ -89,14 +88,14 @@ def create_notification_bar():
     # Time label
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
-    time_label.align(lv.ALIGN.LEFT_MID, mpos.ui.pct_of_display_width(10), 0)
+    time_label.align(lv.ALIGN.LEFT_MID, pct_of_display_width(10), 0)
     temp_label = lv.label(notification_bar)
     temp_label.set_text("00°C")
-    temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, mpos.ui.pct_of_display_width(7)	, 0)
+    temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, pct_of_display_width(7)	, 0)
     if False:
         memfree_label = lv.label(notification_bar)
         memfree_label.set_text("")
-        memfree_label.align_to(temp_label, lv.ALIGN.OUT_RIGHT_MID, mpos.ui.pct_of_display_width(7), 0)
+        memfree_label.align_to(temp_label, lv.ALIGN.OUT_RIGHT_MID, pct_of_display_width(7), 0)
     #style = lv.style_t()
     #style.init()
     #style.set_text_font(lv.font_montserrat_8)  # tiny font
@@ -114,12 +113,12 @@ def create_notification_bar():
     battery_icon = lv.label(notification_bar)
     battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
     #battery_icon.align_to(battery_label, lv.ALIGN.OUT_LEFT_MID, 0, 0)
-    battery_icon.align(lv.ALIGN.RIGHT_MID, -mpos.ui.pct_of_display_width(10), 0)
+    battery_icon.align(lv.ALIGN.RIGHT_MID, -pct_of_display_width(10), 0)
     battery_icon.add_flag(lv.obj.FLAG.HIDDEN) # keep it hidden until it has a correct value
     # WiFi icon
     wifi_icon = lv.label(notification_bar)
     wifi_icon.set_text(lv.SYMBOL.WIFI)
-    wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -mpos.ui.pct_of_display_width(1), 0)
+    wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -pct_of_display_width(1), 0)
     wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
     # Update time
     def update_time(timer):
@@ -158,7 +157,7 @@ def create_notification_bar():
     update_battery_icon() # run it immediately instead of waiting for the timer
 
     def update_wifi_icon(timer):
-        from mpos.net.wifi_service import WifiService
+        from mpos import WifiService
         if WifiService.is_connected():
             wifi_icon.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
@@ -372,7 +371,7 @@ def create_drawer(display=None):
 def drawer_scroll_callback(event):
     global scroll_start_y
     event_code=event.get_code()
-    x, y = mpos.ui.get_pointer_xy()
+    x, y = get_pointer_xy()
     #name = mpos.ui.get_event_name(event_code)
     #print(f"drawer_scroll: code={event_code}, name={name}, ({x},{y})")
     if event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y == None:

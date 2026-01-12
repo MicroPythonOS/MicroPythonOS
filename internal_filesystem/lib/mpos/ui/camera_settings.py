@@ -1,9 +1,9 @@
 import lvgl as lv
 
-import mpos.ui
-from mpos.apps import Activity
-from mpos.config import SharedPreferences
-from mpos.content.intent import Intent
+from ..config import SharedPreferences
+from ..app.activity import Activity
+from .display import pct_of_display_width, pct_of_display_height
+from . import anim
 
 class CameraSettingsActivity(Activity):
 
@@ -124,8 +124,8 @@ class CameraSettingsActivity(Activity):
 
         # Create tabview
         tabview = lv.tabview(screen)
-        tabview.set_tab_bar_size(mpos.ui.pct_of_display_height(15))
-        #tabview.set_size(lv.pct(100), mpos.ui.pct_of_display_height(80))
+        tabview.set_tab_bar_size(pct_of_display_height(15))
+        #tabview.set_size(lv.pct(100), pct_of_display_height(80))
 
         # Create Basic tab (always)
         basic_tab = tabview.add_tab("Basic")
@@ -227,7 +227,7 @@ class CameraSettingsActivity(Activity):
         textarea.align(lv.ALIGN.TOP_RIGHT, 0, 0)
 
         # Initialize keyboard (hidden initially)
-        from mpos.ui.keyboard import MposKeyboard
+        from ..indev.mpos_sdl_keyboard import MposKeyboard
         keyboard = MposKeyboard(parent)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)
@@ -238,7 +238,7 @@ class CameraSettingsActivity(Activity):
     def add_buttons(self, parent):
         # Save/Cancel buttons at bottom
         button_cont = lv.obj(parent)
-        button_cont.set_size(lv.pct(100), mpos.ui.pct_of_display_height(20))
+        button_cont.set_size(lv.pct(100), pct_of_display_height(20))
         button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         button_cont.set_style_border_width(0, 0)
@@ -255,9 +255,9 @@ class CameraSettingsActivity(Activity):
         save_label.center()
 
         cancel_button = lv.button(button_cont)
-        cancel_button.set_size(mpos.ui.pct_of_display_width(25), lv.SIZE_CONTENT)
+        cancel_button.set_size(pct_of_display_width(25), lv.SIZE_CONTENT)
         if self.scanqr_mode:
-            cancel_button.align(lv.ALIGN.BOTTOM_MID, mpos.ui.pct_of_display_width(10), 0)
+            cancel_button.align(lv.ALIGN.BOTTOM_MID, pct_of_display_width(10), 0)
         else:
             cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
@@ -266,7 +266,7 @@ class CameraSettingsActivity(Activity):
         cancel_label.center()
 
         erase_button = lv.button(button_cont)
-        erase_button.set_size(mpos.ui.pct_of_display_width(20), lv.SIZE_CONTENT)
+        erase_button.set_size(pct_of_display_width(20), lv.SIZE_CONTENT)
         erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
         erase_label = lv.label(erase_button)
@@ -353,11 +353,11 @@ class CameraSettingsActivity(Activity):
         def exposure_ctrl_changed(e=None):
             is_auto = aec_checkbox.get_state() & lv.STATE.CHECKED
             if is_auto:
-                mpos.ui.anim.smooth_hide(me_cont, duration=1000)
-                mpos.ui.anim.smooth_show(ae_cont, delay=1000)
+                anim.smooth_hide(me_cont, duration=1000)
+                anim.smooth_show(ae_cont, delay=1000)
             else:
-                mpos.ui.anim.smooth_hide(ae_cont, duration=1000)
-                mpos.ui.anim.smooth_show(me_cont, delay=1000)
+                anim.smooth_hide(ae_cont, duration=1000)
+                anim.smooth_show(me_cont, delay=1000)
 
         aec_checkbox.add_event_cb(exposure_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
         exposure_ctrl_changed()
@@ -381,9 +381,9 @@ class CameraSettingsActivity(Activity):
             is_auto = agc_checkbox.get_state() & lv.STATE.CHECKED
             gain_slider = self.ui_controls["agc_gain"]
             if is_auto:
-                mpos.ui.anim.smooth_hide(agc_cont, duration=1000)
+                anim.smooth_hide(agc_cont, duration=1000)
             else:
-                mpos.ui.anim.smooth_show(agc_cont, duration=1000)
+                anim.smooth_show(agc_cont, duration=1000)
 
         agc_checkbox.add_event_cb(gain_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
         gain_ctrl_changed()
@@ -413,9 +413,9 @@ class CameraSettingsActivity(Activity):
         def whitebal_changed(e=None):
             is_auto = wbcheckbox.get_state() & lv.STATE.CHECKED
             if is_auto:
-                mpos.ui.anim.smooth_hide(wb_cont, duration=1000)
+                anim.smooth_hide(wb_cont, duration=1000)
             else:
-                mpos.ui.anim.smooth_show(wb_cont, duration=1000)
+                anim.smooth_show(wb_cont, duration=1000)
         wbcheckbox.add_event_cb(whitebal_changed, lv.EVENT.VALUE_CHANGED, None)
         whitebal_changed()
 

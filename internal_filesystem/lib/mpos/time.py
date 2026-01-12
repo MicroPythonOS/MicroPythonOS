@@ -1,6 +1,6 @@
 import time
-import mpos.config
-from mpos.timezones import TIMEZONE_MAP
+from . import config
+from .timezones import TIMEZONE_MAP
 
 import localPTZtime
 
@@ -29,7 +29,7 @@ def sync_time():
 
 def refresh_timezone_preference():
     global timezone_preference
-    prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
+    prefs = config.SharedPreferences("com.micropythonos.settings")
     timezone_preference = prefs.get_string("timezone")
     if not timezone_preference:
         timezone_preference = "Etc/GMT" # Use a default value so that it doesn't refresh every time the time is requested

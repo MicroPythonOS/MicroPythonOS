@@ -49,8 +49,7 @@ battery power:
 import lvgl as lv
 import time
 
-import mpos.battery_voltage
-from mpos.apps import Activity
+from mpos import battery_voltage, Activity
 
 class Hello(Activity):
 

@@ -4,12 +4,13 @@ from .app.activity import Activity
 from .config import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net import download_manager as DownloadManager
+from .net.wifi_service import WifiService
 from .content.intent import Intent
 from .activity_navigator import ActivityNavigator
 from .content.package_manager import PackageManager
 from .task_manager import TaskManager
 
-# Common activities (optional)
+# Common activities
 from .app.activities.chooser import ChooserActivity
 from .app.activities.view import ViewActivity
 from .app.activities.share import ShareActivity
@@ -17,13 +18,77 @@ from .app.activities.share import ShareActivity
 from .ui.setting_activity import SettingActivity
 from .ui.settings_activity import SettingsActivity
 from .ui.camera_activity import CameraActivity
+from .ui.keyboard import MposKeyboard
+from .ui.testing import (
+    wait_for_render, capture_screenshot, simulate_click,
+    find_label_with_text, verify_text_present, print_screen_labels,
+    click_button, click_label
+)
+
+# UI utility functions
+from .ui.display import (
+    pct_of_display_width, pct_of_display_height,
+    get_display_width, get_display_height,
+    min_resolution, max_resolution, get_pointer_xy
+)
+from .ui.event import get_event_name, print_event
+from .ui.view import setContentView, back_screen
+from .ui.theme import set_theme
+from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
+from .ui.focus import save_and_clear_current_focusgroup
+from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
+from .ui.util import shutdown, set_foreground_app, get_foreground_app
+from .ui import focus_direction
+
+# Utility modules
+from . import apps
+from . import ui
+from . import config
+from . import net
+from . import content
+from . import time
+from . import sensor_manager
+from . import sdcard
+from . import battery_voltage
+from . import audio
+from . import hardware
+
+# Lazy import to avoid circular dependencies
+def __getattr__(name):
+    if name == 'bootloader':
+        from . import bootloader
+        return bootloader
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 __all__ = [
+    # Core framework
     "App",
     "Activity",
     "SharedPreferences",
-    "ConnectivityManager", "DownloadManager", "Intent",
+    "ConnectivityManager", "DownloadManager", "WifiService", "Intent",
     "ActivityNavigator", "PackageManager", "TaskManager",
+    # Common activities
     "ChooserActivity", "ViewActivity", "ShareActivity",
-    "SettingActivity", "SettingsActivity", "CameraActivity"
+    "SettingActivity", "SettingsActivity", "CameraActivity",
+    # UI components
+    "MposKeyboard",
+    # UI utility functions
+    "pct_of_display_width", "pct_of_display_height",
+    "get_display_width", "get_display_height",
+    "min_resolution", "max_resolution", "get_pointer_xy",
+    "get_event_name", "print_event",
+    "setContentView", "back_screen",
+    "set_theme",
+    "open_bar", "close_bar", "open_drawer", "drawer_open", "NOTIFICATION_BAR_HEIGHT",
+    "save_and_clear_current_focusgroup",
+    "handle_back_swipe", "handle_top_swipe",
+    "shutdown", "set_foreground_app", "get_foreground_app",
+    "focus_direction",
+    # Testing utilities
+    "wait_for_render", "capture_screenshot", "simulate_click",
+    "find_label_with_text", "verify_text_present", "print_screen_labels",
+    "click_button", "click_label",
+    # Submodules
+    "apps", "ui", "config", "net", "content", "time", "sensor_manager",
+    "sdcard", "battery_voltage", "audio", "hardware", "bootloader"
 ]

@@ -1,5 +1,5 @@
-from mpos.apps import Activity
-import mpos.ui
+import lvgl as lv
+from mpos import Activity, ui
 
 class FileManager(Activity):
 
@@ -40,7 +40,7 @@ class FileManager(Activity):
         # GET_SELF_SIZE
         # 47 STYLE CHANGED
         if event_code not in [2,19,23,24,25,26,27,28,29,30,31,32,33,47,49,52]:
-            name = mpos.ui.get_event_name(event_code)
+            name = ui.get_event_name(event_code)
             print(f"file_explorer_event_cb {event_code} with name {name}")
             if event_code == lv.EVENT.VALUE_CHANGED:
                 path = self.file_explorer.explorer_get_current_path()

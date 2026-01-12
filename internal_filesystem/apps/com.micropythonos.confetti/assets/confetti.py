@@ -2,8 +2,7 @@ import time
 import random
 import lvgl as lv
 
-from mpos.apps import Activity, Intent
-import mpos.config
+from mpos import Activity, Intent, config
 import mpos.ui
 
 class Confetti(Activity):

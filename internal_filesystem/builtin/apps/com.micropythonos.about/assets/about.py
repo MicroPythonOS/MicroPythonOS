@@ -1,4 +1,4 @@
-from mpos.apps import Activity
+from mpos import Activity, pct_of_display_width
 
 import mpos.info
 import sys
@@ -9,7 +9,7 @@ class About(Activity):
         screen = lv.obj()
         screen.set_style_border_width(0, 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        screen.set_style_pad_all(mpos.ui.pct_of_display_width(2), 0)
+        screen.set_style_pad_all(pct_of_display_width(2), 0)
         # Make the screen focusable so it can be scrolled with the arrow keys
         focusgroup = lv.group_get_default()
         if focusgroup:

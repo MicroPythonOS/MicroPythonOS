@@ -1,8 +1,7 @@
 import gc
 import os
 
-from mpos.apps import Activity
-import mpos.ui
+from mpos import Activity, ui
 import mpos.ui.anim
 
 class ImageView(Activity):

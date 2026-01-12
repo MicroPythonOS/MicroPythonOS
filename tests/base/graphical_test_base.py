@@ -98,7 +98,7 @@ class GraphicalTestBase(unittest.TestCase):
         Args:
             iterations: Number of render iterations (default: DEFAULT_RENDER_ITERATIONS)
         """
-        from mpos.ui.testing import wait_for_render
+        from mpos import wait_for_render
         if iterations is None:
             iterations = self.DEFAULT_RENDER_ITERATIONS
         wait_for_render(iterations)
@@ -115,7 +115,7 @@ class GraphicalTestBase(unittest.TestCase):
         Returns:
             bytes: The screenshot buffer
         """
-        from mpos.ui.testing import capture_screenshot
+        from mpos import capture_screenshot
         
         if width is None:
             width = self.SCREEN_WIDTH
@@ -136,7 +136,7 @@ class GraphicalTestBase(unittest.TestCase):
         Returns:
             The label widget if found, None otherwise
         """
-        from mpos.ui.testing import find_label_with_text
+        from mpos import find_label_with_text
         if parent is None:
             parent = lv.screen_active()
         return find_label_with_text(parent, text)
@@ -152,7 +152,7 @@ class GraphicalTestBase(unittest.TestCase):
         Returns:
             bool: True if text is found
         """
-        from mpos.ui.testing import verify_text_present
+        from mpos import verify_text_present
         if parent is None:
             parent = lv.screen_active()
         return verify_text_present(parent, text)
@@ -164,7 +164,7 @@ class GraphicalTestBase(unittest.TestCase):
         Args:
             parent: Parent widget to search in (default: current screen)
         """
-        from mpos.ui.testing import print_screen_labels
+        from mpos import print_screen_labels
         if parent is None:
             parent = lv.screen_active()
         print_screen_labels(parent)
@@ -180,7 +180,7 @@ class GraphicalTestBase(unittest.TestCase):
         Returns:
             bool: True if button was found and clicked
         """
-        from mpos.ui.testing import click_button
+        from mpos import click_button
         return click_button(text, use_send_event=use_send_event)
     
     def click_label(self, text, use_send_event=True):
@@ -194,7 +194,7 @@ class GraphicalTestBase(unittest.TestCase):
         Returns:
             bool: True if label was found and clicked
         """
-        from mpos.ui.testing import click_label
+        from mpos import click_label
         return click_label(text, use_send_event=use_send_event)
     
     def simulate_click(self, x, y):
@@ -208,7 +208,7 @@ class GraphicalTestBase(unittest.TestCase):
             x: X coordinate
             y: Y coordinate
         """
-        from mpos.ui.testing import simulate_click
+        from mpos import simulate_click
         simulate_click(x, y)
         self.wait_for_render()
     

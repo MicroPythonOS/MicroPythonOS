@@ -16,7 +16,7 @@ import unittest
 
 # Import graphical test infrastructure
 import lvgl as lv
-from mpos.ui.testing import (
+from mpos import (
     wait_for_render,
     simulate_click,
     find_button_with_text,
@@ -91,7 +91,7 @@ class TestIMUCalibrationUI(unittest.TestCase):
         # Look for actual values (not "--")
         has_values_before = False
         widgets = []
-        from mpos.ui.testing import get_all_widgets_with_text
+        from mpos import get_all_widgets_with_text
         for widget in get_all_widgets_with_text(lv.screen_active()):
             text = widget.get_text()
             # Look for patterns like "X: 0.00" or "Quality: Good"
