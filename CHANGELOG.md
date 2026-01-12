@@ -8,7 +8,7 @@
 - Improve robustness with custom exception that does not deinit() the TaskHandler
 - Improve robustness by removing TaskHandler callback that throws an uncaught exception
 - Make "Power Off" button on desktop exit completely
-- Promote SettingActivity from app to framework: now all apps can use it to easily build a setting screen
+- Create new SettingsActivity and SettingActivity framework so apps can easily add settings screens with just a few lines of code
 
 0.5.2
 =====
