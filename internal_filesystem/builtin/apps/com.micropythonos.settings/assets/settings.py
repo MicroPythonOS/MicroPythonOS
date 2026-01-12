@@ -43,19 +43,19 @@ class SettingsActivity(Activity):
         ]
         self.settings = [
             # Basic settings, alphabetically:
-            {"title": "Light/Dark Theme", "key": "theme_light_dark", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
-            {"title": "Theme Color", "key": "theme_primary_color", "value_label": None, "cont": None, "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
-            {"title": "Timezone", "key": "timezone", "value_label": None, "cont": None, "ui": "dropdown", "ui_options": self.get_timezone_tuples(), "changed_callback": lambda *args: mpos.time.refresh_timezone_preference()},
+            {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
+            {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
+            {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in mpos.time.get_timezones()], "changed_callback": lambda *args: mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
-            #{"title": "Audio Output Device", "key": "audio_device", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
-            {"title": "Auto Start App", "key": "auto_start_app", "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
-            {"title": "Check IMU Calibration", "key": "check_imu_calibration", "value_label": None, "cont": None, "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
-            {"title": "Calibrate IMU", "key": "calibrate_imu", "value_label": None, "cont": None, "ui": "activity", "activity_class": CalibrateIMUActivity},
+            #{"title": "Audio Output Device", "key": "audio_device", "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
+            {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
+            {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
+            {"title": "Calibrate IMU", "key": "calibrate_imu", "ui": "activity", "activity_class": CalibrateIMUActivity},
             # Expert settings, alphabetically
-            {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
-            {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "value_label": None, "cont": None, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
+            {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
+            {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
             # This is currently only in the drawer but would make sense to have it here for completeness:
-            #{"title": "Display Brightness", "key": "display_brightness", "value_label": None, "cont": None, "placeholder": "A value from 0 to 100."},
+            #{"title": "Display Brightness", "key": "display_brightness", "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)
         ]
 
@@ -70,7 +70,6 @@ class SettingsActivity(Activity):
     def onResume(self, screen):
         # reload settings because the SettingsActivity might have changed them - could be optimized to only load if it did:
         self.prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
-        #wallet_type = self.prefs.get_string("wallet_type") # unused
 
         # Create settings entries
         screen.clean()
@@ -124,38 +123,6 @@ class SettingsActivity(Activity):
         intent.putExtra("prefs", self.prefs)
         self.startActivity(intent)
 
-    @staticmethod
-    def get_timezone_tuples():
-        return [(tz, tz) for tz in mpos.time.get_timezones()]
-
-    def audio_device_changed(self):
-        """
-        Called when audio device setting changes.
-        Note: Changing device type at runtime requires a restart for full effect.
-        AudioFlinger initialization happens at boot.
-        """
-        import mpos.audio.audioflinger as AudioFlinger
-
-        new_value = self.prefs.get_string("audio_device", "auto")
-        print(f"Audio device setting changed to: {new_value}")
-        print("Note: Restart required for audio device change to take effect")
-
-        # Map setting values to device types
-        device_map = {
-            "auto": AudioFlinger.get_device_type(),  # Keep current
-            "i2s": AudioFlinger.DEVICE_I2S,
-            "buzzer": AudioFlinger.DEVICE_BUZZER,
-            "both": AudioFlinger.DEVICE_BOTH,
-            "null": AudioFlinger.DEVICE_NULL,
-        }
-
-        desired_device = device_map.get(new_value, AudioFlinger.get_device_type())
-        current_device = AudioFlinger.get_device_type()
-
-        if desired_device != current_device:
-            print(f"Desired device type ({desired_device}) differs from current ({current_device})")
-            print("Full device type change requires restart - current session continues with existing device")
-
     def focus_container(self, container):
         print(f"container {container} focused, setting border...")
         container.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
@@ -166,6 +133,8 @@ class SettingsActivity(Activity):
         print(f"container {container} defocused, unsetting border...")
         container.set_style_border_width(0, lv.PART.MAIN)
 
+
+    # Change handlers:
     def reset_into_bootloader(self, new_value):
         if new_value is not "bootloader":
             return
