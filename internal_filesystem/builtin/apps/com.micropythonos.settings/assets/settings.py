@@ -1,7 +1,6 @@
 import lvgl as lv
 from mpos.apps import Intent
-from mpos.ui import SettingsActivity
-from mpos import PackageManager, SettingActivity
+from mpos import PackageManager, SettingActivity, SettingsActivity
 import mpos.config
 import mpos.ui
 import mpos.time
