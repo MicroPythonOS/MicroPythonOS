@@ -12,9 +12,8 @@ from check_imu_calibration import CheckIMUCalibrationActivity
 # Used to list and edit all settings:
 class Settings(SettingsActivity):
 
-    def __init__(self):
-        super().__init__()
-        self.prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
+    """Override getIntent to provide prefs and settings via Intent extras"""
+    def getIntent(self):
         theme_colors = [
             ("Aqua Blue", "00ffff"),
             ("Bitcoin Orange", "f0a010"),
@@ -40,13 +39,19 @@ class Settings(SettingsActivity):
             ("Teal", "008080"),
             ("Turquoise", "40e0d0")
         ]
-        self.settings = [
+        # Create a mock intent-like object with extras
+        class MockIntent:
+            def __init__(self, extras):
+                self.extras = extras
+
+        return MockIntent({
+            "prefs": mpos.config.SharedPreferences("com.micropythonos.settings"),
+            "settings": [
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
             {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in mpos.time.get_timezones()], "changed_callback": lambda *args: mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
-            #{"title": "Audio Output Device", "key": "audio_device", "ui": "radiobuttons", "ui_options": [("Auto-detect", "auto"), ("I2S (Digital Audio)", "i2s"), ("Buzzer (PWM Tones)", "buzzer"), ("Both I2S and Buzzer", "both"), ("Disabled", "null")], "changed_callback": self.audio_device_changed},
             {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
             {"title": "Calibrate IMU", "key": "calibrate_imu", "ui": "activity", "activity_class": CalibrateIMUActivity},
@@ -56,7 +61,8 @@ class Settings(SettingsActivity):
             # This is currently only in the drawer but would make sense to have it here for completeness:
             #{"title": "Display Brightness", "key": "display_brightness", "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)
-        ]
+            ]
+        })
 
     # Change handlers:
     def reset_into_bootloader(self, new_value):

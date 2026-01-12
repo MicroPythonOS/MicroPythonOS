@@ -12,14 +12,8 @@ class SettingsActivity(Activity):
     settings = None
 
     def onCreate(self):
-        # Try to get from Intent first (for apps launched with Intent)
-        intent = self.getIntent()
-        if intent and intent.extras:
-            self.prefs = intent.extras.get("prefs")
-            self.settings = intent.extras.get("settings")
-
-        # If not set from Intent, subclasses should have set them in __init__()
-        # (for apps that define their own settings)
+        self.prefs = self.getIntent().extras.get("prefs")
+        self.settings = self.getIntent().extras.get("settings")
 
         print("creating SettingsActivity ui...")
         screen = lv.obj()
@@ -29,11 +23,6 @@ class SettingsActivity(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
-        # If prefs/settings not set yet, they should be set by subclass
-        if not self.prefs or not self.settings:
-            print("WARNING: SettingsActivity.onResume() called but prefs or settings not set")
-            return
-
         # Create settings entries
         screen.clean()
         # Get the group for focusable objects
