@@ -11,7 +11,7 @@
 "activities": [
     {
       "entrypoint": "assets/settings.py",
-      "classname": "SettingsActivity",
+      "classname": "Settings",
       "intent_filters": [
         {
           "action": "main",

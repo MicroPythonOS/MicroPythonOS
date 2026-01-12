@@ -1,6 +1,6 @@
 import lvgl as lv
 from mpos.apps import Intent
-from mpos.ui import SettingsActivity as SettingsActivityFramework
+from mpos.ui import SettingsActivity
 from mpos import PackageManager, SettingActivity
 import mpos.config
 import mpos.ui
@@ -10,7 +10,7 @@ from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity
 
 # Used to list and edit all settings:
-class SettingsActivity(SettingsActivityFramework):
+class Settings(SettingsActivity):
     def __init__(self):
         super().__init__()
         self.prefs = None
