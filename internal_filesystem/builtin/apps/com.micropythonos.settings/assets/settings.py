@@ -1,4 +1,5 @@
 import lvgl as lv
+
 from mpos.apps import Intent
 from mpos import PackageManager, SettingActivity, SettingsActivity
 import mpos.config
@@ -10,9 +11,10 @@ from check_imu_calibration import CheckIMUCalibrationActivity
 
 # Used to list and edit all settings:
 class Settings(SettingsActivity):
+
     def __init__(self):
         super().__init__()
-        self.prefs = None
+        self.prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
         theme_colors = [
             ("Aqua Blue", "00ffff"),
             ("Bitcoin Orange", "f0a010"),
@@ -55,11 +57,6 @@ class Settings(SettingsActivity):
             #{"title": "Display Brightness", "key": "display_brightness", "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)
         ]
-
-    def onCreate(self):
-        if not self.prefs:
-            self.prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
-        super().onCreate()
 
     # Change handlers:
     def reset_into_bootloader(self, new_value):
