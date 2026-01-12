@@ -2,14 +2,10 @@ import lvgl as lv
 
 from mpos.apps import Intent
 from mpos import PackageManager, SettingActivity, SettingsActivity
-import mpos.config
-import mpos.ui
-import mpos.time
 
 from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity
 
-# Used to list and edit all settings:
 class Settings(SettingsActivity):
 
     """Override getIntent to provide prefs and settings via Intent extras"""
@@ -40,7 +36,9 @@ class Settings(SettingsActivity):
             ("Turquoise", "40e0d0")
         ]
         intent = Intent()
+        import mpos.config
         intent.putExtra("prefs", mpos.config.SharedPreferences("com.micropythonos.settings"))
+        import mpos.time
         intent.putExtra("settings", [
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
@@ -98,4 +96,5 @@ class Settings(SettingsActivity):
         PackageManager.refresh_apps()
 
     def theme_changed(self, new_value):
+        import mpos.ui
         mpos.ui.set_theme(self.prefs)
