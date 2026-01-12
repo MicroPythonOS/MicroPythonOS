@@ -5,7 +5,6 @@ import sys
 import time
 import requests
 import usocket
-from machine import Timer
 
 try:
     import network
@@ -37,6 +36,7 @@ class ConnectivityManager:
             self.is_connected = True # If there's no way to check, then assume we're always "connected" and online
 
         # Start periodic validation timer (only on real embedded targets)
+        from machine import Timer # Import Timer lazily to allow test mocks to be set up first
         self._check_timer = Timer(1) # 0 is already taken by task_handler.py
         self._check_timer.init(period=8000, mode=Timer.PERIODIC, callback=self._periodic_check_connected)
         
