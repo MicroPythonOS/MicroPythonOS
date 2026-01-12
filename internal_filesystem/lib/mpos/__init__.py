@@ -22,7 +22,7 @@ from .ui.keyboard import MposKeyboard
 from .ui.testing import (
     wait_for_render, capture_screenshot, simulate_click,
     find_label_with_text, verify_text_present, print_screen_labels,
-    click_button, click_label
+    click_button, click_label, click_keyboard_button
 )
 
 # UI utility functions
@@ -87,7 +87,7 @@ __all__ = [
     # Testing utilities
     "wait_for_render", "capture_screenshot", "simulate_click",
     "find_label_with_text", "verify_text_present", "print_screen_labels",
-    "click_button", "click_label",
+    "click_button", "click_label", "click_keyboard_button",
     # Submodules
     "apps", "ui", "config", "net", "content", "time", "sensor_manager",
     "sdcard", "battery_voltage", "audio", "hardware", "bootloader"
