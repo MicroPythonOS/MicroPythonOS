@@ -98,7 +98,7 @@ class SettingsActivity(Activity):
 
             # Value label (smaller, below title)
             value = lv.label(setting_cont)
-            value.set_text(self.prefs.get_string(setting["key"], "(not set)"))
+            value.set_text(self.prefs.get_string(setting["key"], "(not set)" if not setting.get("dont_persist") else "(not persisted)"))
             value.set_style_text_font(lv.font_montserrat_12, 0)
             value.set_style_text_color(lv.color_hex(0x666666), 0)
             value.set_pos(0, 20)
