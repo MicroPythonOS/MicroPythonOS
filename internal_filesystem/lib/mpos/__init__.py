@@ -16,6 +16,7 @@ from .app.activities.share import ShareActivity
 
 from .ui.setting_activity import SettingActivity
 from .ui.settings_activity import SettingsActivity
+from .ui.camera_activity import CameraActivity
 
 __all__ = [
     "App",
@@ -24,5 +25,5 @@ __all__ = [
     "ConnectivityManager", "DownloadManager", "Intent",
     "ActivityNavigator", "PackageManager", "TaskManager",
     "ChooserActivity", "ViewActivity", "ShareActivity",
-    "SettingActivity", "SettingsActivity"
+    "SettingActivity", "SettingsActivity", "CameraActivity"
 ]
