@@ -12,7 +12,7 @@ from mpos.content.intent import Intent
 
 from .camera_settings import CameraSettingsActivity
 
-class CameraApp(Activity):
+class CameraActivity(Activity):
 
     PACKAGE = "com.micropythonos.camera"
     CONFIGFILE = "config.json"

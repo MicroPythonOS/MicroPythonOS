@@ -8,7 +8,7 @@ from mpos.ui.keyboard import MposKeyboard
 import mpos.apps
 from mpos.net.wifi_service import WifiService
 
-from mpos.ui.camera_app import CameraApp
+from mpos.ui.camera_activity import CameraActivity
 
 class WiFi(Activity):
     """
@@ -341,7 +341,7 @@ class EditNetwork(Activity):
             self.finish()
         else:
             print("Opening CameraApp")
-            self.startActivityForResult(Intent(activity_class=CameraApp).putExtra("scanqr_intent", True), self.gotqr_result_callback)
+            self.startActivityForResult(Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True), self.gotqr_result_callback)
 
     def gotqr_result_callback(self, result):
         print(f"QR capture finished, result: {result}")

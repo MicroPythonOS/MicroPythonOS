@@ -3,7 +3,7 @@ import lvgl as lv
 import mpos
 from mpos.apps import Activity, Intent
 from mpos.ui.keyboard import MposKeyboard
-from .camera_app import CameraApp
+from .camera_activity import CameraActivity
 
 """
 SettingActivity is used to edit one setting.
@@ -181,7 +181,7 @@ class SettingActivity(Activity):
 
     def cambutton_cb(self, event):
         print("cambutton clicked!")
-        self.startActivityForResult(Intent(activity_class=CameraApp).putExtra("scanqr_intent", True), self.gotqr_result_callback)
+        self.startActivityForResult(Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True), self.gotqr_result_callback)
 
     def save_setting(self, setting):
         ui = setting.get("ui")
