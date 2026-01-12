@@ -370,7 +370,10 @@ class MposSDLKeyboard(keypad_framework.KeypadDriver):
         else:
             self.__current_state = self.RELEASED
 
-        micropython.schedule(MposSDLKeyboard.read, self)
+        try:
+            micropython.schedule(MposSDLKeyboard.read, self)
+        except Exception as e:
+            print(f"mpos_sdl_keyboard.py failed to call micropython.schedule: {e}")
 
     def _get_key(self):
         return self.__current_state, self.__last_key
