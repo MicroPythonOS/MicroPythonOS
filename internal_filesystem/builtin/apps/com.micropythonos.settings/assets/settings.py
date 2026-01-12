@@ -39,14 +39,9 @@ class Settings(SettingsActivity):
             ("Teal", "008080"),
             ("Turquoise", "40e0d0")
         ]
-        # Create a mock intent-like object with extras
-        class MockIntent:
-            def __init__(self, extras):
-                self.extras = extras
-
-        return MockIntent({
-            "prefs": mpos.config.SharedPreferences("com.micropythonos.settings"),
-            "settings": [
+        intent = Intent()
+        intent.putExtra("prefs", mpos.config.SharedPreferences("com.micropythonos.settings"))
+        intent.putExtra("settings", [
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
@@ -61,8 +56,8 @@ class Settings(SettingsActivity):
             # This is currently only in the drawer but would make sense to have it here for completeness:
             #{"title": "Display Brightness", "key": "display_brightness", "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)
-            ]
-        })
+            ])
+        return intent
 
     # Change handlers:
     def reset_into_bootloader(self, new_value):
