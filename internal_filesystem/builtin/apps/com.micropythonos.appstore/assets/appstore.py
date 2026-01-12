@@ -33,7 +33,6 @@ class AppStore(Activity):
     _DEFAULT_BACKEND = _BACKEND_API_GITHUB + "," + _GITHUB_PROD_BASE_URL + "/" + _GITHUB_LIST
 
     apps = []
-    prefs = None
     can_check_network = True
 
     # Widgets:
@@ -46,18 +45,8 @@ class AppStore(Activity):
     progress_bar = None
     settings_button = None
 
-    @staticmethod
-    def _apply_default_styles(widget, border=0, radius=0, pad=0):
-        """Apply common default styles to reduce repetition"""
-        widget.set_style_border_width(border, 0)
-        widget.set_style_radius(radius, 0)
-        widget.set_style_pad_all(pad, 0)
-
-    def _add_click_handler(self, widget, callback, app):
-        """Register click handler to avoid repetition"""
-        widget.add_event_cb(lambda e, a=app: callback(a), lv.EVENT.CLICKED, None)
-
     def onCreate(self):
+        self.prefs = SharedPreferences(self.PACKAGE)
         self.main_screen = lv.obj()
         self.please_wait_label = lv.label(self.main_screen)
         self.please_wait_label.set_text("Downloading app index...")
@@ -75,9 +64,7 @@ class AppStore(Activity):
         self.setContentView(self.main_screen)
 
     def onResume(self, screen):
-        super().onResume(screen)
-        if not self.prefs:
-            self.prefs = SharedPreferences(self.PACKAGE)
+        super().onResume(screen) # super handles self._has_foreground
         if not len(self.apps):
             self.refresh_list()
 
@@ -232,6 +219,20 @@ class AppStore(Activity):
         intent.putExtra("appstore", self)
         self.startActivity(intent)
 
+    def _get_backend_config(self):
+        """Get backend configuration tuple (type, list_url, details_url)"""
+        pref_string = self.prefs.get_string("backend", self._DEFAULT_BACKEND)
+        return AppStore.backend_pref_string_to_backend(pref_string)
+
+    def get_backend_type_from_settings(self):
+        return self._get_backend_config()[0]
+
+    def get_backend_list_url_from_settings(self):
+        return self._get_backend_config()[1]
+
+    def get_backend_details_url_from_settings(self):
+        return self._get_backend_config()[2]
+
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
         name = bhapp.get("name")
@@ -252,20 +253,6 @@ class AppStore(Activity):
             print("Could not parse category")
         return App(name, None, short_description, None, icon_url, None, fullname, None, category, None)
 
-    def _get_backend_config(self):
-        """Get backend configuration tuple (type, list_url, details_url)"""
-        pref_string = self.prefs.get_string("backend", self._DEFAULT_BACKEND)
-        return AppStore.backend_pref_string_to_backend(pref_string)
-
-    def get_backend_type_from_settings(self):
-        return self._get_backend_config()[0]
-
-    def get_backend_list_url_from_settings(self):
-        return self._get_backend_config()[1]
-
-    def get_backend_details_url_from_settings(self):
-        return self._get_backend_config()[2]
-
     @staticmethod
     def get_backend_pref_string(index):
         backend_info = AppStore.backends[index]
@@ -282,3 +269,15 @@ class AppStore(Activity):
     @staticmethod
     def backend_pref_string_to_backend(string):
         return string.split(",")
+
+    @staticmethod
+    def _apply_default_styles(widget, border=0, radius=0, pad=0):
+        """Apply common default styles to reduce repetition"""
+        widget.set_style_border_width(border, 0)
+        widget.set_style_radius(radius, 0)
+        widget.set_style_pad_all(pad, 0)
+
+    @staticmethod
+    def _add_click_handler(widget, callback, app):
+        """Register click handler to avoid repetition"""
+        widget.add_event_cb(lambda e, a=app: callback(a), lv.EVENT.CLICKED, None)
