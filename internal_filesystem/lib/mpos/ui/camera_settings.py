@@ -103,11 +103,6 @@ class CameraSettingsActivity(Activity):
         ("1920x1080", "1920x1080"),
     ]
 
-    # These are taken from the Intent:
-    use_webcam = False
-    prefs = None
-    scanqr_mode = False
-
     # Widgets:
     button_cont = None
 
