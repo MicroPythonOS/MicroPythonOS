@@ -94,7 +94,8 @@ def read_raw_adc(force_refresh=False):
     WifiService = None
     if needs_wifi_disable:
         try:
-            from mpos import WifiService
+            # Needs actual path, not "from mpos" shorthand because it's mocked by test_battery_voltage.py
+            from mpos.net.wifi_service import WifiService
         except ImportError:
             pass
 
