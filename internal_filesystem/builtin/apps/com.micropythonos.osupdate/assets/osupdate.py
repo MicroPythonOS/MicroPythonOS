@@ -194,11 +194,12 @@ class OSUpdate(Activity):
         try:
             # Use UpdateChecker to fetch update info
             update_info = self.update_checker.fetch_update_info(hwid)
-            self.handle_update_info(
-                update_info["version"],
-                update_info["download_url"],
-                update_info["changelog"]
-            )
+            if self.has_foreground():
+                self.handle_update_info(
+                    update_info["version"],
+                    update_info["download_url"],
+                    update_info["changelog"]
+                )
         except ValueError as e:
             # JSON parsing or validation error (not network related)
             self.set_state(UpdateState.ERROR)
