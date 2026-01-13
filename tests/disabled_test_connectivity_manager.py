@@ -87,15 +87,15 @@ class TestConnectivityManagerWithNetwork(unittest.TestCase):
         cm = self.ConnectivityManager()
 
         # Should have network checking capability
-        self.assertTrue(cm.can_check_network)
+        self.assertTrue(cm.can_check_network, "a")
 
         # Should have created WLAN instance
-        self.assertIsNotNone(cm.wlan)
+        self.assertIsNotNone(cm.wlan, "b")
 
         # Should have created timer
         timer = MockTimer.get_timer(1)
         self.assertIsNotNone(timer)
-        self.assertTrue(timer.active)
+        self.assertTrue(timer.active, "c")
         self.assertEqual(timer.period, 8000)
         self.assertEqual(timer.mode, MockTimer.PERIODIC)
 

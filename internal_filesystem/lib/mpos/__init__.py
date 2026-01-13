@@ -20,9 +20,10 @@ from .ui.settings_activity import SettingsActivity
 from .ui.camera_activity import CameraActivity
 from .ui.keyboard import MposKeyboard
 from .ui.testing import (
-    wait_for_render, capture_screenshot, simulate_click,
-    find_label_with_text, verify_text_present, print_screen_labels,
-    click_button, click_label, click_keyboard_button
+    wait_for_render, capture_screenshot, simulate_click, get_widget_coords,
+    find_label_with_text, verify_text_present, print_screen_labels, find_text_on_screen,
+    click_button, click_label, click_keyboard_button, find_button_with_text,
+    get_all_widgets_with_text
 )
 
 # UI utility functions
@@ -85,9 +86,10 @@ __all__ = [
     "shutdown", "set_foreground_app", "get_foreground_app",
     "focus_direction",
     # Testing utilities
-    "wait_for_render", "capture_screenshot", "simulate_click",
-    "find_label_with_text", "verify_text_present", "print_screen_labels",
-    "click_button", "click_label", "click_keyboard_button",
+    "wait_for_render", "capture_screenshot", "simulate_click", "get_widget_coords",
+    "find_label_with_text", "verify_text_present", "print_screen_labels", "find_text_on_screen",
+    "click_button", "click_label", "click_keyboard_button", "find_button_with_text",
+    "get_all_widgets_with_text"
     # Submodules
     "apps", "ui", "config", "net", "content", "time", "sensor_manager",
     "sdcard", "battery_voltage", "audio", "hardware", "bootloader"
