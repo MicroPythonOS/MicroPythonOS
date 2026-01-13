@@ -1,5 +1,5 @@
 """
-Camera app wrapper that imports from the mpos.ui.camera_activity module.
+Camera app wrapper that imports from the camera_activity module.
 """
 
 from mpos import CameraActivity
