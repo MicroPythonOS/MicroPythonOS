@@ -3,7 +3,7 @@ import random
 import lvgl as lv
 
 from mpos import Activity, Intent, config
-import mpos.ui
+from mpos.ui import task_handler
 
 class Confetti(Activity):
     # === CONFIG ===
@@ -44,10 +44,10 @@ class Confetti(Activity):
         self.setContentView(self.screen)
 
     def onResume(self, screen):
-        mpos.ui.task_handler.add_event_cb(self.update_frame, 1)
+        task_handler.add_event_cb(self.update_frame, task_handler.TASK_HANDLER_STARTED)
 
     def onPause(self, screen):
-        mpos.ui.task_handler.remove_event_cb(self.update_frame)
+        task_handler.remove_event_cb(self.update_frame)
 
     def spawn_confetti(self):
         """Safely spawn a new confetti piece with unique img_idx"""
