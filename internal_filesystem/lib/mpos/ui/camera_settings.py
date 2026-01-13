@@ -93,9 +93,9 @@ class CameraSettingsActivity(Activity):
         ("720x720", "720x720"),
         #("800x600", "800x600"), # somehow this fails to initialize
         #("800x800", "800x800"), # somehow this fails to initialize
-        ("960x960", "960x960"),
-        #("1024x768", "1024x768"), # Makes more sense to show it after, even though resolution is lower than 960x960
-        #("1280x720", "1280x720"), # weird and same resolution as 960x960
+        #("1024x768", "1024x768"), # this resolution is lower than 960x960 but it looks higher
+        ("960x960", "960x960"), # ideal for QR scanning, quick and high quality scaling (binning)
+        #("1280x720", "1280x720"), # too thin (16:9) and same pixel area as 960x960
         #("1024x1024", "1024x1024"), # somehow this fails to initialize
         # Disabled because they use a lot of RAM and are very slow:
         #("1280x1024", "1280x1024"),
