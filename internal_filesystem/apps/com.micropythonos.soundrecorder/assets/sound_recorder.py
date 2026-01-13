@@ -2,8 +2,7 @@
 import os
 import time
 
-from mpos import Activity, ui
-import mpos.audio.audioflinger as AudioFlinger
+from mpos import Activity, ui, audio as AudioFlinger
 
 
 def _makedirs(path):
