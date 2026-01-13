@@ -400,15 +400,15 @@ class CameraActivity(Activity):
                 (960, 960): FrameSize.R960X960,
                 (1024, 768): FrameSize.XGA,
                 (1024,1024): FrameSize.R1024X1024,
-                (1280, 720): FrameSize.HD,
-                (1280, 1024): FrameSize.SXGA,
-                (1280, 1280): FrameSize.R1280X1280,
-                (1600, 1200): FrameSize.UXGA,
-                (1920, 1080): FrameSize.FHD,
+                #(1280, 720): FrameSize.HD,
+                #(1280, 1024): FrameSize.SXGA,
+                #(1280, 1280): FrameSize.R1280X1280,
+                #(1600, 1200): FrameSize.UXGA,
+                #(1920, 1080): FrameSize.FHD,
             }
     
-            frame_size = resolution_map.get((width, height), FrameSize.QVGA)
-            print(f"init_internal_cam: Using FrameSize for {width}x{height}")
+            frame_size = resolution_map.get((width, height), FrameSize.R240X240)
+            print(f"init_internal_cam: Using FrameSize {frame_size} for {width}x{height}")
     
             # Try to initialize, with one retry for I2C poweroff issue
             max_attempts = 3

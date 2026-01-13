@@ -34,13 +34,13 @@ echo "Patching $idfile"...
 echo "Check need to add esp32-camera..."
 if ! grep esp32-camera "$idfile"; then
 	echo "Adding esp32-camera to $idfile"
-	echo "  espressif/esp32-camera:
+	echo "  mpos/esp32-camera:
     git: https://github.com/MicroPythonOS/esp32-camera" >> "$idfile"
-	echo "Resulting file:"
-	cat "$idfile"
 else
 	echo "No need to add esp32-camera to $idfile"
 fi
+echo "Resulting file:"
+cat "$idfile"
 
 # Adding it doesn't hurt - it won't be used anyway as RLOTTIE is disabled in lv_conf.h
 echo "Check need to add esp_rlottie"
@@ -114,6 +114,9 @@ if [ "$target" == "esp32" ]; then
 	rm -rf lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
+	echo "Grepping..."
+	pwd
+	grep FrameSize.R480X480 -nril .
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
