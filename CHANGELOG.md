@@ -1,10 +1,12 @@
-0.5.3
+0.6.0
 =====
 - AppStore app: add Settings screen to choose backend
+- Camera app: fix aspect ratio for higher resolutions
 - WiFi app: check "hidden" in EditNetwork
 - Wifi app: add support for scanning wifi QR codes to "Add Network"
 - Make "Power Off" button on desktop exit completely
 - App framework: simplify MANIFEST.JSON
+- AudioFlinger framework: simplify import, use singleton class
 - Create new SettingsActivity and SettingActivity framework so apps can easily add settings screens with just a few lines of code
 - Improve robustness by catching unhandled app exceptions
 - Improve robustness with custom exception that does not deinit() the TaskHandler

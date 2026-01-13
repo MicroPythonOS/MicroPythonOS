@@ -291,7 +291,7 @@ mpos.sdcard.init(spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
 from machine import PWM, Pin
-import mpos.audio.audioflinger as AudioFlinger
+from mpos import AudioFlinger
 
 # Initialize buzzer (GPIO 46)
 buzzer = PWM(Pin(46), freq=550, duty=0)

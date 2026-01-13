@@ -111,7 +111,7 @@ except Exception as e:
     print(f"Warning: powering off camera got exception: {e}")
 
 # === AUDIO HARDWARE ===
-import mpos.audio.audioflinger as AudioFlinger
+from mpos import AudioFlinger
 
 # Note: Waveshare board has no buzzer or I2S audio
 AudioFlinger.init()

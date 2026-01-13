@@ -5,6 +5,7 @@ from .config import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net import download_manager as DownloadManager
 from .net.wifi_service import WifiService
+from .audio.audioflinger import AudioFlinger
 from .content.intent import Intent
 from .activity_navigator import ActivityNavigator
 from .content.package_manager import PackageManager
@@ -61,7 +62,7 @@ __all__ = [
     "App",
     "Activity",
     "SharedPreferences",
-    "ConnectivityManager", "DownloadManager", "WifiService", "Intent",
+    "ConnectivityManager", "DownloadManager", "WifiService", "AudioFlinger", "Intent",
     "ActivityNavigator", "PackageManager", "TaskManager",
     # Common activities
     "ChooserActivity", "ViewActivity", "ShareActivity",

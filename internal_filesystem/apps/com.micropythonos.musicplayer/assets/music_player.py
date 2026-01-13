@@ -2,7 +2,7 @@ import machine
 import os
 import time
 
-from mpos import Activity, Intent, sdcard, get_event_name, audio as AudioFlinger
+from mpos import Activity, Intent, sdcard, get_event_name, AudioFlinger
 
 class MusicPlayer(Activity):
 

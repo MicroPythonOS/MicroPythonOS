@@ -20,7 +20,7 @@ inject_mocks({
 })
 
 # Now import the module to test
-import mpos.audio.audioflinger as AudioFlinger
+from mpos.audio.audioflinger import AudioFlinger
 
 
 class TestAudioFlinger(unittest.TestCase):
@@ -45,8 +45,9 @@ class TestAudioFlinger(unittest.TestCase):
 
     def test_initialization(self):
         """Test that AudioFlinger initializes correctly."""
-        self.assertEqual(AudioFlinger._i2s_pins, self.i2s_pins)
-        self.assertEqual(AudioFlinger._buzzer_instance, self.buzzer)
+        af = AudioFlinger.get()
+        self.assertEqual(af._i2s_pins, self.i2s_pins)
+        self.assertEqual(af._buzzer_instance, self.buzzer)
 
     def test_has_i2s(self):
         """Test has_i2s() returns correct value."""
@@ -134,7 +135,8 @@ class TestAudioFlinger(unittest.TestCase):
 
     def test_audio_focus_check_no_current_stream(self):
         """Test audio focus allows playback when no stream is active."""
-        result = AudioFlinger._check_audio_focus(AudioFlinger.STREAM_MUSIC)
+        af = AudioFlinger.get()
+        result = af._check_audio_focus(AudioFlinger.STREAM_MUSIC)
         self.assertTrue(result)
 
     def test_volume_default_value(self):
@@ -156,7 +158,8 @@ class TestAudioFlingerRecording(unittest.TestCase):
         self.i2s_pins_no_mic = {'sck': 2, 'ws': 47, 'sd': 16}
 
         # Reset state
-        AudioFlinger._current_recording = None
+        af = AudioFlinger.get()
+        af._current_recording = None
         AudioFlinger.set_volume(70)
 
         AudioFlinger.init(

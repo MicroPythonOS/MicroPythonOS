@@ -96,7 +96,7 @@ def adc_to_voltage(adc_value):
 mpos.battery_voltage.init_adc(999, adc_to_voltage)
 
 # === AUDIO HARDWARE ===
-import mpos.audio.audioflinger as AudioFlinger
+from mpos import AudioFlinger
 
 # Desktop builds have no real audio hardware, but we simulate microphone
 # recording with a 440Hz sine wave for testing WAV file generation
