@@ -39,6 +39,7 @@ from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICAT
 from .ui.focus import save_and_clear_current_focusgroup
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.util import shutdown, set_foreground_app, get_foreground_app
+from .ui.anim import smooth_show, smooth_hide
 from .ui import focus_direction
 
 # Utility modules
@@ -78,12 +79,13 @@ __all__ = [
     "save_and_clear_current_focusgroup",
     "handle_back_swipe", "handle_top_swipe",
     "shutdown", "set_foreground_app", "get_foreground_app",
+    "smooth_show", "smooth_hide",
     "focus_direction",
     # Testing utilities
     "wait_for_render", "capture_screenshot", "simulate_click", "get_widget_coords",
     "find_label_with_text", "verify_text_present", "print_screen_labels", "find_text_on_screen",
     "click_button", "click_label", "click_keyboard_button", "find_button_with_text",
-    "get_all_widgets_with_text"
+    "get_all_widgets_with_text",
     # Submodules
     "apps", "ui", "config", "net", "content", "time", "sensor_manager",
     "sdcard", "battery_voltage", "audio", "hardware", "bootloader"

@@ -1,8 +1,7 @@
 import gc
 import os
 
-from mpos import Activity, ui
-import mpos.ui.anim
+from mpos import Activity, smooth_show, smooth_hide, pct_of_display_width, pct_of_display_height
 
 class ImageView(Activity):
 
@@ -103,9 +102,9 @@ class ImageView(Activity):
 
     def no_image_mode(self):
         self.label.set_text(f"No images found in {self.imagedir}...")
-        mpos.ui.anim.smooth_hide(self.prev_button)
-        mpos.ui.anim.smooth_hide(self.delete_button)
-        mpos.ui.anim.smooth_hide(self.next_button)
+        smooth_hide(self.prev_button)
+        smooth_hide(self.delete_button)
+        smooth_hide(self.next_button)
 
     def show_prev_image(self, event=None):
         print("showing previous image...")
@@ -132,21 +131,21 @@ class ImageView(Activity):
 
     def stop_fullscreen(self):
         print("stopping fullscreen")
-        mpos.ui.anim.smooth_show(self.label)
-        mpos.ui.anim.smooth_show(self.prev_button)
-        mpos.ui.anim.smooth_show(self.delete_button)
-        #mpos.ui.anim.smooth_show(self.play_button)
+        smooth_show(self.label)
+        smooth_show(self.prev_button)
+        smooth_show(self.delete_button)
+        #smooth_show(self.play_button)
         self.play_button.add_flag(lv.obj.FLAG.HIDDEN) # make it not accepting focus
-        mpos.ui.anim.smooth_show(self.next_button)
+        smooth_show(self.next_button)
 
     def start_fullscreen(self):
         print("starting fullscreen")
-        mpos.ui.anim.smooth_hide(self.label)
-        mpos.ui.anim.smooth_hide(self.prev_button, hide=False)
-        mpos.ui.anim.smooth_hide(self.delete_button, hide=False)
-        #mpos.ui.anim.smooth_hide(self.play_button, hide=False)
+        smooth_hide(self.label)
+        smooth_hide(self.prev_button, hide=False)
+        smooth_hide(self.delete_button, hide=False)
+        #smooth_hide(self.play_button, hide=False)
         self.play_button.remove_flag(lv.obj.FLAG.HIDDEN) # make it accepting focus
-        mpos.ui.anim.smooth_hide(self.next_button, hide=False)
+        smooth_hide(self.next_button, hide=False)
         self.unfocus() # focus on the invisible center button, not previous or next
 
     def show_prev_image_if_fullscreen(self, event=None):
@@ -272,8 +271,8 @@ class ImageView(Activity):
             pct = 100
         else:
             pct = 70
-        lvgl_w = mpos.ui.pct_of_display_width(pct)
-        lvgl_h = mpos.ui.pct_of_display_height(pct)
+        lvgl_w = pct_of_display_width(pct)
+        lvgl_h = pct_of_display_height(pct)
         print(f"scaling to size: {lvgl_w}x{lvgl_h}")
         header = lv.image_header_t()
         self.image.decoder_get_info(self.image.get_src(), header)
