@@ -70,9 +70,9 @@ class Hello(Activity):
 
         def update_bat(timer):
             #global l
-            r = mpos.battery_voltage.read_raw_adc()
-            v = mpos.battery_voltage.read_battery_voltage()
-            percent = mpos.battery_voltage.get_battery_percentage()
+            r = battery_voltage.read_raw_adc()
+            v = battery_voltage.read_battery_voltage()
+            percent = battery_voltage.get_battery_percentage()
             text = f"{time.localtime()}\n{r}\n{v}V\n{percent}%"
             #text = f"{time.localtime()}: {r}"
             print(text)
