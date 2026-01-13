@@ -31,6 +31,11 @@ sys.modules['usocket'] = MockUsocket
 mock_requests = MockRequests()
 sys.modules['requests'] = mock_requests
 
+# These tests need:
+# from mpos.net.connectivity_manager import ConnectivityManager
+# ...instead of
+# from mpos import ConnectivityManager
+# ...to make the mocking work.
 
 class TestConnectivityManagerWithNetwork(unittest.TestCase):
     """Test ConnectivityManager with network module available."""
@@ -49,7 +54,7 @@ class TestConnectivityManagerWithNetwork(unittest.TestCase):
             del sys.modules['mpos.net.connectivity_manager'] # Maybe this doesn't suffic now that it's imported through mpos
 
         # Import fresh
-        from mpos import ConnectivityManager
+        from mpos.net.connectivity_manager import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         # Reset the singleton instance
@@ -301,7 +306,7 @@ class TestConnectivityManagerWithoutNetwork(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos import ConnectivityManager
+        from mpos.net.connectivity_manager import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         # Reset the singleton instance
@@ -382,7 +387,7 @@ class TestConnectivityManagerWaitUntilOnline(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos import ConnectivityManager
+        from mpos.net.connectivity_manager import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         ConnectivityManager._instance = None
@@ -417,7 +422,7 @@ class TestConnectivityManagerWaitUntilOnline(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos import ConnectivityManager
+        from mpos.net.connectivity_manager import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
         ConnectivityManager._instance = None
 
@@ -439,7 +444,7 @@ class TestConnectivityManagerEdgeCases(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos import ConnectivityManager
+        from mpos.net.connectivity_manager import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         ConnectivityManager._instance = None
@@ -520,13 +525,13 @@ class TestConnectivityManagerEdgeCases(unittest.TestCase):
         # Go offline
         self.mock_network.set_connected(False)
         timer.callback(timer)
-        self.assertFalse(cm.is_online())
+        self.assertFalse(cm.is_online(), "a")
         self.assertEqual(notifications[-1], False)
 
         # Go online
         self.mock_network.set_connected(True)
         timer.callback(timer)
-        self.assertTrue(cm.is_online())
+        self.assertTrue(cm.is_online(), "b")
         self.assertEqual(notifications[-1], True)
 
         # Go offline again
@@ -550,7 +555,7 @@ class TestConnectivityManagerIntegration(unittest.TestCase):
         if 'mpos.net.connectivity_manager' in sys.modules:
             del sys.modules['mpos.net.connectivity_manager']
 
-        from mpos import ConnectivityManager
+        from mpos.net.connectivity_manager import ConnectivityManager
         self.ConnectivityManager = ConnectivityManager
 
         ConnectivityManager._instance = None
