@@ -262,12 +262,13 @@ class CameraActivity(Activity):
         result = self.remove_bom(result)
         result = self.print_qr_buffer(result)
         print(f"QR decoding found: {result}")
-        self.stop_qr_decoding()
         if self.scanqr_intent:
+            self.stop_qr_decoding(activate_non_qr_mode=False)
             self.setResult(True, result)
             self.finish()
         else:
             self.status_label.set_text(result) # in the future, the status_label text should be copy-paste-able
+            self.stop_qr_decoding()
 
     def snap_button_click(self, e):
         print("Taking picture...")
@@ -323,7 +324,7 @@ class CameraActivity(Activity):
         self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
         self.status_label.set_text(self.STATUS_SEARCHING_QR)
     
-    def stop_qr_decoding(self):
+    def stop_qr_decoding(self, activate_non_qr_mode=True):
         print("Deactivating live QR decoding...")
         self.scanqr_mode = False
         self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
@@ -331,15 +332,12 @@ class CameraActivity(Activity):
         if status_label_text in (self.STATUS_NO_CAMERA, self.STATUS_SEARCHING_QR, self.STATUS_FOUND_QR): # if it found a QR code, leave it
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
         # Check if it's necessary to restart the camera:
-        oldwidth = self.width
-        oldheight = self.height
-        oldcolormode = self.colormode
-        # Activate non-QR mode settings
+        if activate_non_qr_mode is False:
+            return
+        # Instead of checking if any setting changed, just reload and restart the camera:
         self.load_settings_cached()
-        # Check if it's necessary to restart the camera:
-        if self.width != oldwidth or self.height != oldheight or self.colormode != oldcolormode:
-            self.stop_cam()
-            self.start_cam()
+        self.stop_cam()
+        self.start_cam()
     
     def qr_button_click(self, e):
         if not self.scanqr_mode:
