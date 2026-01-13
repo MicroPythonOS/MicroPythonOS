@@ -2,8 +2,7 @@ import machine
 import os
 import time
 
-from mpos import Activity, Intent, sdcard
-import mpos.ui
+from mpos import Activity, Intent, sdcard, get_event_name
 import mpos.audio.audioflinger as AudioFlinger
 
 class MusicPlayer(Activity):
@@ -14,7 +13,7 @@ class MusicPlayer(Activity):
     def onCreate(self):
         screen = lv.obj()
         # the user might have recently plugged in the sd card so try to mount it
-        mpos.sdcard.mount_with_optional_format('/sdcard')
+        sdcard.mount_with_optional_format('/sdcard')
         self.file_explorer = lv.file_explorer(screen)
         self.file_explorer.explorer_open_dir('M:/')
         self.file_explorer.align(lv.ALIGN.CENTER, 0, 0)
@@ -29,12 +28,12 @@ class MusicPlayer(Activity):
 
     def onResume(self, screen):
         # the user might have recently plugged in the sd card so try to mount it
-        mpos.sdcard.mount_with_optional_format('/sdcard') # would be good to refresh the file_explorer so the /sdcard folder shows up
+        sdcard.mount_with_optional_format('/sdcard') # would be good to refresh the file_explorer so the /sdcard folder shows up
 
     def file_explorer_event_cb(self, event):
         event_code = event.get_code()
         if event_code not in [2,19,23,24,25,26,27,28,29,30,31,32,33,47,49,52]:
-            name = mpos.ui.get_event_name(event_code)
+            name = get_event_name(event_code)
             #print(f"file_explorer_event_cb {event_code} with name {name}")
             if event_code == lv.EVENT.VALUE_CHANGED:
                 path = self.file_explorer.explorer_get_current_path()
