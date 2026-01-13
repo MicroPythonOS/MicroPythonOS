@@ -16,9 +16,9 @@ class About(Activity):
             focusgroup.add_obj(screen)
 
         label0 = lv.label(screen)
-        label0.set_text(f"Hardware ID: {mpos.info.get_hardware_id()}")
+        label0.set_text(f"MicroPythonOS version: {mpos.info.CURRENT_OS_VERSION}")
         label1 = lv.label(screen)
-        label1.set_text(f"MicroPythonOS version: {mpos.info.CURRENT_OS_VERSION}")
+        label1.set_text(f"Hardware ID: {mpos.info.get_hardware_id()}")
         label2 = lv.label(screen)
         label2.set_text(f"sys.version: {sys.version}")
         label3 = lv.label(screen)
@@ -103,7 +103,7 @@ class About(Activity):
             # but they will not be able to install libraries into /lib.
             print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
             label11 = lv.label(screen)
-            label11.set_text(f"freezefs_mount_builtin exception (normal on dev builds): {e}")
+            label11.set_text(f"freezefs_mount_builtin exception (normal if internal storage partition has overriding /builtin folder): {e}")
         # Disk usage:
         import os
         try:
