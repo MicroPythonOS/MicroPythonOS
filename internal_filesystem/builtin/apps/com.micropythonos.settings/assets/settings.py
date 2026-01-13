@@ -95,5 +95,5 @@ class Settings(SettingsActivity):
         PackageManager.refresh_apps()
 
     def theme_changed(self, new_value):
-        import mpos.ui
-        mpos.ui.set_theme(self.prefs)
+        from mpos import set_theme
+        set_theme(self.prefs)

@@ -10,7 +10,7 @@
 # Most of this time is actually spent reading and parsing manifests.
 import lvgl as lv
 import mpos.apps
-from mpos import ui, PackageManager, Activity, pct_of_display_width
+from mpos import NOTIFICATION_BAR_HEIGHT, PackageManager, Activity, pct_of_display_width
 import time
 import uhashlib
 import ubinascii
@@ -28,9 +28,9 @@ class Launcher(Activity):
         main_screen = lv.obj()
         main_screen.set_style_border_width(0, lv.PART.MAIN)
         main_screen.set_style_radius(0, 0)
-        main_screen.set_pos(0, mpos.ui.topmenu.NOTIFICATION_BAR_HEIGHT)
+        main_screen.set_pos(0, NOTIFICATION_BAR_HEIGHT)
         main_screen.set_style_pad_hor(pct_of_display_width(2), 0)
-        main_screen.set_style_pad_ver(mpos.ui.topmenu.NOTIFICATION_BAR_HEIGHT, 0)
+        main_screen.set_style_pad_ver(NOTIFICATION_BAR_HEIGHT, 0)
         main_screen.set_flex_flow(lv.FLEX_FLOW.ROW_WRAP)
         self.setContentView(main_screen)
 

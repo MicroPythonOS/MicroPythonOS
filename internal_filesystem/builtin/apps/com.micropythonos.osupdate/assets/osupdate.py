@@ -52,7 +52,6 @@ class OSUpdate(Activity):
         self.force_update = lv.checkbox(self.main_screen)
         self.force_update.set_text("Force Update")
         self.force_update.add_event_cb(lambda *args: self.force_update_clicked(), lv.EVENT.VALUE_CHANGED, None)
-        #self.force_update.add_event_cb(lambda e: mpos.ui.print_event(e), lv.EVENT.ALL, None)
         self.force_update.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, pct_of_display_height(5))
         self.install_button = lv.button(self.main_screen)
         self.install_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
