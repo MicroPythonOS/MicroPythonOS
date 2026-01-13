@@ -51,7 +51,7 @@ class TestConnectivityManagerWithNetwork(unittest.TestCase):
         # Now import after network is mocked
         # Need to reload the module to pick up the new network module
         if 'mpos.net.connectivity_manager' in sys.modules:
-            del sys.modules['mpos.net.connectivity_manager'] # Maybe this doesn't suffic now that it's imported through mpos
+            del sys.modules['mpos.net.connectivity_manager']
 
         # Import fresh
         from mpos.net.connectivity_manager import ConnectivityManager
