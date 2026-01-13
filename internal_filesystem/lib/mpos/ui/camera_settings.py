@@ -97,6 +97,7 @@ class CameraSettingsActivity(Activity):
         ("1024x768",  "1024x768"),
         ("1280x720",  "1280x720"),
         ("1024x1024","1024x1024"),
+        # Disabled because they use a lot of RAM and are very slow:
         #("1280x1024", "1280x1024"),
         #("1280x1280", "1280x1280"),
         #("1600x1200", "1600x1200"),

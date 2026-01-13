@@ -399,9 +399,9 @@ class CameraActivity(Activity):
                 (800, 800): FrameSize.R800X800,
                 (960, 960): FrameSize.R960X960,
                 (1024, 768): FrameSize.XGA,
-                (1024,1024): FrameSize.R1024X1024,
-                # These are disabled in the settings because use a lot of RAM:
                 (1280, 720): FrameSize.HD,
+                (1024, 1024): FrameSize.R1024X1024,
+                # These are disabled in the settings because use a lot of RAM:
                 (1280, 1024): FrameSize.SXGA,
                 (1280, 1280): FrameSize.R1280X1280,
                 (1600, 1200): FrameSize.UXGA,
