@@ -121,8 +121,8 @@ class CameraActivity(Activity):
         if self.scanqr_mode or self.scanqr_intent:
             self.start_qr_decoding()
             if not self.cam and self.scanqr_mode:
-                print("No camera found, stopping camera app")
-                self.finish()
+                self.status_label.set_text(self.STATUS_NO_CAMERA)
+                # leave it open so the user can read the error and maybe open the settings
         else:
             self.load_settings_cached()
             self.start_cam()
