@@ -43,6 +43,7 @@ from .ui import focus_direction
 
 # Utility modules
 from . import apps
+from . import bootloader
 from . import ui
 from . import config
 from . import net
@@ -53,13 +54,6 @@ from . import sdcard
 from . import battery_voltage
 from . import audio
 from . import hardware
-
-# Lazy import to avoid circular dependencies
-def __getattr__(name):
-    if name == 'bootloader':
-        from . import bootloader
-        return bootloader
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 __all__ = [
     # Core framework
