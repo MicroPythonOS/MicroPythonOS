@@ -10,7 +10,8 @@ class About(Activity):
         label = lv.label(parent)
         label.set_text(text)
         if is_header:
-            label.set_style_text_color(lv.color_hex(0x4A90E2), 0)
+            primary_color = lv.theme_get_color_primary(None)
+            label.set_style_text_color(primary_color, 0)
             label.set_style_text_font(lv.font_montserrat_14, 0)
             label.set_style_margin_top(12, 0)
             label.set_style_margin_bottom(4, 0)

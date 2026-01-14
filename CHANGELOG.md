@@ -1,5 +1,6 @@
 0.6.0
 =====
+- About app: make more beautiful
 - AppStore app: add Settings screen to choose backend
 - Camera app: fix aspect ratio for higher resolutions
 - WiFi app: check "hidden" in EditNetwork
