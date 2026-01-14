@@ -380,128 +380,33 @@ class AudioFlinger:
 
 
 # ============================================================================
-# Class methods that delegate to singleton instance (like DownloadManager)
+# Class methods that delegate to singleton instance
 # ============================================================================
+# Store original instance methods BEFORE we replace them with class methods
+_original_methods = {}
+_methods_to_delegate = [
+    'init', 'play_wav', 'play_rtttl', 'record_wav', 'stop', 'pause', 'resume',
+    'set_volume', 'get_volume', 'is_playing', 'is_recording',
+    'has_i2s', 'has_buzzer', 'has_microphone'
+]
 
-# Store original instance methods before creating class methods
-_init_impl = AudioFlinger.init
-_play_wav_impl = AudioFlinger.play_wav
-_play_rtttl_impl = AudioFlinger.play_rtttl
-_record_wav_impl = AudioFlinger.record_wav
-_stop_impl = AudioFlinger.stop
-_pause_impl = AudioFlinger.pause
-_resume_impl = AudioFlinger.resume
-_set_volume_impl = AudioFlinger.set_volume
-_get_volume_impl = AudioFlinger.get_volume
-_is_playing_impl = AudioFlinger.is_playing
-_is_recording_impl = AudioFlinger.is_recording
-_has_i2s_impl = AudioFlinger.has_i2s
-_has_buzzer_impl = AudioFlinger.has_buzzer
-_has_microphone_impl = AudioFlinger.has_microphone
+for method_name in _methods_to_delegate:
+    _original_methods[method_name] = getattr(AudioFlinger, method_name)
+
+# Helper function to create delegating class methods
+def _make_class_method(method_name):
+    """Create a class method that delegates to the singleton instance."""
+    # Capture the original method in the closure
+    original_method = _original_methods[method_name]
+    
+    @classmethod
+    def class_method(cls, *args, **kwargs):
+        instance = cls.get()
+        return original_method(instance, *args, **kwargs)
+    
+    return class_method
 
 
-# Create class methods that delegate to singleton
-@classmethod
-def init(cls, i2s_pins=None, buzzer_instance=None):
-    """Initialize AudioFlinger with hardware configuration."""
-    return cls.get()._init_impl(i2s_pins=i2s_pins, buzzer_instance=buzzer_instance)
-
-@classmethod
-def play_wav(cls, file_path, stream_type=None, volume=None, on_complete=None):
-    """Play WAV file via I2S."""
-    return cls.get()._play_wav_impl(file_path=file_path, stream_type=stream_type, 
-                                    volume=volume, on_complete=on_complete)
-
-@classmethod
-def play_rtttl(cls, rtttl_string, stream_type=None, volume=None, on_complete=None):
-    """Play RTTTL ringtone via buzzer."""
-    return cls.get()._play_rtttl_impl(rtttl_string=rtttl_string, stream_type=stream_type,
-                                      volume=volume, on_complete=on_complete)
-
-@classmethod
-def record_wav(cls, file_path, duration_ms=None, on_complete=None, sample_rate=16000):
-    """Record audio from I2S microphone to WAV file."""
-    return cls.get()._record_wav_impl(file_path=file_path, duration_ms=duration_ms,
-                                      on_complete=on_complete, sample_rate=sample_rate)
-
-@classmethod
-def stop(cls):
-    """Stop current audio playback or recording."""
-    return cls.get()._stop_impl()
-
-@classmethod
-def pause(cls):
-    """Pause current audio playback."""
-    return cls.get()._pause_impl()
-
-@classmethod
-def resume(cls):
-    """Resume paused audio playback."""
-    return cls.get()._resume_impl()
-
-@classmethod
-def set_volume(cls, volume):
-    """Set system volume."""
-    return cls.get()._set_volume_impl(volume)
-
-@classmethod
-def get_volume(cls):
-    """Get system volume."""
-    return cls.get()._get_volume_impl()
-
-@classmethod
-def is_playing(cls):
-    """Check if audio is currently playing."""
-    return cls.get()._is_playing_impl()
-
-@classmethod
-def is_recording(cls):
-    """Check if audio is currently being recorded."""
-    return cls.get()._is_recording_impl()
-
-@classmethod
-def has_i2s(cls):
-    """Check if I2S audio is available."""
-    return cls.get()._has_i2s_impl()
-
-@classmethod
-def has_buzzer(cls):
-    """Check if buzzer is available."""
-    return cls.get()._has_buzzer_impl()
-
-@classmethod
-def has_microphone(cls):
-    """Check if I2S microphone is available."""
-    return cls.get()._has_microphone_impl()
-
-# Attach class methods to AudioFlinger class
-AudioFlinger.init = init
-AudioFlinger.play_wav = play_wav
-AudioFlinger.play_rtttl = play_rtttl
-AudioFlinger.record_wav = record_wav
-AudioFlinger.stop = stop
-AudioFlinger.pause = pause
-AudioFlinger.resume = resume
-AudioFlinger.set_volume = set_volume
-AudioFlinger.get_volume = get_volume
-AudioFlinger.is_playing = is_playing
-AudioFlinger.is_recording = is_recording
-AudioFlinger.has_i2s = has_i2s
-AudioFlinger.has_buzzer = has_buzzer
-AudioFlinger.has_microphone = has_microphone
-
-# Rename instance methods to avoid conflicts
-AudioFlinger._init_impl = _init_impl
-AudioFlinger._play_wav_impl = _play_wav_impl
-AudioFlinger._play_rtttl_impl = _play_rtttl_impl
-AudioFlinger._record_wav_impl = _record_wav_impl
-AudioFlinger._stop_impl = _stop_impl
-AudioFlinger._pause_impl = _pause_impl
-AudioFlinger._resume_impl = _resume_impl
-AudioFlinger._set_volume_impl = _set_volume_impl
-AudioFlinger._get_volume_impl = _get_volume_impl
-AudioFlinger._is_playing_impl = _is_playing_impl
-AudioFlinger._is_recording_impl = _is_recording_impl
-AudioFlinger._has_i2s_impl = _has_i2s_impl
-AudioFlinger._has_buzzer_impl = _has_buzzer_impl
-AudioFlinger._has_microphone_impl = _has_microphone_impl
+# Attach class methods to AudioFlinger
+for method_name in _methods_to_delegate:
+    setattr(AudioFlinger, method_name, _make_class_method(method_name))
