@@ -101,13 +101,6 @@ class SettingActivity(Activity):
         btn_cont.set_height(lv.SIZE_CONTENT)
         btn_cont.set_flex_flow(lv.FLEX_FLOW.ROW)
         btn_cont.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
-        # Save button
-        save_btn = lv.button(btn_cont)
-        save_btn.set_size(lv.pct(45), lv.SIZE_CONTENT)
-        save_label = lv.label(save_btn)
-        save_label.set_text("Save")
-        save_label.center()
-        save_btn.add_event_cb(lambda e, s=setting: self.save_setting(s), lv.EVENT.CLICKED, None)
         # Cancel button
         cancel_btn = lv.button(btn_cont)
         cancel_btn.set_size(lv.pct(45), lv.SIZE_CONTENT)
@@ -115,6 +108,13 @@ class SettingActivity(Activity):
         cancel_label.set_text("Cancel")
         cancel_label.center()
         cancel_btn.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
+        # Save button
+        save_btn = lv.button(btn_cont)
+        save_btn.set_size(lv.pct(45), lv.SIZE_CONTENT)
+        save_label = lv.label(save_btn)
+        save_label.set_text("Save")
+        save_label.center()
+        save_btn.add_event_cb(lambda e, s=setting: self.save_setting(s), lv.EVENT.CLICKED, None)
 
         if ui == "textarea" and CameraManager.has_camera(): # Scan QR button for text settings (only if camera available)
             cambutton = lv.button(settings_screen_detail)
