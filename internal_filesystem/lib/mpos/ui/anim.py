@@ -123,6 +123,47 @@ class WidgetAnimator:
         return anim
 
     @staticmethod
+    def change_widget(widget, anim_type="interpolate", duration=5000, delay=0, begin_value=0, end_value=100, display_change=None):
+        """
+        Animate a widget's text by interpolating between begin_value and end_value.
+
+        Args:
+            widget: The widget to animate (should have set_text method)
+            anim_type: Type of animation (currently "interpolate" is supported)
+            duration: Animation duration in milliseconds
+            delay: Animation delay in milliseconds
+            begin_value: Starting value for interpolation
+            end_value: Ending value for interpolation
+            display_change: callback to display the change in the UI
+
+        Returns:
+            The animation object
+        """
+        lv.anim_delete(widget, None)  # stop all ongoing animations to prevent visual glitches
+        anim = lv.anim_t()
+        anim.init()
+        anim.set_var(widget)
+        anim.set_delay(delay)
+        anim.set_duration(duration)
+
+        if anim_type == "interpolate":
+            print(f"Create interpolation animation (value from {begin_value} to {end_value})")
+            anim.set_values(begin_value, end_value)
+            if display_change is not None:
+                anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: display_change(value)))
+            else:
+                anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_text(str(value))))
+            anim.set_path_cb(lv.anim_t.path_ease_in_out)
+            # Ensure final value is set after animation
+            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_text(str(end_value))))
+        else:
+            print(f"change_widget: unknown anim_type {anim_type}")
+            return
+
+        anim.start()
+        return anim
+
+    @staticmethod
     def hide_complete_cb(widget, original_y=None, hide=True):
         #print("hide_complete_cb")
         if hide:
