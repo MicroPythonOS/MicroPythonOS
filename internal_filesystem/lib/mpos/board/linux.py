@@ -123,14 +123,21 @@ import mpos.sensor_manager as SensorManager
 SensorManager.init(None)
 
 # === CAMERA HARDWARE ===
-import mpos.camera_manager as CameraManager
 
-# Desktop builds can simulate a camera for testing
-CameraManager.add_camera(CameraManager.Camera(
-    lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
-    name="Desktop Simulated Camera",
-    vendor="MicroPythonOS"
-))
+try:
+    # Try to initialize webcam to verify it's available
+    import webcam
+    test_cam = webcam.init("/dev/video0", width=320, height=240)
+    if test_cam:
+        webcam.deinit(test_cam)
+        import mpos.camera_manager as CameraManager
+        CameraManager.add_camera(CameraManager.Camera(
+            lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
+            name="Video4Linux2 Camera",
+            vendor="ACME"
+        ))
+except Exception as e:
+    print(f"Info: webcam initialization failed, camera will not be available: {e}")
 
 print("linux.py finished")
 
