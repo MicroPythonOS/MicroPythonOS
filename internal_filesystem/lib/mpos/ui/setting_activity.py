@@ -4,6 +4,7 @@ from ..app.activity import Activity
 from .camera_activity import CameraActivity
 from .display import pct_of_display_width
 from . import anim
+from .. import camera_manager as CameraManager
 
 """
 SettingActivity is used to edit one setting.
@@ -115,7 +116,7 @@ class SettingActivity(Activity):
         cancel_label.center()
         cancel_btn.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
 
-        if ui == "textarea": # Scan QR button for text settings
+        if ui == "textarea" and CameraManager.has_camera(): # Scan QR button for text settings (only if camera available)
             cambutton = lv.button(settings_screen_detail)
             cambutton.align(lv.ALIGN.BOTTOM_MID, 0, 0)
             cambutton.set_size(lv.pct(100), lv.pct(30))
