@@ -151,11 +151,13 @@ class WidgetAnimator:
             anim.set_values(begin_value, end_value)
             if display_change is not None:
                 anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: display_change(value)))
+                # Ensure final value is set after animation
+                anim.set_completed_cb(lambda *args: safe_widget_access(lambda: display_change(end_value)))
             else:
                 anim.set_custom_exec_cb(lambda anim, value: safe_widget_access(lambda: widget.set_text(str(value))))
+                # Ensure final value is set after animation
+                anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_text(str(end_value))))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
-            # Ensure final value is set after animation
-            anim.set_completed_cb(lambda *args: safe_widget_access(lambda: widget.set_text(str(end_value))))
         else:
             print(f"change_widget: unknown anim_type {anim_type}")
             return
