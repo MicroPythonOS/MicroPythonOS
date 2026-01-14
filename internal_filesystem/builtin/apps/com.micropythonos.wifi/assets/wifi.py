@@ -4,6 +4,7 @@ import _thread
 
 from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, pct_of_display_width
 import mpos.apps
+import mpos.camera_manager as CameraManager
 
 class WiFi(Activity):
     """
@@ -286,7 +287,10 @@ class EditNetwork(Activity):
         if self.selected_ssid:
             label.set_text(self.action_button_label_forget)
         else:
-            label.set_text(self.action_button_label_scanqr)
+            if CameraManager.has_camera():
+                label.set_text(self.action_button_label_scanqr)
+            else:
+                self.forget_button.add_flag(lv.obj.FLAG.HIDDEN)
         # Close button
         self.cancel_button = lv.button(buttons)
         self.cancel_button.center()
