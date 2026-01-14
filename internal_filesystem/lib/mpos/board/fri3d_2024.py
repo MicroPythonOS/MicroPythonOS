@@ -311,10 +311,7 @@ i2s_pins = {
 }
 
 # Initialize AudioFlinger with I2S and buzzer
-AudioFlinger.init(
-    i2s_pins=i2s_pins,
-    buzzer_instance=buzzer
-)
+AudioFlinger(i2s_pins=i2s_pins, buzzer_instance=buzzer)
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
