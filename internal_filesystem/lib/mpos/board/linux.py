@@ -122,6 +122,16 @@ import mpos.sensor_manager as SensorManager
 # (On Linux desktop, this will fail gracefully but set _initialized flag)
 SensorManager.init(None)
 
+# === CAMERA HARDWARE ===
+import mpos.camera_manager as CameraManager
+
+# Desktop builds can simulate a camera for testing
+CameraManager.add_camera(CameraManager.Camera(
+    lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
+    name="Desktop Simulated Camera",
+    vendor="MicroPythonOS"
+))
+
 print("linux.py finished")
 
 

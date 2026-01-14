@@ -127,4 +127,14 @@ import mpos.sensor_manager as SensorManager
 # i2c_bus was created on line 75 for touch, reuse it for IMU
 SensorManager.init(i2c_bus, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
+# === CAMERA HARDWARE ===
+import mpos.camera_manager as CameraManager
+
+# Waveshare ESP32-S3-Touch-LCD-2 has OV5640 camera
+CameraManager.add_camera(CameraManager.Camera(
+    lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
+    name="OV5640",
+    vendor="OmniVision"
+))
+
 print("waveshare_esp32_s3_touch_lcd_2.py finished")

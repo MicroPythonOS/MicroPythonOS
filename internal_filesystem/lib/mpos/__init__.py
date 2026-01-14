@@ -52,6 +52,7 @@ from . import net
 from . import content
 from . import time
 from . import sensor_manager
+from . import camera_manager
 from . import sdcard
 from . import battery_voltage
 from . import audio
@@ -89,5 +90,5 @@ __all__ = [
     "get_all_widgets_with_text",
     # Submodules
     "apps", "ui", "config", "net", "content", "time", "sensor_manager",
-    "sdcard", "battery_voltage", "audio", "hardware", "bootloader"
+    "camera_manager", "sdcard", "battery_voltage", "audio", "hardware", "bootloader"
 ]
