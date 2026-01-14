@@ -5,10 +5,18 @@ import sys
 
 class About(Activity):
 
-    def _add_label(self, parent, text):
+    def _add_label(self, parent, text, is_header=False):
         """Helper to create and add a label with text."""
         label = lv.label(parent)
         label.set_text(text)
+        if is_header:
+            label.set_style_text_color(lv.color_hex(0x4A90E2), 0)
+            label.set_style_text_font(lv.font_montserrat_14, 0)
+            label.set_style_margin_top(12, 0)
+            label.set_style_margin_bottom(4, 0)
+        else:
+            label.set_style_text_font(lv.font_montserrat_12, 0)
+            label.set_style_margin_bottom(2, 0)
         return label
 
     def _add_disk_info(self, screen, path):
@@ -36,12 +44,14 @@ class About(Activity):
             focusgroup.add_obj(screen)
 
         # Basic OS info
+        self._add_label(screen, f"{lv.SYMBOL.HOME} System Information", is_header=True)
         self._add_label(screen, f"MicroPythonOS version: {mpos.info.CURRENT_OS_VERSION}")
         self._add_label(screen, f"Hardware ID: {mpos.info.get_hardware_id()}")
         self._add_label(screen, f"sys.version: {sys.version}")
         self._add_label(screen, f"sys.implementation: {sys.implementation}")
 
         # MPY version info
+        self._add_label(screen, f"{lv.SYMBOL.SETTINGS} MicroPython Version", is_header=True)
         sys_mpy = sys.implementation._mpy
         self._add_label(screen, f'mpy version: {sys_mpy & 0xff}')
         self._add_label(screen, f'mpy sub-version: {sys_mpy >> 8 & 3}')
@@ -57,10 +67,12 @@ class About(Activity):
             self._add_label(screen, 'mpy flags: ' + flags)
 
         # Platform info
+        self._add_label(screen, f"{lv.SYMBOL.FILE} Platform", is_header=True)
         self._add_label(screen, f"sys.platform: {sys.platform}")
         self._add_label(screen, f"sys.path: {sys.path}")
 
         # MicroPython and memory info
+        self._add_label(screen, f"{lv.SYMBOL.DRIVE} Memory & Performance", is_header=True)
         import micropython
         self._add_label(screen, f"micropython.opt_level(): {micropython.opt_level()}")
         import gc
@@ -72,6 +84,7 @@ class About(Activity):
 
         # Partition info (ESP32 only)
         try:
+            self._add_label(screen, f"{lv.SYMBOL.SD_CARD} Partition Info", is_header=True)
             from esp32 import Partition
             current = Partition(Partition.RUNNING)
             self._add_label(screen, f"Partition.RUNNING: {current}")
@@ -83,6 +96,7 @@ class About(Activity):
         # Machine info
         try:
             print("Trying to find out additional board info, not available on every platform...")
+            self._add_label(screen, f"{lv.SYMBOL.POWER} Machine Info", is_header=True)
             import machine
             self._add_label(screen, f"machine.freq: {machine.freq()}")
             self._add_label(screen, f"machine.unique_id(): {machine.unique_id()}")
@@ -94,6 +108,7 @@ class About(Activity):
         # Freezefs info (production builds only)
         try:
             print("Trying to find out freezefs info, this only works on production builds...") # dev builds already have the /builtin folder
+            self._add_label(screen, f"{lv.SYMBOL.DOWNLOAD} Frozen Filesystem", is_header=True)
             import freezefs_mount_builtin
             self._add_label(screen, f"freezefs_mount_builtin.date_frozen: {freezefs_mount_builtin.date_frozen}")
             self._add_label(screen, f"freezefs_mount_builtin.files_folders: {freezefs_mount_builtin.files_folders}")
@@ -110,6 +125,7 @@ class About(Activity):
             self._add_label(screen, f"freezefs_mount_builtin exception (normal if internal storage partition has overriding /builtin folder): {e}")
 
         # Disk usage info
+        self._add_label(screen, f"{lv.SYMBOL.DRIVE} Storage", is_header=True)
         self._add_disk_info(screen, '/')
         self._add_disk_info(screen, '/sdcard')
 
