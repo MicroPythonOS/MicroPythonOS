@@ -37,7 +37,7 @@ class AudioFlinger:
         if AudioFlinger._instance:
             return
         AudioFlinger._instance = self
-        
+
         self._i2s_pins = None          # I2S pin configuration dict (created per-stream)
         self._buzzer_instance = None   # PWM buzzer instance
         self._current_stream = None    # Currently playing stream
@@ -377,12 +377,11 @@ class AudioFlinger:
             bool: True if recording active, False otherwise
         """
         return self._current_recording is not None and self._current_recording.is_recording()
-
-
+ 
 # ============================================================================
-# Class methods that delegate to singleton instance
+# Class method forwarding to singleton instance
 # ============================================================================
-# Store original instance methods BEFORE we replace them with class methods
+# Store original instance methods before replacing them
 _original_methods = {}
 _methods_to_delegate = [
     'init', 'play_wav', 'play_rtttl', 'record_wav', 'stop', 'pause', 'resume',
@@ -393,10 +392,9 @@ _methods_to_delegate = [
 for method_name in _methods_to_delegate:
     _original_methods[method_name] = getattr(AudioFlinger, method_name)
 
-# Helper function to create delegating class methods
+# Helper to create delegating class methods
 def _make_class_method(method_name):
     """Create a class method that delegates to the singleton instance."""
-    # Capture the original method in the closure
     original_method = _original_methods[method_name]
     
     @classmethod
@@ -406,7 +404,7 @@ def _make_class_method(method_name):
     
     return class_method
 
-
 # Attach class methods to AudioFlinger
 for method_name in _methods_to_delegate:
     setattr(AudioFlinger, method_name, _make_class_method(method_name))
+
