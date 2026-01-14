@@ -31,13 +31,16 @@ class TestAudioFlinger(unittest.TestCase):
         self.buzzer = MockPWM(MockPin(46))
         self.i2s_pins = {'sck': 2, 'ws': 47, 'sd': 16}
 
-        # Reset volume to default before each test
-        AudioFlinger.set_volume(70)
+        # Reset singleton instance for each test
+        AudioFlinger._instance = None
 
         AudioFlinger(
             i2s_pins=self.i2s_pins,
             buzzer_instance=self.buzzer
         )
+        
+        # Reset volume to default after creating instance
+        AudioFlinger.set_volume(70)
 
     def tearDown(self):
         """Clean up after each test."""
@@ -52,20 +55,24 @@ class TestAudioFlinger(unittest.TestCase):
     def test_has_i2s(self):
         """Test has_i2s() returns correct value."""
         # With I2S configured
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=self.i2s_pins, buzzer_instance=None)
         self.assertTrue(AudioFlinger.has_i2s())
         
         # Without I2S configured
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=None, buzzer_instance=self.buzzer)
         self.assertFalse(AudioFlinger.has_i2s())
 
     def test_has_buzzer(self):
         """Test has_buzzer() returns correct value."""
         # With buzzer configured
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=None, buzzer_instance=self.buzzer)
         self.assertTrue(AudioFlinger.has_buzzer())
         
         # Without buzzer configured
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=self.i2s_pins, buzzer_instance=None)
         self.assertFalse(AudioFlinger.has_buzzer())
 
@@ -95,6 +102,7 @@ class TestAudioFlinger(unittest.TestCase):
     def test_no_hardware_rejects_playback(self):
         """Test that no hardware rejects all playback requests."""
         # Re-initialize with no hardware
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=None, buzzer_instance=None)
 
         # WAV should be rejected (no I2S)
@@ -108,6 +116,7 @@ class TestAudioFlinger(unittest.TestCase):
     def test_i2s_only_rejects_rtttl(self):
         """Test that I2S-only config rejects buzzer playback."""
         # Re-initialize with I2S only
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=self.i2s_pins, buzzer_instance=None)
 
         # RTTTL should be rejected (no buzzer)
@@ -117,6 +126,7 @@ class TestAudioFlinger(unittest.TestCase):
     def test_buzzer_only_rejects_wav(self):
         """Test that buzzer-only config rejects I2S playback."""
         # Re-initialize with buzzer only
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=None, buzzer_instance=self.buzzer)
 
         # WAV should be rejected (no I2S)
@@ -125,6 +135,9 @@ class TestAudioFlinger(unittest.TestCase):
 
     def test_is_playing_initially_false(self):
         """Test that is_playing() returns False initially."""
+        # Reset to ensure clean state
+        AudioFlinger._instance = None
+        AudioFlinger(i2s_pins=self.i2s_pins, buzzer_instance=self.buzzer)
         self.assertFalse(AudioFlinger.is_playing())
 
     def test_stop_with_no_playback(self):
@@ -157,15 +170,16 @@ class TestAudioFlingerRecording(unittest.TestCase):
         # I2S pins without microphone input
         self.i2s_pins_no_mic = {'sck': 2, 'ws': 47, 'sd': 16}
 
-        # Reset state
-        af = AudioFlinger.get()
-        af._current_recording = None
-        AudioFlinger.set_volume(70)
+        # Reset singleton instance for each test
+        AudioFlinger._instance = None
 
         AudioFlinger(
             i2s_pins=self.i2s_pins_with_mic,
             buzzer_instance=self.buzzer
         )
+        
+        # Reset volume to default after creating instance
+        AudioFlinger.set_volume(70)
 
     def tearDown(self):
         """Clean up after each test."""
@@ -173,16 +187,19 @@ class TestAudioFlingerRecording(unittest.TestCase):
 
     def test_has_microphone_with_sd_in(self):
         """Test has_microphone() returns True when sd_in pin is configured."""
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=self.i2s_pins_with_mic, buzzer_instance=None)
         self.assertTrue(AudioFlinger.has_microphone())
 
     def test_has_microphone_without_sd_in(self):
         """Test has_microphone() returns False when sd_in pin is not configured."""
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=self.i2s_pins_no_mic, buzzer_instance=None)
         self.assertFalse(AudioFlinger.has_microphone())
 
     def test_has_microphone_no_i2s(self):
         """Test has_microphone() returns False when no I2S is configured."""
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=None, buzzer_instance=self.buzzer)
         self.assertFalse(AudioFlinger.has_microphone())
 
@@ -192,11 +209,13 @@ class TestAudioFlingerRecording(unittest.TestCase):
 
     def test_record_wav_no_microphone(self):
         """Test that record_wav() fails when no microphone is configured."""
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=self.i2s_pins_no_mic, buzzer_instance=None)
         result = AudioFlinger.record_wav("test.wav")
         self.assertFalse(result, "record_wav() fails when no microphone is configured")
 
     def test_record_wav_no_i2s(self):
+        AudioFlinger._instance = None
         AudioFlinger(i2s_pins=None, buzzer_instance=self.buzzer)
         result = AudioFlinger.record_wav("test.wav")
         self.assertFalse(result, "record_wav() should fail when no I2S is configured")
