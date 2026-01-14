@@ -25,12 +25,11 @@ class AppStore(Activity):
 
     # Hardcoded list for now:
     backends = [
-        ("MPOS GitHub", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
-        ("BadgeHub Test", _BACKEND_API_BADGEHUB, _BADGEHUB_TEST_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
-        ("BadgeHub Prod", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS)
+        ("Apps.MicroPythonOS.com on GitHub", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
+        ("Badge.WHY2025.org by BadgeHub", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
+        ("BadgeHub.p1m.nl Testing (unstable)", _BACKEND_API_BADGEHUB, _BADGEHUB_TEST_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
     ]
 
-    _DEFAULT_BACKEND = _BACKEND_API_GITHUB + "," + _GITHUB_PROD_BASE_URL + "/" + _GITHUB_LIST
 
     apps = []
     can_check_network = True
@@ -47,6 +46,7 @@ class AppStore(Activity):
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.PACKAGE)
+        self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self.main_screen = lv.obj()
         self.please_wait_label = lv.label(self.main_screen)
         self.please_wait_label.set_text("Downloading app index...")
@@ -84,6 +84,7 @@ class AppStore(Activity):
         intent.putExtra("setting", {"title": "AppStore Backend",
                                     "key": "backend",
                                     "ui": "radiobuttons",
+                                    "default_value": self._DEFAULT_BACKEND,
                                     "ui_options":  [(backend[0], AppStore.get_backend_pref_string(index)) for index, backend in enumerate(AppStore.backends)],
                                     "changed_callback": self.backend_changed})
         self.startActivity(intent)
