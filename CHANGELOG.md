@@ -9,6 +9,7 @@
 - App framework: simplify MANIFEST.JSON
 - AudioFlinger framework: simplify import, use singleton class
 - Create new SettingsActivity and SettingActivity framework so apps can easily add settings screens with just a few lines of code
+- Create CameraManager framework so apps can easily check whether there is a camera available etc.
 - Improve robustness by catching unhandled app exceptions
 - Improve robustness with custom exception that does not deinit() the TaskHandler
 - Improve robustness by removing TaskHandler callback that throws an uncaught exception

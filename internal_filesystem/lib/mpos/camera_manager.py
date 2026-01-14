@@ -22,11 +22,6 @@ MIT License
 Copyright (c) 2024 MicroPythonOS contributors
 """
 
-try:
-    import _thread
-    _lock = _thread.allocate_lock()
-except ImportError:
-    _lock = None
 
 
 # Camera lens facing constants (matching Android Camera2 API)
@@ -105,22 +100,15 @@ def add_camera(camera):
         print(f"[CameraManager] Error: add_camera() requires Camera object, got {type(camera)}")
         return False
 
-    if _lock:
-        _lock.acquire()
-
-    try:
-        # Check if camera with same facing already exists
-        for existing in _cameras:
-            if existing.lens_facing == camera.lens_facing:
-                print(f"[CameraManager] Warning: Camera with facing {camera.lens_facing} already registered")
-                # Still add it (allow multiple cameras with same facing)
-        
-        _cameras.append(camera)
-        print(f"[CameraManager] Registered camera: {camera}")
-        return True
-    finally:
-        if _lock:
-            _lock.release()
+    # Check if camera with same facing already exists
+    for existing in _cameras:
+        if existing.lens_facing == camera.lens_facing:
+            print(f"[CameraManager] Warning: Camera with facing {camera.lens_facing} already registered")
+            # Still add it (allow multiple cameras with same facing)
+    
+    _cameras.append(camera)
+    print(f"[CameraManager] Registered camera: {camera}")
+    return True
 
 
 def get_cameras():
@@ -129,14 +117,7 @@ def get_cameras():
     Returns:
         list: List of Camera objects (copy of internal list)
     """
-    if _lock:
-        _lock.acquire()
-
-    try:
-        return _cameras.copy() if _cameras else []
-    finally:
-        if _lock:
-            _lock.release()
+    return _cameras.copy() if _cameras else []
 
 
 def get_camera_by_facing(lens_facing):
@@ -148,17 +129,10 @@ def get_camera_by_facing(lens_facing):
     Returns:
         Camera object or None if not found
     """
-    if _lock:
-        _lock.acquire()
-
-    try:
-        for camera in _cameras:
-            if camera.lens_facing == lens_facing:
-                return camera
-        return None
-    finally:
-        if _lock:
-            _lock.release()
+    for camera in _cameras:
+        if camera.lens_facing == lens_facing:
+            return camera
+    return None
 
 
 def has_camera():
@@ -167,14 +141,7 @@ def has_camera():
     Returns:
         bool: True if at least one camera available
     """
-    if _lock:
-        _lock.acquire()
-
-    try:
-        return len(_cameras) > 0
-    finally:
-        if _lock:
-            _lock.release()
+    return len(_cameras) > 0
 
 
 def get_camera_count():
@@ -183,14 +150,7 @@ def get_camera_count():
     Returns:
         int: Number of cameras
     """
-    if _lock:
-        _lock.acquire()
-
-    try:
-        return len(_cameras)
-    finally:
-        if _lock:
-            _lock.release()
+    return len(_cameras)
 
 
 # Initialize on module load

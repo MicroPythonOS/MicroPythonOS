@@ -10,6 +10,7 @@ from .content.intent import Intent
 from .activity_navigator import ActivityNavigator
 from .content.package_manager import PackageManager
 from .task_manager import TaskManager
+from . import camera_manager as CameraManager
 
 # Common activities
 from .app.activities.chooser import ChooserActivity
@@ -64,7 +65,7 @@ __all__ = [
     "Activity",
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioFlinger", "Intent",
-    "ActivityNavigator", "PackageManager", "TaskManager",
+    "ActivityNavigator", "PackageManager", "TaskManager", "CameraManager",
     # Common activities
     "ChooserActivity", "ViewActivity", "ShareActivity",
     "SettingActivity", "SettingsActivity", "CameraActivity",

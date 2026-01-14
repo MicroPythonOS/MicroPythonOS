@@ -1,3 +1,4 @@
+
 import unittest
 import sys
 import os
@@ -294,5 +295,4 @@ class TestCameraManagerUsagePattern(unittest.TestCase):
             has_camera = False
         
         self.assertFalse(has_camera)
-
 
