@@ -46,7 +46,7 @@ class SettingActivity(Activity):
 
         ui = setting.get("ui")
         ui_options = setting.get("ui_options")
-        current_setting = self.prefs.get_string(setting["key"])
+        current_setting = self.prefs.get_string(setting["key"], setting.get("default_value"))
         if ui and ui == "radiobuttons" and ui_options:
             # Create container for radio buttons
             self.radio_container = lv.obj(settings_screen_detail)
