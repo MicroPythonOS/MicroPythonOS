@@ -375,6 +375,17 @@ class AudioFlinger:
  
 # ============================================================================
 # Class method forwarding to singleton instance
+#
+# Instead of writing each function like this:
+#     @classmethod
+#    def has_microphone(cls):
+#        instance = cls.get()
+#        return instance._i2s_pins is not None and 'sd_in' in instance._i2s_pins
+#
+# They can be written like this:
+#    def has_microphone(self):
+#        return self._i2s_pins is not None and 'sd_in' in self._i2s_pins
+#
 # ============================================================================
 # Store original instance methods before replacing them
 _original_methods = {}
