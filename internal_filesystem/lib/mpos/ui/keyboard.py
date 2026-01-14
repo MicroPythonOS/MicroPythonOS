@@ -232,26 +232,6 @@ class MposKeyboard:
         self._keyboard.set_map(mode, key_map, ctrl_map)
         self._keyboard.set_mode(mode)
 
-
-    # Python magic method for automatic method forwarding
-    def __getattr__(self, name):
-        #print(f"[kbd] __getattr__ {name}")
-        """
-        Forward any undefined method/attribute to the underlying LVGL keyboard.
-
-        This allows MposKeyboard to support ALL lv.keyboard methods automatically
-        without needing to manually wrap each one. Any method not defined on
-        MposKeyboard will be forwarded to self._keyboard.
-
-        Examples:
-            keyboard.set_textarea(ta)       # Works
-            keyboard.align(lv.ALIGN.CENTER) # Works
-            keyboard.set_style_opa(128, 0)  # Works
-            keyboard.any_lvgl_method()      # Works!
-        """
-        # Forward to the underlying keyboard object
-        return getattr(self._keyboard, name)
-
     def scroll_after_show(self, timer):
         #self._textarea.scroll_to_view_recursive(True) # makes sense but doesn't work and breaks the keyboard scroll
         self._keyboard.scroll_to_view_recursive(True)
@@ -282,3 +262,22 @@ class MposKeyboard:
         mpos.ui.anim.smooth_hide(self._keyboard, duration=500)
         # Do this after the hide so the scrollbars disappear automatically if not needed
         scroll_timer = lv.timer_create(self.scroll_back_after_hide,550,None).set_repeat_count(1)
+
+    # Python magic method for automatic method forwarding
+    def __getattr__(self, name):
+        #print(f"[kbd] __getattr__ {name}")
+        """
+        Forward any undefined method/attribute to the underlying LVGL keyboard.
+
+        This allows MposKeyboard to support ALL lv.keyboard methods automatically
+        without needing to manually wrap each one. Any method not defined on
+        MposKeyboard will be forwarded to self._keyboard.
+
+        Examples:
+            keyboard.set_textarea(ta)       # Works
+            keyboard.align(lv.ALIGN.CENTER) # Works
+            keyboard.set_style_opa(128, 0)  # Works
+            keyboard.any_lvgl_method()      # Works!
+        """
+        # Forward to the underlying keyboard object
+        return getattr(self._keyboard, name)
