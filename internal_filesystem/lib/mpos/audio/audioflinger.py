@@ -32,35 +32,23 @@ class AudioFlinger:
     
     _instance = None  # Singleton instance
     
-    def __init__(self):
-        """Initialize AudioFlinger instance."""
-        if AudioFlinger._instance:
-            return
-        AudioFlinger._instance = self
-
-        self._i2s_pins = None          # I2S pin configuration dict (created per-stream)
-        self._buzzer_instance = None   # PWM buzzer instance
-        self._current_stream = None    # Currently playing stream
-        self._current_recording = None # Currently recording stream
-        self._volume = 50              # System volume (0-100)
-    
-    @classmethod
-    def get(cls):
-        """Get or create the singleton instance."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-    
-    def init(self, i2s_pins=None, buzzer_instance=None):
+    def __init__(self, i2s_pins=None, buzzer_instance=None):
         """
-        Initialize AudioFlinger with hardware configuration.
+        Initialize AudioFlinger instance with optional hardware configuration.
 
         Args:
             i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers (for I2S/WAV playback)
             buzzer_instance: PWM instance for buzzer (for RTTTL playback)
         """
-        self._i2s_pins = i2s_pins
-        self._buzzer_instance = buzzer_instance
+        if AudioFlinger._instance:
+            return
+        AudioFlinger._instance = self
+
+        self._i2s_pins = i2s_pins              # I2S pin configuration dict (created per-stream)
+        self._buzzer_instance = buzzer_instance # PWM buzzer instance
+        self._current_stream = None             # Currently playing stream
+        self._current_recording = None          # Currently recording stream
+        self._volume = 50                       # System volume (0-100)
 
         # Build status message
         capabilities = []
@@ -73,6 +61,13 @@ class AudioFlinger:
             print(f"AudioFlinger initialized: {', '.join(capabilities)}")
         else:
             print("AudioFlinger initialized: No audio hardware")
+
+    @classmethod
+    def get(cls):
+        """Get or create the singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
     def has_i2s(self):
         """Check if I2S audio is available for WAV playback."""
@@ -384,7 +379,7 @@ class AudioFlinger:
 # Store original instance methods before replacing them
 _original_methods = {}
 _methods_to_delegate = [
-    'init', 'play_wav', 'play_rtttl', 'record_wav', 'stop', 'pause', 'resume',
+    'play_wav', 'play_rtttl', 'record_wav', 'stop', 'pause', 'resume',
     'set_volume', 'get_volume', 'is_playing', 'is_recording',
     'has_i2s', 'has_buzzer', 'has_microphone'
 ]
@@ -396,7 +391,7 @@ for method_name in _methods_to_delegate:
 def _make_class_method(method_name):
     """Create a class method that delegates to the singleton instance."""
     original_method = _original_methods[method_name]
-    
+
     @classmethod
     def class_method(cls, *args, **kwargs):
         instance = cls.get()
@@ -407,4 +402,3 @@ def _make_class_method(method_name):
 # Attach class methods to AudioFlinger
 for method_name in _methods_to_delegate:
     setattr(AudioFlinger, method_name, _make_class_method(method_name))
-

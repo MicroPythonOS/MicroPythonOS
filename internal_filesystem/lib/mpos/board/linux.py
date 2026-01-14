@@ -108,7 +108,7 @@ i2s_pins = {
     'sck_in': 0,    # Simulated - not used on desktop
     'sd_in': 0,     # Simulated - enables microphone simulation
 }
-AudioFlinger.init(i2s_pins=i2s_pins)
+AudioFlinger(i2s_pins=i2s_pins)
 
 # === LED HARDWARE ===
 # Note: Desktop builds have no LED hardware
