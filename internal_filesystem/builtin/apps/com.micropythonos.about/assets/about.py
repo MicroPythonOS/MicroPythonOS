@@ -50,6 +50,8 @@ class About(Activity):
         self._add_label(screen, f"Hardware ID: {mpos.info.get_hardware_id()}")
         self._add_label(screen, f"sys.version: {sys.version}")
         self._add_label(screen, f"sys.implementation: {sys.implementation}")
+        self._add_label(screen, f"sys.byteorder: {sys.byteorder}")
+        self._add_label(screen, f"sys.maxsize: {sys.maxsize}")
 
         # MPY version info
         self._add_label(screen, f"{lv.SYMBOL.SETTINGS} MicroPython Version", is_header=True)
@@ -82,6 +84,25 @@ class About(Activity):
         #self._add_label(screen, f"micropython.mem_info(): {micropython.mem_info()}")
         #self._add_label(screen, f"micropython.qstr_info(): {micropython.qstr_info()}")
         self._add_label(screen, f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
+
+        # ESP32 hardware info
+        if sys.platform == "esp32":
+            try:
+                self._add_label(screen, f"{lv.SYMBOL.SETTINGS} ESP32 Hardware", is_header=True)
+                import esp32
+                self._add_label(screen, f"Flash size: {esp32.flash_size()} bytes")
+                try:
+                    psram_size = esp32.psram_size()
+                    self._add_label(screen, f"PSRAM size: {psram_size} bytes")
+                except:
+                    pass
+                try:
+                    idf_version = esp32.idf_version()
+                    self._add_label(screen, f"IDF version: {idf_version}")
+                except:
+                    pass
+            except Exception as e:
+                print(f"Could not get ESP32 hardware info: {e}")
 
         # Partition info (ESP32 only)
         try:
@@ -129,6 +150,22 @@ class About(Activity):
             error = f"Could not get freezefs_mount_builtin info because: {e}\nIt's normal to get an exception if the internal storage partition contains an overriding /builtin folder."
             print(error)
             self._add_label(screen, error)
+
+        # Display info
+        try:
+            self._add_label(screen, f"{lv.SYMBOL.IMAGE} Display", is_header=True)
+            disp = lv.disp_get_default()
+            if disp:
+                hor_res = disp.get_hor_res()
+                ver_res = disp.get_ver_res()
+                self._add_label(screen, f"Resolution: {hor_res}x{ver_res}")
+                try:
+                    dpi = disp.get_dpi()
+                    self._add_label(screen, f"DPI: {dpi}")
+                except:
+                    pass
+        except Exception as e:
+            print(f"Could not get display info: {e}")
 
         # Disk usage info
         self._add_label(screen, f"{lv.SYMBOL.DRIVE} Storage", is_header=True)
