@@ -92,7 +92,9 @@ class About(Activity):
             next_partition = current.get_next_update()
             self._add_label(screen, f"Next update partition: {next_partition}")
         except Exception as e:
-            print(f"Partition info got exception: {e}")
+            error = f"Could not find partition info because: {e}\nIt's normal to get this error on desktop."
+            print(error)
+            self._add_label(screen, error)
 
         # Machine info
         try:
@@ -104,11 +106,13 @@ class About(Activity):
             self._add_label(screen, f"machine.wake_reason(): {machine.wake_reason()}")
             self._add_label(screen, f"machine.reset_cause(): {machine.reset_cause()}")
         except Exception as e:
-            print(f"Additional board info got exception: {e}")
+            error = f"Could not find machine info because: {e}\nIt's normal to get this error on desktop."
+            print(error)
+            self._add_label(screen, error)
 
         # Freezefs info (production builds only)
         try:
-            print("Trying to find out freezefs info, this only works on production builds...") # dev builds already have the /builtin folder
+            print("Trying to find out freezefs info")
             self._add_label(screen, f"{lv.SYMBOL.DOWNLOAD} Frozen Filesystem", is_header=True)
             import freezefs_mount_builtin
             self._add_label(screen, f"freezefs_mount_builtin.date_frozen: {freezefs_mount_builtin.date_frozen}")
@@ -122,8 +126,9 @@ class About(Activity):
             # and then they install a prod build (with OSUpdate) that then is unable to mount the freezefs into /builtin
             # BUT which will still have the frozen-inside /lib folder. So the user will be able to install apps into /builtin
             # but they will not be able to install libraries into /lib.
-            print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
-            self._add_label(screen, f"freezefs_mount_builtin exception (normal if internal storage partition has overriding /builtin folder): {e}")
+            error = f"Could not get freezefs_mount_builtin info because: {e}\nIt's normal to get an exception if the internal storage partition contains an overriding /builtin folder."
+            print(error)
+            self._add_label(screen, error)
 
         # Disk usage info
         self._add_label(screen, f"{lv.SYMBOL.DRIVE} Storage", is_header=True)
