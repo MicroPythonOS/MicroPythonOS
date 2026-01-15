@@ -31,7 +31,7 @@ from .ui.testing import (
 # UI utility functions
 from .ui.display import (
     pct_of_display_width, pct_of_display_height,
-    get_display_width, get_display_height,
+    get_display_width, get_display_height, get_dpi,
     min_resolution, max_resolution, get_pointer_xy
 )
 from .ui.event import get_event_name, print_event
@@ -73,7 +73,7 @@ __all__ = [
     "MposKeyboard",
     # UI utility functions
     "pct_of_display_width", "pct_of_display_height",
-    "get_display_width", "get_display_height",
+    "get_display_width", "get_display_height", "get_dpi",
     "min_resolution", "max_resolution", "get_pointer_xy",
     "get_event_name", "print_event",
     "setContentView", "back_screen",

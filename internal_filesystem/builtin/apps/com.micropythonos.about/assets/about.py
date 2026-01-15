@@ -1,4 +1,4 @@
-from mpos import Activity, pct_of_display_width
+from mpos import Activity, pct_of_display_width, get_display_width, get_display_height, get_dpi
 
 import mpos.info
 import sys
@@ -90,32 +90,22 @@ class About(Activity):
             try:
                 self._add_label(screen, f"{lv.SYMBOL.SETTINGS} ESP32 Hardware", is_header=True)
                 import esp32
-                self._add_label(screen, f"Flash size: {esp32.flash_size()} bytes")
-                try:
-                    psram_size = esp32.psram_size()
-                    self._add_label(screen, f"PSRAM size: {psram_size} bytes")
-                except:
-                    pass
-                try:
-                    idf_version = esp32.idf_version()
-                    self._add_label(screen, f"IDF version: {idf_version}")
-                except:
-                    pass
+                self._add_label(screen, f"Temperature: {esp32.mcu_temperature()} °C")
             except Exception as e:
                 print(f"Could not get ESP32 hardware info: {e}")
 
-        # Partition info (ESP32 only)
-        try:
-            self._add_label(screen, f"{lv.SYMBOL.SD_CARD} Partition Info", is_header=True)
-            from esp32 import Partition
-            current = Partition(Partition.RUNNING)
-            self._add_label(screen, f"Partition.RUNNING: {current}")
-            next_partition = current.get_next_update()
-            self._add_label(screen, f"Next update partition: {next_partition}")
-        except Exception as e:
-            error = f"Could not find partition info because: {e}\nIt's normal to get this error on desktop."
-            print(error)
-            self._add_label(screen, error)
+            # Partition info (ESP32 only)
+            try:
+                self._add_label(screen, f"{lv.SYMBOL.SD_CARD} Partition Info", is_header=True)
+                from esp32 import Partition
+                current = Partition(Partition.RUNNING)
+                self._add_label(screen, f"Partition.RUNNING: {current}")
+                next_partition = current.get_next_update()
+                self._add_label(screen, f"Next update partition: {next_partition}")
+            except Exception as e:
+                error = f"Could not find partition info because: {e}\nIt's normal to get this error on desktop."
+                print(error)
+                self._add_label(screen, error)
 
         # Machine info
         try:
@@ -154,16 +144,11 @@ class About(Activity):
         # Display info
         try:
             self._add_label(screen, f"{lv.SYMBOL.IMAGE} Display", is_header=True)
-            disp = lv.disp_get_default()
-            if disp:
-                hor_res = disp.get_hor_res()
-                ver_res = disp.get_ver_res()
-                self._add_label(screen, f"Resolution: {hor_res}x{ver_res}")
-                try:
-                    dpi = disp.get_dpi()
-                    self._add_label(screen, f"DPI: {dpi}")
-                except:
-                    pass
+            hor_res = get_display_width()
+            ver_res = get_display_height()
+            self._add_label(screen, f"Resolution: {hor_res}x{ver_res}")
+            dpi = get_dpi()
+            self._add_label(screen, f"Dots Per Inch (dpi): {dpi}")
         except Exception as e:
             print(f"Could not get display info: {e}")
 

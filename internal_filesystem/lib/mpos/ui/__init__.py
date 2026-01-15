@@ -7,7 +7,7 @@ from .theme import set_theme
 from .topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
 from .focus import save_and_clear_current_focusgroup
 from .display import (
-    get_display_width, get_display_height,
+    get_display_width, get_display_height, get_dpi,
     pct_of_display_width, pct_of_display_height,
     min_resolution, max_resolution,
     get_pointer_xy   # ← now correct
@@ -28,7 +28,7 @@ __all__ = [
     "set_theme",
     "open_bar", "close_bar", "open_drawer", "drawer_open", "NOTIFICATION_BAR_HEIGHT",
     "save_and_clear_current_focusgroup",
-    "get_display_width", "get_display_height",
+    "get_display_width", "get_display_height", "get_dpi",
     "pct_of_display_width", "pct_of_display_height",
     "min_resolution", "max_resolution",
     "get_pointer_xy",

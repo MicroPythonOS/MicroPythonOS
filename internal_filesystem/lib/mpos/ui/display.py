@@ -3,14 +3,16 @@ import lvgl as lv
 
 _horizontal_resolution = None
 _vertical_resolution = None
+_dpi = None
 
 def init_rootscreen():
-    global _horizontal_resolution, _vertical_resolution
+    global _horizontal_resolution, _vertical_resolution, _dpi
     screen = lv.screen_active()
     disp = screen.get_display()
     _horizontal_resolution = disp.get_horizontal_resolution()
     _vertical_resolution = disp.get_vertical_resolution()
-    print(f"init_rootscreen set _vertical_resolution to {_vertical_resolution}")
+    _dpi = disp.get_dpi()
+    print(f"init_rootscreen set resolution to {_horizontal_resolution}x{_vertical_resolution} at {_dpi} DPI")
     label = lv.label(screen)
     label.set_text("Welcome to MicroPythonOS")
     label.center()
@@ -40,11 +42,12 @@ def max_resolution():
     return max(_horizontal_resolution, _vertical_resolution)
 
 def get_display_width():
-    if _horizontal_resolution is None:
-        _init_resolution()
     return _horizontal_resolution
 
 def get_display_height():
-    if _vertical_resolution is None:
-        _init_resolution()
     return _vertical_resolution
+
+def get_dpi():
+    print(f"get_dpi_called {_dpi}")
+    return _dpi
+    
