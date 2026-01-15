@@ -2,18 +2,17 @@
 =====
 - About app: make more beautiful
 - AppStore app: add Settings screen to choose backend
-- Camera app: fix aspect ratio for higher resolutions
-- WiFi app: check "hidden" in EditNetwork
-- Wifi app: add support for scanning wifi QR codes to "Add Network"
-- Make "Power Off" button on desktop exit completely
-- App framework: simplify MANIFEST.JSON
-- AudioFlinger framework: simplify import, use singleton class
+- Camera app and QR scanning: fix aspect ratio for higher resolutions
+- WiFi app: check 'hidden' in EditNetwork
+- Wifi app: add support for scanning wifi QR codes to 'Add Network'
 - Create new SettingsActivity and SettingActivity framework so apps can easily add settings screens with just a few lines of code
 - Create CameraManager framework so apps can easily check whether there is a camera available etc.
+- Simplify and unify most frameworks to make developing apps easier
 - Improve robustness by catching unhandled app exceptions
 - Improve robustness with custom exception that does not deinit() the TaskHandler
 - Improve robustness by removing TaskHandler callback that throws an uncaught exception
 - Don't rate-limit update_ui_threadsafe_if_foreground
+- Make 'Power Off' button on desktop exit completely
 
 0.5.2
 =====
