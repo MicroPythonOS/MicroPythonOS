@@ -47,7 +47,10 @@ class ActivityNavigator:
     @staticmethod
     def _launch_activity(intent, result_callback=None):
         """Launch an activity and set up result callback."""
-        activity = intent.activity_class()
+        activity = intent.activity_class
+        if callable(activity):
+            # Instantiate the class if necessary
+            activity = activity()
         activity.intent = intent
         activity._result_callback = result_callback  # Pass callback to activity
         start_time = utime.ticks_ms()
