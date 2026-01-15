@@ -17,13 +17,10 @@ rm "$outputjson"
 # These apps are for testing, or aren't ready yet:
 # com.quasikili.quasidoodle doesn't work on touch screen devices
 # com.micropythonos.filemanager doesn't do anything other than let you browse the filesystem, so it's confusing
-# com.micropythonos.confetti crashes when closing
-# com.micropythonos.showfonts is slow to open
-# com.micropythonos.draw isnt very useful
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.showbattery is just a test
-# com.micropythonos.doom isn't ready because the firmware doesn't have doom built-in yet
-blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.confetti com.micropythonos.showfonts com.micropythonos.draw com.micropythonos.errortest com.micropythonos.showbattery com.micropythonos.doom"
+# com.micropythonos.doom_launcher isn't ready because the firmware doesn't have doom built-in yet
+blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.showbattery com.micropythonos.doom_launcher"
 
 echo "[" | tee -a "$outputjson"
 
