@@ -51,7 +51,7 @@ class About(Activity):
         self._add_label(screen, f"sys.version: {sys.version}")
         self._add_label(screen, f"sys.implementation: {sys.implementation}")
         self._add_label(screen, f"sys.byteorder: {sys.byteorder}")
-        self._add_label(screen, f"sys.maxsize: {sys.maxsize}")
+        self._add_label(screen, f"sys.maxsize of integer: {sys.maxsize}")
 
         # MPY version info
         self._add_label(screen, f"{lv.SYMBOL.SETTINGS} MicroPython Version", is_header=True)
@@ -107,19 +107,22 @@ class About(Activity):
                 print(error)
                 self._add_label(screen, error)
 
-        # Machine info
-        try:
-            print("Trying to find out additional board info, not available on every platform...")
-            self._add_label(screen, f"{lv.SYMBOL.POWER} Machine Info", is_header=True)
-            import machine
-            self._add_label(screen, f"machine.freq: {machine.freq()}")
-            self._add_label(screen, f"machine.unique_id(): {machine.unique_id()}")
-            self._add_label(screen, f"machine.wake_reason(): {machine.wake_reason()}")
-            self._add_label(screen, f"machine.reset_cause(): {machine.reset_cause()}")
-        except Exception as e:
-            error = f"Could not find machine info because: {e}\nIt's normal to get this error on desktop."
-            print(error)
-            self._add_label(screen, error)
+            # Machine info
+            try:
+                print("Trying to find out additional board info, not available on every platform...")
+                self._add_label(screen, f"{lv.SYMBOL.POWER} Machine Info", is_header=True)
+                import machine
+                self._add_label(screen, f"machine.freq: {machine.freq()}")
+                # Format unique_id as MAC address (AA:BB:CC:DD:EE:FF)
+                unique_id = machine.unique_id()
+                mac_address = ':'.join(f'{b:02X}' for b in unique_id)
+                self._add_label(screen, f"machine.unique_id(): {mac_address}")
+                self._add_label(screen, f"machine.wake_reason(): {machine.wake_reason()}")
+                self._add_label(screen, f"machine.reset_cause(): {machine.reset_cause()}")
+            except Exception as e:
+                error = f"Could not find machine info because: {e}\nIt's normal to get this error on desktop."
+                print(error)
+                self._add_label(screen, error)
 
         # Freezefs info (production builds only)
         try:
