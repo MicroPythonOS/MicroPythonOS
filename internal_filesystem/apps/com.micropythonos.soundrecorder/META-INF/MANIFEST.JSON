@@ -3,10 +3,10 @@
   "publisher": "MicroPythonOS",
   "short_description": "Record audio from microphone",
   "long_description": "Record audio from the I2S microphone and save as WAV files. Recordings can be played back with the Music Player app.",
-  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.soundrecorder/icons/com.micropythonos.soundrecorder_0.0.1_64x64.png",
-  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.soundrecorder/mpks/com.micropythonos.soundrecorder_0.0.1.mpk",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.soundrecorder/icons/com.micropythonos.soundrecorder_0.0.2_64x64.png",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.soundrecorder/mpks/com.micropythonos.soundrecorder_0.0.2.mpk",
   "fullname": "com.micropythonos.soundrecorder",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "category": "utilities",
   "activities": [
     {
