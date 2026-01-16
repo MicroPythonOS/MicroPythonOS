@@ -103,15 +103,17 @@ class Nostr(Activity):
             print("wallet is already running, nothing to do") # might have come from the QR activity
             return
         try:
-            from nwc_wallet import NWCWallet
-            self.wallet = NWCWallet(self.prefs.get_string("nwc_url"))
+            from nostr_client import NostrClient
+            self.wallet = NostrClient(self.prefs.get_string("nwc_url"))
             self.wallet.static_receive_code = self.prefs.get_string("nwc_static_receive_code")
             self.redraw_static_receive_code_cb()
         except Exception as e:
             self.error_cb(f"Couldn't initialize NWC Wallet because: {e}")
+            import sys
+            sys.print_exception(e)
             return
         self.balance_label.set_text(lv.SYMBOL.REFRESH)
-        self.payments_label.set_text(f"\nConnecting to {wallet_type} backend.\n\nIf this takes too long, it might be down or something's wrong with the settings.")
+        self.payments_label.set_text(f"\nConnecting to backend.\n\nIf this takes too long, it might be down or something's wrong with the settings.")
         # by now, self.wallet can be assumed
         self.wallet.start(self.balance_updated_cb, self.redraw_payments_cb, self.redraw_static_receive_code_cb, self.error_cb)
 
@@ -182,18 +184,12 @@ class Nostr(Activity):
             self.payments_label.set_text(str(error))
 
     def should_show_setting(self, setting):
-        wallet_type = self.prefs.get_string("wallet_type")
-        if wallet_type != "lnbits" and setting["key"].startswith("lnbits_"):
-            return False
-        if wallet_type != "nwc" and setting["key"].startswith("nwc_"):
-            return False
         return True
 
     def settings_button_tap(self, event):
         intent = Intent(activity_class=SettingsActivity)
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
-            {"title": "Wallet Type", "key": "wallet_type", "ui": "radiobuttons", "ui_options": [("LNBits", "lnbits"), ("Nostr Wallet Connect", "nwc")]},
             {"title": "LNBits URL", "key": "lnbits_url", "placeholder": "https://demo.lnpiggy.com", "should_show": self.should_show_setting},
             {"title": "LNBits Read Key", "key": "lnbits_readkey", "placeholder": "fd92e3f8168ba314dc22e54182784045", "should_show": self.should_show_setting},
             {"title": "Optional LN Address", "key": "lnbits_static_receive_code", "placeholder": "Will be fetched if empty.", "should_show": self.should_show_setting},

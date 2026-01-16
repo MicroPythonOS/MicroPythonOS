@@ -14,7 +14,7 @@ from nostr.key import PrivateKey
 from payment import Payment
 from unique_sorted_list import UniqueSortedList
 
-class NWCWallet():
+class NostrClient():
 
     PAYMENTS_TO_SHOW = 6
     PERIODIC_FETCH_BALANCE_SECONDS = 60 # seconds
@@ -26,6 +26,7 @@ class NWCWallet():
     def __init__(self, nwc_url):
         super().__init__()
         self.nwc_url = nwc_url
+        self.payment_list = UniqueSortedList()
         if not nwc_url:
             raise ValueError('NWC URL is not set.')
         self.connected = False
@@ -54,7 +55,6 @@ class NWCWallet():
                 print("text/plain field is missing from JSON description")
         except Exception as e:
             print(f"Info: comment {comment} is not JSON, this is fine, using as-is ({e})")
-        comment = super().try_parse_as_zap(comment)
         return comment
 
     async def async_wallet_manager_task(self):
@@ -278,4 +278,92 @@ class NWCWallet():
         except Exception as e:
             raise RuntimeError(f"Exception parsing NWC URL {nwc_url}: {e}")
 
+
+    # From wallet.py:
+    # Public variables
+    # These values could be loading from a cache.json file at __init__
+    last_known_balance = 0
+    payment_list = None
+    static_receive_code = None
+
+    # Variables
+    keep_running = True
+    
+    # Callbacks:
+    balance_updated_cb = None
+    payments_updated_cb = None
+    static_receive_code_updated_cb = None
+    error_cb = None
+
+
+    def __str__(self):
+        if isinstance(self, LNBitsWallet):
+            return "LNBitsWallet"
+        elif isinstance(self, NWCWallet):
+            return "NWCWallet"
+
+    def handle_new_balance(self, new_balance, fetchPaymentsIfChanged=True):
+        if not self.keep_running or new_balance is None:
+            return
+        sats_added = new_balance - self.last_known_balance
+        if new_balance != self.last_known_balance:
+            print("Balance changed!")
+            self.last_known_balance = new_balance
+            print("Calling balance_updated_cb")
+            self.balance_updated_cb(sats_added)
+            if fetchPaymentsIfChanged: # Fetching *all* payments isn't necessary if balance was changed by a payment notification
+                print("Refreshing payments...")
+                self.fetch_payments() # if the balance changed, then re-list transactions
+
+    def handle_new_payment(self, new_payment):
+        if not self.keep_running:
+            return
+        print("handle_new_payment")
+        self.payment_list.add(new_payment)
+        self.payments_updated_cb()
+
+    def handle_new_payments(self, new_payments):
+        if not self.keep_running:
+            return
+        print("handle_new_payments")
+        if self.payment_list != new_payments:
+            print("new list of payments")
+            self.payment_list = new_payments
+            self.payments_updated_cb()
+
+    def handle_new_static_receive_code(self, new_static_receive_code):
+        print("handle_new_static_receive_code")
+        if not self.keep_running or not new_static_receive_code:
+            print("not self.keep_running or not new_static_receive_code")
+            return
+        if self.static_receive_code != new_static_receive_code:
+            print("it's really a new static_receive_code")
+            self.static_receive_code = new_static_receive_code
+            if self.static_receive_code_updated_cb:
+                self.static_receive_code_updated_cb()
+        else:
+            print(f"self.static_receive_code {self.static_receive_code } == new_static_receive_code {new_static_receive_code}")
+
+    def handle_error(self, e):
+        if self.error_cb:
+            self.error_cb(e)
+
+    # Maybe also add callbacks for:
+    #    - started (so the user can show the UI) 
+    #    - stopped (so the user can delete/free it)
+    #    - error (so the user can show the error)
+    def start(self, balance_updated_cb, payments_updated_cb, static_receive_code_updated_cb = None, error_cb = None):
+        self.keep_running = True
+        self.balance_updated_cb = balance_updated_cb
+        self.payments_updated_cb = payments_updated_cb
+        self.static_receive_code_updated_cb = static_receive_code_updated_cb
+        self.error_cb = error_cb
+        TaskManager.create_task(self.async_wallet_manager_task())
+
+    def stop(self):
+        self.keep_running = False
+        # idea: do a "close connections" call here instead of waiting for polling sub-tasks to notice the change
+
+    def is_running(self):
+        return self.keep_running
 
