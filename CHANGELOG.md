@@ -1,3 +1,7 @@
+0.6.1
+=====
+- ActivityNavigator: support pre-instantiated activities
+
 0.6.0
 =====
 - About app: make more beautiful

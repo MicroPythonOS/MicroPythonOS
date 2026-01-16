@@ -141,9 +141,12 @@ class TestTwoWebsockets(unittest.TestCase):
         _thread.start_new_thread(self.newthread, ())
         time.sleep(10)
 
+
+
+
 # This demonstrates a crash when doing asyncio using different threads:
 #class TestCrashingSeparateThreads(unittest.TestCase):
-class TestCrashingSeparateThreads():
+class TestCrashingSeparateThreads(): # Disabled
 
     # ----------------------------------------------------------------------
     # Configuration

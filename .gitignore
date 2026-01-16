@@ -19,6 +19,7 @@ internal_filesystem_excluded/
 # these tests contain actual NWC URLs:
 tests/manual_test_nwcwallet_alby.py
 tests/manual_test_nwcwallet_cashu.py
+tests/manual_test_nwcwallet_coinos.py
 
 # Python cache files (created by CPython when testing imports)
 __pycache__/
