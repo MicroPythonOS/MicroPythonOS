@@ -166,6 +166,10 @@ class Nostr(Activity):
             self.fullscreenqr.finish()
         balance = self.wallet.last_known_balance
         print(f"balance: {balance}")
+        if balance is not None:
+            WidgetAnimator.change_widget(self.balance_label, anim_type="interpolate", duration=5000, delay=0, begin_value=balance-sats_added, end_value=balance, display_change=self.display_balance)
+        else:
+            print("Not drawing balance because it's None")
     
     def redraw_payments_cb(self):
         # this gets called from another thread (the wallet) so make sure it happens in the LVGL thread using lv.async_call():
