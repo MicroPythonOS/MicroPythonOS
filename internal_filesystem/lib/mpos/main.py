@@ -23,6 +23,8 @@ elif sys.platform == "esp32":
         i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
         if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
             board = "fri3d_2024"
+        elif {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
+            board = "fri3d_2026"
         else:
             print("Unable to identify board, defaulting...")
             board = "fri3d_2024" # default fallback
