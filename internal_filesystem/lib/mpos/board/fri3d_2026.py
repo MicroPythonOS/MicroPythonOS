@@ -1,4 +1,18 @@
-# Hardware initialization for Fri3d Camp 2024 Badge
+# Hardware initialization for Fri3d Camp 2026 Badge
+
+# TODO:
+# - touch screen / touch pad
+# - IMU is different from fri3d_2024 (also address 0x6A instead of 0x6B)
+# - I2S audio (communicator) is the same
+# - headphone jack audio?
+# - headphone jack microphone?
+# - CH32X035GxUx over I2C:
+#   - battery voltage measurement
+#   - analog joystick
+#   - digital buttons (X,Y,A,B, MENU)
+#   - buzzer
+#       - audio DAC emulation using buzzer might be slow or need specific buffered protocol
+
 from machine import Pin, SPI, SDCard
 import st7789 
 import lcd_bus
@@ -262,25 +276,8 @@ disp = lv.display_get_default()  # NOQA
 indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
 
-# Battery voltage ADC measuring
-# NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
-# battery_voltage.py handles this automatically: disables WiFi, reads ADC, reconnects WiFi.
+# Battery voltage ADC measuring: sits on PC0 of CH32X035GxUx
 import mpos.battery_voltage
-"""
-best fit on battery power:
-2482 is 4.180
-2470 is 4.170
-2457 is 4.147
-# 2444 is 4.12
-2433 is 4.109
-2429 is 4.102
-2393 is 4.044
-2369 is 4.000
-2343 is 3.957
-2319 is 3.916
-2269 is 3.831
-2227 is 3.769
-"""
 def adc_to_voltage(adc_value):
     """
     Convert raw ADC value to battery voltage using calibrated linear function.
@@ -288,8 +285,7 @@ def adc_to_voltage(adc_value):
     This is ~10x more accurate than simple scaling (error ~0.01V vs ~0.1V).
     """
     return (0.001651* adc_value + 0.08709)
-
-mpos.battery_voltage.init_adc(13, adc_to_voltage)
+#mpos.battery_voltage.init_adc(13, adc_to_voltage) # TODO
 
 import mpos.sdcard
 mpos.sdcard.init(spi_bus, cs_pin=14)
@@ -298,8 +294,8 @@ mpos.sdcard.init(spi_bus, cs_pin=14)
 from machine import PWM, Pin
 from mpos import AudioFlinger
 
-# Initialize buzzer (GPIO 46)
-buzzer = PWM(Pin(46), freq=550, duty=0)
+# Initialize buzzer: sits on PC14/CC1 of the CH32X035GxUx
+#buzzer = PWM(Pin(46), freq=550, duty=0)
 
 # I2S pin configuration for audio output (DAC) and input (microphone)
 # Note: I2S is created per-stream, not at boot (only one instance can exist)
@@ -316,7 +312,7 @@ i2s_pins = {
 }
 
 # Initialize AudioFlinger with I2S and buzzer
-AudioFlinger(i2s_pins=i2s_pins, buzzer_instance=buzzer)
+#AudioFlinger(i2s_pins=i2s_pins, buzzer_instance=buzzer)
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
@@ -327,71 +323,9 @@ LightsManager.init(neopixel_pin=12, num_leds=5)
 # === SENSOR HARDWARE ===
 import mpos.sensor_manager as SensorManager
 
-# Create I2C bus for IMU (different pins from display)
+# Create I2C bus for IMU
 from machine import I2C
 imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
-SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
+SensorManager.init(imu_i2c, address=0x6A, mounted_position=SensorManager.FACING_EARTH)
 
-print("Fri3d hardware: Audio, LEDs, and sensors initialized")
-
-# === STARTUP "WOW" EFFECT ===
-import time
-import _thread
-
-def startup_wow_effect():
-    """
-    Epic startup effect with rainbow LED chase and upbeat startup jingle.
-    Runs in background thread to avoid blocking boot.
-    """
-    try:
-        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
-        startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
-        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
-
-        # Start the jingle
-        AudioFlinger.play_rtttl(
-            startup_jingle,
-            stream_type=AudioFlinger.STREAM_NOTIFICATION,
-            volume=60
-        )
-
-        # Rainbow colors for the 5 LEDs
-        rainbow = [
-            (255, 0, 0),    # Red
-            (255, 128, 0),  # Orange
-            (255, 255, 0),  # Yellow
-            (0, 255, 0),    # Green
-            (0, 0, 255),    # Blue
-        ]
-
-        # Rainbow sweep effect (3 passes, getting faster)
-        for pass_num in range(3):
-            for i in range(5):
-                # Light up LEDs progressively
-                for j in range(i + 1):
-                    LightsManager.set_led(j, *rainbow[j])
-                LightsManager.write()
-                time.sleep_ms(80 - pass_num * 20)  # Speed up each pass
-
-        # Flash all LEDs bright white
-        LightsManager.set_all(255, 255, 255)
-        LightsManager.write()
-        time.sleep_ms(150)
-
-        # Rainbow finale
-        for i in range(5):
-            LightsManager.set_led(i, *rainbow[i])
-        LightsManager.write()
-        time.sleep_ms(300)
-
-        # Fade out
-        LightsManager.clear()
-        LightsManager.write()
-
-    except Exception as e:
-        print(f"Startup effect error: {e}")
-
-_thread.stack_size(mpos.apps.good_stack_size()) # default stack size won't work, crashes!
-_thread.start_new_thread(startup_wow_effect, ())
-
-print("fri3d_2024.py finished")
+print("fri3d_2026.py finished")
