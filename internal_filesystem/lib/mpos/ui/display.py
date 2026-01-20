@@ -6,7 +6,7 @@ _horizontal_resolution = None
 _vertical_resolution = None
 _dpi = None
 
-logo_url = "M:builtin/res/mipmap-mdpi/MicroPythonOS_logo_white_on_black_240x54.png"
+logo_url = "M:builtin/res/mipmap-mdpi/MicroPythonOS_logo_white_on_black_240x35.png"
 
 def init_rootscreen():
     global _horizontal_resolution, _vertical_resolution, _dpi
