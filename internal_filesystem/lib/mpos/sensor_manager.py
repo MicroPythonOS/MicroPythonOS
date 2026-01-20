@@ -135,11 +135,11 @@ def _ensure_imu_initialized():
         except:
             pass
 
-        # Try WSEN_ISDS (Fri3d badge)
+        # Try WSEN_ISDS (fri3d_2024) or LSM6DSO (fri3d_2026)
         try:
             from mpos.hardware.drivers.wsen_isds import Wsen_Isds
-            chip_id = _i2c_bus.readfrom_mem(_i2c_address, 0x0F, 1)[0]  # WHO_AM_I register
-            if chip_id == 0x6A:  # WSEN_ISDS WHO_AM_I
+            chip_id = _i2c_bus.readfrom_mem(_i2c_address, 0x0F, 1)[0]  # WHO_AM_I register - could also use Wsen_Isds.get_chip_id()
+            if chip_id == 0x6A or chip_id == 0x6C:  # WSEN_ISDS WHO_AM_I 0x6A (Fri3d 2024) or 0x6C (Fri3d 2026)
                 _imu_driver = _WsenISDSDriver(_i2c_bus, _i2c_address)
                 _register_wsen_isds_sensors()
                 _load_calibration()
