@@ -23,8 +23,10 @@ def init_rootscreen():
             img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE) # invert the logo color 
         img.center()
     except Exception as e: # if image loading fails
-        print(f"Falling back to text-based logo because image loading failed: {e}")
-        screen.clean()
+        print(f"ERROR: logo image failed, LVGL will be in a bad state and the UI will hang: {e}")
+        import sys
+        sys.print_exception(e)
+        print("Trying to fall back to a simple text-based 'logo' but it won't showup because the UI broke...")
         label = lv.label(screen)
         label.set_text("MicroPythonOS")
         label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
