@@ -93,7 +93,7 @@ btn_y = Pin(41, Pin.IN, Pin.PULL_UP) # Y
 btn_a = Pin(39, Pin.IN, Pin.PULL_UP) # A
 btn_b = Pin(40, Pin.IN, Pin.PULL_UP) # B
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
-btn_menu = Pin(45, Pin.IN, Pin.PULL_UP) # START
+btn_menu = Pin(45, Pin.IN, Pin.PULL_UP) # MENU
 
 ADC_KEY_MAP = [
     {'key': 'UP', 'unit': 1, 'channel': 2, 'min': 3072, 'max': 4096},

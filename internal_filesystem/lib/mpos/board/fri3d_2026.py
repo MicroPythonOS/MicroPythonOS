@@ -2,7 +2,7 @@
 
 # TODO:
 # - touch screen / touch pad
-# - IMU is different from fri3d_2024 (also address 0x6A instead of 0x6B)
+# - IMU (LSM6DSO) is different from fri3d_2024 (and address 0x6A instead of 0x6B) but the API seems the same, except different chip ID (0x6C iso 0x6A)
 # - I2S audio (communicator) is the same
 # - headphone jack audio?
 # - headphone jack microphone?
@@ -12,6 +12,7 @@
 #   - digital buttons (X,Y,A,B, MENU)
 #   - buzzer
 #       - audio DAC emulation using buzzer might be slow or need specific buffered protocol
+# - test it on the Waveshare to make sure no syntax / variable errors
 
 from machine import Pin, SPI, SDCard
 import st7789 
@@ -30,33 +31,20 @@ import task_handler
 import mpos.ui
 import mpos.ui.focus_direction
 
-
-# Pin configuration
-SPI_BUS = 2
-SPI_FREQ = 40000000
-#SPI_FREQ = 20000000 # also works but I guess higher is better
-LCD_SCLK = 7
-LCD_MOSI = 6
-LCD_MISO = 8
-LCD_DC = 4
-LCD_CS = 5
-#LCD_BL = 1 # backlight can't be controlled on this hardware
-LCD_RST = 48
-
 TFT_HOR_RES=320
 TFT_VER_RES=240
 
 spi_bus = machine.SPI.Bus(
-    host=SPI_BUS,
-    mosi=LCD_MOSI,
-    miso=LCD_MISO,
-    sck=LCD_SCLK
+    host=2,
+    mosi=6,
+    miso=8,
+    sck=7
 )
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
-    freq=SPI_FREQ,
-    dc=LCD_DC,
-    cs=LCD_CS
+    freq=40000000,
+    dc=4,
+    cs=5
 )
 
 # lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
@@ -84,8 +72,8 @@ mpos.ui.main_display = st7789.ST7789(
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
-    reset_pin=LCD_RST, # doesn't seem needed
-    reset_state=STATE_LOW # doesn't seem needed
+    reset_pin=48, # LCD reset: TODO: this is now on the CH32
+    reset_state=STATE_LOW # TODO: is this correct?
 )
 
 mpos.ui.main_display.init()
@@ -96,77 +84,18 @@ mpos.ui.main_display.set_color_inversion(False)
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13
 i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_locks=False)
-touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=TP_ADDR, reg_bits=TP_REGBITS)
+touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=TP_REGBITS)
 indev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
 
 lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 mpos.ui.main_display.set_params(0x36, bytearray([0x28]))
 
-# Button and joystick handling code:
+# Button handling code:
 from machine import ADC, Pin
 import time
 
-btn_x = Pin(38, Pin.IN, Pin.PULL_UP) # X
-btn_y = Pin(41, Pin.IN, Pin.PULL_UP) # Y
-btn_a = Pin(39, Pin.IN, Pin.PULL_UP) # A
-btn_b = Pin(40, Pin.IN, Pin.PULL_UP) # B
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
-btn_menu = Pin(45, Pin.IN, Pin.PULL_UP) # START
-
-ADC_KEY_MAP = [
-    {'key': 'UP', 'unit': 1, 'channel': 2, 'min': 3072, 'max': 4096},
-    {'key': 'DOWN', 'unit': 1, 'channel': 2, 'min': 0, 'max': 1024},
-    {'key': 'RIGHT', 'unit': 1, 'channel': 0, 'min': 3072, 'max': 4096},
-    {'key': 'LEFT', 'unit': 1, 'channel': 0, 'min': 0, 'max': 1024},
-]
-
-# Initialize ADC for the two channels
-adc_up_down = ADC(Pin(3))  # ADC1_CHANNEL_2 (GPIO 33)
-adc_up_down.atten(ADC.ATTN_11DB)  # 0-3.3V range
-adc_left_right = ADC(Pin(1))  # ADC1_CHANNEL_0 (GPIO 36)
-adc_left_right.atten(ADC.ATTN_11DB)  # 0-3.3V range
-
-def read_joystick():
-    # Read ADC values
-    val_up_down = adc_up_down.read()
-    val_left_right = adc_left_right.read()
-
-    # Check each key's range
-    for mapping in ADC_KEY_MAP:
-        adc_val = val_up_down if mapping['channel'] == 2 else val_left_right
-        if mapping['min'] <= adc_val <= mapping['max']:
-            return mapping['key']
-    return None  # No key triggered
-
-# Rotate: UP = 0°, RIGHT = 90°, DOWN = 180°, LEFT = 270°
-def read_joystick_angle(threshold=0.1):
-    # Read ADC values
-    val_up_down = adc_up_down.read()
-    val_left_right = adc_left_right.read()
-
-    #if time.time() < 60:
-    #    print(f"val_up_down: {val_up_down}")
-    #    print(f"val_left_right: {val_left_right}")
-
-    # Normalize to [-1, 1]
-    x = (val_left_right - 2048) / 2048  # Positive x = RIGHT
-    y = (val_up_down - 2048) / 2048    # Positive y = UP
-    #if time.time() < 60:
-    #    print(f"x,y = {x},{y}")
-
-    # Check if joystick is near center
-    magnitude = math.sqrt(x*x + y*y)
-    #if time.time() < 60:
-    #    print(f"magnitude: {magnitude}")
-    if magnitude < threshold:
-        return None  # Neutral position
-
-    # Calculate angle in degrees with UP = 0°, clockwise
-    angle_rad = math.atan2(x, y)
-    angle_deg = math.degrees(angle_rad)
-    angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
-    return angle_deg
 
 # Key repeat configuration
 # This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
@@ -186,37 +115,13 @@ def keypad_read_cb(indev, data):
     data.continue_reading = False
     since_last_repeat = 0
 
-    # Check buttons and joystick
+    # Check buttons
     current_key = None
     current_time = time.ticks_ms()
 
     # Check buttons
-    if btn_x.value() == 0:
-        current_key = lv.KEY.ESC
-    elif btn_y.value() == 0:
-        current_key = ord("Y")
-    elif btn_a.value() == 0:
-        current_key = lv.KEY.ENTER
-    elif btn_b.value() == 0:
-        current_key = ord("B")
-    elif btn_menu.value() == 0:
-        current_key = lv.KEY.HOME
-    elif btn_start.value() == 0:
+    if btn_start.value() == 0:
         current_key = lv.KEY.END
-    else:
-        # Check joystick
-        angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 should be good
-        if angle:
-            if angle > 45 and angle < 135:
-                current_key = lv.KEY.RIGHT
-            elif angle > 135 and angle < 225:
-                current_key = lv.KEY.DOWN
-            elif angle > 225 and angle < 315:
-                current_key = lv.KEY.LEFT
-            elif angle < 45 or angle > 315:
-                current_key = lv.KEY.UP
-            else:
-                print(f"WARNING: unhandled joystick angle {angle}") # maybe we could also handle diagonals?
 
     # Key repeat logic
     if current_key:
@@ -294,7 +199,7 @@ mpos.sdcard.init(spi_bus, cs_pin=14)
 from machine import PWM, Pin
 from mpos import AudioFlinger
 
-# Initialize buzzer: sits on PC14/CC1 of the CH32X035GxUx
+# Initialize buzzer: now sits on PC14/CC1 of the CH32X035GxUx so needs custom code
 #buzzer = PWM(Pin(46), freq=550, duty=0)
 
 # I2S pin configuration for audio output (DAC) and input (microphone)
@@ -303,7 +208,7 @@ from mpos import AudioFlinger
 # See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 i2s_pins = {
     # Output (DAC/speaker) pins
-    'sck': 2,       # BCK - Bit Clock for DAC output
+    'sck': 2,       # MCLK / BCK - Bit Clock for DAC output
     'ws': 47,       # Word Select / LRCLK (shared between DAC and mic)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     # Input (microphone) pins
@@ -311,8 +216,8 @@ i2s_pins = {
     'sd_in': 15,    # DIN - Serial Data IN (microphone)
 }
 
-# Initialize AudioFlinger with I2S and buzzer
-#AudioFlinger(i2s_pins=i2s_pins, buzzer_instance=buzzer)
+# Initialize AudioFlinger with I2S (buzzer TODO)
+AudioFlinger(i2s_pins=i2s_pins)
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
@@ -323,7 +228,7 @@ LightsManager.init(neopixel_pin=12, num_leds=5)
 # === SENSOR HARDWARE ===
 import mpos.sensor_manager as SensorManager
 
-# Create I2C bus for IMU
+# Create I2C bus for IMU (LSM6DSOTR-C / LSM6DSO)
 from machine import I2C
 imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
 SensorManager.init(imu_i2c, address=0x6A, mounted_position=SensorManager.FACING_EARTH)

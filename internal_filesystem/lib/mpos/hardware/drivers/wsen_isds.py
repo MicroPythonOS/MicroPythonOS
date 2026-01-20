@@ -104,7 +104,7 @@ class Wsen_Isds:
             'reg': 0x5E, 'mask': 0b11110111, 'shift_left': 3,
             'val_to_bits': {0: 0b00, 1: 0b01}
         },
-        'int1_on_int0': {
+        'int1_on_int0': { # on the LSM6DSO, this is called "INT2_on_INT1"
             'reg': 0x13, 'mask': 0b11011111, 'shift_left': 5,
             'val_to_bits': {0: 0b00, 1: 0b01}
         },
