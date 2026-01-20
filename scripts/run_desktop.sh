@@ -62,11 +62,16 @@ if [ -f "$script" ]; then
 	"$binary"  -v -i "$script"
 else
 	echo "Running app $script"
-	mv data/com.micropythonos.settings/config.json data/com.micropythonos.settings/config.json.backup
-	# When $script is empty, it just doesn't find the app and stays at the launcher
-	echo '{"auto_start_app": "'$script'"}' > data/com.micropythonos.settings/config.json
+	CONFIG_FILE="data/com.micropythonos.settings/config.json"
+	# Check if config.json exists
+	if [ -f "$CONFIG_FILE" ]; then
+		# Update the auto_start_app field using sed
+		sed -i '' -e 's/"auto_start_app": ".*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
+	else
+		# If config.json doesn't exist, create it with auto_start_app
+		echo '{"auto_start_app": "'$script'"}' > "$CONFIG_FILE"
+	fi
 	"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat main.py)"
-	mv data/com.micropythonos.settings/config.json.backup data/com.micropythonos.settings/config.json
 fi
 
 popd
