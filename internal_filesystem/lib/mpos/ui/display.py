@@ -1,9 +1,12 @@
 # lib/mpos/ui/display.py
 import lvgl as lv
+from mpos.ui.theme import _is_light_mode
 
 _horizontal_resolution = None
 _vertical_resolution = None
 _dpi = None
+
+logo_url="M:lib/assets/MicroPythonOS-logo-white-long-w240.png" # change this
 
 def init_rootscreen():
     global _horizontal_resolution, _vertical_resolution, _dpi
@@ -13,9 +16,16 @@ def init_rootscreen():
     _vertical_resolution = disp.get_vertical_resolution()
     _dpi = disp.get_dpi()
     print(f"init_rootscreen set resolution to {_horizontal_resolution}x{_vertical_resolution} at {_dpi} DPI")
-    label = lv.label(screen)
-    label.set_text("Welcome to MicroPythonOS")
-    label.center()
+    try:
+        img = lv.image(screen)
+        img.set_src(logo_url)
+        if _is_light_mode:
+            img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE) # invert the logo color 
+        img.center()
+    except: # if image loading fails
+        label = lv.label(screen)
+        label.set_text("MicroPythonOS")
+        label.center()
 
 def get_pointer_xy():
     indev = lv.indev_active()
