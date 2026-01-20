@@ -19,7 +19,7 @@ def init_rootscreen():
     try:
         img = lv.image(screen)
         img.set_src(logo_url)
-        if _is_light_mode:
+        if not _is_light_mode:
             img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE) # invert the logo color 
         img.center()
     except Exception as e: # if image loading fails
