@@ -1,4 +1,5 @@
 import os
+import json
 import lvgl as lv
 
 from mpos import Activity, DownloadManager, PackageManager, TaskManager
@@ -276,7 +277,7 @@ class AppDetail(Activity):
         self.install_button.remove_state(lv.STATE.DISABLED)
 
     async def fetch_badgehub_app_details(self, app_obj):
-        details_url = self.get_backend_details_url_from_settings() + "/" + app_obj.fullname
+        details_url = self.appstore.get_backend_details_url_from_settings() + "/" + app_obj.fullname
         try:
             response = await DownloadManager.download_url(details_url)
         except Exception as e:
@@ -329,5 +330,5 @@ class AppDetail(Activity):
         except Exception as e:
             err = f"ERROR: could not parse app details JSON: {e}"
             print(err)
-            self.please_wait_label.set_text(err)
+            self.appstore.please_wait_label.set_text(err)
             return
