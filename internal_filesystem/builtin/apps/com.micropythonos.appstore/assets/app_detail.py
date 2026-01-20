@@ -256,8 +256,8 @@ class AppDetail(Activity):
             else:
                 print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
                 # Install it:
-                PackageManager.install_mpk(temp_zip_path, dest_folder) # 60 until 90 percent is the unzip but no progress there...
-                await self._update_progress(90, wait=False)
+                PackageManager.install_mpk(temp_zip_path, dest_folder) # 60 until 80 percent is the unzip but no progress there...
+                await self._update_progress(80, wait=False)
         except Exception as e:
             print(f"Download failed with exception: {e}")
             if DownloadManager.is_network_error(e):
@@ -270,6 +270,8 @@ class AppDetail(Activity):
             return
         # Make sure there's no leftover file filling the storage:
         self._cleanup_temp_file(temp_zip_path)
+        await self._update_progress(85, wait=False)
+        # TODO: report the install if badgehub /report/install is fixed
         # Success:
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
