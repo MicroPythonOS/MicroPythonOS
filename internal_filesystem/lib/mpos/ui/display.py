@@ -6,7 +6,7 @@ _horizontal_resolution = None
 _vertical_resolution = None
 _dpi = None
 
-logo_url="M:lib/assets/MicroPythonOS-logo-white-long-w240.png" # change this
+logo_url = "M:builtin/res/mipmap-mdpi/MicroPythonOS_logo_white_on_black_240x54.png"
 
 def init_rootscreen():
     global _horizontal_resolution, _vertical_resolution, _dpi
@@ -22,9 +22,12 @@ def init_rootscreen():
         if _is_light_mode:
             img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE) # invert the logo color 
         img.center()
-    except: # if image loading fails
+    except Exception as e: # if image loading fails
+        print(f"Falling back to text-based logo because image loading failed: {e}")
+        screen.clean()
         label = lv.label(screen)
         label.set_text("MicroPythonOS")
+        label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         label.center()
 
 def get_pointer_xy():
