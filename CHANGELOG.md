@@ -1,6 +1,11 @@
 0.6.1
 =====
 - ActivityNavigator: support pre-instantiated activities
+- AppStore app: fix BadgeHub backend handling
+- OSUpdate app: eliminate requests library
+- Remove depenency on micropython-esp32-ota library
+- Show new MicroPythonOS logo at boot
+- SensorManager: add support for LSM6DSO
 
 0.6.0
 =====
