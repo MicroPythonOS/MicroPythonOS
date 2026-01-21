@@ -21,7 +21,7 @@ rm "$outputjson"
 # com.micropythonos.showbattery is just a test
 # com.micropythonos.doom_launcher isn't ready because the firmware doesn't have doom built-in yet
 # com.micropythonos.nostr isn't ready for release yet
-blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.showbattery com.micropythonos.doom_launcher"
+blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.showbattery com.micropythonos.doom_launcher com.micropythonos.nostr"
 
 echo "[" | tee -a "$outputjson"
 
@@ -38,6 +38,11 @@ for apprepo in internal_filesystem/apps; do
 		pushd "$apprepo"/"$appdir"
 		manifest=META-INF/MANIFEST.JSON
 		version=$( jq -r '.version' "$manifest" )
+		result=$?
+		if [ $result -ne 0 ]; then
+			echo "Failed to parse $apprepo/$appdir/$manifest !"
+			exit 1
+		fi
 		cat "$manifest" | tee -a "$outputjson"
 		echo -n "," | tee -a "$outputjson"
 		thisappdir="$output"/apps/"$appdir"
