@@ -108,8 +108,8 @@ mpos.TaskManager.create_task(asyncio_repl()) # only gets started when mpos.TaskM
 
 async def ota_rollback_cancel():
     try:
-        import ota.rollback
-        ota.rollback.cancel()
+        from esp32 import Partition
+        Partition.mark_app_valid_cancel_rollback()
     except Exception as e:
         print("main.py: warning: could not mark this update as valid:", e)
 
