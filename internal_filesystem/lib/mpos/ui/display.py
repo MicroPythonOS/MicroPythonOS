@@ -11,7 +11,6 @@ logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w240.png"
 # Black text on transparent logo works (for light mode) but can't be inverted (for dark mode)
 # Even when trying different blend modes (SUBTRACTIVE, ADDITIVE, MULTIPLY)
 # Even when it's on a white (instead of transparent) background
-#logo_black = "M:builtin/res/mipmap-mdpi/MicroPythonOS_logo_black_240x35.png"
 #logo_black = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-black-long-w240.png"
 
 def init_rootscreen():

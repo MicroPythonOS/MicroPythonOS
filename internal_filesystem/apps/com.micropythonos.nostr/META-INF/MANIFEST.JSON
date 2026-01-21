@@ -10,8 +10,8 @@
 "category": "communication",
 "activities": [
     {
-      "entrypoint": "assets/nostr.py",
-      "classname": "Nostr",
+      "entrypoint": "assets/nostr_app.py",
+      "classname": "NostrApp",
       "intent_filters": [
         {
           "action": "main",

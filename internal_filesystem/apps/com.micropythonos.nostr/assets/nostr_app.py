@@ -5,7 +5,7 @@ from mpos.ui.anim import WidgetAnimator
 
 from fullscreen_qr import FullscreenQR
 
-class Nostr(Activity):
+class NostrApp(Activity):
 
     wallet = None
     receive_qr_data = None
@@ -104,11 +104,11 @@ class Nostr(Activity):
             return
         try:
             from nostr_client import NostrClient
-            self.wallet = NostrClient(self.prefs.get_string("nwc_url"))
-            self.wallet.static_receive_code = self.prefs.get_string("nwc_static_receive_code")
+            self.wallet = NostrClient(self.prefs.get_string("nostr_nsec"))
+            self.wallet.follow_npub = self.prefs.get_string("nostr_follow_npub")
             self.redraw_static_receive_code_cb()
         except Exception as e:
-            self.error_cb(f"Couldn't initialize NWC Wallet because: {e}")
+            self.error_cb(f"Couldn't initialize Nostr client because: {e}")
             import sys
             sys.print_exception(e)
             return
@@ -194,11 +194,9 @@ class Nostr(Activity):
         intent = Intent(activity_class=SettingsActivity)
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
-            {"title": "LNBits URL", "key": "lnbits_url", "placeholder": "https://demo.lnpiggy.com", "should_show": self.should_show_setting},
-            {"title": "LNBits Read Key", "key": "lnbits_readkey", "placeholder": "fd92e3f8168ba314dc22e54182784045", "should_show": self.should_show_setting},
-            {"title": "Optional LN Address", "key": "lnbits_static_receive_code", "placeholder": "Will be fetched if empty.", "should_show": self.should_show_setting},
-            {"title": "Nost Wallet Connect", "key": "nwc_url", "placeholder": "nostr+walletconnect://69effe7b...", "should_show": self.should_show_setting},
-            {"title": "Optional LN Address", "key": "nwc_static_receive_code", "placeholder": "Optional if present in NWC URL.", "should_show": self.should_show_setting},
+            {"title": "Nostr Private Key (nsec)", "key": "nostr_nsec", "placeholder": "nsec1...", "should_show": self.should_show_setting},
+            {"title": "Nostr Follow Public Key (npub)", "key": "nostr_follow_npub", "placeholder": "npub1...", "should_show": self.should_show_setting},
+            {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": "wss://relay.example.com", "should_show": self.should_show_setting},
         ])
         self.startActivity(intent)
 
