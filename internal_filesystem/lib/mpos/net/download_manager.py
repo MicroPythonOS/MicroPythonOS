@@ -220,11 +220,13 @@ def is_network_error(exception):
     error_repr = repr(exception).lower()
     
     # Common network error codes and messages
-    # -113 = ECONNABORTED (connection aborted)
-    # -104 = ECONNRESET (connection reset by peer)
-    # -110 = ETIMEDOUT (connection timed out)
-    # -118 = EHOSTUNREACH (no route to host)
+    # -113 = ECONNABORTED (connection aborted) - actually 103
+    # -104 = ECONNRESET (connection reset by peer) - correct
+    # -110 = ETIMEDOUT (connection timed out) - correct
+    # -118 = EHOSTUNREACH (no route to host) - actually 113
     # -202 = DNS/connection error (network not ready)
+    #
+    # See lvgl_micropython/lib/esp-idf/components/lwip/lwip/src/include/lwip/errno.h
     network_indicators = [
         '-113', '-104', '-110', '-118', '-202',  # Error codes
         'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
