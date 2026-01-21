@@ -58,13 +58,33 @@ def format_tags(tags):
 
 class NostrEvent:
     """Simple wrapper for a Nostr event with rich details"""
-    def __init__(self, event_obj):
+    def __init__(self, event_obj, private_key=None):
         self.event = event_obj
         self.created_at = event_obj.created_at
         self.content = event_obj.content
         self.public_key = event_obj.public_key
         self.kind = event_obj.kind
         self.tags = event_obj.tags if hasattr(event_obj, 'tags') else []
+        self.private_key = private_key
+        self.decrypted_content = None
+        
+        # Try to decrypt if this is an encrypted DM
+        if self.kind == 4 and self.private_key:
+            self._try_decrypt()
+    
+    def _try_decrypt(self):
+        """Attempt to decrypt encrypted DM content"""
+        try:
+            if self.kind == 4 and self.content:
+                decrypted = self.private_key.decrypt_message(
+                    self.content,
+                    self.public_key
+                )
+                self.decrypted_content = decrypted
+                print(f"DEBUG: Successfully decrypted DM: {decrypted}")
+        except Exception as e:
+            print(f"DEBUG: Failed to decrypt DM: {e}")
+            # Leave decrypted_content as None if decryption fails
     
     def get_kind_name(self):
         """Get human-readable name for this event's kind"""
@@ -78,16 +98,23 @@ class NostrEvent:
         """Get formatted tags for this event"""
         return format_tags(self.tags)
     
+    def get_display_content(self):
+        """Get the content to display (decrypted if available, otherwise raw)"""
+        if self.decrypted_content is not None:
+            return self.decrypted_content
+        return self.content
+    
     def __str__(self):
         """Return formatted event details"""
         kind_name = self.get_kind_name()
         timestamp = self.get_formatted_timestamp()
         tags_str = self.get_formatted_tags()
+        display_content = self.get_display_content()
         
         # Build the formatted event string
         result = f"[{kind_name}] {timestamp}\n"
-        if self.content:
-            result += f"{self.content}"
+        if display_content:
+            result += f"{display_content}"
         if tags_str:
             result += f"\n{tags_str}"
         
@@ -197,8 +224,8 @@ class NostrClient():
                     event_created_at = event_msg.event.created_at
                     print(f"Received at {time.localtime()} a message with timestamp {event_created_at} after {time.ticks_ms()-start_time}ms")
                     try:
-                        # Create NostrEvent wrapper
-                        nostr_event = NostrEvent(event_msg.event)
+                        # Create NostrEvent wrapper with private key for decryption
+                        nostr_event = NostrEvent(event_msg.event, self.private_key)
                         print(f"DEBUG: Event content: {nostr_event.content}")
                         
                         # Add to event list
