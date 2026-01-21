@@ -86,11 +86,18 @@ class NostrClient():
             self.subscription_id = "micropython_nostr_" + str(round(time.time()))
             print(f"DEBUG: Setting up subscription with ID: {self.subscription_id}")
             
+            # Convert npub to hex if needed
+            follow_npub_hex = self.follow_npub
+            if self.follow_npub.startswith("npub1"):
+                from nostr.key import PublicKey
+                follow_npub_hex = PublicKey.from_npub(self.follow_npub).hex()
+                print(f"DEBUG: Converted npub to hex: {follow_npub_hex}")
+            
             # Create filter for events from follow_npub
             # Note: Some relays don't support filtering by both kinds and authors
             # So we just filter by authors
             self.filters = Filters([Filter(
-                authors=[self.follow_npub],
+                authors=[follow_npub_hex],
             )])
             print(f"DEBUG: Subscription filters: {self.filters.to_json_array()}")
             self.relay_manager.add_subscription(self.subscription_id, self.filters)
