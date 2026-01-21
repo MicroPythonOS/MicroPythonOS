@@ -2,368 +2,175 @@ import ssl
 import json
 import time
 
-from mpos.util import urldecode
 from mpos import TaskManager
 
 from nostr.relay_manager import RelayManager
 from nostr.message_type import ClientMessageType
 from nostr.filter import Filter, Filters
-from nostr.event import EncryptedDirectMessage
 from nostr.key import PrivateKey
 
-from payment import Payment
-from unique_sorted_list import UniqueSortedList
+class NostrEvent:
+    """Simple wrapper for a Nostr event"""
+    def __init__(self, event_obj):
+        self.event = event_obj
+        self.created_at = event_obj.created_at
+        self.content = event_obj.content
+        self.public_key = event_obj.public_key
+    
+    def __str__(self):
+        return f"{self.content}"
 
 class NostrClient():
+    """Simple Nostr event subscriber that connects to a relay and subscribes to a public key's events"""
 
-    PAYMENTS_TO_SHOW = 6
-    PERIODIC_FETCH_BALANCE_SECONDS = 60 # seconds
+    EVENTS_TO_SHOW = 10
     
-    relays = []
-    secret = None
-    wallet_pubkey = None
+    relay = None
+    nsec = None
+    follow_npub = None
+    private_key = None
+    relay_manager = None
 
-    def __init__(self, nwc_url):
+    def __init__(self, nsec, follow_npub, relay):
         super().__init__()
-        self.nwc_url = nwc_url
-        self.payment_list = UniqueSortedList()
-        if not nwc_url:
-            raise ValueError('NWC URL is not set.')
+        self.nsec = nsec
+        self.follow_npub = follow_npub
+        self.relay = relay
+        self.event_list = []
+        
+        if not nsec:
+            raise ValueError('Nostr private key (nsec) is not set.')
+        if not follow_npub:
+            raise ValueError('Nostr follow public key (npub) is not set.')
+        if not relay:
+            raise ValueError('Nostr relay is not set.')
+        
         self.connected = False
-        self.relays, self.wallet_pubkey, self.secret, self.lud16 = self.parse_nwc_url(self.nwc_url)
-        if not self.relays:
-            raise ValueError('Missing relay in NWC URL.')
-        if not self.wallet_pubkey:
-            raise ValueError('Missing public key in NWC URL.')
-        if not self.secret:
-            raise ValueError('Missing "secret" in NWC URL.')
-        #if not self.lud16:
-        #    raise ValueError('Missing lud16 (= lightning address) in NWC URL.')
 
-    def getCommentFromTransaction(self, transaction):
-        comment = ""
+    async def async_event_manager_task(self):
+        """Main event loop: connect to relay and subscribe to events"""
         try:
-            comment = transaction["description"]
-            if comment is None:
-                return comment
-            json_comment = json.loads(comment)
-            for field in json_comment:
-                if field[0] == "text/plain":
-                    comment = field[1]
+            # Initialize private key from nsec
+            # nsec can be in bech32 format (nsec1...) or hex format
+            if self.nsec.startswith("nsec1"):
+                self.private_key = PrivateKey.from_nsec(self.nsec)
+            else:
+                self.private_key = PrivateKey(bytes.fromhex(self.nsec))
+            
+            # Initialize relay manager
+            self.relay_manager = RelayManager()
+            self.relay_manager.add_relay(self.relay)
+
+            print(f"DEBUG: Opening relay connection to {self.relay}")
+            await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
+            
+            self.connected = False
+            for _ in range(100):
+                await TaskManager.sleep(0.1)
+                nrconnected = self.relay_manager.connected_or_errored_relays()
+                if nrconnected == 1 or not self.keep_running:
                     break
-            else:
-                print("text/plain field is missing from JSON description")
-        except Exception as e:
-            print(f"Info: comment {comment} is not JSON, this is fine, using as-is ({e})")
-        return comment
-
-    async def async_wallet_manager_task(self):
-        if self.lud16:
-            self.handle_new_static_receive_code(self.lud16)
-
-        self.private_key = PrivateKey(bytes.fromhex(self.secret))
-        self.relay_manager = RelayManager()
-        for relay in self.relays:
-            self.relay_manager.add_relay(relay)
-
-        print(f"DEBUG: Opening relay connections")
-        await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
-        self.connected = False
-        nrconnected = 0
-        for _ in range(100):
-            await TaskManager.sleep(0.1)
-            nrconnected = self.relay_manager.connected_or_errored_relays()
-            #print(f"Waiting for relay connections, currently: {nrconnected}/{len(self.relays)}")
-            if nrconnected == len(self.relays) or not self.keep_running:
-                break
-        if nrconnected == 0:
-            self.handle_error("Could not connect to any Nostr Wallet Connect relays.")
-            return
-        if not self.keep_running:
-            print(f"async_wallet_manager_task does not have self.keep_running, returning...")
-            return
-
-        print(f"{nrconnected} relays connected")
-
-        # Set up subscription to receive response
-        self.subscription_id = "micropython_nwc_" + str(round(time.time()))
-        print(f"DEBUG: Setting up subscription with ID: {self.subscription_id}")
-        self.filters = Filters([Filter(
-            #event_ids=[self.subscription_id], would be nice to filter, but not like this
-            kinds=[23195, 23196],  # NWC reponses and notifications
-            authors=[self.wallet_pubkey],
-            pubkey_refs=[self.private_key.public_key.hex()]
-        )])
-        print(f"DEBUG: Subscription filters: {self.filters.to_json_array()}")
-        self.relay_manager.add_subscription(self.subscription_id, self.filters)
-        print(f"DEBUG: Creating subscription request")
-        request_message = [ClientMessageType.REQUEST, self.subscription_id]
-        request_message.extend(self.filters.to_json_array())
-        print(f"DEBUG: Publishing subscription request")
-        self.relay_manager.publish_message(json.dumps(request_message))
-        print(f"DEBUG: Published subscription request")
-
-        last_fetch_balance = time.time() - self.PERIODIC_FETCH_BALANCE_SECONDS
-        while True: # handle incoming events and do periodic fetch_balance
-            #print(f"checking for incoming events...")
-            await TaskManager.sleep(0.1)
-            if not self.keep_running:
-                print("NWCWallet: not keep_running, closing connections...")
-                await self.relay_manager.close_connections()
-                break
-
-            if time.time() - last_fetch_balance >= self.PERIODIC_FETCH_BALANCE_SECONDS:
-                last_fetch_balance = time.time()
-                try:
-                    await self.fetch_balance()
-                except Exception as e:
-                    print(f"fetch_balance got exception {e}") # fetch_balance got exception 'NoneType' object isn't iterable?!
-
-            start_time = time.ticks_ms()
-            if self.relay_manager.message_pool.has_events():
-                print(f"DEBUG: Event received from message pool after {time.ticks_ms()-start_time}ms")
-                event_msg = self.relay_manager.message_pool.get_event()
-                event_created_at = event_msg.event.created_at
-                print(f"Received at {time.localtime()} a message with timestamp {event_created_at} after {time.ticks_ms()-start_time}ms")
-                try:
-                    # This takes a very long time, even for short messages:
-                    decrypted_content = self.private_key.decrypt_message(
-                        event_msg.event.content,
-                        event_msg.event.public_key,
-                    )
-                    print(f"DEBUG: Decrypted content: {decrypted_content} after {time.ticks_ms()-start_time}ms")
-                    response = json.loads(decrypted_content)
-                    print(f"DEBUG: Parsed response: {response}")
-                    result = response.get("result")
-                    if result:
-                        if result.get("balance") is not None:
-                            new_balance = round(int(result["balance"]) / 1000)
-                            print(f"Got balance: {new_balance}")
-                            self.handle_new_balance(new_balance)
-                        elif result.get("transactions") is not None:
-                            print("Response contains transactions!")
-                            new_payment_list = UniqueSortedList()
-                            for transaction in result["transactions"]:
-                                amount = transaction["amount"]
-                                amount = round(amount / 1000)
-                                comment = self.getCommentFromTransaction(transaction)
-                                epoch_time = transaction["created_at"]
-                                paymentObj = Payment(epoch_time, amount, comment)
-                                new_payment_list.add(paymentObj)
-                            if len(new_payment_list) > 0:
-                                # do them all in one shot instead of one-by-one because the lv_async() isn't always chronological,
-                                # so when a long list of payments is added, it may be overwritten by a short list
-                                self.handle_new_payments(new_payment_list)
-                    else:
-                        notification = response.get("notification")
-                        if notification:
-                            amount = notification["amount"]
-                            amount = round(amount / 1000)
-                            type = notification["type"]
-                            if type == "outgoing":
-                                amount = -amount
-                            elif type == "incoming":
-                                new_balance = self.last_known_balance + amount
-                                self.handle_new_balance(new_balance, False) # don't trigger full fetch because payment info is in notification
-                                epoch_time = notification["created_at"]
-                                comment = self.getCommentFromTransaction(notification)
-                                paymentObj = Payment(epoch_time, amount, comment)
-                                self.handle_new_payment(paymentObj)
-                            else:
-                                print(f"WARNING: invalid notification type {type}, ignoring.")
-                        else:
-                            print("Unsupported response, ignoring.")
-                except Exception as e:
-                    print(f"DEBUG: Error processing response: {e}")
-                    import sys
-                    sys.print_exception(e)  # Full traceback on MicroPython
-            else:
-                #print(f"pool has no events after {time.ticks_ms()-start_time}ms") # completes in 0-1ms
-                pass
-
-    def fetch_balance(self):
-        try:
-            if not self.keep_running:
+            
+            if nrconnected == 0:
+                self.handle_error("Could not connect to Nostr relay.")
                 return
-            # Create get_balance request
-            balance_request = {
-                "method": "get_balance",
-                "params": {}
-            }
-            print(f"DEBUG: Created balance request: {balance_request}")
-            print(f"DEBUG: Creating encrypted DM to wallet pubkey: {self.wallet_pubkey}")
-            dm = EncryptedDirectMessage(
-                recipient_pubkey=self.wallet_pubkey,
-                cleartext_content=json.dumps(balance_request),
-                kind=23194
-            )
-            print(f"DEBUG: Signing DM {json.dumps(dm)} with private key")
-            self.private_key.sign_event(dm) # sign also does encryption if it's a encrypted dm
-            print(f"DEBUG: Publishing encrypted DM")
-            self.relay_manager.publish_event(dm)
+            
+            if not self.keep_running:
+                print(f"async_event_manager_task: not keep_running, returning...")
+                return
+
+            print(f"Relay connected")
+            self.connected = True
+
+            # Set up subscription to receive events from follow_npub
+            self.subscription_id = "micropython_nostr_" + str(round(time.time()))
+            print(f"DEBUG: Setting up subscription with ID: {self.subscription_id}")
+            
+            # Create filter for events from follow_npub
+            self.filters = Filters([Filter(
+                kinds=[1],  # Text notes
+                authors=[self.follow_npub],
+            )])
+            print(f"DEBUG: Subscription filters: {self.filters.to_json_array()}")
+            self.relay_manager.add_subscription(self.subscription_id, self.filters)
+            
+            print(f"DEBUG: Creating subscription request")
+            request_message = [ClientMessageType.REQUEST, self.subscription_id]
+            request_message.extend(self.filters.to_json_array())
+            print(f"DEBUG: Publishing subscription request")
+            self.relay_manager.publish_message(json.dumps(request_message))
+            print(f"DEBUG: Published subscription request")
+
+            # Main event loop
+            while True:
+                await TaskManager.sleep(0.1)
+                if not self.keep_running:
+                    print("NostrClient: not keep_running, closing connections...")
+                    await self.relay_manager.close_connections()
+                    break
+
+                start_time = time.ticks_ms()
+                if self.relay_manager.message_pool.has_events():
+                    print(f"DEBUG: Event received from message pool after {time.ticks_ms()-start_time}ms")
+                    event_msg = self.relay_manager.message_pool.get_event()
+                    event_created_at = event_msg.event.created_at
+                    print(f"Received at {time.localtime()} a message with timestamp {event_created_at} after {time.ticks_ms()-start_time}ms")
+                    try:
+                        # Create NostrEvent wrapper
+                        nostr_event = NostrEvent(event_msg.event)
+                        print(f"DEBUG: Event content: {nostr_event.content}")
+                        
+                        # Add to event list
+                        self.handle_new_event(nostr_event)
+                        
+                    except Exception as e:
+                        print(f"DEBUG: Error processing event: {e}")
+                        import sys
+                        sys.print_exception(e)
+
         except Exception as e:
-            print(f"inside fetch_balance exception: {e}")
+            print(f"async_event_manager_task exception: {e}")
+            import sys
+            sys.print_exception(e)
+            self.handle_error(f"Error in event manager: {e}")
 
-    def fetch_payments(self):
-        if not self.keep_running:
-            return
-        # Create get_balance request
-        list_transactions = {
-            "method": "list_transactions",
-            "params": {
-                "limit": self.PAYMENTS_TO_SHOW
-            }
-        }
-        dm = EncryptedDirectMessage(
-            recipient_pubkey=self.wallet_pubkey,
-            cleartext_content=json.dumps(list_transactions),
-            kind=23194
-        )
-        self.private_key.sign_event(dm) # sign also does encryption if it's a encrypted dm
-        print("\nPublishing DM to fetch payments...")
-        self.relay_manager.publish_event(dm)
-
-    def parse_nwc_url(self, nwc_url):
-        """Parse Nostr Wallet Connect URL to extract pubkey, relays, secret, and lud16."""
-        print(f"DEBUG: Starting to parse NWC URL: {nwc_url}")
-        try:
-            # Remove 'nostr+walletconnect://' or 'nwc:' prefix
-            if nwc_url.startswith('nostr+walletconnect://'):
-                print(f"DEBUG: Removing 'nostr+walletconnect://' prefix")
-                nwc_url = nwc_url[22:]
-            elif nwc_url.startswith('nwc:'):
-                print(f"DEBUG: Removing 'nwc:' prefix")
-                nwc_url = nwc_url[4:]
-            else:
-                print(f"DEBUG: No recognized prefix found in URL")
-                raise ValueError("Invalid NWC URL: missing 'nostr+walletconnect://' or 'nwc:' prefix")
-            print(f"DEBUG: URL after prefix removal: {nwc_url}")
-            # urldecode because the relay might have %3A%2F%2F etc
-            nwc_url = urldecode(nwc_url)
-            print(f"after urldecode: {nwc_url}")
-            # Split into pubkey and query params
-            parts = nwc_url.split('?')
-            pubkey = parts[0]
-            print(f"DEBUG: Extracted pubkey: {pubkey}")
-            # Validate pubkey (should be 64 hex characters)
-            if len(pubkey) != 64 or not all(c in '0123456789abcdef' for c in pubkey):
-                raise ValueError("Invalid NWC URL: pubkey must be 64 hex characters")
-            # Extract relay, secret, and lud16 from query params
-            relays = []
-            lud16 = None
-            secret = None
-            if len(parts) > 1:
-                print(f"DEBUG: Query parameters found: {parts[1]}")
-                params = parts[1].split('&')
-                for param in params:
-                    if param.startswith('relay='):
-                        relay = param[6:]
-                        print(f"DEBUG: Extracted relay: {relay}")
-                        relays.append(relay)
-                    elif param.startswith('secret='):
-                        secret = param[7:]
-                        print(f"DEBUG: Extracted secret: {secret}")
-                    elif param.startswith('lud16='):
-                        lud16 = param[6:]
-                        print(f"DEBUG: Extracted lud16: {lud16}")
-            else:
-                print(f"DEBUG: No query parameters found")
-            if not pubkey or not len(relays) > 0 or not secret:
-                raise ValueError("Invalid NWC URL: missing required fields (pubkey, relay, or secret)")
-            # Validate secret (should be 64 hex characters)
-            if len(secret) != 64 or not all(c in '0123456789abcdef' for c in secret):
-                raise ValueError("Invalid NWC URL: secret must be 64 hex characters")
-            print(f"DEBUG: Parsed NWC data - Relay: {relays}, Pubkey: {pubkey}, Secret: {secret}, lud16: {lud16}")
-            return relays, pubkey, secret, lud16
-        except Exception as e:
-            raise RuntimeError(f"Exception parsing NWC URL {nwc_url}: {e}")
-
-
-    # From wallet.py:
     # Public variables
-    # These values could be loading from a cache.json file at __init__
     last_known_balance = 0
-    payment_list = None
-    static_receive_code = None
+    event_list = None
 
     # Variables
     keep_running = True
     
     # Callbacks:
-    balance_updated_cb = None
-    payments_updated_cb = None
-    static_receive_code_updated_cb = None
+    events_updated_cb = None
     error_cb = None
 
-
-    def __str__(self):
-        if isinstance(self, LNBitsWallet):
-            return "LNBitsWallet"
-        elif isinstance(self, NWCWallet):
-            return "NWCWallet"
-
-    def handle_new_balance(self, new_balance, fetchPaymentsIfChanged=True):
-        if not self.keep_running or new_balance is None:
-            return
-        sats_added = new_balance - self.last_known_balance
-        if new_balance != self.last_known_balance:
-            print("Balance changed!")
-            self.last_known_balance = new_balance
-            print("Calling balance_updated_cb")
-            self.balance_updated_cb(sats_added)
-            if fetchPaymentsIfChanged: # Fetching *all* payments isn't necessary if balance was changed by a payment notification
-                print("Refreshing payments...")
-                self.fetch_payments() # if the balance changed, then re-list transactions
-
-    def handle_new_payment(self, new_payment):
+    def handle_new_event(self, new_event):
+        """Handle a new event from the relay"""
         if not self.keep_running:
             return
-        print("handle_new_payment")
-        self.payment_list.add(new_payment)
-        self.payments_updated_cb()
-
-    def handle_new_payments(self, new_payments):
-        if not self.keep_running:
-            return
-        print("handle_new_payments")
-        if self.payment_list != new_payments:
-            print("new list of payments")
-            self.payment_list = new_payments
-            self.payments_updated_cb()
-
-    def handle_new_static_receive_code(self, new_static_receive_code):
-        print("handle_new_static_receive_code")
-        if not self.keep_running or not new_static_receive_code:
-            print("not self.keep_running or not new_static_receive_code")
-            return
-        if self.static_receive_code != new_static_receive_code:
-            print("it's really a new static_receive_code")
-            self.static_receive_code = new_static_receive_code
-            if self.static_receive_code_updated_cb:
-                self.static_receive_code_updated_cb()
-        else:
-            print(f"self.static_receive_code {self.static_receive_code } == new_static_receive_code {new_static_receive_code}")
+        print("handle_new_event")
+        self.event_list.append(new_event)
+        # Keep only the most recent EVENTS_TO_SHOW events
+        if len(self.event_list) > self.EVENTS_TO_SHOW:
+            self.event_list = self.event_list[-self.EVENTS_TO_SHOW:]
+        if self.events_updated_cb:
+            self.events_updated_cb()
 
     def handle_error(self, e):
         if self.error_cb:
             self.error_cb(e)
 
-    # Maybe also add callbacks for:
-    #    - started (so the user can show the UI) 
-    #    - stopped (so the user can delete/free it)
-    #    - error (so the user can show the error)
-    def start(self, balance_updated_cb, payments_updated_cb, static_receive_code_updated_cb = None, error_cb = None):
+    def start(self, events_updated_cb, error_cb=None):
+        """Start the event manager task"""
         self.keep_running = True
-        self.balance_updated_cb = balance_updated_cb
-        self.payments_updated_cb = payments_updated_cb
-        self.static_receive_code_updated_cb = static_receive_code_updated_cb
+        self.events_updated_cb = events_updated_cb
         self.error_cb = error_cb
-        TaskManager.create_task(self.async_wallet_manager_task())
+        TaskManager.create_task(self.async_event_manager_task())
 
     def stop(self):
+        """Stop the event manager task"""
         self.keep_running = False
-        # idea: do a "close connections" call here instead of waiting for polling sub-tasks to notice the change
 
     def is_running(self):
         return self.keep_running
-
