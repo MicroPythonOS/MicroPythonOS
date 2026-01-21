@@ -79,3 +79,7 @@ def set_theme(prefs):
     # Recreate keyboard button fix style if mode changed
     global _keyboard_button_fix_style
     _keyboard_button_fix_style = None  # Force recreation with new theme colors
+
+def is_light_mode():
+    global _is_light_mode
+    return _is_light_mode

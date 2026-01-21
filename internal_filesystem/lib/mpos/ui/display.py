@@ -1,12 +1,18 @@
 # lib/mpos/ui/display.py
 import lvgl as lv
-from mpos.ui.theme import _is_light_mode
 
 _horizontal_resolution = None
 _vertical_resolution = None
 _dpi = None
 
-logo_url = "M:builtin/res/mipmap-mdpi/MicroPythonOS_logo_white_on_black_240x35.png"
+# White text on black logo works (for dark mode) and can be inverted (for light mode)
+logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w240.png"
+
+# Black text on transparent logo works (for light mode) but can't be inverted (for dark mode)
+# Even when trying different blend modes (SUBTRACTIVE, ADDITIVE, MULTIPLY)
+# Even when it's on a white (instead of transparent) background
+#logo_black = "M:builtin/res/mipmap-mdpi/MicroPythonOS_logo_black_240x35.png"
+#logo_black = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-black-long-w240.png"
 
 def init_rootscreen():
     global _horizontal_resolution, _vertical_resolution, _dpi
@@ -18,9 +24,8 @@ def init_rootscreen():
     print(f"init_rootscreen set resolution to {_horizontal_resolution}x{_vertical_resolution} at {_dpi} DPI")
     try:
         img = lv.image(screen)
-        img.set_src(logo_url)
-        if not _is_light_mode:
-            img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE) # invert the logo color 
+        img.set_src(logo_white)
+        img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)
         img.center()
     except Exception as e: # if image loading fails
         print(f"ERROR: logo image failed, LVGL will be in a bad state and the UI will hang: {e}")
