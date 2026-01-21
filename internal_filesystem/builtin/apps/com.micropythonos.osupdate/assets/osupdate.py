@@ -133,12 +133,12 @@ class OSUpdate(Activity):
             if self.current_state == UpdateState.IDLE or self.current_state == UpdateState.WAITING_WIFI:
                 # Was waiting for network, now can check for updates
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                self.schedule_show_update_info()
+                self.show_update_info()
             elif self.current_state == UpdateState.ERROR:
                 # Was in error state (possibly network error), retry now that network is back
                 print("OSUpdate: Retrying update check after network came back online")
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                self.schedule_show_update_info()
+                self.show_update_info()
             elif self.current_state == UpdateState.DOWNLOAD_PAUSED:
                 # Download was paused, will auto-resume in download thread
                 pass
@@ -180,15 +180,6 @@ class OSUpdate(Activity):
         # Generic errors
         else:
             return f"An error occurred:\n{str(error)}\n\nPlease try again."
-
-    # Show update info with a delay, to ensure ordering of multiple lv.async_call()
-    def schedule_show_update_info(self):
-        # Create async task for show_update_info with a delay
-        async def delayed_show_update_info():
-            await TaskManager.sleep_ms(150)
-            await self.show_update_info()
-
-        TaskManager.create_task(delayed_show_update_info())
 
     async def show_update_info(self):
         hwid = mpos.info.get_hardware_id()
@@ -277,7 +268,7 @@ class OSUpdate(Activity):
         print("OSUpdate: Check Again button clicked")
         self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.set_state(UpdateState.CHECKING_UPDATE)
-        self.schedule_show_update_info()
+        self.show_update_info()
 
     async def async_progress_callback(self, percent):
         """Async progress callback for DownloadManager.
