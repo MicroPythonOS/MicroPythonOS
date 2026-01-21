@@ -3,8 +3,6 @@
 
 import sys
 import time
-import requests
-import usocket
 
 try:
     import network
