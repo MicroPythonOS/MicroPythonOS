@@ -9,16 +9,89 @@ from nostr.message_type import ClientMessageType
 from nostr.filter import Filter, Filters
 from nostr.key import PrivateKey
 
+# Mapping of Nostr event kinds to human-readable names
+EVENT_KIND_NAMES = {
+    0: "SET_METADATA",
+    1: "TEXT_NOTE",
+    2: "RECOMMEND_RELAY",
+    3: "CONTACTS",
+    4: "ENCRYPTED_DM",
+    5: "DELETE",
+}
+
+def get_kind_name(kind):
+    """Get human-readable name for an event kind"""
+    return EVENT_KIND_NAMES.get(kind, f"UNKNOWN({kind})")
+
+def format_timestamp(timestamp):
+    """Format a Unix timestamp to a readable date/time string"""
+    try:
+        import time as time_module
+        # Convert Unix timestamp to time tuple
+        time_tuple = time_module.localtime(timestamp)
+        # Format as YYYY-MM-DD HH:MM
+        return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}".format(
+            time_tuple[0], time_tuple[1], time_tuple[2],
+            time_tuple[3], time_tuple[4]
+        )
+    except:
+        return str(timestamp)
+
+def format_tags(tags):
+    """Format event tags into a readable string"""
+    if not tags:
+        return ""
+    
+    tag_strs = []
+    for tag in tags:
+        if len(tag) >= 2:
+            tag_type = tag[0]
+            tag_value = tag[1]
+            # Truncate long values
+            if len(tag_value) > 16:
+                tag_value = tag_value[:16] + "..."
+            tag_strs.append(f"{tag_type}:{tag_value}")
+    
+    if tag_strs:
+        return "Tags: " + ", ".join(tag_strs)
+    return ""
+
 class NostrEvent:
-    """Simple wrapper for a Nostr event"""
+    """Simple wrapper for a Nostr event with rich details"""
     def __init__(self, event_obj):
         self.event = event_obj
         self.created_at = event_obj.created_at
         self.content = event_obj.content
         self.public_key = event_obj.public_key
+        self.kind = event_obj.kind
+        self.tags = event_obj.tags if hasattr(event_obj, 'tags') else []
+    
+    def get_kind_name(self):
+        """Get human-readable name for this event's kind"""
+        return get_kind_name(self.kind)
+    
+    def get_formatted_timestamp(self):
+        """Get formatted timestamp for this event"""
+        return format_timestamp(self.created_at)
+    
+    def get_formatted_tags(self):
+        """Get formatted tags for this event"""
+        return format_tags(self.tags)
     
     def __str__(self):
-        return f"{self.content}"
+        """Return formatted event details"""
+        kind_name = self.get_kind_name()
+        timestamp = self.get_formatted_timestamp()
+        tags_str = self.get_formatted_tags()
+        
+        # Build the formatted event string
+        result = f"[{kind_name}] {timestamp}\n"
+        if self.content:
+            result += f"{self.content}"
+        if tags_str:
+            result += f"\n{tags_str}"
+        
+        return result
 
 class NostrClient():
     """Simple Nostr event subscriber that connects to a relay and subscribes to a public key's events"""

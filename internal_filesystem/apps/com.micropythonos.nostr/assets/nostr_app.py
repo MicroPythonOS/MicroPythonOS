@@ -167,7 +167,8 @@ class NostrApp(Activity):
         events_text = ""
         if self.wallet.event_list:
             for event in self.wallet.event_list:
-                events_text += f"{event.content}\n\n"
+                # Use the enhanced __str__ method that includes kind, timestamp, and tags
+                events_text += f"{str(event)}\n\n"
         else:
             events_text = "No events yet..."
         self.events_label.set_text(events_text)
