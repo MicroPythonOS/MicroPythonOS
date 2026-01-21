@@ -46,7 +46,8 @@ def close_drawer(to_launcher=False):
     global drawer_open, drawer
     if drawer_open:
         drawer_open=False
-        if not to_launcher and not "launcher" in get_foreground_app():
+        fg = get_foreground_app()
+        if not to_launcher and fg is not None and not "launcher" in fg:
             print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {get_foreground_app()}")
             close_bar(False)
         WidgetAnimator.hide_widget(drawer, anim_type="slide_up", duration=1000, delay=0)
