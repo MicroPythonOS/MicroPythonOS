@@ -87,8 +87,9 @@ class NostrClient():
             print(f"DEBUG: Setting up subscription with ID: {self.subscription_id}")
             
             # Create filter for events from follow_npub
+            # Note: Some relays don't support filtering by both kinds and authors
+            # So we just filter by authors
             self.filters = Filters([Filter(
-                kinds=[1],  # Text notes
                 authors=[self.follow_npub],
             )])
             print(f"DEBUG: Subscription filters: {self.filters.to_json_array()}")
@@ -127,6 +128,13 @@ class NostrClient():
                         print(f"DEBUG: Error processing event: {e}")
                         import sys
                         sys.print_exception(e)
+                
+                # Check for relay notices (error messages)
+                if self.relay_manager.message_pool.has_notices():
+                    notice_msg = self.relay_manager.message_pool.get_notice()
+                    print(f"DEBUG: Relay notice: {notice_msg}")
+                    if notice_msg:
+                        self.handle_error(f"Relay: {notice_msg.content}")
 
         except Exception as e:
             print(f"async_event_manager_task exception: {e}")
