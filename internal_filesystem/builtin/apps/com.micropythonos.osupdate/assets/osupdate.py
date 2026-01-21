@@ -1,5 +1,4 @@
 import lvgl as lv
-import requests
 import ujson
 import time
 
@@ -184,15 +183,19 @@ class OSUpdate(Activity):
 
     # Show update info with a delay, to ensure ordering of multiple lv.async_call()
     def schedule_show_update_info(self):
-        timer = lv.timer_create(self.show_update_info, 150, None)
-        timer.set_repeat_count(1)
+        # Create async task for show_update_info with a delay
+        async def delayed_show_update_info():
+            await TaskManager.sleep_ms(150)
+            await self.show_update_info()
 
-    def show_update_info(self, timer=None):
+        TaskManager.create_task(delayed_show_update_info())
+
+    async def show_update_info(self):
         hwid = mpos.info.get_hardware_id()
 
         try:
             # Use UpdateChecker to fetch update info
-            update_info = self.update_checker.fetch_update_info(hwid)
+            update_info = await self.update_checker.fetch_update_info(hwid)
             if self.has_foreground():
                 self.handle_update_info(
                     update_info["version"],
@@ -696,14 +699,14 @@ class UpdateDownloader:
 class UpdateChecker:
     """Handles checking for OS updates from remote server."""
 
-    def __init__(self, requests_module=None, json_module=None):
+    def __init__(self, download_manager=None, json_module=None):
         """Initialize with optional dependency injection for testing.
 
         Args:
-            requests_module: HTTP requests module (defaults to requests)
+            download_manager: DownloadManager module (defaults to mpos.DownloadManager)
             json_module: JSON parsing module (defaults to ujson)
         """
-        self.requests = requests_module if requests_module else requests
+        self.download_manager = download_manager if download_manager else DownloadManager
         self.json = json_module if json_module else ujson
 
     def get_update_url(self, hardware_id):
@@ -722,7 +725,7 @@ class UpdateChecker:
             infofile = f"osupdate_{hardware_id}.json"
         return f"https://updates.micropythonos.com/{infofile}"
 
-    def fetch_update_info(self, hardware_id):
+    async def fetch_update_info(self, hardware_id):
         """Fetch and parse update information from server.
 
         Args:
@@ -734,27 +737,20 @@ class UpdateChecker:
 
         Raises:
             ValueError: If JSON is malformed or missing required fields
-            ConnectionError: If network request fails
+            RuntimeError: If network request fails
         """
         url = self.get_update_url(hardware_id)
         print(f"OSUpdate: fetching {url}")
 
         try:
-            response = self.requests.get(url)
-
-            if response.status_code != 200:
-                # Use RuntimeError instead of ConnectionError (not available in MicroPython)
-                raise RuntimeError(
-                    f"HTTP {response.status_code} while checking {url}"
-                )
+            # Use DownloadManager to fetch the JSON data
+            response_data = await self.download_manager.download_url(url)
 
             # Parse JSON
             try:
-                update_data = self.json.loads(response.text)
+                update_data = self.json.loads(response_data)
             except Exception as e:
                 raise ValueError(f"Invalid JSON in update file: {e}")
-            finally:
-                response.close()
 
             # Validate required fields
             required_fields = ['version', 'download_url', 'changelog']
