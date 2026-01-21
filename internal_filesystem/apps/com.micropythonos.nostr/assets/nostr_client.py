@@ -23,7 +23,7 @@ class NostrEvent:
 class NostrClient():
     """Simple Nostr event subscriber that connects to a relay and subscribes to a public key's events"""
 
-    EVENTS_TO_SHOW = 10
+    EVENTS_TO_SHOW = 50
     
     relay = None
     nsec = None

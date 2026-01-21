@@ -67,13 +67,13 @@ class SettingsActivity(Activity):
                 focusgroup.add_obj(setting_cont)
 
     def focus_container(self, container):
-        print(f"container {container} focused, setting border...")
+        #print(f"container {container} focused, setting border...")
         container.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
         container.set_style_border_width(1, lv.PART.MAIN)
         container.scroll_to_view(True) # scroll to bring it into view
 
     def defocus_container(self, container):
-        print(f"container {container} defocused, unsetting border...")
+        #print(f"container {container} defocused, unsetting border...")
         container.set_style_border_width(0, lv.PART.MAIN)
 
     def startSettingActivity(self, setting):

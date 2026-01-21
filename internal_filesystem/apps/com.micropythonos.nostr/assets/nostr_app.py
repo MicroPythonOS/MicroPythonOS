@@ -1,6 +1,59 @@
 import lvgl as lv
 
 from mpos import Activity, Intent, ConnectivityManager, pct_of_display_width, pct_of_display_height, SharedPreferences, SettingsActivity
+from fullscreen_qr import FullscreenQR
+
+class ShowNpubQRActivity(Activity):
+    """Activity that computes npub from nsec and displays it as a QR code"""
+    
+    def onCreate(self):
+        try:
+            print("ShowNpubQRActivity.onCreate() called")
+            prefs = self.getIntent().extras.get("prefs")
+            print(f"Got prefs: {prefs}")
+            nsec = prefs.get_string("nostr_nsec")
+            print(f"Got nsec: {nsec[:20] if nsec else 'None'}...")
+            
+            if not nsec:
+                print("ERROR: No nsec configured")
+                # Show error screen
+                error_screen = lv.obj()
+                error_label = lv.label(error_screen)
+                error_label.set_text("No nsec configured")
+                error_label.center()
+                self.setContentView(error_screen)
+                return
+            
+            # Compute npub from nsec
+            print("Importing PrivateKey...")
+            from nostr.key import PrivateKey
+            print("Computing npub from nsec...")
+            if nsec.startswith("nsec1"):
+                print("Using from_nsec()")
+                private_key = PrivateKey.from_nsec(nsec)
+            else:
+                print("Using hex format")
+                private_key = PrivateKey(bytes.fromhex(nsec))
+            
+            npub = private_key.public_key.bech32()
+            print(f"Computed npub: {npub[:20]}...")
+            
+            # Launch FullscreenQR activity with npub as QR data
+            print("Creating FullscreenQR intent...")
+            intent = Intent(activity_class=FullscreenQR)
+            intent.putExtra("receive_qr_data", npub)
+            print(f"Starting FullscreenQR activity with npub: {npub[:20]}...")
+            self.startActivity(intent)
+        except Exception as e:
+            print(f"ShowNpubQRActivity exception: {e}")
+            # Show error screen
+            error_screen = lv.obj()
+            error_label = lv.label(error_screen)
+            error_label.set_text(f"Error: {e}")
+            error_label.center()
+            self.setContentView(error_screen)
+            import sys
+            sys.print_exception(e)
 
 class NostrApp(Activity):
 
@@ -133,6 +186,7 @@ class NostrApp(Activity):
             {"title": "Nostr Private Key (nsec)", "key": "nostr_nsec", "placeholder": "nsec1...", "should_show": self.should_show_setting},
             {"title": "Nostr Follow Public Key (npub)", "key": "nostr_follow_npub", "placeholder": "npub1...", "should_show": self.should_show_setting},
             {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": "wss://relay.example.com", "should_show": self.should_show_setting},
+            {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self.should_show_setting},
         ])
         self.startActivity(intent)
 
