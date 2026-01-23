@@ -16,7 +16,7 @@ Usage:
 """
 
 import lvgl as lv
-import mpos.ui.theme
+from .appearance_manager import AppearanceManager
 from .widget_animator import WidgetAnimator
 
 class MposKeyboard:
@@ -122,7 +122,7 @@ class MposKeyboard:
         self._keyboard.add_event_cb(self._handle_events, lv.EVENT.ALL, None)
 
         # Apply theme fix for light mode visibility
-        mpos.ui.theme.fix_keyboard_button_style(self._keyboard)
+        AppearanceManager.apply_keyboard_fix(self._keyboard)
 
         # Set good default height
         self._keyboard.set_style_min_height(175, 0)

@@ -35,8 +35,8 @@ class Settings(SettingsActivity):
             ("Turquoise", "40e0d0")
         ]
         intent = Intent()
-        import mpos.config
-        intent.putExtra("prefs", mpos.config.SharedPreferences("com.micropythonos.settings"))
+        from mpos import SharedPreferences
+        intent.putExtra("prefs", SharedPreferences("com.micropythonos.settings"))
         import mpos.time
         intent.putExtra("settings", [
             # Basic settings, alphabetically:
@@ -95,5 +95,5 @@ class Settings(SettingsActivity):
         PackageManager.refresh_apps()
 
     def theme_changed(self, new_value):
-        from mpos import set_theme
-        set_theme(self.prefs)
+        from mpos import AppearanceManager
+        AppearanceManager.init(self.prefs)
