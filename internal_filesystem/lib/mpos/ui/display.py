@@ -6,7 +6,7 @@ _vertical_resolution = None
 _dpi = None
 
 # White text on black logo works (for dark mode) and can be inverted (for light mode)
-logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w240.png"
+logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296_without_border_266x39.png"
 
 # Black text on transparent logo works (for light mode) but can't be inverted (for dark mode)
 # Even when trying different blend modes (SUBTRACTIVE, ADDITIVE, MULTIPLY)
