@@ -2,7 +2,7 @@ import lvgl as lv
 
 from ..config import SharedPreferences
 from ..app.activity import Activity
-from .display import DisplayMetrics
+from .display_metrics import DisplayMetrics
 from .widget_animator import WidgetAnimator
 
 class CameraSettingsActivity(Activity):

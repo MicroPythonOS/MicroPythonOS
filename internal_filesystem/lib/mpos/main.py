@@ -5,31 +5,70 @@ import mpos
 import mpos.apps
 import mpos.config
 import mpos.ui
-from . import ui
+
 from .content.package_manager import PackageManager
-from mpos.ui.display import init_rootscreen
-from mpos.ui.appearance_manager import AppearanceManager
+from .ui.appearance_manager import AppearanceManager
+from .ui.display_metrics import DisplayMetrics
 import mpos.ui.topmenu
 
-# Auto-detect and initialize hardware
-import sys
-if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
-    board = "linux"
-elif sys.platform == "esp32":
-    from machine import Pin, I2C
-    i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
-    if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
-        board = "waveshare_esp32_s3_touch_lcd_2"
-    else:
-        i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
-        if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
-            board = "fri3d_2024"
-        elif {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
-            board = "fri3d_2026"
-        else:
-            print("Unable to identify board, defaulting...")
-            board = "fri3d_2024" # default fallback
 
+
+# White text on black logo works (for dark mode) and can be inverted (for light mode)
+logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png" # from the MPOS-logo repo
+
+# Black text on transparent logo works (for light mode) but can't be inverted (for dark mode)
+# Even when trying different blend modes (SUBTRACTIVE, ADDITIVE, MULTIPLY)
+# Even when it's on a white (instead of transparent) background
+#logo_black = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-black-long-w240.png"
+
+
+def init_rootscreen():
+    """Initialize the root screen and set display metrics."""
+    screen = lv.screen_active()
+    disp = screen.get_display()
+    width = disp.get_horizontal_resolution()
+    height = disp.get_vertical_resolution()
+    dpi = disp.get_dpi()
+    
+    # Initialize DisplayMetrics with actual display values
+    DisplayMetrics.set_resolution(width, height)
+    DisplayMetrics.set_dpi(dpi)
+    
+    print(f"init_rootscreen set resolution to {width}x{height} at {dpi} DPI")
+    
+    try:
+        img = lv.image(screen)
+        img.set_src(logo_white)
+        img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)
+        img.center()
+    except Exception as e:  # if image loading fails
+        print(f"ERROR: logo image failed, LVGL will be in a bad state and the UI will hang: {e}")
+        import sys
+        sys.print_exception(e)
+        print("Trying to fall back to a simple text-based 'logo' but it won't showup because the UI broke...")
+        label = lv.label(screen)
+        label.set_text("MicroPythonOS")
+        label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+        label.center()
+
+def detect_board():
+    import sys
+    if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
+        return "linux"
+    elif sys.platform == "esp32":
+        from machine import Pin, I2C
+        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
+        if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
+            return "waveshare_esp32_s3_touch_lcd_2"
+        else:
+            i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
+            if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
+                return "fri3d_2026"
+            else: # if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+                return "fri3d_2024"
+
+
+board = detect_board()
 print(f"Initializing {board} hardware")
 import mpos.info
 mpos.info.set_hardware_id(board)
@@ -45,7 +84,7 @@ prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
 AppearanceManager.init(prefs)
 init_rootscreen()
 mpos.ui.topmenu.create_notification_bar()
-mpos.ui.topmenu.create_drawer(mpos.ui.display)
+mpos.ui.topmenu.create_drawer()
 mpos.ui.handle_back_swipe()
 mpos.ui.handle_top_swipe()
 

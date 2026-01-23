@@ -3,7 +3,7 @@ from lvgl import LvReferenceError
 from .widget_animator import WidgetAnimator
 from .view import back_screen
 from mpos.ui import topmenu as topmenu
-from .display import DisplayMetrics
+from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
 
 downbutton = None

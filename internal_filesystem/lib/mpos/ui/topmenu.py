@@ -217,7 +217,7 @@ def create_notification_bar():
     
 
 
-def create_drawer(display=None):
+def create_drawer():
     global drawer
     drawer=lv.obj(lv.layer_top())
     drawer.set_size(lv.pct(100),lv.pct(90))

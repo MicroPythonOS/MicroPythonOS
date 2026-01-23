@@ -2,7 +2,7 @@ import lvgl as lv
 
 from ..app.activity import Activity
 from .camera_activity import CameraActivity
-from .display import DisplayMetrics
+from .display_metrics import DisplayMetrics
 from .widget_animator import WidgetAnimator
 from ..camera_manager import CameraManager
 
