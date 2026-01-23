@@ -25,6 +25,7 @@ import os
 from mpos import (
     wait_for_render,
     capture_screenshot,
+    AppearanceManager,
 )
 
 
@@ -62,7 +63,7 @@ class TestKeyboardStyling(unittest.TestCase):
         editor.commit()
 
         # Reapply original theme
-        mpos.ui.theme.set_theme(prefs)
+        AppearanceManager.set_theme(prefs)
 
         print("=== Test cleanup complete ===\n")
 
@@ -90,7 +91,7 @@ class TestKeyboardStyling(unittest.TestCase):
         keyboard.set_style_min_height(160, 0)
 
         # Apply the keyboard button fix
-        mpos.ui.theme.fix_keyboard_button_style(keyboard)
+        AppearanceManager.apply_keyboard_fix(keyboard)
 
         # Load the screen and wait for rendering
         lv.screen_load(screen)
@@ -228,7 +229,7 @@ class TestKeyboardStyling(unittest.TestCase):
         editor.commit()
 
         # Apply theme
-        mpos.ui.theme.set_theme(prefs)
+        AppearanceManager.set_theme(prefs)
         wait_for_render(iterations=10)
 
         # Create test keyboard
@@ -282,7 +283,7 @@ class TestKeyboardStyling(unittest.TestCase):
         editor.commit()
 
         # Apply theme
-        mpos.ui.theme.set_theme(prefs)
+        AppearanceManager.set_theme(prefs)
         wait_for_render(iterations=10)
 
         # Create test keyboard
@@ -335,7 +336,7 @@ class TestKeyboardStyling(unittest.TestCase):
         editor.commit()
 
         # Apply theme
-        mpos.ui.theme.set_theme(prefs)
+        AppearanceManager.set_theme(prefs)
         wait_for_render(iterations=10)
 
         # Create test keyboard

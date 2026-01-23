@@ -13,7 +13,7 @@ import unittest
 import lvgl as lv
 import sys
 import os
-from mpos import MposKeyboard, wait_for_render, capture_screenshot
+from mpos import MposKeyboard, wait_for_render, capture_screenshot, AppearanceManager
 
 
 class TestGraphicalMposKeyboard(unittest.TestCase):
@@ -200,12 +200,11 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
 
         # Set light mode (should already be default)
         import mpos.config
-        import mpos.ui.theme
         prefs = mpos.config.SharedPreferences("theme_settings")
         editor = prefs.edit()
         editor.put_string("theme_light_dark", "light")
         editor.commit()
-        mpos.ui.theme.set_theme(prefs)
+        AppearanceManager.set_theme(prefs)
         wait_for_render(10)
 
         # Create keyboard

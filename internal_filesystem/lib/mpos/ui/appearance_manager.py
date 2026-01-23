@@ -155,6 +155,26 @@ class AppearanceManager:
         
         print(f"[AppearanceManager] Light mode set to: {is_light}")
     
+    @classmethod
+    def set_theme(cls, prefs):
+        """
+        Set the theme from preferences and reinitialize LVGL theme.
+        
+        This is a convenience method that loads theme settings from SharedPreferences
+        and applies them. It's equivalent to calling init() with the preferences.
+        
+        Args:
+            prefs: SharedPreferences object containing theme settings
+        
+        Example:
+            from mpos import AppearanceManager
+            import mpos.config
+            
+            prefs = mpos.config.SharedPreferences("theme_settings")
+            AppearanceManager.set_theme(prefs)
+        """
+        cls.init(prefs)
+    
     # ========== Theme Colors ==========
     
     @classmethod
