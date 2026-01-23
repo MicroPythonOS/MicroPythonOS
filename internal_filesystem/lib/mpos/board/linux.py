@@ -116,7 +116,7 @@ AudioFlinger(i2s_pins=i2s_pins)
 
 # === SENSOR HARDWARE ===
 # Note: Desktop builds have no sensor hardware
-import mpos.sensor_manager as SensorManager
+from mpos import SensorManager
 
 # Initialize with no I2C bus - will detect MCU temp if available
 # (On Linux desktop, this will fail gracefully but set _initialized flag)
@@ -130,7 +130,7 @@ try:
     test_cam = webcam.init("/dev/video0", width=320, height=240)
     if test_cam:
         webcam.deinit(test_cam)
-        import mpos.camera_manager as CameraManager
+        from mpos import CameraManager
         CameraManager.add_camera(CameraManager.Camera(
             lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
             name="Video4Linux2 Camera",

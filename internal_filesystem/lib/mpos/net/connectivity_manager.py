@@ -87,11 +87,39 @@ class ConnectivityManager:
         return self.is_connected
 
     def wait_until_online(self, timeout=60):
-        if not self.can_check_network:
-            return True
-        start = time.time()
-        while time.time() - start < timeout:
-            if self.is_online:
-                return True
-            time.sleep(1)
-        return False
+         if not self.can_check_network:
+             return True
+         start = time.time()
+         while time.time() - start < timeout:
+             if self.is_online:
+                 return True
+             time.sleep(1)
+         return False
+
+
+# ============================================================================
+# Class method delegation (at module level)
+# ============================================================================
+
+_original_methods = {}
+_methods_to_delegate = [
+    'is_online', 'is_wifi_connected', 'wait_until_online',
+    'register_callback', 'unregister_callback'
+]
+
+for method_name in _methods_to_delegate:
+    _original_methods[method_name] = getattr(ConnectivityManager, method_name)
+
+def _make_class_method(method_name):
+    """Create a class method that delegates to the singleton instance."""
+    original_method = _original_methods[method_name]
+    
+    @classmethod
+    def class_method(cls, *args, **kwargs):
+        instance = cls.get()
+        return original_method(instance, *args, **kwargs)
+    
+    return class_method
+
+for method_name in _methods_to_delegate:
+    setattr(ConnectivityManager, method_name, _make_class_method(method_name))

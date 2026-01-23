@@ -4,7 +4,7 @@ from ..app.activity import Activity
 from .camera_activity import CameraActivity
 from .display import pct_of_display_width
 from . import anim
-from .. import camera_manager as CameraManager
+from ..camera_manager import CameraManager
 
 """
 SettingActivity is used to edit one setting.

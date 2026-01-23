@@ -3,7 +3,7 @@ import unittest
 import sys
 import os
 
-import mpos.camera_manager as CameraManager
+from mpos import CameraManager
 
 class TestCameraClass(unittest.TestCase):
     """Test Camera class functionality."""

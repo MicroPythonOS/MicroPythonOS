@@ -16,7 +16,7 @@ import sys
 
 # Import the module under test
 sys.path.insert(0, '../internal_filesystem/lib')
-import mpos.net.download_manager as DownloadManager
+from mpos.net.download_manager import DownloadManager
 from mpos.testing.mocks import MockDownloadManager
 
 
@@ -25,11 +25,6 @@ class TestDownloadManager(unittest.TestCase):
 
     def setUp(self):
         """Reset module state before each test."""
-        # Reset module-level state
-        DownloadManager._session = None
-        DownloadManager._session_refcount = 0
-        DownloadManager._session_lock = None
-
         # Create temp directory for file downloads
         self.temp_dir = "/tmp/test_download_manager"
         try:
@@ -41,8 +36,10 @@ class TestDownloadManager(unittest.TestCase):
         """Clean up after each test."""
         # Close any open sessions
         import asyncio
-        if DownloadManager._session:
+        try:
             asyncio.run(DownloadManager.close_session())
+        except Exception:
+            pass  # Session might not be open
 
         # Clean up temp files
         try:
@@ -471,3 +468,122 @@ class TestDownloadManager(unittest.TestCase):
             os.remove(outfile)
 
         asyncio.run(run_test())
+
+    # ==================== Async/Sync Compatibility Tests ====================
+
+    def test_async_download_with_await(self):
+        """Test async download using await (traditional async usage)."""
+        import asyncio
+
+        async def run_test():
+            try:
+                # Traditional async usage with await
+                data = await DownloadManager.download_url("https://MicroPythonOS.com")
+            except Exception as e:
+                self.skipTest(f"MicroPythonOS.com unavailable: {e}")
+                return
+
+            self.assertIsNotNone(data)
+            self.assertIsInstance(data, bytes)
+            self.assertTrue(len(data) > 0)
+            # Verify it's HTML content
+            self.assertIn(b'html', data.lower())
+
+        asyncio.run(run_test())
+
+    def test_sync_download_without_await(self):
+        """Test synchronous download without await (auto-detects sync context)."""
+        # This is a synchronous function (no async def)
+        # The wrapper should detect no running event loop and run synchronously
+        try:
+            # Synchronous usage without await
+            data = DownloadManager.download_url("https://MicroPythonOS.com")
+        except Exception as e:
+            self.skipTest(f"MicroPythonOS.com unavailable: {e}")
+            return
+
+        self.assertIsNotNone(data)
+        self.assertIsInstance(data, bytes)
+        self.assertTrue(len(data) > 0)
+        # Verify it's HTML content
+        self.assertIn(b'html', data.lower())
+
+    def test_async_and_sync_return_same_data(self):
+        """Test that async and sync methods return identical data."""
+        import asyncio
+
+        # First, get data synchronously
+        try:
+            sync_data = DownloadManager.download_url("https://MicroPythonOS.com")
+        except Exception as e:
+            self.skipTest(f"MicroPythonOS.com unavailable: {e}")
+            return
+
+        # Then, get data asynchronously
+        async def run_async_test():
+            try:
+                async_data = await DownloadManager.download_url("https://MicroPythonOS.com")
+            except Exception as e:
+                self.skipTest(f"MicroPythonOS.com unavailable: {e}")
+                return
+            return async_data
+
+        async_data = asyncio.run(run_async_test())
+
+        # Both should return the same data
+        self.assertEqual(sync_data, async_data)
+        self.assertEqual(len(sync_data), len(async_data))
+
+    def test_sync_download_to_file(self):
+        """Test synchronous file download without await."""
+        outfile = f"{self.temp_dir}/sync_download.html"
+
+        try:
+            # Synchronous file download
+            success = DownloadManager.download_url(
+                "https://MicroPythonOS.com",
+                outfile=outfile
+            )
+        except Exception as e:
+            self.skipTest(f"MicroPythonOS.com unavailable: {e}")
+            return
+
+        self.assertTrue(success)
+        self.assertTrue(os.path.exists(outfile))
+        
+        # Verify file has content
+        file_size = os.stat(outfile)[6]
+        self.assertTrue(file_size > 0)
+        
+        # Verify it's HTML content
+        with open(outfile, 'rb') as f:
+            content = f.read()
+        self.assertIn(b'html', content.lower())
+
+        # Clean up
+        os.remove(outfile)
+
+    def test_sync_download_with_progress_callback(self):
+        """Test synchronous download with progress callback."""
+        progress_calls = []
+
+        async def track_progress(percent):
+            progress_calls.append(percent)
+
+        try:
+            # Synchronous download with async progress callback
+            data = DownloadManager.download_url(
+                "https://MicroPythonOS.com",
+                progress_callback=track_progress
+            )
+        except Exception as e:
+            self.skipTest(f"MicroPythonOS.com unavailable: {e}")
+            return
+
+        self.assertIsNotNone(data)
+        self.assertIsInstance(data, bytes)
+        # Progress callbacks should have been called
+        self.assertTrue(len(progress_calls) > 0)
+        # Verify progress values are in valid range
+        for pct in progress_calls:
+            self.assertTrue(0 <= pct <= 100)

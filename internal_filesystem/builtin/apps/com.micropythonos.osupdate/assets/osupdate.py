@@ -133,12 +133,12 @@ class OSUpdate(Activity):
             if self.current_state == UpdateState.IDLE or self.current_state == UpdateState.WAITING_WIFI:
                 # Was waiting for network, now can check for updates
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                self.show_update_info()
+                TaskManager.create_task(self.show_update_info())
             elif self.current_state == UpdateState.ERROR:
                 # Was in error state (possibly network error), retry now that network is back
                 print("OSUpdate: Retrying update check after network came back online")
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                self.show_update_info()
+                TaskManager.create_task(self.show_update_info())
             elif self.current_state == UpdateState.DOWNLOAD_PAUSED:
                 # Download was paused, will auto-resume in download thread
                 pass
@@ -425,11 +425,11 @@ class UpdateDownloader:
         Args:
             partition_module: ESP32 Partition module (defaults to esp32.Partition if available)
             connectivity_manager: ConnectivityManager instance for checking network during download
-            download_manager: DownloadManager module for async downloads (defaults to mpos.DownloadManager)
+            download_manager: DownloadManager instance for async downloads (defaults to DownloadManager class)
         """
         self.partition_module = partition_module
         self.connectivity_manager = connectivity_manager
-        self.download_manager = download_manager  # For testing injection
+        self.download_manager = download_manager if download_manager else DownloadManager
         self.simulate = False
 
         # Download state for pause/resume
@@ -576,7 +576,7 @@ class UpdateDownloader:
                 print(f"UpdateDownloader: Resuming from byte {self.bytes_written_so_far} (last complete block)")
 
             # Get the download manager (use injected one for testing, or global)
-            dm = self.download_manager if self.download_manager else DownloadManager
+            dm = self.download_manager
 
             # Create wrapper for chunk callback that checks should_continue
             async def chunk_handler(chunk):
@@ -694,7 +694,7 @@ class UpdateChecker:
         """Initialize with optional dependency injection for testing.
 
         Args:
-            download_manager: DownloadManager module (defaults to mpos.DownloadManager)
+            download_manager: DownloadManager instance (defaults to DownloadManager class)
             json_module: JSON parsing module (defaults to ujson)
         """
         self.download_manager = download_manager if download_manager else DownloadManager

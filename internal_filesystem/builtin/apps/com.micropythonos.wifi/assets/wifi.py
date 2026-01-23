@@ -2,9 +2,8 @@ import time
 import lvgl as lv
 import _thread
 
-from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, pct_of_display_width
+from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, pct_of_display_width, CameraManager
 import mpos.apps
-import mpos.camera_manager as CameraManager
 
 class WiFi(Activity):
     """

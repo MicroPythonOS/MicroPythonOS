@@ -96,6 +96,40 @@ _ACCELSCALE_RANGE_8G = 0b10
 _GYROSCALE_RANGE_256DPS = 0b100
 
 
+# Mock SharedPreferences to prevent loading real calibration
+class MockSharedPreferences:
+    """Mock SharedPreferences for testing."""
+    def __init__(self, package, filename=None):
+        self.package = package
+        self.filename = filename
+        self.data = {}
+    
+    def get_list(self, key):
+        """Get list value."""
+        return self.data.get(key)
+    
+    def edit(self):
+        """Return editor."""
+        return MockEditor(self.data)
+
+class MockEditor:
+    """Mock SharedPreferences editor."""
+    def __init__(self, data):
+        self.data = data
+    
+    def put_list(self, key, value):
+        """Put list value."""
+        self.data[key] = value
+        return self
+    
+    def commit(self):
+        """Commit changes."""
+        pass
+
+mock_config = type('module', (), {
+    'SharedPreferences': MockSharedPreferences
+})()
+
 # Create mock modules
 mock_machine = type('module', (), {
     'I2C': MockI2C,
@@ -128,6 +162,7 @@ sys.modules['machine'] = mock_machine
 sys.modules['mpos.hardware.drivers.qmi8658'] = mock_qmi8658
 sys.modules['mpos.hardware.drivers.wsen_isds'] = mock_wsen_isds
 sys.modules['esp32'] = mock_esp32
+sys.modules['mpos.config'] = mock_config
 
 # Mock _thread for thread safety testing
 try:
@@ -142,7 +177,7 @@ except ImportError:
     sys.modules['_thread'] = mock_thread
 
 # Now import the module to test
-import mpos.sensor_manager as SensorManager
+from mpos import SensorManager
 
 
 class TestSensorManagerQMI8658(unittest.TestCase):
@@ -150,11 +185,16 @@ class TestSensorManagerQMI8658(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test."""
-        # Reset SensorManager state
+        # Reset SensorManager singleton instance
+        SensorManager._instance = None
+        
+        # Reset SensorManager class state
         SensorManager._initialized = False
         SensorManager._imu_driver = None
         SensorManager._sensor_list = []
         SensorManager._has_mcu_temperature = False
+        SensorManager._i2c_bus = None
+        SensorManager._i2c_address = None
 
         # Create mock I2C bus with QMI8658
         self.i2c_bus = MockI2C(0, sda=48, scl=47)
@@ -262,11 +302,16 @@ class TestSensorManagerWsenIsds(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test."""
-        # Reset SensorManager state
+        # Reset SensorManager singleton instance
+        SensorManager._instance = None
+        
+        # Reset SensorManager class state
         SensorManager._initialized = False
         SensorManager._imu_driver = None
         SensorManager._sensor_list = []
         SensorManager._has_mcu_temperature = False
+        SensorManager._i2c_bus = None
+        SensorManager._i2c_address = None
 
         # Create mock I2C bus with WSEN_ISDS
         self.i2c_bus = MockI2C(0, sda=9, scl=18)
@@ -312,11 +357,16 @@ class TestSensorManagerNoHardware(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test."""
-        # Reset SensorManager state
+        # Reset SensorManager singleton instance
+        SensorManager._instance = None
+        
+        # Reset SensorManager class state
         SensorManager._initialized = False
         SensorManager._imu_driver = None
         SensorManager._sensor_list = []
         SensorManager._has_mcu_temperature = False
+        SensorManager._i2c_bus = None
+        SensorManager._i2c_address = None
 
         # Create mock I2C bus with no devices
         self.i2c_bus = MockI2C(0, sda=48, scl=47)
@@ -353,11 +403,16 @@ class TestSensorManagerMultipleInit(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test."""
-        # Reset SensorManager state
+        # Reset SensorManager singleton instance
+        SensorManager._instance = None
+        
+        # Reset SensorManager class state
         SensorManager._initialized = False
         SensorManager._imu_driver = None
         SensorManager._sensor_list = []
         SensorManager._has_mcu_temperature = False
+        SensorManager._i2c_bus = None
+        SensorManager._i2c_address = None
 
         # Create mock I2C bus with QMI8658
         self.i2c_bus = MockI2C(0, sda=48, scl=47)

@@ -117,14 +117,14 @@ except Exception as e:
 # LightsManager will not be initialized (functions will return False)
 
 # === SENSOR HARDWARE ===
-import mpos.sensor_manager as SensorManager
+from mpos import SensorManager
 
 # IMU is on I2C0 (same bus as touch): SDA=48, SCL=47, addr=0x6B
 # i2c_bus was created on line 75 for touch, reuse it for IMU
 SensorManager.init(i2c_bus, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 # === CAMERA HARDWARE ===
-import mpos.camera_manager as CameraManager
+from mpos import CameraManager
 
 # Waveshare ESP32-S3-Touch-LCD-2 has OV5640 camera
 CameraManager.add_camera(CameraManager.Camera(

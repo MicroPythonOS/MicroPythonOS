@@ -165,7 +165,7 @@ def create_notification_bar():
             wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
     
     # Get temperature sensor via SensorManager
-    import mpos.sensor_manager as SensorManager
+    from mpos import SensorManager
     temp_sensor = None
     if SensorManager.is_available():
         # Prefer MCU temperature (more stable) over IMU temperature

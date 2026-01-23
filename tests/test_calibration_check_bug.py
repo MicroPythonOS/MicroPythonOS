@@ -90,7 +90,7 @@ except ImportError:
     sys.modules['_thread'] = mock_thread
 
 # Now import the module to test
-import mpos.sensor_manager as SensorManager
+from mpos import SensorManager
 
 
 class TestCalibrationCheckBug(unittest.TestCase):

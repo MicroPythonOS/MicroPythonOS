@@ -1,16 +1,18 @@
 # Core framework
 from .app.app import App
 from .app.activity import Activity
-from .config import SharedPreferences
-from .net.connectivity_manager import ConnectivityManager
-from .net import download_manager as DownloadManager
-from .net.wifi_service import WifiService
-from .audio.audioflinger import AudioFlinger
 from .content.intent import Intent
 from .activity_navigator import ActivityNavigator
+
 from .content.package_manager import PackageManager
+from .config import SharedPreferences
+from .net.connectivity_manager import ConnectivityManager
+from .net.wifi_service import WifiService
+from .audio.audioflinger import AudioFlinger
+from .net.download_manager import DownloadManager
 from .task_manager import TaskManager
-from . import camera_manager as CameraManager
+from .camera_manager import CameraManager
+from .sensor_manager import SensorManager
 
 # Common activities
 from .app.activities.chooser import ChooserActivity

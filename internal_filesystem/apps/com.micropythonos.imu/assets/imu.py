@@ -1,4 +1,4 @@
-from mpos import Activity, sensor_manager as SensorManager
+from mpos import Activity, SensorManager
 
 class IMU(Activity):
 

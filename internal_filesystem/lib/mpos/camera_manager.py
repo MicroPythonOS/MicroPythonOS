@@ -1,10 +1,10 @@
 """Android-inspired CameraManager for MicroPythonOS.
 
 Provides unified access to camera devices (back-facing, front-facing, external).
-Follows module-level singleton pattern (like SensorManager, AudioFlinger).
+Follows singleton pattern with class method delegation.
 
 Example usage:
-    import mpos.camera_manager as CameraManager
+    from mpos import CameraManager
 
     # In board init file:
     CameraManager.add_camera(CameraManager.Camera(
@@ -21,7 +21,6 @@ Example usage:
 MIT License
 Copyright (c) 2024 MicroPythonOS contributors
 """
-
 
 
 # Camera lens facing constants (matching Android Camera2 API)
@@ -62,96 +61,153 @@ class Camera:
         return f"Camera({self.name}, facing={facing_str})"
 
 
-# Module state
-_initialized = False
-_cameras = []  # List of Camera objects
-
-
-def init():
-    """Initialize CameraManager.
+class CameraManager:
+    """
+    Centralized camera device management service.
+    Implements singleton pattern for unified camera access.
     
-    Returns:
-        bool: True if initialized successfully
+    Usage:
+        from mpos import CameraManager
+        
+        # Register a camera
+        CameraManager.add_camera(CameraManager.Camera(
+            lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
+            name="OV5640"
+        ))
+        
+        # Get all cameras
+        cameras = CameraManager.get_cameras()
     """
-    global _initialized
-    _initialized = True
-    return True
-
-
-def is_available():
-    """Check if CameraManager is initialized.
-
-    Returns:
-        bool: True if CameraManager is initialized
-    """
-    return _initialized
-
-
-def add_camera(camera):
-    """Register a camera device.
-
-    Args:
-        camera: Camera object to register
-
-    Returns:
-        bool: True if camera added successfully
-    """
-    if not isinstance(camera, Camera):
-        print(f"[CameraManager] Error: add_camera() requires Camera object, got {type(camera)}")
-        return False
-
-    # Check if camera with same facing already exists
-    for existing in _cameras:
-        if existing.lens_facing == camera.lens_facing:
-            print(f"[CameraManager] Warning: Camera with facing {camera.lens_facing} already registered")
-            # Still add it (allow multiple cameras with same facing)
     
-    _cameras.append(camera)
-    print(f"[CameraManager] Registered camera: {camera}")
-    return True
+    # Expose inner classes as class attributes
+    Camera = Camera
+    CameraCharacteristics = CameraCharacteristics
+    
+    _instance = None
+    _cameras = []  # Class-level camera list for singleton
+    
+    def __init__(self):
+        """Initialize CameraManager singleton instance."""
+        if CameraManager._instance:
+            return
+        CameraManager._instance = self
+        
+        self._initialized = False
+        self.init()
+    
+    @classmethod
+    def get(cls):
+        """Get or create the singleton instance."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+    
+    def init(self):
+        """Initialize CameraManager.
+        
+        Returns:
+            bool: True if initialized successfully
+        """
+        self._initialized = True
+        return True
+    
+    def is_available(self):
+        """Check if CameraManager is initialized.
+
+        Returns:
+            bool: True if CameraManager is initialized
+        """
+        return self._initialized
+    
+    def add_camera(self, camera):
+        """Register a camera device.
+
+        Args:
+            camera: Camera object to register
+
+        Returns:
+            bool: True if camera added successfully
+        """
+        if not isinstance(camera, Camera):
+            print(f"[CameraManager] Error: add_camera() requires Camera object, got {type(camera)}")
+            return False
+
+        # Check if camera with same facing already exists
+        for existing in CameraManager._cameras:
+            if existing.lens_facing == camera.lens_facing:
+                print(f"[CameraManager] Warning: Camera with facing {camera.lens_facing} already registered")
+                # Still add it (allow multiple cameras with same facing)
+        
+        CameraManager._cameras.append(camera)
+        print(f"[CameraManager] Registered camera: {camera}")
+        return True
+    
+    def get_cameras(self):
+        """Get list of all registered cameras.
+
+        Returns:
+            list: List of Camera objects (copy of internal list)
+        """
+        return CameraManager._cameras.copy() if CameraManager._cameras else []
+    
+    def get_camera_by_facing(self, lens_facing):
+        """Get first camera with specified lens facing.
+
+        Args:
+            lens_facing: Camera orientation (LENS_FACING_BACK, LENS_FACING_FRONT, etc.)
+
+        Returns:
+            Camera object or None if not found
+        """
+        for camera in CameraManager._cameras:
+            if camera.lens_facing == lens_facing:
+                return camera
+        return None
+    
+    def has_camera(self):
+        """Check if any camera is registered.
+
+        Returns:
+            bool: True if at least one camera available
+        """
+        return len(CameraManager._cameras) > 0
+    
+    def get_camera_count(self):
+        """Get number of registered cameras.
+
+        Returns:
+            int: Number of cameras
+        """
+        return len(CameraManager._cameras)
 
 
-def get_cameras():
-    """Get list of all registered cameras.
+# ============================================================================
+# Class method delegation (at module level)
+# ============================================================================
 
-    Returns:
-        list: List of Camera objects (copy of internal list)
-    """
-    return _cameras.copy() if _cameras else []
+_original_methods = {}
+_methods_to_delegate = [
+    'init', 'is_available', 'add_camera', 'get_cameras',
+    'get_camera_by_facing', 'has_camera', 'get_camera_count'
+]
 
+for method_name in _methods_to_delegate:
+    _original_methods[method_name] = getattr(CameraManager, method_name)
 
-def get_camera_by_facing(lens_facing):
-    """Get first camera with specified lens facing.
+def _make_class_method(method_name):
+    """Create a class method that delegates to the singleton instance."""
+    original_method = _original_methods[method_name]
+    
+    @classmethod
+    def class_method(cls, *args, **kwargs):
+        instance = cls.get()
+        return original_method(instance, *args, **kwargs)
+    
+    return class_method
 
-    Args:
-        lens_facing: Camera orientation (LENS_FACING_BACK, LENS_FACING_FRONT, etc.)
-
-    Returns:
-        Camera object or None if not found
-    """
-    for camera in _cameras:
-        if camera.lens_facing == lens_facing:
-            return camera
-    return None
-
-
-def has_camera():
-    """Check if any camera is registered.
-
-    Returns:
-        bool: True if at least one camera available
-    """
-    return len(_cameras) > 0
-
-
-def get_camera_count():
-    """Get number of registered cameras.
-
-    Returns:
-        int: Number of cameras
-    """
-    return len(_cameras)
+for method_name in _methods_to_delegate:
+    setattr(CameraManager, method_name, _make_class_method(method_name))
 
 
 # Initialize on module load
-init()
+CameraManager.init()

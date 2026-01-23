@@ -10,7 +10,7 @@ Guides user through IMU calibration process:
 import lvgl as lv
 import time
 import sys
-from mpos import Activity, sensor_manager as SensorManager, wait_for_render, pct_of_display_width
+from mpos import Activity, SensorManager, wait_for_render, pct_of_display_width
 
 
 class CalibrationState:

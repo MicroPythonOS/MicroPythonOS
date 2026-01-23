@@ -320,7 +320,7 @@ import mpos.lights as LightsManager
 LightsManager.init(neopixel_pin=12, num_leds=5)
 
 # === SENSOR HARDWARE ===
-import mpos.sensor_manager as SensorManager
+from mpos import SensorManager
 
 # Create I2C bus for IMU (different pins from display)
 from machine import I2C

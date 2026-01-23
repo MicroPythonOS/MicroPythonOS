@@ -16,9 +16,12 @@ Features:
 - Resume support via Range headers
 - Network error detection utilities
 
-Utility Functions:
-    is_network_error(exception) - Check if error is recoverable network error
-    get_resume_position(outfile) - Get file size for resume support
+Class Methods:
+    DownloadManager.download_url(...) - Download with flexible output modes
+    DownloadManager.is_session_active() - Check if session is active
+    DownloadManager.close_session() - Explicitly close session
+    DownloadManager.is_network_error(exception) - Check if error is recoverable
+    DownloadManager.get_resume_position(outfile) - Get file size for resume
 
 Example:
     from mpos import DownloadManager
@@ -71,441 +74,637 @@ _MAX_RETRIES = 3  # Retry attempts per chunk
 _CHUNK_TIMEOUT_SECONDS = 10  # Timeout per chunk read
 _SPEED_UPDATE_INTERVAL_MS = 1000  # Update speed every 1 second
 
-# Module-level state (singleton pattern)
-_session = None
-_session_lock = None
-_session_refcount = 0
 
-
-def _init():
-    """Initialize DownloadManager (called automatically on first use)."""
-    global _session_lock
-
-    if _session_lock is not None:
-        return  # Already initialized
-
-    try:
-        import _thread
-        _session_lock = _thread.allocate_lock()
-        print("DownloadManager: Initialized with thread safety")
-    except ImportError:
-        # Desktop mode without threading support (or MicroPython without _thread)
-        _session_lock = None
-        print("DownloadManager: Initialized without thread safety")
-
-
-def _get_session():
-    """Get or create the shared aiohttp session (thread-safe).
-
-    Returns:
-        aiohttp.ClientSession or None: The session instance, or None if aiohttp unavailable
+class DownloadManager:
     """
-    global _session, _session_lock
-
-    # Lazy init lock
-    if _session_lock is None:
-        _init()
-
-    # Thread-safe session creation
-    if _session_lock:
-        _session_lock.acquire()
-
-    try:
-        if _session is None:
-            try:
-                import aiohttp
-                _session = aiohttp.ClientSession()
-                print("DownloadManager: Created new aiohttp session")
-            except ImportError:
-                print("DownloadManager: aiohttp not available")
-                return None
-        return _session
-    finally:
-        if _session_lock:
-            _session_lock.release()
-
-
-async def _close_session_if_idle():
-    """Close session if no downloads are active (thread-safe).
-
-    Note: MicroPythonOS aiohttp implementation doesn't require explicit session closing.
-    Sessions are automatically closed via "Connection: close" header.
-    This function is kept for potential future enhancements.
-    """
-    global _session, _session_refcount, _session_lock
-
-    if _session_lock:
-        _session_lock.acquire()
-
-    try:
-        if _session and _session_refcount == 0:
-            # MicroPythonOS aiohttp doesn't have close() method
-            # Sessions close automatically, so just clear the reference
-            _session = None
-            print("DownloadManager: Cleared idle session reference")
-    finally:
-        if _session_lock:
-            _session_lock.release()
-
-
-def is_session_active():
-    """Check if a session is currently active.
-
-    Returns:
-        bool: True if session exists and is open
-    """
-    global _session, _session_lock
-
-    if _session_lock:
-        _session_lock.acquire()
-
-    try:
-        return _session is not None
-    finally:
-        if _session_lock:
-            _session_lock.release()
-
-
-async def close_session():
-    """Explicitly close the session (optional, normally auto-managed).
-
-    Useful for testing or forced cleanup. Session will be recreated
-    on next download_url() call.
-
-    Note: MicroPythonOS aiohttp implementation doesn't require explicit session closing.
-    Sessions are automatically closed via "Connection: close" header.
-    This function clears the session reference to allow garbage collection.
-    """
-    global _session, _session_lock
-
-    if _session_lock:
-        _session_lock.acquire()
-
-    try:
-        if _session:
-            # MicroPythonOS aiohttp doesn't have close() method
-            # Just clear the reference to allow garbage collection
-            _session = None
-            print("DownloadManager: Explicitly cleared session reference")
-    finally:
-        if _session_lock:
-            _session_lock.release()
-
-
-def is_network_error(exception):
-    """Check if exception is a recoverable network error.
+    Centralized HTTP download service with flexible output modes.
+    Implements singleton pattern for shared aiohttp session.
     
-    Recognizes common network error codes and messages that indicate
-    temporary connectivity issues that can be retried.
+    Usage:
+        from mpos import DownloadManager
+        
+        # Download to memory (use module-level function for cleaner API)
+        data = await download_url("https://api.example.com/data.json")
+        
+        # Or use class methods directly
+        data = await DownloadManager.download_url("https://api.example.com/data.json")
+        
+        # Download to file
+        success = await DownloadManager.download_url(
+            "https://example.com/file.bin",
+            outfile="/sdcard/file.bin"
+        )
+    """
     
-    Args:
-        exception: Exception to check
+    _instance = None
+    
+    def __init__(self):
+        """Initialize DownloadManager singleton instance."""
+        if DownloadManager._instance:
+            return
+        DownloadManager._instance = self
         
-    Returns:
-        bool: True if this is a network error that can be retried
+        self._session = None
+        self._session_lock = None
+        self._session_refcount = 0
         
-    Example:
+        # Initialize thread safety
         try:
-            await DownloadManager.download_url(url)
-        except Exception as e:
-            if DownloadManager.is_network_error(e):
-                # Retry or pause
-                await asyncio.sleep(2)
-                # retry...
-            else:
-                # Fatal error
-                raise
-    """
-    error_str = str(exception).lower()
-    error_repr = repr(exception).lower()
+            import _thread
+            self._session_lock = _thread.allocate_lock()
+            print("DownloadManager: Initialized with thread safety")
+        except ImportError:
+            # Desktop mode without threading support
+            self._session_lock = None
+            print("DownloadManager: Initialized without thread safety")
     
-    # Common network error codes and messages
-    # -113 = ECONNABORTED (connection aborted) - actually 103
-    # -104 = ECONNRESET (connection reset by peer) - correct
-    # -110 = ETIMEDOUT (connection timed out) - correct
-    # -118 = EHOSTUNREACH (no route to host) - actually 113
-    # -202 = DNS/connection error (network not ready)
-    #
-    # See lvgl_micropython/lib/esp-idf/components/lwip/lwip/src/include/lwip/errno.h
-    network_indicators = [
-        '-113', '-104', '-110', '-118', '-202',  # Error codes
-        'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
-        'connection reset', 'connection aborted',  # Error messages
-        'broken pipe', 'network unreachable', 'host unreachable',
-        'failed to download chunk'  # From download_manager OSError(-110)
-    ]
+    @classmethod
+    def _get_instance(cls):
+        """Get or create the singleton instance (internal use)."""
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
     
-    return any(indicator in error_str or indicator in error_repr
-              for indicator in network_indicators)
-
-
-def get_resume_position(outfile):
-    """Get the current size of a partially downloaded file.
-    
-    Useful for implementing resume functionality with Range headers.
-    
-    Args:
-        outfile: Path to file
+    def _get_session(self):
+        """Get or create the shared aiohttp session (thread-safe).
         
-    Returns:
-        int: File size in bytes, or 0 if file doesn't exist
+        Returns:
+            aiohttp.ClientSession or None: The session instance, or None if aiohttp unavailable
+        """
+        # Thread-safe session creation
+        if self._session_lock:
+            self._session_lock.acquire()
         
-    Example:
-        resume_from = DownloadManager.get_resume_position("/sdcard/file.bin")
-        if resume_from > 0:
-            headers = {'Range': f'bytes={resume_from}-'}
-            await DownloadManager.download_url(url, outfile=outfile, headers=headers)
-    """
-    try:
-        import os
-        return os.stat(outfile)[6]  # st_size
-    except OSError:
-        return 0
-
-
-async def download_url(url, outfile=None, total_size=None,
-                      progress_callback=None, chunk_callback=None, headers=None,
-                      speed_callback=None):
-    """Download a URL with flexible output modes.
-
-    This async download function can be used in 3 ways:
-    - with just a url => returns the content
-    - with a url and an outfile => writes the content to the outfile
-    - with a url and a chunk_callback => calls the chunk_callback(chunk_data) for each chunk
-
-    Args:
-        url (str): URL to download
-        outfile (str, optional): Path to write file. If None, returns bytes.
-        total_size (int, optional): Expected size in bytes for progress tracking.
-                                   If None, uses Content-Length header or defaults to 100KB.
-        progress_callback (coroutine, optional): async def callback(percent: float)
-                                                Called with progress 0.00-100.00 (2 decimal places).
-                                                Only called when progress changes by at least 0.01%.
-        chunk_callback (coroutine, optional): async def callback(chunk: bytes)
-                                             Called for each chunk. Cannot use with outfile.
-        headers (dict, optional): HTTP headers (e.g., {'Range': 'bytes=1000-'})
-        speed_callback (coroutine, optional): async def callback(bytes_per_second: float)
-                                             Called periodically (every ~1 second) with download speed.
-
-    Returns:
-        bytes: Downloaded content (if outfile and chunk_callback are None)
-        bool: True if successful (when using outfile or chunk_callback)
-
-    Raises:
-        ImportError: If aiohttp module is not available
-        RuntimeError: If HTTP request fails (status code < 200 or >= 400)
-        OSError: If chunk download times out after retries or network connection is lost
-        ValueError: If both outfile and chunk_callback are provided
-        Exception: Other download errors (propagated from aiohttp or chunk processing)
-
-    Example:
-        # Download to memory
-        data = await DownloadManager.download_url("https://example.com/file.json")
-
-        # Download to file with progress and speed
-        async def on_progress(percent):
-            print(f"Progress: {percent:.2f}%")
-
-        async def on_speed(bps):
-            print(f"Speed: {bps / 1024:.1f} KB/s")
-
-        success = await DownloadManager.download_url(
-            "https://example.com/large.bin",
-            outfile="/sdcard/large.bin",
-            progress_callback=on_progress,
-            speed_callback=on_speed
-        )
-
-        # Stream processing
-        async def on_chunk(chunk):
-            process(chunk)
-
-        success = await DownloadManager.download_url(
-            "https://example.com/stream",
-            chunk_callback=on_chunk
-        )
-    """
-    # Validate parameters
-    if outfile and chunk_callback:
-        raise ValueError(
-            "Cannot use both outfile and chunk_callback. "
-            "Use outfile for saving to disk, or chunk_callback for streaming."
-        )
-
-    # Lazy init
-    if _session_lock is None:
-        _init()
-
-    # Get/create session
-    session = _get_session()
-    if session is None:
-        print("DownloadManager: Cannot download, aiohttp not available")
-        raise ImportError("aiohttp module not available")
-
-    # Increment refcount
-    global _session_refcount
-    if _session_lock:
-        _session_lock.acquire()
-    _session_refcount += 1
-    if _session_lock:
-        _session_lock.release()
-
-    print(f"DownloadManager: Downloading {url}")
-
-    fd = None
-    try:
-        # Ensure headers is a dict (aiohttp expects dict, not None)
-        if headers is None:
-            headers = {}
-
-        async with session.get(url, headers=headers) as response:
-            if response.status < 200 or response.status >= 400:
-                print(f"DownloadManager: HTTP error {response.status}")
-                raise RuntimeError(f"HTTP {response.status}")
-
-            # Figure out total size and starting offset (for resume support)
-            print("DownloadManager: Response headers:", response.headers)
-            resume_offset = 0  # Starting byte offset (0 for new downloads, >0 for resumed)
-            
-            if total_size is None:
-                # response.headers is a dict (after parsing) or None/list (before parsing)
+        try:
+            if self._session is None:
                 try:
-                    if isinstance(response.headers, dict):
-                        # Check for Content-Range first (used when resuming with Range header)
-                        # Format: 'bytes 1323008-3485807/3485808'
-                        # START is the resume offset, TOTAL is the complete file size
-                        content_range = response.headers.get('Content-Range')
-                        if content_range:
-                            # Parse total size and starting offset from Content-Range header
-                            # Example: 'bytes 1323008-3485807/3485808' -> offset=1323008, total=3485808
-                            if '/' in content_range and ' ' in content_range:
-                                # Extract the range part: '1323008-3485807'
-                                range_part = content_range.split(' ')[1].split('/')[0]
-                                # Extract starting offset
-                                resume_offset = int(range_part.split('-')[0])
-                                # Extract total size
-                                total_size = int(content_range.split('/')[-1])
-                                print(f"DownloadManager: Resuming from byte {resume_offset}, total size: {total_size}")
-                        
-                        # Fall back to Content-Length if Content-Range not present
-                        if total_size is None:
-                            content_length = response.headers.get('Content-Length')
-                            if content_length:
-                                total_size = int(content_length)
-                                print(f"DownloadManager: Using Content-Length: {total_size}")
-                except (AttributeError, TypeError, ValueError, IndexError) as e:
-                    print(f"DownloadManager: Could not parse Content-Range/Content-Length: {e}")
-
-                if total_size is None:
-                    print(f"DownloadManager: WARNING: Unable to determine total_size, assuming {_DEFAULT_TOTAL_SIZE} bytes")
-                    total_size = _DEFAULT_TOTAL_SIZE
-
-            # Setup output
-            if outfile:
-                fd = open(outfile, 'wb')
-                if not fd:
-                    print(f"DownloadManager: WARNING: could not open {outfile} for writing!")
-                    return False
-
-            chunks = []
-            partial_size = resume_offset  # Start from resume offset for accurate progress
-            chunk_size = _DEFAULT_CHUNK_SIZE
+                    import aiohttp
+                    self._session = aiohttp.ClientSession()
+                    print("DownloadManager: Created new aiohttp session")
+                except ImportError:
+                    print("DownloadManager: aiohttp not available")
+                    return None
+            return self._session
+        finally:
+            if self._session_lock:
+                self._session_lock.release()
+    
+    async def _close_session_if_idle(self):
+        """Close session if no downloads are active (thread-safe).
+        
+        Note: MicroPythonOS aiohttp implementation doesn't require explicit session closing.
+        Sessions are automatically closed via "Connection: close" header.
+        This function is kept for potential future enhancements.
+        """
+        if self._session_lock:
+            self._session_lock.acquire()
+        
+        try:
+            if self._session and self._session_refcount == 0:
+                # MicroPythonOS aiohttp doesn't have close() method
+                # Sessions close automatically, so just clear the reference
+                self._session = None
+                print("DownloadManager: Cleared idle session reference")
+        finally:
+            if self._session_lock:
+                self._session_lock.release()
+    
+    def _is_session_active(self):
+        """Check if a session is currently active (instance method).
+        
+        Returns:
+            bool: True if session exists and is open
+        """
+        if self._session_lock:
+            self._session_lock.acquire()
+        
+        try:
+            return self._session is not None
+        finally:
+            if self._session_lock:
+                self._session_lock.release()
+    
+    async def _close_session(self):
+        """Explicitly close the session (instance method, optional, normally auto-managed).
+        
+        Useful for testing or forced cleanup. Session will be recreated
+        on next download_url() call.
+        
+        Note: MicroPythonOS aiohttp implementation doesn't require explicit session closing.
+        Sessions are automatically closed via "Connection: close" header.
+        This function clears the session reference to allow garbage collection.
+        """
+        if self._session_lock:
+            self._session_lock.acquire()
+        
+        try:
+            if self._session:
+                # MicroPythonOS aiohttp doesn't have close() method
+                # Just clear the reference to allow garbage collection
+                self._session = None
+                print("DownloadManager: Explicitly cleared session reference")
+        finally:
+            if self._session_lock:
+                self._session_lock.release()
+    
+    @classmethod
+    def is_session_active(cls):
+        """Check if a session is currently active.
+        
+        Returns:
+            bool: True if session exists and is open
+        """
+        instance = cls._get_instance()
+        return instance._is_session_active()
+    
+    @classmethod
+    async def close_session(cls):
+        """Explicitly close the session (optional, normally auto-managed).
+        
+        Useful for testing or forced cleanup. Session will be recreated
+        on next download_url() call.
+        
+        Note: MicroPythonOS aiohttp implementation doesn't require explicit session closing.
+        Sessions are automatically closed via "Connection: close" header.
+        This function clears the session reference to allow garbage collection.
+        """
+        instance = cls._get_instance()
+        return await instance._close_session()
+    
+    @classmethod
+    async def download_url(cls, url, outfile=None, total_size=None,
+                          progress_callback=None, chunk_callback=None, headers=None,
+                          speed_callback=None):
+        """Download a URL with flexible output modes.
+        
+        This async download function can be used in 3 ways:
+        - with just a url => returns the content
+        - with a url and an outfile => writes the content to the outfile
+        - with a url and a chunk_callback => calls the chunk_callback(chunk_data) for each chunk
+        
+        Args:
+            url (str): URL to download
+            outfile (str, optional): Path to write file. If None, returns bytes.
+            total_size (int, optional): Expected size in bytes for progress tracking.
+                                       If None, uses Content-Length header or defaults to 100KB.
+            progress_callback (coroutine, optional): async def callback(percent: float)
+                                                    Called with progress 0.00-100.00 (2 decimal places).
+                                                    Only called when progress changes by at least 0.01%.
+            chunk_callback (coroutine, optional): async def callback(chunk: bytes)
+                                                 Called for each chunk. Cannot use with outfile.
+            headers (dict, optional): HTTP headers (e.g., {'Range': 'bytes=1000-'})
+            speed_callback (coroutine, optional): async def callback(bytes_per_second: float)
+                                                 Called periodically (every ~1 second) with download speed.
+        
+        Returns:
+            bytes: Downloaded content (if outfile and chunk_callback are None)
+            bool: True if successful (when using outfile or chunk_callback)
+        
+        Raises:
+            ImportError: If aiohttp module is not available
+            RuntimeError: If HTTP request fails (status code < 200 or >= 400)
+            OSError: If chunk download times out after retries or network connection is lost
+            ValueError: If both outfile and chunk_callback are provided
+            Exception: Other download errors (propagated from aiohttp or chunk processing)
+        
+        Example:
+            # Download to memory
+            data = await DownloadManager.download_url("https://example.com/file.json")
             
-            # Progress tracking with 2-decimal precision
-            last_progress_pct = -1.0  # Track last reported progress to avoid duplicates
+            # Download to file with progress and speed
+            async def on_progress(percent):
+                print(f"Progress: {percent:.2f}%")
             
-            # Speed tracking
-            speed_bytes_since_last_update = 0
-            speed_last_update_time = None
+            async def on_speed(bps):
+                print(f"Speed: {bps / 1024:.1f} KB/s")
+            
+            success = await DownloadManager.download_url(
+                "https://example.com/large.bin",
+                outfile="/sdcard/large.bin",
+                progress_callback=on_progress,
+                speed_callback=on_speed
+            )
+            
+            # Stream processing
+            async def on_chunk(chunk):
+                process(chunk)
+            
+            success = await DownloadManager.download_url(
+                "https://example.com/stream",
+                chunk_callback=on_chunk
+            )
+        """
+        instance = cls._get_instance()
+        return await instance._download_url(
+            url, outfile=outfile, total_size=total_size,
+            progress_callback=progress_callback, chunk_callback=chunk_callback,
+            headers=headers, speed_callback=speed_callback
+        )
+    
+    @staticmethod
+    def is_network_error(exception):
+        """Check if exception is a recoverable network error.
+        
+        Recognizes common network error codes and messages that indicate
+        temporary connectivity issues that can be retried.
+        
+        Args:
+            exception: Exception to check
+            
+        Returns:
+            bool: True if this is a network error that can be retried
+            
+        Example:
             try:
-                import time
-                speed_last_update_time = time.ticks_ms()
-            except ImportError:
-                pass  # time module not available
-
-            print(f"DownloadManager: {'Writing to ' + outfile if outfile else 'Downloading'} {total_size} bytes in chunks of size {chunk_size}")
-
-            # Download loop with retry logic
-            while True:
-                tries_left = _MAX_RETRIES
-                chunk_data = None
-                while tries_left > 0:
-                    try:
-                        # Import TaskManager here to avoid circular imports
-                        from mpos import TaskManager
-                        chunk_data = await TaskManager.wait_for(
-                            response.content.read(chunk_size),
-                            _CHUNK_TIMEOUT_SECONDS
-                        )
-                        break
-                    except Exception as e:
-                        print(f"DownloadManager: Chunk read error: {e}")
-                        tries_left -= 1
-
-                if tries_left == 0:
-                    print("DownloadManager: ERROR: failed to download chunk after retries!")
-                    if fd:
-                        fd.close()
-                    raise OSError(-110, "Failed to download chunk after retries")
-
-                if chunk_data:
-                    # Output chunk
-                    if fd:
-                        fd.write(chunk_data)
-                    elif chunk_callback:
-                        await chunk_callback(chunk_data)
-                    else:
-                        chunks.append(chunk_data)
-
-                    # Track bytes for speed calculation
-                    chunk_len = len(chunk_data)
-                    partial_size += chunk_len
-                    speed_bytes_since_last_update += chunk_len
-                    
-                    # Report progress with 2-decimal precision
-                    # Only call callback if progress changed by at least 0.01%
-                    progress_pct = round((partial_size * 100) / int(total_size), 2)
-                    if progress_callback and progress_pct != last_progress_pct:
-                        print(f"DownloadManager: Progress: {partial_size} / {total_size} bytes = {progress_pct:.2f}%")
-                        await progress_callback(progress_pct)
-                        last_progress_pct = progress_pct
-                    
-                    # Report speed periodically
-                    if speed_callback and speed_last_update_time is not None:
-                        import time
-                        current_time = time.ticks_ms()
-                        elapsed_ms = time.ticks_diff(current_time, speed_last_update_time)
-                        if elapsed_ms >= _SPEED_UPDATE_INTERVAL_MS:
-                            # Calculate bytes per second
-                            bytes_per_second = (speed_bytes_since_last_update * 1000) / elapsed_ms
-                            await speed_callback(bytes_per_second)
-                            # Reset for next interval
-                            speed_bytes_since_last_update = 0
-                            speed_last_update_time = current_time
+                await DownloadManager.download_url(url)
+            except Exception as e:
+                if DownloadManager.is_network_error(e):
+                    # Retry or pause
+                    await asyncio.sleep(2)
+                    # retry...
                 else:
-                    # Chunk is None, download complete
-                    print(f"DownloadManager: Finished downloading {url}")
-                    if fd:
-                        fd.close()
-                        fd = None
-                        return True
-                    elif chunk_callback:
-                        return True
+                    # Fatal error
+                    raise
+        """
+        error_str = str(exception).lower()
+        error_repr = repr(exception).lower()
+        
+        # Common network error codes and messages
+        # -113 = ECONNABORTED (connection aborted) - actually 103
+        # -104 = ECONNRESET (connection reset by peer) - correct
+        # -110 = ETIMEDOUT (connection timed out) - correct
+        # -118 = EHOSTUNREACH (no route to host) - actually 113
+        # -202 = DNS/connection error (network not ready)
+        #
+        # See lvgl_micropython/lib/esp-idf/components/lwip/lwip/src/include/lwip/errno.h
+        network_indicators = [
+            '-113', '-104', '-110', '-118', '-202',  # Error codes
+            'econnaborted', 'econnreset', 'etimedout', 'ehostunreach',  # Error names
+            'connection reset', 'connection aborted',  # Error messages
+            'broken pipe', 'network unreachable', 'host unreachable',
+            'failed to download chunk'  # From download_manager OSError(-110)
+        ]
+        
+        return any(indicator in error_str or indicator in error_repr
+                  for indicator in network_indicators)
+    
+    @staticmethod
+    def get_resume_position(outfile):
+        """Get the current size of a partially downloaded file.
+        
+        Useful for implementing resume functionality with Range headers.
+        
+        Args:
+            outfile: Path to file
+            
+        Returns:
+            int: File size in bytes, or 0 if file doesn't exist
+            
+        Example:
+            resume_from = DownloadManager.get_resume_position("/sdcard/file.bin")
+            if resume_from > 0:
+                headers = {'Range': f'bytes={resume_from}-'}
+                await DownloadManager.download_url(url, outfile=outfile, headers=headers)
+        """
+        try:
+            import os
+            return os.stat(outfile)[6]  # st_size
+        except OSError:
+            return 0
+    
+    async def _download_url(self, url, outfile=None, total_size=None,
+                           progress_callback=None, chunk_callback=None, headers=None,
+                           speed_callback=None):
+        """Download a URL with flexible output modes (instance method).
+        
+        This async download function can be used in 3 ways:
+        - with just a url => returns the content
+        - with a url and an outfile => writes the content to the outfile
+        - with a url and a chunk_callback => calls the chunk_callback(chunk_data) for each chunk
+        
+        Args:
+            url (str): URL to download
+            outfile (str, optional): Path to write file. If None, returns bytes.
+            total_size (int, optional): Expected size in bytes for progress tracking.
+                                       If None, uses Content-Length header or defaults to 100KB.
+            progress_callback (coroutine, optional): async def callback(percent: float)
+                                                    Called with progress 0.00-100.00 (2 decimal places).
+                                                    Only called when progress changes by at least 0.01%.
+            chunk_callback (coroutine, optional): async def callback(chunk: bytes)
+                                                 Called for each chunk. Cannot use with outfile.
+            headers (dict, optional): HTTP headers (e.g., {'Range': 'bytes=1000-'})
+            speed_callback (coroutine, optional): async def callback(bytes_per_second: float)
+                                                 Called periodically (every ~1 second) with download speed.
+        
+        Returns:
+            bytes: Downloaded content (if outfile and chunk_callback are None)
+            bool: True if successful (when using outfile or chunk_callback)
+        
+        Raises:
+            ImportError: If aiohttp module is not available
+            RuntimeError: If HTTP request fails (status code < 200 or >= 400)
+            OSError: If chunk download times out after retries or network connection is lost
+            ValueError: If both outfile and chunk_callback are provided
+            Exception: Other download errors (propagated from aiohttp or chunk processing)
+        
+        Example:
+            # Download to memory
+            data = await DownloadManager.download_url("https://example.com/file.json")
+            
+            # Download to file with progress and speed
+            async def on_progress(percent):
+                print(f"Progress: {percent:.2f}%")
+            
+            async def on_speed(bps):
+                print(f"Speed: {bps / 1024:.1f} KB/s")
+            
+            success = await DownloadManager.download_url(
+                "https://example.com/large.bin",
+                outfile="/sdcard/large.bin",
+                progress_callback=on_progress,
+                speed_callback=on_speed
+            )
+            
+            # Stream processing
+            async def on_chunk(chunk):
+                process(chunk)
+            
+            success = await DownloadManager.download_url(
+                "https://example.com/stream",
+                chunk_callback=on_chunk
+            )
+        """
+        # Validate parameters
+        if outfile and chunk_callback:
+            raise ValueError(
+                "Cannot use both outfile and chunk_callback. "
+                "Use outfile for saving to disk, or chunk_callback for streaming."
+            )
+        
+        # Get/create session
+        session = self._get_session()
+        if session is None:
+            print("DownloadManager: Cannot download, aiohttp not available")
+            raise ImportError("aiohttp module not available")
+        
+        # Increment refcount
+        if self._session_lock:
+            self._session_lock.acquire()
+        self._session_refcount += 1
+        if self._session_lock:
+            self._session_lock.release()
+        
+        print(f"DownloadManager: Downloading {url}")
+        
+        fd = None
+        try:
+            # Ensure headers is a dict (aiohttp expects dict, not None)
+            if headers is None:
+                headers = {}
+            
+            async with session.get(url, headers=headers) as response:
+                if response.status < 200 or response.status >= 400:
+                    print(f"DownloadManager: HTTP error {response.status}")
+                    raise RuntimeError(f"HTTP {response.status}")
+                
+                # Figure out total size and starting offset (for resume support)
+                print("DownloadManager: Response headers:", response.headers)
+                resume_offset = 0  # Starting byte offset (0 for new downloads, >0 for resumed)
+                
+                if total_size is None:
+                    # response.headers is a dict (after parsing) or None/list (before parsing)
+                    try:
+                        if isinstance(response.headers, dict):
+                            # Check for Content-Range first (used when resuming with Range header)
+                            # Format: 'bytes 1323008-3485807/3485808'
+                            # START is the resume offset, TOTAL is the complete file size
+                            content_range = response.headers.get('Content-Range')
+                            if content_range:
+                                # Parse total size and starting offset from Content-Range header
+                                # Example: 'bytes 1323008-3485807/3485808' -> offset=1323008, total=3485808
+                                if '/' in content_range and ' ' in content_range:
+                                    # Extract the range part: '1323008-3485807'
+                                    range_part = content_range.split(' ')[1].split('/')[0]
+                                    # Extract starting offset
+                                    resume_offset = int(range_part.split('-')[0])
+                                    # Extract total size
+                                    total_size = int(content_range.split('/')[-1])
+                                    print(f"DownloadManager: Resuming from byte {resume_offset}, total size: {total_size}")
+                            
+                            # Fall back to Content-Length if Content-Range not present
+                            if total_size is None:
+                                content_length = response.headers.get('Content-Length')
+                                if content_length:
+                                    total_size = int(content_length)
+                                    print(f"DownloadManager: Using Content-Length: {total_size}")
+                    except (AttributeError, TypeError, ValueError, IndexError) as e:
+                        print(f"DownloadManager: Could not parse Content-Range/Content-Length: {e}")
+                    
+                    if total_size is None:
+                        print(f"DownloadManager: WARNING: Unable to determine total_size, assuming {_DEFAULT_TOTAL_SIZE} bytes")
+                        total_size = _DEFAULT_TOTAL_SIZE
+                
+                # Setup output
+                if outfile:
+                    fd = open(outfile, 'wb')
+                    if not fd:
+                        print(f"DownloadManager: WARNING: could not open {outfile} for writing!")
+                        return False
+                
+                chunks = []
+                partial_size = resume_offset  # Start from resume offset for accurate progress
+                chunk_size = _DEFAULT_CHUNK_SIZE
+                
+                # Progress tracking with 2-decimal precision
+                last_progress_pct = -1.0  # Track last reported progress to avoid duplicates
+                
+                # Speed tracking
+                speed_bytes_since_last_update = 0
+                speed_last_update_time = None
+                try:
+                    import time
+                    speed_last_update_time = time.ticks_ms()
+                except ImportError:
+                    pass  # time module not available
+                
+                print(f"DownloadManager: {'Writing to ' + outfile if outfile else 'Downloading'} {total_size} bytes in chunks of size {chunk_size}")
+                
+                # Download loop with retry logic
+                while True:
+                    tries_left = _MAX_RETRIES
+                    chunk_data = None
+                    while tries_left > 0:
+                        try:
+                            # Import TaskManager here to avoid circular imports
+                            from mpos import TaskManager
+                            chunk_data = await TaskManager.wait_for(
+                                response.content.read(chunk_size),
+                                _CHUNK_TIMEOUT_SECONDS
+                            )
+                            break
+                        except Exception as e:
+                            print(f"DownloadManager: Chunk read error: {e}")
+                            tries_left -= 1
+                    
+                    if tries_left == 0:
+                        print("DownloadManager: ERROR: failed to download chunk after retries!")
+                        if fd:
+                            fd.close()
+                        raise OSError(-110, "Failed to download chunk after retries")
+                    
+                    if chunk_data:
+                        # Output chunk
+                        if fd:
+                            fd.write(chunk_data)
+                        elif chunk_callback:
+                            await chunk_callback(chunk_data)
+                        else:
+                            chunks.append(chunk_data)
+                        
+                        # Track bytes for speed calculation
+                        chunk_len = len(chunk_data)
+                        partial_size += chunk_len
+                        speed_bytes_since_last_update += chunk_len
+                        
+                        # Report progress with 2-decimal precision
+                        # Only call callback if progress changed by at least 0.01%
+                        progress_pct = round((partial_size * 100) / int(total_size), 2)
+                        if progress_callback and progress_pct != last_progress_pct:
+                            print(f"DownloadManager: Progress: {partial_size} / {total_size} bytes = {progress_pct:.2f}%")
+                            await progress_callback(progress_pct)
+                            last_progress_pct = progress_pct
+                        
+                        # Report speed periodically
+                        if speed_callback and speed_last_update_time is not None:
+                            import time
+                            current_time = time.ticks_ms()
+                            elapsed_ms = time.ticks_diff(current_time, speed_last_update_time)
+                            if elapsed_ms >= _SPEED_UPDATE_INTERVAL_MS:
+                                # Calculate bytes per second
+                                bytes_per_second = (speed_bytes_since_last_update * 1000) / elapsed_ms
+                                await speed_callback(bytes_per_second)
+                                # Reset for next interval
+                                speed_bytes_since_last_update = 0
+                                speed_last_update_time = current_time
                     else:
-                        return b''.join(chunks)
+                        # Chunk is None, download complete
+                        print(f"DownloadManager: Finished downloading {url}")
+                        if fd:
+                            fd.close()
+                            fd = None
+                            return True
+                        elif chunk_callback:
+                            return True
+                        else:
+                            return b''.join(chunks)
+        
+        except Exception as e:
+            print(f"DownloadManager: Exception during download: {e}")
+            if fd:
+                fd.close()
+            raise  # Re-raise the exception instead of suppressing it
+        finally:
+            # Decrement refcount
+            if self._session_lock:
+                self._session_lock.acquire()
+            self._session_refcount -= 1
+            if self._session_lock:
+                self._session_lock.release()
+            
+            # Close session if idle
+            await self._close_session_if_idle()
 
-    except Exception as e:
-        print(f"DownloadManager: Exception during download: {e}")
-        if fd:
-            fd.close()
-        raise  # Re-raise the exception instead of suppressing it
-    finally:
-        # Decrement refcount
-        if _session_lock:
-            _session_lock.acquire()
-        _session_refcount -= 1
-        if _session_lock:
-            _session_lock.release()
 
-        # Close session if idle
-        await _close_session_if_idle()
+# ============================================================================
+# Smart wrapper: auto-detect async context and run synchronously if needed
+# ============================================================================
+
+class _DownloadManagerWrapper:
+    """Smart wrapper that works both sync and async.
+    
+    - If called with await in async context: returns coroutine (async)
+    - If called without await in sync context: runs synchronously (blocking)
+    - If called with await in sync context: still works (creates event loop)
+    """
+    
+    def __init__(self, async_class):
+        """Initialize with reference to async DownloadManager class."""
+        self._async_class = async_class
+    
+    def download_url(self, url, outfile=None, total_size=None,
+                    progress_callback=None, chunk_callback=None, headers=None,
+                    speed_callback=None):
+        """Download URL - works both sync and async.
+        
+        Async usage (in async function):
+            data = await DownloadManager.download_url(url)
+        
+        Sync usage (in regular function):
+            data = DownloadManager.download_url(url)  # Blocks until complete
+        """
+        # Get the async coroutine
+        coro = self._async_class.download_url(
+            url, outfile=outfile, total_size=total_size,
+            progress_callback=progress_callback, chunk_callback=chunk_callback,
+            headers=headers, speed_callback=speed_callback
+        )
+        
+        # Try to detect if we're in an async context
+        try:
+            import asyncio
+            try:
+                # Check if there's a running task (MicroPython uses current_task())
+                asyncio.current_task()
+                # We're in async context, return the coroutine for await
+                return coro
+            except RuntimeError:
+                # No running task, we're in sync context
+                # Create a new event loop and run the coroutine
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+        except ImportError:
+            # asyncio not available, just return coroutine
+            return coro
+    
+    async def close_session(self):
+        """Close session - works both sync and async.
+        
+        Async usage:
+            await DownloadManager.close_session()
+        
+        Sync usage:
+            DownloadManager.close_session()  # Blocks until complete
+        """
+        return await self._async_class.close_session()
+    
+    def is_session_active(self):
+        """Check if session is active (synchronous)."""
+        return self._async_class.is_session_active()
+    
+    @staticmethod
+    def is_network_error(exception):
+        """Check if exception is a network error (synchronous)."""
+        return self._async_class.is_network_error(exception)
+    
+    @staticmethod
+    def get_resume_position(outfile):
+        """Get resume position (synchronous)."""
+        return self._async_class.get_resume_position(outfile)
+
+
+# ============================================================================
+# Initialize singleton instance (for internal use)
+# ============================================================================
+
+# Ensure singleton is initialized when module is imported
+_instance = DownloadManager._get_instance()
+
+# Save the original async class
+_original_download_manager = DownloadManager
+
+# Replace with smart wrapper
+DownloadManager = _DownloadManagerWrapper(_original_download_manager)

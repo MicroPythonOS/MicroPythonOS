@@ -7,7 +7,7 @@ variance, expected value comparison, and overall quality score.
 import lvgl as lv
 import time
 import sys
-from mpos import Activity, sensor_manager as SensorManager, pct_of_display_width
+from mpos import Activity, SensorManager, pct_of_display_width
 
 
 class CheckIMUCalibrationActivity(Activity):
