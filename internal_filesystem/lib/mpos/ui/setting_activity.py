@@ -2,7 +2,7 @@ import lvgl as lv
 
 from ..app.activity import Activity
 from .camera_activity import CameraActivity
-from .display import pct_of_display_width
+from .display import DisplayMetrics
 from . import anim
 from ..camera_manager import CameraManager
 
@@ -80,9 +80,9 @@ class SettingActivity(Activity):
             ui = "textarea"
             self.textarea = lv.textarea(settings_screen_detail)
             self.textarea.set_width(lv.pct(100))
-            self.textarea.set_style_pad_all(pct_of_display_width(2), lv.PART.MAIN)
-            self.textarea.set_style_margin_left(pct_of_display_width(2), lv.PART.MAIN)
-            self.textarea.set_style_margin_right(pct_of_display_width(2), lv.PART.MAIN)
+            self.textarea.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+            self.textarea.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+            self.textarea.set_style_margin_right(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
             self.textarea.set_one_line(True)
             if current_setting:
                 self.textarea.set_text(current_setting)

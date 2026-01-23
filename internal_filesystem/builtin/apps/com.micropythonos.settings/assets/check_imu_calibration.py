@@ -7,7 +7,7 @@ variance, expected value comparison, and overall quality score.
 import lvgl as lv
 import time
 import sys
-from mpos import Activity, SensorManager, pct_of_display_width
+from mpos import Activity, SensorManager, DisplayMetrics
 
 
 class CheckIMUCalibrationActivity(Activity):
@@ -34,7 +34,7 @@ class CheckIMUCalibrationActivity(Activity):
 
     def onCreate(self):
         screen = lv.obj()
-        screen.set_style_pad_all(pct_of_display_width(1), 0)
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(1), 0)
         #screen.set_style_pad_all(0, 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         focusgroup = lv.group_get_default()
@@ -96,7 +96,7 @@ class CheckIMUCalibrationActivity(Activity):
 
         # Gyroscope section
         gyro_cont = lv.obj(data_cont)
-        gyro_cont.set_width(pct_of_display_width(45))
+        gyro_cont.set_width(DisplayMetrics.pct_of_width(45))
         gyro_cont.set_height(lv.SIZE_CONTENT)
         gyro_cont.set_style_border_width(0, 0)
         gyro_cont.set_style_pad_all(0, 0)

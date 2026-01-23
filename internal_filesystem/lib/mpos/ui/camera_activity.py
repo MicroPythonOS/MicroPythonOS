@@ -99,11 +99,11 @@ class CameraActivity(Activity):
 
 
         self.status_label_cont = lv.obj(self.main_screen)
-        width = mpos_ui.pct_of_display_width(70)
-        height = mpos_ui.pct_of_display_width(60)
+        width = mpos_ui.DisplayMetrics.pct_of_width(70)
+        height = mpos_ui.DisplayMetrics.pct_of_width(60)
         self.status_label_cont.set_size(width,height)
-        center_w = round((mpos_ui.pct_of_display_width(100) - self.button_width - 5 - width)/2)
-        center_h = round((mpos_ui.pct_of_display_height(100) - height)/2)
+        center_w = round((mpos_ui.DisplayMetrics.pct_of_width(100) - self.button_width - 5 - width)/2)
+        center_h = round((mpos_ui.DisplayMetrics.pct_of_height(100) - height)/2)
         self.status_label_cont.set_pos(center_w,center_h)
         self.status_label_cont.set_style_bg_color(lv.color_white(), 0)
         self.status_label_cont.set_style_bg_opa(66, 0)

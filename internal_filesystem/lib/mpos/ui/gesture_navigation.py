@@ -3,7 +3,7 @@ from lvgl import LvReferenceError
 from .anim import smooth_show, smooth_hide
 from .view import back_screen
 from mpos.ui import topmenu as topmenu
-from .display import get_display_width, get_display_height
+from .display import DisplayMetrics
 
 downbutton = None
 backbutton = None
@@ -56,7 +56,7 @@ def _back_swipe_cb(event):
         if backbutton_visible:
             backbutton_visible = False
             smooth_hide(backbutton)
-        if x > get_display_width() / 5:
+        if x > DisplayMetrics.width() / 5:
             if topmenu.drawer_open :
                 topmenu.close_drawer()
             else : 
@@ -97,7 +97,7 @@ def _top_swipe_cb(event):
             smooth_hide(downbutton)
         dx = abs(x - down_start_x)
         dy = abs(y - down_start_y)
-        if y > get_display_height() / 5:
+        if y > DisplayMetrics.height() / 5:
             topmenu.open_drawer()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")

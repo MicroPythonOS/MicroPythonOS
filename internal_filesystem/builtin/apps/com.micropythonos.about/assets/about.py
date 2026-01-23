@@ -1,4 +1,4 @@
-from mpos import Activity, pct_of_display_width, get_display_width, get_display_height, get_dpi
+from mpos import Activity, DisplayMetrics
 
 import mpos.info
 import sys
@@ -38,7 +38,7 @@ class About(Activity):
         screen = lv.obj()
         screen.set_style_border_width(0, 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        screen.set_style_pad_all(pct_of_display_width(2), 0)
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), 0)
         # Make the screen focusable so it can be scrolled with the arrow keys
         focusgroup = lv.group_get_default()
         if focusgroup:
@@ -147,10 +147,10 @@ class About(Activity):
         # Display info
         try:
             self._add_label(screen, f"{lv.SYMBOL.IMAGE} Display", is_header=True)
-            hor_res = get_display_width()
-            ver_res = get_display_height()
+            hor_res = DisplayMetrics.width()
+            ver_res = DisplayMetrics.height()
             self._add_label(screen, f"Resolution: {hor_res}x{ver_res}")
-            dpi = get_dpi()
+            dpi = DisplayMetrics.dpi()
             self._add_label(screen, f"Dots Per Inch (dpi): {dpi}")
         except Exception as e:
             print(f"Could not get display info: {e}")

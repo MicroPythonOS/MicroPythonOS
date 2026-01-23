@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Activity, min_resolution
+from mpos import Activity, DisplayMetrics
 
 class FullscreenQR(Activity):
     # No __init__() so super.__init__() will be called automatically
@@ -28,7 +28,7 @@ class FullscreenQR(Activity):
         qr_screen.set_scroll_dir(lv.DIR.NONE)
         qr_screen.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
         big_receive_qr = lv.qrcode(qr_screen)
-        big_receive_qr.set_size(min_resolution())
+        big_receive_qr.set_size(DisplayMetrics.min_dimension())
         big_receive_qr.set_dark_color(lv.color_black())
         big_receive_qr.set_light_color(lv.color_white())
         big_receive_qr.center()

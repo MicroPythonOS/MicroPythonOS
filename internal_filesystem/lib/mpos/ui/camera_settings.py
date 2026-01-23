@@ -2,7 +2,7 @@ import lvgl as lv
 
 from ..config import SharedPreferences
 from ..app.activity import Activity
-from .display import pct_of_display_width, pct_of_display_height
+from .display import DisplayMetrics
 from . import anim
 
 class CameraSettingsActivity(Activity):
@@ -125,7 +125,7 @@ class CameraSettingsActivity(Activity):
 
         # Create tabview
         tabview = lv.tabview(screen)
-        tabview.set_tab_bar_size(pct_of_display_height(15))
+        tabview.set_tab_bar_size(DisplayMetrics.pct_of_height(15))
         #tabview.set_size(lv.pct(100), pct_of_display_height(80))
 
         # Create Basic tab (always)
@@ -239,7 +239,7 @@ class CameraSettingsActivity(Activity):
     def add_buttons(self, parent):
         # Save/Cancel buttons at bottom
         button_cont = lv.obj(parent)
-        button_cont.set_size(lv.pct(100), pct_of_display_height(20))
+        button_cont.set_size(lv.pct(100), DisplayMetrics.pct_of_height(20))
         button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         button_cont.set_style_border_width(0, 0)
@@ -256,9 +256,9 @@ class CameraSettingsActivity(Activity):
         save_label.center()
 
         cancel_button = lv.button(button_cont)
-        cancel_button.set_size(pct_of_display_width(25), lv.SIZE_CONTENT)
+        cancel_button.set_size(DisplayMetrics.pct_of_width(25), lv.SIZE_CONTENT)
         if self.scanqr_mode:
-            cancel_button.align(lv.ALIGN.BOTTOM_MID, pct_of_display_width(10), 0)
+            cancel_button.align(lv.ALIGN.BOTTOM_MID, DisplayMetrics.pct_of_width(10), 0)
         else:
             cancel_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         cancel_button.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
@@ -267,7 +267,7 @@ class CameraSettingsActivity(Activity):
         cancel_label.center()
 
         erase_button = lv.button(button_cont)
-        erase_button.set_size(pct_of_display_width(20), lv.SIZE_CONTENT)
+        erase_button.set_size(DisplayMetrics.pct_of_width(20), lv.SIZE_CONTENT)
         erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
         erase_label = lv.label(erase_button)

@@ -1,7 +1,7 @@
 import gc
 import os
 
-from mpos import Activity, smooth_show, smooth_hide, pct_of_display_width, pct_of_display_height
+from mpos import Activity, smooth_show, smooth_hide, DisplayMetrics
 
 class ImageView(Activity):
 
@@ -271,8 +271,8 @@ class ImageView(Activity):
             pct = 100
         else:
             pct = 70
-        lvgl_w = pct_of_display_width(pct)
-        lvgl_h = pct_of_display_height(pct)
+        lvgl_w = DisplayMetrics.pct_of_width(pct)
+        lvgl_h = DisplayMetrics.pct_of_height(pct)
         print(f"scaling to size: {lvgl_w}x{lvgl_h}")
         header = lv.image_header_t()
         self.image.decoder_get_info(self.image.get_src(), header)

@@ -2,7 +2,7 @@ import lvgl as lv
 import ujson
 import time
 
-from mpos import Activity, PackageManager, ConnectivityManager, TaskManager, DownloadManager, pct_of_display_width, pct_of_display_height
+from mpos import Activity, PackageManager, ConnectivityManager, TaskManager, DownloadManager, DisplayMetrics
 import mpos.info
 
 class OSUpdate(Activity):
@@ -39,7 +39,7 @@ class OSUpdate(Activity):
 
     def onCreate(self):
         self.main_screen = lv.obj()
-        self.main_screen.set_style_pad_all(pct_of_display_width(2), 0)
+        self.main_screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), 0)
 
         # Make the screen focusable so it can be scrolled with the arrow keys
         if focusgroup := lv.group_get_default():
@@ -51,7 +51,7 @@ class OSUpdate(Activity):
         self.force_update = lv.checkbox(self.main_screen)
         self.force_update.set_text("Force Update")
         self.force_update.add_event_cb(lambda *args: self.force_update_clicked(), lv.EVENT.VALUE_CHANGED, None)
-        self.force_update.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, pct_of_display_height(5))
+        self.force_update.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(5))
         self.install_button = lv.button(self.main_screen)
         self.install_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         self.install_button.add_state(lv.STATE.DISABLED) # button will be enabled if there is an update available
@@ -72,7 +72,7 @@ class OSUpdate(Activity):
         check_again_label.center()
 
         self.status_label = lv.label(self.main_screen)
-        self.status_label.align_to(self.force_update, lv.ALIGN.OUT_BOTTOM_LEFT, 0, pct_of_display_height(5))
+        self.status_label.align_to(self.force_update, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(5))
         self.setContentView(self.main_screen)
 
     def _update_ui_for_state(self):

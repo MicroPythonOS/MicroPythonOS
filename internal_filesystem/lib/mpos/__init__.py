@@ -31,11 +31,7 @@ from .ui.testing import (
 )
 
 # UI utility functions
-from .ui.display import (
-    pct_of_display_width, pct_of_display_height,
-    get_display_width, get_display_height, get_dpi,
-    min_resolution, max_resolution, get_pointer_xy
-)
+from .ui.display_metrics import DisplayMetrics
 from .ui.event import get_event_name, print_event
 from .ui.view import setContentView, back_screen
 from .ui.theme import set_theme
@@ -73,10 +69,8 @@ __all__ = [
     "SettingActivity", "SettingsActivity", "CameraActivity",
     # UI components
     "MposKeyboard",
-    # UI utility functions
-    "pct_of_display_width", "pct_of_display_height",
-    "get_display_width", "get_display_height", "get_dpi",
-    "min_resolution", "max_resolution", "get_pointer_xy",
+    # UI utility - DisplayMetrics
+    "DisplayMetrics",
     "get_event_name", "print_event",
     "setContentView", "back_screen",
     "set_theme",

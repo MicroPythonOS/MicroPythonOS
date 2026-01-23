@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Activity, Intent, ConnectivityManager, pct_of_display_width, pct_of_display_height, SharedPreferences, SettingsActivity
+from mpos import Activity, Intent, ConnectivityManager, DisplayMetrics, SharedPreferences, SettingsActivity
 from fullscreen_qr import FullscreenQR
 
 class ShowNpubQRActivity(Activity):
@@ -82,13 +82,13 @@ class NostrApp(Activity):
         self.balance_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
         self.balance_label.set_style_text_font(lv.font_montserrat_24, 0)
         self.balance_label.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.balance_label.set_width(pct_of_display_width(100))
+        self.balance_label.set_width(DisplayMetrics.pct_of_width(100))
         # Events label
         self.events_label = lv.label(self.main_screen)
         self.events_label.set_text("")
         self.events_label.align_to(header_line,lv.ALIGN.OUT_BOTTOM_LEFT,0,10)
         self.update_events_label_font()
-        self.events_label.set_width(pct_of_display_width(100))
+        self.events_label.set_width(DisplayMetrics.pct_of_width(100))
         self.events_label.add_flag(lv.obj.FLAG.CLICKABLE)
         self.events_label.add_event_cb(self.events_label_clicked,lv.EVENT.CLICKED,None)
         settings_button = lv.button(self.main_screen)

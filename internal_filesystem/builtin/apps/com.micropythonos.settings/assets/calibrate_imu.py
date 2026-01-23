@@ -10,7 +10,7 @@ Guides user through IMU calibration process:
 import lvgl as lv
 import time
 import sys
-from mpos import Activity, SensorManager, wait_for_render, pct_of_display_width
+from mpos import Activity, SensorManager, wait_for_render, DisplayMetrics
 
 
 class CalibrationState:
@@ -40,7 +40,7 @@ class CalibrateIMUActivity(Activity):
 
     def onCreate(self):
         screen = lv.obj()
-        screen.set_style_pad_all(pct_of_display_width(3), 0)
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(3), 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_flex_align(lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER)
         focusgroup = lv.group_get_default()
