@@ -10,7 +10,7 @@ Guides user through IMU calibration process:
 import lvgl as lv
 import time
 import sys
-from mpos import Activity, SensorManager, wait_for_render, DisplayMetrics
+from mpos import Activity, SensorManager, DisplayMetrics
 
 
 class CalibrationState:
@@ -164,7 +164,6 @@ class CalibrateIMUActivity(Activity):
         try:
             # Step 1: Check stationarity
             self.set_state(CalibrationState.CALIBRATING)
-            wait_for_render()  # Let UI update
 
             if self.is_desktop:
                 stationarity = {'is_stationary': True, 'message': 'Mock: Stationary'}
