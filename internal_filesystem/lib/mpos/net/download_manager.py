@@ -688,10 +688,9 @@ class _DownloadManagerWrapper:
     @staticmethod
     def is_network_error(exception):
         """Check if exception is a network error (synchronous)."""
-        return self._async_class.is_network_error(exception)
+        return _original_download_manager.is_network_error(exception)
     
-    @staticmethod
-    def get_resume_position(outfile):
+    def get_resume_position(self, outfile):
         """Get resume position (synchronous)."""
         return self._async_class.get_resume_position(outfile)
 
@@ -708,3 +707,11 @@ _original_download_manager = DownloadManager
 
 # Replace with smart wrapper
 DownloadManager = _DownloadManagerWrapper(_original_download_manager)
+
+# ============================================================================
+# Module-level exports for direct import
+# ============================================================================
+
+# Export utility functions at module level for convenience
+is_network_error = _original_download_manager.is_network_error
+get_resume_position = _original_download_manager.get_resume_position
