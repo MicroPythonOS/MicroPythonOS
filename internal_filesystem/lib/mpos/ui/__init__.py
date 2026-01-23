@@ -3,8 +3,8 @@ from .view import (
     screen_stack, remove_and_stop_current_activity, remove_and_stop_all_activities
 )
 from .gesture_navigation import handle_back_swipe, handle_top_swipe
-from .theme import set_theme
-from .topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
+from .appearance_manager import AppearanceManager
+from .topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .focus import save_and_clear_current_focusgroup
 from .display_metrics import DisplayMetrics
 from .event import get_event_name, print_event
@@ -20,8 +20,8 @@ main_display = None
 __all__ = [
     "setContentView", "back_screen", "remove_and_stop_current_activity", "remove_and_stop_all_activities",
     "handle_back_swipe", "handle_top_swipe",
-    "set_theme",
-    "open_bar", "close_bar", "open_drawer", "drawer_open", "NOTIFICATION_BAR_HEIGHT",
+    "AppearanceManager",
+    "open_bar", "close_bar", "open_drawer", "drawer_open",
     "save_and_clear_current_focusgroup",
     "DisplayMetrics",
     "get_event_name", "print_event",

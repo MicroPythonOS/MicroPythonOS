@@ -4,6 +4,7 @@ from .widget_animator import WidgetAnimator
 from .view import back_screen
 from mpos.ui import topmenu as topmenu
 from .display import DisplayMetrics
+from .appearance_manager import AppearanceManager
 
 downbutton = None
 backbutton = None
@@ -106,10 +107,10 @@ def _top_swipe_cb(event):
 def handle_back_swipe():
     global backbutton
     rect = lv.obj(lv.layer_top())
-    rect.set_size(topmenu.NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-topmenu.NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
+    rect.set_size(AppearanceManager.NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-AppearanceManager.NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     rect.set_scroll_dir(lv.DIR.NONE)
-    rect.set_pos(0, topmenu.NOTIFICATION_BAR_HEIGHT)
+    rect.set_pos(0, AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     style = lv.style_t()
     style.init()
     style.set_bg_opa(lv.OPA.TRANSP)
@@ -137,7 +138,7 @@ def handle_back_swipe():
 def handle_top_swipe():
     global downbutton
     rect = lv.obj(lv.layer_top())
-    rect.set_size(lv.pct(100), topmenu.NOTIFICATION_BAR_HEIGHT)
+    rect.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     rect.set_pos(0, 0)
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     style = lv.style_t()

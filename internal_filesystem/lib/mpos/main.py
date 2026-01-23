@@ -8,6 +8,7 @@ import mpos.ui
 from . import ui
 from .content.package_manager import PackageManager
 from mpos.ui.display import init_rootscreen
+from mpos.ui.appearance_manager import AppearanceManager
 import mpos.ui.topmenu
 
 # Auto-detect and initialize hardware
@@ -41,7 +42,7 @@ mpos.fs_driver.fs_register(fs_drv, 'M')
 
 prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
 
-mpos.ui.set_theme(prefs)
+AppearanceManager.init(prefs)
 init_rootscreen()
 mpos.ui.topmenu.create_notification_bar()
 mpos.ui.topmenu.create_drawer(mpos.ui.display)

@@ -3,11 +3,10 @@ import lvgl as lv
 import mpos.time
 import mpos.battery_voltage
 from .display_metrics import DisplayMetrics
+from .appearance_manager import AppearanceManager
 from .util import (get_foreground_app)
 from . import focus_direction
 from .widget_animator import WidgetAnimator
-
-NOTIFICATION_BAR_HEIGHT=24
 
 CLOCK_UPDATE_INTERVAL = 1000 # 10 or even 1 ms doesn't seem to change the framerate but 100ms is enough
 WIFI_ICON_UPDATE_INTERVAL = 1500
@@ -20,7 +19,7 @@ DRAWER_ANIM_DURATION=300
 
 hide_bar_animation = None
 show_bar_animation = None
-show_bar_animation_start_value = -NOTIFICATION_BAR_HEIGHT
+show_bar_animation_start_value = -AppearanceManager.NOTIFICATION_BAR_HEIGHT
 show_bar_animation_end_value = 0
 hide_bar_animation_start_value = show_bar_animation_end_value
 hide_bar_animation_end_value = show_bar_animation_start_value
@@ -80,7 +79,7 @@ def create_notification_bar():
     global notification_bar
     # Create notification bar
     notification_bar = lv.obj(lv.layer_top())
-    notification_bar.set_size(lv.pct(100), NOTIFICATION_BAR_HEIGHT)
+    notification_bar.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     notification_bar.set_pos(0, show_bar_animation_start_value)
     notification_bar.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     notification_bar.set_scroll_dir(lv.DIR.NONE)
@@ -203,7 +202,7 @@ def create_notification_bar():
     hide_bar_animation = lv.anim_t()
     hide_bar_animation.init()
     hide_bar_animation.set_var(notification_bar)
-    hide_bar_animation.set_values(0, -NOTIFICATION_BAR_HEIGHT)
+    hide_bar_animation.set_values(0, -AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     hide_bar_animation.set_duration(2000)
     hide_bar_animation.set_custom_exec_cb(lambda not_used, value : notification_bar.set_y(value))
     
@@ -222,7 +221,7 @@ def create_drawer(display=None):
     global drawer
     drawer=lv.obj(lv.layer_top())
     drawer.set_size(lv.pct(100),lv.pct(90))
-    drawer.set_pos(0,NOTIFICATION_BAR_HEIGHT)
+    drawer.set_pos(0,AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     drawer.set_scroll_dir(lv.DIR.VER)
     drawer.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     drawer.set_style_pad_all(15, 0)
@@ -381,7 +380,7 @@ def drawer_scroll_callback(event):
     elif event_code == lv.EVENT.SCROLL and scroll_start_y != None:
         diff = y - scroll_start_y
         #print(f"scroll distance: {diff}")
-        if diff < -NOTIFICATION_BAR_HEIGHT:
+        if diff < -AppearanceManager.NOTIFICATION_BAR_HEIGHT:
             close_drawer()
     elif event_code == lv.EVENT.SCROLL_END:
         scroll_start_y = None

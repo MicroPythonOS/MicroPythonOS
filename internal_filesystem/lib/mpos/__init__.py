@@ -32,10 +32,10 @@ from .ui.testing import (
 
 # UI utility functions
 from .ui.display_metrics import DisplayMetrics
+from .ui.appearance_manager import AppearanceManager
 from .ui.event import get_event_name, print_event
 from .ui.view import setContentView, back_screen
-from .ui.theme import set_theme
-from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICATION_BAR_HEIGHT
+from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .ui.focus import save_and_clear_current_focusgroup
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.util import shutdown, set_foreground_app, get_foreground_app
@@ -69,12 +69,12 @@ __all__ = [
     "SettingActivity", "SettingsActivity", "CameraActivity",
     # UI components
     "MposKeyboard",
-    # UI utility - DisplayMetrics
+    # UI utility - DisplayMetrics and AppearanceManager
     "DisplayMetrics",
+    "AppearanceManager",
     "get_event_name", "print_event",
     "setContentView", "back_screen",
-    "set_theme",
-    "open_bar", "close_bar", "open_drawer", "drawer_open", "NOTIFICATION_BAR_HEIGHT",
+    "open_bar", "close_bar", "open_drawer", "drawer_open",
     "save_and_clear_current_focusgroup",
     "handle_back_swipe", "handle_top_swipe",
     "shutdown", "set_foreground_app", "get_foreground_app",
