@@ -1,8 +1,8 @@
 """
-Test MposKeyboard animation support (show/hide with mpos.ui.anim).
+Test MposKeyboard animation support (show/hide with WidgetAnimator).
 
 This test reproduces the bug where MposKeyboard is missing methods
-required by mpos.ui.anim.smooth_show() and smooth_hide().
+required by WidgetAnimator.smooth_show() and smooth_hide().
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_animation.py
@@ -12,7 +12,7 @@ Usage:
 import unittest
 import lvgl as lv
 import time
-import mpos.ui.anim
+from mpos.ui.widget_animator import WidgetAnimator
 from base import KeyboardTestBase
 
 
@@ -23,7 +23,7 @@ class TestKeyboardAnimation(KeyboardTestBase):
         """
         Test that MposKeyboard has set_style_opa method.
 
-        This method is required by mpos.ui.anim for fade animations.
+        This method is required by WidgetAnimator for fade animations.
         """
         print("Testing that MposKeyboard has set_style_opa...")
 
@@ -62,7 +62,7 @@ class TestKeyboardAnimation(KeyboardTestBase):
 
         # This should work without raising AttributeError
         try:
-            mpos.ui.anim.smooth_show(self.keyboard)
+            WidgetAnimator.smooth_show(self.keyboard)
             self.wait_for_render(100)
             print("smooth_show called successfully")
         except AttributeError as e:
@@ -91,7 +91,7 @@ class TestKeyboardAnimation(KeyboardTestBase):
 
         # This should work without raising AttributeError
         try:
-            mpos.ui.anim.smooth_hide(self.keyboard)
+            WidgetAnimator.smooth_hide(self.keyboard)
             print("smooth_hide called successfully")
         except AttributeError as e:
             self.fail(f"smooth_hide raised AttributeError: {e}\n"
@@ -117,7 +117,7 @@ class TestKeyboardAnimation(KeyboardTestBase):
 
         # Show keyboard (simulates textarea click)
         try:
-            mpos.ui.anim.smooth_show(self.keyboard)
+            WidgetAnimator.smooth_show(self.keyboard)
             self.wait_for_render(100)
         except AttributeError as e:
             self.fail(f"Failed during smooth_show: {e}")
@@ -127,7 +127,7 @@ class TestKeyboardAnimation(KeyboardTestBase):
 
         # Hide keyboard (simulates pressing Enter)
         try:
-            mpos.ui.anim.smooth_hide(self.keyboard)
+            WidgetAnimator.smooth_hide(self.keyboard)
             self.wait_for_render(100)
         except AttributeError as e:
             self.fail(f"Failed during smooth_hide: {e}")

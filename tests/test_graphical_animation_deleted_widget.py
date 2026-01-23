@@ -17,7 +17,7 @@ Usage:
 
 import unittest
 import lvgl as lv
-import mpos.ui.anim
+from mpos.ui.widget_animator import WidgetAnimator
 import time
 from mpos import wait_for_render
 
@@ -57,7 +57,7 @@ class TestAnimationDeletedWidget(unittest.TestCase):
 
         # Start fade-in animation (500ms duration)
         print("Starting smooth_show animation...")
-        mpos.ui.anim.smooth_show(widget)
+        WidgetAnimator.smooth_show(widget)
 
         # Give animation time to start
         wait_for_render(2)
@@ -97,7 +97,7 @@ class TestAnimationDeletedWidget(unittest.TestCase):
 
         # Start fade-out animation
         print("Starting smooth_hide animation...")
-        mpos.ui.anim.smooth_hide(widget)
+        WidgetAnimator.smooth_hide(widget)
 
         # Give animation time to start
         wait_for_render(2)
@@ -144,7 +144,7 @@ class TestAnimationDeletedWidget(unittest.TestCase):
 
         # User clicks textarea - keyboard shows with animation
         print("Showing keyboard with animation...")
-        mpos.ui.anim.smooth_show(keyboard)
+        WidgetAnimator.smooth_show(keyboard)
 
         # Give animation time to start
         wait_for_render(2)
@@ -189,7 +189,7 @@ class TestAnimationDeletedWidget(unittest.TestCase):
         # Start animations on all widgets
         print("Starting animations on 5 widgets...")
         for w in widgets:
-            mpos.ui.anim.smooth_show(w)
+            WidgetAnimator.smooth_show(w)
 
         wait_for_render(2)
 

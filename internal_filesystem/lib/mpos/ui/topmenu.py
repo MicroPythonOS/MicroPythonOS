@@ -5,7 +5,7 @@ import mpos.battery_voltage
 from .display_metrics import DisplayMetrics
 from .util import (get_foreground_app)
 from . import focus_direction
-from .anim import WidgetAnimator
+from .widget_animator import WidgetAnimator
 
 NOTIFICATION_BAR_HEIGHT=24
 

@@ -1,6 +1,6 @@
 import lvgl as lv
 from lvgl import LvReferenceError
-from .anim import smooth_show, smooth_hide
+from .widget_animator import WidgetAnimator
 from .view import back_screen
 from mpos.ui import topmenu as topmenu
 from .display import DisplayMetrics
@@ -50,12 +50,12 @@ def _back_swipe_cb(event):
         should_show = not is_short_movement(dx, dy)
         if should_show != backbutton_visible:
             backbutton_visible = should_show
-            smooth_show(backbutton) if should_show else smooth_hide(backbutton)
+            WidgetAnimator.smooth_show(backbutton) if should_show else WidgetAnimator.smooth_hide(backbutton)
         backbutton.set_pos(round(x / 10), back_start_y)
     elif event_code == lv.EVENT.RELEASED:
         if backbutton_visible:
             backbutton_visible = False
-            smooth_hide(backbutton)
+            WidgetAnimator.smooth_hide(backbutton)
         if x > DisplayMetrics.width() / 5:
             if topmenu.drawer_open :
                 topmenu.close_drawer()
@@ -89,12 +89,12 @@ def _top_swipe_cb(event):
         should_show = not is_short_movement(dx, dy)
         if should_show != downbutton_visible:
             downbutton_visible = should_show
-            smooth_show(downbutton) if should_show else smooth_hide(downbutton)
+            WidgetAnimator.smooth_show(downbutton) if should_show else WidgetAnimator.smooth_hide(downbutton)
         downbutton.set_pos(down_start_x, round(y / 10))
     elif event_code == lv.EVENT.RELEASED:
         if downbutton_visible:
             downbutton_visible = False
-            smooth_hide(downbutton)
+            WidgetAnimator.smooth_hide(downbutton)
         dx = abs(x - down_start_x)
         dy = abs(y - down_start_y)
         if y > DisplayMetrics.height() / 5:

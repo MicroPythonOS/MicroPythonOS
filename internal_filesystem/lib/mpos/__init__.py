@@ -39,7 +39,7 @@ from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open, NOTIFICAT
 from .ui.focus import save_and_clear_current_focusgroup
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.util import shutdown, set_foreground_app, get_foreground_app
-from .ui.anim import smooth_show, smooth_hide
+from .ui.widget_animator import WidgetAnimator
 from .ui import focus_direction
 
 # Utility modules
@@ -78,7 +78,7 @@ __all__ = [
     "save_and_clear_current_focusgroup",
     "handle_back_swipe", "handle_top_swipe",
     "shutdown", "set_foreground_app", "get_foreground_app",
-    "smooth_show", "smooth_hide",
+    "WidgetAnimator",
     "focus_direction",
     # Testing utilities
     "wait_for_render", "capture_screenshot", "simulate_click", "get_widget_coords",

@@ -3,7 +3,7 @@ import lvgl as lv
 from ..config import SharedPreferences
 from ..app.activity import Activity
 from .display import DisplayMetrics
-from . import anim
+from .widget_animator import WidgetAnimator
 
 class CameraSettingsActivity(Activity):
 
@@ -354,11 +354,11 @@ class CameraSettingsActivity(Activity):
         def exposure_ctrl_changed(e=None):
             is_auto = aec_checkbox.get_state() & lv.STATE.CHECKED
             if is_auto:
-                anim.smooth_hide(me_cont, duration=1000)
-                anim.smooth_show(ae_cont, delay=1000)
+                WidgetAnimator.smooth_hide(me_cont, duration=1000)
+                WidgetAnimator.smooth_show(ae_cont, delay=1000)
             else:
-                anim.smooth_hide(ae_cont, duration=1000)
-                anim.smooth_show(me_cont, delay=1000)
+                WidgetAnimator.smooth_hide(ae_cont, duration=1000)
+                WidgetAnimator.smooth_show(me_cont, delay=1000)
 
         aec_checkbox.add_event_cb(exposure_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
         exposure_ctrl_changed()
@@ -382,9 +382,9 @@ class CameraSettingsActivity(Activity):
             is_auto = agc_checkbox.get_state() & lv.STATE.CHECKED
             gain_slider = self.ui_controls["agc_gain"]
             if is_auto:
-                anim.smooth_hide(agc_cont, duration=1000)
+                WidgetAnimator.smooth_hide(agc_cont, duration=1000)
             else:
-                anim.smooth_show(agc_cont, duration=1000)
+                WidgetAnimator.smooth_show(agc_cont, duration=1000)
 
         agc_checkbox.add_event_cb(gain_ctrl_changed, lv.EVENT.VALUE_CHANGED, None)
         gain_ctrl_changed()
@@ -414,9 +414,9 @@ class CameraSettingsActivity(Activity):
         def whitebal_changed(e=None):
             is_auto = wbcheckbox.get_state() & lv.STATE.CHECKED
             if is_auto:
-                anim.smooth_hide(wb_cont, duration=1000)
+                WidgetAnimator.smooth_hide(wb_cont, duration=1000)
             else:
-                anim.smooth_show(wb_cont, duration=1000)
+                WidgetAnimator.smooth_show(wb_cont, duration=1000)
         wbcheckbox.add_event_cb(whitebal_changed, lv.EVENT.VALUE_CHANGED, None)
         whitebal_changed()
 

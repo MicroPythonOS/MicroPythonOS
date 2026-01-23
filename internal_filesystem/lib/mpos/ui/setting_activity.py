@@ -3,7 +3,7 @@ import lvgl as lv
 from ..app.activity import Activity
 from .camera_activity import CameraActivity
 from .display import DisplayMetrics
-from . import anim
+from .widget_animator import WidgetAnimator
 from ..camera_manager import CameraManager
 
 """
@@ -134,7 +134,7 @@ class SettingActivity(Activity):
 
     def onStop(self, screen):
         if self.keyboard:
-            anim.smooth_hide(self.keyboard)
+            WidgetAnimator.smooth_hide(self.keyboard)
 
     def radio_event_handler(self, event):
         print("radio_event_handler called")

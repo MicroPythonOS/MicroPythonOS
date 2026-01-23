@@ -11,7 +11,7 @@ from .event import get_event_name, print_event
 from .util import shutdown, set_foreground_app, get_foreground_app
 from .setting_activity import SettingActivity
 from .settings_activity import SettingsActivity
-from .anim import smooth_show, smooth_hide
+from .widget_animator import WidgetAnimator
 from . import focus_direction
 
 # main_display is assigned by board-specific initialization code
@@ -28,6 +28,6 @@ __all__ = [
     "shutdown", "set_foreground_app", "get_foreground_app",
     "SettingActivity",
     "SettingsActivity",
-    "smooth_show", "smooth_hide",
+    "WidgetAnimator",
     "focus_direction"
 ]

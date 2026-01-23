@@ -17,6 +17,7 @@ Usage:
 
 import lvgl as lv
 import mpos.ui.theme
+from .widget_animator import WidgetAnimator
 
 class MposKeyboard:
     """
@@ -247,7 +248,7 @@ class MposKeyboard:
 
     def show_keyboard(self):
         self._saved_scroll_y = self._parent.get_scroll_y()
-        mpos.ui.anim.smooth_show(self._keyboard, duration=500)
+        WidgetAnimator.smooth_show(self._keyboard, duration=500)
         # Scroll to view on a timer because it will be hidden initially
         lv.timer_create(self.scroll_after_show, 250, None).set_repeat_count(1)
         # When this is done from a timer, focus styling is not applied so the user doesn't see which button is selected.
@@ -259,7 +260,7 @@ class MposKeyboard:
         self.focus_on_keyboard()
 
     def hide_keyboard(self):
-        mpos.ui.anim.smooth_hide(self._keyboard, duration=500)
+        WidgetAnimator.smooth_hide(self._keyboard, duration=500)
         # Do this after the hide so the scrollbars disappear automatically if not needed
         scroll_timer = lv.timer_create(self.scroll_back_after_hide,550,None).set_repeat_count(1)
 
