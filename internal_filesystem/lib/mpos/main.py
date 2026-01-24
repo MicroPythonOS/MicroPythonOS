@@ -74,10 +74,17 @@ import mpos.fs_driver
 fs_drv = lv.fs_drv_t()
 mpos.fs_driver.fs_register(fs_drv, 'M')
 
+# Needed to load the logo from storage:
+try:
+    import freezefs_mount_builtin
+except Exception as e:
+    # This will throw an exception if there is already a "/builtin" folder present
+    print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
+
 prefs = SharedPreferences("com.micropythonos.settings")
 
 AppearanceManager.init(prefs)
-init_rootscreen()
+init_rootscreen() # shows the boot logo
 mpos.ui.topmenu.create_notification_bar()
 mpos.ui.topmenu.create_drawer()
 mpos.ui.handle_back_swipe()
@@ -110,12 +117,6 @@ else:
 # Convenient for apps to be able to access these:
 mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
 mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED
-
-try:
-    import freezefs_mount_builtin
-except Exception as e:
-    # This will throw an exception if there is already a "/builtin" folder present
-    print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
 try:
     from mpos.net.wifi_service import WifiService
