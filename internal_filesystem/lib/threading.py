@@ -1,5 +1,8 @@
+# Lightweight replacement for CPython's Thread module
+
 import _thread
 
+from .task_manager import TaskManager
 import mpos.apps
 
 class Thread:
@@ -21,7 +24,7 @@ class Thread:
         # small stack sizes 8KB gives segfault directly
         # 22KB or less is too tight on desktop, 23KB and more is fine
         #stacksize = 24*1024
-        stacksize = mpos.apps.good_stack_size()
+        stacksize = TaskManager.good_stack_size()
         #stacksize = 20*1024
         print(f"starting thread with stacksize {stacksize}")
         _thread.stack_size(stacksize)

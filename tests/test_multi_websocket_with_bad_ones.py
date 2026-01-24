@@ -3,7 +3,7 @@ import _thread
 import time
 
 from mpos import App, PackageManager
-import mpos.apps
+from mpos import TaskManager
 
 from websocket import WebSocketApp
 
@@ -136,7 +136,7 @@ class TestTwoWebsockets(unittest.TestCase):
         asyncio.run(self.main())
 
     def test_it(self):
-        _thread.stack_size(mpos.apps.good_stack_size())
+        _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.newthread, ())
         time.sleep(10)
 

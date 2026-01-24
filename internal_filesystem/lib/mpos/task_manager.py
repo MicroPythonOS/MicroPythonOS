@@ -26,10 +26,6 @@ class TaskManager:
             print("Not starting TaskManager because it's been disabled.")
             return
         cls.keep_running = True
-        # New thread works but LVGL isn't threadsafe so it's preferred to do this in the same thread:
-        #_thread.stack_size(mpos.apps.good_stack_size())
-        #_thread.start_new_thread(asyncio.run, (self._asyncio_thread(100), ))
-        # Same thread works, although it blocks the real REPL, but aiorepl works:
         asyncio.run(TaskManager._asyncio_thread(10)) # 100ms is too high, causes lag. 10ms is fine. not sure if 1ms would be better...
 
     @classmethod
@@ -70,3 +66,12 @@ class TaskManager:
     @staticmethod
     def wait_for(awaitable, timeout):
         return asyncio.wait_for(awaitable, timeout)
+
+    @staticmethod
+    def good_stack_size():
+        stacksize = 24*1024 # less than 20KB crashes on desktop when doing heavy apps, like LightningPiggy's Wallet connections
+        import sys
+        if sys.platform == "esp32":
+            stacksize = 16*1024
+        return stacksize
+

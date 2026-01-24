@@ -16,6 +16,7 @@ import task_handler
 import mpos.ui
 import mpos.ui.focus_direction
 
+from ..task_manager import TaskManager
 
 # Pin configuration
 SPI_BUS = 2
@@ -386,7 +387,7 @@ def startup_wow_effect():
     except Exception as e:
         print(f"Startup effect error: {e}")
 
-_thread.stack_size(mpos.apps.good_stack_size()) # default stack size won't work, crashes!
+_thread.stack_size(TaskManager.good_stack_size()) # default stack size won't work, crashes!
 _thread.start_new_thread(startup_wow_effect, ())
 
 print("fri3d_2024.py finished")

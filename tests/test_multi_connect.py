@@ -2,11 +2,9 @@ import unittest
 import _thread
 import time
 
-from mpos import App, PackageManager
-import mpos.apps
+from mpos import App, PackageManager, TaskManager
 
 from websocket import WebSocketApp
-
 
 # demo_multiple_ws.py
 import asyncio
@@ -137,7 +135,7 @@ class TestTwoWebsockets(unittest.TestCase):
         asyncio.run(self.main())
 
     def test_it(self):
-        _thread.stack_size(mpos.apps.good_stack_size())
+        _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.newthread, ())
         time.sleep(10)
 
@@ -253,6 +251,6 @@ class TestCrashingSeparateThreads(): # Disabled
 
     def test_it(self):
         for url in self.WS_URLS:
-            _thread.stack_size(mpos.apps.good_stack_size())
+            _thread.stack_size(TaskManager.good_stack_size())
             _thread.start_new_thread(self.newthread, (url,))
         time.sleep(15)

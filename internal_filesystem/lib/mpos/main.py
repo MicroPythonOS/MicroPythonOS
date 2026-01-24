@@ -9,8 +9,9 @@ import mpos.ui
 from .content.package_manager import PackageManager
 from .ui.appearance_manager import AppearanceManager
 from .ui.display_metrics import DisplayMetrics
-import mpos.ui.topmenu
 
+import mpos.ui.topmenu
+from .task_manager import TaskManager
 
 
 # White text on black logo works (for dark mode) and can be inverted (for light mode)
@@ -124,7 +125,7 @@ except Exception as e:
 
 try:
     from mpos.net.wifi_service import WifiService
-    _thread.stack_size(mpos.apps.good_stack_size())
+    _thread.stack_size(TaskManager.good_stack_size())
     _thread.start_new_thread(WifiService.auto_connect, ())
 except Exception as e:
     print(f"Couldn't start WifiService.auto_connect thread because: {e}")

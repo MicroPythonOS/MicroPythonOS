@@ -6,7 +6,7 @@
 # Uses _thread for non-blocking background playback/recording (separate thread from UI)
 
 import _thread
-import mpos.apps
+from ..task_manager import TaskManager
 
 
 class AudioFlinger:
@@ -164,7 +164,7 @@ class AudioFlinger:
                 on_complete=on_complete
             )
 
-            _thread.stack_size(mpos.apps.good_stack_size())
+            _thread.stack_size(TaskManager.good_stack_size())
             _thread.start_new_thread(self._playback_thread, (stream,))
             return True
 
@@ -208,7 +208,7 @@ class AudioFlinger:
                 on_complete=on_complete
             )
 
-            _thread.stack_size(mpos.apps.good_stack_size())
+            _thread.stack_size(TaskManager.good_stack_size())
             _thread.start_new_thread(self._playback_thread, (stream,))
             return True
 
@@ -285,7 +285,7 @@ class AudioFlinger:
             )
 
             print("AudioFlinger: Starting recording thread...")
-            _thread.stack_size(mpos.apps.good_stack_size())
+            _thread.stack_size(TaskManager.good_stack_size())
             _thread.start_new_thread(self._recording_thread, (stream,))
             print("AudioFlinger: Recording thread started successfully")
             return True

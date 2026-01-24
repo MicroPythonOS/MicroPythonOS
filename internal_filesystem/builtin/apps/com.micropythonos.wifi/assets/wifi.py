@@ -2,8 +2,7 @@ import time
 import lvgl as lv
 import _thread
 
-from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager
-import mpos.apps
+from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager
 
 class WiFi(Activity):
     """
@@ -101,7 +100,7 @@ class WiFi(Activity):
         self.busy_scanning = True
         self.scan_button.add_state(lv.STATE.DISABLED)
         self.scan_button_label.set_text(self.scan_button_scanning_text)
-        _thread.stack_size(mpos.apps.good_stack_size())
+        _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.scan_networks_thread, ())
 
     def refresh_list(self):
@@ -179,7 +178,7 @@ class WiFi(Activity):
             print("Not attempting connect because busy_connecting.")
         else:
             self.busy_connecting = True
-            _thread.stack_size(mpos.apps.good_stack_size())
+            _thread.stack_size(TaskManager.good_stack_size())
             _thread.start_new_thread(self.attempt_connecting_thread, (ssid, password))
 
     def attempt_connecting_thread(self, ssid, password):

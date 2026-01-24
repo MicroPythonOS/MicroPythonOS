@@ -6,13 +6,6 @@ import traceback
 import mpos.info
 import mpos.ui
 
-def good_stack_size():
-    stacksize = 24*1024 # less than 20KB crashes on desktop when doing heavy apps, like LightningPiggy's Wallet connections
-    import sys
-    if sys.platform == "esp32":
-        stacksize = 16*1024
-    return stacksize
-
 # Run the script in the current thread:
 # Returns True if successful
 def execute_script(script_source, is_file, classname, cwd=None):
@@ -80,34 +73,6 @@ def execute_script(script_source, is_file, classname, cwd=None):
         tb = getattr(e, '__traceback__', None)
         traceback.print_exception(type(e), e, tb)
         return False
-
-""" Unused:
-# Run the script in a new thread:
-# NOTE: check if the script exists here instead of launching a new thread?
-def execute_script_new_thread(scriptname, is_file):
-    print(f"main.py: execute_script_new_thread({scriptname},{is_file})")
-    try:
-        # 168KB maximum at startup but 136KB after loading display, drivers, LVGL gui etc so let's go for 128KB for now, still a lot...
-        # But then no additional threads can be created. A stacksize of 32KB allows for 4 threads, so 3 in the app itself, which might be tight.
-        # 16KB allows for 10 threads in the apps, but seems too tight for urequests on unix (desktop) targets
-        # 32KB seems better for the camera, but it forced me to lower other app threads from 16 to 12KB
-        #_thread.stack_size(24576) # causes camera issue...
-        # NOTE: This doesn't do anything if apps are started in the same thread!
-        if "camtest" in scriptname:
-            print("Starting camtest with extra stack size!")
-            stack=32*1024
-        elif "appstore" in scriptname:
-            print("Starting appstore with extra stack size!")
-            stack=24*1024 # this doesn't do anything because it's all started in the same thread
-        else:
-            stack=16*1024 # 16KB doesn't seem to be enough for the AppStore app on desktop
-        stack = mpos.apps.good_stack_size()
-        print(f"app.py: setting stack size for script to {stack}")
-        _thread.stack_size(stack)
-        _thread.start_new_thread(execute_script, (scriptname, is_file))
-    except Exception as e:
-        print("main.py: execute_script_new_thread(): error starting new thread thread: ", e)
-"""
 
 # Returns True if successful
 def start_app(fullname):
