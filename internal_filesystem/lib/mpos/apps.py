@@ -3,7 +3,6 @@ import lvgl as lv
 import _thread
 import traceback
 
-import mpos.info
 import mpos.ui
 
 # Run the script in the current thread:

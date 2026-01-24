@@ -11,7 +11,9 @@ from mpos import (
     capture_screenshot,
     find_label_with_text,
     verify_text_present,
-    print_screen_labels
+    print_screen_labels,
+    DeviceInfo,
+    BuildInfo
 )
 
 
@@ -148,7 +150,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
         # Check that it contains the current version
         label_text = version_label.get_text()
-        current_version = mpos.info.CURRENT_OS_VERSION
+        current_version = BuildInfo.version.release
         self.assertIn(current_version, label_text,
                      f"Current version {current_version} not in label text: {label_text}")
 
@@ -186,7 +188,7 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.hardware_id = mpos.info.get_hardware_id()
+        self.hardware_id = DeviceInfo.hardware_id
         self.screenshot_dir = "tests/screenshots"
 
         try:
@@ -243,7 +245,7 @@ class TestOSUpdateGraphicalScreenshots(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.hardware_id = mpos.info.get_hardware_id()
+        self.hardware_id = DeviceInfo.hardware_id
         self.screenshot_dir = "tests/screenshots"
 
         try:

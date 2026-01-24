@@ -18,7 +18,6 @@ Usage:
 import unittest
 import lvgl as lv
 import mpos.apps
-import mpos.info
 import mpos.ui
 import os
 from mpos import (
@@ -26,7 +25,9 @@ from mpos import (
     capture_screenshot,
     find_label_with_text,
     verify_text_present,
-    print_screen_labels
+    print_screen_labels,
+    DeviceInfo,
+    BuildInfo
 )
 
 
@@ -51,7 +52,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
             pass  # Directory already exists
 
         # Store hardware ID for verification
-        self.hardware_id = mpos.info.get_hardware_id()
+        self.hardware_id = DeviceInfo.hardware_id
         print(f"Testing with hardware ID: {self.hardware_id}")
 
     def tearDown(self):
@@ -161,7 +162,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
         )
 
         # Verify the actual version string is present
-        os_version = mpos.info.CURRENT_OS_VERSION
+        os_version = BuildInfo.version.release
         self.assertTrue(
             verify_text_present(screen, os_version),
             f"OS version '{os_version}' not found on screen"

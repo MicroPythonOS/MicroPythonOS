@@ -2,8 +2,7 @@ import lvgl as lv
 import ujson
 import time
 
-from mpos import Activity, PackageManager, ConnectivityManager, TaskManager, DownloadManager, DisplayMetrics
-import mpos.info
+from mpos import Activity, PackageManager, ConnectivityManager, TaskManager, DownloadManager, DisplayMetrics, DeviceInfo, BuildInfo
 
 class OSUpdate(Activity):
 
@@ -47,7 +46,7 @@ class OSUpdate(Activity):
 
         self.current_version_label = lv.label(self.main_screen)
         self.current_version_label.align(lv.ALIGN.TOP_LEFT,0,0)
-        self.current_version_label.set_text(f"Installed OS version: {mpos.info.CURRENT_OS_VERSION}")
+        self.current_version_label.set_text(f"Installed OS version: {BuildInfo.version.release}")
         self.force_update = lv.checkbox(self.main_screen)
         self.force_update.set_text("Force Update")
         self.force_update.add_event_cb(lambda *args: self.force_update_clicked(), lv.EVENT.VALUE_CHANGED, None)
@@ -182,7 +181,7 @@ class OSUpdate(Activity):
             return f"An error occurred:\n{str(error)}\n\nPlease try again."
 
     async def show_update_info(self):
-        hwid = mpos.info.get_hardware_id()
+        hwid = DeviceInfo.hardware_id
 
         try:
             # Use UpdateChecker to fetch update info
@@ -217,7 +216,7 @@ class OSUpdate(Activity):
         self.download_update_url = download_url
 
         # Use UpdateChecker to determine if update is available
-        is_newer = self.update_checker.is_update_available(version, mpos.info.CURRENT_OS_VERSION)
+        is_newer = self.update_checker.is_update_available(version, BuildInfo.version.release)
 
         if is_newer:
             label = "New"

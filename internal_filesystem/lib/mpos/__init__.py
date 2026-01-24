@@ -14,6 +14,8 @@ from .task_manager import TaskManager
 from .camera_manager import CameraManager
 from .sensor_manager import SensorManager
 from .time_zone import TimeZone
+from .device_info import DeviceInfo
+from .build_info import BuildInfo
 
 # Common activities
 from .app.activities.chooser import ChooserActivity
@@ -65,6 +67,8 @@ __all__ = [
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioFlinger", "Intent",
     "ActivityNavigator", "PackageManager", "TaskManager", "CameraManager",
+    # Device and build info
+    "DeviceInfo", "BuildInfo",
     # Common activities
     "ChooserActivity", "ViewActivity", "ShareActivity",
     "SettingActivity", "SettingsActivity", "CameraActivity",

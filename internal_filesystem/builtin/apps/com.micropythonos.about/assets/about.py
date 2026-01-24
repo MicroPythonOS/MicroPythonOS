@@ -1,6 +1,5 @@
-from mpos import Activity, DisplayMetrics
+from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
 
-import mpos.info
 import sys
 
 class About(Activity):
@@ -46,8 +45,8 @@ class About(Activity):
 
         # Basic OS info
         self._add_label(screen, f"{lv.SYMBOL.HOME} System Information", is_header=True)
-        self._add_label(screen, f"MicroPythonOS version: {mpos.info.CURRENT_OS_VERSION}")
-        self._add_label(screen, f"Hardware ID: {mpos.info.get_hardware_id()}")
+        self._add_label(screen, f"MicroPythonOS version: {BuildInfo.version.release}")
+        self._add_label(screen, f"Hardware ID: {DeviceInfo.hardware_id}")
         self._add_label(screen, f"sys.version: {sys.version}")
         self._add_label(screen, f"sys.implementation: {sys.implementation}")
         self._add_label(screen, f"sys.byteorder: {sys.byteorder}")
@@ -83,6 +82,7 @@ class About(Activity):
         # These are always written to sys.stdout
         #self._add_label(screen, f"micropython.mem_info(): {micropython.mem_info()}")
         #self._add_label(screen, f"micropython.qstr_info(): {micropython.qstr_info()}")
+        import mpos
         self._add_label(screen, f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
 
         # ESP32 hardware info

@@ -6,7 +6,7 @@ import mpos.apps
 import mpos.ui
 import mpos.ui.topmenu
 
-from mpos import AppearanceManager, DisplayMetrics, PackageManager, SharedPreferences, TaskManager
+from mpos import AppearanceManager, DisplayMetrics, PackageManager, SharedPreferences, TaskManager, DeviceInfo
 
 # White text on black logo works (for dark mode) and can be inverted (for light mode)
 logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png" # from the MPOS-logo repo
@@ -65,8 +65,7 @@ def detect_board():
 
 board = detect_board()
 print(f"Initializing {board} hardware")
-import mpos.info
-mpos.info.set_hardware_id(board)
+DeviceInfo.set_hardware_id(board)
 __import__(f"mpos.board.{board}")
 
 # Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
