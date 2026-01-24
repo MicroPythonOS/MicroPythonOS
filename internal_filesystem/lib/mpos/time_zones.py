@@ -2,7 +2,7 @@
 # and then asked an LLM to shorten the list (otherwise it's a huge scroll)
 # by keeping only the commonly used cities.
 
-TIMEZONE_MAP = {
+TIME_ZONE_MAP = {
     "Africa/Abidjan": "GMT0",  # West Africa, GMT0
     "Africa/Accra": "GMT0",  # Ghana’s capital
     "Africa/Addis_Ababa": "EAT-3",  # Ethiopia’s capital

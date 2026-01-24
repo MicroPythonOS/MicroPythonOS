@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Intent, PackageManager, SettingActivity, SettingsActivity
+from mpos import Intent, PackageManager, SettingActivity, SettingsActivity, TimeZone
 
 from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity
@@ -42,7 +42,7 @@ class Settings(SettingsActivity):
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
-            {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in mpos.time.get_timezones()], "changed_callback": lambda *args: mpos.time.refresh_timezone_preference()},
+            {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in TimeZone.get_timezones()], "changed_callback": lambda *args: mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
             {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},

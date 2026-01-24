@@ -13,6 +13,7 @@ from .net.download_manager import DownloadManager
 from .task_manager import TaskManager
 from .camera_manager import CameraManager
 from .sensor_manager import SensorManager
+from .time_zone import TimeZone
 
 # Common activities
 from .app.activities.chooser import ChooserActivity
@@ -87,5 +88,7 @@ __all__ = [
     "get_all_widgets_with_text",
     # Submodules
     "apps", "ui", "config", "net", "content", "time", "sensor_manager",
-    "camera_manager", "sdcard", "battery_voltage", "audio", "hardware", "bootloader"
+    "camera_manager", "sdcard", "battery_voltage", "audio", "hardware", "bootloader",
+    # Timezone utilities
+    "TimeZone"
 ]

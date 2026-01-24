@@ -1,6 +1,6 @@
 import time
 from . import config
-from .timezones import TIMEZONE_MAP
+from .time_zone import TimeZone
 
 import localPTZtime
 
@@ -38,7 +38,7 @@ def localtime():
     global timezone_preference
     if not timezone_preference: # if it's the first time, then it needs refreshing
         refresh_timezone_preference()
-    ptz = timezone_to_posix_time_zone(timezone_preference)
+    ptz = TimeZone.timezone_to_posix_time_zone(timezone_preference)
     t = time.time()
     try:
         localtime = localPTZtime.tztime(t, ptz)
@@ -46,27 +46,4 @@ def localtime():
         #print(f"localPTZtime setting got exception {e}, defaulting to non-localized time...") # this gets called too often to print
         return time.localtime()
     return localtime
-
-def timezone_to_posix_time_zone(timezone):
-    """
-    Convert a timezone name to its POSIX timezone string.
-
-    Args:
-        timezone (str or None): Timezone name (e.g., 'Africa/Abidjan') or None.
-
-    Returns:
-        str: POSIX timezone string (e.g., 'GMT0'). Returns 'GMT0' if timezone is None or not found.
-    """
-    if timezone is None or timezone not in TIMEZONE_MAP:
-        return "GMT0"
-    return TIMEZONE_MAP[timezone]
-
-def get_timezones():
-    """
-    Get a list of all available timezone names.
-
-    Returns:
-        list: List of timezone names (e.g., ['Africa/Abidjan', 'Africa/Accra', ...]).
-    """
-    return sorted(TIMEZONE_MAP.keys()) # even though they are defined alphabetical, the order isn't maintained in MicroPython
 
