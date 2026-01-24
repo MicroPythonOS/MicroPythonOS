@@ -1,18 +1,12 @@
 import task_handler
 import _thread
 import lvgl as lv
-import mpos
+
 import mpos.apps
-import mpos.config
 import mpos.ui
-
-from .content.package_manager import PackageManager
-from .ui.appearance_manager import AppearanceManager
-from .ui.display_metrics import DisplayMetrics
-
 import mpos.ui.topmenu
-from .task_manager import TaskManager
 
+from mpos import AppearanceManager, DisplayMetrics, PackageManager, SharedPreferences, TaskManager
 
 # White text on black logo works (for dark mode) and can be inverted (for light mode)
 logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png" # from the MPOS-logo repo
@@ -80,7 +74,7 @@ import mpos.fs_driver
 fs_drv = lv.fs_drv_t()
 mpos.fs_driver.fs_register(fs_drv, 'M')
 
-prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
+prefs = SharedPreferences("com.micropythonos.settings")
 
 AppearanceManager.init(prefs)
 init_rootscreen()
@@ -145,7 +139,7 @@ import aiorepl
 async def asyncio_repl():
     print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: import mpos ; mpos.TaskManager.stop()")
     await aiorepl.task()
-mpos.TaskManager.create_task(asyncio_repl()) # only gets started when mpos.TaskManager.start() is created
+TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
 
 async def ota_rollback_cancel():
     try:
@@ -157,11 +151,11 @@ async def ota_rollback_cancel():
 if not started_launcher:
     print(f"WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
 else:
-    mpos.TaskManager.create_task(ota_rollback_cancel()) # only gets started when mpos.TaskManager() is created 
+    TaskManager.create_task(ota_rollback_cancel()) # only gets started after TaskManager.start()
 
 try:
-    mpos.TaskManager.start() # do this at the end because it doesn't return
+    TaskManager.start() # do this at the end because it doesn't return
 except KeyboardInterrupt as k:
-    print(f"mpos.TaskManager() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
+    print(f"TaskManager.start() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
 except Exception as e:
-    print(f"mpos.TaskManager() got exception: {e}")
+    print(f"TaskManager.start() got exception: {e}")
