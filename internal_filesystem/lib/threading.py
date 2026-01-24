@@ -2,7 +2,7 @@
 
 import _thread
 
-from .task_manager import TaskManager
+from mpos.task_manager import TaskManager
 import mpos.apps
 
 class Thread:
