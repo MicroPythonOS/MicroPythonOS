@@ -2,7 +2,7 @@ import sys
 import utime
 
 from .content.intent import Intent
-from .content.package_manager import PackageManager
+from .content.app_manager import AppManager
 
 import mpos.ui
 
@@ -13,7 +13,7 @@ class ActivityNavigator:
         if not isinstance(intent, Intent):
             raise ValueError("Must provide an Intent")
         if intent.action:  # Implicit intent: resolve handlers
-            handlers = PackageManager.resolve_activity(intent)
+            handlers = AppManager.resolve_activity(intent)
             if not handlers:
                 print("No handler for action:", intent.action)
                 return
@@ -31,7 +31,7 @@ class ActivityNavigator:
         if not isinstance(intent, Intent):
             raise ValueError("Must provide an Intent")
         if intent.action:  # Implicit intent: resolve handlers
-            handlers = PackageManager.resolve_activity(intent)
+            handlers = AppManager.resolve_activity(intent)
             if not handlers:
                 print("No handler for action:", intent.action)
                 return

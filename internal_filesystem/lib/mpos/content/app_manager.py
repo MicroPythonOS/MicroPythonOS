@@ -28,7 +28,7 @@ Question: does it make sense to cache the database?
 
 '''
 
-class PackageManager:
+class AppManager:
 
     _registry = {}          # action → [ActivityClass, ...]
 
@@ -52,9 +52,9 @@ class PackageManager:
 
     """Registry of all discovered apps.
 
-    * PackageManager.get_app_list()          -> list of App objects (sorted by name)
-    * PackageManager[fullname]               -> App (raises KeyError if missing)
-    * PackageManager.get(fullname)           -> App or None
+    * AppManager.get_app_list()          -> list of App objects (sorted by name)
+    * AppManager[fullname]               -> App (raises KeyError if missing)
+    * AppManager.get(fullname)           -> App or None
     """
 
     _app_list = []                     # sorted by app.name
@@ -93,7 +93,7 @@ class PackageManager:
 
     @classmethod
     def refresh_apps(cls):
-        print("PackageManager finding apps...")
+        print("AppManager finding apps...")
 
         cls.clear()                     # <-- this guarantees both containers are empty
         seen = set()                     # avoid processing the same fullname twice
@@ -117,7 +117,7 @@ class PackageManager:
                         if not (st[0] & 0x4000):
                             continue
                     except Exception as e:
-                        print("PackageManager: stat of {} got exception: {}".format(full_path, e))
+                        print("AppManager: stat of {} got exception: {}".format(full_path, e))
                         continue
 
                     fullname = name
@@ -132,7 +132,7 @@ class PackageManager:
                         from ..app.app import App
                         app = App.from_manifest(full_path)
                     except Exception as e:
-                        print("PackageManager: parsing {} failed: {}".format(full_path, e))
+                        print("AppManager: parsing {} failed: {}".format(full_path, e))
                         continue
 
                     # ---- store in both containers ---------------------------
@@ -141,7 +141,7 @@ class PackageManager:
                     print("added app {}".format(app))
 
             except Exception as e:
-                print("PackageManager: handling {} got exception: {}".format(base, e))
+                print("AppManager: handling {} got exception: {}".format(base, e))
 
         # ---- sort the list by display name (case-insensitive) ------------
         cls._app_list.sort(key=lambda a: a.name.lower())
@@ -153,7 +153,7 @@ class PackageManager:
             shutil.rmtree(f"apps/{app_fullname}") # never in builtin/apps because those can't be uninstalled
         except Exception as e:
             print(f"Removing app_folder {app_folder} got error: {e}")
-        PackageManager.refresh_apps()
+        AppManager.refresh_apps()
 
     @staticmethod
     def install_mpk(temp_zip_path, dest_folder):
@@ -169,7 +169,7 @@ class PackageManager:
         except Exception as e:
             print(f"Unzip and cleanup failed: {e}")
             # Would be good to show error message here if it fails...
-        PackageManager.refresh_apps()
+        AppManager.refresh_apps()
 
     @staticmethod
     def compare_versions(ver1: str, ver2: str) -> bool:
@@ -200,20 +200,20 @@ class PackageManager:
 
     @staticmethod
     def is_builtin_app(app_fullname):
-        return PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
+        return AppManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
     def is_overridden_builtin_app(app_fullname):
-        return PackageManager.is_installed_by_path(f"apps/{app_fullname}") and PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
+        return AppManager.is_installed_by_path(f"apps/{app_fullname}") and AppManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
     def is_update_available(app_fullname, new_version):
         appdir = f"apps/{app_fullname}"
         builtinappdir = f"builtin/apps/{app_fullname}"
-        installed_app=PackageManager.get(app_fullname)
+        installed_app=AppManager.get(app_fullname)
         if not installed_app:
             return False
-        return PackageManager.compare_versions(new_version, installed_app.version)
+        return AppManager.compare_versions(new_version, installed_app.version)
 
     @staticmethod
     def is_installed_by_path(dir_path):
@@ -231,7 +231,7 @@ class PackageManager:
     @staticmethod
     def is_installed_by_name(app_fullname):
         print(f"Checking if app {app_fullname} is installed...")
-        return PackageManager.is_installed_by_path(f"apps/{app_fullname}") or PackageManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
+        return AppManager.is_installed_by_path(f"apps/{app_fullname}") or AppManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
     def execute_script(script_source, is_file, classname, cwd=None):
@@ -311,7 +311,7 @@ class PackageManager:
         mpos.ui.set_foreground_app(fullname)
         import utime
         start_time = utime.ticks_ms()
-        app = PackageManager.get(fullname)
+        app = AppManager.get(fullname)
         if not app:
             print(f"Warning: start_app can't find app {fullname}")
             return
@@ -325,7 +325,7 @@ class PackageManager:
         else:
             entrypoint = app.main_launcher_activity.get('entrypoint')
             classname = app.main_launcher_activity.get("classname")
-        result = PackageManager.execute_script(app.installed_path + "/" + entrypoint, True, classname, app.installed_path + "/assets/")
+        result = AppManager.execute_script(app.installed_path + "/" + entrypoint, True, classname, app.installed_path + "/assets/")
         # Launchers have the bar, other apps don't have it
         if app.is_valid_launcher():
             mpos.ui.topmenu.open_bar()
@@ -343,5 +343,4 @@ class PackageManager:
         # Stop all apps
         mpos.ui.remove_and_stop_all_activities()
         # No need to stop the other launcher first, because it exits after building the screen
-        return PackageManager.start_app(PackageManager.get_launcher().fullname)
-
+        return AppManager.start_app(AppManager.get_launcher().fullname)

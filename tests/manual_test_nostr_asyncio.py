@@ -5,7 +5,7 @@ import _thread
 import time
 import unittest
 
-from mpos import App, PackageManager
+from mpos import App, AppManager
 
 from nostr.relay_manager import RelayManager
 from nostr.message_type import ClientMessageType

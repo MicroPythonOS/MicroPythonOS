@@ -5,7 +5,7 @@ import lvgl as lv
 import mpos.ui
 import mpos.ui.topmenu
 
-from mpos import AppearanceManager, DisplayMetrics, PackageManager, SharedPreferences, TaskManager, DeviceInfo
+from mpos import AppearanceManager, DisplayMetrics, AppManager, SharedPreferences, TaskManager, DeviceInfo
 
 # White text on black logo works (for dark mode) and can be inverted (for light mode)
 logo_white = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png" # from the MPOS-logo repo
@@ -124,12 +124,12 @@ except Exception as e:
     print(f"Couldn't start WifiService.auto_connect thread because: {e}")
 
 # Start launcher so it's always at bottom of stack
-launcher_app = PackageManager.get_launcher()
-started_launcher = PackageManager.start_app(launcher_app.fullname)
+launcher_app = AppManager.get_launcher()
+started_launcher = AppManager.start_app(launcher_app.fullname)
 # Then start auto_start_app if configured
 auto_start_app = prefs.get_string("auto_start_app", None)
 if auto_start_app and launcher_app.fullname != auto_start_app:
-    result = PackageManager.start_app(auto_start_app)
+    result = AppManager.start_app(auto_start_app)
     if result is not True:
         print(f"WARNING: could not run {auto_start_app} app")
 

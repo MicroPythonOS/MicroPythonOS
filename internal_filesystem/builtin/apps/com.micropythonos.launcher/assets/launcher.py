@@ -9,7 +9,7 @@
 # All icons took: 1250ms
 # Most of this time is actually spent reading and parsing manifests.
 import lvgl as lv
-from mpos import AppearanceManager, PackageManager, Activity, DisplayMetrics
+from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics
 import time
 import uhashlib
 import ubinascii
@@ -54,7 +54,7 @@ class Launcher(Activity):
         # ------------------------------------------------------------------
         # 1. Build a *compact* representation of the current app list
         current_apps = []
-        for app in PackageManager.get_app_list():
+        for app in AppManager.get_app_list():
             if app.category == "launcher":
                 continue
             icon_hash = Launcher._hash_file(app.icon_path)   # cheap SHA-1 of the icon file
@@ -90,7 +90,7 @@ class Launcher(Activity):
         iconcont_width = icon_size + label_height
         iconcont_height = icon_size + label_height
 
-        for app in PackageManager.get_app_list():
+        for app in AppManager.get_app_list():
             if app.category == "launcher":
                 continue
 
@@ -128,7 +128,7 @@ class Launcher(Activity):
 
             # ----- events --------------------------------------------------
             app_cont.add_event_cb(
-                lambda e, fullname=app.fullname: PackageManager.start_app(fullname),
+                lambda e, fullname=app.fullname: AppManager.start_app(fullname),
                 lv.EVENT.CLICKED, None)
             app_cont.add_event_cb(
                 lambda e, cont=app_cont: self.focus_app_cont(cont),

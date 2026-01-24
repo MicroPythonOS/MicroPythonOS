@@ -27,7 +27,7 @@ from mpos import (
     click_label,
     click_button,
     find_text_on_screen,
-    PackageManager
+    AppManager
 )
 
 
@@ -63,7 +63,7 @@ class TestIMUCalibration(unittest.TestCase):
         print("\n=== Testing CheckIMUCalibrationActivity ===")
 
         # Navigate: Launcher -> Settings -> Check IMU Calibration
-        result = PackageManager.start_app("com.micropythonos.settings")
+        result = AppManager.start_app("com.micropythonos.settings")
         self.assertTrue(result, "Failed to start Settings app")
         wait_for_render(15)
 
@@ -98,7 +98,7 @@ class TestIMUCalibration(unittest.TestCase):
         print("\n=== Testing CalibrateIMUActivity Flow ===")
 
         # Navigate: Launcher -> Settings -> Calibrate IMU
-        result = PackageManager.start_app("com.micropythonos.settings")
+        result = AppManager.start_app("com.micropythonos.settings")
         self.assertTrue(result, "Failed to start Settings app")
         wait_for_render(15)
 
@@ -155,7 +155,7 @@ class TestIMUCalibration(unittest.TestCase):
         print("\n=== Testing Check -> Calibrate Navigation ===")
 
         # Navigate to Check activity
-        result = PackageManager.start_app("com.micropythonos.settings")
+        result = AppManager.start_app("com.micropythonos.settings")
         self.assertTrue(result)
         wait_for_render(15)
 

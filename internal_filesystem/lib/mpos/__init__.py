@@ -4,7 +4,7 @@ from .app.activity import Activity
 from .content.intent import Intent
 from .activity_navigator import ActivityNavigator
 
-from .content.package_manager import PackageManager
+from .content.app_manager import AppManager
 from .config import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net.wifi_service import WifiService
@@ -65,7 +65,7 @@ __all__ = [
     "Activity",
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioFlinger", "Intent",
-    "ActivityNavigator", "PackageManager", "TaskManager", "CameraManager",
+    "ActivityNavigator", "AppManager", "TaskManager", "CameraManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",
     # Common activities

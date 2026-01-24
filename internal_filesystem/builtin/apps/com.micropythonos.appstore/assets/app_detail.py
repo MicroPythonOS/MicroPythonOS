@@ -2,7 +2,7 @@ import os
 import json
 import lvgl as lv
 
-from mpos import Activity, DownloadManager, PackageManager, TaskManager
+from mpos import Activity, DownloadManager, AppManager, TaskManager
 
 class AppDetail(Activity):
 
@@ -142,7 +142,7 @@ class AppDetail(Activity):
         self.install_label = lv.label(self.install_button)
         self.install_label.center()
         self.set_install_label(self.app.fullname)
-        if app.version and PackageManager.is_update_available(self.app.fullname, app.version):
+        if app.version and AppManager.is_update_available(self.app.fullname, app.version):
             self.install_button.set_size(lv.pct(47), 40) # make space for update button
             print("Update available, adding update button.")
             self.update_button = lv.button(buttoncont)
@@ -171,10 +171,10 @@ class AppDetail(Activity):
         # - update is separate button, only shown if already installed and new version
         is_installed = True
         update_available = False
-        builtin_app = PackageManager.is_builtin_app(app_fullname)
-        overridden_builtin_app = PackageManager.is_overridden_builtin_app(app_fullname)
+        builtin_app = AppManager.is_builtin_app(app_fullname)
+        overridden_builtin_app = AppManager.is_overridden_builtin_app(app_fullname)
         if not overridden_builtin_app:
-            is_installed = PackageManager.is_installed_by_name(app_fullname)
+            is_installed = AppManager.is_installed_by_name(app_fullname)
         if is_installed:
             if builtin_app:
                 if overridden_builtin_app:
@@ -214,12 +214,12 @@ class AppDetail(Activity):
         self._show_progress_bar()
         await self._update_progress(21)
         await self._update_progress(42)
-        PackageManager.uninstall_app(app_fullname)
+        AppManager.uninstall_app(app_fullname)
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
-        if PackageManager.is_builtin_app(app_fullname):
+        if AppManager.is_builtin_app(app_fullname):
             self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
             self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
 
@@ -256,7 +256,7 @@ class AppDetail(Activity):
             else:
                 print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
                 # Install it:
-                PackageManager.install_mpk(temp_zip_path, dest_folder) # 60 until 80 percent is the unzip but no progress there...
+                AppManager.install_mpk(temp_zip_path, dest_folder) # 60 until 80 percent is the unzip but no progress there...
                 await self._update_progress(80, wait=False)
         except Exception as e:
             print(f"Download failed with exception: {e}")

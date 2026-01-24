@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Intent, PackageManager, SettingActivity, SettingsActivity, TimeZone
+from mpos import Intent, AppManager, SettingActivity, SettingsActivity, TimeZone
 
 from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity
@@ -44,7 +44,7 @@ class Settings(SettingsActivity):
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
             {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in TimeZone.get_timezones()], "changed_callback": lambda *args: mpos.time.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
-            {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in PackageManager.get_app_list()]},
+            {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in AppManager.get_app_list()]},
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
             {"title": "Calibrate IMU", "key": "calibrate_imu", "ui": "activity", "activity_class": CalibrateIMUActivity},
             # Expert settings, alphabetically
@@ -92,7 +92,7 @@ class Settings(SettingsActivity):
             # This will throw an exception if there is already a "/builtin" folder present
             print("settings.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
         print("Done mounting, refreshing apps")
-        PackageManager.refresh_apps()
+        AppManager.refresh_apps()
 
     def theme_changed(self, new_value):
         from mpos import AppearanceManager

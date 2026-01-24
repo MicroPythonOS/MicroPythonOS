@@ -2,7 +2,7 @@ import lvgl as lv
 import ujson
 import time
 
-from mpos import Activity, PackageManager, ConnectivityManager, TaskManager, DownloadManager, DisplayMetrics, DeviceInfo, BuildInfo
+from mpos import Activity, AppManager, ConnectivityManager, TaskManager, DownloadManager, DisplayMetrics, DeviceInfo, BuildInfo
 
 class OSUpdate(Activity):
 
@@ -770,7 +770,7 @@ class UpdateChecker:
         Returns:
             bool: True if remote version is newer
         """
-        return PackageManager.compare_versions(remote_version, current_version)
+        return AppManager.compare_versions(remote_version, current_version)
 
 
 # Non-class functions:

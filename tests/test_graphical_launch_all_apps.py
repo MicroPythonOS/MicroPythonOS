@@ -13,7 +13,7 @@ import time
 # This is a graphical test - needs boot and main to run first
 # Add tests directory to path for helpers
 
-from mpos import wait_for_render, ui, PackageManager
+from mpos import wait_for_render, ui, AppManager
 
 
 class TestLaunchAllApps(unittest.TestCase):
@@ -30,7 +30,7 @@ class TestLaunchAllApps(unittest.TestCase):
     def _discover_apps(self):
         """Discover all installed apps."""
         # Use PackageManager to get all apps
-        all_packages = PackageManager.get_app_list()
+        all_packages = AppManager.get_app_list()
 
         for package in all_packages:
             # Get the main activity for each app
@@ -64,7 +64,7 @@ class TestLaunchAllApps(unittest.TestCase):
 
             try:
                 # Launch the app by package name
-                result = PackageManager.start_app(package_name)
+                result = AppManager.start_app(package_name)
 
                 # Wait for UI to render
                 wait_for_render(iterations=5)
@@ -188,7 +188,7 @@ class TestLaunchSpecificApps(unittest.TestCase):
 
         try:
             # Launch the app by package name
-            result = PackageManager.start_app(package_name)
+            result = AppManager.start_app(package_name)
             wait_for_render(iterations=5)
 
             # Check if start_app returned False (indicates error)

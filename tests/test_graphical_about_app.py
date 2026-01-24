@@ -27,7 +27,7 @@ from mpos import (
     print_screen_labels,
     DeviceInfo,
     BuildInfo,
-    PackageManager
+    AppManager
 )
 
 
@@ -78,7 +78,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
         print("\n=== Starting About app test ===")
 
         # Start the About app
-        result = PackageManager.start_app("com.micropythonos.about")
+        result = AppManager.start_app("com.micropythonos.about")
         self.assertTrue(result, "Failed to start About app")
 
         # Wait for UI to fully render
@@ -146,7 +146,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
         print("\n=== Starting About app OS version test ===")
 
         # Start the About app
-        result = PackageManager.start_app("com.micropythonos.about")
+        result = AppManager.start_app("com.micropythonos.about")
         self.assertTrue(result, "Failed to start About app")
 
         # Wait for UI to render

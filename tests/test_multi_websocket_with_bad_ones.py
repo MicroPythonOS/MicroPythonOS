@@ -2,7 +2,7 @@ import unittest
 import _thread
 import time
 
-from mpos import App, PackageManager
+from mpos import App, AppManager
 from mpos import TaskManager
 
 from websocket import WebSocketApp

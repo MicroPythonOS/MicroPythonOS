@@ -1,5 +1,5 @@
 from ..activity import Activity
-from ...content.package_manager import PackageManager
+from ...content.app_manager import AppManager
 
 class ShareActivity(Activity):
     def __init__(self):
@@ -35,4 +35,4 @@ class ShareActivity(Activity):
         else:
             print("Stopped for other screen")
 
-PackageManager.register_activity("share", ShareActivity)
+AppManager.register_activity("share", ShareActivity)

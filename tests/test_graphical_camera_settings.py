@@ -31,7 +31,7 @@ from mpos import (
     print_screen_labels,
     simulate_click,
     get_widget_coords,
-    PackageManager
+    AppManager
 )
 
 @unittest.skipIf(sys.platform == 'darwin', "Camera tests not supported on macOS (no camera available)")
@@ -117,7 +117,7 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         print("\n=== Testing settings button click (no crash) ===")
 
         # Start the Camera app
-        result = PackageManager.start_app("com.micropythonos.camera")
+        result = AppManager.start_app("com.micropythonos.camera")
         self.assertTrue(result, "Failed to start Camera app")
 
         # Wait for camera to initialize and first frame to render
@@ -251,7 +251,7 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         print("\n=== Testing resolution change (no crash) ===")
 
         # Start the Camera app
-        result = PackageManager.start_app("com.micropythonos.camera")
+        result = AppManager.start_app("com.micropythonos.camera")
         self.assertTrue(result, "Failed to start Camera app")
 
         # Wait for camera to initialize

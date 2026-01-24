@@ -815,7 +815,7 @@ class MockThread:
 
 class MockApps:
     """
-    Mock mpos.apps module for testing (deprecated, use MockPackageManager instead).
+    Mock mpos.apps module for testing (deprecated, use MockAppManager instead).
     
     This is kept for backward compatibility with existing tests.
     
@@ -839,12 +839,12 @@ class MockApps:
         return True
 
 
-class MockPackageManager:
+class MockAppManager:
     """
-    Mock mpos.content.package_manager module for testing.
+    Mock mpos.content.app_manager module for testing.
     
     Usage:
-        sys.modules['mpos.content.package_manager'] = MockPackageManager
+        sys.modules['mpos.content.app_manager'] = MockAppManager
     """
     
     @staticmethod

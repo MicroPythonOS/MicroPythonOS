@@ -2,7 +2,7 @@ from ..activity import Activity
 # Chooser doesn't handle an action — it shows handlers
 # → No registration needed
 
-from ...content.package_manager import PackageManager
+from ...content.app_manager import AppManager
 
 class ChooserActivity(Activity):
     def __init__(self):
@@ -27,7 +27,7 @@ class ChooserActivity(Activity):
         self.setContentView(screen)
 
     def _select_handler(self, handler_name, original_intent):
-        for handler in PackageManager.APP_REGISTRY.get(original_intent.action, []):
+        for handler in AppManager.APP_REGISTRY.get(original_intent.action, []):
             if handler.__name__ == handler_name:
                 original_intent.activity_class = handler
                 navigator.startActivity(original_intent)

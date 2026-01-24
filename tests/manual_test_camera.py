@@ -1,6 +1,6 @@
 import unittest
 
-from mpos import App, PackageManager
+from mpos import App, AppManager
 
 from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
 

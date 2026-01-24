@@ -38,7 +38,7 @@ class MockPartition:
 
 # Import PackageManager which is needed by UpdateChecker
 # The test runs from internal_filesystem/ directory, so we can import from lib/mpos
-from mpos import PackageManager
+from mpos import AppManager
 
 # Import the actual classes we're testing
 # Tests run from internal_filesystem/, so we add the assets directory to path
