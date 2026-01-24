@@ -1,5 +1,4 @@
 import os
-import traceback
 
 try:
     import zipfile
@@ -289,9 +288,7 @@ class AppManager:
                     return False
             except Exception as e:
                 print(f"Thread {thread_id}: exception during execution:")
-                # Print stack trace with exception type, value, and traceback
-                tb = getattr(e, '__traceback__', None)
-                traceback.print_exception(type(e), e, tb)
+                sys.print_exception(e)
                 return False
             finally:
                 # Always restore sys.path, even if we return early or raise an exception
