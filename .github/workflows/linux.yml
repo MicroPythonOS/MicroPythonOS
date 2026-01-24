@@ -63,7 +63,7 @@ jobs:
       - name: Extract OS version
         id: version
         run: |
-            OS_VERSION=$(grep CURRENT_OS_VERSION internal_filesystem/lib/mpos/info.py  | cut -d "=" -f 2 | tr -d " " | tr -d '"')
+            OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
             echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
             echo "Extracted version: $OS_VERSION"
 

@@ -7,8 +7,10 @@
 - SensorManager: add support for LSM6DSO
 - ActivityNavigator: support pre-instantiated activities to support one activity closing a child activity
 - Add new AppearanceManager framework
+- Add new DeviceInfo framework
 - Add new DisplayMetrics framework
-- Add new board support: Fri3d Camp 2026 (untested on real hardware)
+- Add new VersionInfo framework
+- Additional board support: Fri3d Camp 2026 (untested on real hardware)
 - Harmonize frameworks to use same coding patterns
 
 0.6.0

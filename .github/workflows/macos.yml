@@ -29,6 +29,13 @@ jobs:
           xcodebuild -version
           clang --version
 
+      - name: Extract OS version
+        id: version
+        run: |
+            OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
+            echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
+            echo "Extracted version: $OS_VERSION"
+
       - name: Build LVGL MicroPython for macOS dev
         run: |
           ./scripts/build_mpos.sh macOS
@@ -41,39 +48,42 @@ jobs:
       - name: Run unit tests on macOS
         run: |
           ./tests/unittest.sh
+          mv lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
         continue-on-error: true
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lvgl_micropy_macOS.bin
-          path: lvgl_micropython/build/lvgl_micropy_macOS
+          name: MicroPythonOS_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
+          path: lvgl_micropython/build/MicroPythonOS_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
           compression-level: 0 # don't zip it
           retention-days: 7
 
       - name: Build LVGL MicroPython esp32
         run: |
           ./scripts/build_mpos.sh esp32
+          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
+          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_esp32.bin
-          path: lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
+          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
+          path: lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
           compression-level: 0 # don't zip it
           retention-days: 7
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_esp32.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
+          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
           compression-level: 0 # don't zip it
           retention-days: 7
 
       - name: Cleanup
         run: |
-          rm lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin
-          rm lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin
+          rm lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
+          rm lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
 
 
