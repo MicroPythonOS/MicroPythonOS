@@ -1,11 +1,15 @@
-0.6.1
+0.7.0
 =====
-- ActivityNavigator: support pre-instantiated activities
 - AppStore app: fix BadgeHub backend handling
 - OSUpdate app: eliminate requests library
 - Remove depenency on micropython-esp32-ota library
 - Show new MicroPythonOS logo at boot
 - SensorManager: add support for LSM6DSO
+- ActivityNavigator: support pre-instantiated activities to support one activity closing a child activity
+- Add new AppearanceManager framework
+- Add new DisplayMetrics framework
+- Add new board support: Fri3d Camp 2026 (untested on real hardware)
+- Harmonize frameworks to use same coding patterns
 
 0.6.0
 =====

@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "View and change MicroPythonOS settings.",
 "long_description": "This is the official settings app for MicroPythonOS. It allows you to configure all aspects of MicroPythonOS.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings/icons/com.micropythonos.settings_0.1.0_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings/mpks/com.micropythonos.settings_0.1.0.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings/icons/com.micropythonos.settings_0.1.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings/mpks/com.micropythonos.settings_0.1.1.mpk",
 "fullname": "com.micropythonos.settings",
-"version": "0.1.0",
+"version": "0.1.1",
 "category": "development",
 "activities": [
     {

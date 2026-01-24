@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Image Viewer",
 "long_description": "Opens and shows images on the display.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/icons/com.micropythonos.imageview_0.0.6_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/mpks/com.micropythonos.imageview_0.0.6.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/icons/com.micropythonos.imageview_0.1.0_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/mpks/com.micropythonos.imageview_0.1.0.mpk",
 "fullname": "com.micropythonos.imageview",
-"version": "0.0.6",
+"version": "0.1.0",
 "category": "graphics",
 "activities": [
     {
