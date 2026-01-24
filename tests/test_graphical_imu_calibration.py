@@ -11,7 +11,6 @@ Usage:
 
 import unittest
 import lvgl as lv
-import mpos.apps
 import mpos.ui
 import os
 import sys
@@ -27,7 +26,8 @@ from mpos import (
     find_button_with_text,
     click_label,
     click_button,
-    find_text_on_screen
+    find_text_on_screen,
+    PackageManager
 )
 
 
@@ -63,7 +63,7 @@ class TestIMUCalibration(unittest.TestCase):
         print("\n=== Testing CheckIMUCalibrationActivity ===")
 
         # Navigate: Launcher -> Settings -> Check IMU Calibration
-        result = mpos.apps.start_app("com.micropythonos.settings")
+        result = PackageManager.start_app("com.micropythonos.settings")
         self.assertTrue(result, "Failed to start Settings app")
         wait_for_render(15)
 
@@ -98,7 +98,7 @@ class TestIMUCalibration(unittest.TestCase):
         print("\n=== Testing CalibrateIMUActivity Flow ===")
 
         # Navigate: Launcher -> Settings -> Calibrate IMU
-        result = mpos.apps.start_app("com.micropythonos.settings")
+        result = PackageManager.start_app("com.micropythonos.settings")
         self.assertTrue(result, "Failed to start Settings app")
         wait_for_render(15)
 
@@ -155,7 +155,7 @@ class TestIMUCalibration(unittest.TestCase):
         print("\n=== Testing Check -> Calibrate Navigation ===")
 
         # Navigate to Check activity
-        result = mpos.apps.start_app("com.micropythonos.settings")
+        result = PackageManager.start_app("com.micropythonos.settings")
         self.assertTrue(result)
         wait_for_render(15)
 

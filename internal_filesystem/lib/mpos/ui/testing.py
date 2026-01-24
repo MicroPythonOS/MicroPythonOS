@@ -13,9 +13,10 @@ infrastructure are already initialized (boot.py and main.py executed).
 
 Usage in tests:
     from mpos.ui.testing import wait_for_render, capture_screenshot
+    from mpos import PackageManager
 
     # Start your app
-    mpos.apps.start_app("com.example.myapp")
+    PackageManager.start_app("com.example.myapp")
 
     # Wait for UI to render
     wait_for_render()
@@ -62,7 +63,8 @@ def wait_for_render(iterations=10):
         iterations: Number of task handler iterations to run (default: 10)
 
     Example:
-        mpos.apps.start_app("com.example.myapp")
+        from mpos import PackageManager
+        PackageManager.start_app("com.example.myapp")
         wait_for_render()  # Ensure UI is ready
         assert verify_text_present(lv.screen_active(), "Welcome")
     """

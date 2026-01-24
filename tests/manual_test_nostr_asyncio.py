@@ -6,7 +6,6 @@ import time
 import unittest
 
 from mpos import App, PackageManager
-import mpos.apps
 
 from nostr.relay_manager import RelayManager
 from nostr.message_type import ClientMessageType

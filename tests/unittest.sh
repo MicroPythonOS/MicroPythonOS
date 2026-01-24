@@ -64,7 +64,7 @@ one_test() {
 		# Desktop execution
 		if [ $is_graphical -eq 1 ]; then
 			echo "Graphical test: include main.py"
-			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py) ; import mpos.apps; sys.path.append(\"$tests_abs_path\")
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py) ; sys.path.append(\"$tests_abs_path\")
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
             result=$?

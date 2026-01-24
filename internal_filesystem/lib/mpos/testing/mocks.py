@@ -815,13 +815,49 @@ class MockThread:
 
 class MockApps:
     """
-    Mock mpos.apps module for testing.
+    Mock mpos.apps module for testing (deprecated, use MockPackageManager instead).
+    
+    This is kept for backward compatibility with existing tests.
     
     Usage:
         sys.modules['mpos.apps'] = MockApps
     """
     
     @staticmethod
-    def good_stack_size():
-        """Return a reasonable stack size for testing."""
-        return 8192
+    def start_app(fullname):
+        """Mock start_app function."""
+        return True
+    
+    @staticmethod
+    def restart_launcher():
+        """Mock restart_launcher function."""
+        return True
+    
+    @staticmethod
+    def execute_script(script_source, is_file, classname, cwd=None):
+        """Mock execute_script function."""
+        return True
+
+
+class MockPackageManager:
+    """
+    Mock mpos.content.package_manager module for testing.
+    
+    Usage:
+        sys.modules['mpos.content.package_manager'] = MockPackageManager
+    """
+    
+    @staticmethod
+    def start_app(fullname):
+        """Mock start_app function."""
+        return True
+    
+    @staticmethod
+    def restart_launcher():
+        """Mock restart_launcher function."""
+        return True
+    
+    @staticmethod
+    def execute_script(script_source, is_file, classname, cwd=None):
+        """Mock execute_script function."""
+        return True

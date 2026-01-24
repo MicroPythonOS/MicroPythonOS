@@ -1,7 +1,6 @@
 # lib/mpos/ui/util.py
 import lvgl as lv
 import sys
-from ..apps import restart_launcher
 
 _foreground_app_name = None
 

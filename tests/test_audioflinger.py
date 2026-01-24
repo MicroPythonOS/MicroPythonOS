@@ -8,7 +8,6 @@ from mpos.testing import (
     MockPWM,
     MockPin,
     MockThread,
-    MockApps,
     inject_mocks,
 )
 
@@ -16,7 +15,6 @@ from mpos.testing import (
 inject_mocks({
     'machine': MockMachine(),
     '_thread': MockThread,
-    'mpos.apps': MockApps,
 })
 
 # Now import the module to test

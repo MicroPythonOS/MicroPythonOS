@@ -2,7 +2,6 @@ import task_handler
 import _thread
 import lvgl as lv
 
-import mpos.apps
 import mpos.ui
 import mpos.ui.topmenu
 
@@ -126,11 +125,11 @@ except Exception as e:
 
 # Start launcher so it's always at bottom of stack
 launcher_app = PackageManager.get_launcher()
-started_launcher = mpos.apps.start_app(launcher_app.fullname)
+started_launcher = PackageManager.start_app(launcher_app.fullname)
 # Then start auto_start_app if configured
 auto_start_app = prefs.get_string("auto_start_app", None)
 if auto_start_app and launcher_app.fullname != auto_start_app:
-    result = mpos.apps.start_app(auto_start_app)
+    result = PackageManager.start_app(auto_start_app)
     if result is not True:
         print(f"WARNING: could not run {auto_start_app} app")
 

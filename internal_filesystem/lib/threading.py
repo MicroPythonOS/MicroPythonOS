@@ -3,7 +3,6 @@
 import _thread
 
 from mpos.task_manager import TaskManager
-import mpos.apps
 
 class Thread:
     def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, daemon=None):

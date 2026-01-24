@@ -9,7 +9,6 @@
 # All icons took: 1250ms
 # Most of this time is actually spent reading and parsing manifests.
 import lvgl as lv
-import mpos.apps
 from mpos import AppearanceManager, PackageManager, Activity, DisplayMetrics
 import time
 import uhashlib
@@ -129,7 +128,7 @@ class Launcher(Activity):
 
             # ----- events --------------------------------------------------
             app_cont.add_event_cb(
-                lambda e, fullname=app.fullname: mpos.apps.start_app(fullname),
+                lambda e, fullname=app.fullname: PackageManager.start_app(fullname),
                 lv.EVENT.CLICKED, None)
             app_cont.add_event_cb(
                 lambda e, cont=app_cont: self.focus_app_cont(cont),

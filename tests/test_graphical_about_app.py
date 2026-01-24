@@ -17,7 +17,6 @@ Usage:
 
 import unittest
 import lvgl as lv
-import mpos.apps
 import mpos.ui
 import os
 from mpos import (
@@ -27,7 +26,8 @@ from mpos import (
     verify_text_present,
     print_screen_labels,
     DeviceInfo,
-    BuildInfo
+    BuildInfo,
+    PackageManager
 )
 
 
@@ -78,7 +78,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
         print("\n=== Starting About app test ===")
 
         # Start the About app
-        result = mpos.apps.start_app("com.micropythonos.about")
+        result = PackageManager.start_app("com.micropythonos.about")
         self.assertTrue(result, "Failed to start About app")
 
         # Wait for UI to fully render
@@ -146,7 +146,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
         print("\n=== Starting About app OS version test ===")
 
         # Start the About app
-        result = mpos.apps.start_app("com.micropythonos.about")
+        result = PackageManager.start_app("com.micropythonos.about")
         self.assertTrue(result, "Failed to start About app")
 
         # Wait for UI to render

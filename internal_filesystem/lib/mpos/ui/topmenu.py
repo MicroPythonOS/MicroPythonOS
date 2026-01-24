@@ -7,6 +7,7 @@ from .appearance_manager import AppearanceManager
 from .util import (get_foreground_app)
 from . import focus_direction
 from .widget_animator import WidgetAnimator
+from mpos.content.package_manager import PackageManager
 
 CLOCK_UPDATE_INTERVAL = 1000 # 10 or even 1 ms doesn't seem to change the framerate but 100ms is enough
 WIFI_ICON_UPDATE_INTERVAL = 1500
@@ -267,7 +268,7 @@ def create_drawer():
     wifi_label.center()
     def wifi_event(e):
         close_drawer()
-        mpos.apps.start_app("com.micropythonos.wifi")
+        PackageManager.start_app("com.micropythonos.wifi")
     wifi_btn.add_event_cb(wifi_event,lv.EVENT.CLICKED,None)
     settings_btn=lv.button(drawer)
     settings_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
@@ -277,7 +278,7 @@ def create_drawer():
     settings_label.center()
     def settings_event(e):
         close_drawer()
-        mpos.apps.start_app("com.micropythonos.settings")
+        PackageManager.start_app("com.micropythonos.settings")
     settings_btn.add_event_cb(settings_event,lv.EVENT.CLICKED,None)
     launcher_btn=lv.button(drawer)
     launcher_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
@@ -288,7 +289,7 @@ def create_drawer():
     def launcher_event(e):
         print("Launch button pressed!")
         close_drawer(True)
-        mpos.apps.restart_launcher()
+        PackageManager.restart_launcher()
     launcher_btn.add_event_cb(launcher_event,lv.EVENT.CLICKED,None)
     '''
     sleep_btn=lv.button(drawer)
@@ -307,7 +308,7 @@ def create_drawer():
         else: # assume unix:
             # maybe do a system suspend here? or at least show a popup toast "not supported"
             close_drawer(True)
-            mpos.apps.restart_launcher()
+            PackageManager.restart_launcher()
     sleep_btn.add_event_cb(sleep_event,lv.EVENT.CLICKED,None)
     '''
     restart_btn=lv.button(drawer)

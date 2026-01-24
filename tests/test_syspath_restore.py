@@ -8,7 +8,7 @@ class TestSysPathRestore(unittest.TestCase):
     def test_syspath_restored_after_execute_script(self):
         """Test that sys.path is restored to original state after script execution"""
         # Import here to ensure we're in the right context
-        import mpos.apps
+        from mpos import PackageManager
 
         # Capture original sys.path
         original_path = sys.path[:]
@@ -31,11 +31,11 @@ x = 42
         # Call execute_script with cwd parameter
         # Note: This will fail because there's no Activity to start,
         # but that's fine - we're testing the sys.path restoration
-        result = mpos.apps.execute_script(
+        result = PackageManager.execute_script(
             test_script,
             is_file=False,
-            cwd=test_cwd,
-            classname="NonExistentClass"
+            classname="NonExistentClass",
+            cwd=test_cwd
         )
 
         # After execution, sys.path should be restored
@@ -56,7 +56,7 @@ x = 42
 
     def test_syspath_not_affected_when_no_cwd(self):
         """Test that sys.path is unchanged when cwd is None"""
-        import mpos.apps
+        from mpos import PackageManager
 
         # Capture original sys.path
         original_path = sys.path[:]
@@ -66,11 +66,11 @@ x = 42
 '''
 
         # Call without cwd parameter
-        result = mpos.apps.execute_script(
+        result = PackageManager.execute_script(
             test_script,
             is_file=False,
-            cwd=None,
-            classname="NonExistentClass"
+            classname="NonExistentClass",
+            cwd=None
         )
 
         # sys.path should be unchanged

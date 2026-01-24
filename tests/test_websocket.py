@@ -5,7 +5,6 @@ import time
 
 from mpos import App, PackageManager
 from mpos import TaskManager
-import mpos.apps
 
 from websocket import WebSocketApp
 

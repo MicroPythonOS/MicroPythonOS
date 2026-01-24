@@ -13,7 +13,8 @@ from mpos import (
     verify_text_present,
     print_screen_labels,
     DeviceInfo,
-    BuildInfo
+    BuildInfo,
+    PackageManager
 )
 
 
@@ -28,7 +29,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
     def test_app_launches_successfully(self):
         """Test that OSUpdate app launches without errors."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
 
         self.assertTrue(result, "Failed to start OSUpdate app")
         wait_for_render(10)
@@ -39,7 +40,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
     def test_ui_elements_exist(self):
         """Test that all required UI elements are created."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
@@ -59,7 +60,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
     def test_force_checkbox_initially_unchecked(self):
         """Test that force update checkbox starts unchecked."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
@@ -102,7 +103,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
     def test_install_button_initially_disabled(self):
         """Test that install button starts in disabled state."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
@@ -138,7 +139,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
     def test_current_version_displayed(self):
         """Test that current OS version is displayed correctly."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
@@ -158,7 +159,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         """Test status message when wifi is not connected."""
         # This test assumes desktop mode where wifi check returns True
         # On actual hardware without wifi, it would show error
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
@@ -173,7 +174,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
     def test_screenshot_initial_state(self):
         """Capture screenshot of initial app state."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(20)
 
@@ -206,7 +207,7 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
 
     def test_status_label_exists(self):
         """Test that status label is created and visible."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
@@ -225,7 +226,7 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
 
     def test_all_labels_readable(self):
         """Test that all labels are readable (no truncation issues)."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
@@ -263,14 +264,14 @@ class TestOSUpdateGraphicalScreenshots(unittest.TestCase):
 
     def test_capture_main_screen(self):
         """Capture screenshot of main OSUpdate screen."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(20)
 
 
     def test_capture_with_labels_visible(self):
         """Capture screenshot ensuring all text is visible."""
-        result = mpos.apps.start_app("com.micropythonos.osupdate")
+        result = PackageManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(20)
 

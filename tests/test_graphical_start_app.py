@@ -13,8 +13,7 @@ Usage:
 """
 
 import unittest
-import mpos.apps
-from mpos import ui, wait_for_render
+from mpos import ui, wait_for_render, PackageManager
 
 
 class TestStartApp(unittest.TestCase):
@@ -40,7 +39,7 @@ class TestStartApp(unittest.TestCase):
         """Test that launching an existing app succeeds."""
         print("Testing normal app launch...")
 
-        result = mpos.apps.start_app("com.micropythonos.launcher")
+        result = PackageManager.start_app("com.micropythonos.launcher")
         wait_for_render(10)  # Wait for app to load
 
         self.assertTrue(result, "com.micropythonos.launcher should start")
@@ -50,7 +49,7 @@ class TestStartApp(unittest.TestCase):
         """Test that launching a non-existent app fails gracefully."""
         print("Testing non-existent app launch...")
 
-        result = mpos.apps.start_app("com.micropythonos.nonexistent")
+        result = PackageManager.start_app("com.micropythonos.nonexistent")
 
         self.assertFalse(result, "com.micropythonos.nonexistent should not start")
         print("Non-existent app handled correctly")
@@ -59,7 +58,7 @@ class TestStartApp(unittest.TestCase):
         """Test that restarting the launcher succeeds."""
         print("Testing launcher restart...")
 
-        result = mpos.apps.restart_launcher()
+        result = PackageManager.restart_launcher()
         wait_for_render(10)  # Wait for launcher to load
 
         self.assertTrue(result, "restart_launcher() should succeed")

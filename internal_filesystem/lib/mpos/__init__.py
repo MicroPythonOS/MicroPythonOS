@@ -46,7 +46,6 @@ from .ui.widget_animator import WidgetAnimator
 from .ui import focus_direction
 
 # Utility modules
-from . import apps
 from . import bootloader
 from . import ui
 from . import config
@@ -91,7 +90,7 @@ __all__ = [
     "click_button", "click_label", "click_keyboard_button", "find_button_with_text",
     "get_all_widgets_with_text",
     # Submodules
-    "apps", "ui", "config", "net", "content", "time", "sensor_manager",
+    "ui", "config", "net", "content", "time", "sensor_manager",
     "camera_manager", "sdcard", "battery_voltage", "audio", "hardware", "bootloader",
     # Timezone utilities
     "TimeZone"

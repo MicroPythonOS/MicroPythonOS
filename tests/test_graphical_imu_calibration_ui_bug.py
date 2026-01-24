@@ -26,7 +26,8 @@ from mpos import (
     capture_screenshot,
     click_label,
     click_button,
-    find_text_on_screen
+    find_text_on_screen,
+    PackageManager
 )
 
 
@@ -43,10 +44,9 @@ class TestIMUCalibrationUI(unittest.TestCase):
     
         # Step 2: Open Settings app
         print("Step 2: Opening Settings app...")
-        import mpos.apps
     
         # Start Settings app by name
-        mpos.apps.start_app("com.micropythonos.settings")
+        PackageManager.start_app("com.micropythonos.settings")
         wait_for_render(iterations=30)
         print("Settings app opened\n")
     
