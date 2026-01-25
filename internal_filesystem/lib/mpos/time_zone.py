@@ -1,8 +1,11 @@
 from .time_zones import TIME_ZONE_MAP
+from . import config
 
 
 class TimeZone:
     """Timezone utility class for converting and managing timezone information."""
+
+    timezone_preference = None
 
     @staticmethod
     def timezone_to_posix_time_zone(timezone):
@@ -28,3 +31,12 @@ class TimeZone:
             list: List of timezone names (e.g., ['Africa/Abidjan', 'Africa/Accra', ...]).
         """
         return sorted(TIME_ZONE_MAP.keys())  # even though they are defined alphabetical, the order isn't maintained in MicroPython
+
+    @staticmethod
+    def refresh_timezone_preference():
+        """
+        Refresh the timezone preference from SharedPreferences.
+        """
+        TimeZone.timezone_preference = config.SharedPreferences("com.micropythonos.settings").get_string("timezone")
+        if not TimeZone.timezone_preference:
+            TimeZone.timezone_preference = "Etc/GMT" # Use a default value so that it doesn't refresh every time the time is requested
