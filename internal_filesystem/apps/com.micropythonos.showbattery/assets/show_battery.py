@@ -40,9 +40,9 @@ battery power:
 import lvgl as lv
 import time
 
-from mpos import BatteryManager, Activity
+from mpos import Activity, BatteryManager
 
-class Hello(Activity):
+class ShowBattery(Activity):
 
     refresh_timer = None
     
@@ -60,14 +60,12 @@ class Hello(Activity):
         super().onResume(screen)
 
         def update_bat(timer):
-            #global l
             r = BatteryManager.read_raw_adc()
             v = BatteryManager.read_battery_voltage()
             percent = BatteryManager.get_battery_percentage()
             text = f"{time.localtime()}\n{r}\n{v}V\n{percent}%"
-            #text = f"{time.localtime()}: {r}"
             print(text)
-            self.update_ui_threadsafe_if_foreground(self.raw_label.set_text, text)
+            self.raw_label.set_text(text)
 
         self.refresh_timer = lv.timer_create(update_bat,1000,None) #.set_repeat_count(10)
 

@@ -3,15 +3,15 @@
 "publisher": "MicroPythonOS",
 "short_description": "Minimal app",
 "long_description": "Demonstrates the simplest app.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/icons/com.micropythonos.helloworld_0.0.3_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/mpks/com.micropythonos.helloworld_0.0.3.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/icons/com.micropythonos.helloworld_0.1.0_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/mpks/com.micropythonos.helloworld_0.1.0.mpk",
 "fullname": "com.micropythonos.showbattery",
-"version": "0.0.3",
+"version": "0.1.0",
 "category": "development",
 "activities": [
     {
-      "entrypoint": "assets/hello.py",
-      "classname": "Hello",
+      "entrypoint": "assets/show_battery.py",
+      "classname": "ShowBattery",
       "intent_filters": [
         {
           "action": "main",
