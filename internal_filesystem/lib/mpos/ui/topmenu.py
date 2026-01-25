@@ -5,6 +5,7 @@ import mpos.battery_voltage
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
 from .util import (get_foreground_app)
+from .input_manager import InputManager
 from . import focus_direction
 from .widget_animator import WidgetAnimator
 from mpos.content.app_manager import AppManager
@@ -372,7 +373,7 @@ def create_drawer():
 def drawer_scroll_callback(event):
     global scroll_start_y
     event_code=event.get_code()
-    x, y = DisplayMetrics.pointer_xy()
+    x, y = InputManager.pointer_xy()
     #name = mpos.ui.get_event_name(event_code)
     #print(f"drawer_scroll: code={event_code}, name={name}, ({x},{y})")
     if event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y == None:

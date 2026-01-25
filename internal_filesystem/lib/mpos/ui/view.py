@@ -86,8 +86,8 @@ def back_screen():
     if default_group:
         from .focus import move_focusgroup_objects
         move_focusgroup_objects(prev_focusgroup, default_group)
-        from .focus_direction import emulate_focus_obj
-        emulate_focus_obj(default_group, prev_focused)
+        from .input_manager import InputManager
+        InputManager.emulate_focus_obj(default_group, prev_focused)
 
     if prev_activity:
         prev_activity.onResume(prev_screen)

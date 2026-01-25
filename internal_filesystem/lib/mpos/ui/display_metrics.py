@@ -69,13 +69,3 @@ class DisplayMetrics:
         """Get maximum dimension (width or height)."""
         return max(cls._width, cls._height)
     
-    @classmethod
-    def pointer_xy(cls):
-        """Get current pointer/touch coordinates."""
-        import lvgl as lv
-        indev = lv.indev_active()
-        if indev:
-            p = lv.point_t()
-            indev.get_point(p)
-            return p.x, p.y
-        return -1, -1
