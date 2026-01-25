@@ -2,11 +2,12 @@
 =====
 - AppStore app: fix BadgeHub backend handling
 - OSUpdate app: eliminate requests library
-- Remove depenency on micropython-esp32-ota library
+- Remove dependency on micropython-esp32-ota library
+- Remove dependency on traceback library
 - Show new MicroPythonOS logo at boot
-- SensorManager: add support for LSM6DSO
 - ActivityNavigator: support pre-instantiated activities to support one activity closing a child activity
-- Rename PackageManager to AppManager framework
+- SensorManager: add support for LSM6DSO
+- Rename PackageManager framework to AppManager
 - Add new AppearanceManager framework
 - Add new BatteryManager framework
 - Add new DeviceInfo framework
