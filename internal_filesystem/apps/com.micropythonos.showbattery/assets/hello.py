@@ -1,13 +1,4 @@
 """
-8:44 4.15V
-8:46 4.13V
-
-import time
-v = mpos.battery_voltage.read_battery_voltage()
-percent = mpos.battery_voltage.get_battery_percentage()
-text = f"{time.localtime()}: {v}V is {percent}%"
-text
-
 from machine import ADC, Pin # do this inside the try because it will fail on desktop
 adc = ADC(Pin(13))
 # Set ADC to 11dB attenuation for 0–3.3V range (common for ESP32)
