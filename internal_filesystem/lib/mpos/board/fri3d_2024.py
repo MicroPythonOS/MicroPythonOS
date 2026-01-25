@@ -15,6 +15,7 @@ import task_handler
 
 import mpos.ui
 import mpos.ui.focus_direction
+from mpos import InputManager
 
 from ..task_manager import TaskManager
 
@@ -257,6 +258,9 @@ indev.set_group(group) # is this needed? maybe better to move the default group 
 disp = lv.display_get_default()  # NOQA
 indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
+
+# Register the input device with InputManager
+InputManager.register_indev(indev)
 
 # Battery voltage ADC measuring
 # NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.

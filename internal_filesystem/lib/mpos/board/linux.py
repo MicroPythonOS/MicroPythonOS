@@ -7,6 +7,7 @@ import mpos.clipboard
 import mpos.indev.mpos_sdl_keyboard
 import mpos.ui
 import mpos.ui.focus_direction
+from mpos import InputManager
 
 # Same as Waveshare ESP32-S3-Touch-LCD-2 and Fri3d Camp 2026 Badge
 TFT_HOR_RES=320
@@ -71,13 +72,14 @@ def catch_escape_key(indev, indev_data):
 
     sdlkeyboard._read(indev, indev_data)
 
-#import sdl_keyboard
 sdlkeyboard = mpos.indev.mpos_sdl_keyboard.MposSDLKeyboard()
 sdlkeyboard._indev_drv.set_read_cb(catch_escape_key) # check for escape
+InputManager.register_indev(sdlkeyboard)
 try:
     sdlkeyboard.set_paste_text_callback(mpos.clipboard.paste_text)
 except Exception as e:
     print("Warning: could not set paste_text callback for sdlkeyboard, copy-paste won't work")
+
 
 #def keyboard_cb(event):
  #   global canvas

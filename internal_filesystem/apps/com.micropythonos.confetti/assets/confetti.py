@@ -1,3 +1,5 @@
+# This is a copy of LightningPiggyApp's confetti.py
+
 import time
 import random
 import lvgl as lv
