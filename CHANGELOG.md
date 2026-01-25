@@ -8,8 +8,10 @@
 - ActivityNavigator: support pre-instantiated activities to support one activity closing a child activity
 - Rename PackageManager to AppManager framework
 - Add new AppearanceManager framework
+- Add new BatteryManager framework
 - Add new DeviceInfo framework
 - Add new DisplayMetrics framework
+- Add new InputManager framework
 - Add new VersionInfo framework
 - Additional board support: Fri3d Camp 2026 (untested on real hardware)
 - Harmonize frameworks to use same coding patterns

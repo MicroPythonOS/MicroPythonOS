@@ -17,6 +17,9 @@ from .time_zone import TimeZone
 from .device_info import DeviceInfo
 from .build_info import BuildInfo
 
+# Battery manager (imported early for UI dependencies)
+from .battery_manager import BatteryManager
+
 # Common activities
 from .app.activities.chooser import ChooserActivity
 from .app.activities.view import ViewActivity
@@ -56,7 +59,6 @@ from . import time
 from . import sensor_manager
 from . import camera_manager
 from . import sdcard
-from . import battery_voltage
 from . import audio
 from . import hardware
 
@@ -66,7 +68,7 @@ __all__ = [
     "Activity",
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioFlinger", "Intent",
-    "ActivityNavigator", "AppManager", "TaskManager", "CameraManager",
+    "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",
     # Common activities
@@ -93,7 +95,7 @@ __all__ = [
     "get_all_widgets_with_text",
     # Submodules
     "ui", "config", "net", "content", "time", "sensor_manager",
-    "camera_manager", "sdcard", "battery_voltage", "audio", "hardware", "bootloader",
+    "camera_manager", "sdcard", "audio", "hardware", "bootloader",
     # Timezone utilities
     "TimeZone"
 ]

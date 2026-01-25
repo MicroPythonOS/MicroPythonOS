@@ -185,7 +185,7 @@ indev.enable(True)  # NOQA
 InputManager.register_indev(indev)
 
 # Battery voltage ADC measuring: sits on PC0 of CH32X035GxUx
-import mpos.battery_voltage
+from mpos import BatteryManager
 def adc_to_voltage(adc_value):
     """
     Convert raw ADC value to battery voltage using calibrated linear function.
@@ -193,7 +193,7 @@ def adc_to_voltage(adc_value):
     This is ~10x more accurate than simple scaling (error ~0.01V vs ~0.1V).
     """
     return (0.001651* adc_value + 0.08709)
-#mpos.battery_voltage.init_adc(13, adc_to_voltage) # TODO
+#BatteryManager.init_adc(13, adc_to_voltage) # TODO
 
 import mpos.sdcard
 mpos.sdcard.init(spi_bus, cs_pin=14)

@@ -1,7 +1,7 @@
 import lvgl as lv
 
 import mpos.time
-import mpos.battery_voltage
+from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
 from .util import (get_foreground_app)
@@ -138,9 +138,9 @@ def create_notification_bar():
     
     def update_battery_icon(timer=None):
         try:
-            percent = mpos.battery_voltage.get_battery_percentage()
+            percent = BatteryManager.get_battery_percentage()
         except Exception as e:
-            print(f"battery_voltage.get_battery_percentage got exception, not updating battery_icon: {e}")
+            print(f"BatteryManager.get_battery_percentage got exception, not updating battery_icon: {e}")
             return
         if percent > 80:
             battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)

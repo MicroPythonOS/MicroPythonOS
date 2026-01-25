@@ -82,7 +82,7 @@ lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 # Battery voltage ADC measuring
-import mpos.battery_voltage
+from mpos import BatteryManager
 
 def adc_to_voltage(adc_value):
     """
@@ -95,7 +95,7 @@ def adc_to_voltage(adc_value):
     """
     return adc_value * 0.00262
 
-mpos.battery_voltage.init_adc(5, adc_to_voltage)
+BatteryManager.init_adc(5, adc_to_voltage)
 
 # On the Waveshare ESP32-S3-Touch-LCD-2, the camera is hard-wired to power on,
 # so it needs a software power off to prevent it from staying hot all the time and quickly draining the battery.

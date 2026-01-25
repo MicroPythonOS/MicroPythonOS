@@ -49,7 +49,7 @@ battery power:
 import lvgl as lv
 import time
 
-from mpos import battery_voltage, Activity
+from mpos import BatteryManager, Activity
 
 class Hello(Activity):
 
@@ -70,9 +70,9 @@ class Hello(Activity):
 
         def update_bat(timer):
             #global l
-            r = battery_voltage.read_raw_adc()
-            v = battery_voltage.read_battery_voltage()
-            percent = battery_voltage.get_battery_percentage()
+            r = BatteryManager.read_raw_adc()
+            v = BatteryManager.read_battery_voltage()
+            percent = BatteryManager.get_battery_percentage()
             text = f"{time.localtime()}\n{r}\n{v}V\n{percent}%"
             #text = f"{time.localtime()}: {r}"
             print(text)
