@@ -1,5 +1,5 @@
 import lvgl as lv
-from mpos import Activity, ui
+from mpos import Activity, DisplayMetrics
 
 indev_error_x = 160
 indev_error_y = 120
@@ -35,11 +35,11 @@ class Draw(Activity):
     def touch_cb(self, event):
         event_code=event.get_code()
         if event_code not in [19,23,25,26,27,28,29,30,49]:
-            name = ui.get_event_name(event_code)
+            #name = ui.get_event_name(event_code)
             #print(f"lv_event_t: code={event_code}, name={name}") # target={event.get_target()}, user_data={event.get_user_data()}, param={event.get_param()}
             if event_code == lv.EVENT.PRESSING: # this is probably enough
             #if event_code in [lv.EVENT.PRESSED, lv.EVENT.PRESSING, lv.EVENT.LONG_PRESSED, lv.EVENT.LONG_PRESSED_REPEAT]:
-                x, y = ui.get_pointer_xy()
+                x, y = DisplayMetrics.pointer_xy()
                 #canvas.set_px(x,y,lv.color_black(),lv.OPA.COVER) # draw a tiny point
                 self.draw_rect(x,y)
                 #self.draw_line(x,y)
