@@ -1,7 +1,7 @@
 # Hardware initialization for Fri3d Camp 2026 Badge
 
-# TODO:
-# - touch screen / touch pad
+# Overview:
+# - Touch screen controller is cst816s
 # - IMU (LSM6DSO) is different from fri3d_2024 (and address 0x6A instead of 0x6B) but the API seems the same, except different chip ID (0x6C iso 0x6A)
 # - I2S audio (communicator) is the same
 # - headphone jack audio?
@@ -30,6 +30,7 @@ import task_handler
 
 import mpos.ui
 import mpos.ui.focus_direction
+from mpos import InputManager
 
 TFT_HOR_RES=320
 TFT_VER_RES=240
@@ -85,7 +86,8 @@ mpos.ui.main_display.set_color_inversion(False)
 # touch pad interrupt TP Int is on ESP.IO13
 i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_locks=False)
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=TP_REGBITS)
-indev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
+tindev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
+InputManager.register_indev(tindev)
 
 lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
@@ -180,6 +182,7 @@ indev.set_group(group) # is this needed? maybe better to move the default group 
 disp = lv.display_get_default()  # NOQA
 indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
+InputManager.register_indev(indev)
 
 # Battery voltage ADC measuring: sits on PC0 of CH32X035GxUx
 import mpos.battery_voltage
