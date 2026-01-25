@@ -3,15 +3,15 @@
 "publisher": "MicroPythonOS",
 "short_description": "Just shows confetti",
 "long_description": "Nothing special, just a demo.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.confetti/icons/com.micropythonos.confetti_0.0.3_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.confetti/mpks/com.micropythonos.confetti_0.0.3.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.confetti/icons/com.micropythonos.confetti_0.0.4_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.confetti/mpks/com.micropythonos.confetti_0.0.4.mpk",
 "fullname": "com.micropythonos.confetti",
-"version": "0.0.3",
+"version": "0.0.4",
 "category": "games",
 "activities": [
     {
-      "entrypoint": "assets/confetti.py",
-      "classname": "Confetti",
+      "entrypoint": "assets/confetti_app.py",
+      "classname": "ConfettiApp",
       "intent_filters": [
         {
           "action": "main",
