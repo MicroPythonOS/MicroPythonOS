@@ -2,6 +2,7 @@ import lvgl as lv
 
 from mpos import Intent, AppManager, SettingActivity, SettingsActivity, TimeZone
 
+from bootloader import ResetIntoBootloader
 from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity
 
@@ -59,7 +60,6 @@ class Settings(SettingsActivity):
     def reset_into_bootloader(self, new_value):
         if new_value is not "bootloader":
             return
-        from mpos.bootloader import ResetIntoBootloader
         intent = Intent(activity_class=ResetIntoBootloader)
         self.startActivity(intent)
 

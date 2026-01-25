@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from .app.activity import Activity
+from mpos import Activity
 
 class ResetIntoBootloader(Activity):
     

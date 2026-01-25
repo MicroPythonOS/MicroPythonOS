@@ -50,7 +50,6 @@ from .ui.widget_animator import WidgetAnimator
 from .ui import focus_direction
 
 # Utility modules
-from . import bootloader
 from . import ui
 from . import config
 from . import net
@@ -95,7 +94,7 @@ __all__ = [
     "get_all_widgets_with_text",
     # Submodules
     "ui", "config", "net", "content", "time", "sensor_manager",
-    "camera_manager", "sdcard", "audio", "hardware", "bootloader",
+    "camera_manager", "sdcard", "audio", "hardware",
     # Timezone utilities
     "TimeZone"
 ]
