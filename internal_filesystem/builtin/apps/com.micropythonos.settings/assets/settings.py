@@ -37,7 +37,6 @@ class Settings(SettingsActivity):
         intent = Intent()
         from mpos import SharedPreferences
         intent.putExtra("prefs", SharedPreferences("com.micropythonos.settings"))
-        import mpos.time
         intent.putExtra("settings", [
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
