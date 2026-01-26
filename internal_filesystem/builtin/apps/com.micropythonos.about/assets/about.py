@@ -1,8 +1,12 @@
 import sys
+import logging
 
 from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
 
 class About(Activity):
+
+    logger = logging.getLogger(__file__)
+    logger.setLevel(logging.INFO)
 
     def _add_label(self, parent, text, is_header=False, margin_top=DisplayMetrics.pct_of_height(5)):
         """Helper to create and add a label with text."""
@@ -31,7 +35,7 @@ class About(Activity):
             self._add_label(screen, f"Free space {path}: {free_space} bytes")
             self._add_label(screen, f"Used space {path}: {used_space} bytes")
         except Exception as e:
-            print(f"About app could not get info on {path} filesystem: {e}")
+            self.logger.warning(f"About app could not get info on {path} filesystem: {e}")
 
     def onCreate(self):
         screen = lv.obj()
@@ -98,7 +102,7 @@ class About(Activity):
                 import esp32
                 self._add_label(screen, f"Temperature: {esp32.mcu_temperature()} °C")
             except Exception as e:
-                print(f"Could not get ESP32 hardware info: {e}")
+                self.logger.warning(f"Could not get ESP32 hardware info: {e}")
 
             # Partition info (ESP32 only)
             try:
@@ -110,12 +114,12 @@ class About(Activity):
                 self._add_label(screen, f"Next update partition: {next_partition}")
             except Exception as e:
                 error = f"Could not find partition info because: {e}\nIt's normal to get this error on desktop."
-                print(error)
+                self.logger.warning(error)
                 self._add_label(screen, error)
 
             # Machine info
             try:
-                print("Trying to find out additional board info, not available on every platform...")
+                self.logger.info("Trying to find out additional board info, not available on every platform...")
                 self._add_label(screen, f"{lv.SYMBOL.POWER} Machine Info", is_header=True)
                 import machine
                 self._add_label(screen, f"machine.freq: {machine.freq()}")
@@ -127,12 +131,12 @@ class About(Activity):
                 self._add_label(screen, f"machine.reset_cause(): {machine.reset_cause()}")
             except Exception as e:
                 error = f"Could not find machine info because: {e}\nIt's normal to get this error on desktop."
-                print(error)
+                self.logger.warning(error)
                 self._add_label(screen, error)
 
         # Freezefs info (production builds only)
         try:
-            print("Trying to find out freezefs info")
+            self.logger.info("Trying to find out freezefs info")
             self._add_label(screen, f"{lv.SYMBOL.DOWNLOAD} Frozen Filesystem", is_header=True)
             import freezefs_mount_builtin
             self._add_label(screen, f"freezefs_mount_builtin.date_frozen: {freezefs_mount_builtin.date_frozen}")
@@ -147,7 +151,7 @@ class About(Activity):
             # BUT which will still have the frozen-inside /lib folder. So the user will be able to install apps into /builtin
             # but they will not be able to install libraries into /lib.
             error = f"Could not get freezefs_mount_builtin info because: {e}\nIt's normal to get an exception if the internal storage partition contains an overriding /builtin folder."
-            print(error)
+            self.logger.warning(error)
             self._add_label(screen, error)
 
         # Display info
@@ -159,7 +163,7 @@ class About(Activity):
             dpi = DisplayMetrics.dpi()
             self._add_label(screen, f"Dots Per Inch (dpi): {dpi}")
         except Exception as e:
-            print(f"Could not get display info: {e}")
+            self.logger.warning(f"Could not get display info: {e}")
 
         # Disk usage info
         self._add_label(screen, f"{lv.SYMBOL.DRIVE} Storage", is_header=True)

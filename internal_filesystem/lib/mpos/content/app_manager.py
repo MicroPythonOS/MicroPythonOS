@@ -252,7 +252,8 @@ class AppManager:
                     print(f"execute_script: reading script_source took {read_time}ms")
             script_globals = {
                 'lv': lv,
-                '__name__': "__main__"
+                '__name__': "__main__", # in case the script wants this
+                '__file__': compile_name
             }
             print(f"Thread {thread_id}: starting script")
             import sys
