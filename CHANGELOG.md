@@ -17,8 +17,9 @@ Frameworks:
 - Add new DeviceInfo framework
 - Add new DisplayMetrics framework
 - Add new InputManager framework
+- Add new TimeZone framework
 - Add new VersionInfo framework
-- ActivityNavigator: allow an activity to close a child activity
+- ActivityNavigator: support pre-instantiated activities so an activity can close a child activity
 - SensorManager: add support for LSM6DSO
 
 OS:
