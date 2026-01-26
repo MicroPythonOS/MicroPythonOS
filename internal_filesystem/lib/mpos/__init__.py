@@ -8,7 +8,7 @@ from .content.app_manager import AppManager
 from .config import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net.wifi_service import WifiService
-from .audio.audioflinger import AudioFlinger
+from .audio.audiomanager import AudioManager
 from .net.download_manager import DownloadManager
 from .task_manager import TaskManager
 from .camera_manager import CameraManager
@@ -66,7 +66,7 @@ __all__ = [
     "App",
     "Activity",
     "SharedPreferences",
-    "ConnectivityManager", "DownloadManager", "WifiService", "AudioFlinger", "Intent",
+    "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",

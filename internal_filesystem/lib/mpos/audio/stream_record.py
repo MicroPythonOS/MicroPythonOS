@@ -1,4 +1,4 @@
-# RecordStream - WAV File Recording Stream for AudioFlinger
+# RecordStream - WAV File Recording Stream for AudioManager
 # Records 16-bit mono PCM audio from I2S microphone to WAV file
 # Uses synchronous recording in a separate thread for non-blocking operation
 # On desktop (no I2S hardware), generates a 440Hz sine wave for testing

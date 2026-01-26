@@ -98,7 +98,7 @@ def adc_to_voltage(adc_value):
 BatteryManager.init_adc(999, adc_to_voltage)
 
 # === AUDIO HARDWARE ===
-from mpos import AudioFlinger
+from mpos import AudioManager
 
 # Desktop builds have no real audio hardware, but we simulate microphone
 # recording with a 440Hz sine wave for testing WAV file generation
@@ -110,7 +110,7 @@ i2s_pins = {
     'sck_in': 0,    # Simulated - not used on desktop
     'sd_in': 0,     # Simulated - enables microphone simulation
 }
-AudioFlinger(i2s_pins=i2s_pins)
+AudioManager(i2s_pins=i2s_pins)
 
 # === LED HARDWARE ===
 # Note: Desktop builds have no LED hardware

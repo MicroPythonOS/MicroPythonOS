@@ -1,4 +1,4 @@
-# AudioFlinger - Core Audio Management Service
+# AudioManager - Core Audio Management Service
 # Centralized audio routing with priority-based audio focus (Android-inspired)
 # Supports I2S (digital audio) and PWM buzzer (tones/ringtones)
 #
@@ -9,20 +9,20 @@ import _thread
 from ..task_manager import TaskManager
 
 
-class AudioFlinger:
+class AudioManager:
     """
     Centralized audio management service with priority-based audio focus.
     Implements singleton pattern for single audio service instance.
     
     Usage:
-        from mpos import AudioFlinger
+        from mpos import AudioManager
         
         # Direct class method calls (no .get() needed)
-        AudioFlinger.init(i2s_pins=pins, buzzer_instance=buzzer)
-        AudioFlinger.play_wav("music.wav", stream_type=AudioFlinger.STREAM_MUSIC)
-        AudioFlinger.set_volume(80)
-        volume = AudioFlinger.get_volume()
-        AudioFlinger.stop()
+        AudioManager.init(i2s_pins=pins, buzzer_instance=buzzer)
+        AudioManager.play_wav("music.wav", stream_type=AudioManager.STREAM_MUSIC)
+        AudioManager.set_volume(80)
+        volume = AudioManager.get_volume()
+        AudioManager.stop()
     """
     
     # Stream type constants (priority order: higher number = higher priority)
@@ -34,15 +34,15 @@ class AudioFlinger:
     
     def __init__(self, i2s_pins=None, buzzer_instance=None):
         """
-        Initialize AudioFlinger instance with optional hardware configuration.
+        Initialize AudioManager instance with optional hardware configuration.
 
         Args:
             i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers (for I2S/WAV playback)
             buzzer_instance: PWM instance for buzzer (for RTTTL playback)
         """
-        if AudioFlinger._instance:
+        if AudioManager._instance:
             return
-        AudioFlinger._instance = self
+        AudioManager._instance = self
 
         self._i2s_pins = i2s_pins              # I2S pin configuration dict (created per-stream)
         self._buzzer_instance = buzzer_instance # PWM buzzer instance
@@ -58,9 +58,9 @@ class AudioFlinger:
             capabilities.append("Buzzer (RTTTL)")
         
         if capabilities:
-            print(f"AudioFlinger initialized: {', '.join(capabilities)}")
+            print(f"AudioManager initialized: {', '.join(capabilities)}")
         else:
-            print("AudioFlinger initialized: No audio hardware")
+            print("AudioManager initialized: No audio hardware")
 
     @classmethod
     def get(cls):
@@ -100,11 +100,11 @@ class AudioFlinger:
 
         # Check priority
         if stream_type <= self._current_stream.stream_type:
-            print(f"AudioFlinger: Stream rejected (priority {stream_type} <= current {self._current_stream.stream_type})")
+            print(f"AudioManager: Stream rejected (priority {stream_type} <= current {self._current_stream.stream_type})")
             return False
 
         # Higher priority stream - interrupt current
-        print(f"AudioFlinger: Interrupting stream (priority {stream_type} > current {self._current_stream.stream_type})")
+        print(f"AudioManager: Interrupting stream (priority {stream_type} > current {self._current_stream.stream_type})")
         self._current_stream.stop()
         return True
 
@@ -122,7 +122,7 @@ class AudioFlinger:
             # Run synchronous playback in this thread
             stream.play()
         except Exception as e:
-            print(f"AudioFlinger: Playback error: {e}")
+            print(f"AudioManager: Playback error: {e}")
         finally:
             # Clear current stream
             if self._current_stream == stream:
@@ -145,7 +145,7 @@ class AudioFlinger:
             stream_type = self.STREAM_MUSIC
             
         if not self._i2s_pins:
-            print("AudioFlinger: play_wav() failed - I2S not configured")
+            print("AudioManager: play_wav() failed - I2S not configured")
             return False
 
         # Check audio focus
@@ -169,7 +169,7 @@ class AudioFlinger:
             return True
 
         except Exception as e:
-            print(f"AudioFlinger: play_wav() failed: {e}")
+            print(f"AudioManager: play_wav() failed: {e}")
             return False
 
     def play_rtttl(self, rtttl_string, stream_type=None, volume=None, on_complete=None):
@@ -189,7 +189,7 @@ class AudioFlinger:
             stream_type = self.STREAM_NOTIFICATION
             
         if not self._buzzer_instance:
-            print("AudioFlinger: play_rtttl() failed - buzzer not configured")
+            print("AudioManager: play_rtttl() failed - buzzer not configured")
             return False
 
         # Check audio focus
@@ -213,7 +213,7 @@ class AudioFlinger:
             return True
 
         except Exception as e:
-            print(f"AudioFlinger: play_rtttl() failed: {e}")
+            print(f"AudioManager: play_rtttl() failed: {e}")
             return False
 
     def _recording_thread(self, stream):
@@ -230,7 +230,7 @@ class AudioFlinger:
             # Run synchronous recording in this thread
             stream.record()
         except Exception as e:
-            print(f"AudioFlinger: Recording error: {e}")
+            print(f"AudioManager: Recording error: {e}")
         finally:
             # Clear current recording
             if self._current_recording == stream:
@@ -249,7 +249,7 @@ class AudioFlinger:
         Returns:
             bool: True if recording started, False if rejected or unavailable
         """
-        print(f"AudioFlinger.record_wav() called")
+        print(f"AudioManager.record_wav() called")
         print(f"  file_path: {file_path}")
         print(f"  duration_ms: {duration_ms}")
         print(f"  sample_rate: {sample_rate}")
@@ -257,25 +257,25 @@ class AudioFlinger:
         print(f"  has_microphone(): {self.has_microphone()}")
 
         if not self.has_microphone():
-            print("AudioFlinger: record_wav() failed - microphone not configured")
+            print("AudioManager: record_wav() failed - microphone not configured")
             return False
 
         # Cannot record while playing (I2S can only be TX or RX, not both)
         if self.is_playing():
-            print("AudioFlinger: Cannot record while playing")
+            print("AudioManager: Cannot record while playing")
             return False
 
         # Cannot start new recording while already recording
         if self.is_recording():
-            print("AudioFlinger: Already recording")
+            print("AudioManager: Already recording")
             return False
 
         # Create stream and start recording in separate thread
         try:
-            print("AudioFlinger: Importing RecordStream...")
+            print("AudioManager: Importing RecordStream...")
             from mpos.audio.stream_record import RecordStream
 
-            print("AudioFlinger: Creating RecordStream instance...")
+            print("AudioManager: Creating RecordStream instance...")
             stream = RecordStream(
                 file_path=file_path,
                 duration_ms=duration_ms,
@@ -284,15 +284,15 @@ class AudioFlinger:
                 on_complete=on_complete
             )
 
-            print("AudioFlinger: Starting recording thread...")
+            print("AudioManager: Starting recording thread...")
             _thread.stack_size(TaskManager.good_stack_size())
             _thread.start_new_thread(self._recording_thread, (stream,))
-            print("AudioFlinger: Recording thread started successfully")
+            print("AudioManager: Recording thread started successfully")
             return True
 
         except Exception as e:
             import sys
-            print(f"AudioFlinger: record_wav() failed: {e}")
+            print(f"AudioManager: record_wav() failed: {e}")
             sys.print_exception(e)
             return False
 
@@ -302,16 +302,16 @@ class AudioFlinger:
 
         if self._current_stream:
             self._current_stream.stop()
-            print("AudioFlinger: Playback stopped")
+            print("AudioManager: Playback stopped")
             stopped = True
 
         if self._current_recording:
             self._current_recording.stop()
-            print("AudioFlinger: Recording stopped")
+            print("AudioManager: Recording stopped")
             stopped = True
 
         if not stopped:
-            print("AudioFlinger: No playback or recording to stop")
+            print("AudioManager: No playback or recording to stop")
 
     def pause(self):
         """
@@ -320,9 +320,9 @@ class AudioFlinger:
         """
         if self._current_stream and hasattr(self._current_stream, 'pause'):
             self._current_stream.pause()
-            print("AudioFlinger: Playback paused")
+            print("AudioManager: Playback paused")
         else:
-            print("AudioFlinger: Pause not supported or no playback active")
+            print("AudioManager: Pause not supported or no playback active")
 
     def resume(self):
         """
@@ -331,9 +331,9 @@ class AudioFlinger:
         """
         if self._current_stream and hasattr(self._current_stream, 'resume'):
             self._current_stream.resume()
-            print("AudioFlinger: Playback resumed")
+            print("AudioManager: Playback resumed")
         else:
-            print("AudioFlinger: Resume not supported or no playback active")
+            print("AudioManager: Resume not supported or no playback active")
 
     def set_volume(self, volume):
         """
@@ -396,7 +396,7 @@ _methods_to_delegate = [
 ]
 
 for method_name in _methods_to_delegate:
-    _original_methods[method_name] = getattr(AudioFlinger, method_name)
+    _original_methods[method_name] = getattr(AudioManager, method_name)
 
 # Helper to create delegating class methods
 def _make_class_method(method_name):
@@ -410,6 +410,6 @@ def _make_class_method(method_name):
     
     return class_method
 
-# Attach class methods to AudioFlinger
+# Attach class methods to AudioManager
 for method_name in _methods_to_delegate:
-    setattr(AudioFlinger, method_name, _make_class_method(method_name))
+    setattr(AudioManager, method_name, _make_class_method(method_name))

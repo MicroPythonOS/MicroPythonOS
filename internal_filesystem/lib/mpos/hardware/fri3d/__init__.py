@@ -1,5 +1,5 @@
 # Fri3d Camp 2024 Badge Hardware Drivers
-# These are simple wrappers that can be used by services like AudioFlinger
+# These are simple wrappers that can be used by services like AudioManager
 
 from .buzzer import BuzzerConfig
 from .leds import LEDConfig

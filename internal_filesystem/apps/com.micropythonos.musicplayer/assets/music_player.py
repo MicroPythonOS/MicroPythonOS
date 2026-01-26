@@ -2,7 +2,7 @@ import machine
 import os
 import time
 
-from mpos import Activity, Intent, sdcard, get_event_name, AudioFlinger
+from mpos import Activity, Intent, sdcard, get_event_name, AudioManager
 
 class MusicPlayer(Activity):
 
@@ -63,17 +63,17 @@ class FullscreenPlayer(Activity):
         self._filename = self.getIntent().extras.get("filename")
         qr_screen = lv.obj()
         self._slider_label=lv.label(qr_screen)
-        self._slider_label.set_text(f"Volume: {AudioFlinger.get_volume()}%")
+        self._slider_label.set_text(f"Volume: {AudioManager.get_volume()}%")
         self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
         self._slider=lv.slider(qr_screen)
         self._slider.set_range(0,16)
-        self._slider.set_value(int(AudioFlinger.get_volume()/6.25), False)
+        self._slider.set_value(int(AudioManager.get_volume()/6.25), False)
         self._slider.set_width(lv.pct(90))
         self._slider.align_to(self._slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
         def volume_slider_changed(e):
             volume_int = self._slider.get_value()*6.25
             self._slider_label.set_text(f"Volume: {volume_int}%")
-            AudioFlinger.set_volume(volume_int)
+            AudioManager.set_volume(volume_int)
         self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
         self._filename_label = lv.label(qr_screen)
         self._filename_label.align(lv.ALIGN.CENTER,0,0)
@@ -100,12 +100,12 @@ class FullscreenPlayer(Activity):
             print("Not playing any file...")
         else:
             print(f"Playing file {self._filename}")
-            AudioFlinger.stop()
+            AudioManager.stop()
             time.sleep(0.1)
 
-            success = AudioFlinger.play_wav(
+            success = AudioManager.play_wav(
                 self._filename,
-                stream_type=AudioFlinger.STREAM_MUSIC,
+                stream_type=AudioManager.STREAM_MUSIC,
                 on_complete=self.player_finished
             )
 
@@ -125,7 +125,7 @@ class FullscreenPlayer(Activity):
         obj.set_style_border_width(0, lv.PART.MAIN)
 
     def stop_button_clicked(self, event):
-        AudioFlinger.stop()
+        AudioManager.stop()
         self.finish()
 
     def player_finished(self, result=None):

@@ -2,7 +2,7 @@
 import os
 import time
 
-from mpos import Activity, ui, AudioFlinger
+from mpos import Activity, ui, AudioManager
 
 
 def _makedirs(path):
@@ -136,7 +136,7 @@ class SoundRecorder(Activity):
 
     def _update_status(self):
         """Update status label based on microphone availability."""
-        if AudioFlinger.has_microphone():
+        if AudioManager.has_microphone():
             self._status_label.set_text("Microphone ready")
             self._status_label.set_style_text_color(lv.color_hex(0x00AA00), lv.PART.MAIN)
             self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -243,9 +243,9 @@ class SoundRecorder(Activity):
     def _start_recording(self):
         """Start recording audio."""
         print("SoundRecorder: _start_recording called")
-        print(f"SoundRecorder: has_microphone() = {AudioFlinger.has_microphone()}")
+        print(f"SoundRecorder: has_microphone() = {AudioManager.has_microphone()}")
 
-        if not AudioFlinger.has_microphone():
+        if not AudioManager.has_microphone():
             print("SoundRecorder: No microphone available - aborting")
             return
 
@@ -263,12 +263,12 @@ class SoundRecorder(Activity):
             return
 
         # Start recording
-        print(f"SoundRecorder: Calling AudioFlinger.record_wav()")
+        print(f"SoundRecorder: Calling AudioManager.record_wav()")
         print(f"  file_path: {file_path}")
         print(f"  duration_ms: {self._current_max_duration_ms}")
         print(f"  sample_rate: {self.SAMPLE_RATE}")
 
-        success = AudioFlinger.record_wav(
+        success = AudioManager.record_wav(
             file_path=file_path,
             duration_ms=self._current_max_duration_ms,
             on_complete=self._on_recording_complete,
@@ -302,7 +302,7 @@ class SoundRecorder(Activity):
 
     def _stop_recording(self):
         """Stop recording audio."""
-        AudioFlinger.stop()
+        AudioManager.stop()
         self._is_recording = False
 
         # Show "Saving..." status immediately (file finalization takes time on SD card)
@@ -364,13 +364,13 @@ class SoundRecorder(Activity):
         """Handle play button click."""
         if self._last_recording and not self._is_recording:
             # Stop any current playback
-            AudioFlinger.stop()
+            AudioManager.stop()
             time.sleep_ms(100)
 
             # Play the recording
-            success = AudioFlinger.play_wav(
+            success = AudioManager.play_wav(
                 self._last_recording,
-                stream_type=AudioFlinger.STREAM_MUSIC,
+                stream_type=AudioManager.STREAM_MUSIC,
                 on_complete=self._on_playback_complete,
                 volume=100
             )

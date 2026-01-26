@@ -1,4 +1,4 @@
-# RTTTLStream - RTTTL Ringtone Playback Stream for AudioFlinger
+# RTTTLStream - RTTTL Ringtone Playback Stream for AudioManager
 # Ring Tone Text Transfer Language parser and player
 # Uses synchronous playback in a separate thread for non-blocking operation
 

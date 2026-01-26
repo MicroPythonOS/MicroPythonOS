@@ -200,7 +200,7 @@ mpos.sdcard.init(spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
 from machine import PWM, Pin
-from mpos import AudioFlinger
+from mpos import AudioManager
 
 # Initialize buzzer: now sits on PC14/CC1 of the CH32X035GxUx so needs custom code
 #buzzer = PWM(Pin(46), freq=550, duty=0)
@@ -219,8 +219,8 @@ i2s_pins = {
     'sd_in': 15,    # DIN - Serial Data IN (microphone)
 }
 
-# Initialize AudioFlinger with I2S (buzzer TODO)
-AudioFlinger(i2s_pins=i2s_pins)
+# Initialize AudioManager with I2S (buzzer TODO)
+AudioManager(i2s_pins=i2s_pins)
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager

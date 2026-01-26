@@ -1,4 +1,4 @@
-# WAVStream - WAV File Playback Stream for AudioFlinger
+# WAVStream - WAV File Playback Stream for AudioManager
 # Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling, volume control
 # Uses synchronous playback in a separate thread for non-blocking operation
 

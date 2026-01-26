@@ -296,7 +296,7 @@ mpos.sdcard.init(spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
 from machine import PWM, Pin
-from mpos import AudioFlinger
+from mpos import AudioManager
 
 # Initialize buzzer (GPIO 46)
 buzzer = PWM(Pin(46), freq=550, duty=0)
@@ -315,8 +315,8 @@ i2s_pins = {
     'sd_in': 15,    # DIN - Serial Data IN (microphone)
 }
 
-# Initialize AudioFlinger with I2S and buzzer
-AudioFlinger(i2s_pins=i2s_pins, buzzer_instance=buzzer)
+# Initialize AudioManager with I2S and buzzer
+AudioManager(i2s_pins=i2s_pins, buzzer_instance=buzzer)
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
@@ -349,9 +349,9 @@ def startup_wow_effect():
         #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
 
         # Start the jingle
-        AudioFlinger.play_rtttl(
+        AudioManager.play_rtttl(
             startup_jingle,
-            stream_type=AudioFlinger.STREAM_NOTIFICATION,
+            stream_type=AudioManager.STREAM_NOTIFICATION,
             volume=60
         )
 
