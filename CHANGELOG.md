@@ -1,5 +1,6 @@
 0.7.0
 =====
+- About app: show MicroPythonOS logo at the top
 - AppStore app: fix BadgeHub backend handling
 - OSUpdate app: eliminate requests library
 - Remove dependency on micropython-esp32-ota library

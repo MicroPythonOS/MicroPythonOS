@@ -1,10 +1,10 @@
-from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
-
 import sys
+
+from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
 
 class About(Activity):
 
-    def _add_label(self, parent, text, is_header=False):
+    def _add_label(self, parent, text, is_header=False, margin_top=DisplayMetrics.pct_of_height(5)):
         """Helper to create and add a label with text."""
         label = lv.label(parent)
         label.set_text(text)
@@ -12,8 +12,8 @@ class About(Activity):
             primary_color = lv.theme_get_color_primary(None)
             label.set_style_text_color(primary_color, 0)
             label.set_style_text_font(lv.font_montserrat_14, 0)
-            label.set_style_margin_top(12, 0)
-            label.set_style_margin_bottom(4, 0)
+            label.set_style_margin_top(margin_top, 0)
+            label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), 0)
         else:
             label.set_style_text_font(lv.font_montserrat_12, 0)
             label.set_style_margin_bottom(2, 0)
@@ -37,23 +37,34 @@ class About(Activity):
         screen = lv.obj()
         screen.set_style_border_width(0, 0)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), 0)
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
         # Make the screen focusable so it can be scrolled with the arrow keys
         focusgroup = lv.group_get_default()
         if focusgroup:
             focusgroup.add_obj(screen)
 
+        # Logo
+        img = lv.image(screen)
+        img.set_src("M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png") # from the MPOS-logo repo
+        img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)
+
         # Basic OS info
-        self._add_label(screen, f"{lv.SYMBOL.HOME} System Information", is_header=True)
-        self._add_label(screen, f"MicroPythonOS version: {BuildInfo.version.release}")
+        self._add_label(screen, f"{lv.SYMBOL.HOME} Build Information", is_header=True, margin_top=0) # close to logo
+        self._add_label(screen, f"Release version: {BuildInfo.version.release}")
+        self._add_label(screen, f"API Level: {BuildInfo.version.api_level}")
         self._add_label(screen, f"Hardware ID: {DeviceInfo.hardware_id}")
         self._add_label(screen, f"sys.version: {sys.version}")
         self._add_label(screen, f"sys.implementation: {sys.implementation}")
         self._add_label(screen, f"sys.byteorder: {sys.byteorder}")
         self._add_label(screen, f"sys.maxsize of integer: {sys.maxsize}")
 
+        # Platform info
+        self._add_label(screen, f"{lv.SYMBOL.FILE} Platform", is_header=True)
+        self._add_label(screen, f"sys.platform: {sys.platform}")
+        self._add_label(screen, f"sys.path: {sys.path}")
+
         # MPY version info
-        self._add_label(screen, f"{lv.SYMBOL.SETTINGS} MicroPython Version", is_header=True)
+        self._add_label(screen, f"{lv.SYMBOL.SETTINGS} Binary MPY Format", is_header=True)
         sys_mpy = sys.implementation._mpy
         self._add_label(screen, f'mpy version: {sys_mpy & 0xff}')
         self._add_label(screen, f'mpy sub-version: {sys_mpy >> 8 & 3}')
@@ -67,11 +78,6 @@ class About(Activity):
             flags += ' -march-flags=' + (sys_mpy >> 16)
         if len(flags) > 0:
             self._add_label(screen, 'mpy flags: ' + flags)
-
-        # Platform info
-        self._add_label(screen, f"{lv.SYMBOL.FILE} Platform", is_header=True)
-        self._add_label(screen, f"sys.platform: {sys.platform}")
-        self._add_label(screen, f"sys.path: {sys.path}")
 
         # MicroPython and memory info
         self._add_label(screen, f"{lv.SYMBOL.DRIVE} Memory & Performance", is_header=True)
