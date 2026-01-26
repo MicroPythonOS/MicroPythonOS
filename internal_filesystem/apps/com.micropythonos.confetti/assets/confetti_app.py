@@ -9,7 +9,7 @@ from confetti import Confetti
 class ConfettiApp(Activity):
 
     ASSET_PATH = "M:apps/com.micropythonos.confetti/res/drawable-mdpi/"
-    ICON_PATH = "M:apps/com.lightningpiggy.displaywallet/res/mipmap-mdpi/"
+    ICON_PATH = "M:apps/com.micropythonos.confetti/res/mipmap-mdpi/"
     confetti_duration = 60 * 1000
 
     confetti = None
