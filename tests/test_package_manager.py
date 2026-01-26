@@ -47,4 +47,4 @@ class TestAppManager_get_app_list(unittest.TestCase):
         hello_world_app = AppManager.get("com.micropythonos.helloworld")
         self.assertIsInstance(hello_world_app, App)
         self.assertEqual(hello_world_app.icon_path, "apps/com.micropythonos.helloworld/res/mipmap-mdpi/icon_64x64.png")
-        self.assertEqual(len(hello_world_app.icon_data), 4779)
+        self.assertEqual(len(hello_world_app.icon_data), 6136)
