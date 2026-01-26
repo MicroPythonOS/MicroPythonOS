@@ -9,7 +9,8 @@
 - Show new MicroPythonOS logo at boot
 - ActivityNavigator: support pre-instantiated activities to support one activity closing a child activity
 - SensorManager: add support for LSM6DSO
-- Rename PackageManager framework to AppManager
+- Rename AudioFlinger to AudioManager framework
+- Rename PackageManager to AppManager framework
 - Add new AppearanceManager framework
 - Add new BatteryManager framework
 - Add new DeviceInfo framework
