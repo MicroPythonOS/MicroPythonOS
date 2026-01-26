@@ -19,6 +19,7 @@
 - Add new VersionInfo framework
 - Additional board support: Fri3d Camp 2026 (untested on real hardware)
 - Harmonize frameworks to use same coding patterns
+- Replace all compiled binary .mpy files by source copies for transparency (they get compiled during the build, so performance won't suffer)
 
 0.6.0
 =====
