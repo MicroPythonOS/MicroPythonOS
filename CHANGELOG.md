@@ -1,13 +1,12 @@
 0.7.0
 =====
+- Redesign all app icons from scratch for a more consistent style
+- Show new MicroPythonOS logo at boot
 - About app: show MicroPythonOS logo at the top
 - AppStore app: fix BadgeHub backend handling
 - OSUpdate app: eliminate requests library
-- Settings app: make "Cancel" button more "ghosty" to discourage accidental misclicks
-- Remove dependency on micropython-esp32-ota library
-- Remove dependency on traceback library
-- Show new MicroPythonOS logo at boot
-- ActivityNavigator: support pre-instantiated activities to support one activity closing a child activity
+- Settings app: make 'Cancel' button more 'ghost-y' to discourage accidental misclicks
+- ActivityNavigator: allow an activity to close a child activity
 - SensorManager: add support for LSM6DSO
 - Rename AudioFlinger to AudioManager framework
 - Rename PackageManager to AppManager framework
@@ -17,9 +16,11 @@
 - Add new DisplayMetrics framework
 - Add new InputManager framework
 - Add new VersionInfo framework
-- Additional board support: Fri3d Camp 2026 (untested on real hardware)
 - Harmonize frameworks to use same coding patterns
 - Replace all compiled binary .mpy files by source copies for transparency (they get compiled during the build, so performance won't suffer)
+- Remove dependency on micropython-esp32-ota library
+- Remove dependency on traceback library
+- Additional board support: Fri3d Camp 2026 (untested)
 
 0.6.0
 =====
