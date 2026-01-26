@@ -3,6 +3,7 @@
 - About app: show MicroPythonOS logo at the top
 - AppStore app: fix BadgeHub backend handling
 - OSUpdate app: eliminate requests library
+- Settings app: make "Cancel" button more "ghosty" to discourage accidental misclicks
 - Remove dependency on micropython-esp32-ota library
 - Remove dependency on traceback library
 - Show new MicroPythonOS logo at boot

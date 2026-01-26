@@ -104,6 +104,7 @@ class SettingActivity(Activity):
         # Cancel button
         cancel_btn = lv.button(btn_cont)
         cancel_btn.set_size(lv.pct(45), lv.SIZE_CONTENT)
+        cancel_btn.set_style_opa(lv.OPA._70, lv.PART.MAIN)
         cancel_label = lv.label(cancel_btn)
         cancel_label.set_text("Cancel")
         cancel_label.center()

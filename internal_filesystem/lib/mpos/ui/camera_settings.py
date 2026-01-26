@@ -257,6 +257,7 @@ class CameraSettingsActivity(Activity):
 
         cancel_button = lv.button(button_cont)
         cancel_button.set_size(DisplayMetrics.pct_of_width(25), lv.SIZE_CONTENT)
+        cancel_button.set_style_opa(lv.OPA._70, lv.PART.MAIN)
         if self.scanqr_mode:
             cancel_button.align(lv.ALIGN.BOTTOM_MID, DisplayMetrics.pct_of_width(10), 0)
         else:
