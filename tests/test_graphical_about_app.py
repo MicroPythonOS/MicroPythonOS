@@ -157,8 +157,8 @@ class TestGraphicalAboutApp(unittest.TestCase):
 
         # Verify that MicroPythonOS version text is present
         self.assertTrue(
-            verify_text_present(screen, "MicroPythonOS version:"),
-            "Could not find 'MicroPythonOS version:' on screen"
+            verify_text_present(screen, "Release version:"),
+            "Could not find 'Release version:' on screen"
         )
 
         # Verify the actual version string is present
