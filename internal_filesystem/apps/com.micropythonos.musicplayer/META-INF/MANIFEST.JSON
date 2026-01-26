@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Player audio files",
 "long_description": "Traverse around the filesystem and play audio files that you select.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/icons/com.micropythonos.musicplayer_0.0.7_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/mpks/com.micropythonos.musicplayer_0.0.7.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/icons/com.micropythonos.musicplayer_0.1.0_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/mpks/com.micropythonos.musicplayer_0.1.0.mpk",
 "fullname": "com.micropythonos.musicplayer",
-"version": "0.0.7",
+"version": "0.1.0",
 "category": "development",
 "activities": [
     {
