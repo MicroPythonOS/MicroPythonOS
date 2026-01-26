@@ -29,17 +29,14 @@ export HEAPSIZE=8M # default, same a PSRAM on many ESP32-S3 boards
 # Makes semse because the error is:
 # MemoryError: memory allocation failed, allocating 2518043 bytes
 # So every new slide needs 2.5MB extra RAM!
+# A 1280x720 slide seems to allocate 5530721 bytes, so 6 bytes per pixel... a bit much but okay...
 
 # Fixed by adding lv.image.cache_drop(None) # This helps a lot!
 
-# Now it works with 10M with infinite slides!
+#export HEAPSIZE=16M # 8-10MB is not enough for 1280x720 slides, 16MB seems enough in windowed mode
 
-# Now not anymore... let's try increasing it.
-#export HEAPSIZE=20M # this is fine for 1024x576
-#export HEAPSIZE=15M # fine too
+#export HEAPSIZE=64M # fine for fullscreen 1280x720 slides
 
-#export HEAPSIZE=32M # for 1280x720 images in the image viewer
-#export HEAPSIZE=128M # for 1280x720 images in the image viewer
 
 # print os and set binary
 os_name=$(uname -s)
