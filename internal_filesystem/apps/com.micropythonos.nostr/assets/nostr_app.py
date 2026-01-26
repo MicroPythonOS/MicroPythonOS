@@ -71,7 +71,7 @@ class NostrApp(Activity):
     def onCreate(self):
         self.prefs = SharedPreferences("com.micropythonos.nostr")
         self.main_screen = lv.obj()
-        self.main_screen.set_style_pad_all(10, 0)
+        self.main_screen.set_style_pad_all(10, lv.PART.MAIN)
         # Header line
         header_line = lv.line(self.main_screen)
         header_line.set_points([{'x':0,'y':35},{'x':200,'y':35}],2)
@@ -80,7 +80,7 @@ class NostrApp(Activity):
         self.balance_label = lv.label(self.main_screen)
         self.balance_label.set_text("")
         self.balance_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
-        self.balance_label.set_style_text_font(lv.font_montserrat_24, 0)
+        self.balance_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         self.balance_label.add_flag(lv.obj.FLAG.CLICKABLE)
         self.balance_label.set_width(DisplayMetrics.pct_of_width(100))
         # Events label
@@ -97,7 +97,7 @@ class NostrApp(Activity):
         settings_button.add_event_cb(self.settings_button_tap,lv.EVENT.CLICKED,None)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
-        settings_label.set_style_text_font(lv.font_montserrat_24, 0)
+        settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
         self.setContentView(self.main_screen)
 
@@ -156,7 +156,7 @@ class NostrApp(Activity):
         self.events_label.set_text(f"WiFi is not connected, can't talk to relay...")
 
     def update_events_label_font(self):
-        self.events_label.set_style_text_font(self.events_label_fonts[self.events_label_current_font], 0)
+        self.events_label.set_style_text_font(self.events_label_fonts[self.events_label_current_font], lv.PART.MAIN)
 
     def events_label_clicked(self, event):
         self.events_label_current_font = (self.events_label_current_font + 1) % len(self.events_label_fonts)

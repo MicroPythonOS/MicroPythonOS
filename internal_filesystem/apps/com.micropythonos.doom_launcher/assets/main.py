@@ -21,7 +21,7 @@ class Main(Activity):
 
     def onCreate(self):
         screen = lv.obj()
-        screen.set_style_pad_all(15, 0)
+        screen.set_style_pad_all(15, lv.PART.MAIN)
         
         # Create title label
         title_label = lv.label(screen)
@@ -39,7 +39,7 @@ class Main(Activity):
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         # Set default green color for status label
-        self.status_label.set_style_text_color(lv.color_hex(0x00FF00), 0)
+        self.status_label.set_style_text_color(lv.color_hex(0x00FF00), lv.PART.MAIN)
 
         self.setContentView(screen)
 

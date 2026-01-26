@@ -67,7 +67,7 @@ class SoundRecorder(Activity):
         title = lv.label(screen)
         title.set_text("Sound Recorder")
         title.align(lv.ALIGN.TOP_MID, 0, 10)
-        title.set_style_text_font(lv.font_montserrat_20, 0)
+        title.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
 
         # Status label (shows microphone availability)
         self._status_label = lv.label(screen)
@@ -77,7 +77,7 @@ class SoundRecorder(Activity):
         self._timer_label = lv.label(screen)
         self._timer_label.set_text(self._format_timer_text(0))
         self._timer_label.align(lv.ALIGN.CENTER, 0, -30)
-        self._timer_label.set_style_text_font(lv.font_montserrat_24, 0)
+        self._timer_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
 
         # Record button
         self._record_button = lv.button(screen)
@@ -138,11 +138,11 @@ class SoundRecorder(Activity):
         """Update status label based on microphone availability."""
         if AudioFlinger.has_microphone():
             self._status_label.set_text("Microphone ready")
-            self._status_label.set_style_text_color(lv.color_hex(0x00AA00), 0)
+            self._status_label.set_style_text_color(lv.color_hex(0x00AA00), lv.PART.MAIN)
             self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             self._status_label.set_text("No microphone available")
-            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), 0)
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
             self._record_button.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _find_last_recording(self):
@@ -259,7 +259,7 @@ class SoundRecorder(Activity):
         if self._current_max_duration_ms < self.MIN_DURATION_MS:
             print("SoundRecorder: Not enough storage space")
             self._status_label.set_text("Not enough storage space")
-            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), 0)
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
             return
 
         # Start recording
@@ -285,9 +285,9 @@ class SoundRecorder(Activity):
 
             # Update UI
             self._record_button_label.set_text(lv.SYMBOL.STOP + " Stop")
-            self._record_button.set_style_bg_color(lv.color_hex(0xAA0000), 0)
+            self._record_button.set_style_bg_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
             self._status_label.set_text("Recording...")
-            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), 0)
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
 
             # Hide play/delete buttons during recording
             self._play_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -298,7 +298,7 @@ class SoundRecorder(Activity):
         else:
             print("SoundRecorder: record_wav failed!")
             self._status_label.set_text("Failed to start recording")
-            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), 0)
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
 
     def _stop_recording(self):
         """Stop recording audio."""
@@ -307,7 +307,7 @@ class SoundRecorder(Activity):
 
         # Show "Saving..." status immediately (file finalization takes time on SD card)
         self._status_label.set_text("Saving...")
-        self._status_label.set_style_text_color(lv.color_hex(0xFF8800), 0)  # Orange
+        self._status_label.set_style_text_color(lv.color_hex(0xFF8800), lv.PART.MAIN)  # Orange
 
         # Disable record button while saving
         self._record_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -331,7 +331,7 @@ class SoundRecorder(Activity):
         # Re-enable and reset record button
         self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
         self._record_button_label.set_text(lv.SYMBOL.AUDIO + " Record")
-        self._record_button.set_style_bg_color(lv.theme_get_color_primary(None), 0)
+        self._record_button.set_style_bg_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
 
         # Update status and find recordings
         self._update_status()
@@ -377,10 +377,10 @@ class SoundRecorder(Activity):
 
             if success:
                 self._status_label.set_text("Playing...")
-                self._status_label.set_style_text_color(lv.color_hex(0x0000AA), 0)
+                self._status_label.set_style_text_color(lv.color_hex(0x0000AA), lv.PART.MAIN)
             else:
                 self._status_label.set_text("Playback failed")
-                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), 0)
+                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
 
     def _on_playback_complete(self, message):
         """Callback when playback finishes."""
@@ -402,4 +402,4 @@ class SoundRecorder(Activity):
             except Exception as e:
                 print(f"SoundRecorder: Delete failed: {e}")
                 self._status_label.set_text("Delete failed")
-                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), 0)
+                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)

@@ -59,7 +59,7 @@ class AppStore(Activity):
         self.settings_button.add_event_cb(self.settings_button_tap,lv.EVENT.CLICKED,None)
         settings_label = lv.label(self.settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
-        settings_label.set_style_text_font(lv.font_montserrat_24, 0)
+        settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
         self.setContentView(self.main_screen)
 
@@ -154,11 +154,11 @@ class AppStore(Activity):
         for app in self.apps:
             print(app)
             item = self.apps_list.add_button(None, "")
-            item.set_style_pad_all(0, 0)
+            item.set_style_pad_all(0, lv.PART.MAIN)
             item.set_size(lv.pct(100), lv.SIZE_CONTENT)
             self._add_click_handler(item, self.show_app_detail, app)
             cont = lv.obj(item)
-            cont.set_style_pad_all(0, 0)
+            cont.set_style_pad_all(0, lv.PART.MAIN)
             cont.set_flex_flow(lv.FLEX_FLOW.ROW)
             cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
             cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
@@ -172,16 +172,16 @@ class AppStore(Activity):
             label_cont = lv.obj(cont)
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-            label_cont.set_style_pad_ver(10, 0)  # Add vertical padding for spacing
+            label_cont.set_style_pad_ver(10, lv.PART.MAIN)  # Add vertical padding for spacing
             label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
             self._add_click_handler(label_cont, self.show_app_detail, app)
             name_label = lv.label(label_cont)
             name_label.set_text(app.name)
-            name_label.set_style_text_font(lv.font_montserrat_16, 0)
+            name_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
             self._add_click_handler(name_label, self.show_app_detail, app)
             desc_label = lv.label(label_cont)
             desc_label.set_text(app.short_description)
-            desc_label.set_style_text_font(lv.font_montserrat_12, 0)
+            desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
             self._add_click_handler(desc_label, self.show_app_detail, app)
         print("create_apps_list done")
         # Settings button needs to float in foreground:
@@ -274,9 +274,9 @@ class AppStore(Activity):
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):
         """Apply common default styles to reduce repetition"""
-        widget.set_style_border_width(border, 0)
-        widget.set_style_radius(radius, 0)
-        widget.set_style_pad_all(pad, 0)
+        widget.set_style_border_width(border, lv.PART.MAIN)
+        widget.set_style_radius(radius, lv.PART.MAIN)
+        widget.set_style_pad_all(pad, lv.PART.MAIN)
 
     @staticmethod
     def _add_click_handler(widget, callback, app):

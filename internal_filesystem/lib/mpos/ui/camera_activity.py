@@ -50,8 +50,8 @@ class CameraActivity(Activity):
 
     def onCreate(self):
         self.main_screen = lv.obj()
-        self.main_screen.set_style_pad_all(1, 0)
-        self.main_screen.set_style_border_width(0, 0)
+        self.main_screen.set_style_pad_all(1, lv.PART.MAIN)
+        self.main_screen.set_style_border_width(0, lv.PART.MAIN)
         self.main_screen.set_size(lv.pct(100), lv.pct(100))
         self.main_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         # Initialize LVGL image widget
@@ -105,9 +105,9 @@ class CameraActivity(Activity):
         center_w = round((mpos_ui.DisplayMetrics.pct_of_width(100) - self.button_width - 5 - width)/2)
         center_h = round((mpos_ui.DisplayMetrics.pct_of_height(100) - height)/2)
         self.status_label_cont.set_pos(center_w,center_h)
-        self.status_label_cont.set_style_bg_color(lv.color_white(), 0)
-        self.status_label_cont.set_style_bg_opa(66, 0)
-        self.status_label_cont.set_style_border_width(0, 0)
+        self.status_label_cont.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
+        self.status_label_cont.set_style_bg_opa(66, lv.PART.MAIN)
+        self.status_label_cont.set_style_border_width(0, lv.PART.MAIN)
         self.status_label = lv.label(self.status_label_cont)
         self.status_label.set_text(self.STATUS_NO_CAMERA)
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)

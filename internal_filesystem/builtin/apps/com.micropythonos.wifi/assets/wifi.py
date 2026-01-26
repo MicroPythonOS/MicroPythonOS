@@ -31,7 +31,7 @@ class WiFi(Activity):
     def onCreate(self):
         print("wifi.py onCreate")
         main_screen = lv.obj()
-        main_screen.set_style_pad_all(15, 0)
+        main_screen.set_style_pad_all(15, lv.PART.MAIN)
         self.aplist = lv.list(main_screen)
         self.aplist.set_size(lv.pct(100), lv.pct(75))
         self.aplist.align(lv.ALIGN.TOP_MID, 0, 0)
@@ -274,7 +274,7 @@ class EditNetwork(Activity):
         buttons = lv.obj(password_page)
         buttons.set_width(lv.pct(100))
         buttons.set_height(lv.SIZE_CONTENT)
-        buttons.set_style_bg_opa(lv.OPA.TRANSP, 0)
+        buttons.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         buttons.set_style_border_width(0, lv.PART.MAIN)
         # Forget / Scan QR button
         self.forget_button = lv.button(buttons)
@@ -311,14 +311,14 @@ class EditNetwork(Activity):
         if self.selected_ssid is None:
             new_ssid = self.ssid_ta.get_text()
             if not new_ssid:
-                self.ssid_ta.set_style_bg_color(lv.color_hex(0xff8080), 0)
+                self.ssid_ta.set_style_bg_color(lv.color_hex(0xff8080), lv.PART.MAIN)
                 return
             else:
                 self.selected_ssid = new_ssid
         # If a password is filled, then it should be at least 8 characters:
         pwd = self.password_ta.get_text()
         if len(pwd) > 0 and len(pwd) < 8:
-            self.password_ta.set_style_bg_color(lv.color_hex(0xff8080), 0)
+            self.password_ta.set_style_bg_color(lv.color_hex(0xff8080), lv.PART.MAIN)
             return
 
         # Return the result

@@ -190,7 +190,7 @@ class AppearanceManager:
             
             color = AppearanceManager.get_primary_color()
             if color:
-                button.set_style_bg_color(color, 0)
+                button.set_style_bg_color(color, lv.PART.MAIN)
         """
         return cls._primary_color
     

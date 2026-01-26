@@ -121,7 +121,7 @@ class CameraSettingsActivity(Activity):
         # Create main screen
         screen = lv.obj()
         screen.set_size(lv.pct(100), lv.pct(100))
-        screen.set_style_pad_all(1, 0)
+        screen.set_style_pad_all(1, lv.PART.MAIN)
 
         # Create tabview
         tabview = lv.tabview(screen)
@@ -149,7 +149,7 @@ class CameraSettingsActivity(Activity):
         """Create slider with label showing current value."""
         cont = lv.obj(parent)
         cont.set_size(lv.pct(100), 60)
-        cont.set_style_pad_all(3, 0)
+        cont.set_style_pad_all(3, lv.PART.MAIN)
 
         label = lv.label(cont)
         label.set_text(f"{label_text}: {default_val}")
@@ -173,7 +173,7 @@ class CameraSettingsActivity(Activity):
         """Create checkbox with label."""
         cont = lv.obj(parent)
         cont.set_size(lv.pct(100), 35)
-        cont.set_style_pad_all(3, 0)
+        cont.set_style_pad_all(3, lv.PART.MAIN)
 
         checkbox = lv.checkbox(cont)
         checkbox.set_text(label_text)
@@ -187,7 +187,7 @@ class CameraSettingsActivity(Activity):
         """Create dropdown with label."""
         cont = lv.obj(parent)
         cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
-        cont.set_style_pad_all(2, 0)
+        cont.set_style_pad_all(2, lv.PART.MAIN)
 
         label = lv.label(cont)
         label.set_text(label_text)
@@ -215,7 +215,7 @@ class CameraSettingsActivity(Activity):
     def create_textarea(self, parent, label_text, min_val, max_val, default_val, pref_key):
         cont = lv.obj(parent)
         cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
-        cont.set_style_pad_all(3, 0)
+        cont.set_style_pad_all(3, lv.PART.MAIN)
 
         label = lv.label(cont)
         label.set_text(f"{label_text}:")
@@ -242,7 +242,7 @@ class CameraSettingsActivity(Activity):
         button_cont.set_size(lv.pct(100), DisplayMetrics.pct_of_height(20))
         button_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        button_cont.set_style_border_width(0, 0)
+        button_cont.set_style_border_width(0, lv.PART.MAIN)
 
         save_button = lv.button(button_cont)
         save_button.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
@@ -280,7 +280,7 @@ class CameraSettingsActivity(Activity):
         """Create Basic settings tab."""
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
-        tab.set_style_pad_all(1, 0)
+        tab.set_style_pad_all(1, lv.PART.MAIN)
 
         # Color Mode
         colormode = prefs.get_bool("colormode")
@@ -334,7 +334,7 @@ class CameraSettingsActivity(Activity):
     def create_advanced_tab(self, tab, prefs):
         """Create Advanced settings tab."""
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tab.set_style_pad_all(1, 0)
+        tab.set_style_pad_all(1, lv.PART.MAIN)
 
         # Auto Exposure Control (master switch)
         exposure_ctrl = prefs.get_bool("exposure_ctrl")
@@ -442,7 +442,7 @@ class CameraSettingsActivity(Activity):
         """Create Expert settings tab."""
         #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tab.set_style_pad_all(1, 0)
+        tab.set_style_pad_all(1, lv.PART.MAIN)
 
         # Sharpness
         sharpness = prefs.get_int("sharpness")
@@ -494,7 +494,7 @@ class CameraSettingsActivity(Activity):
 
     def create_raw_tab(self, tab, prefs):
         tab.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tab.set_style_pad_all(0, 0)
+        tab.set_style_pad_all(0, lv.PART.MAIN)
 
         # This would be nice but does not provide adequate resolution:
         #startX, label, cont = self.create_slider(tab, "startX", 0, 2844, startX, "startX")

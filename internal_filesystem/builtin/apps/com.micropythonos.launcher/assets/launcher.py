@@ -26,10 +26,10 @@ class Launcher(Activity):
         print("launcher.py onCreate()")
         main_screen = lv.obj()
         main_screen.set_style_border_width(0, lv.PART.MAIN)
-        main_screen.set_style_radius(0, 0)
+        main_screen.set_style_radius(0, lv.PART.MAIN)
         main_screen.set_pos(0, AppearanceManager.NOTIFICATION_BAR_HEIGHT)
-        main_screen.set_style_pad_hor(DisplayMetrics.pct_of_width(2), 0)
-        main_screen.set_style_pad_ver(AppearanceManager.NOTIFICATION_BAR_HEIGHT, 0)
+        main_screen.set_style_pad_hor(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+        main_screen.set_style_pad_ver(AppearanceManager.NOTIFICATION_BAR_HEIGHT, lv.PART.MAIN)
         main_screen.set_flex_flow(lv.FLEX_FLOW.ROW_WRAP)
         self.setContentView(main_screen)
 
@@ -102,8 +102,8 @@ class Launcher(Activity):
             app_cont = lv.obj(screen)
             app_cont.set_size(iconcont_width, iconcont_height)
             app_cont.set_style_border_width(0, lv.PART.MAIN)
-            app_cont.set_style_pad_all(0, 0)
-            app_cont.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            app_cont.set_style_pad_all(0, lv.PART.MAIN)
+            app_cont.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
             app_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
             # ----- icon ----------------------------------------------------
@@ -124,7 +124,7 @@ class Launcher(Activity):
             label.set_long_mode(lv.label.LONG_MODE.WRAP)
             label.set_width(iconcont_width)
             label.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-            label.set_style_text_align(lv.TEXT_ALIGN.CENTER, 0)
+            label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
 
             # ----- events --------------------------------------------------
             app_cont.add_event_cb(

@@ -10,13 +10,13 @@ class About(Activity):
         label.set_text(text)
         if is_header:
             primary_color = lv.theme_get_color_primary(None)
-            label.set_style_text_color(primary_color, 0)
-            label.set_style_text_font(lv.font_montserrat_14, 0)
-            label.set_style_margin_top(margin_top, 0)
-            label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), 0)
+            label.set_style_text_color(primary_color, lv.PART.MAIN)
+            label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
+            label.set_style_margin_top(margin_top, lv.PART.MAIN)
+            label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
         else:
-            label.set_style_text_font(lv.font_montserrat_12, 0)
-            label.set_style_margin_bottom(2, 0)
+            label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            label.set_style_margin_bottom(2, lv.PART.MAIN)
         return label
 
     def _add_disk_info(self, screen, path):
@@ -35,7 +35,7 @@ class About(Activity):
 
     def onCreate(self):
         screen = lv.obj()
-        screen.set_style_border_width(0, 0)
+        screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
         # Make the screen focusable so it can be scrolled with the arrow keys

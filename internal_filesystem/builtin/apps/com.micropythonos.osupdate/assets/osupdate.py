@@ -38,7 +38,7 @@ class OSUpdate(Activity):
 
     def onCreate(self):
         self.main_screen = lv.obj()
-        self.main_screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), 0)
+        self.main_screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
 
         # Make the screen focusable so it can be scrolled with the arrow keys
         if focusgroup := lv.group_get_default():

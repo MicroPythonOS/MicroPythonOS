@@ -28,9 +28,9 @@ class AppDetail(Activity):
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):
         """Apply common default styles to reduce repetition"""
-        widget.set_style_border_width(border, 0)
-        widget.set_style_radius(radius, 0)
-        widget.set_style_pad_all(pad, 0)
+        widget.set_style_border_width(border, lv.PART.MAIN)
+        widget.set_style_radius(radius, lv.PART.MAIN)
+        widget.set_style_pad_all(pad, lv.PART.MAIN)
 
     def _cleanup_temp_file(self, path="tmp/temp.mpk"):
         """Safely remove temporary file"""
@@ -60,7 +60,7 @@ class AppDetail(Activity):
         self.app = self.getIntent().extras.get("app")
         self.appstore = self.getIntent().extras.get("appstore")
         app_detail_screen = lv.obj()
-        app_detail_screen.set_style_pad_all(5, 0)
+        app_detail_screen.set_style_pad_all(5, lv.PART.MAIN)
         app_detail_screen.set_size(lv.pct(100), lv.pct(100))
         app_detail_screen.set_pos(0, 40)
         app_detail_screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -87,13 +87,13 @@ class AppDetail(Activity):
         detail_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         name_label = lv.label(detail_cont)
         name_label.set_text(self.app.name)
-        name_label.set_style_text_font(lv.font_montserrat_24, 0)
+        name_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         self.publisher_label = lv.label(detail_cont)
         if self.app.publisher:
             self.publisher_label.set_text(self.app.publisher)
         else:
             self.publisher_label.set_text("Unknown publisher")
-        self.publisher_label.set_style_text_font(lv.font_montserrat_16, 0)
+        self.publisher_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
 
         self.progress_bar = lv.bar(app_detail_screen)
         self.progress_bar.set_width(lv.pct(100))
@@ -113,7 +113,7 @@ class AppDetail(Activity):
             self.version_label.set_text(f"Latest version: {self.app.version}") # would be nice to make this bold if this is newer than the currently installed one
         else:
             self.version_label.set_text(f"Unknown version")
-        self.version_label.set_style_text_font(lv.font_montserrat_12, 0)
+        self.version_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.version_label.align_to(self.install_button, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
         self.long_desc_label = lv.label(app_detail_screen)
         self.long_desc_label.align_to(self.version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
@@ -121,7 +121,7 @@ class AppDetail(Activity):
             self.long_desc_label.set_text(self.app.long_description)
         else:
             self.long_desc_label.set_text(self.app.short_description)
-        self.long_desc_label.set_style_text_font(lv.font_montserrat_12, 0)
+        self.long_desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.long_desc_label.set_width(lv.pct(100))
         print("Loading app detail screen...")
         self.setContentView(app_detail_screen)

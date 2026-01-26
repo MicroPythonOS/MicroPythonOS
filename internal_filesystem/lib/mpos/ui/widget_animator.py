@@ -60,10 +60,10 @@ class WidgetAnimator:
         if anim_type == "fade":
             # Create fade-in animation (opacity from 0 to 255)
             anim.set_values(0, 255)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(value, 0)))
+            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(value, lv.PART.MAIN)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Ensure opacity is reset after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(255, 0)))
+            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(255, lv.PART.MAIN)))
         elif anim_type == "slide_down":
             # Create slide-down animation (y from -height to original y)
             original_y = widget.get_y()
@@ -111,7 +111,7 @@ class WidgetAnimator:
         if anim_type == "fade":
             # Create fade-out animation (opacity from 255 to 0)
             anim.set_values(255, 0)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(value, 0)))
+            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(value, lv.PART.MAIN)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
             # Set HIDDEN flag after animation
             anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: WidgetAnimator._hide_complete_cb(widget, hide=hide)))

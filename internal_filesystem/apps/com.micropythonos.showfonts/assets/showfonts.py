@@ -40,7 +40,7 @@ class ShowFonts(Activity):
         y = 0
         for font, name in fonts:
             title = lv.label(screen)
-            title.set_style_text_font(font, 0)
+            title.set_style_text_font(font, lv.PART.MAIN)
             title.set_text(f"{name}: 2357 !@#$%^&*( {lv.SYMBOL.OK} {lv.SYMBOL.BACKSPACE} 丰 😀")
             title.set_pos(0, y)
             y += font.get_line_height() + 4
@@ -66,7 +66,7 @@ class ShowFonts(Activity):
             x = 0
             title = lv.label(screen)
             title.set_text(name + ": 2357 !@#$%^&*(")
-            title.set_style_text_font(lv.font_montserrat_16, 0)
+            title.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
             title.set_pos(x, y)
             y += title.get_height() + 20
 
@@ -75,7 +75,7 @@ class ShowFonts(Activity):
             for cp in range(0x20, 0xFF):
                 if font.get_glyph_dsc(font, dsc, cp, cp+1):
                     lbl = lv.label(screen)
-                    lbl.set_style_text_font(font, 0)
+                    lbl.set_style_text_font(font, lv.PART.MAIN)
                     lbl.set_text(chr(cp))
                     lbl.set_pos(x, y)
 
@@ -106,7 +106,7 @@ class ShowFonts(Activity):
         for font, name in fonts:
             title = lv.label(screen)
             title.set_text(name)
-            title.set_style_text_font(lv.font_montserrat_16, 0)
+            title.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
             title.set_pos(4, y)
             y += title.get_height() + 20
 
@@ -119,7 +119,7 @@ class ShowFonts(Activity):
                     #print(f"{cp} : {chr(cp)}", end="")
                     #print(f"{chr(cp)},", end="")
                     lbl = lv.label(screen)
-                    lbl.set_style_text_font(font, 0)
+                    lbl.set_style_text_font(font, lv.PART.MAIN)
                     lbl.set_text(chr(cp))
                     lbl.set_pos(x, y)
 

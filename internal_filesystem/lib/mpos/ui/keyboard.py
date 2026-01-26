@@ -112,7 +112,7 @@ class MposKeyboard:
         self._keyboard = lv.keyboard(parent)
         self._parent = parent # store it for later
         # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
-        self._keyboard.set_style_text_font(lv.font_montserrat_20,0)
+        self._keyboard.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
 
         self.set_mode(self.MODE_LOWERCASE)
 
@@ -125,7 +125,7 @@ class MposKeyboard:
         AppearanceManager.apply_keyboard_fix(self._keyboard)
 
         # Set good default height
-        self._keyboard.set_style_min_height(175, 0)
+        self._keyboard.set_style_min_height(175, lv.PART.MAIN)
 
     def _handle_events(self, event):
         code = event.get_code()
@@ -278,7 +278,7 @@ class MposKeyboard:
         Examples:
             keyboard.set_textarea(ta)       # Works
             keyboard.align(lv.ALIGN.CENTER) # Works
-            keyboard.set_style_opa(128, 0)  # Works
+            keyboard.set_style_opa(128, lv.PART.MAIN)  # Works
             keyboard.any_lvgl_method()      # Works!
         """
         # Forward to the underlying keyboard object

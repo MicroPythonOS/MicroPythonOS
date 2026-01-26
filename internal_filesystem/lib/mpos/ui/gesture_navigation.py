@@ -132,7 +132,7 @@ def handle_back_swipe():
     backbutton.add_state(lv.STATE.DISABLED)
     backlabel = lv.label(backbutton)
     backlabel.set_text(lv.SYMBOL.LEFT)
-    backlabel.set_style_text_font(lv.font_montserrat_18, 0)
+    backlabel.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
     backlabel.center()
 
 def handle_top_swipe():
@@ -162,5 +162,5 @@ def handle_top_swipe():
     downbutton.add_state(lv.STATE.DISABLED)
     downlabel = lv.label(downbutton)
     downlabel.set_text(lv.SYMBOL.DOWN)
-    downlabel.set_style_text_font(lv.font_montserrat_18, 0)
+    downlabel.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
     downlabel.center()

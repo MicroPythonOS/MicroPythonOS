@@ -105,8 +105,8 @@ class Connect4(Activity):
             (self.SCREEN_WIDTH - self.COLS * self.CELL_SIZE) // 2 - 5,
             self.BOARD_TOP - 5
         )
-        board_bg.set_style_bg_color(lv.color_hex(self.COLOR_BOARD), 0)
-        board_bg.set_style_radius(8, 0)
+        board_bg.set_style_bg_color(lv.color_hex(self.COLOR_BOARD), lv.PART.MAIN)
+        board_bg.set_style_radius(8, lv.PART.MAIN)
         board_bg.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
         # Create pieces (visual representation)
@@ -119,10 +119,10 @@ class Connect4(Activity):
                 x = board_x + col * self.CELL_SIZE + (self.CELL_SIZE - self.PIECE_RADIUS * 2) // 2
                 y = self.BOARD_TOP + row * self.CELL_SIZE + (self.CELL_SIZE - self.PIECE_RADIUS * 2) // 2
                 piece.set_pos(x, y)
-                piece.set_style_radius(lv.RADIUS_CIRCLE, 0)
-                piece.set_style_bg_color(lv.color_hex(self.COLOR_EMPTY), 0)
-                piece.set_style_border_width(1, 0)
-                piece.set_style_border_color(lv.color_hex(0x1C2833), 0)
+                piece.set_style_radius(lv.RADIUS_CIRCLE, lv.PART.MAIN)
+                piece.set_style_bg_color(lv.color_hex(self.COLOR_EMPTY), lv.PART.MAIN)
+                piece.set_style_border_width(1, lv.PART.MAIN)
+                piece.set_style_border_color(lv.color_hex(0x1C2833), lv.PART.MAIN)
                 piece.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
                 piece_row.append(piece)
             self.pieces.append(piece_row)
@@ -137,8 +137,8 @@ class Connect4(Activity):
             btn.set_size(self.CELL_SIZE, self.ROWS * self.CELL_SIZE)
             x = board_x + col * self.CELL_SIZE
             btn.set_pos(x, self.BOARD_TOP)
-            btn.set_style_bg_opa(0, 0)  # Transparent
-            btn.set_style_border_width(0, 0)
+            btn.set_style_bg_opa(0, lv.PART.MAIN)  # Transparent
+            btn.set_style_border_width(0, lv.PART.MAIN)
             btn.add_flag(lv.obj.FLAG.CLICKABLE)
             btn.add_event_cb(lambda e, c=col: self.on_column_click(c), lv.EVENT.CLICKED, None)
             btn.add_event_cb(lambda e, b=btn: self.focus_column(b), lv.EVENT.FOCUSED, None)
@@ -207,7 +207,7 @@ class Connect4(Activity):
 
         # Update the visual
         color = self.COLOR_PLAYER if player == self.PLAYER else self.COLOR_COMPUTER
-        self.pieces[row][col].set_style_bg_color(lv.color_hex(color), 0)
+        self.pieces[row][col].set_style_bg_color(lv.color_hex(color), lv.PART.MAIN)
 
         # Check for win or tie
         if self.check_win(row, col):
@@ -456,9 +456,9 @@ class Connect4(Activity):
     def highlight_winning_pieces(self):
         """Highlight the winning pieces"""
         for row, col in self.winning_positions:
-            self.pieces[row][col].set_style_bg_color(lv.color_hex(self.COLOR_WIN), 0)
-            self.pieces[row][col].set_style_border_width(3, 0)
-            self.pieces[row][col].set_style_border_color(lv.color_hex(0xFFFFFF), 0)
+            self.pieces[row][col].set_style_bg_color(lv.color_hex(self.COLOR_WIN), lv.PART.MAIN)
+            self.pieces[row][col].set_style_border_width(3, lv.PART.MAIN)
+            self.pieces[row][col].set_style_border_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
 
     def is_board_full(self):
         """Check if the board is full"""
@@ -477,6 +477,6 @@ class Connect4(Activity):
         # Reset visual pieces
         for row in range(self.ROWS):
             for col in range(self.COLS):
-                self.pieces[row][col].set_style_bg_color(lv.color_hex(self.COLOR_EMPTY), 0)
-                self.pieces[row][col].set_style_border_width(1, 0)
-                self.pieces[row][col].set_style_border_color(lv.color_hex(0x1C2833), 0)
+                self.pieces[row][col].set_style_bg_color(lv.color_hex(self.COLOR_EMPTY), lv.PART.MAIN)
+                self.pieces[row][col].set_style_border_width(1, lv.PART.MAIN)
+                self.pieces[row][col].set_style_border_color(lv.color_hex(0x1C2833), lv.PART.MAIN)
