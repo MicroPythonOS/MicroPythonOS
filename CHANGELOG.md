@@ -1,13 +1,15 @@
 0.7.0
 =====
+
+Builtin Apps:
 - Redesign all app icons from scratch for a more consistent style
-- Show new MicroPythonOS logo at boot
 - About app: show MicroPythonOS logo at the top
 - AppStore app: fix BadgeHub backend handling
 - OSUpdate app: eliminate requests library
 - Settings app: make 'Cancel' button more 'ghost-y' to discourage accidental misclicks
-- ActivityNavigator: allow an activity to close a child activity
-- SensorManager: add support for LSM6DSO
+
+Frameworks:
+- Harmonize frameworks to use same coding patterns
 - Rename AudioFlinger to AudioManager framework
 - Rename PackageManager to AppManager framework
 - Add new AppearanceManager framework
@@ -16,7 +18,11 @@
 - Add new DisplayMetrics framework
 - Add new InputManager framework
 - Add new VersionInfo framework
-- Harmonize frameworks to use same coding patterns
+- ActivityNavigator: allow an activity to close a child activity
+- SensorManager: add support for LSM6DSO
+
+OS:
+- Show new MicroPythonOS logo at boot
 - Replace all compiled binary .mpy files by source copies for transparency (they get compiled during the build, so performance won't suffer)
 - Remove dependency on micropython-esp32-ota library
 - Remove dependency on traceback library
