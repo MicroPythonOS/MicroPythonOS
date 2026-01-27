@@ -11,7 +11,6 @@ class OSUpdate(Activity):
     # Widgets:
     status_label = None
     install_button = None
-    force_update = None
     check_again_button = None
     main_screen = None
     progress_label = None
@@ -47,10 +46,6 @@ class OSUpdate(Activity):
         self.current_version_label = lv.label(self.main_screen)
         self.current_version_label.align(lv.ALIGN.TOP_LEFT,0,0)
         self.current_version_label.set_text(f"Installed OS version: {BuildInfo.version.release}")
-        self.force_update = lv.checkbox(self.main_screen)
-        self.force_update.set_text("Force Update")
-        self.force_update.add_event_cb(lambda *args: self.force_update_clicked(), lv.EVENT.VALUE_CHANGED, None)
-        self.force_update.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(5))
         self.install_button = lv.button(self.main_screen)
         self.install_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         self.install_button.add_state(lv.STATE.DISABLED) # button will be enabled if there is an update available
@@ -71,7 +66,7 @@ class OSUpdate(Activity):
         check_again_label.center()
 
         self.status_label = lv.label(self.main_screen)
-        self.status_label.align_to(self.force_update, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(5))
+        self.status_label.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(5))
         self.setContentView(self.main_screen)
 
     def _update_ui_for_state(self):
@@ -215,18 +210,35 @@ class OSUpdate(Activity):
     def handle_update_info(self, version, download_url, changelog):
         self.download_update_url = download_url
 
-        # Use UpdateChecker to determine if update is available
-        is_newer = self.update_checker.is_update_available(version, BuildInfo.version.release)
-
-        if is_newer:
-            label = "New"
-            self.install_button.remove_state(lv.STATE.DISABLED)
+        # Compare versions to determine button text and state
+        current_version = BuildInfo.version.release
+        
+        # AppManager.compare_versions() returns 1 if ver1 > ver2, -1 if ver1 < ver2, 0 if equal
+        # We need to check three cases: newer, same, or older
+        is_newer = AppManager.compare_versions(version, current_version)
+        is_older = AppManager.compare_versions(current_version, version)
+        
+        # Determine button text based on version comparison
+        if is_newer > 0:
+            # Update version > installed OS version
+            button_text = "Update OS"
+            label = "newer"
+        elif is_older > 0:
+            # Update version < installed OS version
+            button_text = "Install\nolder version"
+            label = "older"
         else:
-            label = "No new"
-            if (self.force_update.get_state() & lv.STATE.CHECKED):
-                self.install_button.remove_state(lv.STATE.DISABLED)
-        label += f" version: {version}\n\nDetails:\n\n{changelog}"
-        self.status_label.set_text(label)
+            # Update version == installed OS version (neither is newer than the other)
+            button_text = "Reinstall\nsame version"
+            label = "the same version"
+        
+        # Update button text and enable it
+        install_label = self.install_button.get_child(0)
+        install_label.set_text(button_text)
+        install_label.center()
+        self.install_button.remove_state(lv.STATE.DISABLED)
+        
+        self.status_label.set_text(f"Available version: {version}\nis {label}.\n\nDetails:\n\n{changelog}")
 
 
     def install_button_click(self):
@@ -255,12 +267,6 @@ class OSUpdate(Activity):
         
         # Use TaskManager instead of _thread for async download
         TaskManager.create_task(self.perform_update())
-
-    def force_update_clicked(self):
-        if self.download_update_url and (self.force_update.get_state() & lv.STATE.CHECKED):
-            self.install_button.remove_state(lv.STATE.DISABLED)
-        else:
-            self.install_button.add_state(lv.STATE.DISABLED)
 
     def check_again_click(self):
         """Handle 'Check Again' button click - retry update check."""

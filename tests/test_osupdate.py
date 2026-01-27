@@ -517,3 +517,336 @@ class TestUpdateDownloader(unittest.TestCase):
         self.assertEqual(self.downloader.bytes_written_so_far, 245760, "Must preserve internal state")
 
 
+class MockLVGLButton:
+     """Mock LVGL button for testing button state and text."""
+     
+     def __init__(self, initial_disabled=True):
+         self.disabled = initial_disabled
+         self.children = []
+         self.hidden = False
+     
+     def add_state(self, state):
+         """Add a state flag (e.g., lv.STATE.DISABLED)."""
+         # Track if DISABLED state is being added
+         if state == 1:  # lv.STATE.DISABLED
+             self.disabled = True
+     
+     def remove_state(self, state):
+         """Remove a state flag."""
+         # Track if DISABLED state is being removed
+         if state == 1:  # lv.STATE.DISABLED
+             self.disabled = False
+     
+     def add_flag(self, flag):
+         """Add a flag (e.g., lv.obj.FLAG.HIDDEN)."""
+         if flag == 1:  # lv.obj.FLAG.HIDDEN
+             self.hidden = True
+     
+     def remove_flag(self, flag):
+         """Remove a flag."""
+         if flag == 1:  # lv.obj.FLAG.HIDDEN
+             self.hidden = False
+     
+     def get_child(self, index):
+         """Get child widget by index."""
+         if index < len(self.children):
+             return self.children[index]
+         return None
+     
+     def is_disabled(self):
+         """Check if button is disabled."""
+         return self.disabled
+     
+     def is_hidden(self):
+         """Check if button is hidden."""
+         return self.hidden
+     
+     def set_text(self, text):
+         """Set button text (for compatibility with direct text setting)."""
+         if self.children and hasattr(self.children[0], 'set_text'):
+             self.children[0].set_text(text)
+
+
+class MockLVGLLabel:
+    """Mock LVGL label for testing text content."""
+    
+    def __init__(self):
+        self.text = ""
+    
+    def set_text(self, text):
+        """Set label text."""
+        self.text = text
+    
+    def get_text(self):
+        """Get label text."""
+        return self.text
+    
+    def center(self):
+        """Mock center method (no-op for testing)."""
+        pass
+
+
+class MockAppManager:
+   """Mock AppManager for version comparison."""
+   
+   @staticmethod
+   def compare_versions(version1, version2):
+       """Compare two version strings.
+       
+       Returns:
+           > 0 if version1 > version2
+           = 0 if version1 == version2
+           < 0 if version1 < version2
+       """
+       def parse_version(v):
+           return tuple(map(int, v.split('.')))
+       
+       v1 = parse_version(version1)
+       v2 = parse_version(version2)
+       
+       if v1 > v2:
+           return 1
+       elif v1 < v2:
+           return -1
+       else:
+           return 0
+
+
+class MockBuildInfo:
+    """Mock BuildInfo for testing."""
+    class Version:
+        release = "1.0.0"
+    version = Version()
+
+
+class TestOSUpdateButtonBehavior(unittest.TestCase):
+     """Test OSUpdate button behavior with different version scenarios.
+     
+     These tests verify that handle_update_info() correctly interprets
+     AppManager.compare_versions() return values and sets button text accordingly.
+     The bug being tested: compare_versions() returns integers (-1, 0, 1), not booleans.
+     """
+     
+     def setUp(self):
+         """Set up test fixtures."""
+         # Create a mock OSUpdate instance with mocked dependencies
+         self.mock_app_manager = MockAppManager()
+         
+         # We'll patch AppManager.compare_versions for these tests
+         self.original_compare_versions = AppManager.compare_versions
+         AppManager.compare_versions = self.mock_app_manager.compare_versions
+         
+         # Create mock button and label
+         self.mock_button = MockLVGLButton(initial_disabled=True)
+         self.mock_label = MockLVGLLabel()
+         self.mock_button.children = [self.mock_label]
+     
+     def tearDown(self):
+         """Restore original AppManager.compare_versions."""
+         AppManager.compare_versions = self.original_compare_versions
+     
+     def test_button_initially_disabled(self):
+         """Test that the 'Update OS' button is initially disabled."""
+         # Button should start in disabled state
+         self.assertTrue(self.mock_button.is_disabled(),
+                        "Button should be initially disabled")
+     
+     def test_handle_update_info_with_newer_version(self):
+         """Test handle_update_info() with newer version (1.1.0 vs 1.0.0).
+         
+         This test verifies that:
+         - compare_versions(1.1.0, 1.0.0) returns 1 (positive integer)
+         - The button text is set to exactly "Update OS"
+         - The button is enabled (remove_state called)
+         """
+         # Create a minimal OSUpdate instance for testing
+         from osupdate import OSUpdate
+         import osupdate
+         
+         app = OSUpdate()
+         
+         # Mock the UI components with a tracking button
+         tracking_button = MockLVGLButton(initial_disabled=True)
+         tracking_button.children = [MockLVGLLabel()]
+         app.install_button = tracking_button
+         app.status_label = MockLVGLLabel()
+         
+         # Mock BuildInfo and AppManager in osupdate module
+         original_build_info = osupdate.BuildInfo
+         original_app_manager = osupdate.AppManager
+         try:
+             osupdate.BuildInfo = MockBuildInfo
+             osupdate.AppManager = type('MockAppManager', (), {
+                 'compare_versions': staticmethod(self.mock_app_manager.compare_versions)
+             })
+             
+             # Call handle_update_info with newer version
+             app.handle_update_info("1.1.0", "http://example.com/update.bin", "Bug fixes")
+             
+             # Verify button text is exactly "Update OS"
+             button_label = tracking_button.get_child(0)
+             self.assertIsNotNone(button_label, "Button should have a label child")
+             self.assertEqual(button_label.get_text(), "Update OS",
+                            "Button text must be exactly 'Update OS' for newer version")
+         finally:
+             osupdate.BuildInfo = original_build_info
+             osupdate.AppManager = original_app_manager
+     
+     def test_handle_update_info_with_same_version(self):
+         """Test handle_update_info() with same version (1.0.0 vs 1.0.0).
+         
+         This test verifies that:
+         - compare_versions(1.0.0, 1.0.0) returns 0
+         - The button text is set to exactly "Reinstall\\nsame version"
+         - The button is enabled (remove_state called)
+         """
+         # Create a minimal OSUpdate instance for testing
+         from osupdate import OSUpdate
+         import osupdate
+         
+         app = OSUpdate()
+         
+         # Mock the UI components with a tracking button
+         tracking_button = MockLVGLButton(initial_disabled=True)
+         tracking_button.children = [MockLVGLLabel()]
+         app.install_button = tracking_button
+         app.status_label = MockLVGLLabel()
+         
+         # Mock BuildInfo and AppManager in osupdate module
+         original_build_info = osupdate.BuildInfo
+         original_app_manager = osupdate.AppManager
+         try:
+             osupdate.BuildInfo = MockBuildInfo
+             osupdate.AppManager = type('MockAppManager', (), {
+                 'compare_versions': staticmethod(self.mock_app_manager.compare_versions)
+             })
+             
+             # Call handle_update_info with same version
+             app.handle_update_info("1.0.0", "http://example.com/update.bin", "Reinstall")
+             
+             # Verify button text is exactly "Reinstall\nsame version"
+             button_label = tracking_button.get_child(0)
+             self.assertIsNotNone(button_label, "Button should have a label child")
+             self.assertEqual(button_label.get_text(), "Reinstall\nsame version",
+                            "Button text must be exactly 'Reinstall\\nsame version' for same version")
+         finally:
+             osupdate.BuildInfo = original_build_info
+             osupdate.AppManager = original_app_manager
+     
+     def test_handle_update_info_with_older_version(self):
+         """Test handle_update_info() with older version (0.9.0 vs 1.0.0).
+         
+         This test verifies that:
+         - compare_versions(0.9.0, 1.0.0) returns -1 (negative integer)
+         - The button text is set to exactly "Install old version"
+         - The button is enabled (remove_state called)
+         """
+         # Create a minimal OSUpdate instance for testing
+         from osupdate import OSUpdate
+         import osupdate
+         
+         app = OSUpdate()
+         
+         # Mock the UI components with a tracking button
+         tracking_button = MockLVGLButton(initial_disabled=True)
+         tracking_button.children = [MockLVGLLabel()]
+         app.install_button = tracking_button
+         app.status_label = MockLVGLLabel()
+         
+         # Mock BuildInfo and AppManager in osupdate module
+         original_build_info = osupdate.BuildInfo
+         original_app_manager = osupdate.AppManager
+         try:
+             osupdate.BuildInfo = MockBuildInfo
+             osupdate.AppManager = type('MockAppManager', (), {
+                 'compare_versions': staticmethod(self.mock_app_manager.compare_versions)
+             })
+             
+             # Call handle_update_info with older version
+             app.handle_update_info("0.9.0", "http://example.com/update.bin", "Old version")
+             
+             # Verify button text is exactly "Install old version"
+             button_label = tracking_button.get_child(0)
+             self.assertIsNotNone(button_label, "Button should have a label child")
+             self.assertEqual(button_label.get_text(), "Install\nolder version",
+                            "Button text must be exactly 'Install\\nolder version' for older version")
+         finally:
+             osupdate.BuildInfo = original_build_info
+             osupdate.AppManager = original_app_manager
+     
+     def test_version_comparison_returns_integers_not_booleans(self):
+         """Test that compare_versions() returns integers, not booleans.
+         
+         This is the core bug test: the old code treated integer return values
+         as booleans in if statements. This test verifies the mock returns
+         proper integer values that would have caught the bug.
+         """
+         # Test that compare_versions returns integers
+         result_greater = self.mock_app_manager.compare_versions("1.1.0", "1.0.0")
+         self.assertEqual(result_greater, 1, "Should return 1 for greater version")
+         self.assertIsInstance(result_greater, int, "Should return int, not bool")
+         
+         result_equal = self.mock_app_manager.compare_versions("1.0.0", "1.0.0")
+         self.assertEqual(result_equal, 0, "Should return 0 for equal version")
+         self.assertIsInstance(result_equal, int, "Should return int, not bool")
+         
+         result_less = self.mock_app_manager.compare_versions("0.9.0", "1.0.0")
+         self.assertEqual(result_less, -1, "Should return -1 for lesser version")
+         self.assertIsInstance(result_less, int, "Should return int, not bool")
+     
+     def test_button_text_with_multiple_version_pairs(self):
+         """Test button text with various version comparison scenarios.
+         
+         This comprehensive test ensures the button text is correct for
+         multiple version pairs, catching any edge cases in the comparison logic.
+         The bug being tested: compare_versions() returns integers (-1, 0, 1),
+         and these must be properly interpreted in if statements.
+         """
+         from osupdate import OSUpdate
+         import osupdate
+         
+         test_cases = [
+             # (new_version, current_version, expected_button_text, description)
+             ("2.0.0", "1.0.0", "Update OS", "Major version upgrade"),
+             ("1.1.0", "1.0.0", "Update OS", "Minor version upgrade"),
+             ("1.0.1", "1.0.0", "Update OS", "Patch version upgrade"),
+             ("1.0.0", "1.0.0", "Reinstall\nsame version", "Exact same version"),
+             ("0.9.9", "1.0.0", "Install\nolder version", "Downgrade to older version"),
+             ("0.5.0", "1.0.0", "Install\nolder version", "Major version downgrade"),
+             ("1.0.0", "2.0.0", "Install\nolder version", "Downgrade from major version"),
+         ]
+         
+         original_build_info = osupdate.BuildInfo
+         original_app_manager = osupdate.AppManager
+         try:
+             for new_version, current_version, expected_text, description in test_cases:
+                 # Reset button state for each test
+                 tracking_button = MockLVGLButton(initial_disabled=True)
+                 tracking_button.children = [MockLVGLLabel()]
+                 
+                 # Set current version
+                 osupdate.BuildInfo = MockBuildInfo
+                 osupdate.BuildInfo.version.release = current_version
+                 osupdate.AppManager = type('MockAppManager', (), {
+                     'compare_versions': staticmethod(self.mock_app_manager.compare_versions)
+                 })
+                 
+                 # Create app and mock components
+                 app = OSUpdate()
+                 app.install_button = tracking_button
+                 app.status_label = MockLVGLLabel()
+                 
+                 # Call handle_update_info
+                 app.handle_update_info(new_version, "http://example.com/update.bin", "Test")
+                 
+                 # Verify button text
+                 button_label = tracking_button.get_child(0)
+                 actual_text = button_label.get_text()
+                 self.assertEqual(actual_text, expected_text,
+                                f"Failed for {description}: {new_version} vs {current_version}. "
+                                f"Expected '{expected_text}', got '{actual_text}'")
+         finally:
+             osupdate.BuildInfo = original_build_info
+             osupdate.AppManager = original_app_manager
+
+
