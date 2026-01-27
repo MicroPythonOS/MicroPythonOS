@@ -1,3 +1,8 @@
+0.7.1
+=====
+- Fix issue with multiple DownloadManager.download_url's on ESP32 due to SSL session sharing/corruption
+- Update icons for AppStore, Settings, and Wifi apps
+
 0.7.0
 =====
 
