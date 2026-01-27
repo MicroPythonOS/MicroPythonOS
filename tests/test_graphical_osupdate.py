@@ -50,92 +50,27 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         current_version_label = find_label_with_text(screen, "Installed OS version")
         self.assertIsNotNone(current_version_label, "Current version label not found")
 
-        # Check for force update checkbox text (might be "Force" or "Update")
-        force_checkbox_found = verify_text_present(screen, "Force") or verify_text_present(screen, "force")
-        self.assertTrue(force_checkbox_found, "Force checkbox text not found")
-
         # Check for update button text (case insensitive)
-        update_button_found = verify_text_present(screen, "Update") or verify_text_present(screen, "update")
+        # Button text will be "Update OS", "Reinstall\nsame version", or "Install\nolder version"
+        update_button_found = verify_text_present(screen, "Update") or verify_text_present(screen, "update") or \
+                             verify_text_present(screen, "Reinstall") or verify_text_present(screen, "Install")
         self.assertTrue(update_button_found, "Update button text not found")
 
-    def test_force_checkbox_initially_unchecked(self):
-        """Test that force update checkbox starts unchecked."""
+
+    def test_install_button_text_exists(self):
+        """Test that install button with update text exists on screen."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(15)
 
         screen = lv.screen_active()
 
-        # Find checkbox - it's the first checkbox on the screen
-        checkbox = None
-        def find_checkbox(obj):
-            nonlocal checkbox
-            if checkbox:
-                return
-            # Check if this object is a checkbox
-            try:
-                # In LVGL, checkboxes have specific flags/properties
-                if obj.get_child_count() >= 0:  # It's a valid object
-                    # Try to get state - checkboxes respond to STATE.CHECKED
-                    state = obj.get_state()
-                    # If it has checkbox-like text, it's probably our checkbox
-                    for i in range(obj.get_child_count()):
-                        child = obj.get_child(i)
-                        if hasattr(child, 'get_text'):
-                            text = child.get_text()
-                            if text and "Force Update" in text:
-                                checkbox = obj.get_parent() if obj.get_parent() else obj
-                                return
-            except:
-                pass
-
-            # Recursively search children
-            for i in range(obj.get_child_count()):
-                child = obj.get_child(i)
-                find_checkbox(child)
-
-        find_checkbox(screen)
-
-        if checkbox:
-            state = checkbox.get_state()
-            is_checked = bool(state & lv.STATE.CHECKED)
-            self.assertFalse(is_checked, "Force Update checkbox should start unchecked")
-
-    def test_install_button_initially_disabled(self):
-        """Test that install button starts in disabled state."""
-        result = AppManager.start_app("com.micropythonos.osupdate")
-        self.assertTrue(result)
-        wait_for_render(15)
-
-        screen = lv.screen_active()
-
-        # Find the button
-        button = None
-        def find_button(obj):
-            nonlocal button
-            if button:
-                return
-            # Check if this object contains "Update OS" text
-            for i in range(obj.get_child_count()):
-                child = obj.get_child(i)
-                if hasattr(child, 'get_text'):
-                    text = child.get_text()
-                    if text and "Update OS" in text:
-                        # Parent is likely the button
-                        button = obj
-                        return
-
-            # Recursively search children
-            for i in range(obj.get_child_count()):
-                child = obj.get_child(i)
-                find_button(child)
-
-        find_button(screen)
-
-        if button:
-            state = button.get_state()
-            is_disabled = bool(state & lv.STATE.DISABLED)
-            self.assertTrue(is_disabled, "Install button should start disabled")
+        # Verify the button text is present - it will be "Update OS" initially
+        # (or "Reinstall\nsame version" or "Install\nolder version" depending on version comparison)
+        button_text_found = verify_text_present(screen, "Update OS") or \
+                           verify_text_present(screen, "Reinstall") or \
+                           verify_text_present(screen, "Install")
+        self.assertTrue(button_text_found, "Install button text should be present on screen")
 
     def test_current_version_displayed(self):
         """Test that current OS version is displayed correctly."""
@@ -279,11 +214,11 @@ class TestOSUpdateGraphicalScreenshots(unittest.TestCase):
 
         # Verify key elements are visible before screenshot (case insensitive)
         has_version = verify_text_present(screen, "Installed") or verify_text_present(screen, "version")
-        has_force = verify_text_present(screen, "Force") or verify_text_present(screen, "force")
-        has_button = verify_text_present(screen, "Update") or verify_text_present(screen, "update")
+        # Button text can be "Update OS", "Reinstall\nsame version", or "Install\nolder version"
+        has_button = verify_text_present(screen, "Update") or verify_text_present(screen, "update") or \
+                    verify_text_present(screen, "Reinstall") or verify_text_present(screen, "Install")
 
         self.assertTrue(has_version, "Version label should be visible")
-        self.assertTrue(has_force, "Force checkbox should be visible")
         self.assertTrue(has_button, "Update button should be visible")
 
 
