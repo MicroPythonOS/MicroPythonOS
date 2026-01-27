@@ -1,7 +1,7 @@
 """
 download_manager.py - HTTP download service for MicroPythonOS
 
-Provides async HTTP downloads with flexible output modes:
+Provides synchronous and asynchronous HTTP downloads with flexible output modes:
 - Download to memory (returns bytes)
 - Download to file (returns bool)
 - Streaming with chunk callback (returns bool)

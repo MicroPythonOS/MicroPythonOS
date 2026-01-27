@@ -48,14 +48,14 @@ jobs:
       - name: Run unit tests on macOS
         run: |
           ./tests/unittest.sh
-          mv lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
+          mv lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_amd64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
         continue-on-error: true
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
+          name: MicroPythonOS_amd64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
+          path: lvgl_micropython/build/MicroPythonOS_amd64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
           compression-level: 0 # don't zip it
           retention-days: 7
 
