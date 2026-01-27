@@ -34,13 +34,6 @@ class TestDownloadManager(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after each test."""
-        # Close any open sessions
-        import asyncio
-        try:
-            asyncio.run(DownloadManager.close_session())
-        except Exception:
-            pass  # Session might not be open
-
         # Clean up temp files
         try:
             import os
@@ -56,13 +49,10 @@ class TestDownloadManager(unittest.TestCase):
     # ==================== Session Lifecycle Tests ====================
 
     def test_lazy_session_creation(self):
-        """Test that session is created lazily on first download."""
+        """Test that session is created for each download (per-request design)."""
         import asyncio
 
         async def run_test():
-            # Verify no session exists initially
-            self.assertFalse(DownloadManager.is_session_active())
-
             # Perform a download
             try:
                 data = await DownloadManager.download_url("https://httpbin.org/bytes/100")
@@ -71,9 +61,7 @@ class TestDownloadManager(unittest.TestCase):
                 self.skipTest(f"httpbin.org unavailable: {e}")
                 return
 
-            # Verify session was created
-            # Note: Session may be closed immediately after download if refcount == 0
-            # So we can't reliably check is_session_active() here
+            # Verify download succeeded
             self.assertIsNotNone(data)
             self.assertEqual(len(data), 100)
 
@@ -106,35 +94,6 @@ class TestDownloadManager(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    def test_explicit_session_close(self):
-        """Test explicit session closure."""
-        import asyncio
-
-        async def run_test():
-            # Create session by downloading
-            try:
-                data = await DownloadManager.download_url("https://httpbin.org/bytes/10")
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
-            self.assertIsNotNone(data)
-
-            # Explicitly close session
-            await DownloadManager.close_session()
-
-            # Verify session is closed
-            self.assertFalse(DownloadManager.is_session_active())
-
-            # Verify new download recreates session
-            try:
-                data2 = await DownloadManager.download_url("https://httpbin.org/bytes/20")
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
-            self.assertIsNotNone(data2)
-            self.assertEqual(len(data2), 20)
-
-        asyncio.run(run_test())
 
     # ==================== Download Mode Tests ====================
 
@@ -549,11 +508,12 @@ class TestDownloadManager(unittest.TestCase):
             return
 
         self.assertTrue(success)
-        self.assertTrue(os.path.exists(outfile))
-        
-        # Verify file has content
-        file_size = os.stat(outfile)[6]
-        self.assertTrue(file_size > 0)
+        # Check file exists using os.stat instead of os.path.exists
+        try:
+            file_size = os.stat(outfile)[6]
+            self.assertTrue(file_size > 0)
+        except OSError:
+            self.fail("File should exist after successful download")
         
         # Verify it's HTML content
         with open(outfile, 'rb') as f:
