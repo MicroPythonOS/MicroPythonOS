@@ -1,3 +1,9 @@
+0.7.2
+=====
+
+Builtin Apps:
+- OSUpdate app: replace "force update" checkbox with improved button labels
+
 0.7.1
 =====
 
