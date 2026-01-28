@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Intent, AppManager, SettingActivity, SettingsActivity, TimeZone
+from mpos import Intent, AppearanceManager, AppManager, SettingActivity, SettingsActivity, TimeZone
 
 from bootloader import ResetIntoBootloader
 from calibrate_imu import CalibrateIMUActivity
@@ -11,29 +11,29 @@ class Settings(SettingsActivity):
     """Override getIntent to provide prefs and settings via Intent extras"""
     def getIntent(self):
         theme_colors = [
+            ("Amethyst", "9966cc"),
             ("Aqua Blue", "00ffff"),
             ("Bitcoin Orange", "f0a010"),
-            ("Coral Red", "ff7f50"),
-            ("Dark Slate", "2f4f4f"),
-            ("Forest Green", "228b22"),
-            ("Piggy Pink", "ff69b4"),
-            ("Matrix Green", "03a062"),
-            ("Midnight Blue", "191970"),
-            ("Nostr Purple", "ff00ff"),
-            ("Saddle Brown", "8b4513"),
-            ("Sky Blue", "87ceeb"),
-            ("Solarized Yellow", "b58900"),
-            ("Vivid Violet", "9f00ff"),
-            ("Amethyst", "9966cc"),
             ("Burnt Orange", "cc5500"),
             ("Charcoal Gray", "36454f"),
+            ("Coral Red", "ff7f50"),
             ("Crimson", "dc143c"),
+            ("Dark Slate", "2f4f4f"),
             ("Emerald", "50c878"),
+            ("Forest Green", "228b22"),
             ("Goldenrod", "daa520"),
             ("Indigo", "4b0082"),
             ("Lime", "00ff00"),
+            ("Matrix Green", "03a062"),
+            ("Midnight Blue", "191970"),
+            ("Nostr Purple", "ff00ff"),
+            ("Piggy Pink", "ff69b4"),
+            ("Saddle Brown", "8b4513"),
+            ("Sky Blue", "87ceeb"),
+            ("Solarized Yellow", "b58900"),
             ("Teal", "008080"),
-            ("Turquoise", "40e0d0")
+            ("Turquoise", "40e0d0"),
+            ("Vivid Violet", "9f00ff")
         ]
         intent = Intent()
         from mpos import SharedPreferences
@@ -41,7 +41,7 @@ class Settings(SettingsActivity):
         intent.putExtra("settings", [
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
-            {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed},
+            {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},
             {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in TimeZone.get_timezones()], "changed_callback": lambda *args: TimeZone.refresh_timezone_preference()},
             # Advanced settings, alphabetically:
             {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in AppManager.get_app_list()]},

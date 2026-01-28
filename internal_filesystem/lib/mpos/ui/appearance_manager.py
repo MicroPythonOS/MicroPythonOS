@@ -43,6 +43,7 @@ class AppearanceManager:
     # ========== UI Dimensions ==========
     # These are constants that define the layout of the UI
     NOTIFICATION_BAR_HEIGHT = 24  # Height of the notification bar in pixels
+    DEFAULT_PRIMARY_COLOR = "f0a010"
     
     # ========== Private Class Variables ==========
     # State variables shared across all "instances" (there is only one logical instance)
@@ -77,20 +78,20 @@ class AppearanceManager:
         theme_light_dark = prefs.get_string("theme_light_dark", "light")
         theme_dark_bool = (theme_light_dark == "dark")
         cls._is_light_mode = not theme_dark_bool
-        
-        # Load primary color preference
-        primary_color = lv.theme_get_color_primary(None)
-        color_string = prefs.get_string("theme_primary_color")
-        if color_string:
-            try:
-                color_string = color_string.replace("0x", "").replace("#", "").strip().lower()
-                color_int = int(color_string, 16)
-                print(f"[AppearanceManager] Setting primary color: {color_int}")
-                primary_color = lv.color_hex(color_int)
-                cls._primary_color = primary_color
-            except Exception as e:
-                print(f"[AppearanceManager] Converting color setting '{color_string}' failed: {e}")
-        
+
+        primary_color = lv.theme_get_color_primary(None) # Load primary color from LVGL default
+
+        # Try to get a valid color from the preferences
+        color_string = prefs.get_string("theme_primary_color", cls.DEFAULT_PRIMARY_COLOR)
+        try:
+            color_string = color_string.replace("0x", "").replace("#", "").strip().lower()
+            color_int = int(color_string, 16)
+            print(f"[AppearanceManager] Setting primary color: {color_int}")
+            primary_color = lv.color_hex(color_int)
+            cls._primary_color = primary_color
+        except Exception as e:
+            print(f"[AppearanceManager] Converting color setting '{color_string}' failed: {e}")
+
         # Initialize LVGL theme with loaded settings
         # Get the display driver from the active screen
         screen = lv.screen_active()
@@ -102,7 +103,7 @@ class AppearanceManager:
             theme_dark_bool,
             lv.font_montserrat_12
         )
-        
+
         # Reset keyboard button fix style so it's recreated with new theme colors
         cls._keyboard_button_fix_style = None
         
