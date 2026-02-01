@@ -260,7 +260,7 @@ class OSUpdate(Activity):
         self.speed_label.align(lv.ALIGN.CENTER, 0, 10)
         
         self.progress_bar = lv.bar(self.main_screen)
-        self.progress_bar.set_size(200, 20)
+        self.progress_bar.set_size(lv.pct(80), lv.pct(10))
         self.progress_bar.align(lv.ALIGN.BOTTOM_MID, 0, -50)
         self.progress_bar.set_range(0, 100)
         self.progress_bar.set_value(0, False)
