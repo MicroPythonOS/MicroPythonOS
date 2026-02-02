@@ -4,8 +4,7 @@
 # - Touch screen controller is cst816s
 # - IMU (LSM6DSO) is different from fri3d_2024 (and address 0x6A instead of 0x6B) but the API seems the same, except different chip ID (0x6C iso 0x6A)
 # - I2S audio (communicator) is the same
-# - headphone jack audio?
-# - headphone jack microphone?
+# - headphone jack microphone is on ESP.IO1
 # - CH32X035GxUx over I2C:
 #   - battery voltage measurement
 #   - analog joystick
@@ -84,10 +83,13 @@ mpos.ui.main_display.set_color_inversion(False)
 
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13
-i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_locks=False)
-touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=TP_REGBITS)
-tindev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
-InputManager.register_indev(tindev)
+i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
+touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
+try:
+    tindev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
+    InputManager.register_indev(tindev)
+except Exception as e:
+    print(f"Touch screen init got exception: {e}")
 
 lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
@@ -211,29 +213,85 @@ from mpos import AudioManager
 # See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 i2s_pins = {
     # Output (DAC/speaker) pins
-    'sck': 2,       # MCLK / BCK - Bit Clock for DAC output
-    'ws': 47,       # Word Select / LRCLK (shared between DAC and mic)
+    'sck': 2,       # SCLK or BCLK (optional)
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     # Input (microphone) pins
-    'sck_in': 17,   # SCLK - Serial Clock for microphone input
-    'sd_in': 15,    # DIN - Serial Data IN (microphone)
+    'sck_in': 17,   # SCLK - Serial Clock for microphone input (optional for audio out)
 }
 
 # Initialize AudioManager with I2S (buzzer TODO)
 AudioManager(i2s_pins=i2s_pins)
 
+# === SENSOR HARDWARE ===
+from mpos import SensorManager
+# Create I2C bus for IMU (LSM6DSOTR-C / LSM6DSO)
+from machine import I2C
+SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH)
+
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
-
 # Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12, num_leds=5)
 
-# === SENSOR HARDWARE ===
-from mpos import SensorManager
+print("Fri3d hardware: Audio, LEDs, and sensors initialized")
 
-# Create I2C bus for IMU (LSM6DSOTR-C / LSM6DSO)
-from machine import I2C
-imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
-SensorManager.init(imu_i2c, address=0x6A, mounted_position=SensorManager.FACING_EARTH)
+# === STARTUP "WOW" EFFECT ===
+import time
+import _thread
+
+def startup_wow_effect():
+    """
+    Epic startup effect with rainbow LED chase and upbeat startup jingle.
+    Runs in background thread to avoid blocking boot.
+    """
+    try:
+        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
+        startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
+        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
+
+        # Start the jingle
+        # Disabled until buzzer works
+        #AudioManager.play_rtttl(startup_jingle,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60)
+
+        # Rainbow colors for the 5 LEDs
+        rainbow = [
+            (255, 0, 0),    # Red
+            (255, 128, 0),  # Orange
+            (255, 255, 0),  # Yellow
+            (0, 255, 0),    # Green
+            (0, 0, 255),    # Blue
+        ]
+
+        # Rainbow sweep effect (3 passes, getting faster)
+        for pass_num in range(3):
+            for i in range(5):
+                # Light up LEDs progressively
+                for j in range(i + 1):
+                    LightsManager.set_led(j, *rainbow[j])
+                LightsManager.write()
+                time.sleep_ms(80 - pass_num * 20)  # Speed up each pass
+
+        # Flash all LEDs bright white
+        LightsManager.set_all(255, 255, 255)
+        LightsManager.write()
+        time.sleep_ms(150)
+
+        # Rainbow finale
+        for i in range(5):
+            LightsManager.set_led(i, *rainbow[i])
+        LightsManager.write()
+        time.sleep_ms(300)
+
+        # Fade out
+        LightsManager.clear()
+        LightsManager.write()
+
+    except Exception as e:
+        print(f"Startup effect error: {e}")
+
+from mpos import TaskManager
+_thread.stack_size(TaskManager.good_stack_size()) # default stack size won't work, crashes!
+_thread.start_new_thread(startup_wow_effect, ())
 
 print("fri3d_2026.py finished")

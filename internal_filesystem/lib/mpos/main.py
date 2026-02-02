@@ -37,10 +37,10 @@ def detect_board():
             return "waveshare_esp32_s3_touch_lcd_2"
         else:
             i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
-            if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
-                return "fri3d_2026"
-            else: # if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+            if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
+            else: # if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
+                return "fri3d_2026"
 
 
 board = detect_board()
