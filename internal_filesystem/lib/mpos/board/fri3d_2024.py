@@ -21,8 +21,6 @@ from ..task_manager import TaskManager
 
 # Pin configuration
 SPI_BUS = 2
-SPI_FREQ = 40000000
-#SPI_FREQ = 20000000 # also works but I guess higher is better
 LCD_SCLK = 7
 LCD_MOSI = 6
 LCD_MISO = 8
@@ -42,7 +40,7 @@ spi_bus = machine.SPI.Bus(
 )
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
-    freq=SPI_FREQ,
+    freq=40000000,
     dc=LCD_DC,
     cs=LCD_CS
 )
@@ -307,7 +305,7 @@ buzzer = PWM(Pin(46), freq=550, duty=0)
 # See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 i2s_pins = {
     # Output (DAC/speaker) pins
-    'sck': 2,       # BCK - Bit Clock for DAC output
+    'sck': 2,       # MCLK / BCK - Bit Clock for DAC output
     'ws': 47,       # Word Select / LRCLK (shared between DAC and mic)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     # Input (microphone) pins
@@ -318,19 +316,17 @@ i2s_pins = {
 # Initialize AudioManager with I2S and buzzer
 AudioManager(i2s_pins=i2s_pins, buzzer_instance=buzzer)
 
-# === LED HARDWARE ===
-import mpos.lights as LightsManager
-
-# Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12, num_leds=5)
-
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
-
 # Create I2C bus for IMU (different pins from display)
 from machine import I2C
 imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
 SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
+
+# === LED HARDWARE ===
+import mpos.lights as LightsManager
+# Initialize 5 NeoPixel LEDs (GPIO 12)
+LightsManager.init(neopixel_pin=12, num_leds=5)
 
 print("Fri3d hardware: Audio, LEDs, and sensors initialized")
 
@@ -349,11 +345,7 @@ def startup_wow_effect():
         #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
 
         # Start the jingle
-        AudioManager.play_rtttl(
-            startup_jingle,
-            stream_type=AudioManager.STREAM_NOTIFICATION,
-            volume=60
-        )
+        AudioManager.play_rtttl(startup_jingle,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60)
 
         # Rainbow colors for the 5 LEDs
         rainbow = [
