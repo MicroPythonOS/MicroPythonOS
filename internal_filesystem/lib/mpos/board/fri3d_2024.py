@@ -17,8 +17,6 @@ import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager
 
-from ..task_manager import TaskManager
-
 # Pin configuration
 SPI_BUS = 2
 LCD_SCLK = 7
@@ -305,8 +303,8 @@ buzzer = PWM(Pin(46), freq=550, duty=0)
 # See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 i2s_pins = {
     # Output (DAC/speaker) pins
-    'sck': 2,       # MCLK / BCK - Bit Clock for DAC output
-    'ws': 47,       # Word Select / LRCLK (shared between DAC and mic)
+    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory)
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     # Input (microphone) pins
     'sck_in': 17,   # SCLK - Serial Clock for microphone input
@@ -383,6 +381,7 @@ def startup_wow_effect():
     except Exception as e:
         print(f"Startup effect error: {e}")
 
+from mpos import TaskManager
 _thread.stack_size(TaskManager.good_stack_size()) # default stack size won't work, crashes!
 _thread.start_new_thread(startup_wow_effect, ())
 
