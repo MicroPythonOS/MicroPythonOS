@@ -35,6 +35,8 @@ battery power:
 2319 is 3.916
 2269 is 3.831
 
+I want application that will show big time (hour, minutes), with smaller seconds, date, and current battery parameters on the left side, on the right side, i want big battery icon, green when over 30 percent, red otherwise, and in bottom left I want graph of history values for voltage and percentage.
+
 """
 
 import lvgl as lv
@@ -42,34 +44,152 @@ import time
 
 from mpos import Activity, BatteryManager
 
+HISTORY_LEN = 60
+
+DARKPINK = lv.color_hex(0xEC048C)
+BLACK = lv.color_hex(0x000000)
+
 class ShowBattery(Activity):
 
     refresh_timer = None
-    
-    # Widgets:
-    raw_label = None
+
+    # Widgets
+    lbl_time = None
+    lbl_sec = None
+    lbl_date = None
+
+    bat_outline = None
+    bat_fill = None
+
+    history_v = []
+    history_p = []
 
     def onCreate(self):
-        s = lv.obj()
-        self.raw_label = lv.label(s)
-        self.raw_label.set_text("starting...")
-        self.raw_label.center()
-        self.setContentView(s)
+        scr = lv.obj()
+
+        # --- TIME ---
+        self.lbl_time = lv.label(scr)
+        self.lbl_time.set_style_text_font(lv.font_montserrat_48, 0)
+        self.lbl_time.align(lv.ALIGN.TOP_LEFT, 5, 5)
+
+        self.lbl_sec = lv.label(scr)
+        self.lbl_sec.set_style_text_font(lv.font_montserrat_24, 0)
+        self.lbl_sec.align_to(self.lbl_time, lv.ALIGN.OUT_RIGHT_BOTTOM, 24, -4)
+
+        self.lbl_date = lv.label(scr)
+        self.lbl_date.set_style_text_font(lv.font_montserrat_24, 0)
+        self.lbl_date.align(lv.ALIGN.TOP_LEFT, 5, 60)
+
+        # --- BATTERY ICON ---
+        self.bat_outline = lv.obj(scr)
+        self.bat_size = 225
+        self.bat_outline.set_size(80, self.bat_size)
+        self.bat_outline.align(lv.ALIGN.TOP_RIGHT, -10, 10)
+        self.bat_outline.set_style_border_width(2, 0)
+        self.bat_outline.set_style_radius(4, 0)
+
+        self.bat_fill = lv.obj(self.bat_outline)
+        self.bat_fill.align(lv.ALIGN.BOTTOM_MID, 0, -2)
+        self.bat_fill.set_width(52)
+        self.bat_fill.set_style_radius(2, 0)
+
+        # --- CANVAS ---
+        self.canvas = lv.canvas(scr)
+        self.canvas.set_size(220, 100)
+        self.canvas.align(lv.ALIGN.BOTTOM_LEFT, 5, -5)
+        self.canvas.set_style_border_width(1, 0)
+        self.canvas.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
+        buffer = bytearray(220 * 100 * 4)
+        self.canvas.set_buffer(buffer, 220, 100, lv.COLOR_FORMAT.NATIVE)
+        self.layer = lv.layer_t()
+        self.canvas.init_layer(self.layer)
+
+        self.setContentView(scr)
+
+    def draw_line(self, color, x1, y1, x2, y2):
+        dsc = lv.draw_line_dsc_t()
+        lv.draw_line_dsc_t.init(dsc)
+        dsc.color = color
+        dsc.width = 4
+        dsc.round_end = 1
+        dsc.round_start = 1
+        dsc.p1 = lv.point_precise_t()
+        dsc.p1.x = x1
+        dsc.p1.y = y1
+        dsc.p2 = lv.point_precise_t()
+        dsc.p2.x = x2
+        dsc.p2.y = y2
+        lv.draw_line(self.layer,dsc)
+        self.canvas.finish_layer(self.layer)
 
     def onResume(self, screen):
         super().onResume(screen)
 
-        def update_bat(timer):
-            r = BatteryManager.read_raw_adc()
-            v = BatteryManager.read_battery_voltage()
-            percent = BatteryManager.get_battery_percentage()
-            text = f"{time.localtime()}\n{r}\n{v}V\n{percent}%"
-            print(text)
-            self.raw_label.set_text(text)
+        def update(timer):
+            now = time.localtime()
 
-        self.refresh_timer = lv.timer_create(update_bat,1000,None) #.set_repeat_count(10)
+            hour, minute, second = now[3], now[4], now[5]
+            date = f"{now[0]}-{now[1]:02}-{now[2]:02}"
+
+            voltage = BatteryManager.read_battery_voltage()
+            percent = BatteryManager.get_battery_percentage()
+
+            # --- TIME ---
+            self.lbl_time.set_text(f"{hour:02}:{minute:02}")
+            self.lbl_sec.set_text(f":{second:02}")
+            date += f"\n{voltage:.2f}V {percent:.0f}%"
+            self.lbl_date.set_text(date)
+
+            # --- BATTERY ICON ---
+            fill_h = int((percent / 100) * (self.bat_size * 0.9))
+            self.bat_fill.set_height(fill_h)
+
+            if percent >= 30:
+                self.bat_fill.set_style_bg_color(lv.palette_main(lv.PALETTE.GREEN), 0)
+            else:
+                self.bat_fill.set_style_bg_color(lv.palette_main(lv.PALETTE.RED), 0)
+
+            # --- HISTORY ---
+            self.history_v.append(voltage)
+            self.history_p.append(percent)
+
+            if len(self.history_v) > HISTORY_LEN:
+                self.history_v.pop(0)
+                self.history_p.pop(0)
+
+            self.draw_graph()
+
+        self.refresh_timer = lv.timer_create(update, 1000, None)
+
+    def draw_graph(self):
+        self.canvas.fill_bg(lv.color_white(), lv.OPA.COVER)
+        self.canvas.clean()
+
+        w = self.canvas.get_width()
+        h = self.canvas.get_height()
+
+        if len(self.history_v) < 2:
+            return
+
+        v_min = 3.3
+        v_max = 4.2
+        v_range = max(v_max - v_min, 0.01)
+
+        for i in range(1, len(self.history_v)):
+            x1 = int((i - 1) * w / HISTORY_LEN)
+            x2 = int(i * w / HISTORY_LEN)
+
+            yv1 = h - int((self.history_v[i - 1] - v_min) / v_range * h)
+            yv2 = h - int((self.history_v[i] - v_min) / v_range * h)
+
+            yp1 = h - int(self.history_p[i - 1] / 100 * h)
+            yp2 = h - int(self.history_p[i] / 100 * h)
+
+            self.draw_line(DARKPINK, x1, yv1, x2, yv2)
+            self.draw_line(BLACK, x1, yp1, x2, yp2)
 
     def onPause(self, screen):
         super().onPause(screen)
         if self.refresh_timer:
             self.refresh_timer.delete()
+            self.refresh_timer = None
