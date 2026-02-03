@@ -328,7 +328,8 @@ class WAVStream:
                     self._find_data_chunk(f)
 
                 # Decide playback rate (force >=22050 Hz) - but why?! the DAC should support down to 8kHz!
-                target_rate = 22050
+                target_rate = 22050 # slower is faster (less data)
+                target_rate = 22050 * 2 # CJC only supports 30kHz and up?
                 if original_rate >= target_rate:
                     playback_rate = original_rate
                     upsample_factor = 1
@@ -345,6 +346,25 @@ class WAVStream:
                 # Initialize I2S (always 16-bit output)
                 try:
                     i2s_format = machine.I2S.MONO if channels == 1 else machine.I2S.STEREO
+
+                    # Configure MCLK pin if provided (must be done before I2S init)
+                    # On some MicroPython versions, machine.I2S() supports a mck argument
+                    # but not on ESP32S3 1.25.0 version, apparently.
+                    if 'mck' in self.i2s_pins:
+                        mck_pin = machine.Pin(self.i2s_pins['mck'], machine.Pin.OUT)
+                        from machine import Pin, PWM
+                        # Add MCLK generation on GPIO2
+                        try:
+                            mck_pwm = PWM(mck_pin)
+                            # Set frequency to sample_rate * 256 (common ratio for CJC4334H auto-detect)
+                            # Use duty_u16 for finer control (0–65535 range, 32768 = 50%)
+                            mck_pwm.freq(playback_rate * 256)
+                            mck_pwm.duty_u16(32768)  # 50% duty cycle
+                            print(f"MCLK PWM started on GPIO2 at {playback_rate * 256} Hz")
+                        except Exception as e:
+                            print(f"MCLK PWM init failed: {e}")
+                            # fallback or error handling
+
                     self._i2s = machine.I2S(
                         0,
                         sck=machine.Pin(self.i2s_pins['sck'], machine.Pin.OUT),
