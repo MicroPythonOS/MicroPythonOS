@@ -296,6 +296,78 @@ class AudioManager:
             sys.print_exception(e)
             return False
 
+    def record_wav_adc(self, file_path, duration_ms=None, adc_pin=2, sample_rate=8000,
+                       adaptive_control=True, on_complete=None, **adc_config):
+        """
+        Record audio from ADC with adaptive frequency control to WAV file.
+
+        Args:
+            file_path: Path to save WAV file (e.g., "data/recording.wav")
+            duration_ms: Recording duration in milliseconds (None = 60 seconds default)
+            adc_pin: GPIO pin for ADC input (default: 2 for ESP32)
+            sample_rate: Target sample rate in Hz (default 8000 for voice)
+            adaptive_control: Enable PI feedback control for stable sampling (default: True)
+            on_complete: Callback function(message) when recording finishes
+            **adc_config: Additional ADC configuration:
+                - control_gain_p: Proportional gain (default: 0.05)
+                - control_gain_i: Integral gain (default: 0.01)
+                - integral_windup_limit: Integral term limit (default: 1000)
+                - adjustment_interval: Samples between adjustments (default: 1000)
+                - warmup_samples: Warm-up phase samples (default: 3000)
+                - callback_overhead_offset: Initial frequency offset (default: 2500)
+                - min_freq: Minimum timer frequency (default: 6000)
+                - max_freq: Maximum timer frequency (default: 40000)
+                - gc_enabled: Enable garbage collection (default: True)
+                - gc_interval: Samples between GC cycles (default: 5000)
+
+        Returns:
+            bool: True if recording started, False if rejected or unavailable
+        """
+        print(f"AudioManager.record_wav_adc() called")
+        print(f"  file_path: {file_path}")
+        print(f"  duration_ms: {duration_ms}")
+        print(f"  adc_pin: {adc_pin}")
+        print(f"  sample_rate: {sample_rate}")
+        print(f"  adaptive_control: {adaptive_control}")
+
+        # Cannot record while playing (I2S can only be TX or RX, not both)
+        if self.is_playing():
+            print("AudioManager: Cannot record while playing")
+            return False
+
+        # Cannot start new recording while already recording
+        if self.is_recording():
+            print("AudioManager: Already recording")
+            return False
+
+        # Create stream and start recording in separate thread
+        try:
+            print("AudioManager: Importing ADCRecordStream...")
+            from mpos.audio.stream_record_adc import ADCRecordStream
+
+            print("AudioManager: Creating ADCRecordStream instance...")
+            stream = ADCRecordStream(
+                file_path=file_path,
+                duration_ms=duration_ms,
+                sample_rate=sample_rate,
+                adc_pin=adc_pin,
+                adaptive_control=adaptive_control,
+                on_complete=on_complete,
+                **adc_config
+            )
+
+            print("AudioManager: Starting ADC recording thread...")
+            _thread.stack_size(TaskManager.good_stack_size())
+            _thread.start_new_thread(self._recording_thread, (stream,))
+            print("AudioManager: ADC recording thread started successfully")
+            return True
+
+        except Exception as e:
+            import sys
+            print(f"AudioManager: record_wav_adc() failed: {e}")
+            sys.print_exception(e)
+            return False
+
     def stop(self):
         """Stop current audio playback or recording."""
         stopped = False
@@ -390,7 +462,7 @@ class AudioManager:
 # Store original instance methods before replacing them
 _original_methods = {}
 _methods_to_delegate = [
-    'play_wav', 'play_rtttl', 'record_wav', 'stop', 'pause', 'resume',
+    'play_wav', 'play_rtttl', 'record_wav', 'record_wav_adc', 'stop', 'pause', 'resume',
     'set_volume', 'get_volume', 'is_playing', 'is_recording',
     'has_i2s', 'has_buzzer', 'has_microphone'
 ]
