@@ -116,6 +116,8 @@ class OrgCalendarStore:
                 lines = f.read().splitlines()
 
         events = []
+        # FIXME
+        events = [ Event("Test event", 20260207, 20260208) ]
         current_title = None
 
         for line in lines:
@@ -384,7 +386,8 @@ class Hello(Activity):
             lbl.set_text(str(day))
             lbl.center()
 
-            btn._day = day  # store
+            # FIXME
+            #btn._day = day  # store
             self.day_buttons.append(btn)
 
         self.update_day_highlights()
@@ -392,7 +395,7 @@ class Hello(Activity):
     def update_day_highlights(self):
         # Highlight today + event days
         for btn in self.day_buttons:
-            day = btn._day
+            day = 6 # btn._day FIXME
             ymd = ymd_to_int(self.cur_y, self.cur_m, day)
 
             has_event = self.day_has_event(ymd)
@@ -441,6 +444,7 @@ class Hello(Activity):
     # --------------------
 
     def on_day_clicked(self, day):
+        print("Day clicked")
         ymd = ymd_to_int(self.cur_y, self.cur_m, day)
         self.open_add_dialog(ymd)
 
@@ -497,7 +501,7 @@ class Hello(Activity):
             if not title_s or title_s.strip() == "":
                 return
 
-            dur_s = dd.get_selected_str()
+            dur_s = 1 # dd.get_selected_str() FIXME
             try:
                 dur = int(dur_s)
             except Exception:
