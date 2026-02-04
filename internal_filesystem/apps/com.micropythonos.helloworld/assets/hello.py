@@ -237,10 +237,12 @@ class OrgCalendarStore:
             return False
 
     def _append_text(self, s):
+        return # FIXME
         with open(self.path, "a") as f:
             f.write(s)
 
     def _write_text(self, s):
+        return # FIXME
         with open(self.path, "w") as f:
             f.write(s)
 
