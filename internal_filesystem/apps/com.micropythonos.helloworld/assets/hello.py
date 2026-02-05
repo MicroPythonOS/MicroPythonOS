@@ -369,6 +369,7 @@ class Hello(Activity):
         for b in self.day_buttons:
             b.delete()
         self.day_buttons = []
+        self.day_of_btn = {}
 
         first_wd = first_weekday_of_month(self.cur_y, self.cur_m)  # 0=Mon
         dim = days_in_month(self.cur_y, self.cur_m)
@@ -388,16 +389,17 @@ class Hello(Activity):
             lbl.set_text(str(day))
             lbl.center()
 
-            # FIXME
-            #btn._day = day  # store
             self.day_buttons.append(btn)
+            self.day_of_btn[btn] = day
 
         self.update_day_highlights()
 
     def update_day_highlights(self):
-        # Highlight today + event days
         for btn in self.day_buttons:
-            day = 6 # btn._day FIXME
+            day = self.day_of_btn.get(btn, None)
+            if day is None:
+                continue
+
             ymd = ymd_to_int(self.cur_y, self.cur_m, day)
 
             has_event = self.day_has_event(ymd)
