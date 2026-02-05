@@ -116,9 +116,8 @@ class OrgCalendarStore:
                 lines = f.read().splitlines()
 
         events = []
-        # FIXME
-        events = [ Event("Test event", 20260207, 20260208) ]
         current_title = None
+        # FIXME this likely does not work
 
         for line in lines:
             line = line.strip()
@@ -304,7 +303,7 @@ class Hello(Activity):
         # Month grid container
         self.grid = lv.obj(self.screen)
         self.grid.set_style_border_width(1, 0)
-        self.grid.set_style_pad_all(4, 0)
+        self.grid.set_style_pad_all(0, 0)
         self.grid.set_style_radius(6, 0)
         self.grid.align(lv.ALIGN.TOP_LEFT, 0, 70)
 
@@ -316,6 +315,7 @@ class Hello(Activity):
         self.setContentView(self.screen)
 
         self.reload_data()
+        print("My events == ", self.events)
         self.build_month_view()
         self.refresh_upcoming()
 
@@ -332,6 +332,8 @@ class Hello(Activity):
 
     def reload_data(self):
         self.events = self.store.load()
+        # FIXME
+        self.events = [ Event("Test event", 20260207, 20260208) ]
 
     def tick(self, t):
         now = time.localtime()
@@ -405,6 +407,7 @@ class Hello(Activity):
 
             has_event = self.day_has_event(ymd)
             is_today = (ymd == self.today_ymd)
+            #print(ymd, has_event, is_today)
 
             if is_today:
                 btn.set_style_bg_color(lv.palette_main(lv.PALETTE.BLUE), 0)
