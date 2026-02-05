@@ -520,10 +520,12 @@ class Hello(Activity):
             end_ymd = self.add_days(ymd, dur - 1)
 
             ev = Event(title_s.strip(), ymd, end_ymd, None, None)
-            self.store.save_append(ev)
+            self.events.append(ev)
+            #self.store.save_append(ev)
 
             # Reload + refresh UI
-            self.reload_data()
+            # FIXME: common code?
+            #self.reload_data()
             self.update_day_highlights()
             self.refresh_upcoming()
 
