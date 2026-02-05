@@ -47,6 +47,23 @@ if [ $result -ne 0 ]; then
 fi
 cp "$buildfile" "$outdir"/MicroPythonOS_waveshare-esp32-s3-touch-lcd-2_dev_"$version".bin
 
+./scripts/build_lvgl_micropython.sh esp32 prod matouch-esp32-s3-2-8
+result=$?
+if [ $result -ne 0 ]; then
+	echo "build_lvgl_micropython.sh esp32 prod matouch-esp32-s3-2-8 got error: $result"
+	exit 1
+fi
+cp "$buildfile" "$outdir"/MicroPythonOS_matouch-esp32-s3-2-8_prod_"$version".bin
+cp "$updatefile" "$updatesdir"/MicroPythonOS_matouch-esp32-s3-2-8_prod_"$version".ota
+
+./scripts/build_lvgl_micropython.sh esp32 dev matouch-esp32-s3-2-8
+result=$?
+if [ $result -ne 0 ]; then
+	echo "build_lvgl_micropython.sh esp32 dev matouch-esp32-s3-2-8 got error: $result"
+	exit 1
+fi
+cp "$buildfile" "$outdir"/MicroPythonOS_matouch-esp32-s3-2-8_dev_"$version".bin
+
 ./scripts/build_lvgl_micropython.sh unix dev
 cp "$builddir"/lvgl_micropy_unix "$outdir"/MicroPythonOS_amd64_linux_"$version".elf
 result=$?

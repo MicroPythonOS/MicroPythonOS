@@ -14,6 +14,10 @@ if [ -z "$target" ]; then
 	echo "Example: $0 unix"
 	echo "Example: $0 macOS"
 	echo "Example: $0 esp32"
+	echo ""
+	echo "Note: For TOML-based builds (e.g., MaTouch ESP32-S3), use:"
+	echo "  cd lvgl_micropython && python3 make.py esp32 --toml=display_configs/MaTouch-ESP32-S3-SPI-2.8.toml"
+	echo "  Or use build_lvgl_micropython.sh wrapper script"
 	echo
 	exit 1
 fi
@@ -112,7 +116,8 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	pushd "$codebasedir"/lvgl_micropython/
 	rm -rf lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
+	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789  INDEV=gt911 USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
+	# python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789  INDEV=gt911 USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
 	echo "Grepping..."
 	pwd
