@@ -320,7 +320,8 @@ class Hello(Activity):
         self.refresh_upcoming()
 
     def onResume(self, screen):
-        self.timer = lv.timer_create(self.tick, 1000, None)
+        self.timer = lv.timer_create(self.tick, 30000, None)
+        self.tick(0)
 
     def onPause(self, screen):
         if self.timer:
@@ -340,7 +341,7 @@ class Hello(Activity):
 
         self.today_ymd = ymd_to_int(y, m, d)
 
-        self.lbl_time.set_text("%02d:%02d:%02d" % (hh, mm, ss))
+        self.lbl_time.set_text("%02d:%02d" % (hh, mm))
         self.lbl_date.set_text("%04d-%02d-%02d %s" % (y, m, d, wd))
 
         # Month label
@@ -359,7 +360,7 @@ class Hello(Activity):
         d = lv.display_get_default()
         w = d.get_horizontal_resolution()
 
-        cell = (w - 20) // 7
+        cell = 32
         grid_w = cell * 7 + 8
         grid_h = cell * 6 + 8
 
