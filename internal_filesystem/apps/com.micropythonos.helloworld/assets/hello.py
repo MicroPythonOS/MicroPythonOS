@@ -306,12 +306,12 @@ class Hello(Activity):
         self.grid.set_style_border_width(1, 0)
         self.grid.set_style_pad_all(4, 0)
         self.grid.set_style_radius(6, 0)
-        self.grid.align(lv.ALIGN.TOP_MID, 0, 70)
+        self.grid.align(lv.ALIGN.TOP_LEFT, 0, 70)
 
         # Upcoming events list
         self.upcoming_list = lv.list(self.screen)
-        self.upcoming_list.set_size(160, 120)
-        self.upcoming_list.align(lv.ALIGN.BOTTOM_RIGHT, -4, -4)
+        self.upcoming_list.set_size(320, 120)
+        self.upcoming_list.align(lv.ALIGN.BOTTOM_LEFT, -4, -4)
 
         self.setContentView(self.screen)
 
@@ -446,6 +446,8 @@ class Hello(Activity):
             txt = date_s + " " + e.title
             self.upcoming_list.add_text(txt)
 
+        self.upcoming_list.add_text("that's all folks")
+
     # --------------------
 
     def on_day_clicked(self, day):
@@ -457,9 +459,9 @@ class Hello(Activity):
         y, m, d = int_to_ymd(ymd)
 
         dlg = lv.obj(self.screen)
-        dlg.set_size(240, 180)
+        dlg.set_size(320, 240)
         dlg.center()
-        dlg.set_style_bg_color(lv.color_hex(0x111111), 0)
+        dlg.set_style_bg_color(lv.color_hex(0x8f8f8f), 0)
         dlg.set_style_border_width(2, 0)
         dlg.set_style_radius(10, 0)
 
@@ -474,13 +476,13 @@ class Hello(Activity):
         # Title input
         ti = lv.textarea(dlg)
         ti.set_size(220, 32)
-        ti.align(lv.ALIGN.TOP_MID, 0, 55)
+        ti.align(lv.ALIGN.TOP_MID, 0, 10)
         ti.set_placeholder_text("Title")
 
         # End date offset (days)
         end_lbl = lv.label(dlg)
         end_lbl.set_text("Duration days:")
-        end_lbl.align(lv.ALIGN.TOP_LEFT, 12, 95)
+        end_lbl.align(lv.ALIGN.TOP_LEFT, 12, 65)
 
         dd = lv.dropdown(dlg)
         dd.set_options("1\n2\n3\n4\n5\n6\n7\n10\n14\n21\n30")
