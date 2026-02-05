@@ -13,7 +13,7 @@ echo "Example: $0 com.micropythonos.about"
 
 mpremote=$(readlink -f "$mydir/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
 
-pushd internal_filesystem/
+pushd "$mydir"/../internal_filesystem/
 
 # Maybe also do: import mpos ; mpos.TaskManager.stop()
 echo "Disabling wifi because it writes to REPL from time to time when doing disconnect/reconnect for ADC2..."
