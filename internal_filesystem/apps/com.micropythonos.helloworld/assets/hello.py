@@ -462,7 +462,7 @@ class Hello(Activity):
         y, m, d = int_to_ymd(ymd)
 
         dlg = lv.obj(self.screen)
-        dlg.set_size(320, 240)
+        dlg.set_size(lv.pct(100), lv.pct(100))
         dlg.center()
         dlg.set_style_bg_color(lv.color_hex(0x8f8f8f), 0)
         dlg.set_style_border_width(2, 0)
@@ -474,24 +474,24 @@ class Hello(Activity):
 
         date_lbl = lv.label(dlg)
         date_lbl.set_text("%04d-%02d-%02d" % (y, m, d))
-        date_lbl.align(lv.ALIGN.TOP_MID, 0, 30)
+        date_lbl.align_to(title, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
 
         # Title input
         ti = lv.textarea(dlg)
         ti.set_size(220, 32)
-        ti.align(lv.ALIGN.TOP_MID, 0, 10)
+        ti.align_to(date_lbl, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
         ti.set_placeholder_text("Title")
 
         # End date offset (days)
         end_lbl = lv.label(dlg)
         end_lbl.set_text("Duration days:")
-        end_lbl.align(lv.ALIGN.TOP_LEFT, 12, 65)
+        end_lbl.align_to(ti, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
 
         dd = lv.dropdown(dlg)
         dd.set_options("1\n2\n3\n4\n5\n6\n7\n10\n14\n21\n30")
         dd.set_selected(0)
         dd.set_size(70, 32)
-        dd.align(lv.ALIGN.TOP_RIGHT, -12, 88)
+        dd.align_to(end_lbl, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
 
         # Buttons
         btn_cancel = lv.button(dlg)
