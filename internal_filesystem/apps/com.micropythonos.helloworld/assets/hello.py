@@ -285,7 +285,7 @@ class Hello(Activity):
 
     def onCreate(self):
         self.screen = lv.obj()
-        self.screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        #self.screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Top labels
         self.lbl_time = lv.label(self.screen)
@@ -298,17 +298,18 @@ class Hello(Activity):
         self.lbl_month = lv.label(self.screen)
         self.lbl_month.align(lv.ALIGN.TOP_RIGHT, -6, 10)
 
+        # Upcoming events list
+        self.upcoming_list = lv.list(self.screen)
+        self.upcoming_list.set_size(lv.pct(90), 60)
+        self.upcoming_list.align_to(self.lbl_date, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 10)
+
         # Month grid container
         self.grid = lv.obj(self.screen)
+        self.grid.set_size(lv.pct(90), 60)
         self.grid.set_style_border_width(1, 0)
         self.grid.set_style_pad_all(0, 0)
         self.grid.set_style_radius(6, 0)
-        self.grid.align(lv.ALIGN.TOP_LEFT, 0, 70)
-
-        # Upcoming events list
-        self.upcoming_list = lv.list(self.screen)
-        self.upcoming_list.set_size(320, 120)
-        self.upcoming_list.align(lv.ALIGN.BOTTOM_LEFT, -4, -4)
+        self.grid.align_to(self.upcoming_list, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 10)
 
         self.setContentView(self.screen)
 
@@ -361,7 +362,7 @@ class Hello(Activity):
         d = lv.display_get_default()
         w = d.get_horizontal_resolution()
 
-        cell = 32
+        cell = w // 8
         grid_w = cell * 7 + 8
         grid_h = cell * 6 + 8
 
