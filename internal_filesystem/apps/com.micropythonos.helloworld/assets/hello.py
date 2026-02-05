@@ -25,7 +25,7 @@ except ImportError:
 from mpos import Activity
 
 
-ORG_FILE = "/flash/calendar.org"   # adjust for your device
+ORG_FILE = f"data/calendar.org"   # adjust for your device
 MAX_UPCOMING = 8
 
 
@@ -236,12 +236,10 @@ class OrgCalendarStore:
             return False
 
     def _append_text(self, s):
-        return # FIXME
         with open(self.path, "a") as f:
             f.write(s)
 
     def _write_text(self, s):
-        return # FIXME
         with open(self.path, "w") as f:
             f.write(s)
 
@@ -331,9 +329,10 @@ class Hello(Activity):
     # --------------------
 
     def reload_data(self):
+        print("Loading...")
         self.events = self.store.load()
         # FIXME
-        self.events = [ Event("Test event", 20260207, 20260208) ]
+        #self.events = [ Event("Test event", 20260207, 20260208) ]
 
     def tick(self, t):
         now = time.localtime()
@@ -521,7 +520,7 @@ class Hello(Activity):
 
             ev = Event(title_s.strip(), ymd, end_ymd, None, None)
             self.events.append(ev)
-            #self.store.save_append(ev)
+            self.store.save_append(ev) # FIXME
 
             # Reload + refresh UI
             # FIXME: common code?
