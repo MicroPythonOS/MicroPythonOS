@@ -31,89 +31,20 @@ def detect_board():
     if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
         return "linux"
     elif sys.platform == "esp32":
-        # Force MaTouch for ESP32-S3 with 8MB PSRAM
-        # This bypasses unreliable GT911 touch controller detection at boot
-        try:
-            import esp32
-            if hasattr(esp32, 'spiram_size'):
-                psram_size = esp32.spiram_size()
-                print(f"Detected ESP32-S3 with PSRAM size: {psram_size} bytes ({psram_size // 1048576}MB)")
-                if psram_size == 8388608:  # 8MB PSRAM
-                    board_name = "matouch_esp32_s3_2_8"
-                    print(f"Forcing board selection: {board_name}")
-                    return board_name
-        except Exception as e:
-            print(f"PSRAM detection failed: {e}")
-        
         from machine import Pin, I2C
-        import time
-        
-        # Check for MaTouch ESP32-S3 (GT911 touch on I2C0)
-        # Correct pins from schematic: SDA=39, SCL=38, INT=40, RST=1
-        # GT911 requires specific reset sequence with INT pin control for address selection
-        try:
-            # GT911 address selection via INT pin during reset:
-            # INT=LOW during reset -> address 0x5D
-            # INT=HIGH during reset -> address 0x14
-            
-            # Try address 0x5D first (INT=LOW during reset)
-            tp_rst = Pin(1, Pin.OUT)
-            tp_int = Pin(40, Pin.OUT)
-            
-            # Reset sequence for address 0x5D
-            tp_int.value(0)  # INT LOW for address 0x5D
-            tp_rst.value(0)
-            time.sleep_ms(10)
-            tp_rst.value(1)
-            time.sleep_ms(10)
-            tp_int.init(Pin.IN)  # Release INT pin
-            time.sleep_ms(100)  # Wait for GT911 to initialize
-            
-            # Now try I2C communication with correct pins from schematic
+        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
+        if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
+            return "waveshare_esp32_s3_touch_lcd_2"
+        else:
             i2c0 = I2C(0, sda=Pin(39), scl=Pin(38), freq=400000)
-            devices = set(i2c0.scan())
-            print(f"MaTouch I2C scan (SDA=39, SCL=38): {[hex(d) for d in devices]}")
-            
-            # GT911 touch controller uses addresses 0x5D or 0x14
-            if 0x5D in devices or 0x14 in devices:
-                print("Detected MaTouch ESP32-S3 (GT911 found)")
+            if {0x14} <= set(i2c0.scan()): # GT911 touch
                 return "matouch_esp32_s3_2_8"
-            
-            # Clean up pins
-            tp_rst.init(Pin.IN)
-            tp_int.init(Pin.IN)
-        except Exception as e:
-            print(f"MaTouch detection failed: {e}")
-            import sys
-            sys.print_exception(e)
-        
-        # Check for Waveshare ESP32-S3-Touch-LCD-2
-        try:
-            i2c0 = I2C(0, sda=Pin(48), scl=Pin(47), freq=400000)
-            devices = set(i2c0.scan())
-            print(f"Waveshare I2C scan (SDA=48, SCL=47): {[hex(d) for d in devices]}")
-            # Filter out invalid addresses (valid I2C range is 0x08-0x77)
-            valid_devices = {d for d in devices if 0x08 <= d <= 0x77}
-            if {0x15, 0x6B} <= valid_devices: # touch screen and IMU (at least, possibly more)
-                print("Detected Waveshare ESP32-S3-Touch-LCD-2")
-                return "waveshare_esp32_s3_touch_lcd_2"
-        except Exception as e:
-            print(f"Waveshare detection failed: {e}")
-        
-        # Check for Fri3d 2024
-        try:
-            i2c0 = I2C(0, sda=Pin(9), scl=Pin(18), freq=400000)
-            devices = set(i2c0.scan())
-            print(f"Fri3d I2C scan (SDA=9, SCL=18): {[hex(d) for d in devices]}")
-            if {0x6B} <= devices: # IMU (plus possibly the Communicator's LANA TNY at 0x38)
-                print("Detected Fri3d 2024")
-                return "fri3d_2024"
-            else: # if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
-                print("Detected Fri3d 2026")
-                return "fri3d_2026"
-        except Exception as e:
-            print(f"Fri3d detection failed: {e}")
-            return "fri3d_2026"  # Default fallback
+            else:
+                i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
+                if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+                    return "fri3d_2024"
+                else: # if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
+                    return "fri3d_2026"
 
 
 board = detect_board()
