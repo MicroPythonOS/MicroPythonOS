@@ -37,7 +37,7 @@ def detect_board():
         if {0x14} <= set(i2c0.scan()): # GT911 touch initial "ghost" device
             return "matouch_esp32_s3_2_8"
 
-        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # on the Matouch, this "finds" devices at all addresses 8-119 so do this one before
+        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # on matouch_esp32_s3_2_8, this "finds" devices at all addresses 8-119 so only do this after matouch_esp32_s3_2_8
         if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
             return "waveshare_esp32_s3_touch_lcd_2"
 
