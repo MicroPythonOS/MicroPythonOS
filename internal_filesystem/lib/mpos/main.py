@@ -34,7 +34,7 @@ def detect_board():
         from machine import Pin, I2C
 
         i2c0 = I2C(0, sda=Pin(39), scl=Pin(38), freq=400000)
-        if {0x14} <= set(i2c0.scan()): # GT911 touch
+        if {0x14} <= set(i2c0.scan()): # GT911 touch initial "ghost" device
             return "matouch_esp32_s3_2_8"
 
         i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # on the Matouch, this "finds" devices at all addresses 8-119 so do this one before

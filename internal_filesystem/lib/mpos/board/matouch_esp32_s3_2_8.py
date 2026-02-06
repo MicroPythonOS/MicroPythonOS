@@ -15,8 +15,6 @@ from micropython import const
 import st7789
 import lcd_bus
 import machine
-import gt911
-import i2c
 
 import lvgl as lv
 import task_handler
@@ -32,18 +30,7 @@ LCD_MOSI = 13
 LCD_MISO = 12
 LCD_DC = 21
 LCD_CS = 15
-LCD_RST = -1
 LCD_BL = 48
-
-# Pin configuration for Touch (I2C)
-# Correct pins from hardware schematic:
-# TOUCH_SDA = 39, TOUCH_SCL = 38, TOUCH_INT = 40, TOUCH_RST = 1
-I2C_BUS = 0
-I2C_FREQ = 400000
-TP_SDA = 39
-TP_SCL = 38
-TP_INT = 40
-TP_RST = 1
 
 # Display resolution
 TFT_HOR_RES = 320
@@ -76,12 +63,11 @@ mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
-    display_width=TFT_HOR_RES,
-    display_height=TFT_VER_RES,
+    display_width=TFT_VER_RES,
+    display_height=TFT_HOR_RES,
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
-    reset_pin=LCD_RST,
     backlight_pin=LCD_BL,
     backlight_on_state=st7789.STATE_PWM,
 )
@@ -90,16 +76,27 @@ mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 
-# Touch handling:
-i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_locks=False)
-touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
-indev = gt911.GT911(touch_dev)
+# Touch handling
+# Often times, a "ghost" device seems to show up on the I2C bus at 0x14.
+# Initializing it, although it fails, seems to bring up the "proper" GT911 at address 0x5D (gt911.I2C_ADDR).
+try:
+    import i2c
+    import gt911
+    i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39, freq=400000, use_locks=False)
+    touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x14, reg_bits=gt911.BITS)
+    indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True)
+except Exception as e:
+    print(f"Touch init phase 1 got exception: {e}")
+try:
+    import pointer_framework
+    touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
+    indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180, debug=True)
+except Exception as e:
+    print(f"Touch init phase 2 got exception: {e}")
 
 # Initialize LVGL
 lv.init()
-
-# Set display rotation if needed (adjust based on physical orientation)
-# mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._0)
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 # === BATTERY VOLTAGE MONITORING ===
 # Note: MaTouch ESP32-S3 battery monitoring configuration may vary
