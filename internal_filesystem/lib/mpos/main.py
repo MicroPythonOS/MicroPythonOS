@@ -32,19 +32,21 @@ def detect_board():
         return "linux"
     elif sys.platform == "esp32":
         from machine import Pin, I2C
-        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
+
+        i2c0 = I2C(0, sda=Pin(39), scl=Pin(38), freq=400000)
+        if {0x14} <= set(i2c0.scan()): # GT911 touch
+            return "matouch_esp32_s3_2_8"
+
+        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # on the Matouch, this "finds" devices at all addresses 8-119 so do this one before
         if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
             return "waveshare_esp32_s3_touch_lcd_2"
-        else:
-            i2c0 = I2C(0, sda=Pin(39), scl=Pin(38), freq=400000)
-            if {0x14} <= set(i2c0.scan()): # GT911 touch
-                return "matouch_esp32_s3_2_8"
-            else:
-                i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
-                if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
-                    return "fri3d_2024"
-                else: # if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
-                    return "fri3d_2026"
+
+        i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
+        if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+            return "fri3d_2024"
+
+        # default: if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
+        return "fri3d_2026"
 
 
 board = detect_board()
