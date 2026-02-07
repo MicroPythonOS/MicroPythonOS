@@ -1,0 +1,24 @@
+{
+"name": "Calendar",
+"publisher": "Pavemicropythonos",
+"short_description": "Calendar",
+"long_description": "Simple calendar app.",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/icons/com.micropythonos.helloworld_0.0.5_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/mpks/com.micropythonos.helloworld_0.0.5.mpk",
+"fullname": "com.micropythonos.helloworld",
+"version": "0.0.1",
+"category": "development",
+"activities": [
+    {
+      "entrypoint": "assets/hello.py",
+      "classname": "Hello",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
