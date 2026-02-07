@@ -97,7 +97,7 @@ if [ "$target" == "esp32" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
 	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
-	# Build for https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.
+	# Build for https://https://docs.m5stack.com/en/core/fire_v2.7.
 	# See https://github.com/lvgl-micropython/lvgl_micropython
 	# --ota: support Over-The-Air updates
 	# --partition size: both OTA partitions are 4MB
@@ -112,7 +112,7 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	pushd "$codebasedir"/lvgl_micropython/
 	rm -rf lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
+	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC BOARD_VARIANT=SPIRAM DISPLAY=ili9341 USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
 	popd
 	echo "Grepping..."
 	pwd
