@@ -1,7 +1,7 @@
 
 print("matouch_esp32_s3_2_8.py initialization")
 # Hardware initialization for Makerfabs MaTouch ESP32-S3 SPI 2.8" with Camera
-# Manufacturer's website: https://www.makerfabs.com/matouch-esp32-s3.html
+# Manufacturer's website: https://www.makerfabs.com/matouch-esp32-s3-spi-ips-2-8-with-camera-ov3660.html
 # Hardware Specifications:
 # - MCU: ESP32-S3 with 16MB Flash, 8MB Octal PSRAM
 # - Display: 2.8" IPS LCD, 320x240 resolution, ST7789 driver, SPI interface
@@ -77,45 +77,25 @@ mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 
 # Touch handling
-# Often times, a "ghost" device seems to show up on the I2C bus at 0x14.
-# Initializing it, although it fails, seems to bring up the "proper" GT911 at address 0x5D (gt911.I2C_ADDR).
 try:
     import i2c
-    import gt911
-    i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39, freq=400000, use_locks=False)
-    touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x14, reg_bits=gt911.BITS)
-    indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True)
-except Exception as e:
-    print(f"Touch init phase 1 got exception: {e}")
-try:
-    import pointer_framework
+    i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39)
+    import mpos.indev.gt911 as gt911
     touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
-    indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180, debug=True)
+    indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True) # remove debug because it's slower
 except Exception as e:
-    print(f"Touch init phase 2 got exception: {e}")
+    print(f"Touch init got exception: {e}")
 
 # Initialize LVGL
 lv.init()
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
-# === BATTERY VOLTAGE MONITORING ===
-# Note: MaTouch ESP32-S3 battery monitoring configuration may vary
-# This is a placeholder - adjust ADC pin and conversion formula based on actual hardware
-from mpos import BatteryManager
+# TODO: initialize SDIO (instead of SPI) SD card with:
+# CMD = 2
+# SCLK = 42
+# D0 = 41
+#import mpos.sdcard
+#mpos.sdcard.init(spi_bus, cs_pin=14)
 
-def adc_to_voltage(adc_value):
-    """
-    Convert raw ADC value to battery voltage.
-    Currently uses simple linear scaling: voltage = adc * 0.00262
-    
-    This should be calibrated with actual battery voltages and ADC readings.
-    To calibrate: measure actual battery voltages and corresponding ADC readings,
-    then fit a linear or polynomial function.
-    """
-    return adc_value * 0.00262
-
-# Note: Adjust ADC pin number based on actual hardware schematic
-# BatteryManager.init_adc(5, adc_to_voltage)
 
 # === AUDIO HARDWARE ===
 # Note: MaTouch ESP32-S3 has no buzzer or I2S audio hardware

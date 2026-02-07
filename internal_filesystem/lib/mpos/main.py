@@ -32,9 +32,11 @@ def detect_board():
         return "linux"
     elif sys.platform == "esp32":
         from machine import Pin, I2C
+        return "matouch_esp32_s3_2_8" # i2c scan confuses the camera so hard-code for now
 
         i2c0 = I2C(0, sda=Pin(39), scl=Pin(38), freq=400000)
-        if {0x14} <= set(i2c0.scan()): # GT911 touch initial "ghost" device
+        devices = set(i2c0.scan()) # causes a "ghost" device to appear on 0x20 and breaks the camera
+        if {0x14} <= devices or {0x5D} <= devices: # "ghost" device or real GT911
             return "matouch_esp32_s3_2_8"
 
         i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # on matouch_esp32_s3_2_8, this "finds" devices at all addresses 8-119 so only do this after matouch_esp32_s3_2_8

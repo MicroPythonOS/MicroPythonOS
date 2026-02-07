@@ -414,13 +414,13 @@ class CameraActivity(Activity):
             for attempt in range(max_attempts):
                 try:
                     cam = Camera(
-                        data_pins=[12,13,15,11,14,10,7,2],
-                        vsync_pin=6,
-                        href_pin=4,
-                        sda_pin=21,
-                        scl_pin=16,
-                        pclk_pin=9,
-                        xclk_pin=8,
+                        data_pins=[7,5,4,6,16,8,3,46],
+                        vsync_pin=11,
+                        href_pin=10,
+                        sda_pin=39,
+                        scl_pin=38,
+                        pclk_pin=17,
+                        xclk_pin=9,
                         xclk_freq=20000000,
                         powerdown_pin=-1,
                         reset_pin=-1,
