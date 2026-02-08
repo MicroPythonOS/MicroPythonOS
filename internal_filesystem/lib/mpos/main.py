@@ -31,7 +31,24 @@ def detect_board():
     if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
         return "linux"
     elif sys.platform == "esp32":
-        return "m5stack_fire"
+        from machine import Pin, I2C
+        # Check for ESP32 boards first to avoid conflicts with SPI flash reserved pins (GPIO6 to GPIO11)
+        try:
+            i2c0 = I2C(0, sda=Pin(21), scl=Pin(22))
+            if {0x68} <= set(i2c0.scan()):  # IMU (MPU6886)
+                return "m5stack_fire"
+        except ValueError:  # GPIO22 doesn't exist in ESP32-S3
+            pass
+        # Check for ESP32-S3 boards
+        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
+        if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
+            return "waveshare_esp32_s3_touch_lcd_2"
+        else:
+            i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
+            if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+                return "fri3d_2024"
+            else: # if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
+                return "fri3d_2026"
 
 
 board = detect_board()
