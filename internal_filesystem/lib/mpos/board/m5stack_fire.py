@@ -20,7 +20,7 @@ LCD_DC = 27
 LCD_CS = 14
 LCD_BL = 32
 LCD_RST = 33
-LCD_TYPE = 3  # ILI9341 type 3 (M5Stack-Fire ILI9342)
+LCD_TYPE = 2  # ILI9341 type 2
 
 TFT_HOR_RES=320
 TFT_VER_RES=240
@@ -37,7 +37,16 @@ display_bus = lcd_bus.SPIBus(
     cs=LCD_CS
 )
 
-mpos.ui.main_display = ili9341.ILI9341(
+# M5Stack-Fire ILI9342 uses ILI9341 type 2 with a modified orientation table.
+class ILI9341(ili9341.ILI9341):
+    _ORIENTATION_TABLE = (
+        0x00,
+        0x40 | 0x20,  # _MADCTL_MX | _MADCTL_MV
+        0x80 | 0x40,  # _MADCTL_MY | _MADCTL_MX
+        0x80 | 0x20   # _MADCTL_MY | _MADCTL_MV
+    )
+
+mpos.ui.main_display = ILI9341(
     data_bus=display_bus,
     display_width=TFT_HOR_RES,
     display_height=TFT_VER_RES,
