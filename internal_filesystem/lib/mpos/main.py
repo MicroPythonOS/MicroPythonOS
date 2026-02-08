@@ -26,30 +26,51 @@ def init_rootscreen():
     img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)
     img.center()
 
+def single_address_i2c_scan(i2c_bus, address):
+    """
+    Scan a specific I2C address to check if a device is present.
+
+    Args:
+        i2c_bus: An I2C bus object (machine.I2C instance)
+        address: Integer address to scan (0-127)
+
+    Returns:
+        True if a device responds at the specified address, False otherwise
+    """
+    try:
+        # Attempt to write a single byte to the address
+        # This will raise an exception if no device responds
+        i2c_bus.writeto(address, b'')
+        return True
+    except OSError:
+        # No device at this address
+        return False
+    except Exception as e:
+        # Handle any other exceptions gracefully
+        print(f"single_address_i2c_scan: error scanning address 0x{address:02x}: {e}")
+        return False
+
 def detect_board():
     import sys
     if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
         return "linux"
     elif sys.platform == "esp32":
         from machine import Pin, I2C
-        return "matouch_esp32_s3_2_8" # i2c scan confuses the camera so hard-code for now
 
-        i2c0 = I2C(0, sda=Pin(39), scl=Pin(38), freq=400000)
-        devices = set(i2c0.scan()) # causes a "ghost" device to appear on 0x20 and breaks the camera
-        if {0x14} <= devices or {0x5D} <= devices: # "ghost" device or real GT911
-            return "matouch_esp32_s3_2_8"
-
-        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # on matouch_esp32_s3_2_8, this "finds" devices at all addresses 8-119 so only do this after matouch_esp32_s3_2_8
-        if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
+        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
+        if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
             return "waveshare_esp32_s3_touch_lcd_2"
 
+        i2c0 = I2C(0, sda=Pin(39), scl=Pin(38))
+        if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
+            return "matouch_esp32_s3_2_8"
+
         i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
-        if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+        if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
             return "fri3d_2024"
 
-        # default: if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
+        # default: if single_address_i2c_scan(i2c0, 0x6A): # IMU but currently not installed
         return "fri3d_2026"
-
 
 board = detect_board()
 print(f"Initializing {board} hardware")
