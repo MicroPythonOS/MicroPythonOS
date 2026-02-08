@@ -31,16 +31,7 @@ def detect_board():
     if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
         return "linux"
     elif sys.platform == "esp32":
-        from machine import Pin, I2C
-        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47))
-        if {0x15, 0x6B} <= set(i2c0.scan()): # touch screen and IMU (at least, possibly more)
-            return "waveshare_esp32_s3_touch_lcd_2"
-        else:
-            i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
-            if {0x6B} <= set(i2c0.scan()): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
-                return "fri3d_2024"
-            else: # if {0x6A} <= set(i2c0.scan()): # IMU (plus a few others, to be added later, but this should work)
-                return "fri3d_2026"
+        return "m5stack_fire"
 
 
 board = detect_board()
