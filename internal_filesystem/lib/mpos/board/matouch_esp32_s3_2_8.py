@@ -83,8 +83,19 @@ try:
     import mpos.indev.gt911 as gt911
     touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
     indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True) # remove debug because it's slower
+    from mpos import InputManager
+    InputManager.register_indev(indev)
 except Exception as e:
     print(f"Touch init got exception: {e}")
+
+# IO0 Button interrupt handler
+def io0_interrupt_handler(pin):
+    print("IO0 button pressed!")
+    from mpos import back_screen
+    back_screen()
+
+io0_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP)
+io0_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=io0_interrupt_handler)
 
 # Initialize LVGL
 lv.init()
