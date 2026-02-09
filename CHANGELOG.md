@@ -2,7 +2,12 @@
 =====
 
 Builtin Apps:
-- OSUpdate app: replace "force update" checkbox with improved button labels
+- Launcher: fit at least 3 apps per row on a 240px display
+- OSUpdate: replace "force update" checkbox with improved button labels
+
+OS:
+- Scale MicroPythonOS boot logo down if necessary
+- Additional board support: MaTouch ESP32-S3 SPI IPS 2.8" with Camera OV3660
 
 0.7.1
 =====
