@@ -138,7 +138,15 @@ class CameraActivity(Activity):
         # Init camera:
         self.cam = self.init_internal_cam(self.width, self.height)
         if self.cam:
-            self.image.set_rotation(900) # internal camera is rotated 90 degrees
+            try:
+                from mpos import InputManager
+                indev = InputManager.list_indevs()[0]
+                indev.enable(False)
+                InputManager.unregister_indev(indev)
+                print("input disabled")
+            except Exception as e:
+                print(f"disabling indev got exception: {e}")
+            #self.image.set_rotation(900) # internal camera is rotated 90 degrees
             # Apply saved camera settings, only for internal camera for now:
             self.apply_camera_settings(self.scanqr_prefs if self.scanqr_mode else self.prefs, self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
         else:
@@ -166,7 +174,7 @@ class CameraActivity(Activity):
             # Power off, otherwise it keeps using a lot of current
             try:
                 from machine import Pin, I2C
-                i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
+                i2c = I2C(1, scl=Pin(38), sda=Pin(39))  # Adjust pins and frequency
                 #devices = i2c.scan()
                 #print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
                 camera_addr = 0x3C # for OV5640
@@ -177,6 +185,28 @@ class CameraActivity(Activity):
                 i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
             except Exception as e:
                 print(f"Warning: powering off camera got exception: {e}")
+            import time
+            time.sleep_ms(100)
+            try:
+                # hardware reset might work too, but doesn't seem to:
+                #from mpos import InputManager
+                #indev = InputManager.list_indevs()[0]
+                #indev.hw_reset()
+                #indev.enable(True)
+                #print("input enabled")
+                #time.sleep(1)
+                import i2c
+                i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39)
+                import mpos.indev.gt911 as gt911
+                touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
+                indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True) # remove debug because it's slower
+                print("new indev created")
+                from mpos import InputManager
+                InputManager.register_indev(indev)
+                print("new indev registered")
+            except Exception as e:
+                print(f"Indev enable got exception: {e}")
+
         self.cam = None
         if self.image_dsc: # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
             print("emptying self.current_cam_buffer...")
