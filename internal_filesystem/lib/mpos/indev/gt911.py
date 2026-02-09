@@ -18,6 +18,12 @@ _CMD_READ_DATA = const(0x01)
 
 _ESD_CHECK_REG = const(0x8041)
 
+_MODULE_SWITCH_1 = const(0x804D)
+_CMD_INT_RISING_EDGE = const(0x00)
+_CMD_INT_FALLING_EDGE = const(0x01)
+_CMD_INT_LOW_LEVEL = const(0x02)
+_CMD_INT_HIGH_LEVEL = const(0x03)
+
 _STATUS_REG = const(0x814E)
 _POINT_1_REG = const(0x8150)
 
@@ -28,7 +34,8 @@ _VENDOR_ID_REG = const(0x814A)
 _X_CORD_RES_REG = const(0x8146)
 _Y_CORD_RES_REG = const(0x8148)
 
-I2C_ADDR = 0x5D
+#I2C_ADDR = 0x5D
+I2C_ADDR = 0x14
 BITS = 16
 
 _ADDR2 = const(0x14)
@@ -76,12 +83,13 @@ class GT911(pointer_framework.PointerDriver):
         self.__x = 0
         self.__y = 0
         self.__last_state = self.RELEASED
+        self._interrupt_flag = False
 
         if isinstance(reset_pin, int):
             reset_pin = machine.Pin(reset_pin, machine.Pin.OUT)
 
         if isinstance(interrupt_pin, int):
-            interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.OUT)
+            interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.IN)
 
         self._reset_pin = reset_pin
         self._interrupt_pin = interrupt_pin
@@ -91,19 +99,24 @@ class GT911(pointer_framework.PointerDriver):
             touch_cal=touch_cal, startup_rotation=startup_rotation, debug=debug
         )
 
+    def _interrupt_handler(self, pin):
+        """Interrupt handler called when touch event occurs"""
+        self._interrupt_flag = True
+
     def hw_reset(self):
         if self._interrupt_pin and self._reset_pin:
             self._interrupt_pin.init(self._interrupt_pin.OUT)
             self._interrupt_pin(0)
             self._reset_pin(0)
             time.sleep_ms(10)  # NOQA
-            self._interrupt_pin(0)
+            self._interrupt_pin(1) # only for 0x14 address
+            #self._interrupt_pin(0)
             time.sleep_ms(1)  # NOQA
             self._reset_pin(1)
             time.sleep_ms(5)  # NOQA
             self._interrupt_pin(0)
             time.sleep_ms(50)  # NOQA
-            self._interrupt_pin.init(self._interrupt_pin.IN)
+            self._interrupt_pin.init(mode=self._interrupt_pin.IN)
             time.sleep_ms(50)  # NOQA
 
         self._write_reg(_ESD_CHECK_REG, 0x00)
@@ -132,6 +145,16 @@ class GT911(pointer_framework.PointerDriver):
         x, y = self.hw_size
         print(f'Touch resolution: width={x}, height={y}')
 
+        # Set up interrupt handler if interrupt pin is available
+        if self._interrupt_pin:
+            self._interrupt_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self._interrupt_handler)
+            # Setting _MODULE_SWITCH_1 will "hang" the touch input after a second or 2 of initial swipe
+            #self._write_reg(_MODULE_SWITCH_1, _CMD_INT_FALLING_EDGE) # stops working
+            #self._write_reg(_MODULE_SWITCH_1, _CMD_INT_RISING_EDGE) # stops working
+            # Unknown IRQ_LOW_LEVEL:
+            #self._interrupt_pin.irq(trigger=machine.Pin.IRQ_LOW_LEVEL, handler=self._interrupt_handler)
+            #self._write_reg(_MODULE_SWITCH_1, _CMD_INT_LOW_LEVEL)
+
     @property
     def hw_size(self):
         self._read_reg(_X_CORD_RES_REG, 2)
@@ -153,6 +176,16 @@ class GT911(pointer_framework.PointerDriver):
         return gt911_extension.GT911Extension(self, self._device)
 
     def _get_coords(self):
+        # If interrupt pin is available, only fetch data when interrupt flag is set
+        if self._interrupt_pin and not self._interrupt_flag:
+            return self.__last_state, self.__x, self.__y
+
+        # Clear interrupt flag before reading
+        if self._interrupt_pin:
+            self._interrupt_flag = False
+            #self._write_reg(_MODULE_SWITCH_1, _CMD_INT_FALLING_EDGE)
+            #print("[GT911] Interrupt-triggered read")
+
         self._read_reg(_STATUS_REG, 1)
         touch_cnt = self._rx_buf[0] & 0x0F
         status = self._rx_buf[0] & 0x80
