@@ -23,6 +23,8 @@ def init_rootscreen():
     # Show logo
     img = lv.image(screen)
     img.set_src("M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png") # from the MPOS-logo repo
+    if width < 296:
+        img.set_scale(int(256 * width/296))
     img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)
     img.center()
 
