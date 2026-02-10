@@ -114,8 +114,8 @@ class GT911(pointer_framework.PointerDriver):
             self._reset_pin(0)
             time.sleep_ms(10)  # NOQA
             if self._interrupt_pin:
-                self._interrupt_pin(1) # only for 0x14 address
-                #self._interrupt_pin(0)
+                self._interrupt_pin(1) # causes it to stay on 0x14 address
+                #self._interrupt_pin(0) # causes it to go to 0x5D address
             time.sleep_ms(1)  # NOQA
             self._reset_pin(1)
             time.sleep_ms(5)  # NOQA

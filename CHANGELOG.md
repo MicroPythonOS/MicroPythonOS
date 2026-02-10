@@ -12,6 +12,7 @@ Frameworks:
 OS:
 - Scale MicroPythonOS boot logo down if necessary
 - Add board support: MaTouch ESP32-S3 SPI IPS 2.8' with Camera OV3660
+- UI: Don't show battery icon if not present
 
 0.7.1
 =====

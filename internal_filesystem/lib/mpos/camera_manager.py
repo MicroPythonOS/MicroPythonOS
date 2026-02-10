@@ -248,7 +248,7 @@ class CameraManager:
         return resolution_map.get((width, height), FrameSize.R240X240)
 
     @staticmethod
-    def ov_apply_camera_settings(self, cam, prefs):
+    def ov_apply_camera_settings(cam, prefs):
         if not cam or not prefs:
             print("ov_apply_camera_settings: Skipping because invalid prefs or cam object")
             return
