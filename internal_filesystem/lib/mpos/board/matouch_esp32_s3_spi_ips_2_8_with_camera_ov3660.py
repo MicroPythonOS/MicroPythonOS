@@ -31,6 +31,8 @@ LCD_DC = 21
 LCD_CS = 15
 LCD_BL = 48
 
+I2C_FREQ = 400000
+
 # Display resolution
 TFT_HOR_RES = 320
 TFT_VER_RES = 240
@@ -76,16 +78,18 @@ mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 
 # Touch handling
-try:
-    import i2c
-    i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39)
-    import mpos.indev.gt911 as gt911
-    touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
-    indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=False) # debug makes it slower
-    from mpos import InputManager
-    InputManager.register_indev(indev)
-except Exception as e:
-    print(f"Touch init got exception: {e}")
+def init_touch():
+    try:
+        import i2c
+        i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39, freq=I2C_FREQ, use_locks=False)
+        import mpos.indev.gt911 as gt911
+        touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
+        indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=False) # debug makes it slower
+        from mpos import InputManager
+        InputManager.register_indev(indev)
+    except Exception as e:
+        print(f"Touch init got exception: {e}")
+init_touch()
 
 # IO0 Button interrupt handler
 def io0_interrupt_handler(pin):
@@ -160,18 +164,7 @@ def init_cam(width, height, colormode):
                 print("input disabled")
             except Exception as e:
                 print(f"init_cam: disabling indev got exception: {e}")
-            try:
-                import i2c
-                i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39)
-                import mpos.indev.gt911 as gt911
-                touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
-                indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True) # remove debug because it's slower
-                print("new indev created")
-                from mpos import InputManager
-                InputManager.register_indev(indev)
-                print("new indev registered")
-            except Exception as e:
-                print(f"Indev enable got exception: {e}")
+            init_touch()
 
     except Exception as e:
         print(f"init_cam exception: {e}")
@@ -194,18 +187,7 @@ def deinit_cam(cam):
         print(f"Warning: powering off camera got exception: {e}")
     import time
     time.sleep_ms(100)
-    try:
-        import i2c
-        i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39)
-        import mpos.indev.gt911 as gt911
-        touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
-        indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True) # remove debug because it's slower
-        print("new indev created")
-        from mpos import InputManager
-        InputManager.register_indev(indev)
-        print("new indev registered")
-    except Exception as e:
-        print(f"Indev enable got exception: {e}")
+    init_touch()
 
 def capture_cam(cam_obj, colormode):
     return cam_obj.capture()
