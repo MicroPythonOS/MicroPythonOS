@@ -212,7 +212,7 @@ def apply_cam_settings(cam_obj, prefs):
 # MaTouch ESP32-S3 has OV3660 camera (3MP, up to 2048x1536)
 # Camera pins are available but initialization is handled by the camera driver
 CameraManager.add_camera(CameraManager.Camera(
-    lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
+    lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
     name="OV3660",
     vendor="OmniVision",
     init=init_cam,
