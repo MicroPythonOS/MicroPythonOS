@@ -109,6 +109,100 @@ sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
 # LightsManager will not be initialized (functions will return False)
 
 # === CAMERA HARDWARE ===
+def init_cam(width, height, colormode):
+    try:
+        from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
+
+        # Map resolution to FrameSize enum using CameraManager
+        frame_size = CameraManager.resolution_to_framesize(width, height)
+        print(f"init_internal_cam: Using FrameSize {frame_size} for {width}x{height}")
+
+        # Try to initialize, with one retry for I2C poweroff issue
+        max_attempts = 3
+        toreturn = None
+        for attempt in range(max_attempts):
+            try:
+                cam = Camera(
+                    data_pins=[7,5,4,6,16,8,3,46],
+                    vsync_pin=11,
+                    href_pin=10,
+                    sda_pin=39,
+                    scl_pin=38,
+                    pclk_pin=17,
+                    xclk_pin=9,
+                    xclk_freq=20000000,
+                    powerdown_pin=-1,
+                    reset_pin=-1,
+                    pixel_format=PixelFormat.RGB565 if colormode else PixelFormat.GRAYSCALE,
+                    frame_size=frame_size,
+                    #grab_mode=GrabMode.WHEN_EMPTY,
+                    grab_mode=GrabMode.LATEST,
+                    fb_count=1
+                )
+                cam.set_vflip(True)
+
+                toreturn=cam
+                break
+            except Exception as e:
+                if attempt < max_attempts-1:
+                    print(f"init_cam attempt {attempt} failed: {e}, retrying...")
+                else:
+                    print(f"init_cam final exception: {e}")
+                    break
+
+        if toreturn:
+            try:
+                from mpos import InputManager
+                indev = InputManager.list_indevs()[0]
+                indev.enable(False)
+                InputManager.unregister_indev(indev)
+                print("input disabled")
+            except Exception as e:
+                print(f"disabling indev got exception: {e}")
+
+        return toreturn
+    except Exception as e:
+        print(f"init_cam exception: {e}")
+        return None
+
+def deinit_cam(cam):
+    cam.deinit()
+    # Power off, otherwise it keeps using a lot of current
+    try:
+        from machine import Pin, I2C
+        i2c = I2C(1, scl=Pin(38), sda=Pin(39))  # Adjust pins and frequency
+        #devices = i2c.scan()
+        #print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
+        camera_addr = 0x3C # for OV5640
+        reg_addr = 0x3008
+        reg_high = (reg_addr >> 8) & 0xFF  # 0x30
+        reg_low = reg_addr & 0xFF         # 0x08
+        power_off_command = 0x42 # Power off command
+        i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
+    except Exception as e:
+        print(f"Warning: powering off camera got exception: {e}")
+    import time
+    time.sleep_ms(100)
+    try:
+        # hardware reset might work too, but doesn't seem to:
+        #from mpos import InputManager
+        #indev = InputManager.list_indevs()[0]
+        #indev.hw_reset()
+        #indev.enable(True)
+        #print("input enabled")
+        #time.sleep(1)
+        import i2c
+        i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39)
+        import mpos.indev.gt911 as gt911
+        touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
+        indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True) # remove debug because it's slower
+        print("new indev created")
+        from mpos import InputManager
+        InputManager.register_indev(indev)
+        print("new indev registered")
+    except Exception as e:
+        print(f"Indev enable got exception: {e}")
+
 from mpos import CameraManager
 
 # MaTouch ESP32-S3 has OV3660 camera (3MP, up to 2048x1536)
@@ -116,13 +210,13 @@ from mpos import CameraManager
 CameraManager.add_camera(CameraManager.Camera(
     lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
     name="OV3660",
-    vendor="OmniVision"
+    vendor="OmniVision",
+    init=init_cam,
+    deinit=deinit_cam,
 ))
 
 print("matouch_esp32_s3_2_8.py finished")
 print("Board capabilities:")
 print("  - Display: 320x240 ST7789 with GT911 touch")
 print("  - Camera: OV3660 (3MP)")
-print("  - No IMU sensor")
 print("  - No LEDs")
-print("  - No audio hardware")

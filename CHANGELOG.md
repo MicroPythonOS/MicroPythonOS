@@ -6,7 +6,8 @@ Builtin Apps:
 - OSUpdate: replace "force update" checkbox with improved button labels
 
 Frameworks:
-- SDCard framework: add support for SDIO/SD/MMC mode
+- SDCard: add support for SDIO/SD/MMC mode
+- CameraManager: add init and deinit callbacks
 
 OS:
 - Scale MicroPythonOS boot logo down if necessary

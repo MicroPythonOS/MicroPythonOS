@@ -8,7 +8,7 @@ except Exception as e:
 
 from ..time import epoch_seconds
 from .camera_settings import CameraSettingsActivity
-from .camera_manager import CameraManager
+from ..camera_manager import CameraManager
 from .. import ui as mpos_ui
 from ..app.activity import Activity
 
@@ -137,17 +137,8 @@ class CameraActivity(Activity):
 
     def start_cam(self):
         # Init camera:
-        self.cam = self.init_internal_cam(self.width, self.height)
+        self.cam = CameraManager.get_cameras()[0].init(self.width, self.height, self.colormode)
         if self.cam:
-            try:
-                from mpos import InputManager
-                indev = InputManager.list_indevs()[0]
-                indev.enable(False)
-                InputManager.unregister_indev(indev)
-                print("input disabled")
-            except Exception as e:
-                print(f"disabling indev got exception: {e}")
-            #self.image.set_rotation(900) # internal camera is rotated 90 degrees
             # Apply saved camera settings, only for internal camera for now:
             self.apply_camera_settings(self.scanqr_prefs if self.scanqr_mode else self.prefs, self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
         else:
@@ -171,43 +162,7 @@ class CameraActivity(Activity):
         if self.use_webcam:
             webcam.deinit(self.cam)
         elif self.cam:
-            self.cam.deinit()
-            # Power off, otherwise it keeps using a lot of current
-            try:
-                from machine import Pin, I2C
-                i2c = I2C(1, scl=Pin(38), sda=Pin(39))  # Adjust pins and frequency
-                #devices = i2c.scan()
-                #print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
-                camera_addr = 0x3C # for OV5640
-                reg_addr = 0x3008
-                reg_high = (reg_addr >> 8) & 0xFF  # 0x30
-                reg_low = reg_addr & 0xFF         # 0x08
-                power_off_command = 0x42 # Power off command
-                i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
-            except Exception as e:
-                print(f"Warning: powering off camera got exception: {e}")
-            import time
-            time.sleep_ms(100)
-            try:
-                # hardware reset might work too, but doesn't seem to:
-                #from mpos import InputManager
-                #indev = InputManager.list_indevs()[0]
-                #indev.hw_reset()
-                #indev.enable(True)
-                #print("input enabled")
-                #time.sleep(1)
-                import i2c
-                i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39)
-                import mpos.indev.gt911 as gt911
-                touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
-                indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=True) # remove debug because it's slower
-                print("new indev created")
-                from mpos import InputManager
-                InputManager.register_indev(indev)
-                print("new indev registered")
-            except Exception as e:
-                print(f"Indev enable got exception: {e}")
-
+            CameraManager.get_cameras()[0].deinit(self.cam)
         self.cam = None
         if self.image_dsc: # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
             print("emptying self.current_cam_buffer...")
@@ -399,51 +354,6 @@ class CameraActivity(Activity):
         if not self.use_webcam and self.cam:
             self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
 
-    def init_internal_cam(self, width, height):
-        """Initialize internal camera with specified resolution.
-    
-        Automatically retries once if initialization fails (to handle I2C poweroff issue).
-        """
-        try:
-            from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
-    
-            # Map resolution to FrameSize enum using CameraManager
-            frame_size = CameraManager.resolution_to_framesize(width, height)
-            print(f"init_internal_cam: Using FrameSize {frame_size} for {width}x{height}")
-    
-            # Try to initialize, with one retry for I2C poweroff issue
-            max_attempts = 3
-            for attempt in range(max_attempts):
-                try:
-                    cam = Camera(
-                        data_pins=[7,5,4,6,16,8,3,46],
-                        vsync_pin=11,
-                        href_pin=10,
-                        sda_pin=39,
-                        scl_pin=38,
-                        pclk_pin=17,
-                        xclk_pin=9,
-                        xclk_freq=20000000,
-                        powerdown_pin=-1,
-                        reset_pin=-1,
-                        pixel_format=PixelFormat.RGB565 if self.colormode else PixelFormat.GRAYSCALE,
-                        frame_size=frame_size,
-                        #grab_mode=GrabMode.WHEN_EMPTY,
-                        grab_mode=GrabMode.LATEST,
-                        fb_count=1
-                    )
-                    cam.set_vflip(True)
-                    return cam
-                except Exception as e:
-                    if attempt < max_attempts-1:
-                        print(f"init_cam attempt {attempt} failed: {e}, retrying...")
-                    else:
-                        print(f"init_cam final exception: {e}")
-                        return None
-        except Exception as e:
-            print(f"init_cam exception: {e}")
-            return None
-
     def print_qr_buffer(self, buffer):
         try:
             # Try to decode buffer as a UTF-8 string
@@ -583,8 +493,6 @@ class CameraActivity(Activity):
     
         except Exception as e:
             print(f"Error applying camera settings: {e}")
-    
-
 
 
 """
