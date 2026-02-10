@@ -100,13 +100,9 @@ io0_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=io0_interrupt_handler)
 # Initialize LVGL
 lv.init()
 
-# TODO: initialize SDIO (instead of SPI) SD card with:
-# CMD = 2
-# SCLK = 42
-# D0 = 41
-#import mpos.sdcard
-#mpos.sdcard.init(spi_bus, cs_pin=14)
-
+# Initialize SD card in SDIO mode
+from mpos import sdcard
+sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
 
 # === AUDIO HARDWARE ===
 # Note: MaTouch ESP32-S3 has no buzzer or I2S audio hardware
