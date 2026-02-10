@@ -70,6 +70,10 @@ $mpremote fs cp ../internal_filesystem_excluded/data/com.micropythonos.system.wi
 $mpremote fs mkdir :/apps
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -maxdepth 1 -type l | while read symlink; do
+        if echo $symlink | grep quasiboats; then
+		echo "Skipping $symlink because it's needlessly big..."
+		continue
+	fi
 	echo "Handling symlink $symlink"
 	$mpremote fs mkdir :/"$symlink"
 	$mpremote fs cp -r "$symlink"/* :/"$symlink"/
