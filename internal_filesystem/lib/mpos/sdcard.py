@@ -3,17 +3,97 @@ import machine
 import vfs
 
 class SDCardManager:
-    def __init__(self, spi_bus, cs_pin):
+    def __init__(self, mode='spi', spi_bus=None, cs_pin=None, cmd_pin=None, clk_pin=None,
+                 d0_pin=None, d1_pin=None, d2_pin=None, d3_pin=None, slot=1, width=4, freq=20000000):
         self._sdcard = None
+        self._mode = None
+        
+        # Auto-detect mode: if SDIO pins provided, use SDIO; otherwise use SPI
+        if cmd_pin is not None or clk_pin is not None or d0_pin is not None:
+            self._mode = 'sdio'
+        else:
+            self._mode = 'spi'
+        
+        # Allow explicit mode override
+        if mode in ('spi', 'sdio'):
+            self._mode = mode
+        
+        print(f"SD card mode: {self._mode.upper()}")
+        
+        if self._mode == 'spi':
+            self._init_spi(spi_bus, cs_pin)
+        elif self._mode == 'sdio':
+            self._init_sdio(cmd_pin, clk_pin, d0_pin, d1_pin, d2_pin, d3_pin, slot, width, freq)
+    
+    def _init_spi(self, spi_bus, cs_pin):
+        """Initialize SD card in SPI mode."""
+        if spi_bus is None or cs_pin is None:
+            print("ERROR: SPI mode requires spi_bus and cs_pin parameters")
+            print("  - Provide: init(spi_bus=machine.SPI(...), cs_pin=pin_number)")
+            return
+        
         try:
             self._sdcard = machine.SDCard(spi_bus=spi_bus, cs=cs_pin)
             self._sdcard.info()
-            print("SD card initialized successfully")
+            print("SD card initialized successfully in SPI mode")
         except Exception as e:
-            print(f"ERROR: Failed to initialize SD card: {e}")
+            print(f"ERROR: Failed to initialize SD card in SPI mode: {e}")
             print("  - Possible causes: Invalid SPI configuration, SD card not inserted, faulty wiring, or firmware issue")
             print(f"  - Check: SPI pins for the SPI bus, card insertion, VCC (3.3V/5V), GND")
             print("  - Try: Hard reset ESP32, test with known-good SD card")
+    
+    def _init_sdio(self, cmd_pin, clk_pin, d0_pin, d1_pin=None, d2_pin=None, d3_pin=None,
+                   slot=1, width=4, freq=20000000):
+        """Initialize SD card in SDIO mode."""
+        # Validate required SDIO parameters
+        if cmd_pin is None or clk_pin is None or d0_pin is None:
+            print("ERROR: SDIO mode requires cmd_pin, clk_pin, and d0_pin parameters")
+            print("  - Provide: init(mode='sdio', cmd_pin=X, clk_pin=Y, d0_pin=Z, ...)")
+            return
+        
+        # Validate width parameter
+        if width not in (1, 4):
+            print(f"ERROR: SDIO width must be 1 or 4, got {width}")
+            return
+        
+        # Validate slot parameter
+        if slot not in (0, 1):
+            print(f"ERROR: SDIO slot must be 0 or 1, got {slot}")
+            return
+        
+        try:
+            # For 4-bit mode, all data pins are required
+            if width == 4:
+                if d1_pin is None or d2_pin is None or d3_pin is None:
+                    print("ERROR: SDIO 4-bit mode requires d0_pin, d1_pin, d2_pin, and d3_pin")
+                    print("  - Provide all four data pins for 4-bit mode")
+                    return
+                
+                self._sdcard = machine.SDCard(
+                    slot=slot,
+                    cmd=cmd_pin,
+                    clk=clk_pin,
+                    data_pins=(d0_pin,d1_pin,d2_pin,d3_pin,),
+                    width=width,
+                    freq=freq
+                )
+            else:  # 1-bit mode
+                self._sdcard = machine.SDCard(
+                    slot=slot,
+                    cmd=cmd_pin,
+                    clk=clk_pin,
+                    data_pins=(d0_pin,),
+                    width=width,
+                    freq=freq
+                )
+            
+            self._sdcard.info()
+            print(f"SD card initialized successfully in SDIO mode (slot={slot}, width={width}-bit, freq={freq}Hz)")
+        except Exception as e:
+            print(f"ERROR: Failed to initialize SD card in SDIO mode: {e}")
+            print("  - Possible causes: Invalid SDIO pin configuration, SD card not inserted, faulty wiring, or firmware issue")
+            print(f"  - Check: SDIO pins (CMD, CLK, D0-D3), card insertion, VCC (3.3V), GND")
+            print("  - Try: Hard reset ESP32, verify pin assignments, test with known-good SD card")
 
     def _try_mount(self, mount_point):
         try:
@@ -119,11 +199,36 @@ class SDCardManager:
 # --- Singleton pattern ---
 _manager = None
 
-def init(spi_bus, cs_pin):
-    """Initialize the global SD card manager."""
+def init(mode='spi', spi_bus=None, cs_pin=None, cmd_pin=None, clk_pin=None,
+         d0_pin=None, d1_pin=None, d2_pin=None, d3_pin=None, slot=1, width=4, freq=20000000):
+    """
+    Initialize the global SD card manager.
+    
+    SPI mode (default):
+        init(spi_bus=machine.SPI(...), cs_pin=pin_number)
+    
+    SDIO mode:
+        init(mode='sdio', cmd_pin=X, clk_pin=Y, d0_pin=Z, d1_pin=A, d2_pin=B, d3_pin=C, slot=1, width=4, freq=20000000)
+    
+    Auto-detection:
+        If SDIO pins are provided, SDIO mode is used automatically.
+    """
     global _manager
     if _manager is None:
-        _manager = SDCardManager(spi_bus, cs_pin)
+        _manager = SDCardManager(
+            mode=mode,
+            spi_bus=spi_bus,
+            cs_pin=cs_pin,
+            cmd_pin=cmd_pin,
+            clk_pin=clk_pin,
+            d0_pin=d0_pin,
+            d1_pin=d1_pin,
+            d2_pin=d2_pin,
+            d3_pin=d3_pin,
+            slot=slot,
+            width=width,
+            freq=freq
+        )
     else:
         print("WARNING: SDCardManager already initialized")
         print("  - Use existing instance via get()")
@@ -133,22 +238,32 @@ def get():
     """Get the global SD card manager instance."""
     if _manager is None:
         print("ERROR: SDCardManager not initialized")
-        print("  - Call init(spi_bus, cs_pin) first in lib/mpos/board/*.py")
+        print("  - Call init() with appropriate parameters first in lib/mpos/board/*.py")
+        print("  - SPI mode: init(spi_bus=machine.SPI(...), cs_pin=pin_number)")
+        print("  - SDIO mode: init(mode='sdio', cmd_pin=X, clk_pin=Y, d0_pin=Z, ...)")
     return _manager
+
+def get_mode():
+    """Get the current SD card mode ('spi' or 'sdio')."""
+    mgr = get()
+    if mgr is None:
+        print("ERROR: Cannot get mode - SDCardManager not initialized")
+        return None
+    return mgr._mode
 
 def mount(mount_point):
     mgr = get()
     if mgr is None:
         print("ERROR: Cannot mount - SDCardManager not initialized")
-        print("  - Call init(spi_bus, cs_pin) first")
+        print("  - Call init() with appropriate parameters first")
         return False
-    return mgr.mount(mount_point)
+    return mgr.mount_with_optional_format(mount_point)
 
 def mount_with_optional_format(mount_point):
     mgr = get()
     if mgr is None:
         print("ERROR: Cannot mount with format - SDCardManager not initialized")
-        print("  - Call init(spi_bus, cs_pin) first")
+        print("  - Call init() with appropriate parameters first")
         return False
     success = mgr.mount_with_optional_format(mount_point)
     if not success:
