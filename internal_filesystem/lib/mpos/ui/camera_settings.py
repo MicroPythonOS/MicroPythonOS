@@ -74,8 +74,7 @@ class CameraSettingsActivity(Activity):
         "raw_gma": False, # Disable raw gamma for better contrast
     }
 
-    # Resolution options for both ESP32 and webcam
-    # Webcam supports all ESP32 resolutions via automatic cropping/padding
+    # Resolution options are the same for all cameras for now (can be split later)
     RESOLUTIONS = [
         ("96x96", "96x96"),
         ("160x120", "160x120"),
@@ -114,7 +113,6 @@ class CameraSettingsActivity(Activity):
         self.dependent_controls = {}
 
     def onCreate(self):
-        self.use_webcam = self.getIntent().extras.get("use_webcam")
         self.prefs = self.getIntent().extras.get("prefs")
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
 
@@ -132,16 +130,14 @@ class CameraSettingsActivity(Activity):
         basic_tab = tabview.add_tab("Basic")
         self.create_basic_tab(basic_tab, self.prefs)
 
-        # Create Advanced and Expert tabs only for ESP32 camera
-        if not self.use_webcam or True: # for now, show all tabs
-            advanced_tab = tabview.add_tab("Advanced")
-            self.create_advanced_tab(advanced_tab, self.prefs)
+        advanced_tab = tabview.add_tab("Advanced")
+        self.create_advanced_tab(advanced_tab, self.prefs)
 
-            expert_tab = tabview.add_tab("Expert")
-            self.create_expert_tab(expert_tab, self.prefs)
+        expert_tab = tabview.add_tab("Expert")
+        self.create_expert_tab(expert_tab, self.prefs)
 
-            #raw_tab = tabview.add_tab("Raw")
-            #self.create_raw_tab(raw_tab, self.prefs)
+        #raw_tab = tabview.add_tab("Raw")
+        #self.create_raw_tab(raw_tab, self.prefs)
 
         self.setContentView(screen)
 

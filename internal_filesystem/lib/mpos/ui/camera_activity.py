@@ -1,11 +1,6 @@
 import lvgl as lv
 import time
 
-try:
-    import webcam
-except Exception as e:
-    print(f"Info: could not import webcam module: {e}")
-
 from ..time import epoch_seconds
 from .camera_settings import CameraSettingsActivity
 from ..camera_manager import CameraManager
@@ -34,7 +29,6 @@ class CameraActivity(Activity):
     image_dsc = None
     scanqr_mode = False
     scanqr_intent = False
-    use_webcam = False
     capture_timer = None
 
     prefs = None # regular prefs
@@ -321,7 +315,7 @@ class CameraActivity(Activity):
 
     def open_settings(self):
         from ..content.intent import Intent
-        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
+        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 
     def try_capture(self, event):
@@ -363,25 +357,3 @@ class CameraActivity(Activity):
             return buffer[3:]
         return buffer
 
-"""
-    def zoom_button_click_unused(self, e):
-        print("zooming...")
-        if self.use_webcam:
-            print("zoom_button_click is not supported for webcam")
-            return
-        if self.cam:
-            startX = self.prefs.get_int("startX", CameraSettingsActivity.startX_default)
-            startY = self.prefs.get_int("startX", CameraSettingsActivity.startY_default)
-            endX = self.prefs.get_int("startX", CameraSettingsActivity.endX_default)
-            endY = self.prefs.get_int("startX", CameraSettingsActivity.endY_default)
-            offsetX = self.prefs.get_int("startX", CameraSettingsActivity.offsetX_default)
-            offsetY = self.prefs.get_int("startX", CameraSettingsActivity.offsetY_default)
-            totalX = self.prefs.get_int("startX", CameraSettingsActivity.totalX_default)
-            totalY = self.prefs.get_int("startX", CameraSettingsActivity.totalY_default)
-            outputX = self.prefs.get_int("startX", CameraSettingsActivity.outputX_default)
-            outputY = self.prefs.get_int("startX", CameraSettingsActivity.outputY_default)
-            scale = self.prefs.get_bool("scale", CameraSettingsActivity.scale_default)
-            binning = self.prefs.get_bool("binning", CameraSettingsActivity.binning_default)
-            result = self.cam.set_res_raw(startX,startY,endX,endY,offsetX,offsetY,totalX,totalY,outputX,outputY,scale,binning)
-            print(f"self.cam.set_res_raw returned {result}")
-"""
