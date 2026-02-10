@@ -12,7 +12,7 @@ from websocket import WebSocketApp
 import asyncio
 import aiohttp
 from aiohttp import WSMsgType
-import logging
+import logging.logging as logging
 import sys
 from typing import List
 

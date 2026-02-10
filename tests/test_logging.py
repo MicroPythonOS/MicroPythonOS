@@ -3,7 +3,7 @@
 import unittest
 import sys
 import io
-import logging
+import logging.logging as logging
 
 # Add lib to path so we can import logging
 sys.path.insert(0, 'MicroPythonOS/internal_filesystem/lib')
