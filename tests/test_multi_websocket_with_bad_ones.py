@@ -7,15 +7,12 @@ from mpos import TaskManager
 
 from websocket import WebSocketApp
 
-
-# demo_multiple_ws.py
 import asyncio
 import aiohttp
 from aiohttp import WSMsgType
-import logging.logging as logging
+import logging
 import sys
 from typing import List
-
 
 
 # ----------------------------------------------------------------------

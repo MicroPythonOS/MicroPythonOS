@@ -3,26 +3,13 @@
 import unittest
 import sys
 import io
-import logging.logging as logging
+import logging
 
 # Add lib to path so we can import logging
 sys.path.insert(0, 'MicroPythonOS/internal_filesystem/lib')
 
-
 class TestLoggingLevels(unittest.TestCase):
     """Test that logger levels work correctly with handlers."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        # Clear any existing loggers
-        logging._loggers.clear()
-        # Reset basicConfig
-        logging.basicConfig(force=True)
-
-    def tearDown(self):
-        """Clean up after tests."""
-        logging.shutdown()
-        logging._loggers.clear()
 
     def test_child_logger_info_level_with_root_handlers(self):
         """Test that a child logger can set INFO level and log INFO messages using root handlers."""
@@ -146,6 +133,3 @@ class TestLoggingLevels(unittest.TestCase):
         self.assertTrue("info message" not in output)
         self.assertTrue("warning message" in output)
 
-
-if __name__ == '__main__':
-    unittest.main()

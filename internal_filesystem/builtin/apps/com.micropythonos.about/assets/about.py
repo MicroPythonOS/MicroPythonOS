@@ -1,5 +1,5 @@
 import sys
-import logging.logging as logging
+import logging
 
 from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
 
