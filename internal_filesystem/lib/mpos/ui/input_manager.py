@@ -30,6 +30,18 @@ class InputManager:
             cls._registered_indevs.append(indev)
     
     @classmethod
+    def unregister_indev(cls, indev):
+        """
+        Unregister an input device.
+        
+        Parameters:
+        - indev: LVGL input device object to remove
+        """
+        if indev in cls._registered_indevs:
+            indev.enable(False)
+            cls._registered_indevs.remove(indev)
+    
+    @classmethod
     def list_indevs(cls):
         """
         Get list of all registered input devices.

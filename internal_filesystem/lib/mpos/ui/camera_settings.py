@@ -74,8 +74,7 @@ class CameraSettingsActivity(Activity):
         "raw_gma": False, # Disable raw gamma for better contrast
     }
 
-    # Resolution options for both ESP32 and webcam
-    # Webcam supports all ESP32 resolutions via automatic cropping/padding
+    # Resolution options are the same for all cameras for now (can be split later)
     RESOLUTIONS = [
         ("96x96", "96x96"),
         ("160x120", "160x120"),
@@ -114,7 +113,6 @@ class CameraSettingsActivity(Activity):
         self.dependent_controls = {}
 
     def onCreate(self):
-        self.use_webcam = self.getIntent().extras.get("use_webcam")
         self.prefs = self.getIntent().extras.get("prefs")
         self.scanqr_mode = self.getIntent().extras.get("scanqr_mode")
 
@@ -132,16 +130,14 @@ class CameraSettingsActivity(Activity):
         basic_tab = tabview.add_tab("Basic")
         self.create_basic_tab(basic_tab, self.prefs)
 
-        # Create Advanced and Expert tabs only for ESP32 camera
-        if not self.use_webcam or True: # for now, show all tabs
-            advanced_tab = tabview.add_tab("Advanced")
-            self.create_advanced_tab(advanced_tab, self.prefs)
+        advanced_tab = tabview.add_tab("Advanced")
+        self.create_advanced_tab(advanced_tab, self.prefs)
 
-            expert_tab = tabview.add_tab("Expert")
-            self.create_expert_tab(expert_tab, self.prefs)
+        expert_tab = tabview.add_tab("Expert")
+        self.create_expert_tab(expert_tab, self.prefs)
 
-            #raw_tab = tabview.add_tab("Raw")
-            #self.create_raw_tab(raw_tab, self.prefs)
+        #raw_tab = tabview.add_tab("Raw")
+        #self.create_raw_tab(raw_tab, self.prefs)
 
         self.setContentView(screen)
 
@@ -244,16 +240,13 @@ class CameraSettingsActivity(Activity):
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         button_cont.set_style_border_width(0, lv.PART.MAIN)
 
-        save_button = lv.button(button_cont)
-        save_button.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
-        save_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
-        save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
-        save_label = lv.label(save_button)
-        savetext = "Save"
-        if self.scanqr_mode:
-            savetext += " QR tweaks"
-        save_label.set_text(savetext)
-        save_label.center()
+        erase_button = lv.button(button_cont)
+        erase_button.set_size(DisplayMetrics.pct_of_width(20), lv.SIZE_CONTENT)
+        erase_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
+        erase_label = lv.label(erase_button)
+        erase_label.set_text("Erase")
+        erase_label.center()
 
         cancel_button = lv.button(button_cont)
         cancel_button.set_size(DisplayMetrics.pct_of_width(25), lv.SIZE_CONTENT)
@@ -267,13 +260,17 @@ class CameraSettingsActivity(Activity):
         cancel_label.set_text("Cancel")
         cancel_label.center()
 
-        erase_button = lv.button(button_cont)
-        erase_button.set_size(DisplayMetrics.pct_of_width(20), lv.SIZE_CONTENT)
-        erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
-        erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
-        erase_label = lv.label(erase_button)
-        erase_label.set_text("Erase")
-        erase_label.center()
+        save_button = lv.button(button_cont)
+        save_button.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
+        save_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
+        save_label = lv.label(save_button)
+        savetext = "Save"
+        if self.scanqr_mode:
+            savetext += " QR tweaks"
+        save_label.set_text(savetext)
+        save_label.center()
+
 
 
     def create_basic_tab(self, tab, prefs):

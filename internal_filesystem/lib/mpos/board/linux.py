@@ -10,8 +10,8 @@ import mpos.ui.focus_direction
 from mpos import InputManager
 
 # Same as Waveshare ESP32-S3-Touch-LCD-2 and Fri3d Camp 2026 Badge
-TFT_HOR_RES=320
-TFT_VER_RES=240
+TFT_HOR_RES=240
+TFT_VER_RES=320
 
 # Fri3d Camp 2024 Badge:
 #TFT_HOR_RES=296
@@ -126,20 +126,36 @@ SensorManager.init(None)
 
 # === CAMERA HARDWARE ===
 
-try:
-    # Try to initialize webcam to verify it's available
+def init_cam(width, height, colormode):
+    try:
+        # Try to initialize webcam to verify it's available
+        import webcam
+        return webcam.init("/dev/video0", width=width, height=height)
+    except Exception as e:
+        print(f"Info: webcam initialization failed, camera will not be available: {e}")
+
+def deinit_cam(cam_obj):
     import webcam
-    test_cam = webcam.init("/dev/video0", width=320, height=240)
-    if test_cam:
-        webcam.deinit(test_cam)
-        from mpos import CameraManager
-        CameraManager.add_camera(CameraManager.Camera(
-            lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
-            name="Video4Linux2 Camera",
-            vendor="ACME"
-        ))
-except Exception as e:
-    print(f"Info: webcam initialization failed, camera will not be available: {e}")
+    webcam.deinit(cam_obj)
+
+def capture_cam(cam_obj, colormode):
+    import webcam
+    return webcam.capture_frame(cam_obj, "rgb565" if colormode else "grayscale")
+
+def apply_cam_settings(cam_obj, prefs):
+    print("V4L Camera doesn't support settings for now, skipping...")
+
+from mpos import CameraManager
+CameraManager.add_camera(CameraManager.Camera(
+    lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
+    name="Video4Linux2 Camera",
+    vendor="ACME",
+    init=init_cam,
+    deinit=deinit_cam,
+    capture=capture_cam,
+    apply_settings=apply_cam_settings
+))
+
 
 print("linux.py finished")
 

@@ -1,13 +1,9 @@
 import lvgl as lv
 import time
 
-try:
-    import webcam
-except Exception as e:
-    print(f"Info: could not import webcam module: {e}")
-
 from ..time import epoch_seconds
 from .camera_settings import CameraSettingsActivity
+from ..camera_manager import CameraManager
 from .. import ui as mpos_ui
 from ..app.activity import Activity
 
@@ -33,7 +29,6 @@ class CameraActivity(Activity):
     image_dsc = None
     scanqr_mode = False
     scanqr_intent = False
-    use_webcam = False
     capture_timer = None
 
     prefs = None # regular prefs
@@ -97,7 +92,6 @@ class CameraActivity(Activity):
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
 
-
         self.status_label_cont = lv.obj(self.main_screen)
         width = mpos_ui.DisplayMetrics.pct_of_width(70)
         height = mpos_ui.DisplayMetrics.pct_of_width(60)
@@ -136,22 +130,11 @@ class CameraActivity(Activity):
 
     def start_cam(self):
         # Init camera:
-        self.cam = self.init_internal_cam(self.width, self.height)
+        self.cam = CameraManager.get_cameras()[0].init(self.width, self.height, self.colormode)
         if self.cam:
-            self.image.set_rotation(900) # internal camera is rotated 90 degrees
             # Apply saved camera settings, only for internal camera for now:
-            self.apply_camera_settings(self.scanqr_prefs if self.scanqr_mode else self.prefs, self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
-        else:
-            print("camera app: no internal camera found, trying webcam on /dev/video0")
-            try:
-                # Initialize webcam with desired resolution directly
-                print(f"Initializing webcam at {self.width}x{self.height}")
-                self.cam = webcam.init("/dev/video0", width=self.width, height=self.height)
-                self.use_webcam = True
-            except Exception as e:
-                print(f"camera app: webcam exception: {e}")
-        # Start refreshing:
-        if self.cam:
+            CameraManager.get_cameras()[0].apply_settings(self.cam, self.scanqr_prefs if self.scanqr_mode else self.prefs) # needs to be done AFTER the camera is initialized
+            # Start refreshing:
             print("Camera app initialized, continuing...")
             self.update_preview_image()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
@@ -159,24 +142,8 @@ class CameraActivity(Activity):
     def stop_cam(self):
         if self.capture_timer:
             self.capture_timer.delete()
-        if self.use_webcam:
-            webcam.deinit(self.cam)
-        elif self.cam:
-            self.cam.deinit()
-            # Power off, otherwise it keeps using a lot of current
-            try:
-                from machine import Pin, I2C
-                i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
-                #devices = i2c.scan()
-                #print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
-                camera_addr = 0x3C # for OV5640
-                reg_addr = 0x3008
-                reg_high = (reg_addr >> 8) & 0xFF  # 0x30
-                reg_low = reg_addr & 0xFF         # 0x08
-                power_off_command = 0x42 # Power off command
-                i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
-            except Exception as e:
-                print(f"Warning: powering off camera got exception: {e}")
+        if self.cam:
+            CameraManager.get_cameras()[0].deinit(self.cam)
         self.cam = None
         if self.image_dsc: # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
             print("emptying self.current_cam_buffer...")
@@ -347,15 +314,14 @@ class CameraActivity(Activity):
 
     def open_settings(self):
         from ..content.intent import Intent
-        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "use_webcam": self.use_webcam, "scanqr_mode": self.scanqr_mode})
+        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "scanqr_mode": self.scanqr_mode})
         self.startActivity(intent)
 
     def try_capture(self, event):
+        if not self.cam:
+            return
         try:
-            if self.use_webcam and self.cam:
-                self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
-            elif self.cam and self.cam.frame_available():
-                self.current_cam_buffer = self.cam.capture()
+            self.current_cam_buffer = CameraManager.get_cameras()[0].capture(self.cam, self.colormode)
         except Exception as e:
             print(f"Camera capture exception: {e}")
             return
@@ -365,82 +331,10 @@ class CameraActivity(Activity):
         self.image.set_src(self.image_dsc)
         if self.scanqr_mode:
             self.qrdecode_one()
-        if not self.use_webcam and self.cam:
-            self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
-
-    def init_internal_cam(self, width, height):
-        """Initialize internal camera with specified resolution.
-    
-        Automatically retries once if initialization fails (to handle I2C poweroff issue).
-        """
         try:
-            from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
-    
-            # Map resolution to FrameSize enum
-            # Format: (width, height): FrameSize
-            resolution_map = {
-                (96, 96): FrameSize.R96X96,
-                (160, 120): FrameSize.QQVGA,
-                (128, 128): FrameSize.R128X128,
-                (176, 144): FrameSize.QCIF,
-                (240, 176): FrameSize.HQVGA,
-                (240, 240): FrameSize.R240X240,
-                (320, 240): FrameSize.QVGA,
-                (320, 320): FrameSize.R320X320,
-                (400, 296): FrameSize.CIF,
-                (480, 320): FrameSize.HVGA,
-                (480, 480): FrameSize.R480X480,
-                (640, 480): FrameSize.VGA,
-                (640, 640): FrameSize.R640X640,
-                (720, 720): FrameSize.R720X720,
-                (800, 600): FrameSize.SVGA,
-                (800, 800): FrameSize.R800X800,
-                (1024, 768): FrameSize.XGA,
-                (960, 960): FrameSize.R960X960,
-                (1280, 720): FrameSize.HD,
-                (1024, 1024): FrameSize.R1024X1024,
-                # These are disabled in camera_settings.py because they use a lot of RAM:
-                (1280, 1024): FrameSize.SXGA,
-                (1280, 1280): FrameSize.R1280X1280,
-                (1600, 1200): FrameSize.UXGA,
-                (1920, 1080): FrameSize.FHD,
-            }
-    
-            frame_size = resolution_map.get((width, height), FrameSize.R240X240)
-            print(f"init_internal_cam: Using FrameSize {frame_size} for {width}x{height}")
-    
-            # Try to initialize, with one retry for I2C poweroff issue
-            max_attempts = 3
-            for attempt in range(max_attempts):
-                try:
-                    cam = Camera(
-                        data_pins=[12,13,15,11,14,10,7,2],
-                        vsync_pin=6,
-                        href_pin=4,
-                        sda_pin=21,
-                        scl_pin=16,
-                        pclk_pin=9,
-                        xclk_pin=8,
-                        xclk_freq=20000000,
-                        powerdown_pin=-1,
-                        reset_pin=-1,
-                        pixel_format=PixelFormat.RGB565 if self.colormode else PixelFormat.GRAYSCALE,
-                        frame_size=frame_size,
-                        #grab_mode=GrabMode.WHEN_EMPTY,
-                        grab_mode=GrabMode.LATEST,
-                        fb_count=1
-                    )
-                    cam.set_vflip(True)
-                    return cam
-                except Exception as e:
-                    if attempt < max_attempts-1:
-                        print(f"init_cam attempt {attempt} failed: {e}, retrying...")
-                    else:
-                        print(f"init_cam final exception: {e}")
-                        return None
+            self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
         except Exception as e:
-            print(f"init_cam exception: {e}")
-            return None
+            pass # some camera API's don't have this
 
     def print_qr_buffer(self, buffer):
         try:
@@ -461,149 +355,3 @@ class CameraActivity(Activity):
         if buffer.startswith(bom):
             return buffer[3:]
         return buffer
-    
-    
-    def apply_camera_settings(self, prefs, cam, use_webcam):
-        """Apply all saved camera settings to the camera.
-    
-        Only applies settings when use_webcam is False (ESP32 camera).
-        Settings are applied in dependency order (master switches before dependent values).
-    
-        Args:
-            cam: Camera object
-            use_webcam: Boolean indicating if using webcam
-        """
-        if not cam or use_webcam:
-            print("apply_camera_settings: Skipping (no camera or webcam mode)")
-            return
-    
-        try:
-            # Basic image adjustments
-            brightness = prefs.get_int("brightness")
-            cam.set_brightness(brightness)
-    
-            contrast = prefs.get_int("contrast")
-            cam.set_contrast(contrast)
-    
-            saturation = prefs.get_int("saturation")
-            cam.set_saturation(saturation)
-
-            # Orientation
-            hmirror = prefs.get_bool("hmirror")
-            cam.set_hmirror(hmirror)
-
-            vflip = prefs.get_bool("vflip")
-            cam.set_vflip(vflip)
-
-            # Special effect
-            special_effect = prefs.get_int("special_effect")
-            cam.set_special_effect(special_effect)
-
-            # Exposure control (apply master switch first, then manual value)
-            exposure_ctrl = prefs.get_bool("exposure_ctrl")
-            cam.set_exposure_ctrl(exposure_ctrl)
-
-            if not exposure_ctrl:
-                aec_value = prefs.get_int("aec_value")
-                cam.set_aec_value(aec_value)
-
-            # Mode-specific default comes from constructor
-            ae_level = prefs.get_int("ae_level")
-            cam.set_ae_level(ae_level)
-
-            aec2 = prefs.get_bool("aec2")
-            cam.set_aec2(aec2)
-    
-            # Gain control (apply master switch first, then manual value)
-            gain_ctrl = prefs.get_bool("gain_ctrl")
-            cam.set_gain_ctrl(gain_ctrl)
-
-            if not gain_ctrl:
-                agc_gain = prefs.get_int("agc_gain")
-                cam.set_agc_gain(agc_gain)
-
-            gainceiling = prefs.get_int("gainceiling")
-            cam.set_gainceiling(gainceiling)
-
-            # White balance (apply master switch first, then mode)
-            whitebal = prefs.get_bool("whitebal")
-            cam.set_whitebal(whitebal)
-
-            if not whitebal:
-                wb_mode = prefs.get_int("wb_mode")
-                cam.set_wb_mode(wb_mode)
-
-            awb_gain = prefs.get_bool("awb_gain")
-            cam.set_awb_gain(awb_gain)
-    
-            # Sensor-specific settings (try/except for unsupported sensors)
-            try:
-                sharpness = prefs.get_int("sharpness")
-                cam.set_sharpness(sharpness)
-            except:
-                pass  # Not supported on OV2640?
-
-            try:
-                denoise = prefs.get_int("denoise")
-                cam.set_denoise(denoise)
-            except:
-                pass  # Not supported on OV2640?
-
-            # Advanced corrections
-            colorbar = prefs.get_bool("colorbar")
-            cam.set_colorbar(colorbar)
-
-            dcw = prefs.get_bool("dcw")
-            cam.set_dcw(dcw)
-
-            bpc = prefs.get_bool("bpc")
-            cam.set_bpc(bpc)
-
-            wpc = prefs.get_bool("wpc")
-            cam.set_wpc(wpc)
-
-            # Mode-specific default comes from constructor
-            raw_gma = prefs.get_bool("raw_gma")
-            print(f"applying raw_gma: {raw_gma}")
-            cam.set_raw_gma(raw_gma)
-
-            lenc = prefs.get_bool("lenc")
-            cam.set_lenc(lenc)
-    
-            # JPEG quality (only relevant for JPEG format)
-            #try:
-            #    quality = prefs.get_int("quality", 85)
-            #    cam.set_quality(quality)
-            #except:
-            #    pass  # Not in JPEG mode
-    
-            print("Camera settings applied successfully")
-    
-        except Exception as e:
-            print(f"Error applying camera settings: {e}")
-    
-
-
-
-"""
-    def zoom_button_click_unused(self, e):
-        print("zooming...")
-        if self.use_webcam:
-            print("zoom_button_click is not supported for webcam")
-            return
-        if self.cam:
-            startX = self.prefs.get_int("startX", CameraSettingsActivity.startX_default)
-            startY = self.prefs.get_int("startX", CameraSettingsActivity.startY_default)
-            endX = self.prefs.get_int("startX", CameraSettingsActivity.endX_default)
-            endY = self.prefs.get_int("startX", CameraSettingsActivity.endY_default)
-            offsetX = self.prefs.get_int("startX", CameraSettingsActivity.offsetX_default)
-            offsetY = self.prefs.get_int("startX", CameraSettingsActivity.offsetY_default)
-            totalX = self.prefs.get_int("startX", CameraSettingsActivity.totalX_default)
-            totalY = self.prefs.get_int("startX", CameraSettingsActivity.totalY_default)
-            outputX = self.prefs.get_int("startX", CameraSettingsActivity.outputX_default)
-            outputY = self.prefs.get_int("startX", CameraSettingsActivity.outputY_default)
-            scale = self.prefs.get_bool("scale", CameraSettingsActivity.scale_default)
-            binning = self.prefs.get_bool("binning", CameraSettingsActivity.binning_default)
-            result = self.cam.set_res_raw(startX,startY,endX,endY,offsetX,offsetY,totalX,totalY,outputX,outputY,scale,binning)
-            print(f"self.cam.set_res_raw returned {result}")
-"""

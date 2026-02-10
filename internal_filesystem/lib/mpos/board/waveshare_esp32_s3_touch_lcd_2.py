@@ -112,12 +112,6 @@ try:
 except Exception as e:
     print(f"Warning: powering off camera got exception: {e}")
 
-# === AUDIO HARDWARE: Waveshare board has no buzzer or I2S audio so no need to initialize.
-
-# === LED HARDWARE ===
-# Note: Waveshare board has no NeoPixel LEDs
-# LightsManager will not be initialized (functions will return False)
-
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
 
@@ -128,11 +122,82 @@ SensorManager.init(i2c_bus, address=0x6B, mounted_position=SensorManager.FACING_
 # === CAMERA HARDWARE ===
 from mpos import CameraManager
 
+def init_cam(width, height, colormode):
+    toreturn = None
+    try:
+        from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
+
+        # Map resolution to FrameSize enum using CameraManager
+        frame_size = CameraManager.resolution_to_framesize(width, height)
+        print(f"init_internal_cam: Using FrameSize {frame_size} for {width}x{height}")
+
+        # Try to initialize, with one retry for I2C poweroff issue
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                cam = Camera(
+                        data_pins=[12,13,15,11,14,10,7,2],
+                        vsync_pin=6,
+                        href_pin=4,
+                        sda_pin=21,
+                        scl_pin=16,
+                        pclk_pin=9,
+                        xclk_pin=8,
+                        xclk_freq=20000000,
+                        powerdown_pin=-1,
+                        reset_pin=-1,
+                        pixel_format=PixelFormat.RGB565 if self.colormode else PixelFormat.GRAYSCALE,
+                        frame_size=frame_size,
+                        #grab_mode=GrabMode.WHEN_EMPTY,
+                        grab_mode=GrabMode.LATEST,
+                        fb_count=1
+                    )
+                cam.set_vflip(True)
+                toreturn=cam
+                break
+            except Exception as e:
+                if attempt < max_attempts-1:
+                    print(f"init_cam attempt {attempt} failed: {e}, retrying...")
+                else:
+                    print(f"init_cam final exception: {e}")
+                    break
+    except Exception as e:
+        print(f"init_cam exception: {e}")
+
+    return toreturn
+
+def deinit_cam(cam):
+    cam.deinit()
+    # Power off, otherwise it keeps using a lot of current
+    try:
+        from machine import Pin, I2C
+        i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
+        camera_addr = 0x3C # for OV5640
+        reg_addr = 0x3008
+        reg_high = (reg_addr >> 8) & 0xFF  # 0x30
+        reg_low = reg_addr & 0xFF         # 0x08
+        power_off_command = 0x42 # Power off command
+        i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
+    except Exception as e:
+        print(f"Warning: powering off camera got exception: {e}")
+    import time
+    time.sleep_ms(100)
+
+def capture_cam(cam_obj, colormode):
+    return cam_obj.capture()
+
+def apply_cam_settings(cam_obj, prefs):
+    return CameraManager.ov_apply_camera_settings(cam_obj, prefs)
+
 # Waveshare ESP32-S3-Touch-LCD-2 has OV5640 camera
 CameraManager.add_camera(CameraManager.Camera(
     lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
     name="OV5640",
-    vendor="OmniVision"
+    vendor="OmniVision",
+    init=init_cam,
+    deinit=deinit_cam,
+    capture=capture_cam,
+    apply_settings=apply_cam_settings
 ))
 
 print("waveshare_esp32_s3_touch_lcd_2.py finished")

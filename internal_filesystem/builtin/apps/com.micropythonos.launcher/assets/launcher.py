@@ -87,7 +87,7 @@ class Launcher(Activity):
         # Grid parameters
         icon_size = 64
         label_height = 24
-        iconcont_width = icon_size + label_height
+        iconcont_width = int(icon_size * 1.1)
         iconcont_height = icon_size + label_height
 
         for app in AppManager.get_app_list():

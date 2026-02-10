@@ -106,22 +106,49 @@ def create_notification_bar():
     #notif_icon = lv.label(notification_bar)
     #notif_icon.set_text(lv.SYMBOL.BELL)
     #notif_icon.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, PADDING_TINY, 0)
-    # Battery percentage
-    #battery_label = lv.label(notification_bar)
-    #battery_label.set_text("100%")
-    #battery_label.align(lv.ALIGN.RIGHT_MID, 0, 0)
-    #battery_label.add_flag(lv.obj.FLAG.HIDDEN)
-    # Battery icon
-    battery_icon = lv.label(notification_bar)
-    battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
-    #battery_icon.align_to(battery_label, lv.ALIGN.OUT_LEFT_MID, 0, 0)
-    battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
-    battery_icon.add_flag(lv.obj.FLAG.HIDDEN) # keep it hidden until it has a correct value
+
     # WiFi icon
     wifi_icon = lv.label(notification_bar)
     wifi_icon.set_text(lv.SYMBOL.WIFI)
-    wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
     wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
+    wifi_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
+
+    # Battery percentage
+    if BatteryManager.has_battery():
+        #battery_label = lv.label(notification_bar)
+        #battery_label.set_text("100%")
+        #battery_label.align(lv.ALIGN.RIGHT_MID, 0, 0)
+        #battery_label.add_flag(lv.obj.FLAG.HIDDEN)
+        # Battery icon
+        battery_icon = lv.label(notification_bar)
+        battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
+        #battery_icon.align_to(battery_label, lv.ALIGN.OUT_LEFT_MID, 0, 0)
+        battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
+        wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
+        battery_icon.add_flag(lv.obj.FLAG.HIDDEN) # keep it hidden until it has a correct value
+        def update_battery_icon(timer=None):
+            try:
+                percent = BatteryManager.get_battery_percentage()
+            except Exception as e:
+                print(f"BatteryManager.get_battery_percentage got exception, not updating battery_icon: {e}")
+                return
+            if percent > 80:
+                battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
+            elif percent > 60:
+                battery_icon.set_text(lv.SYMBOL.BATTERY_3)
+            elif percent > 40:
+                battery_icon.set_text(lv.SYMBOL.BATTERY_2)
+            elif percent > 20:
+                battery_icon.set_text(lv.SYMBOL.BATTERY_1)
+            else:
+                battery_icon.set_text(lv.SYMBOL.BATTERY_EMPTY)
+            battery_icon.remove_flag(lv.obj.FLAG.HIDDEN)
+            # Percentage is not shown for now:
+            #battery_label.set_text(f"{round(percent)}%")
+            #battery_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        update_battery_icon() # run it immediately instead of waiting for the timer
+        lv.timer_create(update_battery_icon, BATTERY_ICON_UPDATE_INTERVAL, None)
+
     # Update time
     def update_time(timer):
         hours = mpos.time.localtime()[3]
@@ -136,28 +163,6 @@ def create_notification_bar():
     except Exception as e:
         print("Warning: could not check WLAN status:", str(e))
     
-    def update_battery_icon(timer=None):
-        try:
-            percent = BatteryManager.get_battery_percentage()
-        except Exception as e:
-            print(f"BatteryManager.get_battery_percentage got exception, not updating battery_icon: {e}")
-            return
-        if percent > 80:
-            battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
-        elif percent > 60:
-            battery_icon.set_text(lv.SYMBOL.BATTERY_3)
-        elif percent > 40:
-            battery_icon.set_text(lv.SYMBOL.BATTERY_2)
-        elif percent > 20:
-            battery_icon.set_text(lv.SYMBOL.BATTERY_1)
-        else:
-            battery_icon.set_text(lv.SYMBOL.BATTERY_EMPTY)
-        battery_icon.remove_flag(lv.obj.FLAG.HIDDEN)
-        # Percentage is not shown for now:
-        #battery_label.set_text(f"{round(percent)}%")
-        #battery_label.remove_flag(lv.obj.FLAG.HIDDEN)
-    update_battery_icon() # run it immediately instead of waiting for the timer
-
     def update_wifi_icon(timer):
         from mpos import WifiService
         if WifiService.is_connected():
@@ -197,7 +202,6 @@ def create_notification_bar():
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
     #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
     lv.timer_create(update_wifi_icon, WIFI_ICON_UPDATE_INTERVAL, None)
-    lv.timer_create(update_battery_icon, BATTERY_ICON_UPDATE_INTERVAL, None)
     
     # hide bar animation
     global hide_bar_animation

@@ -1,8 +1,18 @@
-0.7.2
+0.8.0
 =====
 
 Builtin Apps:
-- OSUpdate app: replace "force update" checkbox with improved button labels
+- Launcher: fit at least 3 apps per row on a 240px display
+- OSUpdate: replace 'force update' checkbox with improved button labels
+
+Frameworks:
+- SDCard: add support for SDIO/SD/MMC mode
+- CameraManager and CameraActivity: work fully camera-agnostic
+
+OS:
+- Scale MicroPythonOS boot logo down if necessary
+- Add board support: MaTouch ESP32-S3 SPI IPS 2.8' with Camera OV3660
+- UI: Don't show battery icon if not present
 
 0.7.1
 =====
