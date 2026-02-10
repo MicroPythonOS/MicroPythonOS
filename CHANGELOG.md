@@ -7,7 +7,7 @@ Builtin Apps:
 
 Frameworks:
 - SDCard: add support for SDIO/SD/MMC mode
-- CameraManager: add init and deinit callbacks
+- CameraManager and CameraActivity: work fully camera-agnostic
 
 OS:
 - Scale MicroPythonOS boot logo down if necessary

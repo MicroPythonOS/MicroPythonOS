@@ -112,6 +112,7 @@ sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
 from mpos import CameraManager
 
 def init_cam(width, height, colormode):
+    toreturn = None
     try:
         from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
 
@@ -121,7 +122,6 @@ def init_cam(width, height, colormode):
 
         # Try to initialize, with one retry for I2C poweroff issue
         max_attempts = 3
-        toreturn = None
         for attempt in range(max_attempts):
             try:
                 cam = Camera(
@@ -160,12 +160,12 @@ def init_cam(width, height, colormode):
                 InputManager.unregister_indev(indev)
                 print("input disabled")
             except Exception as e:
-                print(f"disabling indev got exception: {e}")
+                print(f"init_cam: disabling indev got exception: {e}")
 
-        return toreturn
     except Exception as e:
         print(f"init_cam exception: {e}")
-        return None
+
+    return toreturn
 
 def deinit_cam(cam):
     cam.deinit()
@@ -173,9 +173,7 @@ def deinit_cam(cam):
     try:
         from machine import Pin, I2C
         i2c = I2C(1, scl=Pin(38), sda=Pin(39))  # Adjust pins and frequency
-        #devices = i2c.scan()
-        #print([hex(addr) for addr in devices]) # finds it on 60 = 0x3C after init
-        camera_addr = 0x3C # for OV5640
+        camera_addr = 0x3C # for OV3660
         reg_addr = 0x3008
         reg_high = (reg_addr >> 8) & 0xFF  # 0x30
         reg_low = reg_addr & 0xFF         # 0x08
@@ -219,7 +217,8 @@ CameraManager.add_camera(CameraManager.Camera(
     vendor="OmniVision",
     init=init_cam,
     deinit=deinit_cam,
-    capture=capture_cam
+    capture=capture_cam,
+    apply_settings=apply_cam_settings
 ))
 
 print("matouch_esp32_s3_2_8.py finished")
