@@ -104,19 +104,23 @@ class GT911(pointer_framework.PointerDriver):
         self._interrupt_flag = True
 
     def hw_reset(self):
-        if self._interrupt_pin and self._reset_pin:
-            self._interrupt_pin.init(self._interrupt_pin.OUT)
-            self._interrupt_pin(0)
+        if self._reset_pin:
+            if self._interrupt_pin:
+                self._interrupt_pin.init(self._interrupt_pin.OUT)
+                self._interrupt_pin(0)
             self._reset_pin(0)
             time.sleep_ms(10)  # NOQA
-            self._interrupt_pin(1) # only for 0x14 address
-            #self._interrupt_pin(0)
+            if self._interrupt_pin:
+                self._interrupt_pin(1) # only for 0x14 address
+                #self._interrupt_pin(0)
             time.sleep_ms(1)  # NOQA
             self._reset_pin(1)
             time.sleep_ms(5)  # NOQA
-            self._interrupt_pin(0)
+            if self._interrupt_pin:
+                self._interrupt_pin(0)
             time.sleep_ms(50)  # NOQA
-            self._interrupt_pin.init(mode=self._interrupt_pin.IN)
+            if self._interrupt_pin:
+                self._interrupt_pin.init(mode=self._interrupt_pin.IN)
             time.sleep_ms(50)  # NOQA
 
         self._write_reg(_ESD_CHECK_REG, 0x00)
