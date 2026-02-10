@@ -92,7 +92,6 @@ class CameraActivity(Activity):
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
 
-
         self.status_label_cont = lv.obj(self.main_screen)
         width = mpos_ui.DisplayMetrics.pct_of_width(70)
         height = mpos_ui.DisplayMetrics.pct_of_width(60)
@@ -356,4 +355,3 @@ class CameraActivity(Activity):
         if buffer.startswith(bom):
             return buffer[3:]
         return buffer
-

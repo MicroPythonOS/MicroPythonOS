@@ -68,6 +68,16 @@ class BatteryManager:
         print(f"Reading ADC at init to fill cache: {initial_adc_value} => {BatteryManager.read_battery_voltage(raw_adc_value=initial_adc_value)}V => {BatteryManager.get_battery_percentage(raw_adc_value=initial_adc_value)}%")
 
     @staticmethod
+    def has_battery():
+        """
+        Check if battery monitoring is initialized.
+
+        Returns:
+            bool: True if init_adc() was called, False otherwise
+        """
+        return _adc_pin is not None
+
+    @staticmethod
     def read_raw_adc(force_refresh=False):
         """
         Read raw ADC value (0-4095) with adaptive caching.

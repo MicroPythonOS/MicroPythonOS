@@ -1,9 +1,9 @@
-0.7.2
+0.8.0
 =====
 
 Builtin Apps:
 - Launcher: fit at least 3 apps per row on a 240px display
-- OSUpdate: replace "force update" checkbox with improved button labels
+- OSUpdate: replace 'force update' checkbox with improved button labels
 
 Frameworks:
 - SDCard: add support for SDIO/SD/MMC mode
@@ -11,7 +11,7 @@ Frameworks:
 
 OS:
 - Scale MicroPythonOS boot logo down if necessary
-- Additional board support: MaTouch ESP32-S3 SPI IPS 2.8" with Camera OV3660
+- Add board support: MaTouch ESP32-S3 SPI IPS 2.8' with Camera OV3660
 
 0.7.1
 =====
