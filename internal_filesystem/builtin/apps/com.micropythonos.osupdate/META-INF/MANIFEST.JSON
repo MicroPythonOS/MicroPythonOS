@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Operating System Updater",
 "long_description": "Updates the operating system in a safe way, to a secondary partition. After the update, the device is restarted. If the system starts up successfully, it is marked as valid and kept. Otherwise, a rollback to the old, primary partition is performed.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.osupdate/icons/com.micropythonos.osupdate_0.1.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.osupdate/mpks/com.micropythonos.osupdate_0.1.1.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.osupdate/icons/com.micropythonos.osupdate_0.1.2_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.osupdate/mpks/com.micropythonos.osupdate_0.1.2.mpk",
 "fullname": "com.micropythonos.osupdate",
-"version": "0.1.1",
+"version": "0.1.2",
 "category": "osupdate",
 "activities": [
     {
