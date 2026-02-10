@@ -40,6 +40,7 @@ BITS = 16
 
 _ADDR2 = const(0x14)
 
+_USE_INTERRUPTS = False # Interrupt handler based? Or just polling?
 
 class GT911(pointer_framework.PointerDriver):
 
@@ -88,8 +89,10 @@ class GT911(pointer_framework.PointerDriver):
         if isinstance(reset_pin, int):
             reset_pin = machine.Pin(reset_pin, machine.Pin.OUT)
 
-        if isinstance(interrupt_pin, int):
+        if isinstance(interrupt_pin, int) and _USE_INTERRUPTS:
             interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.IN)
+        else:
+            interrupt_pin = machine.Pin(interrupt_pin, machine.Pin.OUT)
 
         self._reset_pin = reset_pin
         self._interrupt_pin = interrupt_pin
@@ -119,7 +122,7 @@ class GT911(pointer_framework.PointerDriver):
             if self._interrupt_pin:
                 self._interrupt_pin(0)
             time.sleep_ms(50)  # NOQA
-            if self._interrupt_pin:
+            if self._interrupt_pin and _USE_INTERRUPTS:
                 self._interrupt_pin.init(mode=self._interrupt_pin.IN)
             time.sleep_ms(50)  # NOQA
 
@@ -150,7 +153,7 @@ class GT911(pointer_framework.PointerDriver):
         print(f'Touch resolution: width={x}, height={y}')
 
         # Set up interrupt handler if interrupt pin is available
-        if self._interrupt_pin:
+        if self._interrupt_pin and _USE_INTERRUPTS:
             self._interrupt_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=self._interrupt_handler)
             # Setting _MODULE_SWITCH_1 will "hang" the touch input after a second or 2 of initial swipe
             #self._write_reg(_MODULE_SWITCH_1, _CMD_INT_FALLING_EDGE) # stops working
@@ -181,11 +184,11 @@ class GT911(pointer_framework.PointerDriver):
 
     def _get_coords(self):
         # If interrupt pin is available, only fetch data when interrupt flag is set
-        if self._interrupt_pin and not self._interrupt_flag:
+        if self._interrupt_pin and not self._interrupt_flag and _USE_INTERRUPTS:
             return self.__last_state, self.__x, self.__y
 
         # Clear interrupt flag before reading
-        if self._interrupt_pin:
+        if self._interrupt_pin and _USE_INTERRUPTS:
             self._interrupt_flag = False
             #self._write_reg(_MODULE_SWITCH_1, _CMD_INT_FALLING_EDGE)
             #print("[GT911] Interrupt-triggered read")
