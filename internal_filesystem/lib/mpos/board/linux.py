@@ -10,8 +10,8 @@ import mpos.ui.focus_direction
 from mpos import InputManager
 
 # Same as Waveshare ESP32-S3-Touch-LCD-2 and Fri3d Camp 2026 Badge
-TFT_HOR_RES=320
-TFT_VER_RES=240
+TFT_HOR_RES=240
+TFT_VER_RES=320
 
 # Fri3d Camp 2024 Badge:
 #TFT_HOR_RES=296

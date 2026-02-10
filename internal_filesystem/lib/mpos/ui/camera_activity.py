@@ -8,6 +8,7 @@ except Exception as e:
 
 from ..time import epoch_seconds
 from .camera_settings import CameraSettingsActivity
+from .camera_manager import CameraManager
 from .. import ui as mpos_ui
 from ..app.activity import Activity
 
@@ -406,37 +407,8 @@ class CameraActivity(Activity):
         try:
             from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
     
-            # Map resolution to FrameSize enum
-            # Format: (width, height): FrameSize
-            resolution_map = {
-                (96, 96): FrameSize.R96X96,
-                (160, 120): FrameSize.QQVGA,
-                (128, 128): FrameSize.R128X128,
-                (176, 144): FrameSize.QCIF,
-                (240, 176): FrameSize.HQVGA,
-                (240, 240): FrameSize.R240X240,
-                (320, 240): FrameSize.QVGA,
-                (320, 320): FrameSize.R320X320,
-                (400, 296): FrameSize.CIF,
-                (480, 320): FrameSize.HVGA,
-                (480, 480): FrameSize.R480X480,
-                (640, 480): FrameSize.VGA,
-                (640, 640): FrameSize.R640X640,
-                (720, 720): FrameSize.R720X720,
-                (800, 600): FrameSize.SVGA,
-                (800, 800): FrameSize.R800X800,
-                (1024, 768): FrameSize.XGA,
-                (960, 960): FrameSize.R960X960,
-                (1280, 720): FrameSize.HD,
-                (1024, 1024): FrameSize.R1024X1024,
-                # These are disabled in camera_settings.py because they use a lot of RAM:
-                (1280, 1024): FrameSize.SXGA,
-                (1280, 1280): FrameSize.R1280X1280,
-                (1600, 1200): FrameSize.UXGA,
-                (1920, 1080): FrameSize.FHD,
-            }
-    
-            frame_size = resolution_map.get((width, height), FrameSize.R240X240)
+            # Map resolution to FrameSize enum using CameraManager
+            frame_size = CameraManager.resolution_to_framesize(width, height)
             print(f"init_internal_cam: Using FrameSize {frame_size} for {width}x{height}")
     
             # Try to initialize, with one retry for I2C poweroff issue
