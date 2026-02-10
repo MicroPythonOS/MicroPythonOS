@@ -1,5 +1,4 @@
-
-print("matouch_esp32_s3_2_8.py initialization")
+print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660.py initialization")
 # Hardware initialization for Makerfabs MaTouch ESP32-S3 SPI 2.8" with Camera
 # Manufacturer's website: https://www.makerfabs.com/matouch-esp32-s3-spi-ips-2-8-with-camera-ov3660.html
 # Hardware Specifications:
@@ -226,7 +225,7 @@ CameraManager.add_camera(CameraManager.Camera(
     apply_settings=apply_cam_settings
 ))
 
-print("matouch_esp32_s3_2_8.py finished")
+print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660.py finished")
 print("Board capabilities:")
 print("  - Display: 320x240 ST7789 with GT911 touch")
 print("  - Camera: OV3660 (3MP)")

@@ -61,9 +61,9 @@ def detect_board():
 
         i2c0 = I2C(0, sda=Pin(39), scl=Pin(38))
         if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
-            return "matouch_esp32_s3_2_8"
+            return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
 
-        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # IO48 is floating on matouch and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_2_8
+        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # IO48 is floating on matouch and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
         if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
             return "waveshare_esp32_s3_touch_lcd_2"
 
