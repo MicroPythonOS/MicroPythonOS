@@ -104,17 +104,9 @@ lv.init()
 from mpos import sdcard
 sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
 
-# === AUDIO HARDWARE ===
-# Note: MaTouch ESP32-S3 has no buzzer or I2S audio hardware
-# AudioManager will not be initialized
-
 # === LED HARDWARE ===
 # Note: MaTouch ESP32-S3 has no NeoPixel LEDs
 # LightsManager will not be initialized (functions will return False)
-
-# === SENSOR HARDWARE ===
-# Note: MaTouch ESP32-S3 has no IMU sensor
-# SensorManager will not be initialized
 
 # === CAMERA HARDWARE ===
 from mpos import CameraManager
