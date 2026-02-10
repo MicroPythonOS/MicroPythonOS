@@ -244,16 +244,13 @@ class CameraSettingsActivity(Activity):
         button_cont.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         button_cont.set_style_border_width(0, lv.PART.MAIN)
 
-        save_button = lv.button(button_cont)
-        save_button.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
-        save_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
-        save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
-        save_label = lv.label(save_button)
-        savetext = "Save"
-        if self.scanqr_mode:
-            savetext += " QR tweaks"
-        save_label.set_text(savetext)
-        save_label.center()
+        erase_button = lv.button(button_cont)
+        erase_button.set_size(DisplayMetrics.pct_of_width(20), lv.SIZE_CONTENT)
+        erase_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
+        erase_label = lv.label(erase_button)
+        erase_label.set_text("Erase")
+        erase_label.center()
 
         cancel_button = lv.button(button_cont)
         cancel_button.set_size(DisplayMetrics.pct_of_width(25), lv.SIZE_CONTENT)
@@ -267,13 +264,17 @@ class CameraSettingsActivity(Activity):
         cancel_label.set_text("Cancel")
         cancel_label.center()
 
-        erase_button = lv.button(button_cont)
-        erase_button.set_size(DisplayMetrics.pct_of_width(20), lv.SIZE_CONTENT)
-        erase_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
-        erase_button.add_event_cb(lambda e: self.erase_and_close(), lv.EVENT.CLICKED, None)
-        erase_label = lv.label(erase_button)
-        erase_label.set_text("Erase")
-        erase_label.center()
+        save_button = lv.button(button_cont)
+        save_button.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
+        save_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        save_button.add_event_cb(lambda e: self.save_and_close(), lv.EVENT.CLICKED, None)
+        save_label = lv.label(save_button)
+        savetext = "Save"
+        if self.scanqr_mode:
+            savetext += " QR tweaks"
+        save_label.set_text(savetext)
+        save_label.center()
+
 
 
     def create_basic_tab(self, tab, prefs):
