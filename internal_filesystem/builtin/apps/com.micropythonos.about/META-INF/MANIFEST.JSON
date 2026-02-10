@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Info about MicroPythonOS",
 "long_description": "Shows current MicroPythonOS version, MicroPython version, build date and other useful info..",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.about/icons/com.micropythonos.about_0.1.0_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.about/mpks/com.micropythonos.about_0.1.0.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.about/icons/com.micropythonos.about_0.1.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.about/mpks/com.micropythonos.about_0.1.1.mpk",
 "fullname": "com.micropythonos.about",
-"version": "0.1.0",
+"version": "0.1.1",
 "category": "development",
 "activities": [
     {
