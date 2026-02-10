@@ -140,18 +140,8 @@ class CameraActivity(Activity):
         self.cam = CameraManager.get_cameras()[0].init(self.width, self.height, self.colormode)
         if self.cam:
             # Apply saved camera settings, only for internal camera for now:
-            self.apply_camera_settings(self.scanqr_prefs if self.scanqr_mode else self.prefs, self.cam, self.use_webcam) # needs to be done AFTER the camera is initialized
-        else:
-            print("camera app: no internal camera found, trying webcam on /dev/video0")
-            try:
-                # Initialize webcam with desired resolution directly
-                print(f"Initializing webcam at {self.width}x{self.height}")
-                self.cam = webcam.init("/dev/video0", width=self.width, height=self.height)
-                self.use_webcam = True
-            except Exception as e:
-                print(f"camera app: webcam exception: {e}")
-        # Start refreshing:
-        if self.cam:
+            CameraManager.get_cameras()[0].apply_settings(self.cam, self.scanqr_prefs if self.scanqr_mode else self.prefs) # needs to be done AFTER the camera is initialized
+            # Start refreshing:
             print("Camera app initialized, continuing...")
             self.update_preview_image()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
@@ -159,9 +149,7 @@ class CameraActivity(Activity):
     def stop_cam(self):
         if self.capture_timer:
             self.capture_timer.delete()
-        if self.use_webcam:
-            webcam.deinit(self.cam)
-        elif self.cam:
+        if self.cam:
             CameraManager.get_cameras()[0].deinit(self.cam)
         self.cam = None
         if self.image_dsc: # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
@@ -337,11 +325,10 @@ class CameraActivity(Activity):
         self.startActivity(intent)
 
     def try_capture(self, event):
+        if not self.cam:
+            return
         try:
-            if self.use_webcam and self.cam:
-                self.current_cam_buffer = webcam.capture_frame(self.cam, "rgb565" if self.colormode else "grayscale")
-            elif self.cam and self.cam.frame_available():
-                self.current_cam_buffer = self.cam.capture()
+            self.current_cam_buffer = CameraManager.get_cameras()[0].capture(self.cam, self.colormode)
         except Exception as e:
             print(f"Camera capture exception: {e}")
             return
@@ -351,8 +338,10 @@ class CameraActivity(Activity):
         self.image.set_src(self.image_dsc)
         if self.scanqr_mode:
             self.qrdecode_one()
-        if not self.use_webcam and self.cam:
+        try:
             self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
+        except Exception as e:
+            pass # some camera API's don't have this
 
     def print_qr_buffer(self, buffer):
         try:
@@ -373,127 +362,6 @@ class CameraActivity(Activity):
         if buffer.startswith(bom):
             return buffer[3:]
         return buffer
-    
-    
-    def apply_camera_settings(self, prefs, cam, use_webcam):
-        """Apply all saved camera settings to the camera.
-    
-        Only applies settings when use_webcam is False (ESP32 camera).
-        Settings are applied in dependency order (master switches before dependent values).
-    
-        Args:
-            cam: Camera object
-            use_webcam: Boolean indicating if using webcam
-        """
-        if not cam or use_webcam:
-            print("apply_camera_settings: Skipping (no camera or webcam mode)")
-            return
-    
-        try:
-            # Basic image adjustments
-            brightness = prefs.get_int("brightness")
-            cam.set_brightness(brightness)
-    
-            contrast = prefs.get_int("contrast")
-            cam.set_contrast(contrast)
-    
-            saturation = prefs.get_int("saturation")
-            cam.set_saturation(saturation)
-
-            # Orientation
-            hmirror = prefs.get_bool("hmirror")
-            cam.set_hmirror(hmirror)
-
-            vflip = prefs.get_bool("vflip")
-            cam.set_vflip(vflip)
-
-            # Special effect
-            special_effect = prefs.get_int("special_effect")
-            cam.set_special_effect(special_effect)
-
-            # Exposure control (apply master switch first, then manual value)
-            exposure_ctrl = prefs.get_bool("exposure_ctrl")
-            cam.set_exposure_ctrl(exposure_ctrl)
-
-            if not exposure_ctrl:
-                aec_value = prefs.get_int("aec_value")
-                cam.set_aec_value(aec_value)
-
-            # Mode-specific default comes from constructor
-            ae_level = prefs.get_int("ae_level")
-            cam.set_ae_level(ae_level)
-
-            aec2 = prefs.get_bool("aec2")
-            cam.set_aec2(aec2)
-    
-            # Gain control (apply master switch first, then manual value)
-            gain_ctrl = prefs.get_bool("gain_ctrl")
-            cam.set_gain_ctrl(gain_ctrl)
-
-            if not gain_ctrl:
-                agc_gain = prefs.get_int("agc_gain")
-                cam.set_agc_gain(agc_gain)
-
-            gainceiling = prefs.get_int("gainceiling")
-            cam.set_gainceiling(gainceiling)
-
-            # White balance (apply master switch first, then mode)
-            whitebal = prefs.get_bool("whitebal")
-            cam.set_whitebal(whitebal)
-
-            if not whitebal:
-                wb_mode = prefs.get_int("wb_mode")
-                cam.set_wb_mode(wb_mode)
-
-            awb_gain = prefs.get_bool("awb_gain")
-            cam.set_awb_gain(awb_gain)
-    
-            # Sensor-specific settings (try/except for unsupported sensors)
-            try:
-                sharpness = prefs.get_int("sharpness")
-                cam.set_sharpness(sharpness)
-            except:
-                pass  # Not supported on OV2640?
-
-            try:
-                denoise = prefs.get_int("denoise")
-                cam.set_denoise(denoise)
-            except:
-                pass  # Not supported on OV2640?
-
-            # Advanced corrections
-            colorbar = prefs.get_bool("colorbar")
-            cam.set_colorbar(colorbar)
-
-            dcw = prefs.get_bool("dcw")
-            cam.set_dcw(dcw)
-
-            bpc = prefs.get_bool("bpc")
-            cam.set_bpc(bpc)
-
-            wpc = prefs.get_bool("wpc")
-            cam.set_wpc(wpc)
-
-            # Mode-specific default comes from constructor
-            raw_gma = prefs.get_bool("raw_gma")
-            print(f"applying raw_gma: {raw_gma}")
-            cam.set_raw_gma(raw_gma)
-
-            lenc = prefs.get_bool("lenc")
-            cam.set_lenc(lenc)
-    
-            # JPEG quality (only relevant for JPEG format)
-            #try:
-            #    quality = prefs.get_int("quality", 85)
-            #    cam.set_quality(quality)
-            #except:
-            #    pass  # Not in JPEG mode
-    
-            print("Camera settings applied successfully")
-    
-        except Exception as e:
-            print(f"Error applying camera settings: {e}")
-
 
 """
     def zoom_button_click_unused(self, e):

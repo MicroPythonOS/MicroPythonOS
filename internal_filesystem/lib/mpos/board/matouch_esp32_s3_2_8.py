@@ -109,6 +109,8 @@ sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
 # LightsManager will not be initialized (functions will return False)
 
 # === CAMERA HARDWARE ===
+from mpos import CameraManager
+
 def init_cam(width, height, colormode):
     try:
         from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
@@ -203,7 +205,11 @@ def deinit_cam(cam):
     except Exception as e:
         print(f"Indev enable got exception: {e}")
 
-from mpos import CameraManager
+def capture_cam(cam_obj, colormode):
+    return cam_obj.capture()
+
+def apply_cam_settings(cam_obj, prefs):
+    return CameraManager.ov_apply_camera_settings(cam_obj, prefs)
 
 # MaTouch ESP32-S3 has OV3660 camera (3MP, up to 2048x1536)
 # Camera pins are available but initialization is handled by the camera driver
@@ -213,6 +219,7 @@ CameraManager.add_camera(CameraManager.Camera(
     vendor="OmniVision",
     init=init_cam,
     deinit=deinit_cam,
+    capture=capture_cam
 ))
 
 print("matouch_esp32_s3_2_8.py finished")

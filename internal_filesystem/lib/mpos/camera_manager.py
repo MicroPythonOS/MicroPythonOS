@@ -37,7 +37,7 @@ class Camera:
     Represents a camera device with its characteristics.
     """
 
-    def __init__(self, lens_facing, name=None, vendor=None, version=None, init=None, deinit=None):
+    def __init__(self, lens_facing, name=None, vendor=None, version=None, init=None, deinit=None, capture=None, apply_settings=None):
         """Initialize camera metadata.
 
         Args:
@@ -52,6 +52,8 @@ class Camera:
         self.version = version or 1
         self.init_function = init
         self.deinit_function = deinit
+        self.capture_function = capture
+        self.apply_settings_function = apply_settings
 
     def __repr__(self):
         facing_names = {
@@ -69,6 +71,14 @@ class Camera:
     def deinit(self, cam_obj=None):
         if self.deinit_function:
             return self.deinit_function(cam_obj)
+
+    def capture(self, cam_obj, colormode=None):
+        if self.capture_function:
+            return self.capture_function(cam_obj, colormode)
+
+    def apply_settings(self, cam_obj, prefs):
+        if self.apply_settings_function:
+            return self.apply_settings_function(cam_obj, prefs)
 
 class CameraManager:
     """
@@ -236,6 +246,117 @@ class CameraManager:
         }
         
         return resolution_map.get((width, height), FrameSize.R240X240)
+
+    @staticmethod
+    def ov_apply_camera_settings(self, cam, prefs):
+        if not cam or not prefs:
+            print("ov_apply_camera_settings: Skipping because invalid prefs or cam object")
+            return
+    
+        try:
+            # Basic image adjustments
+            brightness = prefs.get_int("brightness")
+            cam.set_brightness(brightness)
+    
+            contrast = prefs.get_int("contrast")
+            cam.set_contrast(contrast)
+    
+            saturation = prefs.get_int("saturation")
+            cam.set_saturation(saturation)
+
+            # Orientation
+            hmirror = prefs.get_bool("hmirror")
+            cam.set_hmirror(hmirror)
+
+            vflip = prefs.get_bool("vflip")
+            cam.set_vflip(vflip)
+
+            # Special effect
+            special_effect = prefs.get_int("special_effect")
+            cam.set_special_effect(special_effect)
+
+            # Exposure control (apply master switch first, then manual value)
+            exposure_ctrl = prefs.get_bool("exposure_ctrl")
+            cam.set_exposure_ctrl(exposure_ctrl)
+
+            if not exposure_ctrl:
+                aec_value = prefs.get_int("aec_value")
+                cam.set_aec_value(aec_value)
+
+            # Mode-specific default comes from constructor
+            ae_level = prefs.get_int("ae_level")
+            cam.set_ae_level(ae_level)
+
+            aec2 = prefs.get_bool("aec2")
+            cam.set_aec2(aec2)
+    
+            # Gain control (apply master switch first, then manual value)
+            gain_ctrl = prefs.get_bool("gain_ctrl")
+            cam.set_gain_ctrl(gain_ctrl)
+
+            if not gain_ctrl:
+                agc_gain = prefs.get_int("agc_gain")
+                cam.set_agc_gain(agc_gain)
+
+            gainceiling = prefs.get_int("gainceiling")
+            cam.set_gainceiling(gainceiling)
+
+            # White balance (apply master switch first, then mode)
+            whitebal = prefs.get_bool("whitebal")
+            cam.set_whitebal(whitebal)
+
+            if not whitebal:
+                wb_mode = prefs.get_int("wb_mode")
+                cam.set_wb_mode(wb_mode)
+
+            awb_gain = prefs.get_bool("awb_gain")
+            cam.set_awb_gain(awb_gain)
+    
+            # Sensor-specific settings (try/except for unsupported sensors)
+            try:
+                sharpness = prefs.get_int("sharpness")
+                cam.set_sharpness(sharpness)
+            except:
+                pass  # Not supported on OV2640?
+
+            try:
+                denoise = prefs.get_int("denoise")
+                cam.set_denoise(denoise)
+            except:
+                pass  # Not supported on OV2640?
+
+            # Advanced corrections
+            colorbar = prefs.get_bool("colorbar")
+            cam.set_colorbar(colorbar)
+
+            dcw = prefs.get_bool("dcw")
+            cam.set_dcw(dcw)
+
+            bpc = prefs.get_bool("bpc")
+            cam.set_bpc(bpc)
+
+            wpc = prefs.get_bool("wpc")
+            cam.set_wpc(wpc)
+
+            # Mode-specific default comes from constructor
+            raw_gma = prefs.get_bool("raw_gma")
+            print(f"applying raw_gma: {raw_gma}")
+            cam.set_raw_gma(raw_gma)
+
+            lenc = prefs.get_bool("lenc")
+            cam.set_lenc(lenc)
+    
+            # JPEG quality (only relevant for JPEG format)
+            #try:
+            #    quality = prefs.get_int("quality", 85)
+            #    cam.set_quality(quality)
+            #except:
+            #    pass  # Not in JPEG mode
+    
+            print("Camera settings applied successfully")
+    
+        except Exception as e:
+            print(f"Error applying camera settings: {e}")
 
 
 # ============================================================================
