@@ -157,6 +157,8 @@ class SettingActivity(Activity):
             self.active_radio_index = current_checkbox_index
 
     def create_radio_button(self, parent, text, index):
+        # A fix for the "checkbox unchecks when arrow up is pressed"
+        # can be implemented like in the wifi.py app: manually adding a clickable label
         cb = lv.checkbox(parent)
         cb.set_text(text)
         cb.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
