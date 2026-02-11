@@ -26,7 +26,7 @@ class AppStore(Activity):
     # Hardcoded list for now:
     backends = [
         ("Apps.MicroPythonOS.com on GitHub", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
-        ("Badge.WHY2025.org by BadgeHub", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
+        ("Badge.WHY2025.org (beta)", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
         ("BadgeHub.p1m.nl Testing (unstable)", _BACKEND_API_BADGEHUB, _BADGEHUB_TEST_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
     ]
 
