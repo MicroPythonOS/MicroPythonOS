@@ -236,6 +236,7 @@ class CameraActivity(Activity):
             before = time.ticks_ms()
             import qrdecode
             if self.colormode:
+                # exceptions from this one are not caught - see comments in quirc_decode.c
                 result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
             else:
                 result = qrdecode.qrdecode(self.current_cam_buffer, self.width, self.height)
@@ -356,7 +357,12 @@ class CameraActivity(Activity):
         #self.image.invalidate() # does not work so do this:
         self.image.set_src(self.image_dsc)
         if self.scanqr_mode:
-            self.qrdecode_one()
+            try:
+                # Due to buggy behavior in MicroPython and/or qrdecode_rgb565 of quirc_decode.c
+                # the exceptions are not caught in self.qrdecode_one() so must be done here
+                self.qrdecode_one()
+            except Exception as e:
+                print(f"self.qrdecode_one() was unable to catch exception from qrdecode_rgb565(): {e}")
         try:
             self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
         except Exception as e:
