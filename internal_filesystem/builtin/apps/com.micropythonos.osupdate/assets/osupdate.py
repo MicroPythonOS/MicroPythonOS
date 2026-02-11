@@ -46,13 +46,15 @@ class OSUpdate(Activity):
         self.current_version_label = lv.label(self.main_screen)
         self.current_version_label.align(lv.ALIGN.TOP_LEFT,0,0)
         self.current_version_label.set_text(f"Installed OS version: {BuildInfo.version.release}")
+        self.current_version_label.set_width(lv.pct(75))
+        self.current_version_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.install_button = lv.button(self.main_screen)
         self.install_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         self.install_button.add_state(lv.STATE.DISABLED) # button will be enabled if there is an update available
         self.install_button.set_size(lv.SIZE_CONTENT, lv.pct(25))
         self.install_button.add_event_cb(lambda e: self.install_button_click(), lv.EVENT.CLICKED, None)
         install_label = lv.label(self.install_button)
-        install_label.set_text("Update OS")
+        install_label.set_text("No\nUpdate")
         install_label.center()
 
         # Check Again button (hidden initially, shown on errors)
@@ -221,15 +223,15 @@ class OSUpdate(Activity):
         # Determine button text based on version comparison
         if is_newer > 0:
             # Update version > installed OS version
-            button_text = "Update OS"
+            button_text = "Install\nnew\version"
             label = "newer"
         elif is_older > 0:
             # Update version < installed OS version
-            button_text = "Install\nolder version"
+            button_text = "Install\nolder\nversion"
             label = "older"
         else:
             # Update version == installed OS version (neither is newer than the other)
-            button_text = "Reinstall\nsame version"
+            button_text = "Reinstall\nsame\nversion"
             label = "the same version"
         
         # Update button text and enable it
@@ -238,7 +240,7 @@ class OSUpdate(Activity):
         install_label.center()
         self.install_button.remove_state(lv.STATE.DISABLED)
         
-        self.status_label.set_text(f"Available version: {version}\nis {label}.\n\nDetails:\n\n{changelog}")
+        self.status_label.set_text(f"Update version: {version}\nUpdate version is {label}.\n\nDetails:\n\n{changelog}")
 
 
     def install_button_click(self):

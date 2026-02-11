@@ -3,16 +3,16 @@
 
 Builtin Apps:
 - About: use logger framework
-- Launcher: fit at least 3 apps per row on a 240px display
-- OSUpdate: replace 'force update' checkbox with improved button labels
+- Launcher: improve layout on different screen width sizes
+- OSUpdate: remove 'force update' checkbox in favor of varying button labels
 
 Frameworks:
 - SDCard: add support for SDIO/SD/MMC mode
 - CameraManager and CameraActivity: work fully camera-agnostic
 
 OS:
-- Scale MicroPythonOS boot logo down if necessary
 - Add board support: MaTouch ESP32-S3 SPI IPS 2.8' with Camera OV3660
+- Scale MicroPythonOS boot logo down if necessary
 - UI: Don't show battery icon if not present
 - Move logging.py to subdirectory
 
