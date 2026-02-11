@@ -67,8 +67,8 @@ class CameraSettingsActivity(Activity):
 
     # Scanqr mode specific defaults
     SCANQR_DEFAULTS = {
-        "resolution_width": 960,
-        "resolution_height": 960,
+        "resolution_width": 640,
+        "resolution_height": 640,
         "colormode": False,
         "ae_level": 2, # Higher auto-exposure compensation
         "raw_gma": False, # Disable raw gamma for better contrast
