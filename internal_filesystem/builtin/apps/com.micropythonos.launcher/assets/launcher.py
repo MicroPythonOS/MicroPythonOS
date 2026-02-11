@@ -1,19 +1,10 @@
-# bin files:
-# All icons took: 1085ms
-# All icons took: 1051ms
-# All icons took: 1032ms
-# All icons took: 1118ms
-# png files:
-# All icons took: 1258ms
-# All icons took: 1457ms
-# All icons took: 1250ms
-# Most of this time is actually spent reading and parsing manifests.
 import lvgl as lv
-from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics
+import math
 import time
 import uhashlib
 import ubinascii
 
+from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics
 
 class Launcher(Activity):
     def __init__(self):
@@ -28,7 +19,7 @@ class Launcher(Activity):
         main_screen.set_style_border_width(0, lv.PART.MAIN)
         main_screen.set_style_radius(0, lv.PART.MAIN)
         main_screen.set_pos(0, AppearanceManager.NOTIFICATION_BAR_HEIGHT)
-        main_screen.set_style_pad_hor(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+        main_screen.set_style_pad_hor(0, lv.PART.MAIN)
         main_screen.set_style_pad_ver(AppearanceManager.NOTIFICATION_BAR_HEIGHT, lv.PART.MAIN)
         main_screen.set_flex_flow(lv.FLEX_FLOW.ROW_WRAP)
         self.setContentView(main_screen)
@@ -87,7 +78,11 @@ class Launcher(Activity):
         # Grid parameters
         icon_size = 64
         label_height = 24
-        iconcont_width = int(icon_size * 1.1)
+        width_margin = 25
+        icons_fit_width = math.floor((DisplayMetrics.width()-width_margin) / icon_size)
+        #print(f"{icons_fit_width} icons fit")
+        iconcont_width = int((DisplayMetrics.width()-width_margin) / icons_fit_width)
+        #print(f"{iconcont_width} iconcont_width")
         iconcont_height = icon_size + label_height
 
         for app in AppManager.get_app_list():
