@@ -223,11 +223,11 @@ class OSUpdate(Activity):
         # Determine button text based on version comparison
         if is_newer > 0:
             # Update version > installed OS version
-            button_text = "Install\nnew\version"
+            button_text = "Install\nnew\nversion"
             label = "newer"
         elif is_older > 0:
             # Update version < installed OS version
-            button_text = "Install\nolder\nversion"
+            button_text = "Install\nold\nversion"
             label = "older"
         else:
             # Update version == installed OS version (neither is newer than the other)

@@ -683,11 +683,11 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
              # Call handle_update_info with newer version
              app.handle_update_info("1.1.0", "http://example.com/update.bin", "Bug fixes")
              
-             # Verify button text is exactly "Update OS"
+             # Verify button text is exactly "Install\nnew\nversion"
              button_label = tracking_button.get_child(0)
              self.assertIsNotNone(button_label, "Button should have a label child")
-             self.assertEqual(button_label.get_text(), "Update OS",
-                            "Button text must be exactly 'Update OS' for newer version")
+             self.assertEqual(button_label.get_text(), "Install\nnew\nversion",
+                            "Button text must be exactly 'Install\nnew\nversion' for newer version")
          finally:
              osupdate.BuildInfo = original_build_info
              osupdate.AppManager = original_app_manager
@@ -727,8 +727,8 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
              # Verify button text is exactly "Reinstall\nsame version"
              button_label = tracking_button.get_child(0)
              self.assertIsNotNone(button_label, "Button should have a label child")
-             self.assertEqual(button_label.get_text(), "Reinstall\nsame version",
-                            "Button text must be exactly 'Reinstall\\nsame version' for same version")
+             self.assertEqual(button_label.get_text(), "Reinstall\nsame\nversion",
+                            "Button text must be exactly 'Reinstall\\nsame\nversion' for same version")
          finally:
              osupdate.BuildInfo = original_build_info
              osupdate.AppManager = original_app_manager
@@ -768,8 +768,8 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
              # Verify button text is exactly "Install old version"
              button_label = tracking_button.get_child(0)
              self.assertIsNotNone(button_label, "Button should have a label child")
-             self.assertEqual(button_label.get_text(), "Install\nolder version",
-                            "Button text must be exactly 'Install\\nolder version' for older version")
+             self.assertEqual(button_label.get_text(), "Install\nold\nversion",
+                            "Button text must be exactly 'Install\\nold\nversion' for older version")
          finally:
              osupdate.BuildInfo = original_build_info
              osupdate.AppManager = original_app_manager
@@ -807,13 +807,13 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
          
          test_cases = [
              # (new_version, current_version, expected_button_text, description)
-             ("2.0.0", "1.0.0", "Update OS", "Major version upgrade"),
-             ("1.1.0", "1.0.0", "Update OS", "Minor version upgrade"),
-             ("1.0.1", "1.0.0", "Update OS", "Patch version upgrade"),
-             ("1.0.0", "1.0.0", "Reinstall\nsame version", "Exact same version"),
-             ("0.9.9", "1.0.0", "Install\nolder version", "Downgrade to older version"),
-             ("0.5.0", "1.0.0", "Install\nolder version", "Major version downgrade"),
-             ("1.0.0", "2.0.0", "Install\nolder version", "Downgrade from major version"),
+             ("2.0.0", "1.0.0", "Install\nnew\nversion", "Major version upgrade"),
+             ("1.1.0", "1.0.0", "Install\nnew\nversion", "Minor version upgrade"),
+             ("1.0.1", "1.0.0", "Install\nnew\nversion", "Patch version upgrade"),
+             ("1.0.0", "1.0.0", "Reinstall\nsame\nversion", "Exact same version"),
+             ("0.9.9", "1.0.0", "Install\nold\nversion", "Downgrade to older version"),
+             ("0.5.0", "1.0.0", "Install\nold\nversion", "Major version downgrade"),
+             ("1.0.0", "2.0.0", "Install\nold\nversion", "Downgrade from major version"),
          ]
          
          original_build_info = osupdate.BuildInfo
