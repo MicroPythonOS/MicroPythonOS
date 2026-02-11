@@ -334,7 +334,10 @@ class EditNetwork(Activity):
     def focus_app_cont(self, app_cont):
         app_cont.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
         app_cont.set_style_border_width(2, lv.PART.MAIN)
+        app_cont.set_style_border_opa(lv.OPA._50, lv.PART.MAIN)
+        app_cont.set_style_radius(5, lv.PART.MAIN)
         app_cont.scroll_to_view(True)
+        app_cont.set_style_pad_all(2, lv.PART.MAIN)
 
     def defocus_app_cont(self, app_cont):
         app_cont.set_style_border_width(0, lv.PART.MAIN)
