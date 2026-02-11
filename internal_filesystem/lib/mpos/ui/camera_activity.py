@@ -13,9 +13,6 @@ class CameraActivity(Activity):
     CONFIGFILE = "config.json"
     SCANQR_CONFIG = "config_scanqr_mode.json"
 
-    button_width = 75
-    button_height = 50
-
     STATUS_NO_CAMERA = "No camera found."
     STATUS_SEARCHING_QR = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and make the QR code big (4-12cm). Ensure proper lighting."
     STATUS_FOUND_QR = "Found QR, trying to decode... hold still..."
@@ -49,24 +46,20 @@ class CameraActivity(Activity):
         self.main_screen.set_style_border_width(0, lv.PART.MAIN)
         self.main_screen.set_size(lv.pct(100), lv.pct(100))
         self.main_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+
         # Initialize LVGL image widget
         self.image = lv.image(self.main_screen)
-        self.image.align(lv.ALIGN.LEFT_MID, 0, 0)
-        close_button = lv.button(self.main_screen)
-        close_button.set_size(self.button_width, self.button_height)
-        close_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
-        close_label = lv.label(close_button)
+        self.close_button = lv.button(self.main_screen)
+        close_label = lv.label(self.close_button)
         close_label.set_text(lv.SYMBOL.CLOSE)
         close_label.center()
-        close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
+        self.close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
         # Settings button
-        settings_button = lv.button(self.main_screen)
-        settings_button.set_size(self.button_width, self.button_height)
-        settings_button.align_to(close_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
-        settings_label = lv.label(settings_button)
+        self.settings_button = lv.button(self.main_screen)
+        settings_label = lv.label(self.settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.center()
-        settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
+        self.settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
         #self.zoom_button = lv.button(self.main_screen)
         #self.zoom_button.set_size(self.button_width, self.button_height)
         #self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 5)
@@ -75,9 +68,7 @@ class CameraActivity(Activity):
         #zoom_label.set_text("Z")
         #zoom_label.center()
         self.qr_button = lv.button(self.main_screen)
-        self.qr_button.set_size(self.button_width, self.button_height)
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
-        self.qr_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         self.qr_button.add_event_cb(self.qr_button_click,lv.EVENT.CLICKED,None)
         self.qr_label = lv.label(self.qr_button)
         #self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
@@ -85,21 +76,40 @@ class CameraActivity(Activity):
         self.qr_label.center()
 
         self.snap_button = lv.button(self.main_screen)
-        self.snap_button.set_size(self.button_width, self.button_width)
-        self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_TOP_MID, 0, -10)
         self.snap_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.snap_button.add_event_cb(self.snap_button_click,lv.EVENT.CLICKED,None)
-        self.snap_button.set_style_radius(self.button_width, lv.PART.MAIN)
         snap_label = lv.label(self.snap_button)
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
 
+        self.image.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        if mpos_ui.DisplayMetrics.width() < mpos_ui.DisplayMetrics.height():
+            # poster
+            self.button_width = int((mpos_ui.DisplayMetrics.width() / 4 ) - 5)
+            self.button_height = 50
+            self.resize_buttons()
+            self.snap_button.set_size(self.button_height, self.button_height)
+            self.close_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+            self.settings_button.align_to(self.close_button, lv.ALIGN.OUT_LEFT_MID, -5, 0)
+            self.qr_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+            self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_RIGHT_MID, 5, -2) # needs -2 to avoid being too low
+        else:
+            # landscape
+            self.button_width = 75
+            self.button_height = int((mpos_ui.DisplayMetrics.height() / 4 ) - 10)
+            self.resize_buttons()
+            self.snap_button.set_size(self.button_height, self.button_height)
+            self.close_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
+            self.settings_button.align_to(self.close_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+            self.qr_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+            self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_TOP_MID, 0, -10)
+
         self.status_label_cont = lv.obj(self.main_screen)
         width = mpos_ui.DisplayMetrics.pct_of_width(70)
-        height = mpos_ui.DisplayMetrics.pct_of_width(60)
+        height = mpos_ui.DisplayMetrics.pct_of_height(60)
         self.status_label_cont.set_size(width,height)
-        center_w = round((mpos_ui.DisplayMetrics.pct_of_width(100) - self.button_width - 5 - width)/2)
-        center_h = round((mpos_ui.DisplayMetrics.pct_of_height(100) - height)/2)
+        center_w = round((mpos_ui.DisplayMetrics.width() - self.button_width - 5 - width)/2)
+        center_h = round((mpos_ui.DisplayMetrics.height() - height)/2)
         self.status_label_cont.set_pos(center_w,center_h)
         self.status_label_cont.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
         self.status_label_cont.set_style_bg_opa(66, lv.PART.MAIN)
@@ -129,6 +139,12 @@ class CameraActivity(Activity):
         print("camera app backgrounded, cleaning up...")
         self.stop_cam()
         print("camera app cleanup done.")
+
+    def resize_buttons(self):
+        self.close_button.set_size(self.button_width, self.button_height)
+        self.settings_button.set_size(self.button_width, self.button_height)
+        self.qr_button.set_size(self.button_width, self.button_height)
+        self.snap_button.set_style_radius(self.button_width, lv.PART.MAIN)
 
     def start_cam(self):
         # Init camera:
@@ -194,9 +210,10 @@ class CameraActivity(Activity):
             'data': None # Will be updated per frame
         })
         self.image.set_src(self.image_dsc)
-        disp = lv.display_get_default()
-        target_h = disp.get_vertical_resolution()
-        #target_w = disp.get_horizontal_resolution() - self.button_width - 5 # leave 5px for border
+        if mpos_ui.DisplayMetrics.width() < mpos_ui.DisplayMetrics.height():
+            target_h = mpos_ui.DisplayMetrics.width()
+        else:
+            target_h = mpos_ui.DisplayMetrics.height()
         target_w = target_h # square
         print(f"scaling to size: {target_w}x{target_h}")
         scale_factor_w = round(target_w * 256 / self.width)
