@@ -264,10 +264,30 @@ class EditNetwork(Activity):
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Hidden network:
-        self.hidden_cb = lv.checkbox(password_page)
-        self.hidden_cb.set_text("Hidden network (always try connecting)")
-        # doesnt work: self.hidden_cb.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.hidden_cb.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+        hidden_cont = lv.obj(password_page)
+        hidden_cont.set_width(lv.pct(100))
+        hidden_cont.set_height(lv.SIZE_CONTENT)
+        hidden_cont.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+        hidden_cont.set_style_border_width(0, lv.PART.MAIN)
+        hidden_cont.set_style_pad_all(0, lv.PART.MAIN)
+        hidden_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        self.hidden_cb = lv.checkbox(hidden_cont)
+        self.hidden_cb.set_text("")
+        self.hidden_cb.align(lv.ALIGN.LEFT_MID, 0, 0)
+        label = lv.label(hidden_cont)
+        label.set_text("Hidden network (always try connecting)")
+        label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        label.set_width(lv.pct(85))
+        label.align_to(self.hidden_cb, lv.ALIGN.OUT_RIGHT_MID, 0, 0)
+        label.add_event_cb(self.hidden_clicked,lv.EVENT.CLICKED,None)
+        label.add_flag(lv.obj.FLAG.CLICKABLE)
+        label.add_event_cb(lambda e, cont=label: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
+        #label.add_event_cb(lambda e, cont=self.hidden_cb: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
+        label.add_event_cb(lambda e, cont=label: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
+        #label.add_event_cb(lambda e, cont=self.hidden_cb: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(label)
         if known_hidden:
             self.hidden_cb.set_state(lv.STATE.CHECKED, True)
 
@@ -309,6 +329,19 @@ class EditNetwork(Activity):
         label.center()
 
         self.setContentView(password_page)
+
+    def focus_app_cont(self, app_cont):
+        app_cont.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+        app_cont.set_style_border_width(2, lv.PART.MAIN)
+        app_cont.scroll_to_view(True)
+
+    def defocus_app_cont(self, app_cont):
+        app_cont.set_style_border_width(0, lv.PART.MAIN)
+
+    def hidden_clicked(self, event):
+        print("hidden clicked")
+        checked = self.hidden_cb.get_state() & lv.STATE.CHECKED
+        self.hidden_cb.set_state(lv.STATE.CHECKED, not checked)
 
     def connect_cb(self, event):
         # Validate the form
