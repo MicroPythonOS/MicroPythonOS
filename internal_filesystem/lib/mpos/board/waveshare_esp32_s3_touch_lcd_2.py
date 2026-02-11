@@ -146,7 +146,7 @@ def init_cam(width, height, colormode):
                         xclk_freq=20000000,
                         powerdown_pin=-1,
                         reset_pin=-1,
-                        pixel_format=PixelFormat.RGB565 if self.colormode else PixelFormat.GRAYSCALE,
+                        pixel_format=PixelFormat.RGB565 if colormode else PixelFormat.GRAYSCALE,
                         frame_size=frame_size,
                         #grab_mode=GrabMode.WHEN_EMPTY,
                         grab_mode=GrabMode.LATEST,
