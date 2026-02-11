@@ -197,7 +197,8 @@ CameraManager.add_camera(CameraManager.Camera(
     init=init_cam,
     deinit=deinit_cam,
     capture=capture_cam,
-    apply_settings=apply_cam_settings
+    apply_settings=apply_cam_settings,
+    rotation_degrees=-90 # camera is rotated 90 degrees counterclockwise so -90 degrees clockwise
 ))
 
 print("waveshare_esp32_s3_touch_lcd_2.py finished")

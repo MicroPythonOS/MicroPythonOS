@@ -37,7 +37,7 @@ class Camera:
     Represents a camera device with its characteristics.
     """
 
-    def __init__(self, lens_facing, name=None, vendor=None, version=None, init=None, deinit=None, capture=None, apply_settings=None):
+    def __init__(self, lens_facing, name=None, vendor=None, version=None, init=None, deinit=None, capture=None, apply_settings=None, rotation_degrees=0):
         """Initialize camera metadata.
 
         Args:
@@ -45,6 +45,7 @@ class Camera:
             name: Human-readable camera name (e.g., "OV5640", "Front Camera")
             vendor: Camera vendor/manufacturer (e.g., "OmniVision")
             version: Driver version (default 1)
+            rotation_degrees: how many degrees the camera is rotated clockwise
         """
         self.lens_facing = lens_facing
         self.name = name or "Camera"
@@ -54,6 +55,7 @@ class Camera:
         self.deinit_function = deinit
         self.capture_function = capture
         self.apply_settings_function = apply_settings
+        self.rotation_degrees = rotation_degrees
 
     def __repr__(self):
         facing_names = {
@@ -79,6 +81,10 @@ class Camera:
     def apply_settings(self, cam_obj, prefs):
         if self.apply_settings_function:
             return self.apply_settings_function(cam_obj, prefs)
+
+    def get_rotation_degrees(self):
+        return self.rotation_degrees
+
 
 class CameraManager:
     """

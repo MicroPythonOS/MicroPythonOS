@@ -153,10 +153,12 @@ class CameraActivity(Activity):
 
     def start_cam(self):
         # Init camera:
-        self.cam = CameraManager.get_cameras()[0].init(self.width, self.height, self.colormode)
+        firstcam = CameraManager.get_cameras()[0]
+        self.cam = firstcam.init(self.width, self.height, self.colormode)
         if self.cam:
+            self.image.set_rotation(-10 * firstcam.get_rotation_degrees()) # counter the rotation so * -1 and convert to tens-of-a-degree for LVGL
             # Apply saved camera settings, only for internal camera for now:
-            CameraManager.get_cameras()[0].apply_settings(self.cam, self.scanqr_prefs if self.scanqr_mode else self.prefs) # needs to be done AFTER the camera is initialized
+            firstcam.apply_settings(self.cam, self.scanqr_prefs if self.scanqr_mode else self.prefs) # needs to be done AFTER the camera is initialized
             # Start refreshing:
             print("Camera app initialized, continuing...")
             self.update_preview_image()
