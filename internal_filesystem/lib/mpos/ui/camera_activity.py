@@ -45,10 +45,11 @@ class CameraActivity(Activity):
         self.main_screen.set_style_pad_all(1, lv.PART.MAIN)
         self.main_screen.set_style_border_width(0, lv.PART.MAIN)
         self.main_screen.set_size(lv.pct(100), lv.pct(100))
-        self.main_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self.main_screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Initialize LVGL image widget
         self.image = lv.image(self.main_screen)
+        self.image.align(lv.ALIGN.TOP_LEFT, 0, 0)
         self.close_button = lv.button(self.main_screen)
         close_label = lv.label(self.close_button)
         close_label.set_text(lv.SYMBOL.CLOSE)
@@ -82,17 +83,30 @@ class CameraActivity(Activity):
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
 
-        self.image.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        self.status_label_cont = lv.obj(self.main_screen)
+        self.status_label_cont.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
+        self.status_label_cont.set_style_bg_opa(66, lv.PART.MAIN)
+        self.status_label_cont.set_style_border_width(0, lv.PART.MAIN)
+        self.status_label = lv.label(self.status_label_cont)
+        self.status_label.set_text(self.STATUS_NO_CAMERA)
+        self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.status_label.set_width(lv.pct(100))
+        self.status_label.center()
+
         if mpos_ui.DisplayMetrics.width() < mpos_ui.DisplayMetrics.height():
             # poster
             self.button_width = int((mpos_ui.DisplayMetrics.width() / 4 ) - 5)
             self.button_height = 50
             self.resize_buttons()
             self.snap_button.set_size(self.button_height, self.button_height)
-            self.close_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+            self.close_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, -5)
             self.settings_button.align_to(self.close_button, lv.ALIGN.OUT_LEFT_MID, -5, 0)
-            self.qr_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
-            self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_RIGHT_MID, 5, -2) # needs -2 to avoid being too low
+            self.qr_button.align(lv.ALIGN.BOTTOM_LEFT, 0, -5)
+            self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_RIGHT_MID, 5, 0) # needs -2 to avoid being too low
+            width = mpos_ui.DisplayMetrics.pct_of_width(85)
+            height = mpos_ui.DisplayMetrics.pct_of_height(45)
+            center_w = round((mpos_ui.DisplayMetrics.width() - width)/2)
+            center_h = round((mpos_ui.DisplayMetrics.height() - self.button_height - 10 - height)/2)
         else:
             # landscape
             self.button_width = 75
@@ -103,22 +117,13 @@ class CameraActivity(Activity):
             self.settings_button.align_to(self.close_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
             self.qr_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
             self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_TOP_MID, 0, -10)
+            width = mpos_ui.DisplayMetrics.pct_of_width(70)
+            height = mpos_ui.DisplayMetrics.pct_of_height(60)
+            center_w = round((mpos_ui.DisplayMetrics.width() - self.button_width - 5 - width)/2)
+            center_h = round((mpos_ui.DisplayMetrics.height() - height)/2)
 
-        self.status_label_cont = lv.obj(self.main_screen)
-        width = mpos_ui.DisplayMetrics.pct_of_width(70)
-        height = mpos_ui.DisplayMetrics.pct_of_height(60)
-        self.status_label_cont.set_size(width,height)
-        center_w = round((mpos_ui.DisplayMetrics.width() - self.button_width - 5 - width)/2)
-        center_h = round((mpos_ui.DisplayMetrics.height() - height)/2)
         self.status_label_cont.set_pos(center_w,center_h)
-        self.status_label_cont.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
-        self.status_label_cont.set_style_bg_opa(66, lv.PART.MAIN)
-        self.status_label_cont.set_style_border_width(0, lv.PART.MAIN)
-        self.status_label = lv.label(self.status_label_cont)
-        self.status_label.set_text(self.STATUS_NO_CAMERA)
-        self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.status_label.set_width(lv.pct(100))
-        self.status_label.center()
+        self.status_label_cont.set_size(width,height)
         self.setContentView(self.main_screen)
     
     def onResume(self, screen):
