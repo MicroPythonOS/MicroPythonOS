@@ -266,6 +266,7 @@ class EditNetwork(Activity):
         # Hidden network:
         self.hidden_cb = lv.checkbox(password_page)
         self.hidden_cb.set_text("Hidden network (always try connecting)")
+        # doesnt work: self.hidden_cb.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.hidden_cb.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
         if known_hidden:
             self.hidden_cb.set_state(lv.STATE.CHECKED, True)
@@ -276,6 +277,7 @@ class EditNetwork(Activity):
         buttons.set_height(lv.SIZE_CONTENT)
         buttons.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
         buttons.set_style_border_width(0, lv.PART.MAIN)
+        buttons.set_style_pad_all(0, lv.PART.MAIN)
         # Forget / Scan QR button
         self.forget_button = lv.button(buttons)
         self.forget_button.align(lv.ALIGN.LEFT_MID, 0, 0)
@@ -292,6 +294,8 @@ class EditNetwork(Activity):
         # Close button
         self.cancel_button = lv.button(buttons)
         self.cancel_button.center()
+        self.cancel_button.set_style_margin_top(5, lv.PART.MAIN)
+        self.cancel_button.set_style_margin_bottom(5, lv.PART.MAIN)
         self.cancel_button.add_event_cb(lambda *args: self.finish(), lv.EVENT.CLICKED, None)
         label = lv.label(self.cancel_button)
         label.set_text("Close")
