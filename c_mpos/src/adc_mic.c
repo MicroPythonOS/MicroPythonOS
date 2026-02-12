@@ -65,7 +65,7 @@ static mp_obj_t adc_mic_read(void) {
     // ────────────────────────────────────────────────
     // Small reusable buffer + tracking variables
     // ────────────────────────────────────────────────
-    const size_t chunk_samples = 64;
+    const size_t chunk_samples = 512;
     const size_t buf_size = chunk_samples * sizeof(int16_t);
     //int16_t *audio_buffer = heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     int16_t *audio_buffer = heap_caps_malloc_prefer(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
@@ -77,7 +77,7 @@ static mp_obj_t adc_mic_read(void) {
     }
 
     // How many chunks to read (adjust as needed)
-    const int N = 10;  // e.g. 50 × 64 = 3200 samples (~0.2 seconds @ 16 kHz)
+    const int N = 1;  // e.g. 50 × 512 = ~1.5 seconds @ 16 kHz
 
     int16_t global_min = 32767;
     int16_t global_max = -32768;
