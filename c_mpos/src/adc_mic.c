@@ -4,15 +4,30 @@
 #include "esp_heap_caps.h"
 #include "esp_codec_dev.h"  // Include for esp_codec_dev_*
 #include "adc_mic.h"  // Include for audio_codec_adc_cfg_t, audio_codec_new_adc_data, etc.
+#include "sdkconfig.h" // for CONFIG_ADC_MIC_TASK_CORE
 #include <errno.h>   // For ENOMEM
 
 #define ADC_MIC_DEBUG_PRINT(...) mp_printf(&mp_plat_print, __VA_ARGS__)
 
 static mp_obj_t adc_mic_read(void) {
     ADC_MIC_DEBUG_PRINT("Starting adc_mic_read...\n");
+    ADC_MIC_DEBUG_PRINT("CONFIG_ADC_MIC_TASK_CORE: %d\n", CONFIG_ADC_MIC_TASK_CORE);
 
     // Configure for mono ADC on GPIO1 (ADC1_CHANNEL_0) at 16kHz
-    audio_codec_adc_cfg_t cfg = DEFAULT_AUDIO_CODEC_ADC_MONO_CFG(ADC_CHANNEL_0, 16000);
+    //audio_codec_adc_cfg_t cfg = DEFAULT_AUDIO_CODEC_ADC_MONO_CFG(ADC_CHANNEL_0, 16000);
+    audio_codec_adc_cfg_t cfg = {
+        .handle = NULL,
+        .max_store_buf_size = 1024 * 2,
+        .conv_frame_size = 1024,
+        .unit_id = ADC_UNIT_1,
+        .adc_channel_list = ((uint8_t[]){ADC_CHANNEL_0}),
+        .adc_channel_num = 1,
+        .sample_rate_hz = 16000,
+        //.atten = ADC_ATTEN_DB_0,     // ← try 0 dB first (0–1.1 V range, higher gain)
+        .atten = ADC_ATTEN_DB_2_5,     // ← try 0 dB first (0–1.1 V range, higher gain)
+        // or ADC_ATTEN_DB_2_5 for ~0–1.5 V
+        // keep other fields as default or explicit
+    };
     ADC_MIC_DEBUG_PRINT("Config created for channel %d, sample rate %d\n", ADC_CHANNEL_0, 16000);
 
     ADC_MIC_DEBUG_PRINT("Creating ADC data interface...\n");
@@ -54,7 +69,8 @@ static mp_obj_t adc_mic_read(void) {
     ADC_MIC_DEBUG_PRINT("Codec device opened successfully\n");
 
     // Allocate buffer for 16000 samples (16-bit, so 32000 bytes)
-    const size_t buf_size = 16000 * sizeof(int16_t);
+    //const size_t buf_size = 16000 * sizeof(int16_t);
+    const size_t buf_size = 64 * sizeof(int16_t);
     ADC_MIC_DEBUG_PRINT("Allocating buffer of size %zu bytes...\n", buf_size);
     int16_t *audio_buffer = (int16_t *)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (audio_buffer == NULL) {
@@ -81,7 +97,24 @@ static mp_obj_t adc_mic_read(void) {
 
     // Create MicroPython bytes object from the buffer
     ADC_MIC_DEBUG_PRINT("Creating bytes object from buffer...\n");
-    mp_obj_t buf_obj = mp_obj_new_bytes((const byte *)audio_buffer, ret);
+    mp_obj_t buf_obj;
+    if (ret >= 0) {
+        ADC_MIC_DEBUG_PRINT("Creating full bytes object from buffer...\n");
+	buf_obj = mp_obj_new_bytes((const byte *)audio_buffer, buf_size);
+
+        ADC_MIC_DEBUG_PRINT("First 16 samples:\n");
+        size_t samples_to_print = 16;
+        for (size_t i = 0; i < samples_to_print; i++) {
+            int16_t sample = audio_buffer[i];
+            ADC_MIC_DEBUG_PRINT("%4d (0x%04X)  ", sample, (uint16_t)sample);
+            if ((i + 1) % 4 == 0) ADC_MIC_DEBUG_PRINT("\n");
+        }
+        ADC_MIC_DEBUG_PRINT("\n");
+
+    } else {
+        ADC_MIC_DEBUG_PRINT("Creating empty bytes object from buffer...\n");
+        buf_obj = mp_obj_new_bytes((const byte *)audio_buffer, 0);
+    }
 
     // Cleanup
     ADC_MIC_DEBUG_PRINT("Cleaning up...\n");
