@@ -462,7 +462,7 @@ class Hello(Activity):
         y, m, d = int_to_ymd(ymd)
 
         dlg = lv.obj(self.screen)
-        dlg.set_size(lv.pct(100), lv.pct(100))
+        dlg.set_size(lv.pct(100), 480)
         dlg.center()
         dlg.set_style_bg_color(lv.color_hex(0x8f8f8f), 0)
         dlg.set_style_border_width(2, 0)
@@ -483,7 +483,7 @@ class Hello(Activity):
         ti.set_placeholder_text("Title")
         keyboard = MposKeyboard(dlg)
         keyboard.set_textarea(ti)
-        keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        #keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         # End date offset (days)
         end_lbl = lv.label(dlg)
@@ -499,7 +499,7 @@ class Hello(Activity):
         # Buttons
         btn_cancel = lv.button(dlg)
         btn_cancel.set_size(90, 30)
-        btn_cancel.align(lv.ALIGN.BOTTOM_LEFT, 12, -10)
+        btn_cancel.align(lv.ALIGN.TOP_LEFT, 12, 10)
         btn_cancel.add_event_cb(lambda e: dlg.delete(), lv.EVENT.CLICKED, None)
         lc = lv.label(btn_cancel)
         lc.set_text("Cancel")
@@ -507,7 +507,7 @@ class Hello(Activity):
 
         btn_add = lv.button(dlg)
         btn_add.set_size(90, 30)
-        btn_add.align(lv.ALIGN.BOTTOM_RIGHT, -12, -10)
+        btn_add.align(lv.ALIGN.TOP_RIGHT, -12, 10)
 
         def do_add(e):
             title_s = ti.get_text()
