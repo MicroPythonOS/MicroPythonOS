@@ -22,7 +22,7 @@ try:
 except ImportError:
     pass
 
-from mpos import Activity
+from mpos import Activity, MposKeyboard
 
 
 ORG_FILE = f"data/calendar.org"   # adjust for your device
@@ -481,6 +481,9 @@ class Hello(Activity):
         ti.set_size(220, 32)
         ti.align_to(date_lbl, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
         ti.set_placeholder_text("Title")
+        keyboard = MposKeyboard(dlg)
+        keyboard.set_textarea(ti)
+        keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         # End date offset (days)
         end_lbl = lv.label(dlg)
