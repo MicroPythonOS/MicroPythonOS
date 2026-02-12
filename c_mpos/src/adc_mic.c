@@ -2,8 +2,9 @@
 #include "py/runtime.h"
 #include "py/mphal.h"
 #include "esp_heap_caps.h"
-#include "esp_codec_dev.h"
+#include "esp_codec_dev.h"  // Include for esp_codec_dev_*
 #include "adc_mic.h"  // Include for audio_codec_adc_cfg_t, audio_codec_new_adc_data, etc.
+#include <errno.h>   // For ENOMEM
 
 static mp_obj_t adc_mic_read(void) {
     // Configure for mono ADC on GPIO1 (ADC1_CHANNEL_0) at 16kHz
@@ -20,7 +21,7 @@ static mp_obj_t adc_mic_read(void) {
     };
     esp_codec_dev_handle_t dev = esp_codec_dev_new(&codec_dev_cfg);
     if (dev == NULL) {
-        audio_codec_delete_adc_data(adc_if);
+        audio_codec_delete_data_if(adc_if);
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to create codec device"));
     }
 
@@ -31,19 +32,19 @@ static mp_obj_t adc_mic_read(void) {
         .bits_per_sample = 16,
     };
     if (esp_codec_dev_open(dev, &fs) != ESP_OK) {
-        esp_codec_dev_del(dev);
-        audio_codec_delete_adc_data(adc_if);
+        esp_codec_dev_delete(dev);
+        audio_codec_delete_data_if(adc_if);
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to open codec device"));
     }
 
     // Allocate buffer for 16000 samples (16-bit, so 32000 bytes)
-    const size_t buf_size = 16000 * sizeof(uint16_t);
-    uint8_t *audio_buffer = (uint8_t *)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    const size_t buf_size = 16000 * sizeof(int16_t);
+    int16_t *audio_buffer = (int16_t *)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (audio_buffer == NULL) {
         esp_codec_dev_close(dev);
-        esp_codec_dev_del(dev);
-        audio_codec_delete_adc_data(adc_if);
-        mp_raise_OSError(MP_ENOMEM);
+        esp_codec_dev_delete(dev);
+        audio_codec_delete_data_if(adc_if);
+        mp_raise_OSError(ENOMEM);
     }
 
     // Read the data (blocking until buffer is filled)
@@ -51,19 +52,19 @@ static mp_obj_t adc_mic_read(void) {
     if (ret < 0) {
         heap_caps_free(audio_buffer);
         esp_codec_dev_close(dev);
-        esp_codec_dev_del(dev);
-        audio_codec_delete_adc_data(adc_if);
+        esp_codec_dev_delete(dev);
+        audio_codec_delete_data_if(adc_if);
         mp_raise_msg_varg(&mp_type_RuntimeError, MP_ERROR_TEXT("Failed to read audio data: %d"), ret);
     }
 
     // Create MicroPython bytes object from the buffer
-    mp_obj_t buf_obj = mp_obj_new_bytes(audio_buffer, ret);
+    mp_obj_t buf_obj = mp_obj_new_bytes((const byte *)audio_buffer, ret);
 
     // Cleanup
     heap_caps_free(audio_buffer);
     esp_codec_dev_close(dev);
-    esp_codec_dev_del(dev);
-    audio_codec_delete_adc_data(adc_if);
+    esp_codec_dev_delete(dev);
+    audio_codec_delete_data_if(adc_if);
 
     return buf_obj;
 }
