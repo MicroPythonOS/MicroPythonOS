@@ -39,38 +39,85 @@ def single_address_i2c_scan(i2c_bus, address):
     Returns:
         True if a device responds at the specified address, False otherwise
     """
+    print(f"Attempt to write a single byte to I2C bus address 0x{address:02x}...")
     try:
         # Attempt to write a single byte to the address
         # This will raise an exception if no device responds
-        i2c_bus.writeto(address, b'')
+        i2c_bus.writeto(address, b"")
+        print("Write test successful")
         return True
-    except OSError:
-        # No device at this address
+    except OSError as e:
+        print(f"No device at this address: {e}")
         return False
     except Exception as e:
         # Handle any other exceptions gracefully
-        print(f"single_address_i2c_scan: error scanning address 0x{address:02x}: {e}")
+        print(f"scan error: {e}")
         return False
+
+
+def fail_save_i2c(sda, scl):
+    from machine import I2C, Pin
+
+    print(f"Try to I2C initialized on {sda=} {scl=}")
+    try:
+        i2c0 = I2C(0, sda=Pin(sda), scl=Pin(scl))
+    except Exception as e:
+        print(f"Failed: {e}")
+        return None
+    else:
+        print("OK")
+        return i2c0
+
+
+def check_pins(*pins):
+    from machine import Pin
+
+    print(f"Test {pins=}...")
+    for pin in pins:
+        try:
+            Pin(pin)
+        except Exception as e:
+            print(f"Failed to initialize {pin=}: {e}")
+            return True
+    print("All pins initialized successfully")
+    return True
+
 
 def detect_board():
     import sys
     if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
         return "linux"
     elif sys.platform == "esp32":
-        from machine import Pin, I2C
+        print("Detecting ESP32 board by scanning I2C addresses...")
 
-        i2c0 = I2C(0, sda=Pin(39), scl=Pin(38))
-        if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
-            return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
+        print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
+        if i2c0 := fail_save_i2c(sda=39, scl=38):
+            if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(
+                i2c0, 0x5D
+            ):
+                # "ghost" or real GT911 touch screen
+                return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
 
-        i2c0 = I2C(0, sda=Pin(48), scl=Pin(47)) # IO48 is floating on matouch and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
-        if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
-            return "waveshare_esp32_s3_touch_lcd_2"
+        print("waveshare_esp32_s3_touch_lcd_2 ?")
+        if i2c0 := fail_save_i2c(sda=48, scl=47):
+            # IO48 is floating on matouch and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
+            if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(
+                i2c0, 0x6B
+            ):
+                # CST816S touch screen and IMU
+                return "waveshare_esp32_s3_touch_lcd_2"
 
-        i2c0 = I2C(0, sda=Pin(9), scl=Pin(18))
-        if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
-            return "fri3d_2024"
+        print("odroid_go ?")
+        if check_pins(0, 13, 27, 39):
+            return "odroid_go"
 
+        print("fri3d_2024 ?")
+        if i2c0 := fail_save_i2c(sda=9, scl=18):
+            # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+            if single_address_i2c_scan(i2c0, 0x6B):
+                return "fri3d_2024"
+
+        print("Fallback to fri3d_2026")
         # default: if single_address_i2c_scan(i2c0, 0x6A): # IMU but currently not installed
         return "fri3d_2026"
 

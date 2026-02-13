@@ -2,8 +2,28 @@
 
 # Make sure the storage partition's lib/ is first in the path, so whatever is placed there overrides frozen libraries.
 # This allows any build to be used for development as well, just by overriding the libraries in lib/
+import gc
+import os
 import sys
-sys.path.insert(0, 'lib')
 
-print(f"Minimal main.py importing mpos.main with sys.path: {sys.path}")
-import mpos.main
+sys.path.insert(0, "lib")
+
+print(f"{sys.version=}")
+print(f"{sys.implementation=}")
+
+
+print("Check free space on root filesystem:")
+stat = os.statvfs("/")
+total_space = stat[0] * stat[2]
+free_space = stat[0] * stat[3]
+used_space = total_space - free_space
+print(f"{total_space=} / {used_space=} / {free_space=} bytes")
+
+
+gc.collect()
+print(
+    f"RAM: {gc.mem_free()} free, {gc.mem_alloc()} allocated, {gc.mem_alloc() + gc.mem_free()} total"
+)
+
+print("Passing execution over to mpos.main")
+import mpos.main  # noqa: F401

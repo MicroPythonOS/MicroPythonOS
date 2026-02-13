@@ -14,6 +14,7 @@ if [ -z "$target" ]; then
 	echo "Example: $0 unix"
 	echo "Example: $0 macOS"
 	echo "Example: $0 esp32"
+	echo "Example: $0 odroid_go"
 	exit 1
 fi
 
@@ -99,6 +100,23 @@ if [ "$target" == "esp32" ]; then
 	pushd "$codebasedir"/lvgl_micropython/
 	rm -rf lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
+	popd
+elif [ "$target" == "odroid_go" ]; then
+	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
+	frozenmanifest="FROZEN_MANIFEST=$manifest"
+	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
+	# Build for https://wiki.odroid.com/odroid_go/odroid_go
+	pushd "$codebasedir"/lvgl_micropython/
+	rm -rf lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
+	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 \
+	    BOARD=ESP32_GENERIC BOARD_VARIANT=SPIRAM DISPLAY=ili9341 \
+	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
+	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
+	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
+	    CONFIG_FREERTOS_USE_TRACE_FACILITY=y \
+	    CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
+	    CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
+	    "$frozenmanifest"
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
