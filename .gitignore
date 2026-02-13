@@ -1,9 +1,10 @@
+.*
+!.github
+!.gitignore
+
 trash/
 
 conf.json*
-
-# macOS file:
-.DS_Store
 
 # auto created when running on desktop:
 internal_filesystem/SDLPointer_2
@@ -26,7 +27,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
 
 # these get created:
 c_mpos/c_mpos
