@@ -1,6 +1,6 @@
 # Hardware initialization for ESP32 M5Stack-Fire board
 # Manufacturer's website at https://https://docs.m5stack.com/en/core/fire_v2.7
-import ili9341
+import drivers.display.ili9341 as ili9341
 import lcd_bus
 import machine
 
