@@ -6,11 +6,11 @@
 "icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.columns/icons/com.micropythonos.helloworld_0.0.5_64x64.png",
 "fullname": "cz.ucw.pavel.columns",
 "version": "0.0.1",
-"category": "development",
+"category": "utilities",
 "activities": [
     {
-      "entrypoint": "assets/hello.py",
-      "classname": "Hello",
+      "entrypoint": "assets/main.py",
+      "classname": "Main",
       "intent_filters": [
         {
           "action": "main",
