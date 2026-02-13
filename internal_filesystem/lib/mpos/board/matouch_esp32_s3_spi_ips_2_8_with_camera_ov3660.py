@@ -11,7 +11,7 @@ print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660.py initialization")
 # - No buzzer or I2S audio
 
 from micropython import const
-import st7789
+import drivers.display.st7789 as st7789
 import lcd_bus
 import machine
 
