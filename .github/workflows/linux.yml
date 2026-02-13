@@ -109,4 +109,24 @@ jobs:
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
 
+      - name: Build LVGL MicroPython esp32s3
+        run: |
+          ./scripts/build_mpos.sh esp32s3
+          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
+          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
+          path: lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
+          retention-days: 7
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
+          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
+          retention-days: 7
+
 
