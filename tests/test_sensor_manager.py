@@ -159,8 +159,14 @@ mock_esp32 = type('module', (), {
 
 # Inject mocks into sys.modules
 sys.modules['machine'] = mock_machine
-sys.modules['mpos.hardware.drivers.qmi8658'] = mock_qmi8658
-sys.modules['mpos.hardware.drivers.wsen_isds'] = mock_wsen_isds
+
+# Mock parent packages for driver imports
+# These need to exist for the import path to work
+sys.modules['drivers'] = type('module', (), {})()
+sys.modules['drivers.imu_sensor'] = type('module', (), {})()
+
+sys.modules['drivers.imu_sensor.qmi8658'] = mock_qmi8658
+sys.modules['drivers.imu_sensor.wsen_isds'] = mock_wsen_isds
 sys.modules['esp32'] = mock_esp32
 sys.modules['mpos.config'] = mock_config
 

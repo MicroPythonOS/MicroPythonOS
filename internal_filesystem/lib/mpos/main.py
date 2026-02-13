@@ -88,33 +88,30 @@ def detect_board():
     if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
         return "linux"
     elif sys.platform == "esp32":
-        print("Detecting ESP32 board by scanning I2C addresses...")
 
         print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
         if i2c0 := fail_save_i2c(sda=39, scl=38):
-            if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(
-                i2c0, 0x5D
-            ):
-                # "ghost" or real GT911 touch screen
+            if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
                 return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
 
         print("waveshare_esp32_s3_touch_lcd_2 ?")
         if i2c0 := fail_save_i2c(sda=48, scl=47):
-            # IO48 is floating on matouch and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
-            if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(
-                i2c0, 0x6B
-            ):
-                # CST816S touch screen and IMU
+            # IO48 is floating on matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
+            if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
                 return "waveshare_esp32_s3_touch_lcd_2"
 
+        print("m5stack_fire ?")
+        if i2c0 := fail_save_i2c(sda=21, scl=22):
+            if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
+                return "m5stack_fire"
+  
         print("odroid_go ?")
         if check_pins(0, 13, 27, 39):
             return "odroid_go"
 
         print("fri3d_2024 ?")
         if i2c0 := fail_save_i2c(sda=9, scl=18):
-            # IMU (plus possibly the Communicator's LANA TNY at 0x38)
-            if single_address_i2c_scan(i2c0, 0x6B):
+            if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
 
         print("Fallback to fri3d_2026")
