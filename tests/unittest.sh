@@ -64,16 +64,16 @@ one_test() {
 		# Desktop execution
 		if [ $is_graphical -eq 1 ]; then
 			echo "Graphical test: include main.py"
-			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py) ; sys.path.append(\"$tests_abs_path\")
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
-            result=$?
+	           result=$?
 		else
 			echo "Regular test: no boot files"
-			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
-            result=$?
+	           result=$?
 		fi
 	else
 		if [ ! -z "$ondevice" ]; then
@@ -90,23 +90,23 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		echo "$test logging to $testlog"
 		if [ $is_graphical -eq 1 ]; then
 			# Graphical test: system already initialized, just add test paths
-			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py) ; sys.path.append('tests')
+			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
-    print('TEST WAS A SUCCESS')
+		  print('TEST WAS A SUCCESS')
 else:
-    print('TEST WAS A FAILURE')
+		  print('TEST WAS A FAILURE')
 " | tee "$testlog"
 		else
 			# Regular test: no boot files
-			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
-    print('TEST WAS A SUCCESS')
+		  print('TEST WAS A SUCCESS')
 else:
-    print('TEST WAS A FAILURE')
+		  print('TEST WAS A FAILURE')
 " | tee "$testlog"
 		fi
 		grep -q "TEST WAS A SUCCESS" "$testlog"
