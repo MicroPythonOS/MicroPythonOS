@@ -2,14 +2,15 @@
 print("waveshare_esp32_s3_touch_lcd_2.py initialization")
 # Hardware initialization for ESP32-S3-Touch-LCD-2
 # Manufacturer's website at https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2
-import st7789
 import lcd_bus
 import machine
-import cst816s
 import i2c
 
 import lvgl as lv
 import task_handler
+
+import drivers.display.st7789 as st7789
+import drivers.indev.cst816s as cst816s
 
 import mpos.ui
 

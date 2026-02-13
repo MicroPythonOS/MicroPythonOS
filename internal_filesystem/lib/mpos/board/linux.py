@@ -3,8 +3,9 @@ import lcd_bus
 import lvgl as lv
 import sdl_display
 
+from drivers.indev.sdl_keyboard import MposSDLKeyboard
+
 import mpos.clipboard
-import mpos.indev.mpos_sdl_keyboard
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager
@@ -76,7 +77,7 @@ def catch_escape_key(indev, indev_data):
 
     sdlkeyboard._read(indev, indev_data)
 
-sdlkeyboard = mpos.indev.mpos_sdl_keyboard.MposSDLKeyboard()
+sdlkeyboard = MposSDLKeyboard()
 sdlkeyboard._indev_drv.set_read_cb(catch_escape_key) # check for escape
 InputManager.register_indev(sdlkeyboard)
 try:

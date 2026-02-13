@@ -82,7 +82,7 @@ def init_touch():
     try:
         import i2c
         i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39, freq=I2C_FREQ, use_locks=False)
-        import mpos.indev.gt911 as gt911
+        import drivers.indev.gt911 as gt911
         touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
         indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=False) # debug makes it slower
         from mpos import InputManager

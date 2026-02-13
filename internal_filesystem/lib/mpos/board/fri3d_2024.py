@@ -1,9 +1,7 @@
 # Hardware initialization for Fri3d Camp 2024 Badge
 from machine import Pin, SPI, SDCard
-import st7789 
 import lcd_bus
 import machine
-import cst816s
 import i2c
 import math
 
@@ -12,6 +10,9 @@ import gc
 
 import lvgl as lv
 import task_handler
+
+import drivers.display.st7789 as st7789
+import drivers.indev.cst816s as cst816s
 
 import mpos.ui
 import mpos.ui.focus_direction

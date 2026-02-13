@@ -224,7 +224,7 @@ class CameraSettingsActivity(Activity):
         textarea.align(lv.ALIGN.TOP_RIGHT, 0, 0)
 
         # Initialize keyboard (hidden initially)
-        from ..indev.mpos_sdl_keyboard import MposKeyboard
+        from mpos.ui.keyboard import MposKeyboard
         keyboard = MposKeyboard(parent)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         keyboard.add_flag(lv.obj.FLAG.HIDDEN)

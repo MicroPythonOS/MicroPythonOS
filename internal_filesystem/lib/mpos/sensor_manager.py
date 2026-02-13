@@ -162,7 +162,7 @@ class SensorManager:
         # Try QMI8658 first (Waveshare board)
         if self._i2c_bus:
             try:
-                from mpos.hardware.drivers.qmi8658 import QMI8658
+                from drivers.imu_sensor.qmi8658 import QMI8658
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]  # PARTID register
                 if chip_id == 0x05:  # QMI8685_PARTID
                     self._imu_driver = _QMI8658Driver(self._i2c_bus, self._i2c_address)
@@ -174,7 +174,7 @@ class SensorManager:
 
             # Try WSEN_ISDS (fri3d_2024) or LSM6DSO (fri3d_2026)
             try:
-                from mpos.hardware.drivers.wsen_isds import Wsen_Isds
+                from drivers.imu_sensor.wsen_isds import Wsen_Isds
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x0F, 1)[0]  # WHO_AM_I register - could also use Wsen_Isds.get_chip_id()
                 if chip_id == 0x6A or chip_id == 0x6C:  # WSEN_ISDS WHO_AM_I 0x6A (Fri3d 2024) or 0x6C (Fri3d 2026)
                     self._imu_driver = _WsenISDSDriver(self._i2c_bus, self._i2c_address)
@@ -721,7 +721,7 @@ class _QMI8658Driver(_IMUDriver):
     """Wrapper for QMI8658 IMU (Waveshare board)."""
 
     def __init__(self, i2c_bus, address):
-        from mpos.hardware.drivers.qmi8658 import QMI8658
+        from drivers.imu_sensor.qmi8658 import QMI8658
         # QMI8658 scale constants (can't import const() values)
         _ACCELSCALE_RANGE_8G = 0b10
         _GYROSCALE_RANGE_256DPS = 0b100
@@ -817,7 +817,7 @@ class _WsenISDSDriver(_IMUDriver):
     """Wrapper for WSEN_ISDS IMU (Fri3d badge)."""
 
     def __init__(self, i2c_bus, address):
-        from mpos.hardware.drivers.wsen_isds import Wsen_Isds
+        from drivers.imu_sensor.wsen_isds import Wsen_Isds
         self.sensor = Wsen_Isds(
             i2c_bus,
             address=address,

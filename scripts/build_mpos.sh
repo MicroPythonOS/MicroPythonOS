@@ -6,7 +6,6 @@ codebasedir=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
 target="$1"
 buildtype="$2"
-subtarget="$3"
 
 if [ -z "$target" ]; then
 	echo "Usage: $0 target"
@@ -14,10 +13,9 @@ if [ -z "$target" ]; then
 	echo "Example: $0 unix"
 	echo "Example: $0 macOS"
 	echo "Example: $0 esp32"
-	echo "Example: $0 odroid_go"
+	echo "Example: $0 esp32s3"
 	exit 1
 fi
-
 
 # This assumes all the git submodules have been checked out recursively
 
@@ -79,13 +77,21 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
-manifest=""
-if [ "$target" == "esp32" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
+        if [ "$target" == "esp32" ]; then
+		BOARD=ESP32_GENERIC
+		BOARD_VARIANT=SPIRAM
+	else # esp32s3
+		BOARD=ESP32_GENERIC_S3
+		BOARD_VARIANT=SPIRAM_OCT
+	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
 	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
-	# Build for https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2.
-	# See https://github.com/lvgl-micropython/lvgl_micropython
+	pushd "$codebasedir"/lvgl_micropython/
+	rm -rf lib/micropython/ports/esp32/build-$BOARD-$BOARD_VARIANT
+
+	# For more info on the options, see https://github.com/lvgl-micropython/lvgl_micropython
 	# --ota: support Over-The-Air updates
 	# --partition size: both OTA partitions are 4MB
 	# --flash-size: total flash size is 16MB
@@ -97,19 +103,8 @@ if [ "$target" == "esp32" ]; then
 	# CONFIG_FREERTOS_USE_TRACE_FACILITY=y
 	# CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
-	pushd "$codebasedir"/lvgl_micropython/
-	rm -rf lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=ESP32_GENERIC_S3 BOARD_VARIANT=SPIRAM_OCT DISPLAY=st7789 INDEV=cst816s USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake CONFIG_FREERTOS_USE_TRACE_FACILITY=y CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y "$frozenmanifest"
-	popd
-elif [ "$target" == "odroid_go" ]; then
-	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
-	frozenmanifest="FROZEN_MANIFEST=$manifest"
-	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
-	# Build for https://wiki.odroid.com/odroid_go/odroid_go
-	pushd "$codebasedir"/lvgl_micropython/
-	rm -rf lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 \
-	    BOARD=ESP32_GENERIC BOARD_VARIANT=SPIRAM DISPLAY=ili9341 \
+
+	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
@@ -117,6 +112,7 @@ elif [ "$target" == "odroid_go" ]; then
 	    CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
 	    CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
 	    "$frozenmanifest"
+
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
@@ -128,30 +124,14 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
 	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
 
-	#if [ "$target" == "unix" ]; then
-	if false; then
-		# only on unix, because on macos, homebrew install rlottie fails so the compilation runs into: fatal error: 'rlottie_capi.h' file not found on macos"
-		# and on esp32, rlottie_create_from_raw() crashes the system
-		sed -i.backup 's/#define MICROPY_RLOTTIE 0/#define MICROPY_RLOTTIE 1/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
-		echo "After enabling MICROPY_RLOTTIE:"
-		cat "$codebasedir"/lvgl_micropython/lib/lv_conf.h
-	fi
-
 	# If it's still running, kill it, otherwise "text file busy"
 	pkill -9 -f /lvgl_micropy_unix
 	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
 	# STRIP= makes it so that debug symbols are kept
 	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
-	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$frozenmanifest"
+	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer "$frozenmanifest"
 	popd
-
-	# Restore RLOTTIE:
-	if [ "$target" == "unix" ]; then
-		sed -i.backup 's/#define MICROPY_RLOTTIE 1/#define MICROPY_RLOTTIE 0/' "$codebasedir"/lvgl_micropython/lib/lv_conf.h
-		#echo "After disabling MICROPY_RLOTTIE:"
-		#cat "$codebasedir"/lvgl_micropython/lib/lv_conf.h
-	fi
 
 	# Restore @micropython.viper decorator after build
 	echo "Restoring @micropython.viper decorator..."

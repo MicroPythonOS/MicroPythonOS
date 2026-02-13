@@ -6,7 +6,7 @@ print("odroid_go.py initialization")
 
 import time
 
-import ili9341
+import drivers.display.ili9341 as ili9341
 import lcd_bus
 import lvgl as lv
 import machine
@@ -157,7 +157,7 @@ class Crossbar:
         return crossbar_pressed
 
 
-# see: internal_filesystem/lib/mpos/indev/mpos_sdl_keyboard.py
+# see: internal_filesystem/lib/drivers/indev/sdl_keyboard.py
 #         lv.KEY.UP
 # lv.KEY.LEFT - lv.KEY.RIGHT
 #         lv.KEY.DOWN
