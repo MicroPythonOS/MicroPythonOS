@@ -23,7 +23,8 @@ try:
     import network
     HAS_NETWORK_MODULE = True
 except ImportError:
-    print("WifiService: network module not available (desktop mode)")
+    pass
+    #print("WifiService: network module not available (desktop mode)")
 
 
 class WifiService:
