@@ -11,7 +11,7 @@ Usage:
     # Create keyboard
     keyboard = MposKeyboard(parent_obj)
     keyboard.set_textarea(my_textarea)
-    keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+    keyboard.add_flag(lv.obj.FLAG.HIDDEN) # shows up when textarea is clicked
 
 """
 

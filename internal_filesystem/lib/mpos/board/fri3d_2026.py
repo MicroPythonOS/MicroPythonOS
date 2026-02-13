@@ -224,7 +224,7 @@ i2s_pins = {
 i2s_pins = {
     # Output (DAC/speaker) pins
     'mck': 2,       # MCLK (mandatory)
-    #'sck': 17,      # SCLK or BCLK (optional)
+    #'sck': 17,      # SCLK aka BCLK (optional)
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
 }
