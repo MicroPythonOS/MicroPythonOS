@@ -86,7 +86,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 		BOARD_VARIANT=SPIRAM_OCT
 	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
-	frozenmanifest="FROZEN_MANIFEST=$manifest"
+	#frozenmanifest="FROZEN_MANIFEST=$manifest"
 	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
 	pushd "$codebasedir"/lvgl_micropython/
 	rm -rf lib/micropython/ports/esp32/build-$BOARD-$BOARD_VARIANT

@@ -14,12 +14,12 @@ def init_rootscreen():
     width = disp.get_horizontal_resolution()
     height = disp.get_vertical_resolution()
     dpi = disp.get_dpi()
-    
+
     # Initialize DisplayMetrics with actual display values
     DisplayMetrics.set_resolution(width, height)
     DisplayMetrics.set_dpi(dpi)   
     print(f"init_rootscreen set resolution to {width}x{height} at {dpi} DPI")
-    
+
     # Show logo
     img = lv.image(screen)
     img.set_src("M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png") # from the MPOS-logo repo
@@ -105,14 +105,14 @@ def detect_board():
             if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
                 return "m5stack_fire"
   
-        print("odroid_go ?")
-        if check_pins(0, 13, 27, 39):
-            return "odroid_go"
-
         print("fri3d_2024 ?")
         if i2c0 := fail_save_i2c(sda=9, scl=18):
             if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
+
+        print("odroid_go ?")
+        if check_pins(0, 13, 27, 39): # this matches too much (also fri3d_2024) so move towards the end
+            return "odroid_go"
 
         print("Fallback to fri3d_2026")
         # default: if single_address_i2c_scan(i2c0, 0x6A): # IMU but currently not installed
