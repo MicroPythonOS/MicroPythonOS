@@ -4,6 +4,8 @@
 
 add_library(usermod_c_mpos INTERFACE)
 
+set(MPOS_C_INCLUDES)
+
 #set(MPOS_C_INCLUDES
 #    ${CMAKE_CURRENT_LIST_DIR}/../lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__esp_codec_dev/include/
 #    ${CMAKE_CURRENT_LIST_DIR}/../lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__esp_codec_dev/interface/
