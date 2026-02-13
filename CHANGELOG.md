@@ -3,8 +3,9 @@
 
 Builtin Apps:
 - About: use logger framework
+- AppStore: mark BadgeHub backend as 'beta'
 - Launcher: improve layout on different screen width sizes
-- OSUpdate: remove 'force update' checkbox in favor of varying button labels
+- OSUpdate: remove 'force update' checkbox not in favor of varying button labels
 
 Frameworks:
 - SDCard: add support for SDIO/SD/MMC mode
@@ -13,7 +14,7 @@ Frameworks:
 OS:
 - Add board support: Makerfabs MaTouch ESP32-S3 SPI IPS 2.8' with Camera OV3660
 - Scale MicroPythonOS boot logo down if necessary
-- UI: Don't show battery icon if not present
+- Don't show battery icon if battery is not supported
 - Move logging.py to subdirectory
 
 0.7.1
