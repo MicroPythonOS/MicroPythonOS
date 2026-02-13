@@ -48,7 +48,6 @@ CROSSBAR_Y = const(35)
 # Misc settings:
 LED_BLUE = const(2)
 BATTERY_PIN = const(36)
-BATTERY_RESISTANCE_NUM = const(2)
 SPEAKER_ENABLE_PIN = const(25)
 SPEAKER_PIN = const(26)
 
@@ -105,8 +104,22 @@ print("odroid_go.py Battery initialization...")
 from mpos import BatteryManager
 
 
-def adc_to_voltage(adc_value):
-    return adc_value * BATTERY_RESISTANCE_NUM
+def adc_to_voltage(raw_adc_value):
+    """
+    The percentage calculation uses MIN_VOLTAGE = 3.15 and MAX_VOLTAGE = 4.15
+    0% at 3.15V -> raw_adc_value = 270
+    100% at 4.15V -> raw_adc_value = 310
+
+    4.15 - 3.15 = 1V
+    310 - 270 = 40 raw ADC steps
+
+    So each raw ADC step is 1V / 40 = 0.025V
+    Offset calculation:
+    270 * 0.025 = 6.75V. but we want it to be 3.15V
+    So the offset is 3.15V - 6.75V = -3.6V
+    """
+    voltage = raw_adc_value * 0.025 - 3.6
+    return voltage
 
 
 BatteryManager.init_adc(BATTERY_PIN, adc_to_voltage)
@@ -183,6 +196,7 @@ def input_callback(indev, data):
         current_key = lv.KEY.ESC
     elif button_volume.value() == 0:
         print("Volume button pressed -> reset")
+        blue_led.on()
         machine.reset()
     elif button_select.value() == 0:
         current_key = lv.KEY.BACKSPACE
