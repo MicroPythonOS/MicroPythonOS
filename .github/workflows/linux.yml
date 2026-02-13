@@ -58,7 +58,7 @@ jobs:
       - name: Install additional MicroPythonOS dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libv4l-dev librlottie-dev
+          sudo apt-get install -y libv4l-dev
 
       - name: Extract OS version
         id: version
@@ -118,14 +118,14 @@ jobs:
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
+          name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
+          name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
 
