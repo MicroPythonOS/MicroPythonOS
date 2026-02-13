@@ -130,7 +130,7 @@ class ADCRecordStream:
         self.max_pending_samples = adc_config.get('max_pending_samples', self.DEFAULT_MAX_PENDING_SAMPLES)
 
         # PI Controller state
-        self._current_freq = self.sample_rate + self.callback_overhead_offset
+        self._current_freq = self.sample_rate
         self._sample_counter = 0
         self._last_adjustment_sample = 0
         self._integral_error = 0.0
