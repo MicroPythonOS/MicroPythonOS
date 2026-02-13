@@ -5,7 +5,7 @@ import lvgl as lv
 import mpos.ui
 import mpos.ui.topmenu
 
-from mpos import AppearanceManager, DisplayMetrics, AppManager, SharedPreferences, TaskManager, DeviceInfo
+from mpos import AppearanceManager, AppManager, BuildInfo, DeviceInfo, DisplayMetrics, SharedPreferences, TaskManager
 
 def init_rootscreen():
     """Initialize the root screen and set display metrics."""
@@ -74,8 +74,11 @@ def detect_board():
         # default: if single_address_i2c_scan(i2c0, 0x6A): # IMU but currently not installed
         return "fri3d_2026"
 
+# EXECUTION STARTS HERE
+
+print(f"MicroPythonOS {BuildInfo.version.release} running lib/mpos/main.py")
 board = detect_board()
-print(f"Initializing {board} hardware")
+print(f"Detected {board} system, importing mpos.board.{board}")
 DeviceInfo.set_hardware_id(board)
 __import__(f"mpos.board.{board}")
 
@@ -135,7 +138,7 @@ try:
 except Exception as e:
     print(f"Couldn't start WifiService.auto_connect thread because: {e}")
 
-# Start launcher so it's always at bottom of stack
+# Start launcher first so it's always at bottom of stack
 launcher_app = AppManager.get_launcher()
 started_launcher = AppManager.start_app(launcher_app.fullname)
 # Then start auto_start_app if configured

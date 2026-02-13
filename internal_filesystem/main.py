@@ -5,6 +5,5 @@
 import sys
 sys.path.insert(0, 'lib')
 
-print("Passing execution over to mpos.main")
+print(f"Minimal main.py importing mpos.main with sys.path: {sys.path}")
 import mpos.main
-
