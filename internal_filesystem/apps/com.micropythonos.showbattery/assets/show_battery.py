@@ -40,8 +40,7 @@ I want application that will show big time (hour, minutes), with smaller seconds
 """
 
 import lvgl as lv
-import time
-
+import mpos.time
 from mpos import Activity, BatteryManager
 
 HISTORY_LEN = 60
@@ -56,10 +55,12 @@ class ShowBattery(Activity):
     # Widgets
     lbl_time = None
     lbl_sec = None
-    lbl_date = None
+    lbl_text = None
 
     bat_outline = None
     bat_fill = None
+
+    clear_cache_checkbox = None  # Add reference to checkbox
 
     history_v = []
     history_p = []
@@ -69,16 +70,21 @@ class ShowBattery(Activity):
 
         # --- TIME ---
         self.lbl_time = lv.label(scr)
-        self.lbl_time.set_style_text_font(lv.font_montserrat_48, 0)
+        self.lbl_time.set_style_text_font(lv.font_montserrat_40, 0)
         self.lbl_time.align(lv.ALIGN.TOP_LEFT, 5, 5)
 
         self.lbl_sec = lv.label(scr)
         self.lbl_sec.set_style_text_font(lv.font_montserrat_24, 0)
         self.lbl_sec.align_to(self.lbl_time, lv.ALIGN.OUT_RIGHT_BOTTOM, 24, -4)
 
-        self.lbl_date = lv.label(scr)
-        self.lbl_date.set_style_text_font(lv.font_montserrat_24, 0)
-        self.lbl_date.align(lv.ALIGN.TOP_LEFT, 5, 60)
+        # --- CHECKBOX ---
+        self.clear_cache_checkbox = lv.checkbox(scr)
+        self.clear_cache_checkbox.set_text("Real-time values")
+        self.clear_cache_checkbox.align(lv.ALIGN.TOP_LEFT, 5, 50)
+
+        self.lbl_text = lv.label(scr)
+        self.lbl_text.set_style_text_font(lv.font_montserrat_16, 0)
+        self.lbl_text.align(lv.ALIGN.TOP_LEFT, 5, 80)
 
         # --- BATTERY ICON ---
         self.bat_outline = lv.obj(scr)
@@ -126,10 +132,14 @@ class ShowBattery(Activity):
         super().onResume(screen)
 
         def update(timer):
-            now = time.localtime()
+            now = mpos.time.localtime()
 
             hour, minute, second = now[3], now[4], now[5]
             date = f"{now[0]}-{now[1]:02}-{now[2]:02}"
+
+            if self.clear_cache_checkbox.get_state() & lv.STATE.CHECKED:
+                # Get "real-time" values by clearing the cache before reading
+                BatteryManager.clear_cache()
 
             voltage = BatteryManager.read_battery_voltage()
             percent = BatteryManager.get_battery_percentage()
@@ -137,8 +147,11 @@ class ShowBattery(Activity):
             # --- TIME ---
             self.lbl_time.set_text(f"{hour:02}:{minute:02}")
             self.lbl_sec.set_text(f":{second:02}")
+
+            # --- BATTERY VALUES ---
             date += f"\n{voltage:.2f}V {percent:.0f}%"
-            self.lbl_date.set_text(date)
+            date += f"\nRaw ADC: {BatteryManager.read_raw_adc()}"
+            self.lbl_text.set_text(date)
 
             # --- BATTERY ICON ---
             fill_h = int((percent / 100) * (self.bat_size * 0.9))
