@@ -20,7 +20,8 @@ rm "$outputjson"
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.doom_launcher isn't ready because the firmware doesn't have doom built-in yet
 # com.micropythonos.nostr isn't ready for release yet
-blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.doom_launcher com.micropythonos.nostr"
+# cz.ucw.pavel.calendar isn't ready for release yet
+blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.doom_launcher com.micropythonos.nostr cz.ucw.pavel.calendar"
 
 echo "[" | tee -a "$outputjson"
 
