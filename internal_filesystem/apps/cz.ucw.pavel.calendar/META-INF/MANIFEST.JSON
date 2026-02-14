@@ -1,11 +1,11 @@
 {
 "name": "Calendar",
-"publisher": "micropythonos",
+"publisher": "Pavel Machek",
 "short_description": "Calendar",
 "long_description": "Simple calendar app.",
-"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.columns/icons/cz.ucw.pavel.columns_0.0.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.columns/mpks/cz.ucw.pavel.columns_0.0.1.mpk",
-"fullname": "cz.ucw.pavel.columns",
+"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.calendar/icons/cz.ucw.pavel.calendar_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.calendar/mpks/cz.ucw.pavel.calendar_0.0.1.mpk",
+"fullname": "cz.ucw.pavel.calendar",
 "version": "0.0.1",
 "category": "utilities",
 "activities": [
@@ -15,7 +15,7 @@
       "intent_filters": [
         {
           "action": "main",
-          "category": "utilities"
+          "category": "launcher"
         }
       ]
     }
