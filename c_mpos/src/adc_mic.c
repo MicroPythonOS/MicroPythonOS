@@ -25,11 +25,12 @@ static mp_obj_t adc_mic_read(void) {
         .adc_channel_list = ((uint8_t[]){ADC_CHANNEL_0}),
         .adc_channel_num = 1,
         .sample_rate_hz = 16000,
-        //.atten = ADC_ATTEN_DB_2_5,
-        .atten = ADC_ATTEN_DB_11,
+        //.atten = ADC_ATTEN_DB_0,   // values always 16380
+        //.atten = ADC_ATTEN_DB_2_5, // values always 16380
+        .atten = ADC_ATTEN_DB_6,   // values around 12500 +/- 320 (silence) or 4000 (loud talk)
+        //.atten = ADC_ATTEN_DB_11,    // values around -1130 +/- 160 (silence)
     };
-    ADC_MIC_DEBUG_PRINT("Config created for channel %d, sample rate %d, atten %d\n",
-                        ADC_CHANNEL_0, 16000, cfg.atten);
+    ADC_MIC_DEBUG_PRINT("Config created for channel %d, sample rate %d, atten %d\n", ADC_CHANNEL_0, 16000, cfg.atten);
 
     // ────────────────────────────────────────────────
     // Initialization (same as before)
@@ -65,10 +66,10 @@ static mp_obj_t adc_mic_read(void) {
     // ────────────────────────────────────────────────
     // Small reusable buffer + tracking variables
     // ────────────────────────────────────────────────
-    const size_t chunk_samples = 512;
+    const size_t chunk_samples = 10240;
     const size_t buf_size = chunk_samples * sizeof(int16_t);
-    //int16_t *audio_buffer = heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    int16_t *audio_buffer = heap_caps_malloc_prefer(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+    int16_t *audio_buffer = heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    //int16_t *audio_buffer = heap_caps_thread.start_new_thread(testit, ())_malloc_prefer(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
     if (audio_buffer == NULL) {
         esp_codec_dev_close(dev);
         esp_codec_dev_delete(dev);
@@ -77,7 +78,7 @@ static mp_obj_t adc_mic_read(void) {
     }
 
     // How many chunks to read (adjust as needed)
-    const int N = 1;  // e.g. 50 × 512 = ~1.5 seconds @ 16 kHz
+    const int N = 5;  // e.g. 5 × 10240 = ~3.2 seconds @ 16 kHz
 
     int16_t global_min = 32767;
     int16_t global_max = -32768;
@@ -111,7 +112,8 @@ static mp_obj_t adc_mic_read(void) {
         if (chunk < 3) {
             ADC_MIC_DEBUG_PRINT("Chunk %d first 16 samples:\n", chunk);
             for (size_t i = 0; i < 16; i++) {
-                ADC_MIC_DEBUG_PRINT("%6d ", audio_buffer[i]);
+                int16_t sample = audio_buffer[i];
+                ADC_MIC_DEBUG_PRINT("%6d (0x%04X)", sample, (uint16_t)sample);
                 if ((i + 1) % 8 == 0) ADC_MIC_DEBUG_PRINT("\n");
             }
             ADC_MIC_DEBUG_PRINT("\n");
