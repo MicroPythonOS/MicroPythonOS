@@ -39,8 +39,8 @@ else
 fi
 
 echo "Check need to add adc_mic to $idfile"
-if ! grep esp32-camera "$idfile"; then
-	echo "Adding esp32-camera to $idfile"
+if ! grep adc_mic "$idfile"; then
+	echo "Adding adc_mic to $idfile"
         echo '  espressif/adc_mic: "*"' >> "$idfile"
 else
 	echo "No need to add adc_mic to $idfile"
