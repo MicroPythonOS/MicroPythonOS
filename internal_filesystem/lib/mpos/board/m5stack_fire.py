@@ -2,42 +2,66 @@
 # Manufacturer's website at https://https://docs.m5stack.com/en/core/fire_v2.7
 # Original author: https://github.com/ancebfer
 
+import time
+
 import drivers.display.ili9341 as ili9341
 import lcd_bus
-import machine
-
 import lvgl as lv
-import task_handler
-
+import machine
 import mpos.ui
 import mpos.ui.focus_direction
-from mpos import InputManager
+from machine import PWM, Pin
+from micropython import const
+from mpos import AudioManager, InputManager
 
-# Pin configuration
-SPI_BUS = 1  # SPI2
-SPI_FREQ = 40000000
-LCD_SCLK = 18
-LCD_MOSI = 23
-LCD_DC = 27
-LCD_CS = 14
-LCD_BL = 32
-LCD_RST = 33
-LCD_TYPE = 2  # ILI9341 type 2
+# Display settings:
+SPI_BUS = const(1)  # SPI2
+SPI_FREQ = const(40000000)
 
-TFT_HOR_RES=320
-TFT_VER_RES=240
+LCD_SCLK = const(18)
+LCD_MOSI = const(23)
+LCD_DC = const(27)
+LCD_CS = const(14)
+LCD_BL = const(32)
+LCD_RST = const(33)
+LCD_TYPE = const(2)  # ILI9341 type 2
 
-spi_bus = machine.SPI.Bus(
-    host=SPI_BUS,
-    mosi=LCD_MOSI,
-    sck=LCD_SCLK
-)
-display_bus = lcd_bus.SPIBus(
-    spi_bus=spi_bus,
-    freq=SPI_FREQ,
-    dc=LCD_DC,
-    cs=LCD_CS
-)
+TFT_HOR_RES = const(320)
+TFT_VER_RES = const(240)
+
+# Button settings:
+BUTTON_A = const(39)  # A
+BUTTON_B = const(38)  # B
+BUTTON_C = const(37)  # C
+
+# Misc settings:
+BATTERY_PIN = const(35)
+
+# Buzzer
+BUZZER_PIN = const(25)
+
+
+print("m5stack_fire.py init buzzer")
+buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
+AudioManager(i2s_pins=None, buzzer_instance=buzzer)
+AudioManager.set_volume(40)
+AudioManager.play_rtttl("Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6")
+while AudioManager.is_playing():
+    time.sleep(0.1)
+
+
+print("m5stack_fire.py machine.SPI.Bus() initialization")
+try:
+    spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, sck=LCD_SCLK)
+except Exception as e:
+    print(f"Error initializing SPI bus: {e}")
+    print("Attempting hard reset in 3sec...")
+    time.sleep(3)
+    machine.reset()
+
+
+display_bus = lcd_bus.SPIBus(spi_bus=spi_bus, freq=SPI_FREQ, dc=LCD_DC, cs=LCD_CS)
+
 
 # M5Stack-Fire ILI9342 uses ILI9341 type 2 with a modified orientation table.
 class ILI9341(ili9341.ILI9341):
@@ -45,8 +69,9 @@ class ILI9341(ili9341.ILI9341):
         0x00,
         0x40 | 0x20,  # _MADCTL_MX | _MADCTL_MV
         0x80 | 0x40,  # _MADCTL_MY | _MADCTL_MX
-        0x80 | 0x20   # _MADCTL_MY | _MADCTL_MV
+        0x80 | 0x20,  # _MADCTL_MY | _MADCTL_MV
     )
+
 
 mpos.ui.main_display = ILI9341(
     data_bus=display_bus,
@@ -58,7 +83,7 @@ mpos.ui.main_display = ILI9341(
     reset_pin=LCD_RST,
     reset_state=ili9341.STATE_LOW,
     backlight_pin=LCD_BL,
-    backlight_on_state=ili9341.STATE_PWM
+    backlight_on_state=ili9341.STATE_PWM,
 )
 mpos.ui.main_display.init(LCD_TYPE)
 mpos.ui.main_display.set_power(True)
@@ -68,12 +93,9 @@ mpos.ui.main_display.set_backlight(25)
 lv.init()
 
 # Button handling code:
-from machine import Pin
-import time
-
-btn_a = Pin(39, Pin.IN, Pin.PULL_UP) # A
-btn_b = Pin(38, Pin.IN, Pin.PULL_UP) # B
-btn_c = Pin(37, Pin.IN, Pin.PULL_UP) # C
+btn_a = Pin(BUTTON_A, Pin.IN, Pin.PULL_UP)  # A
+btn_b = Pin(BUTTON_B, Pin.IN, Pin.PULL_UP)  # B
+btn_c = Pin(BUTTON_C, Pin.IN, Pin.PULL_UP)  # C
 
 # Key repeat configuration
 # This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
