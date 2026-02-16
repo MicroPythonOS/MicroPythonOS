@@ -29,7 +29,7 @@ except ImportError:
 
 # Sensor type constants (matching Android SensorManager)
 TYPE_ACCELEROMETER = 1      # Units: m/s² (meters per second squared)
-TYPE_MAGNETIC_FIELD = 2	    # Units: μT (micro Teslas)
+TYPE_MAGNETIC_FIELD = 2	    # Units: μT (micro teslas)
 TYPE_GYROSCOPE = 4          # Units: deg/s (degrees per second)
 TYPE_TEMPERATURE = 13       # Units: °C (generic, returns first available - deprecated)
 TYPE_IMU_TEMPERATURE = 14   # Units: °C (IMU chip temperature)
@@ -124,7 +124,6 @@ class SensorManager:
             cls._instance = cls()
         return cls._instance
 
-    
     def init(self, i2c_bus, address=0x6B, mounted_position=FACING_SKY):
         """Initialize SensorManager. MCU temperature initializes immediately, IMU initializes on first use.
 
@@ -159,30 +158,30 @@ class SensorManager:
                 sensor_type=TYPE_ACCELEROMETER,
                 vendor="Linux IIO",
                 version=1,
-                max_range="±8G (78.4 m/s²)",
-                resolution="0.0024 m/s²",
-                power_ma=0.2
+                max_range="?",
+                resolution="?",
+                power_ma=10
             ),
             Sensor(
                 name="Gyroscope",
                 sensor_type=TYPE_GYROSCOPE,
                 vendor="Linux IIO",
                 version=1,
-                max_range="±256 deg/s",
-                resolution="0.002 deg/s",
-                power_ma=0.7
+                max_range="?",
+                resolution="?",
+                power_ma=10
             ),
             Sensor(
                 name="Temperature",
                 sensor_type=TYPE_IMU_TEMPERATURE,
                 vendor="Linux IIO",
                 version=1,
-                max_range="-40°C to +85°C",
-                resolution="0.004°C",
-                power_ma=0
+                max_range="?",
+                resolution="?",
+                power_ma=10
             )
         ]
-        
+
         self._load_calibration()
 
         self._initialized = True

@@ -122,19 +122,9 @@ AudioManager(i2s_pins=i2s_pins)
 # LightsManager will not be initialized (functions will return False)
 
 # === SENSOR HARDWARE ===
-# Note: Desktop builds have no sensor hardware
 from mpos import SensorManager
 
-# Initialize with no I2C bus - will detect MCU temp if available
-# (On Linux desktop, this will fail gracefully but set _initialized flag)
 SensorManager.init_iio()
-
-# In app:
-if False and SensorManager.is_available():
-    accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
-    print(accel)
-    ax, ay, az = SensorManager.read_sensor_once(accel)  # Returns m/s²
-    print(ax, ay, az)
 
 # === CAMERA HARDWARE ===
 
