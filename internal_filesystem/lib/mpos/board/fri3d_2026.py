@@ -231,7 +231,8 @@ i2s_pins = {
 }
 
 # Initialize AudioManager with I2S (buzzer TODO)
-AudioManager(i2s_pins=i2s_pins)
+# ADC microphone is on GPIO 1
+AudioManager(i2s_pins=i2s_pins, adc_mic_pin=1)
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager

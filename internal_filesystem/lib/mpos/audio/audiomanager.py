@@ -32,13 +32,14 @@ class AudioManager:
     
     _instance = None  # Singleton instance
     
-    def __init__(self, i2s_pins=None, buzzer_instance=None):
+    def __init__(self, i2s_pins=None, buzzer_instance=None, adc_mic_pin=None):
         """
         Initialize AudioManager instance with optional hardware configuration.
 
         Args:
             i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers (for I2S/WAV playback)
             buzzer_instance: PWM instance for buzzer (for RTTTL playback)
+            adc_mic_pin: GPIO pin number for ADC microphone (for ADC recording)
         """
         if AudioManager._instance:
             return
@@ -46,6 +47,7 @@ class AudioManager:
 
         self._i2s_pins = i2s_pins              # I2S pin configuration dict (created per-stream)
         self._buzzer_instance = buzzer_instance # PWM buzzer instance
+        self._adc_mic_pin = adc_mic_pin         # ADC microphone pin
         self._current_stream = None             # Currently playing stream
         self._current_recording = None          # Currently recording stream
         self._volume = 50                       # System volume (0-100)
@@ -56,6 +58,8 @@ class AudioManager:
             capabilities.append("I2S (WAV)")
         if buzzer_instance:
             capabilities.append("Buzzer (RTTTL)")
+        if adc_mic_pin:
+            capabilities.append(f"ADC Mic (Pin {adc_mic_pin})")
         
         if capabilities:
             print(f"AudioManager initialized: {', '.join(capabilities)}")
@@ -78,8 +82,10 @@ class AudioManager:
         return self._buzzer_instance is not None
 
     def has_microphone(self):
-        """Check if I2S microphone is available for recording."""
-        return self._i2s_pins is not None and 'sd_in' in self._i2s_pins
+        """Check if microphone (I2S or ADC) is available for recording."""
+        has_i2s_mic = self._i2s_pins is not None and 'sd_in' in self._i2s_pins
+        has_adc_mic = self._adc_mic_pin is not None
+        return has_i2s_mic or has_adc_mic
 
     def _check_audio_focus(self, stream_type):
         """
@@ -296,39 +302,35 @@ class AudioManager:
             sys.print_exception(e)
             return False
 
-    def record_wav_adc(self, file_path, duration_ms=None, adc_pin=2, sample_rate=8000,
-                       adaptive_control=True, on_complete=None, **adc_config):
+    def record_wav_adc(self, file_path, duration_ms=None, adc_pin=None, sample_rate=16000,
+                       on_complete=None, **adc_config):
         """
-        Record audio from ADC with adaptive frequency control to WAV file.
+        Record audio from ADC using optimized C module to WAV file.
 
         Args:
             file_path: Path to save WAV file (e.g., "data/recording.wav")
             duration_ms: Recording duration in milliseconds (None = 60 seconds default)
-            adc_pin: GPIO pin for ADC input (default: 2 for ESP32)
-            sample_rate: Target sample rate in Hz (default 8000 for voice)
-            adaptive_control: Enable PI feedback control for stable sampling (default: True)
+            adc_pin: GPIO pin for ADC input (default: configured pin or 1)
+            sample_rate: Target sample rate in Hz (default 16000 for voice)
             on_complete: Callback function(message) when recording finishes
-            **adc_config: Additional ADC configuration:
-                - control_gain_p: Proportional gain (default: 0.05)
-                - control_gain_i: Integral gain (default: 0.01)
-                - integral_windup_limit: Integral term limit (default: 1000)
-                - adjustment_interval: Samples between adjustments (default: 1000)
-                - warmup_samples: Warm-up phase samples (default: 3000)
-                - callback_overhead_offset: Initial frequency offset (default: 2500)
-                - min_freq: Minimum timer frequency (default: 6000)
-                - max_freq: Maximum timer frequency (default: 40000)
-                - gc_enabled: Enable garbage collection (default: True)
-                - gc_interval: Samples between GC cycles (default: 5000)
+            **adc_config: Additional ADC configuration
 
         Returns:
             bool: True if recording started, False if rejected or unavailable
         """
+        # Use configured pin if not specified
+        if adc_pin is None:
+            adc_pin = self._adc_mic_pin
+            
+        # Fallback to default if still None
+        if adc_pin is None:
+            adc_pin = 1 # Default to GPIO1 (Fri3d 2026)
+            
         print(f"AudioManager.record_wav_adc() called")
         print(f"  file_path: {file_path}")
         print(f"  duration_ms: {duration_ms}")
         print(f"  adc_pin: {adc_pin}")
         print(f"  sample_rate: {sample_rate}")
-        print(f"  adaptive_control: {adaptive_control}")
 
         # Cannot record while playing (I2S can only be TX or RX, not both)
         if self.is_playing():
@@ -351,7 +353,6 @@ class AudioManager:
                 duration_ms=duration_ms,
                 sample_rate=sample_rate,
                 adc_pin=adc_pin,
-                adaptive_control=adaptive_control,
                 on_complete=on_complete,
                 **adc_config
             )

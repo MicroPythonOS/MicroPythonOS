@@ -1,21 +1,21 @@
-# ADCRecordStream - WAV File Recording Stream with Adaptive ADC Sampling
-# Records 16-bit mono PCM audio from ADC with timer-based sampling
-# Uses PI (Proportional-Integral) feedback control for stable sampling rate
-# Includes warm-up phase and periodic garbage collection for long recordings
+# ADCRecordStream - WAV File Recording Stream with C-based ADC Sampling
+# Records 16-bit mono PCM audio from ADC using the optimized adc_mic C module
+# Uses timer-based sampling with double buffering in C for high performance
 # Maintains compatibility with AudioManager and existing recording framework
 
-import math
 import os
 import sys
 import time
 import gc
+import array
 
 # Try to import machine module (not available on desktop)
 try:
     import machine
-    _HAS_MACHINE = True
+    import adc_mic
+    _HAS_HARDWARE = True
 except ImportError:
-    _HAS_MACHINE = False
+    _HAS_HARDWARE = False
 
 
 def _makedirs(path):
@@ -41,114 +41,59 @@ def _makedirs(path):
 
 class ADCRecordStream:
     """
-    WAV file recording stream with adaptive ADC timer-based sampling.
-    Records 16-bit mono PCM audio from ADC with PI feedback control.
-    Maintains target sample rate through dynamic timer frequency adjustment.
+    WAV file recording stream with C-optimized ADC sampling.
+    Records 16-bit mono PCM audio from ADC using the adc_mic module.
     """
 
     # Default recording parameters
-    DEFAULT_SAMPLE_RATE = 8000  # 8kHz - good for voice/ADC
+    DEFAULT_SAMPLE_RATE = 16000  # 16kHz - good for voice/ADC
     DEFAULT_MAX_DURATION_MS = 60000  # 60 seconds max
     DEFAULT_FILESIZE = 1024 * 1024 * 1024  # 1GB data size
-
+    
     # ADC configuration defaults
-    DEFAULT_ADC_PIN = 2  # GPIO2 on ESP32
-    DEFAULT_ADC_ATTENUATION = None  # Will be set based on machine module
-    DEFAULT_ADC_WIDTH = None  # Will be set based on machine module
-
-    # PI Controller configuration
-    DEFAULT_CONTROL_GAIN_P = 0.05  # Proportional gain (aggressive for fast response)
-    DEFAULT_CONTROL_GAIN_I = 0.01  # Integral gain (steady-state correction)
-    DEFAULT_INTEGRAL_WINDUP_LIMIT = 1000  # Prevent integral overflow
-    DEFAULT_ADJUSTMENT_INTERVAL = 1000  # Samples between frequency adjustments
-    DEFAULT_WARMUP_SAMPLES = 3000  # Samples before starting adjustments
-    DEFAULT_CALLBACK_OVERHEAD_OFFSET = 9000  # Hz offset for initial frequency (disabled by default)
-    DEFAULT_MAX_PENDING_SAMPLES = 4096  # Maximum pending samples buffer size
-
-    # Frequency bounds
-    DEFAULT_MIN_FREQ = 6000  # Minimum timer frequency
-    DEFAULT_MAX_FREQ = 40000  # Maximum timer frequency
-
-    # Garbage collection configuration
-    DEFAULT_GC_INTERVAL = 5000  # Perform GC every N samples
-    DEFAULT_GC_ENABLED = False  # Enable explicit garbage collection
+    DEFAULT_ADC_PIN = 1  # GPIO1 on Fri3d 2026
+    DEFAULT_ADC_UNIT = 0 # ADC_UNIT_1 = 0
+    DEFAULT_ADC_CHANNEL = 0 # ADC_CHANNEL_0 = 0 (GPIO1)
+    DEFAULT_ATTEN = 2 # ADC_ATTEN_DB_6 = 2
 
     def __init__(self, file_path, duration_ms, sample_rate, adc_pin=None,
-                 adaptive_control=True, on_complete=None, **adc_config):
+                 on_complete=None, **adc_config):
         """
-        Initialize ADC recording stream with adaptive frequency control.
+        Initialize ADC recording stream.
 
         Args:
             file_path: Path to save WAV file
             duration_ms: Recording duration in milliseconds (None = until stop())
             sample_rate: Target sample rate in Hz
-            adc_pin: GPIO pin for ADC input (default: GPIO2)
-            adaptive_control: Enable PI feedback control (default: True)
+            adc_pin: GPIO pin for ADC input (default: GPIO1)
             on_complete: Callback function(message) when recording finishes
-            **adc_config: Additional ADC configuration:
-                - control_gain_p: Proportional gain
-                - control_gain_i: Integral gain
-                - integral_windup_limit: Integral term limit
-                - adjustment_interval: Samples between adjustments
-                - warmup_samples: Warm-up phase samples
-                - callback_overhead_offset: Initial frequency offset (Hz, default 0)
-                - min_freq: Minimum timer frequency
-                - max_freq: Maximum timer frequency
-                - gc_enabled: Enable garbage collection (default: True)
-                - gc_interval: Samples between GC cycles
-                - max_pending_samples: Maximum pending samples buffer size (default: 4096)
+            **adc_config: Additional ADC configuration
         """
         self.file_path = file_path
         self.duration_ms = duration_ms if duration_ms else self.DEFAULT_MAX_DURATION_MS
         self.sample_rate = sample_rate if sample_rate else self.DEFAULT_SAMPLE_RATE
         self.adc_pin = adc_pin if adc_pin is not None else self.DEFAULT_ADC_PIN
-        self.adaptive_control = adaptive_control
         self.on_complete = on_complete
-
-        # ADC configuration
-        self._adc = None
-        self._timer = None
+        
+        # Determine ADC unit and channel from pin
+        # This is a simple mapping for ESP32-S3
+        # TODO: Make this more robust or pass in unit/channel directly
+        self.adc_unit = self.DEFAULT_ADC_UNIT
+        self.adc_channel = self.DEFAULT_ADC_CHANNEL
+        
+        # Simple mapping for Fri3d 2026 (GPIO1 -> ADC1_CH0)
+        if self.adc_pin == 1:
+            self.adc_unit = 0 # ADC_UNIT_1
+            self.adc_channel = 0 # ADC_CHANNEL_0
+        elif self.adc_pin == 2:
+            self.adc_unit = 0
+            self.adc_channel = 1
+        # Add more mappings as needed
+            
         self._keep_running = True
         self._is_recording = False
         self._bytes_recorded = 0
-
-        # PI Controller configuration
-        self.control_gain_p = adc_config.get('control_gain_p', self.DEFAULT_CONTROL_GAIN_P)
-        self.control_gain_i = adc_config.get('control_gain_i', self.DEFAULT_CONTROL_GAIN_I)
-        self.integral_windup_limit = adc_config.get('integral_windup_limit', self.DEFAULT_INTEGRAL_WINDUP_LIMIT)
-        self.adjustment_interval = adc_config.get('adjustment_interval', self.DEFAULT_ADJUSTMENT_INTERVAL)
-        self.warmup_samples = adc_config.get('warmup_samples', self.DEFAULT_WARMUP_SAMPLES)
-        self.callback_overhead_offset = adc_config.get('callback_overhead_offset', self.DEFAULT_CALLBACK_OVERHEAD_OFFSET)
-        self.min_freq = adc_config.get('min_freq', self.DEFAULT_MIN_FREQ)
-        self.max_freq = adc_config.get('max_freq', self.DEFAULT_MAX_FREQ)
-
-        # Garbage collection configuration
-        self.gc_enabled = adc_config.get('gc_enabled', self.DEFAULT_GC_ENABLED)
-        self.gc_interval = adc_config.get('gc_interval', self.DEFAULT_GC_INTERVAL)
-
-        # Pending samples buffer configuration
-        self.max_pending_samples = adc_config.get('max_pending_samples', self.DEFAULT_MAX_PENDING_SAMPLES)
-
-        # PI Controller state
-        self._current_freq = self.sample_rate
-        self._sample_counter = 0
-        self._last_adjustment_sample = 0
-        self._integral_error = 0.0
-        self._warmup_complete = False
-        self._last_gc_sample = 0
         self._start_time_ms = 0
-        self._adjustment_history = []
-
-        # Logging and diagnostics for dropped samples
-        self._dropped_samples = 0
-        self._drop_events = []  # List of (sample_number, pending_queue_size) tuples
-        self._max_pending_depth = 0
-        self._pending_depth_history = []  # Track queue depth over time
-        self._last_pending_depth_log = 0
-        self._samples_written = 0
-        self._callback_count = 0
-        self._last_callback_time_ms = 0
-        self._max_callback_lag_ms = 0
 
     def is_recording(self):
         """Check if stream is currently recording."""
@@ -165,7 +110,7 @@ class ADCRecordStream:
         return 0
 
     # -----------------------------------------------------------------------
-    #  WAV header generation (reused from RecordStream)
+    #  WAV header generation
     # -----------------------------------------------------------------------
     @staticmethod
     def _create_wav_header(sample_rate, num_channels, bits_per_sample, data_size):
@@ -245,6 +190,7 @@ class ADCRecordStream:
         Returns:
             tuple: (bytearray of samples, number of samples generated)
         """
+        import math
         frequency = 440  # A4 note
         amplitude = 16000  # ~50% of max 16-bit amplitude
 
@@ -269,146 +215,6 @@ class ADCRecordStream:
         return buf, num_samples
 
     # -----------------------------------------------------------------------
-    #  PI Controller for adaptive frequency control
-    # -----------------------------------------------------------------------
-    def _adjust_frequency(self):
-        """
-        PI (Proportional-Integral) feedback control to adjust timer frequency.
-        Compares actual sampling rate vs target rate and adjusts accordingly.
-        Only called after warm-up phase completes.
-        """
-        elapsed_ms = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
-
-        if elapsed_ms <= 0:
-            return
-
-        # Calculate actual sampling rate
-        actual_rate = self._sample_counter / (elapsed_ms / 1000.0)
-
-        # Calculate error (positive means we're behind target)
-        rate_error = self.sample_rate - actual_rate
-
-        # Update integral term (accumulated error)
-        self._integral_error += rate_error
-
-        # Limit integral windup to prevent excessive accumulation
-        self._integral_error = max(-self.integral_windup_limit, 
-                                   min(self.integral_windup_limit, self._integral_error))
-
-        # PI control: combine proportional and integral terms
-        freq_adjustment = (rate_error * self.control_gain_p) + (self._integral_error * self.control_gain_i)
-
-        # Calculate new frequency
-        new_freq = self._current_freq + freq_adjustment
-
-        # Clamp frequency to safe range
-        new_freq = max(self.min_freq, min(self.max_freq, new_freq))
-
-        # Only adjust if change is significant (at least 1 Hz)
-        if abs(new_freq - self._current_freq) >= 1:
-            old_freq = self._current_freq
-            self._current_freq = int(new_freq)
-
-            # Calculate estimated callback overhead
-            estimated_overhead = self._current_freq - actual_rate
-
-            # Reinitialize timer with new frequency
-            try:
-                self._timer.deinit()
-                self._timer.init(freq=self._current_freq, mode=machine.Timer.PERIODIC,
-                               callback=self._record_sample_callback)
-
-                adjustment_info = {
-                    'sample': self._sample_counter,
-                    'actual_rate': actual_rate,
-                    'target_rate': self.sample_rate,
-                    'error': rate_error,
-                    'integral_error': self._integral_error,
-                    'old_freq': old_freq,
-                    'new_freq': self._current_freq,
-                    'adjustment': freq_adjustment,
-                    'estimated_overhead': estimated_overhead
-                }
-                self._adjustment_history.append(adjustment_info)
-
-                print(f"  [ADJUST] Sample {self._sample_counter}: Rate {actual_rate:.1f} Hz "
-                      f"(error: {rate_error:+.1f} Hz) → Freq {old_freq} → {self._current_freq} Hz")
-
-            except Exception as e:
-                print(f"Error adjusting frequency: {e}")
-                self._current_freq = old_freq
-
-    def _record_sample_callback(self, timer):
-        """
-        Timer callback function to read ADC samples with adaptive frequency.
-        Called by hardware timer at precise intervals.
-        Includes periodic garbage collection and buffer overflow protection.
-        Tracks dropped samples and main thread lag.
-        """
-        if not self._is_recording or not self._keep_running:
-            return
-
-        try:
-            # Track callback timing for lag detection
-            current_time_ms = time.ticks_ms()
-            if self._last_callback_time_ms > 0:
-                callback_lag = time.ticks_diff(current_time_ms, self._last_callback_time_ms)
-                if callback_lag > self._max_callback_lag_ms:
-                    self._max_callback_lag_ms = callback_lag
-            self._last_callback_time_ms = current_time_ms
-            self._callback_count += 1
-
-            # Read ADC value
-            adc_value = self._adc.read()
-            self._sample_counter += 1
-
-            # Convert 12-bit ADC value to 16-bit signed PCM
-            # ADC range: 0-4095 (12-bit), convert to -32768 to 32767 (16-bit signed)
-            sample_16bit = int((adc_value - 2048) * 16)
-
-            # Clamp to 16-bit range
-            if sample_16bit > 32767:
-                sample_16bit = 32767
-            elif sample_16bit < -32768:
-                sample_16bit = -32768
-
-            # Track pending queue depth
-            current_pending = len(self._pending_samples)
-            if current_pending > self._max_pending_depth:
-                self._max_pending_depth = current_pending
-
-            # Store sample (unbounded buffer - will buffer everything)
-            self._pending_samples.append(sample_16bit)
-
-            # Log pending queue depth periodically
-            if self._sample_counter - self._last_pending_depth_log >= 1000:
-                self._pending_depth_history.append((self._sample_counter, current_pending))
-                if current_pending > self.max_pending_samples * 0.8:
-                    print(f"[QUEUE] Sample {self._sample_counter}: Pending queue at {current_pending}/{self.max_pending_samples} "
-                          f"({100*current_pending/self.max_pending_samples:.1f}%)")
-                self._last_pending_depth_log = self._sample_counter
-
-            # Perform garbage collection at regular intervals
-            if self.gc_enabled and self._sample_counter - self._last_gc_sample >= self.gc_interval:
-                gc.collect()
-                self._last_gc_sample = self._sample_counter
-
-            # Check if warm-up phase is complete
-            if not self._warmup_complete and self._sample_counter >= self.warmup_samples:
-                self._warmup_complete = True
-                print(f">>> WARM-UP PHASE COMPLETE at sample {self._sample_counter}")
-                print(f">>> Starting adaptive frequency control...\n")
-
-            # Adjust frequency only after warm-up phase and at intervals
-            if self.adaptive_control and self._warmup_complete and \
-               self._sample_counter - self._last_adjustment_sample >= self.adjustment_interval:
-                self._adjust_frequency()
-                self._last_adjustment_sample = self._sample_counter
-
-        except Exception as e:
-            print(f"Error in ADC callback: {e}")
-
-    # -----------------------------------------------------------------------
     #  Main recording routine
     # -----------------------------------------------------------------------
     def record(self):
@@ -417,23 +223,18 @@ class ADCRecordStream:
         print(f"  file_path: {self.file_path}")
         print(f"  duration_ms: {self.duration_ms}")
         print(f"  sample_rate: {self.sample_rate}")
-        print(f"  adc_pin: {self.adc_pin}")
-        print(f"  adaptive_control: {self.adaptive_control}")
-        print(f"  _HAS_MACHINE: {_HAS_MACHINE}")
+        print(f"  adc_pin: {self.adc_pin} (Unit {self.adc_unit}, Channel {self.adc_channel})")
+        print(f"  _HAS_HARDWARE: {_HAS_HARDWARE}")
 
         self._is_recording = True
         self._bytes_recorded = 0
-        self._sample_counter = 0
-        self._pending_samples = []
         self._start_time_ms = time.ticks_ms()
 
         try:
             # Ensure directory exists
             dir_path = '/'.join(self.file_path.split('/')[:-1])
-            print(f"ADCRecordStream: Creating directory: {dir_path}")
             if dir_path:
                 _makedirs(dir_path)
-                print(f"ADCRecordStream: Directory created/verified")
 
             # Create file with placeholder header
             print(f"ADCRecordStream: Creating WAV file with header")
@@ -446,210 +247,110 @@ class ADCRecordStream:
                     data_size=self.DEFAULT_FILESIZE
                 )
                 f.write(header)
-                print(f"ADCRecordStream: Header written ({len(header)} bytes)")
 
             print(f"ADCRecordStream: Recording to {self.file_path}")
-            print(f"ADCRecordStream: {self.sample_rate} Hz, 16-bit, mono")
-            print(f"ADCRecordStream: Max duration {self.duration_ms}ms")
-
-            # Check if we have real ADC hardware or need to simulate
-            use_simulation = not _HAS_MACHINE
+            
+            # Check if we have real hardware or need to simulate
+            use_simulation = not _HAS_HARDWARE
 
             if not use_simulation:
-                # Initialize ADC
-                try:
-                    print(f"ADCRecordStream: Initializing ADC on pin {self.adc_pin}")
-                    self._adc = machine.ADC(machine.Pin(self.adc_pin))
-                    self._adc.atten(machine.ADC.ATTN_11DB)  # Full range: 0-3.3V
-                    self._adc.width(machine.ADC.WIDTH_12BIT)  # 12-bit resolution
-                    print(f"ADCRecordStream: ADC initialized successfully")
-
-                    # Initialize timer for sampling
-                    print(f"ADCRecordStream: Initializing timer at {self._current_freq} Hz")
-                    self._timer = machine.Timer(2)
-                    self._timer.init(freq=self._current_freq, mode=machine.Timer.PERIODIC,
-                                   callback=self._record_sample_callback)
-                    print(f"ADCRecordStream: Timer initialized successfully")
-
-                except Exception as e:
-                    print(f"ADCRecordStream: ADC/Timer init failed: {e}")
-                    print(f"ADCRecordStream: Falling back to simulation mode")
-                    use_simulation = True
+                print(f"ADCRecordStream: Using hardware ADC")
+                # No explicit init needed for adc_mic.read() as it handles it internally per call
+                # But we might want to do some setup if the C module required it.
+                # The current C module implementation does setup/teardown inside read()
+                # which is inefficient for streaming.
+                # However, the C module read() reads a LARGE chunk (e.g. 10000 samples).
+                pass
 
             if use_simulation:
-                print(f"ADCRecordStream: Using desktop simulation (440Hz sine wave)")
+                print(f"ADCRecordStream: Using desktop simulation (sine wave)")
 
             # Calculate recording parameters
-            chunk_size = 1024  # Read 1KB at a time
             max_bytes = int((self.duration_ms / 1000) * self.sample_rate * 2)
-            sample_offset = 0  # For sine wave phase continuity
-
-            # Flush every ~2 seconds of audio (64KB at 8kHz 16-bit mono)
-            flush_interval_bytes = 64 * 1024
-            bytes_since_flush = 0
-
-            print(f"ADCRecordStream: max_bytes={max_bytes}, chunk_size={chunk_size}, flush_interval={flush_interval_bytes}")
-
+            
             # Open file for appending audio data
-            print(f"ADCRecordStream: Opening file for audio data...")
-            t0 = time.ticks_ms()
             f = open(self.file_path, 'ab')
-            print(f"ADCRecordStream: File opened in {time.ticks_diff(time.ticks_ms(), t0)}ms")
+            
+            # Chunk size for reading
+            # For ADC, we want a reasonable chunk size to minimize overhead
+            # 4096 samples = 8192 bytes = ~0.25s at 16kHz
+            chunk_samples = 4096
+            
+            sample_offset = 0
 
             try:
                 while self._keep_running:
-                    # Check elapsed time - strict duration limit
+                    # Check elapsed time
                     elapsed = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
                     if elapsed >= self.duration_ms:
-                        print(f"ADCRecordStream: Duration limit reached ({elapsed}ms >= {self.duration_ms}ms)")
-                        # Stop the timer immediately to prevent more samples
-                        if self._timer:
-                            self._timer.deinit()
-                            self._timer = None
+                        print(f"ADCRecordStream: Duration limit reached")
                         break
 
-                    # Also check byte limit
+                    # Check byte limit
                     if self._bytes_recorded >= max_bytes:
-                        print(f"ADCRecordStream: Byte limit reached ({self._bytes_recorded} >= {max_bytes})")
+                        print(f"ADCRecordStream: Byte limit reached")
                         break
 
                     if use_simulation:
                         # Generate sine wave samples for desktop testing
-                        buf, num_samples = self._generate_sine_wave_chunk(chunk_size, sample_offset)
+                        buf, num_samples = self._generate_sine_wave_chunk(chunk_samples * 2, sample_offset)
                         sample_offset += num_samples
-                        num_read = chunk_size
-
+                        
+                        f.write(buf)
+                        self._bytes_recorded += len(buf)
+                        
                         # Simulate real-time recording speed
-                        time.sleep_ms(int((chunk_size / 2) / self.sample_rate * 1000))
-
-                        f.write(buf[:num_read])
-                        self._bytes_recorded += num_read
-                        bytes_since_flush += num_read
-
+                        time.sleep_ms(int((chunk_samples) / self.sample_rate * 1000))
+                        
                     else:
-                        # Just collect samples in buffer during recording
-                        # Don't write to file yet - that causes I/O delays
-                        pass
-
-                    # Minimal sleep to keep up with callback
-                    time.sleep_ms(1)
+                        # Read from C module
+                        # adc_mic.read(chunk_samples, unit_id, adc_channel_list, adc_channel_num, sample_rate_hz, atten)
+                        # Returns bytes object
+                        
+                        # unit_id: 0 (ADC_UNIT_1)
+                        # adc_channel_list: [self.adc_channel]
+                        # adc_channel_num: 1
+                        # sample_rate_hz: self.sample_rate
+                        # atten: 2 (ADC_ATTEN_DB_6)
+                        
+                        data = adc_mic.read(
+                            chunk_samples, 
+                            self.adc_unit, 
+                            [self.adc_channel], 
+                            1, 
+                            self.sample_rate, 
+                            self.DEFAULT_ATTEN
+                        )
+                        
+                        if data:
+                            f.write(data)
+                            self._bytes_recorded += len(data)
+                        else:
+                            # No data available yet, short sleep
+                            time.sleep_ms(10)
 
             finally:
-                # Write all pending samples to file after recording stops
-                print(f"ADCRecordStream: Writing {len(self._pending_samples)} pending samples to file...")
-                t0 = time.ticks_ms()
-                for sample in self._pending_samples:
-                    if sample < 0:
-                        sample_bytes = (sample & 0xFFFF).to_bytes(2, 'little')
-                    else:
-                        sample_bytes = sample.to_bytes(2, 'little')
-                    f.write(sample_bytes)
-                    self._bytes_recorded += 2
-                self._pending_samples.clear()
-                write_time = time.ticks_diff(time.ticks_ms(), t0)
-                print(f"ADCRecordStream: Wrote pending samples in {write_time}ms")
-                
-                # Explicitly close the file and measure time
-                print(f"ADCRecordStream: Closing audio data file...")
-                t0 = time.ticks_ms()
                 f.close()
-                print(f"ADCRecordStream: File closed in {time.ticks_diff(time.ticks_ms(), t0)}ms")
+                
+                # Update WAV header with actual size
+                try:
+                    # Only update if we actually recorded something
+                    if self._bytes_recorded > 0:
+                        self._update_wav_header(self.file_path, self._bytes_recorded)
+                except Exception as e:
+                    print(f"ADCRecordStream: Error updating header: {e}")
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
             print(f"ADCRecordStream: Finished recording {self._bytes_recorded} bytes ({elapsed_ms}ms)")
             
-            # Verify file size with os.stat()
-            print(f"\n{'='*60}")
-            print(f"FILE SIZE VERIFICATION")
-            print(f"{'='*60}")
-            try:
-                file_stat = os.stat(self.file_path)
-                file_size = file_stat[6]  # st_size is at index 6
-                
-                # Calculate expected size
-                expected_samples = int((self.duration_ms / 1000.0) * self.sample_rate)
-                expected_bytes = expected_samples * 2 + 44  # 44 bytes for WAV header
-                
-                # Calculate actual samples from file size
-                actual_audio_bytes = file_size - 44  # Subtract WAV header
-                actual_samples = actual_audio_bytes // 2
-                actual_duration_ms = int((actual_samples / self.sample_rate) * 1000)
-                
-                print(f"Expected duration: {self.duration_ms}ms")
-                print(f"Expected samples: {expected_samples}")
-                print(f"Expected audio bytes: {expected_samples * 2}")
-                print(f"Expected total file size: {expected_bytes} bytes (including 44-byte WAV header)")
-                print()
-                print(f"Actual file size: {file_size} bytes")
-                print(f"Actual audio bytes: {actual_audio_bytes}")
-                print(f"Actual samples: {actual_samples}")
-                print(f"Actual duration: {actual_duration_ms}ms")
-                print()
-                
-                # Calculate difference
-                size_diff = file_size - expected_bytes
-                sample_diff = actual_samples - expected_samples
-                duration_diff = actual_duration_ms - self.duration_ms
-                
-                if size_diff == 0:
-                    print(f"✓ PERFECT: File size matches expected size exactly!")
-                elif size_diff > 0:
-                    print(f"✓ GOOD: File size is {size_diff} bytes larger than expected")
-                    print(f"  ({sample_diff} extra samples, {duration_diff}ms extra)")
-                else:
-                    print(f"✗ SHORT: File size is {abs(size_diff)} bytes smaller than expected")
-                    print(f"  ({abs(sample_diff)} missing samples, {abs(duration_diff)}ms short)")
-                    print(f"  Completion: {(file_size / expected_bytes) * 100:.1f}%")
-                
-            except Exception as e:
-                print(f"Error verifying file size: {e}")
-            print(f"{'='*60}\n")
-            
-            # Print dropped samples summary
-            print(f"\n{'='*60}")
-            print(f"DROPPED SAMPLES SUMMARY")
-            print(f"{'='*60}")
-            print(f"Total samples collected: {self._sample_counter}")
-            print(f"Total samples dropped: {self._dropped_samples}")
-            print(f"Samples written to file: {self._samples_written}")
-            if self._sample_counter > 0:
-                drop_rate = (self._dropped_samples / self._sample_counter) * 100
-                print(f"Drop rate: {drop_rate:.2f}%")
-            if self._drop_events:
-                print(f"Number of drop events: {len(self._drop_events)}")
-                print(f"First drop at sample: {self._drop_events[0][0]}")
-                print(f"Last drop at sample: {self._drop_events[-1][0]}")
-            print(f"Max pending queue depth: {self._max_pending_depth}/{self.max_pending_samples}")
-            print(f"Max callback lag: {self._max_callback_lag_ms}ms")
-            print(f"Total callbacks: {self._callback_count}")
-            print(f"{'='*60}\n")
-            
-            # Print adaptive control statistics
-            if self.adaptive_control and self._adjustment_history:
-                print(f"\nADCRecordStream: Adaptive control statistics:")
-                print(f"  Total adjustments: {len(self._adjustment_history)}")
-                if self._adjustment_history:
-                    first_error = self._adjustment_history[0]['error']
-                    last_error = self._adjustment_history[-1]['error']
-                    print(f"  First error: {first_error:+.1f} Hz")
-                    print(f"  Last error: {last_error:+.1f} Hz")
-                    print(f"  Error reduction: {abs(first_error) - abs(last_error):+.1f} Hz")
-
             if self.on_complete:
                 self.on_complete(f"Recorded: {self.file_path}")
 
         except Exception as e:
-            import sys
-            print(f"ADCRecordStream: Error: {e}")
             sys.print_exception(e)
             if self.on_complete:
                 self.on_complete(f"Error: {e}")
 
         finally:
             self._is_recording = False
-            if self._timer:
-                self._timer.deinit()
-                self._timer = None
-            if self._adc:
-                self._adc = None
             print(f"ADCRecordStream: Recording thread finished")
