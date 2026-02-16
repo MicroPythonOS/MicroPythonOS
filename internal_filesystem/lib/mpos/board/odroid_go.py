@@ -12,9 +12,9 @@ import lcd_bus
 import lvgl as lv
 import machine
 import mpos.ui
-from machine import ADC, Pin
+from machine import ADC, PWM, Pin
 from micropython import const
-from mpos import InputManager
+from mpos import AudioManager, BatteryManager, InputManager
 
 # Display settings:
 SPI_HOST = const(1)
@@ -49,14 +49,26 @@ CROSSBAR_Y = const(35)
 # Misc settings:
 LED_BLUE = const(2)
 BATTERY_PIN = const(36)
-SPEAKER_ENABLE_PIN = const(25)
-SPEAKER_PIN = const(26)
+
+# Buzzer
+BUZZER_PIN = const(26)
+BUZZER_DAC_PIN = const(25)
+BUZZER_TONE_CHANNEL = const(0)
 
 
 print("odroid_go.py turn on blue LED")
 blue_led = machine.Pin(LED_BLUE, machine.Pin.OUT)
 blue_led.on()
 
+print("odroid_go.py init buzzer")
+buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
+dac_pin = Pin(BUZZER_DAC_PIN, Pin.OUT, value=1)
+dac_pin.value(1)  # Unmute
+AudioManager(i2s_pins=None, buzzer_instance=buzzer)
+AudioManager.set_volume(40)
+AudioManager.play_rtttl("Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6")
+while AudioManager.is_playing():
+    time.sleep(0.1)
 
 print("odroid_go.py machine.SPI.Bus() initialization")
 try:
@@ -102,24 +114,23 @@ lv.init()
 
 
 print("odroid_go.py Battery initialization...")
-from mpos import BatteryManager
 
 
 def adc_to_voltage(raw_adc_value):
     """
     The percentage calculation uses MIN_VOLTAGE = 3.15 and MAX_VOLTAGE = 4.15
-    0% at 3.15V -> raw_adc_value = 270
+    0% at 3.15V -> raw_adc_value = 210
     100% at 4.15V -> raw_adc_value = 310
 
     4.15 - 3.15 = 1V
-    310 - 270 = 40 raw ADC steps
+    310 - 210 = 100 raw ADC steps
 
-    So each raw ADC step is 1V / 40 = 0.025V
+    So each raw ADC step is 1V / 100 = 0.01V
     Offset calculation:
-    270 * 0.025 = 6.75V. but we want it to be 3.15V
-    So the offset is 3.15V - 6.75V = -3.6V
+    210 * 0.01 = 2.1V. but we want it to be 3.15V
+    So the offset is 3.15V - 2.1V = 1.05V
     """
-    voltage = raw_adc_value * 0.025 - 3.6
+    voltage = raw_adc_value * 0.01 + 1.05
     return voltage
 
 
@@ -198,6 +209,13 @@ def input_callback(indev, data):
     elif button_volume.value() == 0:
         print("Volume button pressed -> reset")
         blue_led.on()
+        AudioManager.play_rtttl(
+            "Outro:o=5,d=32,b=160,b=160:c6,b,a,g,f,e,d,c",
+            stream_type=AudioManager.STREAM_ALARM,
+            volume=40,
+        )
+        while AudioManager.is_playing():
+            time.sleep(0.1)
         machine.reset()
     elif button_select.value() == 0:
         current_key = lv.KEY.BACKSPACE

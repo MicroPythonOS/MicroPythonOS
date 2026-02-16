@@ -104,20 +104,28 @@ def detect_board():
         if i2c0 := fail_save_i2c(sda=21, scl=22):
             if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
                 return "m5stack_fire"
-  
+
+        import machine
+        unique_id_prefix = machine.unique_id()[0]
+
+        print("odroid_go ?")
+        if unique_id_prefix == 0x30:
+            return "odroid_go"
+
         print("fri3d_2024 ?")
         if i2c0 := fail_save_i2c(sda=9, scl=18):
             if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
 
-        import machine
-        if machine.unique_id()[0] == 0xdc: # prototype board had: dc:b4:d9:0b:7d:80
+        print("fri3d_2026 ?")
+        if unique_id_prefix == 0xDC:  # prototype board had: dc:b4:d9:0b:7d:80
             # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
             return "fri3d_2026"
 
-        print("odroid_go ?")
-        #if check_pins(0, 13, 27, 39): # not good because it matches other boards (like fri3d_2024 and fri3d_2026)
-        return "odroid_go"
+        raise Exception(
+            "Unknown ESP32-S3 board: couldn't detect known I2C devices or unique_id prefix"
+        )
+
 
 # EXECUTION STARTS HERE
 
