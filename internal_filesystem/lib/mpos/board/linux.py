@@ -127,7 +127,14 @@ from mpos import SensorManager
 
 # Initialize with no I2C bus - will detect MCU temp if available
 # (On Linux desktop, this will fail gracefully but set _initialized flag)
-SensorManager.init(None)
+SensorManager.init_iio()
+
+# In app:
+if False and SensorManager.is_available():
+    accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+    print(accel)
+    ax, ay, az = SensorManager.read_sensor_once(accel)  # Returns m/s²
+    print(ax, ay, az)
 
 # === CAMERA HARDWARE ===
 
