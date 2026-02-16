@@ -29,7 +29,7 @@ popd
 idfile="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/main/idf_component.yml
 echo "Patching $idfile"...
 
-echo "Check need to add esp32-camera..."
+echo "Check need to add esp32-camera to $idfile"
 if ! grep esp32-camera "$idfile"; then
 	echo "Adding esp32-camera to $idfile"
 	echo "  mpos/esp32-camera:
@@ -37,7 +37,16 @@ if ! grep esp32-camera "$idfile"; then
 else
 	echo "No need to add esp32-camera to $idfile"
 fi
-echo "Resulting file:"
+
+echo "Check need to add adc_mic to $idfile"
+if ! grep esp32-camera "$idfile"; then
+	echo "Adding esp32-camera to $idfile"
+        echo '  espressif/adc_mic: "*"' >> "$idfile"
+else
+	echo "No need to add adc_mic to $idfile"
+fi
+
+echo "Resulting $idfile file:"
 cat "$idfile"
 
 echo "Check need to add lvgl_micropython manifest to micropython-camera-API's manifest..."
