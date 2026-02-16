@@ -42,6 +42,7 @@ I want application that will show big time (hour, minutes), with smaller seconds
 import lvgl as lv
 import mpos.time
 from mpos import Activity, BatteryManager
+from mpos.battery_manager import MAX_VOLTAGE, MIN_VOLTAGE
 
 HISTORY_LEN = 60
 
@@ -52,71 +53,60 @@ class ShowBattery(Activity):
 
     refresh_timer = None
 
-    # Widgets
-    lbl_time = None
-    lbl_sec = None
-    lbl_text = None
-
-    bat_outline = None
-    bat_fill = None
-
-    clear_cache_checkbox = None  # Add reference to checkbox
-
     history_v = []
     history_p = []
 
     def onCreate(self):
-        scr = lv.obj()
+        main_content = lv.obj()
+        main_content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        main_content.set_style_pad_all(0, 0)
+        main_content.set_size(lv.pct(100), lv.pct(100))
 
-        # --- TIME ---
-        self.lbl_time = lv.label(scr)
-        self.lbl_time.set_style_text_font(lv.font_montserrat_40, 0)
-        self.lbl_time.align(lv.ALIGN.TOP_LEFT, 5, 5)
+        # --- TOP FLEX BOX: INFORMATION ---
 
-        self.lbl_sec = lv.label(scr)
-        self.lbl_sec.set_style_text_font(lv.font_montserrat_24, 0)
-        self.lbl_sec.align_to(self.lbl_time, lv.ALIGN.OUT_RIGHT_BOTTOM, 24, -4)
+        info_column = lv.obj(main_content)
+        info_column.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        info_column.set_style_pad_all(1, 1)
+        info_column.set_size(lv.pct(100), lv.SIZE_CONTENT)
 
-        # --- CHECKBOX ---
-        self.clear_cache_checkbox = lv.checkbox(scr)
+        self.lbl_datetime = lv.label(info_column)
+        self.lbl_datetime.set_style_text_font(lv.font_montserrat_16, 0)
+
+        self.lbl_battery = lv.label(info_column)
+        self.lbl_battery.set_style_text_font(lv.font_montserrat_24, 0)
+
+        self.lbl_battery_raw = lv.label(info_column)
+        self.lbl_battery_raw.set_style_text_font(lv.font_montserrat_14, 0)
+
+        self.clear_cache_checkbox = lv.checkbox(info_column)
         self.clear_cache_checkbox.set_text("Real-time values")
-        self.clear_cache_checkbox.align(lv.ALIGN.TOP_LEFT, 5, 50)
 
-        self.lbl_text = lv.label(scr)
-        self.lbl_text.set_style_text_font(lv.font_montserrat_16, 0)
-        self.lbl_text.align(lv.ALIGN.TOP_LEFT, 5, 80)
+        # --- BOTTOM FLEX BOX: GRAPH ---
 
-        # --- BATTERY ICON ---
-        self.bat_outline = lv.obj(scr)
-        self.bat_size = 225
-        self.bat_outline.set_size(80, self.bat_size)
-        self.bat_outline.align(lv.ALIGN.TOP_RIGHT, -10, 10)
-        self.bat_outline.set_style_border_width(2, 0)
-        self.bat_outline.set_style_radius(4, 0)
+        self.canvas_width = main_content.get_width()
+        self.canvas_height = 100
 
-        self.bat_fill = lv.obj(self.bat_outline)
-        self.bat_fill.align(lv.ALIGN.BOTTOM_MID, 0, -2)
-        self.bat_fill.set_width(52)
-        self.bat_fill.set_style_radius(2, 0)
+        canvas_column = lv.obj(main_content)
+        canvas_column.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        canvas_column.set_style_pad_all(0, 0)
+        canvas_column.set_size(self.canvas_width, self.canvas_height)
 
-        # --- CANVAS ---
-        self.canvas = lv.canvas(scr)
-        self.canvas.set_size(220, 100)
-        self.canvas.align(lv.ALIGN.BOTTOM_LEFT, 5, -5)
-        self.canvas.set_style_border_width(1, 0)
-        self.canvas.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
-        buffer = bytearray(220 * 100 * 4)
-        self.canvas.set_buffer(buffer, 220, 100, lv.COLOR_FORMAT.NATIVE)
+        self.canvas = lv.canvas(canvas_column)
+        self.canvas.set_size(self.canvas_width, self.canvas_height)
+        buffer = bytearray(self.canvas_width * self.canvas_height * 4)
+        self.canvas.set_buffer(
+            buffer, self.canvas_width, self.canvas_height, lv.COLOR_FORMAT.NATIVE
+        )
+
         self.layer = lv.layer_t()
         self.canvas.init_layer(self.layer)
-
-        self.setContentView(scr)
+        self.setContentView(main_content)
 
     def draw_line(self, color, x1, y1, x2, y2):
         dsc = lv.draw_line_dsc_t()
         lv.draw_line_dsc_t.init(dsc)
         dsc.color = color
-        dsc.width = 4
+        dsc.width = 2
         dsc.round_end = 1
         dsc.round_start = 1
         dsc.p1 = lv.point_precise_t()
@@ -125,17 +115,47 @@ class ShowBattery(Activity):
         dsc.p2 = lv.point_precise_t()
         dsc.p2.x = x2
         dsc.p2.y = y2
-        lv.draw_line(self.layer,dsc)
+        lv.draw_line(self.layer, dsc)
         self.canvas.finish_layer(self.layer)
+
+    def draw_graph(self):
+        self.canvas.fill_bg(lv.color_white(), lv.OPA.COVER)
+        self.canvas.clean()
+
+        w = self.canvas_width
+        h = self.canvas_height
+
+        if len(self.history_v) < 2:
+            return
+
+        v_range = max(MAX_VOLTAGE - MIN_VOLTAGE, 0.01)
+
+        for i in range(1, len(self.history_v)):
+            x1 = int((i - 1) * w / HISTORY_LEN)
+            x2 = int(i * w / HISTORY_LEN)
+
+            yv1 = h - int((self.history_v[i - 1] - MIN_VOLTAGE) / v_range * h)
+            yv2 = h - int((self.history_v[i] - MIN_VOLTAGE) / v_range * h)
+
+            yp1 = h - int(self.history_p[i - 1] / 100 * h)
+            yp2 = h - int(self.history_p[i] / 100 * h)
+
+            self.draw_line(DARKPINK, x1, yv1, x2, yv2)
+            self.draw_line(BLACK, x1, yp1, x2, yp2)
 
     def onResume(self, screen):
         super().onResume(screen)
 
         def update(timer):
+            # --- DATE+TIME ---
             now = mpos.time.localtime()
-
+            year, month, day = now[0], now[1], now[2]
             hour, minute, second = now[3], now[4], now[5]
-            date = f"{now[0]}-{now[1]:02}-{now[2]:02}"
+            self.lbl_datetime.set_text(
+                f"{year}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}"
+            )
+
+            # --- BATTERY VALUES ---
 
             if self.clear_cache_checkbox.get_state() & lv.STATE.CHECKED:
                 # Get "real-time" values by clearing the cache before reading
@@ -144,25 +164,27 @@ class ShowBattery(Activity):
             voltage = BatteryManager.read_battery_voltage()
             percent = BatteryManager.get_battery_percentage()
 
-            # --- TIME ---
-            self.lbl_time.set_text(f"{hour:02}:{minute:02}")
-            self.lbl_sec.set_text(f":{second:02}")
-
-            # --- BATTERY VALUES ---
-            date += f"\n{voltage:.2f}V {percent:.0f}%"
-            date += f"\nRaw ADC: {BatteryManager.read_raw_adc()}"
-            self.lbl_text.set_text(date)
-
-            # --- BATTERY ICON ---
-            fill_h = int((percent / 100) * (self.bat_size * 0.9))
-            self.bat_fill.set_height(fill_h)
-
-            if percent >= 30:
-                self.bat_fill.set_style_bg_color(lv.palette_main(lv.PALETTE.GREEN), 0)
+            if percent > 80:
+                symbol = lv.SYMBOL.BATTERY_FULL
+            elif percent > 60:
+                symbol = lv.SYMBOL.BATTERY_3
+            elif percent > 40:
+                symbol = lv.SYMBOL.BATTERY_2
+            elif percent > 20:
+                symbol = lv.SYMBOL.BATTERY_1
             else:
-                self.bat_fill.set_style_bg_color(lv.palette_main(lv.PALETTE.RED), 0)
+                symbol = lv.SYMBOL.BATTERY_EMPTY
 
-            # --- HISTORY ---
+            self.lbl_battery.set_text(f"{symbol} {voltage:.2f}V {percent:.0f}%")
+            if percent >= 30:
+                bg_color = lv.PALETTE.GREEN
+            else:
+                bg_color = lv.PALETTE.RED
+            self.lbl_battery.set_style_text_color(lv.palette_main(bg_color), 0)
+
+            self.lbl_battery_raw.set_text(f"Raw ADC: {BatteryManager.read_raw_adc()}")
+
+            # --- HISTORY GRAPH ---
             self.history_v.append(voltage)
             self.history_p.append(percent)
 
@@ -173,33 +195,6 @@ class ShowBattery(Activity):
             self.draw_graph()
 
         self.refresh_timer = lv.timer_create(update, 1000, None)
-
-    def draw_graph(self):
-        self.canvas.fill_bg(lv.color_white(), lv.OPA.COVER)
-        self.canvas.clean()
-
-        w = self.canvas.get_width()
-        h = self.canvas.get_height()
-
-        if len(self.history_v) < 2:
-            return
-
-        v_min = 3.3
-        v_max = 4.2
-        v_range = max(v_max - v_min, 0.01)
-
-        for i in range(1, len(self.history_v)):
-            x1 = int((i - 1) * w / HISTORY_LEN)
-            x2 = int(i * w / HISTORY_LEN)
-
-            yv1 = h - int((self.history_v[i - 1] - v_min) / v_range * h)
-            yv2 = h - int((self.history_v[i] - v_min) / v_range * h)
-
-            yp1 = h - int(self.history_p[i - 1] / 100 * h)
-            yp2 = h - int(self.history_p[i] / 100 * h)
-
-            self.draw_line(DARKPINK, x1, yv1, x2, yv2)
-            self.draw_line(BLACK, x1, yp1, x2, yp2)
 
     def onPause(self, screen):
         super().onPause(screen)
