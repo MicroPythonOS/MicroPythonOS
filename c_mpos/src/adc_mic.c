@@ -12,7 +12,10 @@
 
 #define ADC_MIC_DEBUG_PRINT(...) mp_printf(&mp_plat_print, __VA_ARGS__)
 
-static mp_obj_t adc_mic_read(void) {
+static mp_obj_t adc_mic_read(mp_obj_t chunk_samples_obj) {
+    // Extract chunk_samples from argument
+    size_t chunk_samples = mp_obj_get_int(chunk_samples_obj);
+    
     ADC_MIC_DEBUG_PRINT("Starting adc_mic_read...\n");
     ADC_MIC_DEBUG_PRINT("CONFIG_ADC_MIC_TASK_CORE: %d\n", CONFIG_ADC_MIC_TASK_CORE);
 
@@ -66,7 +69,6 @@ static mp_obj_t adc_mic_read(void) {
     // ────────────────────────────────────────────────
     // Small reusable buffer + tracking variables
     // ────────────────────────────────────────────────
-    const size_t chunk_samples = 10240;
     const size_t buf_size = chunk_samples * sizeof(int16_t);
     int16_t *audio_buffer = heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     //int16_t *audio_buffer = heap_caps_thread.start_new_thread(testit, ())_malloc_prefer(buf_size, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
@@ -78,7 +80,8 @@ static mp_obj_t adc_mic_read(void) {
     }
 
     // How many chunks to read (adjust as needed)
-    const int N = 5;  // e.g. 5 × 10240 = ~3.2 seconds @ 16 kHz
+    const int N = 1;  // e.g. 5 × 10240 = ~3.2 seconds @ 16 kHz
+    const int chunks_to_print = 0;
 
     int16_t global_min = 32767;
     int16_t global_max = -32768;
@@ -109,7 +112,7 @@ static mp_obj_t adc_mic_read(void) {
         }
 
         // Optional: print first few chunks for debug (comment out after testing)
-        if (chunk < 3) {
+        if (chunk < chunks_to_print) {
             ADC_MIC_DEBUG_PRINT("Chunk %d first 16 samples:\n", chunk);
             for (size_t i = 0; i < 16; i++) {
                 int16_t sample = audio_buffer[i];
@@ -143,7 +146,7 @@ static mp_obj_t adc_mic_read(void) {
 
     return last_buf_obj ? last_buf_obj : mp_obj_new_bytes(NULL, 0);
 }
-MP_DEFINE_CONST_FUN_OBJ_0(adc_mic_read_obj, adc_mic_read);
+MP_DEFINE_CONST_FUN_OBJ_1(adc_mic_read_obj, adc_mic_read);
 
 static const mp_rom_map_elem_t adc_mic_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_adc_mic) },
