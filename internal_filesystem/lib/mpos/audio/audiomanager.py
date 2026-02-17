@@ -42,7 +42,15 @@ class AudioManager:
             adc_mic_pin: GPIO pin number for ADC microphone (for ADC recording)
         """
         if AudioManager._instance:
+            # If instance exists, update configuration if provided
+            if i2s_pins:
+                AudioManager._instance._i2s_pins = i2s_pins
+            if buzzer_instance:
+                AudioManager._instance._buzzer_instance = buzzer_instance
+            if adc_mic_pin:
+                AudioManager._instance._adc_mic_pin = adc_mic_pin
             return
+            
         AudioManager._instance = self
 
         self._i2s_pins = i2s_pins              # I2S pin configuration dict (created per-stream)
