@@ -31,8 +31,15 @@ class AudioManager:
     STREAM_ALARM = 2         # Alarms/alerts (highest priority)
     
     _instance = None  # Singleton instance
-    
-    def __init__(self, i2s_pins=None, buzzer_instance=None, adc_mic_pin=None):
+
+    def __init__(
+        self,
+        i2s_pins=None,
+        buzzer_instance=None,
+        adc_mic_pin=None,
+        pre_playback=None,
+        post_playback=None,
+    ):
         """
         Initialize AudioManager instance with optional hardware configuration.
 
@@ -40,17 +47,22 @@ class AudioManager:
             i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers (for I2S/WAV playback)
             buzzer_instance: PWM instance for buzzer (for RTTTL playback)
             adc_mic_pin: GPIO pin number for ADC microphone (for ADC recording)
+            pre_playback: Optional callback called before starting playback
+            post_playback: Optional callback called after stopping playback
         """
         if AudioManager._instance:
             return
         AudioManager._instance = self
 
-        self._i2s_pins = i2s_pins              # I2S pin configuration dict (created per-stream)
-        self._buzzer_instance = buzzer_instance # PWM buzzer instance
-        self._adc_mic_pin = adc_mic_pin         # ADC microphone pin
-        self._current_stream = None             # Currently playing stream
-        self._current_recording = None          # Currently recording stream
-        self._volume = 50                       # System volume (0-100)
+        self._i2s_pins = i2s_pins                # I2S pin configuration dict (created per-stream)
+        self._buzzer_instance = buzzer_instance  # PWM buzzer instance
+        self._adc_mic_pin = adc_mic_pin          # ADC microphone pin
+        self.pre_playback = pre_playback
+        self.post_playback = post_playback
+
+        self._current_stream = None     # Currently playing stream
+        self._current_recording = None  # Currently recording stream
+        self._volume = 50               # System volume (0-100)
 
         # Build status message
         capabilities = []
@@ -60,7 +72,7 @@ class AudioManager:
             capabilities.append("Buzzer (RTTTL)")
         if adc_mic_pin:
             capabilities.append(f"ADC Mic (Pin {adc_mic_pin})")
-        
+
         if capabilities:
             print(f"AudioManager initialized: {', '.join(capabilities)}")
         else:
@@ -123,6 +135,11 @@ class AudioManager:
             stream: Stream instance (WAVStream or RTTTLStream)
         """
         self._current_stream = stream
+        if self.pre_playback:
+            try:
+                self.pre_playback()
+            except Exception as e:
+                print(f"AudioManager: pre_playback callback error: {e}")
 
         try:
             # Run synchronous playback in this thread
@@ -133,6 +150,12 @@ class AudioManager:
             # Clear current stream
             if self._current_stream == stream:
                 self._current_stream = None
+
+            if self.post_playback:
+                try:
+                    self.post_playback()
+                except Exception as e:
+                    print(f"AudioManager: post_playback callback error: {e}")
 
     def play_wav(self, file_path, stream_type=None, volume=None, on_complete=None):
         """
