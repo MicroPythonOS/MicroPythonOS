@@ -1,0 +1,24 @@
+{
+"name": "Compass",
+"publisher": "Pavel Machek",
+"short_description": "Application for testing accelerometer and magnetometer",
+"long_description": "Simple compass application, allowing tests of accelerometer and magnetometer.",
+"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.compass/icons/cz.ucw.pavel.compass_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.compass/mpks/cz.ucw.pavel.compass_0.0.1.mpk",
+"fullname": "cz.ucw.pavel.compass",
+"version": "0.0.1",
+"category": "utilities",
+"activities": [
+    {
+      "entrypoint": "assets/main.py",
+      "classname": "Main",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
