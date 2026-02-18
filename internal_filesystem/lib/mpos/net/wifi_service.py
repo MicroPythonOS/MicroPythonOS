@@ -308,6 +308,45 @@ class WifiService:
             print(f"WifiService: Error checking connection: {e}")
             return False
 
+
+    @staticmethod
+    def get_ipv4_address(network_module=None):
+        # If WiFi operations are in progress, report not connected
+        if WifiService.wifi_busy:
+            return None
+
+        # Desktop mode - always report connected
+        if not HAS_NETWORK_MODULE and network_module is None:
+            return "123.456.789.000"
+
+        # Check actual connection status
+        try:
+            net = network_module if network_module else network
+            wlan = net.WLAN(net.STA_IF)
+            return wlan.ipconfig("addr4")
+        except Exception as e:
+            print(f"WifiService: Error retrieving ip4v address: {e}")
+            return None
+
+    @staticmethod
+    def get_ipv4_gateway(network_module=None):
+        # If WiFi operations are in progress, report not connected
+        if WifiService.wifi_busy:
+            return None
+
+        # Desktop mode - always report connected
+        if not HAS_NETWORK_MODULE and network_module is None:
+            return "000.123.456.789"
+
+        # Check actual connection status
+        try:
+            net = network_module if network_module else network
+            wlan = net.WLAN(net.STA_IF)
+            return wlan.ipconfig("gw4")
+        except Exception as e:
+            print(f"WifiService: Error retrieving ip4v gateway: {e}")
+            return None
+
     @staticmethod
     def disconnect(network_module=None):
         """
