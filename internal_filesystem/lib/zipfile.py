@@ -1940,7 +1940,10 @@ class ZipFile:
         if parent:
             self.makedirs(parent)  # Recursively create parent directories
         if not self.path_exists(path):
-            os.mkdir(path)
+            try:
+                os.mkdir(path)
+            except OSError:
+                pass  # Directory may already exist
 
     def _extract_member(self, member, targetpath, pwd):
         """Extract the ZipInfo object 'member' to a physical
@@ -1972,7 +1975,10 @@ class ZipFile:
         # Handle directories
         if member.is_dir():
             if not self.path_isdir(targetpath):
-                os.mkdir(targetpath)
+                try:
+                    os.mkdir(targetpath)
+                except OSError:
+                    pass  # Directory may already exist from makedirs
             return targetpath
 
         # Extract file
