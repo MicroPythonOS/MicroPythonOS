@@ -105,6 +105,9 @@ class DownloadManager:
             print("DownloadManager: aiohttp not available")
             raise ImportError("aiohttp module not available")
         
+        import ssl
+        sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        sslctx.verify_mode = ssl.CERT_OPTIONAL # CERT_REQUIRED might fail because MBEDTLS_ERR_SSL_CA_CHAIN_REQUIRED
         session = aiohttp.ClientSession()
         print("DownloadManager: Created new aiohttp session")
         print(f"DownloadManager: Downloading {url}")
@@ -115,7 +118,7 @@ class DownloadManager:
             if headers is None:
                 headers = {}
             
-            async with session.get(url, headers=headers) as response:
+            async with session.get(url, headers=headers, ssl=sslctx) as response:
                 if response.status < 200 or response.status >= 400:
                     print(f"DownloadManager: HTTP error {response.status}")
                     raise RuntimeError(f"HTTP {response.status}")
