@@ -104,19 +104,6 @@ class About(Activity):
             except Exception as e:
                 self.logger.warning(f"Could not get ESP32 hardware info: {e}")
 
-            # Partition info (ESP32 only)
-            try:
-                self._add_label(screen, f"{lv.SYMBOL.SD_CARD} Partition Info", is_header=True)
-                from esp32 import Partition
-                current = Partition(Partition.RUNNING)
-                self._add_label(screen, f"Partition.RUNNING: {current}")
-                next_partition = current.get_next_update()
-                self._add_label(screen, f"Next update partition: {next_partition}")
-            except Exception as e:
-                error = f"Could not find partition info because: {e}\nIt's normal to get this error on desktop."
-                self.logger.warning(error)
-                self._add_label(screen, error)
-
             # Machine info
             try:
                 self.logger.info("Trying to find out additional board info, not available on every platform...")
@@ -133,6 +120,31 @@ class About(Activity):
                 error = f"Could not find machine info because: {e}\nIt's normal to get this error on desktop."
                 self.logger.warning(error)
                 self._add_label(screen, error)
+
+            # Partition info (ESP32 only)
+            try:
+                self._add_label(screen, f"{lv.SYMBOL.SD_CARD} Partition Info", is_header=True)
+                from esp32 import Partition
+                current = Partition(Partition.RUNNING)
+                self._add_label(screen, f"Partition.RUNNING: {current}")
+                next_partition = current.get_next_update()
+                self._add_label(screen, f"Next update partition: {next_partition}")
+            except Exception as e:
+                error = f"Could not find partition info because: {e}\nIt's normal to get this error on desktop."
+                self.logger.warning(error)
+                self._add_label(screen, error)
+
+            # Network info (ESP32 only)
+            try:
+                self._add_label(screen, f"{lv.SYMBOL.WIFI} Network Info", is_header=True)
+                from mpos import WifiService
+                self._add_label(screen, f"IPv4 Address: {WifiService.get_ipv4_address()}")
+                self._add_label(screen, f"IPv4 Gateway: {WifiService.get_ipv4_gateway()}")
+            except Exception as e:
+                error = f"Could not find network info because: {e}"
+                self.logger.warning(error)
+                self._add_label(screen, error)
+
 
         # Freezefs info (production builds only)
         try:
