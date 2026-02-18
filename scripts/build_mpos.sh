@@ -14,6 +14,7 @@ if [ -z "$target" ]; then
 	echo "Example: $0 macOS"
 	echo "Example: $0 esp32"
 	echo "Example: $0 esp32s3"
+	echo "Example: $0 esp32s3_qemu"
 	exit 1
 fi
 
@@ -86,13 +87,19 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "esp32s3_qemu" ]; then
+	extra_configs=""
         if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
-	else # esp32s3
+	else # esp32s3 or esp32s3_qemu
 		BOARD=ESP32_GENERIC_S3
 		BOARD_VARIANT=SPIRAM_OCT
+		if [ "$target" == "esp32s3_qemu" ]; then
+			# CONFIG_ESPTOOLPY_FLASHMODE_DIO because QIO has an "off by 2 bytes" bug in qemu
+			# CONFIG_MBEDTLS_HARDWARE_* because these have bugs in qemu due to warning: [AES] Error reading from GDMA buffer
+			extra_configs="CONFIG_ESPTOOLPY_FLASHMODE_DIO=y CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
+		fi
 	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
@@ -120,6 +127,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 	    CONFIG_FREERTOS_USE_TRACE_FACILITY=y \
 	    CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
 	    CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
+            $extra_configs \
 	    "$frozenmanifest"
 
 	popd
