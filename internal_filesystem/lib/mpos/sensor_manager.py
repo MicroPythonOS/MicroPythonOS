@@ -159,30 +159,48 @@ class SensorManager:
         if not self._initialized or self._imu_driver is not None:
             return self._imu_driver is not None
 
-        # Try QMI8658 first (Waveshare board)
         if self._i2c_bus:
             try:
-                from drivers.imu_sensor.qmi8658 import QMI8658
-                chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]  # PARTID register
+                print("Try QMI8658 first (Waveshare board)")
+                # PARTID register:
+                chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]
+                print(f"{chip_id=:#04x}")
                 if chip_id == 0x05:  # QMI8685_PARTID
                     self._imu_driver = _QMI8658Driver(self._i2c_bus, self._i2c_address)
                     self._register_qmi8658_sensors()
                     self._load_calibration()
+                    print("Use QMI8658, ok")
                     return True
-            except:
-                pass
+            except Exception as e:
+                print("No QMI8658:", e)
 
-            # Try WSEN_ISDS (fri3d_2024) or LSM6DSO (fri3d_2026)
             try:
-                from drivers.imu_sensor.wsen_isds import Wsen_Isds
-                chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x0F, 1)[0]  # WHO_AM_I register - could also use Wsen_Isds.get_chip_id()
-                if chip_id == 0x6A or chip_id == 0x6C:  # WSEN_ISDS WHO_AM_I 0x6A (Fri3d 2024) or 0x6C (Fri3d 2026)
+                print("Try WSEN_ISDS (fri3d_2024) or LSM6DSO (fri3d_2026)")
+                # WHO_AM_I register - could also use Wsen_Isds.get_chip_id():
+                chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x0F, 1)[0]
+                print(f"{chip_id=:#04x}")
+                # WSEN_ISDS WHO_AM_I 0x6A (Fri3d 2024) or 0x6C (Fri3d 2026):
+                if chip_id == 0x6A or chip_id == 0x6C:
                     self._imu_driver = _WsenISDSDriver(self._i2c_bus, self._i2c_address)
                     self._register_wsen_isds_sensors()
                     self._load_calibration()
+                    print("Use WSEN_ISDS/LSM6DSO, ok")
                     return True
-            except:
-                pass
+            except Exception as e:
+                print("No WSEN_ISDS or LSM6DSO:", e)
+
+            try:
+                print("Try MPU6886 (M5Stack FIRE)")
+                chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x75, 1)[0]
+                print(f"{chip_id=:#04x}")
+                if chip_id == 0x19:
+                    self._imu_driver = _MPU6886Driver(self._i2c_bus, self._i2c_address)
+                    self._register_mpu6886_sensors()
+                    self._load_calibration()
+                    print("Use MPU6886, ok")
+                    return True
+            except Exception as e:
+                print("No MPU6886:", e)
 
         return False
     
@@ -575,7 +593,39 @@ class SensorManager:
                 power_ma=0
             )
         ]
-    
+
+    def _register_mpu6886_sensors(self):
+        """Register MPU6886 sensors in sensor list."""
+        self._sensor_list = [
+            Sensor(
+                name="MPU6886 Accelerometer",
+                sensor_type=TYPE_ACCELEROMETER,
+                vendor="InvenSense",
+                version=1,
+                max_range="±16g",
+                resolution="0.0024 m/s²",
+                power_ma=0.2,
+            ),
+            Sensor(
+                name="MPU6886 Gyroscope",
+                sensor_type=TYPE_GYROSCOPE,
+                vendor="InvenSense",
+                version=1,
+                max_range="±256 deg/s",
+                resolution="0.002 deg/s",
+                power_ma=0.7,
+            ),
+            Sensor(
+                name="MPU6886 Temperature",
+                sensor_type=TYPE_IMU_TEMPERATURE,
+                vendor="InvenSense",
+                version=1,
+                max_range="-40°C to +85°C",
+                resolution="0.05°C",
+                power_ma=0,
+            ),
+        ]
+
     def _register_wsen_isds_sensors(self):
         """Register WSEN_ISDS sensors in sensor list."""
         self._sensor_list = [
@@ -804,6 +854,92 @@ class _QMI8658Driver(_IMUDriver):
             'accel_offsets': self.accel_offset,
             'gyro_offsets': self.gyro_offset
         }
+
+    def set_calibration(self, accel_offsets, gyro_offsets):
+        """Set calibration from saved values."""
+        if accel_offsets:
+            self.accel_offset = list(accel_offsets)
+        if gyro_offsets:
+            self.gyro_offset = list(gyro_offsets)
+
+
+class _MPU6886Driver(_IMUDriver):
+    """Wrapper for MPU6886 IMU (Waveshare board)."""
+
+    def __init__(self, i2c_bus, address):
+        from drivers.imu_sensor.mpu6886 import MPU6886
+
+        self.sensor = MPU6886(i2c_bus, address=address)
+        # Software calibration offsets (MPU6886 has no built-in calibration)
+        self.accel_offset = [0.0, 0.0, 0.0]
+        self.gyro_offset = [0.0, 0.0, 0.0]
+
+    def read_temperature(self):
+        """Read temperature in °C."""
+        return self.sensor.temperature
+
+    def read_acceleration(self):
+        """Read acceleration in m/s² (converts from G)."""
+        ax, ay, az = self.sensor.acceleration
+        # Convert G to m/s² and apply calibration
+        return (
+            (ax * _GRAVITY) - self.accel_offset[0],
+            (ay * _GRAVITY) - self.accel_offset[1],
+            (az * _GRAVITY) - self.accel_offset[2],
+        )
+
+    def read_gyroscope(self):
+        """Read gyroscope in deg/s (already in correct units)."""
+        gx, gy, gz = self.sensor.gyro
+        # Apply calibration
+        return (
+            gx - self.gyro_offset[0],
+            gy - self.gyro_offset[1],
+            gz - self.gyro_offset[2],
+        )
+
+    def calibrate_accelerometer(self, samples):
+        """Calibrate accelerometer (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            ax, ay, az = self.sensor.acceleration
+            sum_x += ax * _GRAVITY
+            sum_y += ay * _GRAVITY
+            sum_z += az * _GRAVITY
+            time.sleep_ms(10)
+
+        if FACING_EARTH == FACING_EARTH:
+            sum_z *= -1
+
+        # Average offsets (assuming Z-axis should read +9.8 m/s²)
+        self.accel_offset[0] = sum_x / samples
+        self.accel_offset[1] = sum_y / samples
+        self.accel_offset[2] = (sum_z / samples) - _GRAVITY
+
+        return tuple(self.accel_offset)
+
+    def calibrate_gyroscope(self, samples):
+        """Calibrate gyroscope (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            gx, gy, gz = self.sensor.gyro
+            sum_x += gx
+            sum_y += gy
+            sum_z += gz
+            time.sleep_ms(10)
+
+        # Average offsets (should be 0 when stationary)
+        self.gyro_offset[0] = sum_x / samples
+        self.gyro_offset[1] = sum_y / samples
+        self.gyro_offset[2] = sum_z / samples
+
+        return tuple(self.gyro_offset)
+
+    def get_calibration(self):
+        """Get current calibration."""
+        return {"accel_offsets": self.accel_offset, "gyro_offsets": self.gyro_offset}
 
     def set_calibration(self, accel_offsets, gyro_offsets):
         """Set calibration from saved values."""
