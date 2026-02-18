@@ -122,6 +122,14 @@ def detect_board():
             # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
             return "fri3d_2026"
 
+        print("qemu ?")
+        if unique_id_prefix == 0x10:
+            return "qemu"
+
+        if i2c0 := fail_save_i2c(sda=10, scl=11):
+            if single_address_i2c_scan(i2c0, 0x20): # IMU
+                return "lilygo_t_watch_s3_plus"
+        
         raise Exception(
             "Unknown ESP32-S3 board: couldn't detect known I2C devices or unique_id prefix"
         )
