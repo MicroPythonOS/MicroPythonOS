@@ -289,7 +289,7 @@ def adc_to_voltage(adc_value):
 BatteryManager.init_adc(13, adc_to_voltage)
 
 import mpos.sdcard
-mpos.sdcard.init(spi_bus, cs_pin=14)
+mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
 from machine import PWM, Pin
