@@ -126,22 +126,25 @@ def detect_board():
         if unique_id_prefix == 0x10:
             return "qemu"
 
+        print("lilygo_t_display_s3 ?")
+        if unique_id_prefix == 0xc0:
+            return "lilygo_t_display_s3"
+
         if i2c0 := fail_save_i2c(sda=10, scl=11):
             if single_address_i2c_scan(i2c0, 0x20): # IMU
                 return "lilygo_t_watch_s3_plus"
         
-        raise Exception(
-            "Unknown ESP32-S3 board: couldn't detect known I2C devices or unique_id prefix"
-        )
+        print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 
 
 # EXECUTION STARTS HERE
 
 print(f"MicroPythonOS {BuildInfo.version.release} running lib/mpos/main.py")
 board = detect_board()
-print(f"Detected {board} system, importing mpos.board.{board}")
-DeviceInfo.set_hardware_id(board)
-__import__(f"mpos.board.{board}")
+if board:
+    print(f"Detected {board} system, importing mpos.board.{board}")
+    DeviceInfo.set_hardware_id(board)
+    __import__(f"mpos.board.{board}")
 
 # Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
 import mpos.fs_driver
@@ -222,6 +225,7 @@ async def ota_rollback_cancel():
         Partition.mark_app_valid_cancel_rollback()
     except Exception as e:
         print("main.py: warning: could not mark this update as valid:", e)
+
 
 if not started_launcher:
     print(f"WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
