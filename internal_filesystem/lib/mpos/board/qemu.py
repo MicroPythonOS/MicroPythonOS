@@ -39,10 +39,9 @@ mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
-    display_width=170, # emulator st7789.c has 135
-    display_height=320, # emulator st7789.c has 240
+    display_width=170,
+    display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
-    #color_space=lv.COLOR_FORMAT.RGB888,
     color_byte_order=st7789.BYTE_ORDER_RGB,
     # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
     reset_pin=5,
@@ -70,14 +69,14 @@ REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
 REPEAT_RATE_MS = 100  # Interval between repeats
 last_key = None
 last_state = lv.INDEV_STATE.RELEASED
-key_press_start = 0  # Time when key was first pressed
-last_repeat_time = 0  # Time of last repeat event
+#key_press_start = 0  # Time when key was first pressed
+#last_repeat_time = 0  # Time of last repeat event
 
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
-    global last_key, last_state, key_press_start, last_repeat_time
+    global last_key, last_state #, key_press_start, last_repeat_time
     since_last_repeat = 0
 
     # Check buttons
@@ -98,23 +97,24 @@ def keypad_read_cb(indev, data):
             # New key press
             data.key = current_key
             data.state = lv.INDEV_STATE.PRESSED
-            last_key = current_key
-            last_state = lv.INDEV_STATE.PRESSED
-            key_press_start = current_time
-            last_repeat_time = current_time
+            last_key = data.key
+            last_state = data.state
+            #key_press_start = current_time
+            #last_repeat_time = current_time
+        else:
+            print(f"should {current_key} be repeated?")
     else:
         # No key pressed
         data.key = last_key if last_key else lv.KEY.ENTER
         data.state = lv.INDEV_STATE.RELEASED
         last_key = None
-        last_state = lv.INDEV_STATE.RELEASED
-        key_press_start = 0
-        last_repeat_time = 0
+        last_state = data.state
+        #key_press_start = 0
+        #last_repeat_time = 0
 
     # Handle ESC for back navigation (only on initial PRESSED)
-    if last_state == lv.INDEV_STATE.PRESSED:
-        if current_key == lv.KEY.ESC:
-            mpos.ui.back_screen()
+    if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:
+        mpos.ui.back_screen()
 
 
 group = lv.group_create()
