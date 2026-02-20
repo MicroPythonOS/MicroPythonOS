@@ -15,7 +15,6 @@
 
 from machine import Pin, SPI, SDCard
 import lcd_bus
-import machine
 import i2c
 import math
 
@@ -35,6 +34,7 @@ from mpos import InputManager
 TFT_HOR_RES=320
 TFT_VER_RES=240
 
+import machine
 spi_bus = machine.SPI.Bus(
     host=2,
     mosi=6,
@@ -43,7 +43,7 @@ spi_bus = machine.SPI.Bus(
 )
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
-    freq=40000000,
+    freq=40000000, # 40 Mhz
     dc=4,
     cs=5
 )
@@ -190,16 +190,11 @@ InputManager.register_indev(indev)
 # Battery voltage ADC measuring: sits on PC0 of CH32X035GxUx
 from mpos import BatteryManager
 def adc_to_voltage(adc_value):
-    """
-    Convert raw ADC value to battery voltage using calibrated linear function.
-    Calibration data shows linear relationship: voltage = -0.0016237 * adc + 8.2035
-    This is ~10x more accurate than simple scaling (error ~0.01V vs ~0.1V).
-    """
     return (0.001651* adc_value + 0.08709)
 #BatteryManager.init_adc(13, adc_to_voltage) # TODO
 
 import mpos.sdcard
-mpos.sdcard.init(spi_bus, cs_pin=14)
+mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
 from machine import PWM, Pin
@@ -220,7 +215,7 @@ i2s_pins = {
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     'sck_in': 17,   # SCLK - Serial Clock for microphone input (optional for audio out)
 }
-
+'''
 # This is how it should be (untested)
 i2s_pins = {
     # Output (DAC/speaker) pins
@@ -229,10 +224,10 @@ i2s_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
 }
-
+'''
 # Initialize AudioManager with I2S (buzzer TODO)
 # ADC microphone is on GPIO 1
-AudioManager(i2s_pins=i2s_pins, adc_mic_pin=1)
+#AudioManager(i2s_pins=i2s_pins, adc_mic_pin=1)
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
@@ -252,10 +247,6 @@ import time
 import _thread
 
 def startup_wow_effect():
-    """
-    Epic startup effect with rainbow LED chase and upbeat startup jingle.
-    Runs in background thread to avoid blocking boot.
-    """
     try:
         # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
         startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
