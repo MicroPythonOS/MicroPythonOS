@@ -329,7 +329,6 @@ class WAVStream:
 
                 # Decide playback rate (force >=22050 Hz) - but why?! the DAC should support down to 8kHz!
                 target_rate = 22050 # slower is faster (less data)
-                target_rate = 22050 * 2 # CJC only supports 30kHz and up?
                 if original_rate >= target_rate:
                     playback_rate = original_rate
                     upsample_factor = 1
@@ -365,17 +364,29 @@ class WAVStream:
                             print(f"MCLK PWM init failed: {e}")
                             # fallback or error handling
 
-                    self._i2s = machine.I2S(
-                        0,
-                        sck=machine.Pin(self.i2s_pins['sck'], machine.Pin.OUT),
-                        ws=machine.Pin(self.i2s_pins['ws'], machine.Pin.OUT),
-                        sd=machine.Pin(self.i2s_pins['sd'], machine.Pin.OUT),
-                        mode=machine.I2S.TX,
-                        bits=16,
-                        format=i2s_format,
-                        rate=playback_rate,
-                        ibuf=32000
-                    )
+                    if self.i2s_pins.get("sck"):
+                        self._i2s = machine.I2S(
+                            0,
+                            sck=machine.Pin(self.i2s_pins['sck'], machine.Pin.OUT),
+                            ws=machine.Pin(self.i2s_pins['ws'], machine.Pin.OUT),
+                            sd=machine.Pin(self.i2s_pins['sd'], machine.Pin.OUT),
+                            mode=machine.I2S.TX,
+                            bits=16,
+                            format=i2s_format,
+                            rate=playback_rate,
+                            ibuf=32000
+                        )
+                    else:
+                        self._i2s = machine.I2S(
+                            0,
+                            ws=machine.Pin(self.i2s_pins['ws'], machine.Pin.OUT),
+                            sd=machine.Pin(self.i2s_pins['sd'], machine.Pin.OUT),
+                            mode=machine.I2S.TX,
+                            bits=16,
+                            format=i2s_format,
+                            rate=playback_rate,
+                            ibuf=32000
+                        )
                 except Exception as e:
                     print(f"WAVStream: I2S init failed: {e}")
                     return

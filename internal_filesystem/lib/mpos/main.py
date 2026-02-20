@@ -132,7 +132,7 @@ def detect_board():
 
         if i2c0 := fail_save_i2c(sda=10, scl=11):
             if single_address_i2c_scan(i2c0, 0x20): # IMU
-                return "lilygo_t_watch_s3_plus"
+                return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
         
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 

@@ -198,7 +198,6 @@ mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
 from machine import PWM, Pin
-from mpos import AudioManager
 
 # Initialize buzzer: now sits on PC14/CC1 of the CH32X035GxUx so needs custom code
 #buzzer = PWM(Pin(46), freq=550, duty=0)
@@ -208,26 +207,18 @@ from mpos import AudioManager
 # The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
 # See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 
-# This worked briefly, way too loud and with distortion:
-i2s_pins = {
-    'sck': 2,       # SCLK or BCLK (optional)
-    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
-    'sd': 16,       # Serial Data OUT (speaker/DAC)
-    'sck_in': 17,   # SCLK - Serial Clock for microphone input (optional for audio out)
-}
-'''
-# This is how it should be (untested)
 i2s_pins = {
     # Output (DAC/speaker) pins
     'mck': 2,       # MCLK (mandatory)
-    #'sck': 17,      # SCLK aka BCLK (optional)
+    'sck': 17,      # SCLK aka BCLK (optional)
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
 }
-'''
+
 # Initialize AudioManager with I2S (buzzer TODO)
 # ADC microphone is on GPIO 1
-#AudioManager(i2s_pins=i2s_pins, adc_mic_pin=1)
+from mpos import AudioManager
+AudioManager(i2s_pins=i2s_pins, adc_mic_pin=1)
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
