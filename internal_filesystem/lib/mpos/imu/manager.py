@@ -3,6 +3,7 @@ import time
 from mpos.imu.constants import (
     TYPE_ACCELEROMETER,
     TYPE_GYROSCOPE,
+    TYPE_MAGNETIC_FIELD,
     TYPE_IMU_TEMPERATURE,
     TYPE_SOC_TEMPERATURE,
     TYPE_TEMPERATURE,
@@ -50,6 +51,15 @@ class ImuManager:
     def init_iio(self):
         self._imu_driver = IIODriver()
         self._sensor_list = [
+            Sensor(
+                name="Magnetometer",
+                sensor_type=TYPE_MAGNETIC_FIELD,
+                vendor="Linux IIO",
+                version=1,
+                max_range="?",
+                resolution="?",
+                power_ma=0.2
+            ),
             Sensor(
                 name="Accelerometer",
                 sensor_type=TYPE_ACCELEROMETER,
@@ -156,6 +166,9 @@ class ImuManager:
         elif sensor.type == TYPE_GYROSCOPE:
             if self._imu_driver:
                 return self._imu_driver.read_gyroscope()
+        elif sensor.type == TYPE_MAGNETIC_FIELD:
+            if self._imu_driver:
+                return self._imu_driver.read_magnetometer()
         elif sensor.type == TYPE_IMU_TEMPERATURE:
             if self._imu_driver:
                 return self._imu_driver.read_temperature()
