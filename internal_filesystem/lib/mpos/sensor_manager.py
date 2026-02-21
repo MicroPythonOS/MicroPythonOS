@@ -346,6 +346,8 @@ class SensorManager:
                 try:
                     return self.read_sensor_once(sensor)
                 except Exception as e:
+                    import sys
+                    sys.print_exception(e)
                     error_msg = str(e)
                     # Retry if sensor data not ready, otherwise fail immediately
                     if "data not ready" in error_msg and attempt < max_retries - 1:
@@ -394,6 +396,8 @@ class SensorManager:
 
             return offsets
         except Exception as e:
+            import sys
+            sys.print_exception(e)
             print(f"[SensorManager] Calibration error: {e}")
             return None
         finally:
@@ -812,6 +816,64 @@ class _IMUDriver:
 
 
 class _IIODriver(_IMUDriver):
+    def __init__(self):
+        self.accel_path = self.find_iio_device_with_file("in_accel_x_raw")
+        print("path:", self.accel_path)
+        self.accel_offset = [0.0, 0.0, 0.0]
+        self.gyro_offset = [0.0, 0.0, 0.0]
+
+    def calibrate_accelerometer(self, samples):
+        """Calibrate accelerometer (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            ax, ay, az = self.read_acceleration()
+            sum_x += ax
+            sum_y += ay
+            sum_z += az
+            time.sleep_ms(10)
+
+        if FACING_EARTH == FACING_EARTH:
+            sum_z *= -1
+
+        # Average offsets (assuming Z-axis should read +9.8 m/s²)
+        self.accel_offset[0] = sum_x / samples
+        self.accel_offset[1] = sum_y / samples
+        self.accel_offset[2] = (sum_z / samples) - _GRAVITY
+
+        return tuple(self.accel_offset)
+
+    def calibrate_gyroscope(self, samples):
+        """Calibrate gyroscope (device must be stationary)."""
+        sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+
+        for _ in range(samples):
+            gx, gy, gz = self.read_gyroscope()
+            sum_x += gx
+            sum_y += gy
+            sum_z += gz
+            time.sleep_ms(10)
+
+        # Average offsets (should be 0 when stationary)
+        self.gyro_offset[0] = sum_x / samples
+        self.gyro_offset[1] = sum_y / samples
+        self.gyro_offset[2] = sum_z / samples
+
+        return tuple(self.gyro_offset)
+
+    def get_calibration(self):
+        """Get current calibration."""
+        return {
+            'accel_offsets': self.accel_offset,
+            'gyro_offsets': self.gyro_offset
+        }
+
+    def set_calibration(self, accel_offsets, gyro_offsets):
+        """Set calibration from saved values."""
+        if accel_offsets:
+            self.accel_offset = list(accel_offsets)
+        if gyro_offsets:
+            self.gyro_offset = list(gyro_offsets)
     """
     Read sensor data via Linux IIO sysfs.
 
@@ -921,13 +983,19 @@ class _IIODriver(_IMUDriver):
         Common names:
           in_accel_{x,y,z}_raw + in_accel_scale
         """
+        if not self.accel_path:
+            return (0.0, 0.0, 0.0)
         scale_name = self.accel_path + "/" +  "in_accel_scale"
 
         ax = self._read_raw_scaled(self.accel_path + "/" + "in_accel_x_raw", scale_name)
         ay = self._read_raw_scaled(self.accel_path + "/" + "in_accel_y_raw", scale_name)
         az = self._read_raw_scaled(self.accel_path + "/" + "in_accel_z_raw", scale_name)
 
-        return (ax, ay, az)
+        return (
+            ax - self.accel_offset[0],
+            ay - self.accel_offset[1],
+            az - self.accel_offset[2]
+        )
 
     def read_gyroscope(self) -> tuple[float, float, float]:
         """
@@ -935,13 +1003,19 @@ class _IIODriver(_IMUDriver):
         Common names:
           in_anglvel_{x,y,z}_raw + in_anglvel_scale
         """
+        if not self.accel_path:
+            return (0.0, 0.0, 0.0)
         scale_name = self.accel_path + "/" + "in_anglvel_scale"
 
         gx = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_x_raw", scale_name)
         gy = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_y_raw", scale_name)
         gz = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_z_raw", scale_name)
 
-        return (gx, gy, gz)
+        return (
+            gx - self.gyro_offset[0],
+            gy - self.gyro_offset[1],
+            gz - self.gyro_offset[2]
+        )
 
 class _QMI8658Driver(_IMUDriver):
     """Wrapper for QMI8658 IMU (Waveshare board)."""
