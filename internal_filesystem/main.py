@@ -12,7 +12,7 @@ print(f"{sys.version=}")
 print(f"{sys.implementation=}")
 
 
-print("Check free space on root filesystem:")
+print("Free space on root filesystem:")
 stat = os.statvfs("/")
 total_space = stat[0] * stat[2]
 free_space = stat[0] * stat[3]
