@@ -5,7 +5,11 @@ https://docs.micropython.org/en/latest/library/bluetooth.html
 
 import time
 
-import bluetooth
+try:
+    import bluetooth
+except ImportError:  # Linux test runner may not provide bluetooth module
+    bluetooth = None
+
 import lvgl as lv
 from micropython import const
 from mpos import Activity
@@ -35,6 +39,8 @@ def decode_field(payload: bytes, adv_type: int) -> list:
 
 class BluetoothScanner:
     def __init__(self, device_callback):
+        if bluetooth is None:
+            raise RuntimeError("Bluetooth module not available")
         self.device_callback = device_callback
         self.ble = bluetooth.BLE()
         self.ble.irq(self.ble_irq_handler)
@@ -87,6 +93,13 @@ class ScanBluetooth(Activity):
         screen.set_style_pad_all(0, 0)
         screen.set_size(lv.pct(100), lv.pct(100))
 
+        if bluetooth is None:
+            label = lv.label(screen)
+            label.set_text("Bluetooth not available on this platform")
+            label.center()
+            self.setContentView(screen)
+            return
+
         self.table = lv.table(screen)
         set_cell_value(
             self.table,
@@ -125,6 +138,8 @@ class ScanBluetooth(Activity):
 
     def onResume(self, screen):
         super().onResume(screen)
+        if bluetooth is None:
+            return
 
         def update(timer):
             self.scanner.scan(SCAN_DURATION)
@@ -136,6 +151,8 @@ class ScanBluetooth(Activity):
 
     def onPause(self, screen):
         super().onPause(screen)
+        if bluetooth is None:
+            return
         self.scanner.__exit__(None, None, None)  # Deactivate BLE
         if self.refresh_timer:
             self.refresh_timer.delete()
