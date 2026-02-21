@@ -885,6 +885,8 @@ class _IIODriver(_IMUDriver):
     def __init__(self):
         self.accel_path = self.find_iio_device_with_file("in_accel_x_raw")
         print("path:", self.accel_path)
+        self.accel_offset = [0.0, 0.0, 0.0]
+        self.gyro_offset = [0.0, 0.0, 0.0]
 
     def _p(self, name: str):
         return self.accel_path + "/" + name
