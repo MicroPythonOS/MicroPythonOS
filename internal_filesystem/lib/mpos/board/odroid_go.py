@@ -62,9 +62,32 @@ blue_led.on()
 
 print("odroid_go.py init buzzer")
 buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
-dac_pin = Pin(BUZZER_DAC_PIN, Pin.OUT, value=1)
-dac_pin.value(1)  # Unmute
-AudioManager(i2s_pins=None, buzzer_instance=buzzer)
+
+
+class BuzzerCallbacks:
+    __slots__ = ("dac_pin",)
+
+    def __init__(self):
+        self.dac_pin = Pin(BUZZER_DAC_PIN, Pin.OUT, value=1)
+
+    def unmute(self):
+        print("Unmute buzzer")
+        self.dac_pin.value(1)  # Unmute
+
+    def mute(self):
+        print("Mute buzzer")
+        self.dac_pin.value(0)  # Mute
+
+
+buzzer_callbacks = BuzzerCallbacks()
+AudioManager(
+    i2s_pins=None,
+    buzzer_instance=buzzer,
+    # The buzzer makes noise when it's unmuted, to avoid this we
+    # mute it after playback and vice versa unmute it before playback:
+    pre_playback=buzzer_callbacks.unmute,
+    post_playback=buzzer_callbacks.mute,
+)
 AudioManager.set_volume(40)
 AudioManager.play_rtttl("Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6")
 while AudioManager.is_playing():
