@@ -157,6 +157,25 @@ class AppManager:
     @staticmethod
     def install_mpk(temp_zip_path, dest_folder):
         try:
+            # Step 1: Remove any existing (possibly partial) install or symlink
+            try:
+                st = os.stat(dest_folder)
+                if st[0] & 0x4000:  # It's a real directory
+                    import shutil
+                    shutil.rmtree(dest_folder)
+                    print("Removed existing folder:", dest_folder)
+                else:
+                    os.remove(dest_folder)
+                    print("Removed existing file:", dest_folder)
+            except OSError:
+                pass  # Doesn't exist, that's fine
+            # Also remove if it's a symlink (broken or otherwise)
+            try:
+                os.remove(dest_folder)
+                print("Removed symlink:", dest_folder)
+            except OSError:
+                pass  # Not a symlink or already removed
+
             # Step 2: Unzip the file
             print("Unzipping it to:", dest_folder)
             with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
