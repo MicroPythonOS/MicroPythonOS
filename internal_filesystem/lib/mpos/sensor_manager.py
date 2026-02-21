@@ -967,6 +967,9 @@ class _IIODriver(_IMUDriver):
           - in_temp_input (already scaled, usually millidegree C)
           - in_temp_raw + in_temp_scale
         """
+        if not self.accel_path:
+            return None
+
         if False: # os.path.exists(self._p("in_temp_input")):
             v = self._read_float(self.accel_path + "/" + "in_temp_input")
             # Many drivers expose millidegree Celsius here.
@@ -975,7 +978,11 @@ class _IIODriver(_IMUDriver):
             return v
 
         # Fallback: raw + scale
-        return self._read_raw_scaled(self.accel_path + "/" + "in_temp_raw", self.accel_path + "/" + "in_temp_scale")
+        raw_path = self.accel_path + "/" + "in_temp_raw"
+        scale_path = self.accel_path + "/" + "in_temp_scale"
+        if not self._exists(raw_path) or not self._exists(scale_path):
+            return None
+        return self._read_raw_scaled(raw_path, scale_path)
 
     def read_acceleration(self) -> tuple[float, float, float]:
         """
