@@ -1,7 +1,6 @@
 # Hardware initialization for ESP32 M5Stack-Fire board
 # Manufacturer's website at https://https://docs.m5stack.com/en/core/fire_v2.7
 # Original author: https://github.com/ancebfer
-
 import time
 
 import drivers.display.ili9341 as ili9341
@@ -10,9 +9,9 @@ import lvgl as lv
 import machine
 import mpos.ui
 import mpos.ui.focus_direction
-from machine import PWM, Pin
+from machine import I2C, PWM, Pin
 from micropython import const
-from mpos import AudioManager, InputManager
+from mpos import AudioManager, InputManager, SensorManager
 
 # Display settings:
 SPI_BUS = const(1)  # SPI2
@@ -40,6 +39,12 @@ BATTERY_PIN = const(35)
 # Buzzer
 BUZZER_PIN = const(25)
 
+# MPU6886 Sensor settings:
+MPU6886_I2C_ADDR = const(0x68)
+MPU6886_I2C_SCL = const(22)
+MPU6886_I2C_SDA = const(21)
+MPU6886_I2C_FREQ = const(400000)
+
 
 print("m5stack_fire.py init buzzer")
 buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
@@ -48,6 +53,15 @@ AudioManager.set_volume(40)
 AudioManager.play_rtttl("Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6")
 while AudioManager.is_playing():
     time.sleep(0.1)
+
+
+print("m5stack_fire.py init IMU")
+i2c_bus = I2C(0, scl=Pin(MPU6886_I2C_SCL), sda=Pin(MPU6886_I2C_SDA), freq=MPU6886_I2C_FREQ)
+SensorManager.init(
+    i2c_bus=i2c_bus,
+    address=MPU6886_I2C_ADDR,
+    mounted_position=SensorManager.FACING_EARTH,
+)
 
 
 print("m5stack_fire.py machine.SPI.Bus() initialization")
