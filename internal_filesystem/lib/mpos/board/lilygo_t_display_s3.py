@@ -58,14 +58,14 @@ mpos.ui.main_display.init()
 mpos.ui.main_display.set_backlight(100) # works
 
 lv.init()
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 mpos.ui.main_display.set_color_inversion(True)
 
 
 # Button handling code:
 from machine import Pin
-btn_a = Pin(0, Pin.IN, Pin.PULL_UP)  # 1
-btn_b = Pin(14, Pin.IN, Pin.PULL_UP)  # 2
+btn_a = Pin(0, Pin.IN, Pin.PULL_UP)
+btn_b = Pin(14, Pin.IN, Pin.PULL_UP)
 
 # Key repeat configuration
 # This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
