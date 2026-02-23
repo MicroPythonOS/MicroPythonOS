@@ -89,6 +89,29 @@ def detect_board():
         return "linux"
     elif sys.platform == "esp32":
 
+        # First do unique_id-based board detections because they're fast and don't mess with actual hardware configurations
+        import machine
+        unique_id_prefixes = machine.unique_id()[0:3]
+
+        print("qemu ?")
+        if unique_id_prefixes[0] == 0x10:
+            return "qemu"
+
+        print("odroid_go ?")
+        if unique_id_prefixes[0] == 0x30:
+            return "odroid_go"
+
+        print("lilygo_t_display_s3 ?")
+        if unique_id_prefixes == b'\xc0\x4e\x30':
+            return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
+
+        print("fri3d_2026 ?")
+        if unique_id_prefixes == b'\xdc\xb4\xd9':
+            # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
+            return "fri3d_2026"
+
+
+        # Then do I2C-based board detection
         print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
         if i2c0 := fail_save_i2c(sda=39, scl=38):
             if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
@@ -105,35 +128,16 @@ def detect_board():
             if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
                 return "m5stack_fire"
 
-        import machine
-        unique_id_prefix = machine.unique_id()[0]
-
-        print("odroid_go ?")
-        if unique_id_prefix == 0x30:
-            return "odroid_go"
-
         print("fri3d_2024 ?")
         if i2c0 := fail_save_i2c(sda=9, scl=18):
             if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
 
-        print("fri3d_2026 ?")
-        if unique_id_prefix == 0xDC:  # prototype board had: dc:b4:d9:0b:7d:80
-            # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
-            return "fri3d_2026"
-
-        print("qemu ?")
-        if unique_id_prefix == 0x10:
-            return "qemu"
-
-        print("lilygo_t_display_s3 ?")
-        if unique_id_prefix == 0xc0:
-            return "lilygo_t_display_s3"
-
+        print("lilygo_t_watch_s3_plus ?")
         if i2c0 := fail_save_i2c(sda=10, scl=11):
             if single_address_i2c_scan(i2c0, 0x20): # IMU
                 return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
-        
+
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 
 
