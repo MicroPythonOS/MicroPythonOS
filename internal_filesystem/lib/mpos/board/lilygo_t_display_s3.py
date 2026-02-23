@@ -121,14 +121,29 @@ def keypad_read_cb(indev, data):
         dt_b = time.ticks_diff(current_time, last_b_down_time) if last_b_down_time else None
         print(f"combo guard: a={btn_a_pressed} b={btn_b_pressed} near={near_simul} wait={single_press_wait} dt_a={dt_a} dt_b={dt_b}")
 
+    # While in an on-screen keyboard, PREV button is LEFT and NEXT button is RIGHT
+    focus_group = lv.group_get_default()
+    focus_keyboard = False
+    if focus_group:
+        current_focused = focus_group.get_focused()
+        if isinstance(current_focused, lv.keyboard):
+            #print("focus is on a keyboard")
+            focus_keyboard = True
+
     if near_simul:
         current_key = lv.KEY.ENTER
     elif single_press_wait:
         current_key = None
     elif btn_a_pressed:
-        current_key = lv.KEY.PREV
+        if focus_keyboard:
+            current_key = lv.KEY.LEFT
+        else:
+            current_key = lv.KEY.PREV
     elif btn_b_pressed:
-        current_key = lv.KEY.NEXT
+        if focus_keyboard:
+            current_key = lv.KEY.RIGHT
+        else:
+            current_key = lv.KEY.NEXT
     else:
         current_key = None
 
