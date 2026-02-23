@@ -81,57 +81,21 @@ last_repeat_time = 0  # Time of last repeat event
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
     global last_key, last_state, key_press_start, last_repeat_time
-    since_last_repeat = 0
 
     # Check buttons
-    current_key = None
     current_time = time.ticks_ms()
-    if btn_a.value() == 0:
-        current_key = lv.KEY.PREV
-    elif btn_b.value() == 0:
-        current_key = lv.KEY.NEXT
-
-    if (btn_a.value() == 0) and (btn_b.value() == 0):
+    btn_a_pressed = btn_a.value() == 0
+    btn_b_pressed = btn_b.value() == 0
+    if btn_a_pressed and btn_b_pressed:
         current_key = lv.KEY.ENTER
-
-    if current_key is not None:
-        if last_key is None or current_key != last_key:
-            print(f"New key press: {current_key}")
-            data.key = current_key
-            data.state = lv.INDEV_STATE.PRESSED
-            last_key = current_key
-            last_state = lv.INDEV_STATE.PRESSED
-            key_press_start = current_time
-            last_repeat_time = current_time
-        else:
-            print(f"key repeat because current_key {current_key} == last_key {last_key}")
-            elapsed = time.ticks_diff(current_time, key_press_start)
-            since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
-            if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
-                if current_key == lv.KEY.PREV:
-                    print("Repeated PREV does not do anything, instead it triggers ESC (back) if long enough")
-                    if since_last_repeat > REPEAT_PREV_BECOMES_BACK:
-                        print("back button trigger!")
-                        data.key = lv.KEY.ESC
-                        data.state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
-                        last_key = current_key
-                        last_state = data.state
-                        last_repeat_time = current_time
-                    else:
-                        print("repeat PREV ignored because not pressed long enough")
-                else:
-                    print("Send a new PRESSED/RELEASED pair for repeat")
-                    data.key = current_key
-                    data.state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
-                    last_key = current_key
-                    last_state = data.state
-                    last_repeat_time = current_time
-            else:
-                pass # not needed as it doesnt help navigating around in the keyboard:
-                #print("No repeat yet, send RELEASED to avoid PRESSING?")
-                #data.state = lv.INDEV_STATE.RELEASED
-                #last_state = lv.INDEV_STATE.RELEASED
+    elif btn_a_pressed:
+        current_key = lv.KEY.PREV
+    elif btn_b_pressed:
+        current_key = lv.KEY.NEXT
     else:
+        current_key = None
+
+    if current_key is None:
         # No key pressed
         data.key = last_key if last_key else -1
         data.state = lv.INDEV_STATE.RELEASED
@@ -139,6 +103,43 @@ def keypad_read_cb(indev, data):
         last_state = lv.INDEV_STATE.RELEASED
         key_press_start = 0
         last_repeat_time = 0
+    elif last_key is None or current_key != last_key:
+        print(f"New key press: {current_key}")
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        last_key = current_key
+        last_state = lv.INDEV_STATE.PRESSED
+        key_press_start = current_time
+        last_repeat_time = current_time
+    else:
+        print(f"key repeat because current_key {current_key} == last_key {last_key}")
+        elapsed = time.ticks_diff(current_time, key_press_start)
+        since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
+        if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
+            next_state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
+            if current_key == lv.KEY.PREV:
+                print("Repeated PREV does not do anything, instead it triggers ESC (back) if long enough")
+                if since_last_repeat > REPEAT_PREV_BECOMES_BACK:
+                    print("back button trigger!")
+                    data.key = lv.KEY.ESC
+                    data.state = next_state
+                    last_key = current_key
+                    last_state = data.state
+                    last_repeat_time = current_time
+                else:
+                    print("repeat PREV ignored because not pressed long enough")
+            else:
+                print("Send a new PRESSED/RELEASED pair for repeat")
+                data.key = current_key
+                data.state = next_state
+                last_key = current_key
+                last_state = data.state
+                last_repeat_time = current_time
+        else:
+            pass # not needed as it doesnt help navigating around in the keyboard:
+            #print("No repeat yet, send RELEASED to avoid PRESSING?")
+            #data.state = lv.INDEV_STATE.RELEASED
+            #last_state = lv.INDEV_STATE.RELEASED
 
     # Handle ESC for back navigation (only on initial PRESSED)
     if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:
