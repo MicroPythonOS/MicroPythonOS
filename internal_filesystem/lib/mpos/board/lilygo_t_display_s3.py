@@ -173,10 +173,10 @@ def keypad_read_cb(indev, data):
                 last_state = data.state
                 last_repeat_time = current_time
         else:
-            pass # not needed as it doesnt help navigating around in the keyboard:
-            #print("No repeat yet, send RELEASED to avoid PRESSING?")
-            #data.state = lv.INDEV_STATE.RELEASED
-            #last_state = lv.INDEV_STATE.RELEASED
+            # This doesn't seem to make the key navigation in on-screen keyboards work, unlike on the m5stack_fire...?
+            #print("No repeat yet, send RELEASED to avoid PRESSING, which breaks keyboard navigation...")
+            data.state = lv.INDEV_STATE.RELEASED
+            last_state = lv.INDEV_STATE.RELEASED
 
     # Handle ESC for back navigation (only on initial PRESSED)
     if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:

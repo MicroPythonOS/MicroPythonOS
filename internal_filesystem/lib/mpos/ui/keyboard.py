@@ -16,6 +16,7 @@ Usage:
 """
 
 import lvgl as lv
+
 from .appearance_manager import AppearanceManager
 from .widget_animator import WidgetAnimator
 
@@ -129,7 +130,14 @@ class MposKeyboard:
 
     def _handle_events(self, event):
         code = event.get_code()
-        #print(f"keyboard event code = {code}")
+
+        '''
+        # DEBUG:
+        from .event import get_event_name
+        name = get_event_name(code)
+        print(f"keyboard event code = {code} is {name}")
+        '''
+
         if code == lv.EVENT.READY or code == lv.EVENT.CANCEL:
             self.hide_keyboard()
             return

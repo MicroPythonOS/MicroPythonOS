@@ -102,7 +102,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "esp32s3_qem
 		fi
 	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
-	frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
+	#frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
 	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
 	pushd "$codebasedir"/lvgl_micropython/
 	rm -rf lib/micropython/ports/esp32/build-$BOARD-$BOARD_VARIANT
@@ -111,7 +111,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "esp32s3_qem
 	# --ota: support Over-The-Air updates
 	# --partition size: both OTA partitions are 4MB
 	# --flash-size: total flash size is 16MB
-	# --debug: enable debugging from ESP-IDF but makes copying files to it very slow
+	# --debug: enable debugging from ESP-IDF but makes copying files to it very slow so that's not added
 	# --dual-core-threads: disabled GIL, run code on both CPUs
 	# --task-stack-size={stack size in bytes}
 	# CONFIG_* sets ESP-IDF options
