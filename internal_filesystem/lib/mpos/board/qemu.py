@@ -5,8 +5,6 @@ import lvgl as lv
 import machine
 import time
 
-import mpos.ui
-
 print("qemu.py display bus initialization")
 try:
     display_bus = lcd_bus.I80Bus(
@@ -33,6 +31,7 @@ _BUFFER_SIZE = const(28800)
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
+import mpos.ui
 import drivers.display.st7789 as st7789
 # 320x200 => make 320x240 screenshot => it's 240x200 (but the display shows more than 200)
 mpos.ui.main_display = st7789.ST7789(
