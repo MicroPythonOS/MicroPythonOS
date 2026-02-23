@@ -37,8 +37,8 @@ mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
-    display_width=170, # emulator st7789.c has 135
-    display_height=320, # emulator st7789.c has 240
+    display_width=170,
+    display_height=320,
     #color_space=lv.COLOR_FORMAT.RGB565,
     color_space=lv.COLOR_FORMAT.RGB888,
     color_byte_order=st7789.BYTE_ORDER_RGB,
@@ -48,15 +48,15 @@ mpos.ui.main_display = st7789.ST7789(
     reset_state=st7789.STATE_LOW, # needs low: high will not enable the display
     backlight_pin=38, # needed
     backlight_on_state=st7789.STATE_PWM,
-    offset_x=35,
-    offset_y=0
+    offset_x=0,
+    offset_y=35
 )
 mpos.ui.main_display.set_power(True) # set RD pin to high before the rest, otherwise garbled output
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_backlight(100) # works
 
 lv.init()
-#mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 mpos.ui.main_display.set_color_inversion(True)
 
 
