@@ -71,23 +71,58 @@ btn_b = Pin(14, Pin.IN, Pin.PULL_UP)  # 2
 REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
 REPEAT_RATE_MS = 100  # Interval between repeats
 REPEAT_PREV_BECOMES_BACK = 700 # Long previous press becomes back button
+COMBO_GRACE_MS = 60  # Accept near-simultaneous A+B as ENTER
 last_key = None
 last_state = lv.INDEV_STATE.RELEASED
 key_press_start = 0  # Time when key was first pressed
 last_repeat_time = 0  # Time of last repeat event
+last_a_down_time = 0
+last_b_down_time = 0
+last_a_pressed = False
+last_b_pressed = False
 
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
-    global last_key, last_state, key_press_start, last_repeat_time
+    global last_key, last_state, key_press_start, last_repeat_time, last_a_down_time, last_b_down_time
+    global last_a_pressed, last_b_pressed
 
     # Check buttons
     current_time = time.ticks_ms()
     btn_a_pressed = btn_a.value() == 0
     btn_b_pressed = btn_b.value() == 0
+    if btn_a_pressed and not last_a_pressed:
+        last_a_down_time = current_time
+    if btn_b_pressed and not last_b_pressed:
+        last_b_down_time = current_time
+    last_a_pressed = btn_a_pressed
+    last_b_pressed = btn_b_pressed
+
+    near_simul = False
     if btn_a_pressed and btn_b_pressed:
+        near_simul = True
+    elif btn_a_pressed and last_b_down_time and time.ticks_diff(current_time, last_b_down_time) <= COMBO_GRACE_MS:
+        near_simul = True
+    elif btn_b_pressed and last_a_down_time and time.ticks_diff(current_time, last_a_down_time) <= COMBO_GRACE_MS:
+        near_simul = True
+
+    single_press_wait = False
+    if btn_a_pressed ^ btn_b_pressed:
+        if btn_a_pressed and time.ticks_diff(current_time, last_a_down_time) < COMBO_GRACE_MS:
+            single_press_wait = True
+        elif btn_b_pressed and time.ticks_diff(current_time, last_b_down_time) < COMBO_GRACE_MS:
+            single_press_wait = True
+
+    if near_simul or single_press_wait:
+        dt_a = time.ticks_diff(current_time, last_a_down_time) if last_a_down_time else None
+        dt_b = time.ticks_diff(current_time, last_b_down_time) if last_b_down_time else None
+        print(f"combo guard: a={btn_a_pressed} b={btn_b_pressed} near={near_simul} wait={single_press_wait} dt_a={dt_a} dt_b={dt_b}")
+
+    if near_simul:
         current_key = lv.KEY.ENTER
+    elif single_press_wait:
+        current_key = None
     elif btn_a_pressed:
         current_key = lv.KEY.PREV
     elif btn_b_pressed:
