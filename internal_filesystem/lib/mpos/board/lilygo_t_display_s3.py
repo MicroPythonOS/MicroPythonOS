@@ -1,11 +1,9 @@
-print("lilygo_t_display_s3.py running again")
+print("lilygo_t_display_s3.py running")
 
 import lcd_bus
 import lvgl as lv
 import machine
 import time
-
-import mpos.ui
 
 print("lilygo_t_display_s3.py display bus initialization")
 try:
@@ -21,7 +19,7 @@ try:
         data5=46,
         data6=47,
         data7=48,
-        reverse_color_bits=False # doesnt seem to do anything?
+        #reverse_color_bits=False # doesnt seem to do anything?
     )
 except Exception as e:
     print(f"Error initializing display bus: {e}")
@@ -34,40 +32,45 @@ fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | l
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
 import drivers.display.st7789 as st7789
+import mpos.ui
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
     display_width=170, # emulator st7789.c has 135
     display_height=320, # emulator st7789.c has 240
-    color_space=lv.COLOR_FORMAT.RGB565,
-    #color_space=lv.COLOR_FORMAT.RGB888,
+    #color_space=lv.COLOR_FORMAT.RGB565,
+    color_space=lv.COLOR_FORMAT.RGB888,
     color_byte_order=st7789.BYTE_ORDER_RGB,
     # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
-    power_pin=15,
+    power_pin=9, # Must set RD pin to high, otherwise blank screen as soon as LVGL's task_handler starts
     reset_pin=5,
-    backlight_pin=38,
+    reset_state=st7789.STATE_LOW, # needs low: high will not enable the display
+    backlight_pin=38, # needed
     backlight_on_state=st7789.STATE_PWM,
+    offset_x=35,
+    offset_y=0
 )
+mpos.ui.main_display.set_power(True) # set RD pin to high before the rest, otherwise garbled output
 mpos.ui.main_display.init()
-mpos.ui.main_display.set_power(True)
-mpos.ui.main_display.set_backlight(100)
+mpos.ui.main_display.set_backlight(100) # works
 
 lv.init()
 #mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
-mpos.ui.main_display.set_color_inversion(True) # doesnt seem to do anything?
+mpos.ui.main_display.set_color_inversion(True)
+
 
 # Button handling code:
 from machine import Pin
 btn_a = Pin(0, Pin.IN, Pin.PULL_UP)  # 1
 btn_b = Pin(14, Pin.IN, Pin.PULL_UP)  # 2
-btn_c = Pin(3, Pin.IN, Pin.PULL_UP)  # 3
 
 # Key repeat configuration
 # This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
 # the lv_keyboard widget doesn't handle PRESSING (long presses) properly, it loses focus.
 REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
 REPEAT_RATE_MS = 100  # Interval between repeats
+REPEAT_PREV_BECOMES_BACK = 700 # Long previous press becomes back button
 last_key = None
 last_state = lv.INDEV_STATE.RELEASED
 key_press_start = 0  # Time when key was first pressed
@@ -86,25 +89,51 @@ def keypad_read_cb(indev, data):
     if btn_a.value() == 0:
         current_key = lv.KEY.PREV
     elif btn_b.value() == 0:
-        current_key = lv.KEY.ENTER
-    elif btn_c.value() == 0:
         current_key = lv.KEY.NEXT
 
-    if (btn_a.value() == 0) and (btn_c.value() == 0):
-        current_key = lv.KEY.ESC
+    if (btn_a.value() == 0) and (btn_b.value() == 0):
+        current_key = lv.KEY.ENTER
 
-    if current_key:
-        if current_key != last_key:
-            # New key press
+    if current_key is not None:
+        if last_key is None or current_key != last_key:
+            print(f"New key press: {current_key}")
             data.key = current_key
             data.state = lv.INDEV_STATE.PRESSED
             last_key = current_key
             last_state = lv.INDEV_STATE.PRESSED
             key_press_start = current_time
             last_repeat_time = current_time
+        else:
+            print(f"key repeat because current_key {current_key} == last_key {last_key}")
+            elapsed = time.ticks_diff(current_time, key_press_start)
+            since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
+            if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
+                if current_key == lv.KEY.PREV:
+                    print("Repeated PREV does not do anything, instead it triggers ESC (back) if long enough")
+                    if since_last_repeat > REPEAT_PREV_BECOMES_BACK:
+                        print("back button trigger!")
+                        data.key = lv.KEY.ESC
+                        data.state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
+                        last_key = current_key
+                        last_state = data.state
+                        last_repeat_time = current_time
+                    else:
+                        print("repeat PREV ignored because not pressed long enough")
+                else:
+                    print("Send a new PRESSED/RELEASED pair for repeat")
+                    data.key = current_key
+                    data.state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
+                    last_key = current_key
+                    last_state = data.state
+                    last_repeat_time = current_time
+            else:
+                pass # not needed as it doesnt help navigating around in the keyboard:
+                #print("No repeat yet, send RELEASED to avoid PRESSING?")
+                #data.state = lv.INDEV_STATE.RELEASED
+                #last_state = lv.INDEV_STATE.RELEASED
     else:
         # No key pressed
-        data.key = last_key if last_key else lv.KEY.ENTER
+        data.key = last_key if last_key else -1
         data.state = lv.INDEV_STATE.RELEASED
         last_key = None
         last_state = lv.INDEV_STATE.RELEASED
@@ -112,9 +141,8 @@ def keypad_read_cb(indev, data):
         last_repeat_time = 0
 
     # Handle ESC for back navigation (only on initial PRESSED)
-    #if last_state == lv.INDEV_STATE.PRESSED:
-    #    if current_key == lv.KEY.ESC:
-    #        mpos.ui.back_screen()
+    if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:
+        mpos.ui.back_screen()
 
 
 group = lv.group_create()
