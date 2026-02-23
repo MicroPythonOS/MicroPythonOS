@@ -2,6 +2,8 @@
 
 # Make sure the storage partition's lib/ is first in the path, so whatever is placed there overrides frozen libraries.
 # This allows any build to be used for development as well, just by overriding the libraries in lib/
+
+# Copy this file to / on the device's internal storage to have it run automatically instead of relying on the frozen-in files.
 import gc
 import os
 import sys
