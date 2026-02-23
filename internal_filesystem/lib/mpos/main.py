@@ -184,9 +184,11 @@ def custom_exception_handler(e):
     sys.print_exception(e)  # NOQA
     # No need to deinit() and re-init LVGL:
     #mpos.ui.task_handler.deinit() # default task handler does this, but then things hang
-    # otherwise it does focus_next and then crashes while doing lv.deinit()
-    #focusgroup.remove_all_objs()
-    #focusgroup.delete()
+    #focusgroup = lv.group_get_default()
+    #if focusgroup: # on esp32 this may not be set
+        # otherwise it does focus_next and then crashes while doing lv.deinit()
+        #focusgroup.remove_all_objs()
+        #focusgroup.delete()
     #lv.deinit()
 
 import sys
