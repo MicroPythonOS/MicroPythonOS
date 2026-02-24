@@ -144,7 +144,7 @@ def _scale_audio_powers_of_2(buf: ptr8, num_bytes: int, shift: int):
 class WAVStream:
     """
     WAV file playback stream with I2S output.
-    Supports 8/16/24/32-bit PCM, mono and stereo, auto-upsampling to >=22050 Hz.
+    Supports 8/16/24/32-bit PCM, mono and stereo, auto-upsampling to >=8000 Hz.
     """
 
     def __init__(
@@ -400,6 +400,8 @@ class WAVStream:
                 )
 
                 self._playback_rate = playback_rate
+		#ibuf = playback_rate # doesnt account for stereo vs mono...
+		ibuf = 32000
 
                 print(f"WAVStream: {original_rate} Hz, {bits_per_sample}-bit, {channels}-ch")
                 print(f"WAVStream: Playback at {playback_rate} Hz (factor {upsample_factor})")
@@ -425,7 +427,7 @@ class WAVStream:
                     print(
                         "WAVStream: I2S config: "
                         f"format={'MONO' if channels == 1 else 'STEREO'}, "
-                        f"ibuf={playback_rate}, has_sck={bool(self.i2s_pins.get('sck'))}, "
+                        f"ibuf={ibuf}, has_sck={bool(self.i2s_pins.get('sck'))}, "
                         f"mck_pin={self.i2s_pins.get('mck')}"
                     )
 
@@ -457,7 +459,7 @@ class WAVStream:
                             bits=16,
                             format=i2s_format,
                             rate=playback_rate,
-                            ibuf=playback_rate
+                            ibuf=ibuf
                         )
                     else:
                         self._i2s = machine.I2S(
@@ -468,7 +470,7 @@ class WAVStream:
                             bits=16,
                             format=i2s_format,
                             rate=playback_rate,
-                            ibuf=playback_rate
+                            ibuf=ibuf
                         )
                 except Exception as e:
                     print(f"WAVStream: I2S init failed: {e}")
@@ -482,8 +484,7 @@ class WAVStream:
                 # - Larger chunks = less overhead, smoother audio
                 # - The 0.5-second (stereo) or 1 second (mono) I2S buffer handles timing smoothness
                 bytes_per_second = original_rate * bytes_per_sample
-                chunk_size = int(bytes_per_second / 10)
-		# chunk_size of 8192 worked great with 22050hz stereo 16 bit so 88200 bytes per sample so fator 10.7
+                chunk_size = int(bytes_per_second / 10.7) # chunk_size of 8192 worked great with 22050hz stereo 16 bit so 88200 bytes per sample so fator 10.7
                 #chunk_size = bytes_per_second >> 3 # 12-14 fps
                 #chunk_size = bytes_per_second >> 4 # 16-18 fps but stutters
                 #chunk_size = int(bytes_per_second / 12) # 18 fps for 8khz mono, 16 fps for 22khz mono, higher stutters
