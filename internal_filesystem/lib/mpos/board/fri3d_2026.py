@@ -191,7 +191,6 @@ import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
-from machine import PWM, Pin
 
 # Initialize buzzer: now sits on PC14/CC1 of the CH32X035GxUx so needs custom code
 #buzzer = PWM(Pin(46), freq=550, duty=0)
@@ -213,18 +212,31 @@ from machine import PWM, Pin
 # - try similar combinations: hss + cs, cm + hsm
 # - try cross combinations: hss + cm, cs + hsm
 
-i2s_pins = {
+i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
-    # Output (DAC/speaker) pins
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     'sck': 17,      # SCLK aka BCLK (appears mandatory) BUT this pin is sck_in on the communicator
     'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator
 }
 
-# Initialize AudioManager with I2S (buzzer TODO)
-# ADC microphone is on GPIO 1
 from mpos import AudioManager
-AudioManager(i2s_pins=i2s_pins, adc_mic_pin=1)
+
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="speaker",
+        kind="i2s",
+        i2s_pins=i2s_output_pins,
+    )
+)
+
+# ADC microphone is on GPIO 1
+mic_input = AudioManager.add(
+    AudioManager.Input(
+        name="mic",
+        kind="adc",
+        adc_mic_pin=1,
+    )
+)
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager

@@ -1,5 +1,4 @@
 # AudioManager - Centralized Audio Management Service for MicroPythonOS
-# Android-inspired audio routing with priority-based audio focus
-# Simple routing: play_wav() -> I2S, play_rtttl() -> buzzer, record_wav() -> I2S mic
+# Registry-based audio routing with device descriptors and session control
 
-from .audiomanager import AudioManager
+from .audiomanager import AudioManager, Player, Recorder, StereoNotSupported

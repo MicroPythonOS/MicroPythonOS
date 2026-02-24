@@ -56,6 +56,8 @@ class SoundRecorder(Activity):
     _last_recording = None
     _timer_task = None
     _record_start_time = 0
+    _recorder = None
+    _player = None
 
     def onCreate(self):
         screen = lv.obj()
@@ -136,7 +138,8 @@ class SoundRecorder(Activity):
 
     def _update_status(self):
         """Update status label based on microphone availability."""
-        if AudioManager.has_microphone():
+        default_input = AudioManager.get_default_input()
+        if default_input is not None:
             self._status_label.set_text("Microphone ready")
             self._status_label.set_style_text_color(lv.color_hex(0x00AA00), lv.PART.MAIN)
             self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -243,9 +246,10 @@ class SoundRecorder(Activity):
     def _start_recording(self):
         """Start recording audio."""
         print("SoundRecorder: _start_recording called")
-        print(f"SoundRecorder: has_microphone() = {AudioManager.has_microphone()}")
+        default_input = AudioManager.get_default_input()
+        print(f"SoundRecorder: default input = {default_input}")
 
-        if not AudioManager.has_microphone():
+        if default_input is None:
             print("SoundRecorder: No microphone available - aborting")
             return
 
@@ -263,25 +267,32 @@ class SoundRecorder(Activity):
             return
 
         # Start recording
-        print(f"SoundRecorder: Calling AudioManager.record_wav()")
+        print(f"SoundRecorder: Calling AudioManager.recorder()")
         print(f"  file_path: {file_path}")
         print(f"  duration_ms: {self._current_max_duration_ms}")
         print(f"  sample_rate: {self.SAMPLE_RATE}")
 
-        success = AudioManager.record_wav(
-            file_path=file_path,
-            duration_ms=self._current_max_duration_ms,
-            on_complete=self._on_recording_complete,
-            sample_rate=self.SAMPLE_RATE
-        )
+        try:
+            self._recorder = AudioManager.recorder(
+                file_path=file_path,
+                duration_ms=self._current_max_duration_ms,
+                on_complete=self._on_recording_complete,
+                sample_rate=self.SAMPLE_RATE,
+                input=default_input,
+            )
+            self._recorder.start()
+            success = True
+        except Exception as exc:
+            print(f"SoundRecorder: recorder start failed: {exc}")
+            success = False
 
-        print(f"SoundRecorder: record_wav returned: {success}")
+        print(f"SoundRecorder: recorder started: {success}")
 
         if success:
             self._is_recording = True
             self._record_start_time = time.ticks_ms()
             self._last_recording = file_path
-            print(f"SoundRecorder: Recording started successfully")
+            print("SoundRecorder: Recording started successfully")
 
             # Update UI
             self._record_button_label.set_text(lv.SYMBOL.STOP + " Stop")
@@ -296,13 +307,15 @@ class SoundRecorder(Activity):
             # Start timer update
             self._start_timer_update()
         else:
-            print("SoundRecorder: record_wav failed!")
+            print("SoundRecorder: recorder failed!")
             self._status_label.set_text("Failed to start recording")
             self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
 
     def _stop_recording(self):
         """Stop recording audio."""
-        AudioManager.stop()
+        if self._recorder:
+            self._recorder.stop()
+        self._recorder = None
         self._is_recording = False
 
         # Show "Saving..." status immediately (file finalization takes time on SD card)
@@ -364,16 +377,30 @@ class SoundRecorder(Activity):
         """Handle play button click."""
         if self._last_recording and not self._is_recording:
             # Stop any current playback
-            AudioManager.stop()
+            if self._player:
+                self._player.stop()
             time.sleep_ms(100)
 
+            output = AudioManager.get_default_output()
+            if output is None:
+                self._status_label.set_text("Playback failed")
+                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+                return
+
             # Play the recording
-            success = AudioManager.play_wav(
-                self._last_recording,
-                stream_type=AudioManager.STREAM_MUSIC,
-                on_complete=self._on_playback_complete,
-                volume=100
-            )
+            try:
+                self._player = AudioManager.player(
+                    file_path=self._last_recording,
+                    stream_type=AudioManager.STREAM_MUSIC,
+                    on_complete=self._on_playback_complete,
+                    volume=100,
+                    output=output,
+                )
+                self._player.start()
+                success = True
+            except Exception as exc:
+                print(f"SoundRecorder: playback failed: {exc}")
+                success = False
 
             if success:
                 self._status_label.set_text("Playing...")

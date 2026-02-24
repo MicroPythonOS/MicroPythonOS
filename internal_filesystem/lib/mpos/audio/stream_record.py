@@ -68,6 +68,7 @@ class RecordStream:
         self._is_recording = False
         self._i2s = None
         self._bytes_recorded = 0
+        self._start_time_ms = 0
 
     def is_recording(self):
         """Check if stream is currently recording."""
@@ -203,6 +204,7 @@ class RecordStream:
 
         self._is_recording = True
         self._bytes_recorded = 0
+        self._start_time_ms = time.ticks_ms()
 
         try:
             # Ensure directory exists
@@ -347,3 +349,8 @@ class RecordStream:
                 self._i2s.deinit()
                 self._i2s = None
             print(f"RecordStream: Recording thread finished")
+
+    def get_duration_ms(self):
+        if self._start_time_ms <= 0:
+            return 0
+        return time.ticks_diff(time.ticks_ms(), self._start_time_ms)

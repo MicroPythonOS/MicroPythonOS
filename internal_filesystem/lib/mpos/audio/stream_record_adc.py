@@ -354,3 +354,8 @@ class ADCRecordStream:
         finally:
             self._is_recording = False
             print(f"ADCRecordStream: Recording thread finished")
+
+    def get_duration_ms(self):
+        if self._start_time_ms <= 0:
+            return 0
+        return time.ticks_diff(time.ticks_ms(), self._start_time_ms)

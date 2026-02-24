@@ -103,15 +103,27 @@ class FullscreenPlayer(Activity):
             AudioManager.stop()
             time.sleep(0.1)
 
-            success = AudioManager.play_wav(
-                self._filename,
-                stream_type=AudioManager.STREAM_MUSIC,
-                on_complete=self.player_finished
-            )
-
-            if not success:
-                error_msg = "Error: Audio device unavailable or busy"
+            output = AudioManager.get_default_output()
+            if output is None:
+                error_msg = "Error: No audio output available"
                 print(error_msg)
+                self.update_ui_threadsafe_if_foreground(
+                    self._filename_label.set_text,
+                    error_msg
+                )
+                return
+
+            try:
+                player = AudioManager.player(
+                    file_path=self._filename,
+                    stream_type=AudioManager.STREAM_MUSIC,
+                    on_complete=self.player_finished,
+                    output=output,
+                )
+                player.start()
+            except Exception as exc:
+                error_msg = "Error: Audio device unavailable or busy"
+                print(f"{error_msg}: {exc}")
                 self.update_ui_threadsafe_if_foreground(
                     self._filename_label.set_text,
                     error_msg

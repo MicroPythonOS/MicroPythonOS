@@ -48,10 +48,16 @@ MPU6886_I2C_FREQ = const(400000)
 
 print("m5stack_fire.py init buzzer")
 buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
-AudioManager(i2s_pins=None, buzzer_instance=buzzer)
+AudioManager()
+AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=BUZZER_PIN))
 AudioManager.set_volume(40)
-AudioManager.play_rtttl("Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6")
-while AudioManager.is_playing():
+
+player = AudioManager.player(
+    rtttl="Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6",
+    stream_type=AudioManager.STREAM_NOTIFICATION,
+)
+player.start()
+while player.is_playing():
     time.sleep(0.1)
 
 

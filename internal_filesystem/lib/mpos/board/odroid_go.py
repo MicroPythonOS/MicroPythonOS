@@ -61,7 +61,6 @@ blue_led = machine.Pin(LED_BLUE, machine.Pin.OUT)
 blue_led.on()
 
 print("odroid_go.py init buzzer")
-buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
 
 
 class BuzzerCallbacks:
@@ -80,17 +79,23 @@ class BuzzerCallbacks:
 
 
 buzzer_callbacks = BuzzerCallbacks()
-AudioManager(
-    i2s_pins=None,
-    buzzer_instance=buzzer,
-    # The buzzer makes noise when it's unmuted, to avoid this we
-    # mute it after playback and vice versa unmute it before playback:
-    pre_playback=buzzer_callbacks.unmute,
-    post_playback=buzzer_callbacks.mute,
+
+buzzer_output = AudioManager.add(
+    AudioManager.Output(
+        name="buzzer",
+        kind="buzzer",
+        buzzer_pin=BUZZER_PIN,
+    )
 )
 AudioManager.set_volume(40)
-AudioManager.play_rtttl("Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6")
-while AudioManager.is_playing():
+player = AudioManager.player(
+    rtttl="Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6",
+    output=buzzer_output,
+    on_complete=buzzer_callbacks.mute,
+)
+buzzer_callbacks.unmute()
+player.start()
+while player.is_playing():
     time.sleep(0.1)
 
 print("odroid_go.py machine.SPI.Bus() initialization")
@@ -232,12 +237,16 @@ def input_callback(indev, data):
     elif button_volume.value() == 0:
         print("Volume button pressed -> reset")
         blue_led.on()
-        AudioManager.play_rtttl(
-            "Outro:o=5,d=32,b=160,b=160:c6,b,a,g,f,e,d,c",
+        player = AudioManager.player(
+            rtttl="Outro:o=5,d=32,b=160,b=160:c6,b,a,g,f,e,d,c",
             stream_type=AudioManager.STREAM_ALARM,
             volume=40,
+            output=buzzer_output,
+            on_complete=buzzer_callbacks.mute,
         )
-        while AudioManager.is_playing():
+        buzzer_callbacks.unmute()
+        player.start()
+        while player.is_playing():
             time.sleep(0.1)
         machine.reset()
     elif button_select.value() == 0:

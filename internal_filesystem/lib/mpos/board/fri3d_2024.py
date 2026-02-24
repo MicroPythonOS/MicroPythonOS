@@ -292,28 +292,47 @@ import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
-from machine import PWM, Pin
 from mpos import AudioManager
-
-# Initialize buzzer (GPIO 46)
-buzzer = PWM(Pin(46), freq=550, duty=0)
 
 # I2S pin configuration for audio output (DAC) and input (microphone)
 # Note: I2S is created per-stream, not at boot (only one instance can exist)
 # The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
 # See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
-i2s_pins = {
+i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
-    # Output (DAC/speaker) config
     'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
-    # Input (microphone) config
+}
+
+i2s_input_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sck_in': 17,   # SCLK - Serial Clock for microphone input
     'sd_in': 15,    # DIN - Serial Data IN (microphone)
 }
 
-# Initialize AudioManager with I2S and buzzer
-AudioManager(i2s_pins=i2s_pins, buzzer_instance=buzzer)
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="speaker",
+        kind="i2s",
+        i2s_pins=i2s_output_pins,
+    )
+)
+
+buzzer_output = AudioManager.add(
+    AudioManager.Output(
+        name="buzzer",
+        kind="buzzer",
+        buzzer_pin=46,
+    )
+)
+
+mic_input = AudioManager.add(
+    AudioManager.Input(
+        name="mic",
+        kind="i2s",
+        i2s_pins=i2s_input_pins,
+    )
+)
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
@@ -344,7 +363,13 @@ def startup_wow_effect():
         #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
 
         # Start the jingle
-        AudioManager.play_rtttl(startup_jingle,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60)
+        player = AudioManager.player(
+            rtttl=startup_jingle,
+            stream_type=AudioManager.STREAM_NOTIFICATION,
+            volume=60,
+            output=buzzer_output,
+        )
+        player.start()
 
         # Rainbow colors for the 5 LEDs
         rainbow = [

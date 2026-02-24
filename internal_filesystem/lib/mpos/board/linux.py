@@ -107,15 +107,22 @@ from mpos import AudioManager
 
 # Desktop builds have no real audio hardware, but we simulate microphone
 # recording with a 440Hz sine wave for testing WAV file generation
-# The i2s_pins dict with 'sd_in' enables has_microphone() to return True
-i2s_pins = {
+# The i2s_pins dict with 'sd_in' enables microphone simulation
+AudioManager()
+
+output_i2s_pins = {
     'sck': 0,       # Simulated - not used on desktop
     'ws': 0,        # Simulated - not used on desktop
     'sd': 0,        # Simulated - not used on desktop
+}
+input_i2s_pins = {
     'sck_in': 0,    # Simulated - not used on desktop
+    'ws': 0,        # Simulated - not used on desktop
     'sd_in': 0,     # Simulated - enables microphone simulation
 }
-AudioManager(i2s_pins=i2s_pins)
+
+AudioManager.add(AudioManager.Output("speaker", "i2s", i2s_pins=output_i2s_pins))
+AudioManager.add(AudioManager.Input("mic", "i2s", i2s_pins=input_i2s_pins))
 
 # === LED HARDWARE ===
 # Note: Desktop builds have no LED hardware

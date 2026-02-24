@@ -147,7 +147,15 @@ class WAVStream:
     Supports 8/16/24/32-bit PCM, mono and stereo, auto-upsampling to >=22050 Hz.
     """
 
-    def __init__(self, file_path, stream_type, volume, i2s_pins, on_complete):
+    def __init__(
+        self,
+        file_path,
+        stream_type,
+        volume,
+        i2s_pins,
+        on_complete,
+        requested_sample_rate=None,
+    ):
         """
         Initialize WAV stream.
 
@@ -157,15 +165,25 @@ class WAVStream:
             volume: Volume level (0-100)
             i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers
             on_complete: Callback function(message) when playback finishes
+            requested_sample_rate: Optional negotiated sample rate for shared clocks
         """
         self.file_path = file_path
         self.stream_type = stream_type
         self.volume = volume
         self.i2s_pins = i2s_pins
         self.on_complete = on_complete
+        self.requested_sample_rate = requested_sample_rate
         self._keep_running = True
         self._is_playing = False
         self._i2s = None
+        self._progress_samples = 0
+        self._total_samples = 0
+        self._duration_ms = None
+        self._playback_rate = None
+        self._original_rate = None
+        self._channels = None
+        self._bits_per_sample = None
+        self._data_size = None
 
     def is_playing(self):
         """Check if stream is currently playing."""
@@ -174,6 +192,19 @@ class WAVStream:
     def stop(self):
         """Stop playback."""
         self._keep_running = False
+
+    def get_progress_percent(self):
+        if self._total_samples <= 0:
+            return None
+        return int((self._progress_samples / self._total_samples) * 100)
+
+    def get_progress_ms(self):
+        if self._playback_rate:
+            return int((self._progress_samples / self._playback_rate) * 1000)
+        return None
+
+    def get_duration_ms(self):
+        return self._duration_ms
 
     # ----------------------------------------------------------------------
     #  WAV header parser - returns bit-depth and format info
@@ -234,6 +265,37 @@ class WAVStream:
                 pos += 1
 
         raise ValueError("No 'data' chunk found")
+
+    # ----------------------------------------------------------------------
+    #  WAV info helpers
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def get_wav_info(file_path):
+        with open(file_path, 'rb') as f:
+            data_start, data_size, sample_rate, channels, bits_per_sample = (
+                WAVStream._find_data_chunk(f)
+            )
+        return {
+            "data_start": data_start,
+            "data_size": data_size,
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "bits_per_sample": bits_per_sample,
+        }
+
+    @staticmethod
+    def compute_playback_rate(original_rate, requested_rate=None):
+        if requested_rate:
+            if requested_rate <= original_rate:
+                return original_rate, 1
+            upsample_factor = (requested_rate + original_rate - 1) // original_rate
+            return original_rate * upsample_factor, upsample_factor
+
+        target_rate = 22050
+        if original_rate >= target_rate:
+            return original_rate, 1
+        upsample_factor = (target_rate + original_rate - 1) // original_rate
+        return original_rate * upsample_factor, upsample_factor
 
     # ----------------------------------------------------------------------
     #  Bit depth conversion functions
@@ -327,20 +389,28 @@ class WAVStream:
                 data_start, data_size, original_rate, channels, bits_per_sample = \
                     self._find_data_chunk(f)
 
-                # Decide playback rate (force >=22050 Hz) - but why?! the DAC should support down to 8kHz!
-                target_rate = 22050 # slower is faster (less data)
-                if original_rate >= target_rate:
-                    playback_rate = original_rate
-                    upsample_factor = 1
-                else:
-                    upsample_factor = (target_rate + original_rate - 1) // original_rate
-                    playback_rate = original_rate * upsample_factor
+                self._original_rate = original_rate
+                self._channels = channels
+                self._bits_per_sample = bits_per_sample
+                self._data_size = data_size
+
+                playback_rate, upsample_factor = self.compute_playback_rate(
+                    original_rate,
+                    self.requested_sample_rate,
+                )
+
+                self._playback_rate = playback_rate
 
                 print(f"WAVStream: {original_rate} Hz, {bits_per_sample}-bit, {channels}-ch")
                 print(f"WAVStream: Playback at {playback_rate} Hz (factor {upsample_factor})")
 
                 if data_size > file_size - data_start:
                     data_size = file_size - data_start
+
+                bytes_per_sample = (bits_per_sample // 8) * channels
+                if bytes_per_sample > 0:
+                    self._total_samples = data_size // bytes_per_sample
+                    self._duration_ms = int((self._total_samples / original_rate) * 1000)
 
                 # Initialize I2S (always 16-bit output)
                 try:
@@ -445,6 +515,7 @@ class WAVStream:
                         time.sleep(num_samples / playback_rate)
 
                     total_original += to_read
+                    self._progress_samples = total_original // bytes_per_original_sample
 
                 print(f"WAVStream: Finished playing {self.file_path}")
                 if self.on_complete:
