@@ -187,7 +187,23 @@ class AudioManager:
 
     @classmethod
     def set_volume(cls, volume):
-        cls.get()._volume = max(0, min(100, volume))
+        manager = cls.get()
+        try:
+            volume_int = int(round(volume))
+        except (TypeError, ValueError):
+            return manager._volume
+        volume_int = max(0, min(100, volume_int))
+        manager._volume = volume_int
+
+        for session in list(manager._active_sessions):
+            stream = getattr(session, "_stream", None)
+            if stream and hasattr(stream, "set_volume"):
+                try:
+                    stream.set_volume(volume_int)
+                except Exception:
+                    pass
+
+        return volume_int
 
     @classmethod
     def get_volume(cls):

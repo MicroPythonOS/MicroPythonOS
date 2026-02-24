@@ -62,19 +62,21 @@ class FullscreenPlayer(Activity):
     def onCreate(self):
         self._filename = self.getIntent().extras.get("filename")
         qr_screen = lv.obj()
-        self._slider_label=lv.label(qr_screen)
+        self._slider_label = lv.label(qr_screen)
         self._slider_label.set_text(f"Volume: {AudioManager.get_volume()}%")
-        self._slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
-        self._slider=lv.slider(qr_screen)
-        self._slider.set_range(0,16)
-        self._slider.set_value(int(AudioManager.get_volume()/6.25), False)
+        self._slider_label.align(lv.ALIGN.TOP_MID, 0, lv.pct(4))
+        self._slider = lv.slider(qr_screen)
+        self._slider.set_range(0, 100)
+        self._slider.set_value(int(AudioManager.get_volume()), False)
         self._slider.set_width(lv.pct(90))
-        self._slider.align_to(self._slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
+        self._slider.align_to(self._slider_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+
         def volume_slider_changed(e):
-            volume_int = self._slider.get_value()*6.25
+            volume_int = int(self._slider.get_value())
             self._slider_label.set_text(f"Volume: {volume_int}%")
             AudioManager.set_volume(volume_int)
-        self._slider.add_event_cb(volume_slider_changed,lv.EVENT.VALUE_CHANGED,None)
+
+        self._slider.add_event_cb(volume_slider_changed, lv.EVENT.VALUE_CHANGED, None)
         self._filename_label = lv.label(qr_screen)
         self._filename_label.align(lv.ALIGN.CENTER,0,0)
         self._filename_label.set_text(self._filename)

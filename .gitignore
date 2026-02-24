@@ -30,3 +30,6 @@ __pycache__/
 
 # these get created:
 c_mpos/c_mpos
+
+# build files
+*.bin

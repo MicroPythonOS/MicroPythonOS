@@ -48,7 +48,6 @@ MPU6886_I2C_FREQ = const(400000)
 
 print("m5stack_fire.py init buzzer")
 buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
-AudioManager()
 AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=BUZZER_PIN))
 AudioManager.set_volume(40)
 

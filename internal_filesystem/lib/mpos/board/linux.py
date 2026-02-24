@@ -108,7 +108,6 @@ from mpos import AudioManager
 # Desktop builds have no real audio hardware, but we simulate microphone
 # recording with a 440Hz sine wave for testing WAV file generation
 # The i2s_pins dict with 'sd_in' enables microphone simulation
-AudioManager()
 
 output_i2s_pins = {
     'sck': 0,       # Simulated - not used on desktop
