@@ -187,12 +187,6 @@ indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
 InputManager.register_indev(indev)
 
-# Battery voltage ADC measuring: sits on PC0 of CH32X035GxUx
-from mpos import BatteryManager
-def adc_to_voltage(adc_value):
-    return (0.001651* adc_value + 0.08709)
-#BatteryManager.init_adc(13, adc_to_voltage) # TODO
-
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
@@ -207,12 +201,24 @@ from machine import PWM, Pin
 # The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
 # See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 
+# recording and playback at the same time:
+# - no issue for the headset
+# - communicator: must be same sample rate because shared sck 17 BUT this will result in feedback, probably
+#                   fix: playback headset speaker, record communicator microphone: should work
+#                   fix: playback communicator speaker, record headset microphone: should work
+# TODO:
+# - revamp to multiple audio framework so all 4 items can be defined: 2 speakers (hss, cs) and 2 microphones (hsm, cm)
+# - try each 4 of the items separately: hss, hsm, cs, cm
+# - try trivial combinations: hss + hsm, cs + cm
+# - try similar combinations: hss + cs, cm + hsm
+# - try cross combinations: hss + cm, cs + hsm
+
 i2s_pins = {
-    # Output (DAC/speaker) pins
-    'mck': 2,       # MCLK (mandatory)
-    'sck': 17,      # SCLK aka BCLK (unclear if optional or mandatory)
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    # Output (DAC/speaker) pins
     'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'sck': 17,      # SCLK aka BCLK (appears mandatory) BUT this pin is sck_in on the communicator
+    'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator
 }
 
 # Initialize AudioManager with I2S (buzzer TODO)
