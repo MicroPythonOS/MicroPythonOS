@@ -59,7 +59,7 @@ class MPU6886:
 
     def _read_xyz(self, reg: int, scale: float) -> tuple[int, int, int]:
         data = self.i2c.readfrom_mem(self.address, reg, 6)
-        x = twos_complement(data[0] << 8 | data[1], 16)
+        x = twos_complement(data[0] << 8 | data[1], 16) * -1
         y = twos_complement(data[2] << 8 | data[3], 16)
         z = twos_complement(data[4] << 8 | data[5], 16)
         return (x * scale, y * scale, z * scale)
