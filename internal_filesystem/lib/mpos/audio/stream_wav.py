@@ -291,10 +291,10 @@ class WAVStream:
             upsample_factor = (requested_rate + original_rate - 1) // original_rate
             return original_rate * upsample_factor, upsample_factor
 
-        target_rate = 22050
-        if original_rate >= target_rate:
+        minimal_rate = 8000
+        if original_rate >= minimal_rate:
             return original_rate, 1
-        upsample_factor = (target_rate + original_rate - 1) // original_rate
+        upsample_factor = (minimal_rate + original_rate - 1) // original_rate
         return original_rate * upsample_factor, upsample_factor
 
     # ----------------------------------------------------------------------
@@ -425,7 +425,7 @@ class WAVStream:
                     print(
                         "WAVStream: I2S config: "
                         f"format={'MONO' if channels == 1 else 'STEREO'}, "
-                        f"ibuf=32000, has_sck={bool(self.i2s_pins.get('sck'))}, "
+                        f"ibuf={playback_rate}, has_sck={bool(self.i2s_pins.get('sck'))}, "
                         f"mck_pin={self.i2s_pins.get('mck')}"
                     )
 
@@ -457,7 +457,7 @@ class WAVStream:
                             bits=16,
                             format=i2s_format,
                             rate=playback_rate,
-                            ibuf=32000
+                            ibuf=playback_rate
                         )
                     else:
                         self._i2s = machine.I2S(
@@ -468,7 +468,7 @@ class WAVStream:
                             bits=16,
                             format=i2s_format,
                             rate=playback_rate,
-                            ibuf=32000
+                            ibuf=playback_rate
                         )
                 except Exception as e:
                     print(f"WAVStream: I2S init failed: {e}")
@@ -480,11 +480,16 @@ class WAVStream:
                 # Chunk size tuning notes:
                 # - Smaller chunks = more responsive to stop()
                 # - Larger chunks = less overhead, smoother audio
-                # - The 32KB I2S buffer handles timing smoothness
-                chunk_size = 8192
-                bytes_per_original_sample = (bits_per_sample // 8) * channels
-                total_original = 0
+                # - The 0.5-second (stereo) or 1 second (mono) I2S buffer handles timing smoothness
+                bytes_per_second = original_rate * bytes_per_sample
+                chunk_size = int(bytes_per_second / 10)
+		# chunk_size of 8192 worked great with 22050hz stereo 16 bit so 88200 bytes per sample so fator 10.7
+                #chunk_size = bytes_per_second >> 3 # 12-14 fps
+                #chunk_size = bytes_per_second >> 4 # 16-18 fps but stutters
+                #chunk_size = int(bytes_per_second / 12) # 18 fps for 8khz mono, 16 fps for 22khz mono, higher stutters
+                #chunk_size = int(bytes_per_second / 11) # still jitters at 22050hz stereo in quasibird
 
+                total_original = 0
                 while total_original < data_size:
                     if not self._keep_running:
                         print("WAVStream: Playback stopped by user")
@@ -492,7 +497,7 @@ class WAVStream:
 
                     # Read chunk of original data
                     to_read = min(chunk_size, data_size - total_original)
-                    to_read -= (to_read % bytes_per_original_sample)
+                    to_read -= (to_read % bytes_per_sample)
                     if to_read <= 0:
                         break
 
@@ -528,7 +533,7 @@ class WAVStream:
                         time.sleep(num_samples / playback_rate)
 
                     total_original += to_read
-                    self._progress_samples = total_original // bytes_per_original_sample
+                    self._progress_samples = total_original // bytes_per_sample
 
                 print(f"WAVStream: Finished playing {self.file_path}")
                 if self.on_complete:
