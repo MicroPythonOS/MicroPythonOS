@@ -1,17 +1,15 @@
-
 print("waveshare_esp32_s3_touch_lcd_2.py initialization")
 # Hardware initialization for ESP32-S3-Touch-LCD-2
 # Manufacturer's website at https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2
-import lcd_bus
-import machine
-import i2c
 
-import lvgl as lv
-import task_handler
+import time
 
 import drivers.display.st7789 as st7789
 import drivers.indev.cst816s as cst816s
-
+import i2c
+import lcd_bus
+import lvgl as lv
+import machine
 import mpos.ui
 
 # Pin configuration
@@ -34,12 +32,17 @@ TP_REGBITS = 8
 TFT_HOR_RES=320
 TFT_VER_RES=240
 
-spi_bus = machine.SPI.Bus(
-    host=SPI_BUS,
-    mosi=LCD_MOSI,
-    miso=LCD_MISO,
-    sck=LCD_SCLK
-)
+
+print("waveshare_esp32_s3_touch_lcd_2.py machine.SPI.Bus() initialization")
+try:
+    spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, miso=LCD_MISO, sck=LCD_SCLK)
+except Exception as e:
+    print(f"Error initializing SPI bus: {e}")
+    print("Attempting hard reset in 3sec...")
+    time.sleep(3)
+    machine.reset()
+
+
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
     freq=SPI_FREQ,
