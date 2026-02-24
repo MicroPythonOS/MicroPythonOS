@@ -412,9 +412,22 @@ class WAVStream:
                     self._total_samples = data_size // bytes_per_sample
                     self._duration_ms = int((self._total_samples / original_rate) * 1000)
 
+                print(
+                    "WAVStream: I2S init params: "
+                    f"requested_rate={self.requested_sample_rate}, "
+                    f"playback_rate={playback_rate}, original_rate={original_rate}, "
+                    f"channels={channels}, bits=16, i2s_pins={self.i2s_pins}"
+                )
+
                 # Initialize I2S (always 16-bit output)
                 try:
                     i2s_format = machine.I2S.MONO if channels == 1 else machine.I2S.STEREO
+                    print(
+                        "WAVStream: I2S config: "
+                        f"format={'MONO' if channels == 1 else 'STEREO'}, "
+                        f"ibuf=32000, has_sck={bool(self.i2s_pins.get('sck'))}, "
+                        f"mck_pin={self.i2s_pins.get('mck')}"
+                    )
 
                     # Configure MCLK pin if provided (must be done before I2S init)
                     # On some MicroPython versions, machine.I2S() supports a mck argument
