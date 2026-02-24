@@ -19,7 +19,6 @@ class MusicPlayer(Activity):
         active_track = AudioManager.get_active_track(stream_type=AudioManager.STREAM_MUSIC)
         if active_track:
             self.startActivity(Intent(activity_class=FullscreenPlayer).putExtra("filename", active_track))
-            self.finish()
             return
 
         self.file_explorer = lv.file_explorer(screen)
