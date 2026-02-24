@@ -4,6 +4,8 @@ import time
 
 from mpos import Activity, Intent, sdcard, get_event_name, AudioManager
 
+slider_max = 16
+
 class MusicPlayer(Activity):
 
     # Widgets:
@@ -62,17 +64,22 @@ class FullscreenPlayer(Activity):
     def onCreate(self):
         self._filename = self.getIntent().extras.get("filename")
         qr_screen = lv.obj()
+
+        audio_volume = AudioManager.get_volume()
+        slider_volume = int(round(audio_volume * slider_max / 100))
+
         self._slider_label = lv.label(qr_screen)
-        self._slider_label.set_text(f"Volume: {AudioManager.get_volume()}%")
+        self._slider_label.set_text(f"Volume: {audio_volume}%")
         self._slider_label.align(lv.ALIGN.TOP_MID, 0, lv.pct(4))
         self._slider = lv.slider(qr_screen)
-        self._slider.set_range(0, 100)
-        self._slider.set_value(int(AudioManager.get_volume()), False)
+        self._slider.set_range(0, slider_max)
+        self._slider.set_value(slider_volume, False)
         self._slider.set_width(lv.pct(90))
         self._slider.align_to(self._slider_label, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
 
         def volume_slider_changed(e):
-            volume_int = int(self._slider.get_value())
+            slider_value = int(self._slider.get_value())
+            volume_int = int(round(slider_value * 100 / slider_max))
             self._slider_label.set_text(f"Volume: {volume_int}%")
             AudioManager.set_volume(volume_int)
 
