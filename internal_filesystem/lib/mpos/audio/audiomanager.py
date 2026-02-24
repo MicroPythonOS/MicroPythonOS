@@ -210,6 +210,27 @@ class AudioManager:
         return cls.get()._volume
 
     @classmethod
+    def get_active_player(cls, stream_type=None, file_path=None):
+        manager = cls.get()
+        manager._cleanup_inactive()
+        for session in list(manager._active_sessions):
+            if isinstance(session, Player):
+                if stream_type is not None and session.stream_type != stream_type:
+                    continue
+                if file_path is not None and session.file_path != file_path:
+                    continue
+                if session.is_playing():
+                    return session
+        return None
+
+    @classmethod
+    def get_active_track(cls, stream_type=None):
+        player = cls.get_active_player(stream_type=stream_type)
+        if player and player.file_path:
+            return player.file_path
+        return None
+
+    @classmethod
     def player(
         cls,
         file_path=None,

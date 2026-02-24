@@ -15,6 +15,13 @@ class MusicPlayer(Activity):
         screen = lv.obj()
         # the user might have recently plugged in the sd card so try to mount it
         sdcard.mount_with_optional_format('/sdcard')
+
+        active_track = AudioManager.get_active_track(stream_type=AudioManager.STREAM_MUSIC)
+        if active_track:
+            self.startActivity(Intent(activity_class=FullscreenPlayer).putExtra("filename", active_track))
+            self.finish()
+            return
+
         self.file_explorer = lv.file_explorer(screen)
         self.file_explorer.explorer_open_dir('M:/')
         self.file_explorer.align(lv.ALIGN.CENTER, 0, 0)
@@ -107,36 +114,41 @@ class FullscreenPlayer(Activity):
         super().onResume(screen)
         if not self._filename:
             print("Not playing any file...")
-        else:
-            print(f"Playing file {self._filename}")
-            AudioManager.stop()
-            time.sleep(0.1)
+            return
 
-            output = AudioManager.get_default_output()
-            if output is None:
-                error_msg = "Error: No audio output available"
-                print(error_msg)
-                self.update_ui_threadsafe_if_foreground(
-                    self._filename_label.set_text,
-                    error_msg
-                )
-                return
+        print(f"Playing file {self._filename}")
+        active_player = AudioManager.get_active_player(stream_type=AudioManager.STREAM_MUSIC)
+        if active_player and active_player.file_path == self._filename and active_player.is_playing():
+            return
 
-            try:
-                player = AudioManager.player(
-                    file_path=self._filename,
-                    stream_type=AudioManager.STREAM_MUSIC,
-                    on_complete=self.player_finished,
-                    output=output,
-                )
-                player.start()
-            except Exception as exc:
-                error_msg = "Error: Audio device unavailable or busy"
-                print(f"{error_msg}: {exc}")
-                self.update_ui_threadsafe_if_foreground(
-                    self._filename_label.set_text,
-                    error_msg
-                )
+        AudioManager.stop()
+        time.sleep(0.1)
+
+        output = AudioManager.get_default_output()
+        if output is None:
+            error_msg = "Error: No audio output available"
+            print(error_msg)
+            self.update_ui_threadsafe_if_foreground(
+                self._filename_label.set_text,
+                error_msg
+            )
+            return
+
+        try:
+            player = AudioManager.player(
+                file_path=self._filename,
+                stream_type=AudioManager.STREAM_MUSIC,
+                on_complete=self.player_finished,
+                output=output,
+            )
+            player.start()
+        except Exception as exc:
+            error_msg = "Error: Audio device unavailable or busy"
+            print(f"{error_msg}: {exc}")
+            self.update_ui_threadsafe_if_foreground(
+                self._filename_label.set_text,
+                error_msg
+            )
 
     def focus_obj(self, obj):
         obj.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
