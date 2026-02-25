@@ -1,3 +1,16 @@
+0.9.0
+=====
+
+Frameworks:
+- AudioManager: add support for multiple speakers and microphones
+- AudioManager: add support for ADC-based microphone (adc_mic)
+
+OS:
+- ESP32 boards: add webrepl
+- New board support: LilyGo T-Display-S3
+- New board support: M5Stack Fire
+- New board support: ODroid Go
+
 0.8.0
 =====
 
@@ -12,7 +25,6 @@ Frameworks:
 - CameraManager and CameraActivity: work fully camera-agnostic
 
 OS:
-- Add webrepl on ESP32 boards
 - Add board support: Makerfabs MaTouch ESP32-S3 SPI IPS 2.8' with Camera OV3660
 - Scale MicroPythonOS boot logo down if necessary
 - Don't show battery icon if battery is not supported
