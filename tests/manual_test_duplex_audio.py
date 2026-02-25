@@ -32,10 +32,7 @@ class DuplexI2STest:
         self._tx = None
         self._rx = None
 
-    def _init_i2s(self):
-        if not _HAS_MACHINE:
-            raise RuntimeError("machine.I2S not available")
-
+    def _init_write(self):
         self._tx = machine.I2S(
             0,
             sck=machine.Pin(I2S_PINS["sck"], machine.Pin.OUT),
@@ -48,6 +45,12 @@ class DuplexI2STest:
             ibuf=8000,
         )
 
+
+    def _init_i2s(self):
+        if not _HAS_MACHINE:
+            raise RuntimeError("machine.I2S not available")
+
+        # self._init_write()
         self._rx = machine.I2S(
             1,
             sck=machine.Pin(I2S_PINS["sck_in"], machine.Pin.OUT),
@@ -78,7 +81,7 @@ class DuplexI2STest:
             t_end = time.ticks_add(time.ticks_ms(), self.duration_ms)
 
             while time.ticks_diff(t_end, time.ticks_ms()) > 0:
-                self._tx.write(tone)
+                #self._tx.write(tone)
                 read_len = self._rx.readinto(read_buf)
                 if read_len:
                     recorded.extend(read_buf[:read_len])
@@ -90,6 +93,8 @@ class DuplexI2STest:
                 playback = memoryview(recorded)
                 offset = 0
                 while offset < len(playback):
+                    if not self._tx:
+                        self._init_write()
                     offset += self._tx.write(playback[offset:])
         finally:
             self._deinit_i2s()
