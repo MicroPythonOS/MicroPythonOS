@@ -12,6 +12,7 @@ Frameworks:
 - CameraManager and CameraActivity: work fully camera-agnostic
 
 OS:
+- Add webrepl on ESP32 boards
 - Add board support: Makerfabs MaTouch ESP32-S3 SPI IPS 2.8' with Camera OV3660
 - Scale MicroPythonOS boot logo down if necessary
 - Don't show battery icon if battery is not supported
