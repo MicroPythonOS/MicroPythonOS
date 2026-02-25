@@ -60,16 +60,14 @@ def init(self):
 
     # sets swapping the bytes at the hardware level.
 
-    if (
-        self._rgb565_byte_swap and
-        isinstance(self._data_bus, lcd_bus.I80Bus) and
-        self._data_bus.get_lane_count() == 8
-    ):
+    color_size = lv.color_format_get_size(self._color_space)
+    if isinstance(self._data_bus, lcd_bus.I80Bus) and color_size == 2:
         param_buf[0] = 0x00
-        param_buf[1] = 0xF0 | _RGB565SWAP
+        param_buf[1] = 0xF0
+        if self._data_bus.get_lane_count() == 8:
+            param_buf[1] |= _RGB565SWAP
         self.set_params(_RAMCTRL, param_mv[:2])
 
-    color_size = lv.color_format_get_size(self._color_space)
     if color_size == 2:  # NOQA
         pixel_format = 0x55
     elif color_size == 3:
