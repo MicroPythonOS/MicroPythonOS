@@ -74,11 +74,23 @@ class DuplexI2STest:
         try:
             tone = self._make_tone_buffer(freq_hz=440, ms=50)
             read_buf = bytearray(1024)
+            recorded = bytearray()
             t_end = time.ticks_add(time.ticks_ms(), self.duration_ms)
 
             while time.ticks_diff(t_end, time.ticks_ms()) > 0:
                 self._tx.write(tone)
-                self._rx.readinto(read_buf)
+                read_len = self._rx.readinto(read_buf)
+                if read_len:
+                    recorded.extend(read_buf[:read_len])
+
+            print("waiting a bit")
+            time.sleep(1)
+            if recorded:
+                print("playing the recording")
+                playback = memoryview(recorded)
+                offset = 0
+                while offset < len(playback):
+                    offset += self._tx.write(playback[offset:])
         finally:
             self._deinit_i2s()
 
