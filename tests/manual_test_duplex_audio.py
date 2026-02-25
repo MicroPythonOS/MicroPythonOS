@@ -1,7 +1,9 @@
-"""Minimal duplex I2S proof-of-concept for Fri3d 2024.
+"""Minimal duplex I2S test for Fri3d 2024 with communicator.
 
 Creates TX + RX I2S instances simultaneously using merged pin config
 from the fri3d_2024 board setup. Intended for quick validation only.
+
+To get this working, the I2S needs to be changed, see plan at https://github.com/orgs/micropython/discussions/12473
 """
 
 import time
@@ -42,15 +44,10 @@ class DuplexI2STest:
             bits=16,
             format=machine.I2S.MONO,
             rate=self.sample_rate,
-            ibuf=8000,
+            ibuf=16000,
         )
 
-
-    def _init_i2s(self):
-        if not _HAS_MACHINE:
-            raise RuntimeError("machine.I2S not available")
-
-        # self._init_write()
+    def _init_read(self):
         self._rx = machine.I2S(
             1,
             sck=machine.Pin(I2S_PINS["sck_in"], machine.Pin.OUT),
@@ -60,8 +57,15 @@ class DuplexI2STest:
             bits=16,
             format=machine.I2S.MONO,
             rate=self.sample_rate,
-            ibuf=8000,
+            ibuf=16000,
         )
+
+    def _init_i2s(self):
+        if not _HAS_MACHINE:
+            raise RuntimeError("machine.I2S not available")
+
+        self._init_read()
+        self._init_write()
 
     def _deinit_i2s(self):
         if self._tx:
@@ -81,7 +85,7 @@ class DuplexI2STest:
             t_end = time.ticks_add(time.ticks_ms(), self.duration_ms)
 
             while time.ticks_diff(t_end, time.ticks_ms()) > 0:
-                #self._tx.write(tone)
+                #self._tx.write(tone) # works but saturates the microphone
                 read_len = self._rx.readinto(read_buf)
                 if read_len:
                     recorded.extend(read_buf[:read_len])
