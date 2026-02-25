@@ -39,7 +39,7 @@ mpos.ui.main_display = st7789.ST7789(
     frame_buffer2=fb2,
     display_width=170,
     display_height=320,
-    color_space=lv.COLOR_FORMAT.RGB565, # gives bad colors
+    color_space=lv.COLOR_FORMAT.RGB565,
     #color_space=lv.COLOR_FORMAT.RGB888, # not supported by qemu
     color_byte_order=st7789.BYTE_ORDER_RGB,
     # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
@@ -195,7 +195,6 @@ def keypad_read_cb(indev, data):
     if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:
         mpos.ui.back_screen()
 
-'''
 group = lv.group_create()
 group.set_default()
 
@@ -209,5 +208,5 @@ indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
 from mpos import InputManager
 InputManager.register_indev(indev)
-'''
+
 print("qemu.py finished")

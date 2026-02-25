@@ -93,23 +93,18 @@ def detect_board():
         import machine
         unique_id_prefixes = machine.unique_id()[0:3]
 
-        print("qemu ?")
-        if unique_id_prefixes[0] == 0x10:
-            return "qemu"
+        print("(emulated) lilygo_t_display_s3 ?")
+        if unique_id_prefixes == b'\x10\x01\x00' or unique_id_prefixes == b'\xc0\x4e\x30':
+            return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
 
         print("odroid_go ?")
         if unique_id_prefixes[0] == 0x30:
             return "odroid_go"
 
-        print("lilygo_t_display_s3 ?")
-        if unique_id_prefixes == b'\xc0\x4e\x30':
-            return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
-
         print("fri3d_2026 ?")
         if unique_id_prefixes == b'\xdc\xb4\xd9':
             # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
             return "fri3d_2026"
-
 
         # Then do I2C-based board detection
         print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")

@@ -41,8 +41,8 @@ mpos.ui.main_display = st7789.ST7789(
     frame_buffer2=fb2,
     display_width=170,
     display_height=320,
-    #color_space=lv.COLOR_FORMAT.RGB565, # gives bad colors
-    color_space=lv.COLOR_FORMAT.RGB888,
+    color_space=lv.COLOR_FORMAT.RGB565,
+    # color_space=lv.COLOR_FORMAT.RGB888, # not supported on qemu
     color_byte_order=st7789.BYTE_ORDER_RGB,
     # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
     power_pin=9, # Must set RD pin to high, otherwise blank screen as soon as LVGL's task_handler starts
