@@ -220,6 +220,12 @@ async def asyncio_repl():
     await aiorepl.task()
 TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
 
+try:
+    import webrepl
+    webrepl.start(port=7890,password="MPOSweb26") # password max 9 characters
+except Exception as e:
+    print(f"Could not start webrepl - this is normal on desktop systems: {e}")
+
 async def ota_rollback_cancel():
     try:
         from esp32 import Partition
