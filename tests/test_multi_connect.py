@@ -4,7 +4,7 @@ import time
 
 from mpos import App, AppManager, TaskManager
 
-from websocket import WebSocketApp
+from uaiowebsocket import WebSocketApp
 
 # demo_multiple_ws.py
 import asyncio

@@ -6,7 +6,7 @@ import time
 from mpos import App, AppManager
 from mpos import TaskManager
 
-from websocket import WebSocketApp
+from uaiowebsocket import WebSocketApp
 
 class TestMutlipleWebsocketsAsyncio(unittest.TestCase):
 
