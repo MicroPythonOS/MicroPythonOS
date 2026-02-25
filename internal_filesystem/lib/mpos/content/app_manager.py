@@ -137,7 +137,7 @@ class AppManager:
                     # ---- store in both containers ---------------------------
                     cls._app_list.append(app)
                     cls._by_fullname[fullname] = app
-                    print("added app {}".format(app))
+                    #print("added app {}".format(app))
 
             except Exception as e:
                 print("AppManager: handling {} got exception: {}".format(base, e))

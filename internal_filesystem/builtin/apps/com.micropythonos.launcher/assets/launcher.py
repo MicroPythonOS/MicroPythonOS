@@ -91,7 +91,7 @@ class Launcher(Activity):
 
             app_name = app.name
             app_dir_fullpath = app.installed_path
-            print(f"Adding app {app_name} from {app_dir_fullpath}")
+            #print(f"Adding app {app_name} from {app_dir_fullpath}")
 
             # ----- container ------------------------------------------------
             app_cont = lv.obj(screen)
