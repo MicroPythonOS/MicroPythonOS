@@ -97,6 +97,8 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 		# These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
 		# There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
 		extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
+		# --py-freertos: add MicroPython FreeRTOS module to expose internals
+		extra_configs="$extra_configs --py-freertos"
 	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
@@ -111,7 +113,6 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 	# --debug: enable debugging from ESP-IDF but makes copying files to it very slow so that's not added
 	# --dual-core-threads: disabled GIL, run code on both CPUs
 	# --task-stack-size={stack size in bytes}
-	# --py-freertos: add MicroPython FreeRTOS module to expose internals
 	# CONFIG_* sets ESP-IDF options
 	# listing processes on the esp32 still doesn't work because no esp32.vtask_list_threads() or something
 	# CONFIG_FREERTOS_USE_TRACE_FACILITY=y
@@ -120,7 +121,6 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
-	    --py-freertos \
 	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
