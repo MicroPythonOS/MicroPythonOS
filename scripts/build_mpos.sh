@@ -14,7 +14,6 @@ if [ -z "$target" ]; then
 	echo "Example: $0 macOS"
 	echo "Example: $0 esp32"
 	echo "Example: $0 esp32s3"
-	echo "Example: $0 esp32s3_qemu"
 	exit 1
 fi
 
@@ -87,18 +86,17 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "esp32s3_qemu" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 	extra_configs=""
         if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
-	else # esp32s3 or esp32s3_qemu
+	else # esp32s3
 		BOARD=ESP32_GENERIC_S3
 		BOARD_VARIANT=SPIRAM_OCT
-		if [ "$target" == "esp32s3_qemu" ]; then
-			# CONFIG_ESPTOOLPY_FLASHMODE_DIO because QIO has an "off by 2 bytes" bug in qemu
-			# CONFIG_MBEDTLS_HARDWARE_* because these have bugs in qemu due to warning: [AES] Error reading from GDMA buffer
-			extra_configs="CONFIG_ESPTOOLPY_FLASHMODE_DIO=y CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
+		# These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
+		# There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
+		extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
 		fi
 	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
@@ -114,14 +112,16 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "esp32s3_qem
 	# --debug: enable debugging from ESP-IDF but makes copying files to it very slow so that's not added
 	# --dual-core-threads: disabled GIL, run code on both CPUs
 	# --task-stack-size={stack size in bytes}
+	# --py-freertos: add MicroPython FreeRTOS module to expose internals
 	# CONFIG_* sets ESP-IDF options
 	# listing processes on the esp32 still doesn't work because no esp32.vtask_list_threads() or something
 	# CONFIG_FREERTOS_USE_TRACE_FACILITY=y
 	# CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
-        # CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
-
+	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
+	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
 	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+	    --py-freertos \
 	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
