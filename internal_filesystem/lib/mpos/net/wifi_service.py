@@ -137,7 +137,7 @@ class WifiService:
             # Wait up to 10 seconds for connection
             for i in range(10):
                 if wlan.isconnected():
-                    print(f"WifiService: Connected to '{ssid}' after {i+1} seconds")
+                    print(f"WifiService: Connected to '{ssid}' after {i+1} seconds with IP: {wlan.ipconfig('addr4')}")
 
                     # Sync time from NTP server if possible
                     try:
