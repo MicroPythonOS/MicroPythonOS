@@ -15,7 +15,7 @@ Features:
 """
 
 # Constants
-_DEFAULT_CHUNK_SIZE = 2048  # 2KB chunks
+_DEFAULT_CHUNK_SIZE = 4 * 1024
 _DEFAULT_TOTAL_SIZE = 100 * 1024  # 100KB default if Content-Length missing
 _MAX_RETRIES = 3  # Retry attempts per chunk
 _CHUNK_TIMEOUT_SECONDS = 10  # Timeout per chunk read
@@ -97,19 +97,15 @@ class DownloadManager:
                 "Cannot use both outfile and chunk_callback. "
                 "Use outfile for saving to disk, or chunk_callback for streaming."
             )
-        
-        # Create a new session for this request
-        try:
-            import aiohttp
-        except ImportError:
-            print("DownloadManager: aiohttp not available")
-            raise ImportError("aiohttp module not available")
-        
-        import ssl
-        sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        sslctx.verify_mode = ssl.CERT_OPTIONAL # CERT_REQUIRED might fail because MBEDTLS_ERR_SSL_CA_CHAIN_REQUIRED
+
+        import aiohttp
         session = aiohttp.ClientSession()
-        print("DownloadManager: Created new aiohttp session")
+        sslctx = None # for http
+        if url.lower().startswith("https"):
+            import ssl
+            sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            sslctx.verify_mode = ssl.CERT_OPTIONAL # CERT_REQUIRED might fail because MBEDTLS_ERR_SSL_CA_CHAIN_REQUIRED
+
         print(f"DownloadManager: Downloading {url}")
         
         fd = None
@@ -238,6 +234,7 @@ class DownloadManager:
                             if elapsed_ms >= _SPEED_UPDATE_INTERVAL_MS:
                                 # Calculate bytes per second
                                 bytes_per_second = (speed_bytes_since_last_update * 1000) / elapsed_ms
+                                print(f"DownloadManager: Speed: {bytes_per_second} bytes / second")
                                 await speed_callback(bytes_per_second)
                                 # Reset for next interval
                                 speed_bytes_since_last_update = 0

@@ -283,7 +283,7 @@ class OSUpdate(Activity):
         Args:
             percent: Progress percentage with 2 decimal places (0.00 - 100.00)
         """
-        print(f"OTA Update: {percent:.2f}%")
+        #print(f"OTA Update: {percent:.2f}%")
         # UI updates are safe from async context in MicroPythonOS (runs on main thread)
         if self.has_foreground():
             self.progress_bar.set_value(int(percent), True)
@@ -304,7 +304,7 @@ class OSUpdate(Activity):
         else:
             speed_str = f"{bytes_per_second:.0f} B/s"
         
-        print(f"Download speed: {speed_str}")
+        #print(f"Download speed: {speed_str}")
         if self.has_foreground() and self.speed_label:
             self.speed_label.set_text(f"Speed: {speed_str}")
 
