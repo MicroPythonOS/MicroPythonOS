@@ -97,7 +97,6 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 		# These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
 		# There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
 		extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
-		fi
 	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
@@ -129,7 +128,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 	    CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
 	    CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
 	    CONFIG_ADC_MIC_TASK_CORE=1 \
-            $extra_configs \
+	    $extra_configs \
 	    "$frozenmanifest"
 
 	popd
