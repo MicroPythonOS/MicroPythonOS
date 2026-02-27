@@ -8,35 +8,6 @@ class About(Activity):
     logger = logging.getLogger(__file__)
     logger.setLevel(logging.INFO)
 
-    def _add_label(self, parent, text, is_header=False, margin_top=DisplayMetrics.pct_of_height(5)):
-        """Helper to create and add a label with text."""
-        label = lv.label(parent)
-        label.set_text(text)
-        if is_header:
-            primary_color = lv.theme_get_color_primary(None)
-            label.set_style_text_color(primary_color, lv.PART.MAIN)
-            label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
-            label.set_style_margin_top(margin_top, lv.PART.MAIN)
-            label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
-        else:
-            label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
-            label.set_style_margin_bottom(2, lv.PART.MAIN)
-        return label
-
-    def _add_disk_info(self, screen, path):
-        """Helper to add disk usage info for a given path."""
-        import os
-        try:
-            stat = os.statvfs(path)
-            total_space = stat[0] * stat[2]
-            free_space = stat[0] * stat[3]
-            used_space = total_space - free_space
-            self._add_label(screen, f"Total space {path}: {total_space} bytes")
-            self._add_label(screen, f"Free space {path}: {free_space} bytes")
-            self._add_label(screen, f"Used space {path}: {used_space} bytes")
-        except Exception as e:
-            self.logger.warning(f"About app could not get info on {path} filesystem: {e}")
-
     def onCreate(self):
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
@@ -183,3 +154,50 @@ class About(Activity):
         self._add_disk_info(screen, '/sdcard')
 
         self.setContentView(screen)
+
+    @staticmethod
+    def _focus_obj(event):
+        target = event.get_target_obj()
+        target.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
+        target.set_style_border_width(1, lv.PART.MAIN)
+        target.scroll_to_view(True)
+
+    @staticmethod
+    def _defocus_obj(event):
+        target = event.get_target_obj()
+        target.set_style_border_width(0, lv.PART.MAIN)
+
+    def _add_label(self, parent, text, is_header=False, margin_top=DisplayMetrics.pct_of_height(5)):
+        """Helper to create and add a label with text."""
+        label = lv.label(parent)
+        label.set_text(text)
+        # Make labels focusable to allow scroll on devices without touch screen
+        label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
+        label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(label)
+        if is_header:
+            primary_color = lv.theme_get_color_primary(None)
+            label.set_style_text_color(primary_color, lv.PART.MAIN)
+            label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
+            label.set_style_margin_top(margin_top, lv.PART.MAIN)
+            label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
+        else:
+            label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            label.set_style_margin_bottom(2, lv.PART.MAIN)
+        return label
+
+    def _add_disk_info(self, screen, path):
+        """Helper to add disk usage info for a given path."""
+        import os
+        try:
+            stat = os.statvfs(path)
+            total_space = stat[0] * stat[2]
+            free_space = stat[0] * stat[3]
+            used_space = total_space - free_space
+            self._add_label(screen, f"Total space {path}: {total_space} bytes")
+            self._add_label(screen, f"Free space {path}: {free_space} bytes")
+            self._add_label(screen, f"Used space {path}: {used_space} bytes")
+        except Exception as e:
+            self.logger.warning(f"About app could not get info on {path} filesystem: {e}")
