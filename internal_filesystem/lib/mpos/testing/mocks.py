@@ -412,6 +412,19 @@ class MockNetwork:
             if self._connected:
                 return ('192.168.1.100', '255.255.255.0', '192.168.1.1', '8.8.8.8')
             return ('0.0.0.0', '0.0.0.0', '0.0.0.0', '0.0.0.0')
+
+        def ipconfig(self, key=None):
+            """Return IP configuration details, mirroring network.WLAN.ipconfig."""
+            config = self.ifconfig()
+            mapping = {
+                'addr4': config[0],
+                'netmask4': config[1],
+                'gateway4': config[2],
+                'dns4': config[3],
+            }
+            if key is None:
+                return mapping
+            return mapping.get(key)
         
         def scan(self):
             """Scan for available networks."""

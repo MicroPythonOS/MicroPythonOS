@@ -102,7 +102,7 @@ class TestWifiServiceConnect(unittest.TestCase):
 
         mock_wlan.connect = mock_connect
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertTrue(result)
 
@@ -114,7 +114,7 @@ class TestWifiServiceConnect(unittest.TestCase):
         mock_wlan = mock_network.WLAN(mock_network.STA_IF)
         mock_wlan._scan_results = [(b"UnsavedNetwork", -50, 1, 3, b"", 0)]
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertFalse(result)
 
@@ -128,7 +128,7 @@ class TestWifiServiceConnect(unittest.TestCase):
         mock_wlan = mock_network.WLAN(mock_network.STA_IF)
         mock_wlan._scan_results = [(b"DifferentNetwork", -50, 1, 3, b"", 0)]
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertFalse(result)
 
@@ -166,6 +166,8 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         )
 
         self.assertTrue(result)
+        # Should not sleep once connected immediately
+        self.assertEqual(len(mock_time.get_sleep_calls()), 0)
 
     def test_connection_timeout(self):
         """Test connection timeout after 10 attempts."""
@@ -227,6 +229,8 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         self.assertFalse(result)
         # Should have checked less than 10 times (aborted early)
         self.assertTrue(check_count[0] < 10)
+        # Should have slept only until abort
+        self.assertEqual(len(mock_time.get_sleep_calls()), 2)
 
     def test_connection_error_handling(self):
         """Test handling of connection errors."""
@@ -501,7 +505,7 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         mock_wlan.connect = mock_connect
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertTrue(result)
         # Should try strongest first (-45 dBm)
@@ -538,7 +542,7 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         mock_wlan.connect = mock_connect
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertTrue(result)
         # Verify order: strongest to weakest
@@ -572,7 +576,7 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         mock_wlan.connect = mock_connect
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertTrue(result)
         # Should only try once (first is strongest and succeeds)
@@ -618,7 +622,7 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         mock_wlan.connect = mock_connect
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertTrue(result)
         # Expected order: Channel 8 (-47), Baptistus (-48), telenet (-70), Galaxy (-83)
@@ -654,7 +658,7 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         mock_wlan.connect = mock_connect
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertFalse(result)  # No connection succeeded
         # Verify all 3 were attempted in RSSI order
@@ -684,7 +688,7 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         mock_wlan.connect = mock_connect
 
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertFalse(result)
         # No attempts should be made
@@ -706,7 +710,7 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         # The connect method now logs "Found network 'TestNet' (RSSI: -55 dBm)"
         # This test just verifies it doesn't crash
-        result = WifiService.connect(network_module=mock_network)
+        result = WifiService.connect(network_module=mock_network, time_module=MockTime())
         # Since mock doesn't actually connect, this will likely be False
         # but the important part is the code runs without error
 

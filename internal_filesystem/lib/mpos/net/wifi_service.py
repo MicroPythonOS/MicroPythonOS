@@ -47,7 +47,7 @@ class WifiService:
     _desktop_connected_ssid = None
 
     @staticmethod
-    def connect(network_module=None):
+    def connect(network_module=None, time_module=None):
         """
         Scan for available networks and connect to the first saved network found.
         Networks are tried in order of signal strength (strongest first).
@@ -55,6 +55,7 @@ class WifiService:
 
         Args:
             network_module: Network module for dependency injection (testing)
+            time_module: Time module for dependency injection (testing)
 
         Returns:
             bool: True if successfully connected, False otherwise
@@ -79,7 +80,12 @@ class WifiService:
                 password = WifiService.access_points.get(ssid).get("password")
                 print(f"WifiService: Attempting to connect to saved network '{ssid}'")
 
-                if WifiService.attempt_connecting(ssid, password, network_module=network_module):
+                if WifiService.attempt_connecting(
+                    ssid,
+                    password,
+                    network_module=network_module,
+                    time_module=time_module,
+                ):
                     print(f"WifiService: Connected to '{ssid}'")
                     return True
                 else:
@@ -93,7 +99,12 @@ class WifiService:
                 password = config.get("password")
                 print(f"WifiService: Attempting hidden network '{ssid}'")
 
-                if WifiService.attempt_connecting(ssid, password, network_module=network_module):
+                if WifiService.attempt_connecting(
+                    ssid,
+                    password,
+                    network_module=network_module,
+                    time_module=time_module,
+                ):
                     print(f"WifiService: Connected to hidden network '{ssid}'")
                     return True
                 else:
@@ -201,7 +212,10 @@ class WifiService:
                 print("WifiService: Simulated connection complete")
             else:
                 # Attempt to connect to saved networks
-                if WifiService.connect(network_module=network_module):
+                if WifiService.connect(
+                    network_module=network_module,
+                    time_module=time_module,
+                ):
                     print("WifiService: Auto-connect successful")
                 else:
                     print("WifiService: Auto-connect failed")
