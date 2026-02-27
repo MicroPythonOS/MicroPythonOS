@@ -18,6 +18,10 @@ class IMUDriverBase:
         """Returns (x, y, z) in deg/s"""
         raise NotImplementedError
 
+    def read_magnetometer(self):
+        """Returns (x, y, z) in uT"""
+        raise NotImplementedError
+
     def read_temperature(self):
         """Returns temperature in °C"""
         raise NotImplementedError

@@ -12,11 +12,12 @@ class IIODriver(IMUDriverBase):
     """
 
     accel_path: str
+    mag_path: str
 
     def __init__(self):
         super().__init__()
         self.accel_path = self.find_iio_device_with_file("in_accel_x_raw")
-        print("path:", self.accel_path)
+        self.mag_path = self.find_iio_device_with_file("in_magn_x_raw")
 
     def _p(self, name: str):
         return self.accel_path + "/" + name
@@ -138,3 +139,10 @@ class IIODriver(IMUDriverBase):
             gy - self.gyro_offset[1],
             gz - self.gyro_offset[2],
         )
+
+    def read_magnetometer(self) -> tuple[float, float, float]:
+        gx = self._read_raw_scaled(self.mag_path + "/" + "in_magn_x_raw", self.mag_path + "/" + "in_magn_x_scale")
+        gy = self._read_raw_scaled(self.mag_path + "/" + "in_magn_y_raw", self.mag_path + "/" + "in_magn_y_scale")
+        gz = self._read_raw_scaled(self.mag_path + "/" + "in_magn_z_raw", self.mag_path + "/" + "in_magn_z_scale")        
+
+        return (gx, gy, gz)
