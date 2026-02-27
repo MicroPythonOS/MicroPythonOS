@@ -52,12 +52,11 @@ mpos.ui.main_display = st7789.ST7789(
     backlight_on_state=st7789.STATE_PWM,
     offset_x=0,
     offset_y=35
-)
+) # this will trigger lv.init()
 mpos.ui.main_display.set_power(True) # set RD pin to high before the rest, otherwise garbled output
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_backlight(100) # works
 
-lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 mpos.ui.main_display.set_color_inversion(True)
 
@@ -119,7 +118,7 @@ def keypad_read_cb(indev, data):
     if near_simul or single_press_wait:
         dt_a = time.ticks_diff(current_time, last_a_down_time) if last_a_down_time else None
         dt_b = time.ticks_diff(current_time, last_b_down_time) if last_b_down_time else None
-        print(f"combo guard: a={btn_a_pressed} b={btn_b_pressed} near={near_simul} wait={single_press_wait} dt_a={dt_a} dt_b={dt_b}")
+        #print(f"combo guard: a={btn_a_pressed} b={btn_b_pressed} near={near_simul} wait={single_press_wait} dt_a={dt_a} dt_b={dt_b}")
 
     # While in an on-screen keyboard, PREV button is LEFT and NEXT button is RIGHT
     focus_group = lv.group_get_default()
@@ -156,7 +155,7 @@ def keypad_read_cb(indev, data):
         key_press_start = 0
         last_repeat_time = 0
     elif last_key is None or current_key != last_key:
-        print(f"New key press: {current_key}")
+        #print(f"New key press: {current_key}")
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED
         last_key = current_key
@@ -164,24 +163,25 @@ def keypad_read_cb(indev, data):
         key_press_start = current_time
         last_repeat_time = current_time
     else:
-        print(f"key repeat because current_key {current_key} == last_key {last_key}")
+        #print(f"key repeat because current_key {current_key} == last_key {last_key}")
         elapsed = time.ticks_diff(current_time, key_press_start)
         since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
         if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
             next_state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
             if current_key == lv.KEY.PREV:
-                print("Repeated PREV does not do anything, instead it triggers ESC (back) if long enough")
+                #print("Repeated PREV does not do anything, instead it triggers ESC (back) if long enough")
                 if since_last_repeat > REPEAT_PREV_BECOMES_BACK:
-                    print("back button trigger!")
+                    print("Long press on PREV triggered back button")
                     data.key = lv.KEY.ESC
                     data.state = next_state
                     last_key = current_key
                     last_state = data.state
                     last_repeat_time = current_time
                 else:
-                    print("repeat PREV ignored because not pressed long enough")
+                    #print("repeat PREV ignored because not pressed long enough")
+                    pass
             else:
-                print("Send a new PRESSED/RELEASED pair for repeat")
+                #print("Send a new PRESSED/RELEASED pair for repeat")
                 data.key = current_key
                 data.state = next_state
                 last_key = current_key
