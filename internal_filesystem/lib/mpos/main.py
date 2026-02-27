@@ -1,4 +1,3 @@
-import task_handler
 import _thread
 import lvgl as lv
 
@@ -187,6 +186,7 @@ def custom_exception_handler(e):
     #lv.deinit()
 
 import sys
+import task_handler
 if sys.platform == "esp32":
     mpos.ui.task_handler = task_handler.TaskHandler(duration=5, exception_hook=custom_exception_handler) # 1ms gives highest framerate on esp32-s3's but might have side effects?
 else:
