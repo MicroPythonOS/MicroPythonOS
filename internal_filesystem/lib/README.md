@@ -10,3 +10,4 @@ This /lib folder contains:
 - https://github.com/micropython/micropython-lib/blob/master/python-stdlib/logging/logging.py version 0.6.2 # for About app
 - https://github.com/micropython/micropython-lib/blob/master/python-stdlib/shutil/shutil.py version 0.0.5 # for rmtree()
 - https://github.com/micropython/micropython-lib/blob/master/python-stdlib/unittest/unittest/__init__.py  version 0.10.4 # for testing (also on-device)
+- https://github.com/micropython/micropython-lib/blob/master/python-stdlib/pathlib/pathlib.py version 0.0.1 # for Path()
