@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass
 
-from mpos import Activity, MposKeyboard
+from mpos import Activity, MposKeyboard, DownloadManager
 
 import ujson
 import utime
@@ -149,7 +149,6 @@ class Weather:
         # See https://open-meteo.com/en/docs?forecast_days=1&current=relative_humidity_2m
         
         host = "api.open-meteo.com"
-        port = 80  # HTTP only
         path = (
             "/v1/forecast?"
             "latitude={}&longitude={}"
@@ -162,54 +161,15 @@ class Weather:
         ).format(self.lat, self.lon)
 
         print("Weather fetch: ", path)
-
-        # Resolve DNS
-        addr = socket.getaddrinfo(host, port, socket.AF_INET)[0][-1]
-        #print("DNS", addr)
-
-        s = socket.socket()
-        s.connect(addr)
-
-        # Send HTTP request
-        request = (
-            "GET {} HTTP/1.1\r\n"
-            "Host: {}\r\n"
-            "Connection: close\r\n\r\n"
-        ).format(path, host)
-
-        s.send(request.encode())
-
-        # ---- Read response ----
-        # Skip HTTP headers
-        buffer = b""
-        while True:
-            chunk = s.recv(256)
-            if not chunk:
-                raise Exception("No response")
-            buffer += chunk
-            header_end = buffer.find(b"\r\n\r\n")
-            if header_end != -1:
-                body = buffer[header_end + 4:]
-                break
-
-
-        # Read remaining body
-        while True:
-            chunk = s.recv(512)
-            if not chunk:
-                break
-            body += chunk
-
-        s.close()
-
-        # Strip non-json parts
-        body = body[5:]
-        body = body[:-7]
-
+        data = DownloadManager.download_url("https://"+host+path)
+        if not data:
+            self.summary = "Download error"
+            return
+        
         #print("Have result:", body.decode())
 
         # Parse JSON
-        data = ujson.loads(body)
+        data = ujson.loads(data)
 
         # ---- Extract data ----
         print("\n\n")
