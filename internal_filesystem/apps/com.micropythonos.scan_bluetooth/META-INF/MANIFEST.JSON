@@ -6,7 +6,7 @@
 "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.scan_bluetooth/icons/com.micropythonos.scan_bluetooth_0.0.1_64x64.png",
 "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.scan_bluetooth/mpks/com.micropythonos.scan_bluetooth_0.0.1.mpk",
 "fullname": "com.micropythonos.scan_bluetooth",
-"version": "0.0.1",
+"version": "0.1.0",
 "category": "development",
 "activities": [
     {
