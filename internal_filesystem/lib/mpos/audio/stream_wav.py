@@ -195,6 +195,7 @@ class WAVStream:
         self._keep_running = True
         self._is_playing = False
         self._i2s = None
+        self._mck_pwm = None
         self._progress_samples = 0
         self._total_samples = 0
         self._duration_ms = None
@@ -458,11 +459,11 @@ class WAVStream:
                         from machine import Pin, PWM
                         # Add MCLK generation on GPIO2
                         try:
-                            mck_pwm = PWM(mck_pin)
+                            self._mck_pwm = PWM(mck_pin)
                             # Set frequency to sample_rate * 256 (common ratio for CJC4334H auto-detect)
                             # Use duty_u16 for finer control (0–65535 range, 32768 = 50%)
-                            mck_pwm.freq(playback_rate * 256)
-                            mck_pwm.duty_u16(32768)  # 50% duty cycle
+                            self._mck_pwm.freq(playback_rate * 256)
+                            self._mck_pwm.duty_u16(32768)  # 50% duty cycle
                             print(f"MCLK PWM started on GPIO2 at {playback_rate * 256} Hz")
                         except Exception as e:
                             print(f"MCLK PWM init failed: {e}")
@@ -584,8 +585,15 @@ class WAVStream:
         finally:
             self._is_playing = False
             if self._i2s:
-                self._i2s.deinit()
+                print("Done playing, doing i2s deinit")
+                self._i2s.deinit() # disabling this does not fix the "play just once" issue
                 self._i2s = None
+            if self._mck_pwm:
+                try:
+                    print("Done playing, stopping MCLK PWM")
+                    self._mck_pwm.deinit()
+                finally:
+                    self._mck_pwm = None
 
     def set_volume(self, vol):
         self.volume = vol
