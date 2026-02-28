@@ -28,7 +28,7 @@ _ADV_TYPE_SHORT_NAME = const(8)
 _ADV_TYPE_NAME = const(9)
 
 
-def decode_name(payload: bytes) -> str:
+def decode_name(payload: bytes) -> str | None:
     i = 0
     payload_len = len(payload)
     while i < payload_len:
@@ -42,7 +42,6 @@ def decode_name(payload: bytes) -> str:
         else:
             print(f"Unsupported: {field_type=} with {length=}")
         i += length + 1
-    return "Unknown"
 
 
 def set_dynamic_column_widths(table, font=None, padding=8):
@@ -98,6 +97,7 @@ class ScanBluetooth(Activity):
         self.scan_count = 0
         self.mac2column = {}
         self.mac2counts = {}
+        self.mac2name = {}
 
         self.ble = bluetooth.BLE()
 
@@ -145,7 +145,10 @@ class ScanBluetooth(Activity):
                 addr_type, addr, adv_type, rssi, adv_data = data
                 addr = ":".join(f"{b:02x}" for b in addr)
                 print(f"{addr=} {rssi=} {len(adv_data)=}")
-                name = decode_name(adv_data)
+                if name := decode_name(adv_data):
+                    self.mac2name[addr] = name
+                else:
+                    name = self.mac2name.get(addr, "Unknown")
 
                 if not (column_index := self.mac2column.get(addr)):
                     column_index = len(self.mac2column) + 1
