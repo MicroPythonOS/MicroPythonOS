@@ -54,7 +54,8 @@ class ADCRecordStream:
     DEFAULT_ADC_PIN = 1  # GPIO1 on Fri3d 2026
     DEFAULT_ADC_UNIT = 0 # ADC_UNIT_1 = 0
     DEFAULT_ADC_CHANNEL = 0 # ADC_CHANNEL_0 = 0 (GPIO1)
-    DEFAULT_ATTEN = 2 # ADC_ATTEN_DB_6 = 2
+    #DEFAULT_ATTEN = 2 # ADC_ATTEN_DB_6
+    DEFAULT_ATTEN = 3 # ADC_ATTEN_DB_12 == ADC_ATTEN_DB_11
 
     def __init__(self, file_path, duration_ms, sample_rate, adc_pin=None,
                  on_complete=None, **adc_config):
