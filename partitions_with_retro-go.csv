@@ -1,0 +1,19 @@
+# Partition table for Fri3D Camp 2024 Badge with ESP-IDF OTA support using 16MB flash
+#
+# Also present in flash:
+# 0x0 images/bootloader.bin
+# 0x8000 images/partition-table.bin
+#
+# Notes:
+# - app partitions should be aligned at 0x10000 (64k block)
+# - otadata size should be 0x2000
+#
+# Name,   Type, SubType, Offset,   Size,     Flags
+otadata,  data, ota,     0x9000,   0x2000,
+nvs,      data, nvs,     0xb000,   0x5000,
+ota_0,app,ota_0,0x20000,0x400000
+ota_1,app,ota_1,0x420000,0x400000
+launcher, app, ota_2, 0x820000, 0x100000,
+retro-core, app, ota_3, 0x930000, 0xd0000
+prboom-go, app, ota_4, 0xa00000, 0xe0000,
+vfs, data, fat, 0xae0000, 0x520000
