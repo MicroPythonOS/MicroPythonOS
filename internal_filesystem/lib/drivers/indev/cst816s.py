@@ -207,7 +207,7 @@ class CST816S(pointer_framework.PointerDriver):
         print('FW Version:', hex(self._rx_buf[0]))
 
         if chip_id not in (_ChipIDValue, _ChipIDValue2):
-            raise RuntimeError(f'Incorrect chip id ({hex(_ChipIDValue)})')
+            raise RuntimeError(f'Incorrect chip id ({hex(chip_id)})')
 
         self._write_reg(_IrqCtl, _EnTouch | _EnChange)
 
