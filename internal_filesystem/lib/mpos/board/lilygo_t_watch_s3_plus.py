@@ -51,9 +51,50 @@ indev=ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROT
 
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
 
+# Audio:
+from mpos import AudioManager
+i2s_output_pins = {
+    'ws': 15,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck': 48,      # SCLK or BCLK - Bit Clock for DAC output (mandatory)
+    'sd': 46,       # Serial Data OUT (speaker/DAC)
+}
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="speaker",
+        kind="i2s",
+        i2s_pins=i2s_output_pins,
+    )
+)
+
+i2s_input_pins = {
+    'ws': 15,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck_in': 44,   # SCLK - Serial Clock for microphone input
+    'sd_in': 47,    # DIN - Serial Data IN (microphone)
+}
+mic_input = AudioManager.add(
+    AudioManager.Input(
+        name="mic",
+        kind="i2s",
+        i2s_pins=i2s_input_pins,
+    )
+)
+
+# Vibrator test
+
+# One extremely strong & fairly long buzz (repeat as needed)
+write_reg(0x01, 0x00)                # internal trigger
+write_reg(0x03, 0)                   # Library A
+write_reg(0x04, 47)                  # Strong Buzz 100%
+write_reg(0x0C, 1)                   # GO
+import time
+time.sleep(1)                        # ~0.8s strong buzz
+write_reg(0x0C, 0)                   # stop (optional)
 
 # TODO:
 # - battery
 # - IMU
+# - vibrator
+# - GPS
+# - LoRa
 
 print("lilygo_t_watch_s3_plus.py finished")
