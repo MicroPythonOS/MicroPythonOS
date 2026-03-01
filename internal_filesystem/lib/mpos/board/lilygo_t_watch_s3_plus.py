@@ -36,6 +36,7 @@ mpos.ui.main_display = st7789.ST7789(
     rgb565_byte_swap=True,
     backlight_pin=45,
     backlight_on_state=st7789.STATE_PWM,
+    offset_y=80
 ) # triggers lv.init()
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
@@ -47,6 +48,9 @@ i2c_bus = i2c.I2C.Bus(host=0, sda=39, scl=40, freq=400000, use_locks=False)
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=ft6x36.I2C_ADDR, reg_bits=ft6x36.BITS)
 import pointer_framework
 indev=ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180)
+
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
+
 
 # TODO:
 # - battery
