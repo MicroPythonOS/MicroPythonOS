@@ -39,22 +39,25 @@ class BMA423:
     # 2G, 4G, 8G and 16G. If we want to be able to measure higher
     # max accelerations, the relative precision decreases as we have
     # a fixed 12 bit reading.
-    def __init__(self,i2c,*,acc_range=2):
+    def __init__(self,i2c,*,acc_range=2,address=None):
         default_addr = [0x18,0x19] # Changes depending on SDO pin
                                    # pulled to ground or V+
         self.i2c = i2c
         self.myaddr = None
         self.features_in = bytearray(FEATURES_IN_SIZE)
 
-        found_devices = i2c.scan()
-        print("BMA423: scan i2c bus:", [hex(x) for x in found_devices])
-        for addr in default_addr:
-            if addr in found_devices:
-                self.myaddr = addr
-                break
-        if self.myaddr == None:
-            raise Exception("BMA423 not found at i2c bus")
-        print("BMA423: device with matching address found at",hex(self.myaddr))
+        if address is not None:
+            self.myaddr = address
+        else:
+            found_devices = i2c.scan()
+            print("BMA423: scan i2c bus:", [hex(x) for x in found_devices])
+            for addr in default_addr:
+                if addr in found_devices:
+                    self.myaddr = addr
+                    break
+            if self.myaddr == None:
+                raise Exception("BMA423 not found at i2c bus")
+            print("BMA423: device with matching address found at",hex(self.myaddr))
 
         # Device initialization.
         self.reset()
