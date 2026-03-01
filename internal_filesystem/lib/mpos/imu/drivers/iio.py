@@ -191,10 +191,9 @@ class IIODriver(IMUDriverBase):
             return None
         return self._read_raw_scaled(raw_path, scale_path)
 
-    def _read_mount_matrix(self):
+    def _read_mount_matrix(self, p):
         """
-        Reads IIO mount matrix from:
-            in_accel_mount_matrix
+        Reads IIO mount matrix from *mount_matrix
 
         Format example:
             "0, 1, 0; -1, 0, 0; 0, 0, 1"
@@ -202,10 +201,7 @@ class IIODriver(IMUDriverBase):
         Returns:
             3x3 matrix as tuple of tuples (float)
         """
-        if not self.accel_path:
-            return None
-
-        path = self.accel_path + "/" + "in_accel_mount_matrix"
+        path = p + "/" + "in_accel_mount_matrix"
         if not self._exists(path):
             # Strange, librem 5 has different filename
             path = self.accel_path + "/" + "mount_matrix"
@@ -224,13 +220,13 @@ class IIODriver(IMUDriverBase):
         return tuple(rows)
 
 
-    def _apply_mount_matrix(self, ax, ay, az):
+    def _apply_mount_matrix(self, ax, ay, az, p):
         """
         Applies IIO mount matrix to acceleration vector.
 
         Returns rotated (ax, ay, az).
         """
-        M = self._read_mount_matrix()
+        M = self._read_mount_matrix(p)
         if M is None:
             return (ax, ay, az)
 
@@ -249,7 +245,7 @@ class IIODriver(IMUDriverBase):
         ay = self._read_raw_scaled(self.accel_path + "/" + "in_accel_y_raw", scale_name)
         az = self._read_raw_scaled(self.accel_path + "/" + "in_accel_z_raw", scale_name)
 
-        return self._apply_mount_matrix(ax, ay, az)
+        return self._apply_mount_matrix(ax, ay, az, self.accel_path)
 
     def _raw_gyroscope_dps(self):
         if not self.accel_path:
@@ -260,7 +256,7 @@ class IIODriver(IMUDriverBase):
         gy = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_y_raw", scale_name)
         gz = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_z_raw", scale_name)
 
-        return (gx, gy, gz)
+        return self._apply_mount_matrix(gx, gy, gz, self.accel_path)
 
     def read_acceleration(self):
         ax, ay, az = self._raw_acceleration_mps2()
@@ -283,4 +279,4 @@ class IIODriver(IMUDriverBase):
         gy = self._read_raw_scaled(self.mag_path + "/" + "in_magn_y_raw", self.mag_path + "/" + "in_magn_y_scale")
         gz = self._read_raw_scaled(self.mag_path + "/" + "in_magn_z_raw", self.mag_path + "/" + "in_magn_z_scale")        
 
-        return (gx, gy, gz)
+        return self._apply_mount_matrix(gx, gy, gz, self.mag_path)
