@@ -105,6 +105,11 @@ def detect_board():
             # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
             return "fri3d_2026"
 
+        print("lilygo_t_watch_s3_plus ?")
+        if i2c0 := fail_save_i2c(sda=10, scl=11):
+            if single_address_i2c_scan(i2c0, 0x19): # IMU on 32? but scan shows: [25, 52, 81, 90]
+                return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
+
         # Then do I2C-based board detection
         print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
         if i2c0 := fail_save_i2c(sda=39, scl=38):
@@ -127,10 +132,6 @@ def detect_board():
             if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
 
-        print("lilygo_t_watch_s3_plus ?")
-        if i2c0 := fail_save_i2c(sda=10, scl=11):
-            if single_address_i2c_scan(i2c0, 0x20): # IMU
-                return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
 
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 

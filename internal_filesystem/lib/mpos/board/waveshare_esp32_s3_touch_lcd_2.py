@@ -72,7 +72,7 @@ mpos.ui.main_display = st7789.ST7789(
     rgb565_byte_swap=True,
     backlight_pin=LCD_BL,
     backlight_on_state=st7789.STATE_PWM,
-)
+) # triggers lv.init()
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
@@ -82,7 +82,6 @@ i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_l
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=TP_ADDR, reg_bits=TP_REGBITS)
 indev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
 
-lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 # Battery voltage ADC measuring
