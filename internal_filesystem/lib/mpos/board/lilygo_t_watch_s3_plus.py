@@ -81,7 +81,7 @@ mic_input = AudioManager.add(
 
 # Vibrator test
 
-# One extremely strong & fairly long buzz (repeat as needed)
+# One strong & fairly long buzz (repeat as needed)
 write_reg(0x01, 0x00)                # internal trigger
 write_reg(0x03, 0)                   # Library A
 write_reg(0x04, 47)                  # Strong Buzz 100%
@@ -89,6 +89,15 @@ write_reg(0x0C, 1)                   # GO
 import time
 time.sleep(1)                        # ~0.8s strong buzz
 write_reg(0x0C, 0)                   # stop (optional)
+
+# IMU:
+import drivers.imu_sensor.bma423.bma423 as bma423
+from machine import SoftI2C, Pin
+i2c = SoftI2C(scl=11,sda=10)
+sensor = bma423.BMA423(i2c)
+print("temperature: ", sensor.get_temperature())
+print("steps: ", sensor.get_steps())
+print("(x,y,z): ", sensor.get_xyz())
 
 # TODO:
 # - battery

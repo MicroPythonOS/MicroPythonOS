@@ -107,7 +107,7 @@ def detect_board():
 
         print("lilygo_t_watch_s3_plus ?")
         if i2c0 := fail_save_i2c(sda=10, scl=11):
-            if single_address_i2c_scan(i2c0, 0x19): # IMU on 32? but scan shows: [25, 52, 81, 90]
+            if single_address_i2c_scan(i2c0, 0x19): # IMU on 0x19, scan shows: [25, 52, 81, 90]
                 return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
 
         # Then do I2C-based board detection
