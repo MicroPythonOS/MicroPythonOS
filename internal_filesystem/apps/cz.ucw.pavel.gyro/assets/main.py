@@ -54,13 +54,15 @@ class TiltGyro(Gyro):
         iio is in rads/second
         """
         t = time.time()
-        v = self.val[1] * 57.2957795
-        coef = 0.1
+        # pp: val[1] seems to be rotation "away" and "towards" the user, like pitch in plane ... or maybe roll?
+        # val[2] sseems to be rotation -- as useful for compass on table
+        v = self.val[2] * 57.2957795
+        coef = 0.8
         self.smooth = self.smooth * (1-coef) + v * coef
-        self.heading += self.smooth * (t - self.last)
+        self.heading -= self.smooth * (t - self.last)
         self.last = t
-        self.angvel = v
-        return self.smooth
+        self.angvel = -self.smooth
+        return self.heading
 
 # -----------------------------
 # Canvas (LVGL)
