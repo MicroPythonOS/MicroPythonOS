@@ -13,6 +13,7 @@ class IIODriver(IMUDriverBase):
 
     accel_path: str
     mag_path: str
+    gyro_path: str
 
     def __init__(self):
         super().__init__()
@@ -20,7 +21,9 @@ class IIODriver(IMUDriverBase):
         self.ensure_sampling_frequency_max(self.accel_path)
         self.mag_path = self.find_iio_device_with_file("in_magn_x_raw")
         self.ensure_sampling_frequency_max(self.mag_path)
-
+        self.gyro_path = self.find_iio_device_with_file("in_anglvel_x_raw")
+        self.ensure_sampling_frequency_max(self.gyro_path)
+        
     def _p(self, name: str):
         return self.accel_path + "/" + name
 
@@ -248,15 +251,15 @@ class IIODriver(IMUDriverBase):
         return self._apply_mount_matrix(ax, ay, az, self.accel_path)
 
     def _raw_gyroscope_dps(self):
-        if not self.accel_path:
+        if not self.gyro_path:
             return (0.0, 0.0, 0.0)
-        scale_name = self.accel_path + "/" + "in_anglvel_scale"
+        scale_name = self.gyro_path + "/" + "in_anglvel_scale"
 
-        gx = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_x_raw", scale_name)
-        gy = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_y_raw", scale_name)
-        gz = self._read_raw_scaled(self.accel_path + "/" + "in_anglvel_z_raw", scale_name)
+        gx = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_x_raw", scale_name)
+        gy = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_y_raw", scale_name)
+        gz = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_z_raw", scale_name)
 
-        return self._apply_mount_matrix(gx, gy, gz, self.accel_path)
+        return self._apply_mount_matrix(gx, gy, gz, self.gyro_path)
 
     def read_acceleration(self):
         ax, ay, az = self._raw_acceleration_mps2()
