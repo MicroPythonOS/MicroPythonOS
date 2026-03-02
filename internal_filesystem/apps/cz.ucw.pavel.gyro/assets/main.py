@@ -56,8 +56,8 @@ class TiltGyro(Gyro):
         t = time.time()
         # pp: val[1] seems to be rotation "away" and "towards" the user, like pitch in plane ... or maybe roll?
         # val[2] sseems to be rotation -- as useful for compass on table
-        v = self.val[2] * 57.2957795
-        coef = 0.8
+        v = self.val[2]
+        coef = 1.0
         self.smooth = self.smooth * (1-coef) + v * coef
         self.heading -= self.smooth * (t - self.last)
         self.last = t
@@ -455,7 +455,7 @@ class Main(PagedCanvas):
 || Acc
 X {self.cal.acc[0]:.2f} Y {self.cal.acc[1]:.2f} Z {self.cal.acc[2]:.2f}
 {total*100:.2f}% {s}
-X {self.cal.val[0]:.2f}\nY {self.cal.val[1]:.2f}\nZ {self.cal.val[2]:.2f}
+X {self.cal.val[0]:.2f} Y {self.cal.val[1]:.2f} Z {self.cal.val[2]:.2f}
 """)
 
     def _px_per_deg(self):
