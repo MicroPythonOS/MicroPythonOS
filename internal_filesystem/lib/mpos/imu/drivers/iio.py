@@ -254,12 +254,11 @@ class IIODriver(IMUDriverBase):
         if not self.gyro_path:
             return (0.0, 0.0, 0.0)
         scale_name = self.gyro_path + "/" + "in_anglvel_scale"
+        mul = 57.2957795
 
-        # fixme: iio probably uses radians, so needs * 57.2957795
-
-        gx = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_x_raw", scale_name)
-        gy = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_y_raw", scale_name)
-        gz = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_z_raw", scale_name)
+        gx = mul * self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_x_raw", scale_name)
+        gy = mul * self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_y_raw", scale_name)
+        gz = mul * self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_z_raw", scale_name)
 
         return self._apply_mount_matrix(gx, gy, gz, self.gyro_path)
 
