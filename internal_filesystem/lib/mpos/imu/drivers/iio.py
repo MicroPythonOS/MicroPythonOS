@@ -255,6 +255,8 @@ class IIODriver(IMUDriverBase):
             return (0.0, 0.0, 0.0)
         scale_name = self.gyro_path + "/" + "in_anglvel_scale"
 
+        # fixme: iio probably uses radians, so needs * 57.2957795
+
         gx = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_x_raw", scale_name)
         gy = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_y_raw", scale_name)
         gz = self._read_raw_scaled(self.gyro_path + "/" + "in_anglvel_z_raw", scale_name)
