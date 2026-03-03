@@ -1,11 +1,11 @@
 {
-"name": "Xxx",
+"name": "Gyro",
 "publisher": "Pavel Machek",
-"short_description": "Xxx",
-"long_description": "Simple xxx app.",
-"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.xxx/icons/cz.ucw.pavel.xxx_0.0.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.xxx/mpks/cz.ucw.pavel.xxx_0.0.1.mpk",
-"fullname": "cz.ucw.pavel.xxx",
+"short_description": "Gyro",
+"long_description": "Simple gyro app.",
+"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.gyro/icons/cz.ucw.pavel.gyro_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.gyro/mpks/cz.ucw.pavel.gyro_0.0.1.mpk",
+"fullname": "cz.ucw.pavel.gyro",
 "version": "0.0.1",
 "category": "utilities",
 "activities": [
