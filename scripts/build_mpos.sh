@@ -14,6 +14,7 @@ if [ -z "$target" ]; then
 	echo "Example: $0 macOS"
 	echo "Example: $0 esp32"
 	echo "Example: $0 esp32s3"
+	echo "Example: $0 unphone"
 	exit 1
 fi
 
@@ -86,12 +87,18 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ]; then
+    partition_size="4194304"
+    flash_size="16"
 	extra_configs=""
-        if [ "$target" == "esp32" ]; then
+    if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
-	else # esp32s3
+	else # esp32s3 or unphone
+	    if [ "$target" == "unphone" ]; then
+	        partition_size="3900000"
+	        flash_size="8"
+        fi
 		BOARD=ESP32_GENERIC_S3
 		BOARD_VARIANT=SPIRAM_OCT
 		# These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
@@ -120,7 +127,8 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" ]; then
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
-	python3 make.py --ota --partition-size=4194304 --flash-size=16 esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+#	python3 make.py --ota --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+	python3 make.py --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
