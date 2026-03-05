@@ -28,8 +28,11 @@ __pycache__/
 *$py.class
 *.so
 
-# these get created:
+# these get created by the build system, don't know why:
 c_mpos/c_mpos
 
 # build files
 *.bin
+
+# auto created by inline_minify_webrepl.py
+internal_filesystem/builtin/html/webrepl_inlined_minified.html

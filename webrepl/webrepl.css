@@ -1,0 +1,13 @@
+html {
+    background: #555;
+}
+
+h1 {
+    margin-bottom: 20px;
+    font: 20px/1.5 sans-serif;
+}
+.file-box {
+    margin: 4px;
+    padding: 4px;
+    background: #888;
+}
