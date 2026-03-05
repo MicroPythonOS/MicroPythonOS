@@ -83,6 +83,17 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 #echo "Applying lvgl_micropython i2c patch..."
 #patch -p0 --forward < "$codebasedir"/patches/i2c_ng.patch
 
+echo "Minifying and inlining HTML..."
+pushd "$codebasedir"/webrepl/
+python3 inline_minify_webrepl.py
+result=$0
+if [ $? -ne 0 ]; then
+	echo "ERROR: webrepl/inline_minify_webrepl.py failed with exit code $result, webrepl won't work"
+else
+	mv webrepl_inlined_minified.html ../internal_filesystem/builtin/html/
+fi
+popd
+
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
