@@ -3,6 +3,8 @@ Initial author: https://github.com/jedie
 https://docs.micropython.org/en/latest/library/bluetooth.html
 """
 
+import time
+
 try:
     import bluetooth
 except ImportError:  # Linux test runner may not provide bluetooth module
@@ -90,7 +92,7 @@ class ScanBluetooth(Activity):
         set_cell_value(
             self.table,
             row=0,
-            values=("pos", "MAC", "RSSI", "count", "Name"),
+            values=("pos", "MAC", "RSSI", "last", "count", "Name"),
         )
         set_dynamic_column_widths(self.table)
 
@@ -98,6 +100,7 @@ class ScanBluetooth(Activity):
         self.mac2column = {}
         self.mac2counts = {}
         self.mac2name = {}
+        self.mac2last_seen = {}
 
         self.ble = bluetooth.BLE()
 
@@ -112,7 +115,7 @@ class ScanBluetooth(Activity):
         while self.scanning:
             print(f"async scan for {SCAN_DURATION_MS}ms...")
             self.ble.gap_scan(SCAN_DURATION_MS, INTERVAL_US, WINDOW_US, True)
-            await TaskManager.sleep_ms(SCAN_DURATION_MS + 100)
+            await TaskManager.sleep_ms(SCAN_DURATION_MS + 500)
 
     def onResume(self, screen):
         super().onResume(screen)
@@ -139,12 +142,20 @@ class ScanBluetooth(Activity):
         self.ble.active(False)
         self.info("BLE deactivated")
 
+    def update_last_seen(self):
+        current_time = int(time.time())
+        for addr, last_seen in self.mac2last_seen.items():
+            last_seen_sec = int(current_time - last_seen)
+            column_index = self.mac2column[addr]
+            self.table.set_cell_value(column_index, 3, f"{last_seen_sec}s")
+
     def ble_irq_handler(self, event: int, data: tuple) -> None:
         try:
             if event == _IRQ_SCAN_RESULT:
                 addr_type, addr, adv_type, rssi, adv_data = data
                 addr = ":".join(f"{b:02x}" for b in addr)
                 print(f"{addr=} {rssi=} {len(adv_data)=}")
+                self.mac2last_seen[addr] = int(time.time())
                 if name := decode_name(adv_data):
                     self.mac2name[addr] = name
                 else:
@@ -164,11 +175,13 @@ class ScanBluetooth(Activity):
                         str(column_index),
                         addr,
                         f"{rssi} dBm",
+                        '0s', # Last seen since 0 sec ;)
                         str(self.mac2counts[addr]),
                         name,
                     ),
                 )
             elif event == _IRQ_SCAN_DONE:
+                self.update_last_seen()
                 set_dynamic_column_widths(self.table)
                 self.scan_count += 1
                 self.info(
