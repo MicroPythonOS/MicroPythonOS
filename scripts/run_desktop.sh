@@ -66,6 +66,7 @@ else
 		sed -i '' -e 's/"auto_start_app": ".*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
 	else
 		# If config.json doesn't exist, create it with auto_start_app
+		mkdir -p data/com.micropythonos.settings
 		echo '{"auto_start_app": "'$script'"}' > "$CONFIG_FILE"
 	fi
 	"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat main.py)"
