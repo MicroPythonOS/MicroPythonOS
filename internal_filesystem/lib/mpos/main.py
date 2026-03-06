@@ -16,7 +16,7 @@ def init_rootscreen():
 
     # Initialize DisplayMetrics with actual display values
     DisplayMetrics.set_resolution(width, height)
-    DisplayMetrics.set_dpi(dpi)   
+    DisplayMetrics.set_dpi(dpi)
     print(f"init_rootscreen set resolution to {width}x{height} at {dpi} DPI")
 
     # Show logo
@@ -91,6 +91,10 @@ def detect_board():
         # First do unique_id-based board detections because they're fast and don't mess with actual hardware configurations
         import machine
         unique_id_prefixes = machine.unique_id()[0:3]
+
+        print("unPhone ?")
+        if unique_id_prefixes == b'00\xf9': # '30:30:F9'
+            return "unphone"
 
         print("(emulated) lilygo_t_display_s3 ?")
         if unique_id_prefixes == b'\x10\x01\x00' or unique_id_prefixes == b'\xc0\x4e\x30':
