@@ -165,6 +165,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# Restore @micropython.viper decorator after build
 	echo "Restoring @micropython.viper decorator..."
 	sed -i.backup 's/^#@micropython\.viper$/@micropython.viper/' "$stream_wav_file"
+	rm "$stream_wav_file".backup
 else
 	echo "invalid target $target"
 fi
