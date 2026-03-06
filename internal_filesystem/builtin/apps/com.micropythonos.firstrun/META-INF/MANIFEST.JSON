@@ -1,0 +1,23 @@
+{
+"name": "FirstRun",
+"publisher": "MicroPythonOS",
+"short_description": "Welcomes the user and gives a few pointers on how to control the UI.",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.firstrun/icons/com.micropythonos.firstrun_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.firstrun/mpks/com.micropythonos.firstrun_0.0.1.mpk",
+"fullname": "com.micropythonos.firstrun",
+"version": "0.0.1",
+"category": "help",
+"activities": [
+    {
+      "entrypoint": "assets/firstrun.py",
+      "classname": "FirstRun",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
