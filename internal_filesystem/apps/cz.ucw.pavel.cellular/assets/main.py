@@ -69,7 +69,7 @@ class Main(Activity):
 
         self.lbl_month = lv.label(self.screen)
         self.lbl_month.set_style_text_font(lv.font_montserrat_20, 0)
-        self.lbl_month.align(lv.ALIGN.TOP_RIGHT, -6, 10)
+        self.lbl_month.align(lv.ALIGN.TOP_RIGHT, -6, 22)
 
         self.setContentView(self.screen)
         cm.init()
@@ -95,10 +95,16 @@ class Main(Activity):
         s += cm.signal["OperatorName"] + "\n"
         s += "RegistrationState %d\n" % cm.signal["RegistrationState"]
         s += "State %d\n" % cm.signal["State"]
+        sq, re = cm.signal["SignalQuality"]
+        s += "Signal %d\n" % sq
 
+        self.lbl_month.set_text(s)
         self.lbl_time.set_text("%02d:%02d" % (hh, mm))
+        s = ""
         self.lbl_date.set_text("%04d-%02d-%02d %s" % (y, m, d, s))
 
+
+        
 
     # --------------------
 
