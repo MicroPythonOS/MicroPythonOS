@@ -1,0 +1,24 @@
+{
+"name": "Floodit",
+"publisher": "Pavel Machek",
+"short_description": "Simple game with colors.",
+"long_description": "Game with colors, where objective is to turn whole board into single color in minimum number of steps.",
+"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.floodit/icons/cz.ucw.pavel.floodit_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.floodit/mpks/cz.ucw.pavel.floodit_0.0.1.mpk",
+"fullname": "cz.ucw.pavel.floodit",
+"version": "0.0.1",
+"category": "utilities",
+"activities": [
+    {
+      "entrypoint": "assets/main.py",
+      "classname": "Main",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
