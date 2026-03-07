@@ -59,14 +59,16 @@ class Main(Activity):
 
         # Top labels
         self.lbl_time = lv.label(self.screen)
-        self.lbl_time.set_style_text_font(lv.font_montserrat_24, 0)
+        self.lbl_time.set_style_text_font(lv.font_montserrat_34, 0)
         self.lbl_time.set_text("Startup...")
         self.lbl_time.align(lv.ALIGN.TOP_LEFT, 6, 22)
 
         self.lbl_date = lv.label(self.screen)
-        self.lbl_date.align(lv.ALIGN.TOP_LEFT, 6, 48)
+        self.lbl_date.set_style_text_font(lv.font_montserrat_20, 0)
+        self.lbl_date.align(lv.ALIGN.TOP_LEFT, 6, 58)
 
         self.lbl_month = lv.label(self.screen)
+        self.lbl_month.set_style_text_font(lv.font_montserrat_20, 0)
         self.lbl_month.align(lv.ALIGN.TOP_RIGHT, -6, 10)
 
         self.setContentView(self.screen)
