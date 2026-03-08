@@ -29,7 +29,7 @@ def run_cmd_json(cmd):
     return json.loads(data)
 
 def dbus_json(cmd):
-    return run_cmd_json("sudo /home/mobian/g/MicroPythonOS/phone.py " + cmd)
+    return run_cmd_json("sudo /home/mobian/g/MicroPythonOS/internal_filesystem/apps/cz.ucw.pavel.cellular/assets/phone.py " + cmd)
 
 class CellularManager:
     def init(self):
