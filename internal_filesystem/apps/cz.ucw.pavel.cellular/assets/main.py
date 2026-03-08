@@ -73,12 +73,22 @@ class Main(Activity):
         self.lbl_month.align(lv.ALIGN.TOP_RIGHT, -6, 22)
 
         self.number = lv.textarea(self.screen)
-        self.number.set_accepted_chars("0123456789")
+        #self.number.set_accepted_chars("0123456789")
         self.number.set_one_line(True)
+        self.number.set_style_text_font(lv.font_montserrat_34, 0)
         self.number.align_to(self.lbl_date, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 12)
+
+        self.call = lv.button(self.screen)
+        self.call.align_to(self.number, lv.ALIGN.OUT_RIGHT_MID, 10, 0)
+
+        l = lv.label(self.call)
+        l.set_text("Call")
+	l.center()
+
 
         kb = lv.keyboard(self.screen)
         kb.set_textarea(self.number)
+        kb.set_size(lv.pct(100), lv.pct(33))
 
         self.setContentView(self.screen)
         cm.init()
