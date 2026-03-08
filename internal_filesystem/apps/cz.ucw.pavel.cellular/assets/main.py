@@ -65,17 +65,26 @@ class Main(Activity):
 
         self.lbl_date = lv.label(self.screen)
         self.lbl_date.set_style_text_font(lv.font_montserrat_20, 0)
-        self.lbl_date.align(lv.ALIGN.TOP_LEFT, 6, 58)
+        self.lbl_date.align_to(self.lbl_time, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 5)
+        self.lbl_date.set_text("(details here?")
 
         self.lbl_month = lv.label(self.screen)
         self.lbl_month.set_style_text_font(lv.font_montserrat_20, 0)
         self.lbl_month.align(lv.ALIGN.TOP_RIGHT, -6, 22)
 
+        self.number = lv.textarea(self.screen)
+        self.number.set_accepted_chars("0123456789")
+        self.number.set_one_line(True)
+        self.number.align_to(self.lbl_date, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 12)
+
+        kb = lv.keyboard(self.screen)
+        kb.set_textarea(self.number)
+
         self.setContentView(self.screen)
         cm.init()
 
     def onResume(self, screen):
-        self.timer = lv.timer_create(self.tick, 3000, None)
+        self.timer = lv.timer_create(self.tick, 60000, None)
         self.tick(0)
 
     def onPause(self, screen):
@@ -90,11 +99,13 @@ class Main(Activity):
         y, m, d = now[0], now[1], now[2]
         hh, mm, ss = now[3], now[4], now[5]
 
+        self.lbl_month.set_text("busy")
+
         cm.poll()
-        s = "\n"
+        s = ""
         s += cm.signal["OperatorName"] + "\n"
         s += "RegistrationState %d\n" % cm.signal["RegistrationState"]
-        s += "State %d\n" % cm.signal["State"]
+        s += "State %d " % cm.signal["State"]
         sq, re = cm.signal["SignalQuality"]
         s += "Signal %d\n" % sq
 
@@ -102,8 +113,6 @@ class Main(Activity):
         self.lbl_time.set_text("%02d:%02d" % (hh, mm))
         s = ""
         self.lbl_date.set_text("%04d-%02d-%02d %s" % (y, m, d, s))
-
-
         
 
     # --------------------
