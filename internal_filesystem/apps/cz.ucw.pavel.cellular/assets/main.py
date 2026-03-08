@@ -40,6 +40,12 @@ class CellularManager:
         print(v)
         self.signal = v
 
+    def call(self, num):
+        v = dbus_json("call '%s'" % num)
+
+    def sms(self, num, text):
+        v = dbus_json("call '%s' '%s'" % (num, text))
+
 cm = CellularManager()
 
 # ------------------------------------------------------------
@@ -80,7 +86,12 @@ class Main(Activity):
 
         self.call = lv.button(self.screen)
         self.call.align_to(self.number, lv.ALIGN.OUT_RIGHT_MID, 10, 0)
+        self.call.add_event_cb(lambda e: self.on_call(), lv.EVENT.CLICKED, None)
 
+        self.sms = lv.textarea(self.screen)
+        self.sms.set_style_text_font(lv.font_montserrat_24, 0)
+        self.sms.align_to(self.number, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 10)
+        
         l = lv.label(self.call)
         l.set_text("Call")
 	l.center()
@@ -92,7 +103,7 @@ class Main(Activity):
 
         self.setContentView(self.screen)
         cm.init()
-
+        
     def onResume(self, screen):
         self.timer = lv.timer_create(self.tick, 60000, None)
         self.tick(0)
@@ -103,6 +114,15 @@ class Main(Activity):
             self.timer = None
 
     # --------------------
+
+    def on_call(self):
+        num = self.number.get_text()
+        cm.call(num)
+
+    def on_sms(self):
+        num = self.number.get_text()
+        text = self.sms.get_text()
+        cm.sms(num, text)
 
     def tick(self, t):
         now = time.localtime()
