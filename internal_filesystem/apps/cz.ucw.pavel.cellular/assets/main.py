@@ -88,14 +88,15 @@ class Main(Activity):
         self.call.align_to(self.number, lv.ALIGN.OUT_RIGHT_MID, 10, 0)
         self.call.add_event_cb(lambda e: self.on_call(), lv.EVENT.CLICKED, None)
 
-        self.sms = lv.textarea(self.screen)
-        self.sms.set_style_text_font(lv.font_montserrat_24, 0)
-        self.sms.align_to(self.number, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 10)
+        # Two text areas on single screen don't work well.
+        # Perhaps make it dialog?
+        #self.sms = lv.textarea(self.screen)
+        #self.sms.set_style_text_font(lv.font_montserrat_24, 0)
+        #self.sms.align_to(self.number, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 10)
         
         l = lv.label(self.call)
         l.set_text("Call")
 	l.center()
-
 
         kb = lv.keyboard(self.screen)
         kb.set_textarea(self.number)
