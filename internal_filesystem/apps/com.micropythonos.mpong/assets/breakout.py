@@ -40,16 +40,16 @@ class Breakout(Activity):
         self.hor_res = d.get_horizontal_resolution()
         self.paddle_move_step = round(self.hor_res/16)
         self.ver_res = d.get_vertical_resolution()
-        '''
+
         self.canvas = lv.canvas(self.screen)
         self.canvas.set_size(self.hor_res, self.ver_res)
         self.buffer = bytearray(self.hor_res * self.ver_res * 2)
         self.canvas.set_buffer(self.buffer, self.hor_res, self.ver_res, lv.COLOR_FORMAT.NATIVE)
-        self.canvas.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.canvas.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
+        #self.canvas.add_flag(lv.obj.FLAG.CLICKABLE)
+        #self.canvas.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
         self.layer = lv.layer_t()
         self.canvas.init_layer(self.layer)
-        '''
+
         self.leftbutton = lv.button(self.screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         leftlabel = lv.label(self.leftbutton)
@@ -59,7 +59,8 @@ class Breakout(Activity):
 
         # Invisible button, just for defocusing the left and right buttons:
         self.play_button = lv.button(self.screen)
-        self.play_button.align(lv.ALIGN.BOTTOM_MID,0,0)
+        self.play_button.align(lv.ALIGN.TOP_MID,0,0)
+        self.play_button.set_size(70,70)
         self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
         self.rightbutton = lv.button(self.screen)
@@ -73,10 +74,10 @@ class Breakout(Activity):
 
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
-        #mpong.init(self.buffer, self.hor_res, self.ver_res)
+        mpong.init(self.buffer, self.hor_res, self.ver_res)
 
-        import mpos.ui
-        mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
+        #import mpos.ui
+        #mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
 
         self.refresh_timer = lv.timer_create(self.run_mpong, 16, None) # max 1000ms/60fps = 16ms/frame
         #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_STARTED)
@@ -127,13 +128,13 @@ class Breakout(Activity):
 
     def run_mpong(self, arg1=None, arg2=None):
         mpong.render()
-        self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
+        #self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
         #self.screen.invalidate()
         #lv.refr_now(None)
         #self.canvas.invalidate() # force redraw
         #self.canvas.center()
         #self.canvas.refre
-        #self.screen.invalidate()
+        self.screen.invalidate()
         #self.screen.center()
         #mpong.render()
         '''
