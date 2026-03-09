@@ -21,11 +21,14 @@ class MPong(Activity):
     buffer = None
     touch_active = False
     touch_last_x = None
+    last_fps = 0
+    average_fps = 0
 
     # Widgets:
     screen = None
     canvas = None
     leftbutton = None
+    playbutton = None
     rightbutton = None
 
     def onCreate(self):
@@ -47,31 +50,68 @@ class MPong(Activity):
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         leftlabel = lv.label(self.leftbutton)
         leftlabel.set_text("<")
-        self.leftbutton.add_event_cb(lambda e: self.move_left(),lv.EVENT.FOCUSED,None)
+        self.leftbutton.add_event_cb(lambda e: self.move_left_unfocus(),lv.EVENT.FOCUSED,None)
         self.leftbutton.add_event_cb(lambda e: self.move_left(),lv.EVENT.CLICKED,None)
+
+        # Invisible button, just for defocusing the left and right buttons:
+        self.play_button = lv.button(self.screen)
+        self.play_button.align(lv.ALIGN.BOTTOM_MID,0,0)
+        self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
         self.rightbutton = lv.button(self.screen)
         self.rightbutton.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         rightlabel = lv.label(self.rightbutton)
         rightlabel.set_text(">")
-        self.rightbutton.add_event_cb(lambda e: self.move_right(),lv.EVENT.FOCUSED,None)
+        self.rightbutton.add_event_cb(lambda e: self.move_right_unfocus(),lv.EVENT.FOCUSED,None)
         self.rightbutton.add_event_cb(lambda e: self.move_right(),lv.EVENT.CLICKED,None)
 
         self.setContentView(self.screen)
 
     def onResume(self, screen):
+        lv.log_register_print_cb(self.log_callback)
         mpong.init(self.buffer, self.hor_res, self.ver_res)
-        self.refresh_timer = lv.timer_create(self.run_mpong, 10, None)
+        self.refresh_timer = lv.timer_create(self.run_mpong, 1, None)
 
     def onPause(self, screen):
         if self.refresh_timer:
             self.refresh_timer.delete()
+        lv.log_register_print_cb(None)
 
     def move_left(self):
         mpong.move_paddle(-self.paddle_move_step)
 
     def move_right(self):
         mpong.move_paddle(self.paddle_move_step)
+
+    def move_left_unfocus(self):
+        self.unfocus()
+        mpong.move_paddle(-self.paddle_move_step)
+
+    def move_right_unfocus(self):
+        self.unfocus()
+        mpong.move_paddle(self.paddle_move_step)
+
+    def unfocus(self):
+        focusgroup = lv.group_get_default()
+        if not focusgroup:
+            print("WARNING: imageview.py could not get default focus group")
+            return
+        focused = focusgroup.get_focused()
+        if focused:
+            print(f"got focus button: {focused}")
+            label = focused.get_child(0)
+            print(f"got label for button: {label.get_text()}")
+            #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
+            print("checking which button is focused")
+            if focused == self.rightbutton:
+                #print("next is focused")
+                focusgroup.focus_prev()
+            elif focused == self.leftbutton:
+                #print("prev is focused")
+                focusgroup.focus_next()
+            else:
+                print("focus isn't on next or previous, leaving it...")
+
 
     def run_mpong(self, timer=None):
         mpong.render()
@@ -103,3 +143,30 @@ class MPong(Activity):
             self.touch_active = False
             self.touch_last_x = None
             return
+
+    average_samples = 20
+    fps_buffer = [0.0] * average_samples
+    fps_index = 0
+    fps_sum = 0.0
+    fps_count = 0  # Number of valid samples (0 to average_samples)
+    def moving_average(self, value):
+        if self.fps_count == self.average_samples:
+            self.fps_sum -= self.fps_buffer[self.fps_index]
+        else:
+            self.fps_count += 1
+        self.fps_sum += value
+        self.fps_buffer[self.fps_index] = value
+        self.fps_index = (self.fps_index + 1) % self.average_samples
+        return self.fps_sum / self.fps_count
+
+    # Custom log callback to capture FPS
+    def log_callback(self, level, log_str):
+        log_str = log_str.decode() if isinstance(log_str, bytes) else log_str
+        if "sysmon:" in log_str and "FPS" in log_str:
+            try:
+                fps_part = log_str.split("FPS")[0].split("sysmon:")[1].strip()
+                self.last_fps = int(fps_part)
+                self.average_fps = self.moving_average(self.last_fps)
+                print(f"Current FPS: {self.last_fps} - Average FPS: {self.average_fps}")
+            except (IndexError, ValueError):
+                pass
