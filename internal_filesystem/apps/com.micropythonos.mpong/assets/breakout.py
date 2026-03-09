@@ -127,7 +127,7 @@ class Breakout(Activity):
 
     def run_mpong(self, arg1=None, arg2=None):
         mpong.render()
-        #self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
+        self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
         #self.screen.invalidate()
         #lv.refr_now(None)
         #self.canvas.invalidate() # force redraw
