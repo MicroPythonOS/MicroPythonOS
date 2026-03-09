@@ -1,0 +1,13 @@
+MPY_DIR = ../../lvgl_micropython/lib/micropython/
+
+# Name of module
+MOD = mpong
+
+# Source files (.c or .py)
+SRC = mpong.c
+
+# Architecture to build for (x86, x64, armv6m, armv7m, xtensa, xtensawin, rv32imc, rv64imc)
+ARCH = xtensawin
+
+# Include to get the rules for compiling and linking the module
+include $(MPY_DIR)/py/dynruntime.mk
