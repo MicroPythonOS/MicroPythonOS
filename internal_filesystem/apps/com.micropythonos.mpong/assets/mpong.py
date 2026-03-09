@@ -10,7 +10,7 @@ import sys
 if sys.platform == "esp32":
     import mpong_xtensawin as mpong
 else:
-    import mpong_amd64 as mpong
+    import mpong_x64 as mpong
 
 class MPong(Activity):
 
