@@ -1,6 +1,15 @@
 // Include the header file to get access to the MicroPython API
 #include "py/dynruntime.h"
 
+// Provide a local memset for xtensawin native modules (libc isn't linked).
+void *memset(void *s, int c, size_t n) {
+    unsigned char *p = (unsigned char *)s;
+    while (n--) {
+        *p++ = (unsigned char)c;
+    }
+    return s;
+}
+
 // Global BSS (non-static) state is required for native modules.
 uint16_t *g_framebuffer;
 size_t g_framebuffer_len;

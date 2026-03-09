@@ -65,7 +65,7 @@ class MPong(Activity):
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
         mpong.init(self.buffer, self.hor_res, self.ver_res)
-        self.refresh_timer = lv.timer_create(self.run_mpong, 15, None)
+        self.refresh_timer = lv.timer_create(self.run_mpong, 30, None)
 
     def onPause(self, screen):
         if self.refresh_timer:
@@ -97,7 +97,7 @@ class MPong(Activity):
         focused = focusgroup.get_focused()
         if focused:
             #print(f"got focus button: {focused}")
-            label = focused.get_child(0)
+            #label = focused.get_child(0)
             #print(f"got label for button: {label.get_text()}")
             #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
             #print("checking which button is focused")
@@ -114,6 +114,7 @@ class MPong(Activity):
     def run_mpong(self, timer=None):
         mpong.render()
         self.canvas.invalidate() # force redraw
+        self.canvas.center()
 
     def touch_cb(self, event):
         event_code = event.get_code()

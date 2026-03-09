@@ -6,6 +6,9 @@ MOD = mpong
 # Source files (.c or .py)
 SRC = mpong.c
 
+# Link runtime libraries (needed for memset on xtensawin)
+LINK_RUNTIME = 1
+
 # Architectures to build for (x86, x64, armv6m, armv7m, xtensa, xtensawin, rv32imc, rv64imc)
 ARCHES = x64 xtensawin
 
