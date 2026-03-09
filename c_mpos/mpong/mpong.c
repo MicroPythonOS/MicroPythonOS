@@ -19,10 +19,11 @@ size_t g_framebuffer_height;
 int g_paddle_x;
 int g_paddle_width;
 int g_paddle_height;
-int g_ball_x;
-int g_ball_y;
-int g_ball_vx;
-int g_ball_vy;
+float g_ball_x;
+float g_ball_y;
+float g_ball_vx;
+float g_ball_vy;
+uint32_t g_last_tick_ms;
 
 uint32_t g_fps_last_ms;
 uint32_t g_fps_frames;
@@ -99,10 +100,10 @@ static void draw_rect(int x, int y, int w, int h, uint16_t color) {
 }
 
 static void reset_ball(void) {
-    g_ball_x = (int)g_framebuffer_width / 2;
-    g_ball_y = (int)g_framebuffer_height / 2;
-    g_ball_vx = 1;
-    g_ball_vy = -1;
+    g_ball_x = (float)((int)g_framebuffer_width / 2);
+    g_ball_y = (float)((int)g_framebuffer_height / 2);
+    g_ball_vx = 120.0f;
+    g_ball_vy = -120.0f;
 }
 
 static void reset_bricks(void) {
@@ -132,6 +133,7 @@ static mp_obj_t init(mp_obj_t framebuffer_obj, mp_obj_t width_obj, mp_obj_t heig
 
     g_fps_last_ms = ticks_ms();
     g_fps_frames = 0;
+    g_last_tick_ms = g_fps_last_ms;
 
     return mp_const_none;
 }
@@ -160,22 +162,29 @@ static mp_obj_t render(void) {
         g_fps_frames = 0;
     }
 
+    uint32_t tick_delta_ms = now_ms - g_last_tick_ms;
+    g_last_tick_ms = now_ms;
+    if (tick_delta_ms > 50) {
+        tick_delta_ms = 50;
+    }
+    const float dt = (float)tick_delta_ms / 1000.0f;
+
     // Update ball position.
-    g_ball_x += g_ball_vx;
-    g_ball_y += g_ball_vy;
+    g_ball_x += g_ball_vx * dt;
+    g_ball_y += g_ball_vy * dt;
 
     // Wall collisions.
-    if (g_ball_x <= 0) {
-        g_ball_x = 0;
-        g_ball_vx = 1;
-    } else if (g_ball_x >= (int)width - 1) {
-        g_ball_x = (int)width - 1;
-        g_ball_vx = -1;
+    if (g_ball_x <= 0.0f) {
+        g_ball_x = 0.0f;
+        g_ball_vx = 120.0f;
+    } else if (g_ball_x >= (float)width - 1.0f) {
+        g_ball_x = (float)width - 1.0f;
+        g_ball_vx = -120.0f;
     }
 
-    if (g_ball_y <= 0) {
-        g_ball_y = 0;
-        g_ball_vy = 1;
+    if (g_ball_y <= 0.0f) {
+        g_ball_y = 0.0f;
+        g_ball_vy = 120.0f;
     }
 
     // Brick layout.
@@ -188,7 +197,7 @@ static mp_obj_t render(void) {
     const int brick_offset_y = 8;
 
     // Brick collision.
-    if (brick_width > 0 && g_ball_y <= brick_offset_y + brick_rows * (brick_height + brick_gap)) {
+    if (brick_width > 0 && g_ball_y <= (float)(brick_offset_y + brick_rows * (brick_height + brick_gap))) {
         for (int row = 0; row < brick_rows; row++) {
             for (int col = 0; col < brick_cols; col++) {
                 if (!g_bricks[row][col]) {
@@ -196,7 +205,7 @@ static mp_obj_t render(void) {
                 }
                 const int bx = brick_gap + col * (brick_width + brick_gap);
                 const int by = brick_offset_y + row * (brick_height + brick_gap);
-                if (g_ball_x >= bx && g_ball_x < bx + brick_width && g_ball_y >= by && g_ball_y < by + brick_height) {
+                if (g_ball_x >= (float)bx && g_ball_x < (float)(bx + brick_width) && g_ball_y >= (float)by && g_ball_y < (float)(by + brick_height)) {
                     g_bricks[row][col] = 0;
                     g_ball_vy = -g_ball_vy;
                     row = brick_rows;
@@ -208,21 +217,21 @@ static mp_obj_t render(void) {
 
     // Paddle collision.
     const int paddle_y = (int)height - g_paddle_height - 4;
-    if (g_ball_y >= paddle_y - 1 && g_ball_y <= paddle_y + g_paddle_height) {
-        if (g_ball_x >= g_paddle_x && g_ball_x <= g_paddle_x + g_paddle_width) {
-            g_ball_y = paddle_y - 1;
-            g_ball_vy = -1;
+    if (g_ball_y >= (float)(paddle_y - 1) && g_ball_y <= (float)(paddle_y + g_paddle_height)) {
+        if (g_ball_x >= (float)g_paddle_x && g_ball_x <= (float)(g_paddle_x + g_paddle_width)) {
+            g_ball_y = (float)(paddle_y - 1);
+            g_ball_vy = -120.0f;
             const int paddle_center = g_paddle_x + g_paddle_width / 2;
-            if (g_ball_x < paddle_center) {
-                g_ball_vx = -1;
-            } else if (g_ball_x > paddle_center) {
-                g_ball_vx = 1;
+            if (g_ball_x < (float)paddle_center) {
+                g_ball_vx = -120.0f;
+            } else if (g_ball_x > (float)paddle_center) {
+                g_ball_vx = 120.0f;
             }
         }
     }
 
     // Ball fell below paddle: reset.
-    if (g_ball_y >= (int)height - 1) {
+    if (g_ball_y >= (float)((int)height - 1)) {
         reset_ball();
     }
 
@@ -242,7 +251,7 @@ static mp_obj_t render(void) {
 
     // Draw paddle and ball.
     draw_rect(g_paddle_x, paddle_y, g_paddle_width, g_paddle_height, 0xFFFF); // RGB565 white
-    draw_pixel(g_ball_x, g_ball_y, 0xFFFF);
+    draw_pixel((int)g_ball_x, (int)g_ball_y, 0xFFFF);
 
     return mp_const_none;
 }
