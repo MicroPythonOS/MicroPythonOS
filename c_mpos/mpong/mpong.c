@@ -15,6 +15,9 @@ int g_ball_y;
 int g_ball_vx;
 int g_ball_vy;
 
+uint32_t g_fps_last_ms;
+uint32_t g_fps_frames;
+
 #define BRICK_ROWS 4
 #define BRICK_COLS 8
 uint8_t g_bricks[BRICK_ROWS][BRICK_COLS];
@@ -36,6 +39,13 @@ static mp_obj_t readfile(mp_obj_t filename_obj) {
     return data_obj;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(readfile_obj, readfile);
+
+static uint32_t ticks_ms(void) {
+    mp_obj_t time_mod = mp_import_name(MP_QSTR_time, mp_const_none, MP_OBJ_NEW_SMALL_INT(0));
+    mp_obj_t ticks_fun = mp_load_attr(time_mod, MP_QSTR_ticks_ms);
+    mp_obj_t ticks_val = mp_call_function_n_kw(ticks_fun, 0, 0, NULL);
+    return (uint32_t)mp_obj_get_int(ticks_val);
+}
 
 static inline int clamp_int(int value, int min_value, int max_value) {
     if (value < min_value) {
@@ -111,6 +121,9 @@ static mp_obj_t init(mp_obj_t framebuffer_obj, mp_obj_t width_obj, mp_obj_t heig
     reset_ball();
     reset_bricks();
 
+    g_fps_last_ms = ticks_ms();
+    g_fps_frames = 0;
+
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_3(init_obj, init);
@@ -127,6 +140,16 @@ static mp_obj_t render(void) {
 
     // Clear to black.
     for (size_t i = 0; i < fill_pixels; i++) { g_framebuffer[i] = 0x0000; } // RGB565 black
+
+    g_fps_frames++;
+    const uint32_t now_ms = ticks_ms();
+    const uint32_t elapsed_ms = now_ms - g_fps_last_ms;
+    if (elapsed_ms >= 1000) {
+        const uint32_t fps = (g_fps_frames * 1000) / elapsed_ms;
+        mp_printf(&mp_plat_print, "mpong fps: %lu\n", (unsigned long)fps);
+        g_fps_last_ms = now_ms;
+        g_fps_frames = 0;
+    }
 
     // Update ball position.
     g_ball_x += g_ball_vx;

@@ -1,11 +1,6 @@
 import lvgl as lv
 from mpos import Activity, DisplayMetrics, InputManager
 
-indev_error_x = 160
-indev_error_y = 120
-
-DARKPINK = lv.color_hex(0xEC048C)
-
 import sys
 if sys.platform == "esp32":
     import mpong_xtensawin as mpong
@@ -70,7 +65,7 @@ class MPong(Activity):
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
         mpong.init(self.buffer, self.hor_res, self.ver_res)
-        self.refresh_timer = lv.timer_create(self.run_mpong, 1, None)
+        self.refresh_timer = lv.timer_create(self.run_mpong, 15, None)
 
     def onPause(self, screen):
         if self.refresh_timer:
@@ -91,6 +86,9 @@ class MPong(Activity):
         self.unfocus()
         mpong.move_paddle(self.paddle_move_step)
 
+    # This only works with the PREV/pageup and NEXT/pagedown buttons,
+    # because the focus_direction handling of the arrow keys uses a trick to move focus (focus_next)
+    # which conflicts with the focus_next below...
     def unfocus(self):
         focusgroup = lv.group_get_default()
         if not focusgroup:
@@ -98,11 +96,11 @@ class MPong(Activity):
             return
         focused = focusgroup.get_focused()
         if focused:
-            print(f"got focus button: {focused}")
+            #print(f"got focus button: {focused}")
             label = focused.get_child(0)
-            print(f"got label for button: {label.get_text()}")
+            #print(f"got label for button: {label.get_text()}")
             #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
-            print("checking which button is focused")
+            #print("checking which button is focused")
             if focused == self.rightbutton:
                 #print("next is focused")
                 focusgroup.focus_prev()
