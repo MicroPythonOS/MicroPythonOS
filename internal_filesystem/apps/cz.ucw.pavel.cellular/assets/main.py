@@ -1,7 +1,7 @@
 from mpos import Activity
 
 """
-
+Simple cellular-network example
 """
 
 import time
@@ -49,7 +49,7 @@ class CellularManager:
 cm = CellularManager()
 
 # ------------------------------------------------------------
-#
+# User interface
 # ------------------------------------------------------------
 
 class Main(Activity):
@@ -85,7 +85,7 @@ class Main(Activity):
         self.number.align_to(self.lbl_date, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 12)
 
         self.call = lv.button(self.screen)
-        self.call.align_to(self.number, lv.ALIGN.OUT_RIGHT_MID, 10, 0)
+        self.call.align_to(self.number, lv.ALIGN.OUT_RIGHT_MID, 2, 0)
         self.call.add_event_cb(lambda e: self.on_call(), lv.EVENT.CLICKED, None)
 
         # Two text areas on single screen don't work well.
