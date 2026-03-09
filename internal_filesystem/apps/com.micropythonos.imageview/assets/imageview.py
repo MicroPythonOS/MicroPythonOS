@@ -40,6 +40,8 @@ class ImageView(Activity):
         prev_label = lv.label(self.prev_button)
         prev_label.set_text(lv.SYMBOL.LEFT)
         prev_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+
+        # Invisible button, just for defocusing the prev and next buttons:
         self.play_button = lv.button(screen)
         self.play_button.align(lv.ALIGN.BOTTOM_MID,0,0)
         self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
@@ -167,12 +169,10 @@ class ImageView(Activity):
         if not focusgroup:
             print("WARNING: imageview.py could not get default focus group")
             return
-        print("got focus group")
-        # group.focus_obj(self.play_button) would be better but appears missing?!
         focused = focusgroup.get_focused()
-        print("got focus button")
-        #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
         if focused:
+            print(f"got focus button: {focused}")
+            #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
             print("checking which button is focused")
             if focused == self.next_button:
                 print("next is focused")
