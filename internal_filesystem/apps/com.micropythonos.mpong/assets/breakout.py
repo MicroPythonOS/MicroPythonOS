@@ -76,10 +76,10 @@ class Breakout(Activity):
         lv.log_register_print_cb(self.log_callback)
         mpong.init(self.buffer, self.hor_res, self.ver_res)
 
-        #import mpos.ui
+        import mpos.ui
         #mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
 
-        self.refresh_timer = lv.timer_create(self.run_mpong, 16, None) # max 1000ms/60fps = 16ms/frame
+        self.refresh_timer = lv.timer_create(self.run_mpong, 32, None) # max 1000ms/60fps = 16ms/frame but gets no more than 10FPS
         #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_STARTED)
         #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
 
