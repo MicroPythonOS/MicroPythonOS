@@ -219,7 +219,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(render_obj, render);
 // move_paddle(delta): move the paddle horizontally by delta.
 static mp_obj_t move_paddle(mp_obj_t delta_obj) {
     int delta = mp_obj_get_int(delta_obj);
-    mp_printf(&mp_plat_print, "delta: %d\n", delta);
+    //mp_printf(&mp_plat_print, "delta: %d\n", delta);
     if (g_framebuffer_width > 0) {
         g_paddle_x = clamp_int(g_paddle_x + delta, 0, (int)g_framebuffer_width - g_paddle_width);
     }

@@ -19,6 +19,8 @@ class MPong(Activity):
     paddle_move_step = None
     layer = None
     buffer = None
+    touch_active = False
+    touch_last_x = None
 
     # Widgets:
     screen = None
@@ -76,12 +78,28 @@ class MPong(Activity):
         self.canvas.invalidate() # force redraw
 
     def touch_cb(self, event):
-        # TODO: track lv.EVENT.PRESSED, lv.EVENT.PRESSING and lv.EVENT.RELEASED events to detect swipes left and right to move_paddle
-        event_code=event.get_code()
-        import mpos.ui
-        mpos.ui.print_event(event)
-        if event_code not in [19,23,25,26,27,28,29,30,49]:
-            if event_code == lv.EVENT.PRESSING: # this is probably enough
+        event_code = event.get_code()
+        if event_code == lv.EVENT.PRESSED:
+            x, y = InputManager.pointer_xy()
+            self.touch_active = True
+            self.touch_last_x = x
+            return
+
+        if event_code == lv.EVENT.PRESSING:
+            if not self.touch_active:
                 x, y = InputManager.pointer_xy()
-                mpong.move_paddle(-10) # TODO: set actual detected swipe left or right
+                self.touch_active = True
+                self.touch_last_x = x
                 return
+            x, y = InputManager.pointer_xy()
+            if self.touch_last_x is not None:
+                delta = x - self.touch_last_x
+                if delta:
+                    mpong.move_paddle(delta)
+            self.touch_last_x = x
+            return
+
+        if event_code == lv.EVENT.RELEASED:
+            self.touch_active = False
+            self.touch_last_x = None
+            return
