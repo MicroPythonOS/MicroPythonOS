@@ -31,6 +31,9 @@ __pycache__/
 # these get created by the build system, don't know why:
 c_mpos/c_mpos
 
+# build output
+c_mpos/mpong/build
+
 # build files
 *.bin
 
