@@ -1,5 +1,5 @@
 {
-"name": "mPong",
+"name": "Breakout",
 "publisher": "MicroPythonOS",
 "short_description": "PingPong game",
 "long_description": "Demonstrates native machinecode in .mpy files on both AMD64 and ESP32",
@@ -10,8 +10,8 @@
 "category": "games",
 "activities": [
     {
-      "entrypoint": "assets/mpong.py",
-      "classname": "MPong",
+      "entrypoint": "assets/breakout.py",
+      "classname": "Breakout",
       "intent_filters": [
         {
           "action": "main",

@@ -1,3 +1,8 @@
+# This gets just 7.5 FPS on actual ESP32S3 hardware
+# Probably because the double buffer copies.
+# With a direct buffer, it's still only 10 FPS. (and flickering buttons on black screen)
+# direct framebuffer + without self.canvas.invalidate() and self.canvas.center(), it's still only 13.5 FPS (and black screen)
+
 import lvgl as lv
 from mpos import Activity, DisplayMetrics, InputManager
 
@@ -7,7 +12,7 @@ if sys.platform == "esp32":
 else:
     import mpong_x64 as mpong
 
-class MPong(Activity):
+class Breakout(Activity):
 
     hor_res = 0
     ver_res = 0
@@ -28,11 +33,15 @@ class MPong(Activity):
 
     def onCreate(self):
         self.screen = lv.obj()
-        self.canvas = lv.canvas(self.screen)
+        self.screen.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.screen.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
+
         d = lv.display_get_default()
         self.hor_res = d.get_horizontal_resolution()
         self.paddle_move_step = round(self.hor_res/16)
         self.ver_res = d.get_vertical_resolution()
+        '''
+        self.canvas = lv.canvas(self.screen)
         self.canvas.set_size(self.hor_res, self.ver_res)
         self.buffer = bytearray(self.hor_res * self.ver_res * 2)
         self.canvas.set_buffer(self.buffer, self.hor_res, self.ver_res, lv.COLOR_FORMAT.NATIVE)
@@ -40,7 +49,7 @@ class MPong(Activity):
         self.canvas.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
         self.layer = lv.layer_t()
         self.canvas.init_layer(self.layer)
-
+        '''
         self.leftbutton = lv.button(self.screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         leftlabel = lv.label(self.leftbutton)
@@ -64,8 +73,14 @@ class MPong(Activity):
 
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
-        mpong.init(self.buffer, self.hor_res, self.ver_res)
-        self.refresh_timer = lv.timer_create(self.run_mpong, 30, None)
+        #mpong.init(self.buffer, self.hor_res, self.ver_res)
+
+        import mpos.ui
+        mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
+
+        self.refresh_timer = lv.timer_create(self.run_mpong, 16, None) # max 1000ms/60fps = 16ms/frame
+        #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_STARTED)
+        #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
 
     def onPause(self, screen):
         if self.refresh_timer:
@@ -110,11 +125,27 @@ class MPong(Activity):
             else:
                 print("focus isn't on next or previous, leaving it...")
 
-
-    def run_mpong(self, timer=None):
+    def run_mpong(self, arg1=None, arg2=None):
         mpong.render()
-        self.canvas.invalidate() # force redraw
-        self.canvas.center()
+        #self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
+        #self.screen.invalidate()
+        #lv.refr_now(None)
+        #self.canvas.invalidate() # force redraw
+        #self.canvas.center()
+        #self.canvas.refre
+        #self.screen.invalidate()
+        #self.screen.center()
+        #mpong.render()
+        '''
+        import lvgl as lv
+        area = lv.area_t()
+        area.x1 = 0
+        area.y1 = 0
+        area.x2 = 170
+        area.y2 = 170
+        import mpos.ui
+        mpos.ui.main_display._flush_cb(None, area, mpos.ui.main_display._frame_buffer1) # color_p should be pointer, not memoryview
+        '''
 
     def touch_cb(self, event):
         event_code = event.get_code()
