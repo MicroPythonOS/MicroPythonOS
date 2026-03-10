@@ -29,18 +29,20 @@ except Exception as e:
     time.sleep(3)
     machine.reset()
 
-_BUFFER_SIZE = const(28800)
+#_BUFFER_SIZE = const(28800)
+_BUFFER_SIZE = const(170 * 320 * 2) # without the + 1 this triggers render_mode = lv.DISPLAY_RENDER_MODE.FULL which is broken on emulated hardware (actual hardware still to test)
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+#fb1_aligned = lv.draw_buf_align(fb1, lv.COLOR_FORMAT.RGB565)
+#fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
 import drivers.display.st7789 as st7789
 import mpos.ui
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
-    frame_buffer2=fb2,
-    display_width=170,
-    display_height=320,
+    #frame_buffer2=fb2,
+    display_width=320,
+    display_height=170,
     color_space=lv.COLOR_FORMAT.RGB565,
     # color_space=lv.COLOR_FORMAT.RGB888, # not supported on qemu
     color_byte_order=st7789.BYTE_ORDER_BGR,
@@ -51,15 +53,17 @@ mpos.ui.main_display = st7789.ST7789(
     backlight_pin=38, # needed
     backlight_on_state=st7789.STATE_PWM,
     offset_x=0,
-    offset_y=35
+    offset_y=0
 ) # this will trigger lv.init()
 mpos.ui.main_display.set_power(True) # set RD pin to high before the rest, otherwise garbled output
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_backlight(100) # works
 
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+#mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
 mpos.ui.main_display.set_color_inversion(True)
 
+mpos.ui.frame_buffer1 = fb1
 
 # Button handling code:
 from machine import Pin
