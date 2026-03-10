@@ -4,6 +4,9 @@
 # direct framebuffer + without self.canvas.invalidate() and self.canvas.center(), it's still only 13.5 FPS (and black screen)
 # AHA! with a send_to_display() it is running at 21.5 FPS but with heavy flicker
 # adding a wait for the render of 10ms gives a non-flicker 17.5 FPS
+# not waiting for the render but adding a callback brings the FPS to 25.5 !
+
+# on the emulator, it gets around 8 FPS (LVGL) and 3.5 FPS (mpong)
 
 import lvgl as lv
 
@@ -29,6 +32,10 @@ class Breakout(Activity):
     touch_last_x = None
     last_fps = 0
     average_fps = 0
+
+    old_callback = None
+
+    render_next = True
 
     # Widgets:
     screen = None
@@ -84,19 +91,41 @@ class Breakout(Activity):
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
         #mpong.init(self.buffer, self.hor_res, self.ver_res)
-        mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
 
+        #self.old_callback = mpos.ui.main_display._data_bus.
+        #self.refresh_timer = lv.timer_create(self.run_mpong, 5, None) # max 1000ms/60fps = 16ms/frame
         #self.refresh_timer = lv.timer_create(self.run_mpong, 16, None) # max 1000ms/60fps = 16ms/frame
-        self.refresh_timer = lv.timer_create(self.run_mpong, 33, None) # max 1000ms/30fps = 33ms/frame
+        #self.refresh_timer = lv.timer_create(self.run_mpong, 33, None) # max 1000ms/30fps = 33ms/frame
         #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_STARTED)
-        #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
+        #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_FINISHED) # just 18 FPS
 
         #mpos.ui.main_display.delete_refr_timer() # how to enable after? also it doesnt help
+        #lv.timer_create(self.startit, 1000, None).set_repeat_count(1)
+        # 10ms is fine on real hardware
+        lv.timer_create(self.startit, 5000, None).set_repeat_count(1) # this needs to be delayed, otherwise the whole thing hangs
+        #lv.async_call(self.startit, None)
 
     def onPause(self, screen):
         if self.refresh_timer:
             self.refresh_timer.delete()
         lv.log_register_print_cb(None)
+        mpos.ui.main_display._data_bus.register_callback(mpos.ui.main_display._flush_ready_cb)
+
+    def startit(self, arg1=None):
+        print("starting it!")
+        mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
+        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
+        self.refresh_timer = lv.timer_create(self.run_mpong, 20, None) # max 1000ms/50fps = 20ms/frame
+        #self.refresh_timer = lv.timer_create(self.run_mpong, 33, None).set_repeat_count(1) # max 1000ms/60fps = 16ms/frame
+        #lv.async_call(self.run_mpong, None)
+
+    def flush_ready_cb(self, arg1=None, arg2=None):
+        #print("cbb")
+        mpos.ui.main_display._disp_drv.flush_ready() # with this, it hangs, and without it, the device crashes
+        #print("cba")
+        #self.refresh_timer = lv.timer_create(self.run_mpong, 33, None).set_repeat_count(1) # max 1000ms/60fps = 16ms/frame
+        #lv.async_call(self.run_mpong, None)
+        self.render_next = True
 
     def move_left(self):
         mpong.move_paddle(-self.paddle_move_step)
@@ -158,6 +187,9 @@ class Breakout(Activity):
         )
 
     def run_mpong(self, arg1=None, arg2=None):
+        if self.render_next == False:
+            return
+        self.render_next = False
         mpong.render()
         #self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
         #self.screen.invalidate()
@@ -179,7 +211,7 @@ class Breakout(Activity):
         mpos.ui.main_display._flush_cb(None, area, mpos.ui.main_display._frame_buffer1) # color_p should be pointer, not memoryview
         '''
         self.send_to_display()
-        time.sleep_ms(10) # give it time to flush, otherwise there's heavy flicker. 5ms is fine!
+        #time.sleep_ms(10) # give it time to flush, otherwise there's heavy flicker. 5ms is fine!
 
     def touch_cb(self, event):
         event_code = event.get_code()
