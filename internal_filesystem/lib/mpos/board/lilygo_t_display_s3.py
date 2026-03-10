@@ -29,8 +29,15 @@ except Exception as e:
     time.sleep(3)
     machine.reset()
 
-#_BUFFER_SIZE = const(28800)
-_BUFFER_SIZE = const(170 * 320 * 2) # without the + 1 this triggers render_mode = lv.DISPLAY_RENDER_MODE.FULL which is broken on emulated hardware (actual hardware still to test)
+#_BUFFER_SIZE = const(28800) # 320*240*2 / 5.33
+# 153600 (320*240*2) is too much
+# 150400 (320*235*2) is too much
+# 148480 (320*232*2) is too much
+#
+# 147200 (320*230*2) is fine!
+# 140800 (320*220*2) is fine!
+# 108800 (320*170*2) is fine
+_BUFFER_SIZE = const(320 * 170 * 2 + 1) # without the + 1 this triggers render_mode = lv.DISPLAY_RENDER_MODE.FULL which is broken on emulated hardware (actual hardware still to test)
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 #fb1_aligned = lv.draw_buf_align(fb1, lv.COLOR_FORMAT.RGB565)
 #fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
@@ -41,8 +48,8 @@ mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     #frame_buffer2=fb2,
-    display_width=320,
-    display_height=170,
+    display_width=170,
+    display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
     # color_space=lv.COLOR_FORMAT.RGB888, # not supported on qemu
     color_byte_order=st7789.BYTE_ORDER_BGR,
@@ -53,17 +60,15 @@ mpos.ui.main_display = st7789.ST7789(
     backlight_pin=38, # needed
     backlight_on_state=st7789.STATE_PWM,
     offset_x=0,
-    offset_y=0
+    offset_y=35
 ) # this will trigger lv.init()
 mpos.ui.main_display.set_power(True) # set RD pin to high before the rest, otherwise garbled output
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_backlight(100) # works
 
-#mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+#mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180) # doesnt suffer from the qemu full buffer issue
 mpos.ui.main_display.set_color_inversion(True)
-
-mpos.ui.frame_buffer1 = fb1
 
 # Button handling code:
 from machine import Pin
