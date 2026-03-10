@@ -28,7 +28,7 @@ uint32_t g_last_tick_ms;
 uint32_t g_fps_last_ms;
 uint32_t g_fps_frames;
 
-#define BRICK_ROWS 4
+#define BRICK_ROWS 12
 #define BRICK_COLS 8
 uint8_t g_bricks[BRICK_ROWS][BRICK_COLS];
 
@@ -147,9 +147,9 @@ static mp_obj_t render(void) {
 
     const size_t width = g_framebuffer_width;
     const size_t height = g_framebuffer_height;
-    const size_t fill_pixels = framebuffer_max_pixels();
 
     // Clear to black.
+    const size_t fill_pixels = framebuffer_max_pixels();
     for (size_t i = 0; i < fill_pixels; i++) { g_framebuffer[i] = 0x0000; } // RGB565 black
 
     g_fps_frames++;

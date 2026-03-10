@@ -2,8 +2,14 @@
 # Probably because the double buffer copies.
 # With a direct buffer, it's still only 10 FPS. (and flickering buttons on black screen)
 # direct framebuffer + without self.canvas.invalidate() and self.canvas.center(), it's still only 13.5 FPS (and black screen)
+# AHA! with a send_to_display() it is running at 21.5 FPS but with heavy flicker
+# adding a wait for the render of 10ms gives a non-flicker 17.5 FPS
 
 import lvgl as lv
+
+import time
+
+import mpos.ui
 from mpos import Activity, DisplayMetrics, InputManager
 
 import sys
@@ -41,14 +47,17 @@ class Breakout(Activity):
         self.paddle_move_step = round(self.hor_res/16)
         self.ver_res = d.get_vertical_resolution()
 
+        '''
         self.canvas = lv.canvas(self.screen)
         self.canvas.set_size(self.hor_res, self.ver_res)
-        self.buffer = bytearray(self.hor_res * self.ver_res * 2)
-        self.canvas.set_buffer(self.buffer, self.hor_res, self.ver_res, lv.COLOR_FORMAT.NATIVE)
+        #self.buffer = bytearray(self.hor_res * self.ver_res * 2)
+        #self.canvas.set_buffer(self.buffer, self.hor_res, self.ver_res, lv.COLOR_FORMAT.NATIVE)
+        #self.canvas.set_buffer(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res, lv.COLOR_FORMAT.NATIVE)
         #self.canvas.add_flag(lv.obj.FLAG.CLICKABLE)
         #self.canvas.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
         self.layer = lv.layer_t()
         self.canvas.init_layer(self.layer)
+        '''
 
         self.leftbutton = lv.button(self.screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
@@ -59,8 +68,8 @@ class Breakout(Activity):
 
         # Invisible button, just for defocusing the left and right buttons:
         self.play_button = lv.button(self.screen)
-        self.play_button.align(lv.ALIGN.TOP_MID,0,0)
-        self.play_button.set_size(70,70)
+        self.play_button.align(lv.ALIGN.BOTTOM_MID,0,0)
+        self.play_button.set_size(1,1)
         self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
         self.rightbutton = lv.button(self.screen)
@@ -74,14 +83,15 @@ class Breakout(Activity):
 
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
-        mpong.init(self.buffer, self.hor_res, self.ver_res)
+        #mpong.init(self.buffer, self.hor_res, self.ver_res)
+        mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
 
-        import mpos.ui
-        #mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
-
-        self.refresh_timer = lv.timer_create(self.run_mpong, 32, None) # max 1000ms/60fps = 16ms/frame but gets no more than 10FPS
+        #self.refresh_timer = lv.timer_create(self.run_mpong, 16, None) # max 1000ms/60fps = 16ms/frame
+        self.refresh_timer = lv.timer_create(self.run_mpong, 33, None) # max 1000ms/30fps = 33ms/frame
         #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_STARTED)
         #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
+
+        #mpos.ui.main_display.delete_refr_timer() # how to enable after? also it doesnt help
 
     def onPause(self, screen):
         if self.refresh_timer:
@@ -126,6 +136,27 @@ class Breakout(Activity):
             else:
                 print("focus isn't on next or previous, leaving it...")
 
+    def send_to_display(self):
+        # full-screen area
+        x1, y1 = 0, 0
+        x2 = mpos.ui.main_display.get_horizontal_resolution() - 1
+        x2 = x2 + mpos.ui.main_display._offset_x
+        x1 = x1 + mpos.ui.main_display._offset_x
+        y2 = mpos.ui.main_display.get_vertical_resolution() - 1
+        y2 = y2 + mpos.ui.main_display._offset_y
+        y1 = y1 + mpos.ui.main_display._offset_y
+
+        cmd = mpos.ui.main_display._set_memory_location(x1, y1, x2, y2)
+        data_view = mpos.ui.main_display._frame_buffer1
+
+        mpos.ui.main_display._data_bus.tx_color(
+            cmd,
+            data_view,
+            x1, y1, x2, y2,
+            mpos.ui.main_display._rotation,
+            True,
+        )
+
     def run_mpong(self, arg1=None, arg2=None):
         mpong.render()
         #self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
@@ -134,7 +165,7 @@ class Breakout(Activity):
         #self.canvas.invalidate() # force redraw
         #self.canvas.center()
         #self.canvas.refre
-        self.screen.invalidate()
+        #self.screen.invalidate()
         #self.screen.center()
         #mpong.render()
         '''
@@ -147,6 +178,8 @@ class Breakout(Activity):
         import mpos.ui
         mpos.ui.main_display._flush_cb(None, area, mpos.ui.main_display._frame_buffer1) # color_p should be pointer, not memoryview
         '''
+        self.send_to_display()
+        time.sleep_ms(10) # give it time to flush, otherwise there's heavy flicker. 5ms is fine!
 
     def touch_cb(self, event):
         event_code = event.get_code()
