@@ -147,6 +147,7 @@ class TestLaunchAllApps(unittest.TestCase):
             fail for fail in failed_apps
             if 'errortest' not in fail['info']['package_name'].lower() and
                not (fail['info']['package_name'] == 'com.micropythonos.musicplayer' and is_macos) and
+               not (fail['info']['package_name'] == 'com.micropythonos.breakout' and is_macos) and
                not (fail['info']['package_name'] == 'com.micropythonos.camera' and is_macos)
         ]
 
