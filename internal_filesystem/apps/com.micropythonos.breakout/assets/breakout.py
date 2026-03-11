@@ -1,3 +1,4 @@
+# On the 320x170 T-Display-S3:
 # This gets just 7.5 FPS on actual ESP32S3 hardware
 # Probably because the double buffer copies.
 # With a direct buffer, it's still only 10 FPS. (and flickering buttons on black screen)
@@ -6,7 +7,10 @@
 # adding a wait for the render of 10ms gives a non-flicker 17.5 FPS
 # not waiting for the render but adding a callback brings the FPS to 25.5 !
 
-# on the emulator, it gets around 8 FPS (LVGL) and 3.5 FPS (mpong)
+# on the emulator, it gets around 8 FPS (LVGL) and 3.5 FPS (breakout.c)
+# at 33ms, it's 4.5 and 2.5 FPS (mpong)
+
+# On the 320x230 (instead of 240 because memory limitation) it gets 17 FPS (LVGL) or 12 FPS (breakout.c)
 
 import lvgl as lv
 
@@ -17,9 +21,9 @@ from mpos import Activity, DisplayMetrics, InputManager
 
 import sys
 if sys.platform == "esp32":
-    import mpong_xtensawin as mpong
+    import breakout_xtensawin as breakout
 else:
-    import mpong_x64 as mpong
+    import breakout_x64 as breakout
 
 class Breakout(Activity):
 
@@ -101,7 +105,7 @@ class Breakout(Activity):
 
         #mpos.ui.main_display.delete_refr_timer() # how to enable after? also it doesnt help
         #lv.timer_create(self.startit, 1000, None).set_repeat_count(1)
-        # 10ms is fine on real hardware
+        # 10ms is fine on real hardware but needs > 1000ms on emulator
         lv.timer_create(self.startit, 5000, None).set_repeat_count(1) # this needs to be delayed, otherwise the whole thing hangs
         #lv.async_call(self.startit, None)
 
@@ -113,9 +117,9 @@ class Breakout(Activity):
 
     def startit(self, arg1=None):
         print("starting it!")
-        mpong.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res) # stays black
+        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, min(self.ver_res, 230))
         mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-        self.refresh_timer = lv.timer_create(self.run_mpong, 20, None) # max 1000ms/50fps = 20ms/frame
+        self.refresh_timer = lv.timer_create(self.drawframe, 20, None) # max 1000ms/50fps = 20ms/frame
         #self.refresh_timer = lv.timer_create(self.run_mpong, 33, None).set_repeat_count(1) # max 1000ms/60fps = 16ms/frame
         #lv.async_call(self.run_mpong, None)
 
@@ -128,18 +132,18 @@ class Breakout(Activity):
         self.render_next = True
 
     def move_left(self):
-        mpong.move_paddle(-self.paddle_move_step)
+        breakout.move_paddle(-self.paddle_move_step)
 
     def move_right(self):
-        mpong.move_paddle(self.paddle_move_step)
+        breakout.move_paddle(self.paddle_move_step)
 
     def move_left_unfocus(self):
         self.unfocus()
-        mpong.move_paddle(-self.paddle_move_step)
+        breakout.move_paddle(-self.paddle_move_step)
 
     def move_right_unfocus(self):
         self.unfocus()
-        mpong.move_paddle(self.paddle_move_step)
+        breakout.move_paddle(self.paddle_move_step)
 
     # This only works with the PREV/pageup and NEXT/pagedown buttons,
     # because the focus_direction handling of the arrow keys uses a trick to move focus (focus_next)
@@ -186,11 +190,11 @@ class Breakout(Activity):
             True,
         )
 
-    def run_mpong(self, arg1=None, arg2=None):
+    def drawframe(self, arg1=None, arg2=None):
         if self.render_next == False:
             return
         self.render_next = False
-        mpong.render()
+        breakout.render()
         #self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
         #self.screen.invalidate()
         #lv.refr_now(None)
@@ -231,7 +235,7 @@ class Breakout(Activity):
             if self.touch_last_x is not None:
                 delta = x - self.touch_last_x
                 if delta:
-                    mpong.move_paddle(delta)
+                    breakout.move_paddle(delta)
             self.touch_last_x = x
             return
 

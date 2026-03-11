@@ -1,0 +1,24 @@
+{
+"name": "Breakout",
+"publisher": "MicroPythonOS",
+"short_description": "Classic Breakout game",
+"long_description": "Classic Breakout game to demonstrate native machinecode (from C) in .mpy files on both AMD64 and ESP32",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.breakout/icons/com.micropythonos.breakout_0.1.0_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.breakout/mpks/com.micropythonos.breakout_0.1.0.mpk",
+"fullname": "com.micropythonos.breakout",
+"version": "0.1.0",
+"category": "games",
+"activities": [
+    {
+      "entrypoint": "assets/breakout.py",
+      "classname": "Breakout",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+

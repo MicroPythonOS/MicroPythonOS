@@ -1,10 +1,10 @@
 MPY_DIR = ../../lvgl_micropython/lib/micropython/
 
 # Name of module
-MOD = mpong
+MOD = breakout
 
 # Source files (.c or .py)
-SRC = mpong.c
+SRC = breakout.c
 
 # Link runtime libraries (needed for memset on xtensawin)
 LINK_RUNTIME = 1

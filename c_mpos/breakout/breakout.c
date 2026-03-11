@@ -32,24 +32,6 @@ uint32_t g_fps_frames;
 #define BRICK_COLS 8
 uint8_t g_bricks[BRICK_ROWS][BRICK_COLS];
 
-// readfile(filename): return first 10 bytes of a file as bytes
-static mp_obj_t readfile(mp_obj_t filename_obj) {
-    mp_obj_t open_fun = mp_load_global(MP_QSTR_open);
-    mp_obj_t open_args[2] = { filename_obj, mp_obj_new_str("rb", 2) };
-    mp_obj_t file_obj = mp_call_function_n_kw(open_fun, 2, 0, open_args);
-
-    mp_obj_t read_fun = mp_load_attr(file_obj, MP_QSTR_read);
-    mp_obj_t read_args[1] = { mp_obj_new_int(10) };
-    mp_obj_t data_obj = mp_call_function_n_kw(read_fun, 1, 0, read_args);
-
-    mp_obj_t close_fun = mp_load_attr(file_obj, MP_QSTR_close);
-    mp_obj_t close_args[1];
-    mp_call_function_n_kw(close_fun, 0, 0, close_args);
-
-    return data_obj;
-}
-static MP_DEFINE_CONST_FUN_OBJ_1(readfile_obj, readfile);
-
 static uint32_t ticks_ms(void) {
     mp_obj_t time_mod = mp_import_name(MP_QSTR_time, mp_const_none, MP_OBJ_NEW_SMALL_INT(0));
     mp_obj_t ticks_fun = mp_load_attr(time_mod, MP_QSTR_ticks_ms);
@@ -157,7 +139,7 @@ static mp_obj_t render(void) {
     const uint32_t elapsed_ms = now_ms - g_fps_last_ms;
     if (elapsed_ms >= 1000) {
         const uint32_t fps = (g_fps_frames * 1000) / elapsed_ms;
-        mp_printf(&mp_plat_print, "mpong fps: %lu\n", (unsigned long)fps);
+        mp_printf(&mp_plat_print, "breakout.c fps: %lu\n", (unsigned long)fps);
         g_fps_last_ms = now_ms;
         g_fps_frames = 0;
     }
@@ -277,7 +259,6 @@ mp_obj_t mpy_init(mp_obj_fun_bc_t *self, size_t n_args, size_t n_kw, mp_obj_t *a
     mp_store_global(MP_QSTR_init, MP_OBJ_FROM_PTR(&init_obj));
     mp_store_global(MP_QSTR_render, MP_OBJ_FROM_PTR(&render_obj));
     mp_store_global(MP_QSTR_move_paddle, MP_OBJ_FROM_PTR(&move_paddle_obj));
-    mp_store_global(MP_QSTR_readfile, MP_OBJ_FROM_PTR(&readfile_obj));
 
     // This must be last, it restores the globals dict
     MP_DYNRUNTIME_INIT_EXIT
