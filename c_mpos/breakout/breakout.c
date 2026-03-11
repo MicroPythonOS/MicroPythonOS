@@ -22,6 +22,7 @@ uint16_t *g_framebuffer;
 size_t g_framebuffer_len;
 size_t g_framebuffer_width;
 size_t g_framebuffer_height;
+size_t g_framebuffer_max_pixels;
 size_t g_render_y_offset;
 size_t g_render_height;
 
@@ -59,9 +60,7 @@ static inline int clamp_int(int value, int min_value, int max_value) {
 }
 
 static inline size_t framebuffer_max_pixels(void) {
-    const size_t max_pixels = g_framebuffer_len / sizeof(uint16_t);
-    const size_t total_pixels = g_framebuffer_width * g_framebuffer_height;
-    return (max_pixels < total_pixels) ? max_pixels : total_pixels;
+    return g_framebuffer_max_pixels;
 }
 
 static void draw_pixel(int x, int y, uint16_t color) {
@@ -84,12 +83,44 @@ static void draw_pixel(int x, int y, uint16_t color) {
 }
 
 static void draw_rect(int x, int y, int w, int h, uint16_t color) {
-    if (w <= 0 || h <= 0) {
+    if (w <= 0 || h <= 0 || g_framebuffer == NULL) {
         return;
     }
-    for (int yy = 0; yy < h; yy++) {
-        for (int xx = 0; xx < w; xx++) {
-            draw_pixel(x + xx, y + yy, color);
+
+    const int x0 = (x < 0) ? 0 : x;
+    const int y0 = (y < 0) ? 0 : y;
+    const int x1 = x + w;
+    const int y1 = y + h;
+
+    const int max_x = (int)g_framebuffer_width;
+    const int max_y = (int)g_framebuffer_height;
+
+    int clip_x0 = x0;
+    int clip_y0 = y0;
+    int clip_x1 = (x1 > max_x) ? max_x : x1;
+    int clip_y1 = (y1 > max_y) ? max_y : y1;
+
+    const int slice_y0 = (int)g_render_y_offset;
+    const int slice_y1 = (int)(g_render_y_offset + g_render_height);
+    if (clip_y0 < slice_y0) {
+        clip_y0 = slice_y0;
+    }
+    if (clip_y1 > slice_y1) {
+        clip_y1 = slice_y1;
+    }
+
+    if (clip_x0 >= clip_x1 || clip_y0 >= clip_y1) {
+        return;
+    }
+
+    const size_t width = g_framebuffer_width;
+    const size_t fill_width = (size_t)(clip_x1 - clip_x0);
+
+    for (int yy = clip_y0; yy < clip_y1; yy++) {
+        const size_t local_y = (size_t)(yy - (int)g_render_y_offset);
+        uint16_t *row = g_framebuffer + local_y * width + (size_t)clip_x0;
+        for (size_t xx = 0; xx < fill_width; xx++) {
+            row[xx] = color;
         }
     }
 }
@@ -118,6 +149,9 @@ static mp_obj_t init(mp_obj_t framebuffer_obj, mp_obj_t width_obj, mp_obj_t heig
     g_framebuffer_len = bufinfo.len;
     g_framebuffer_width = (size_t)mp_obj_get_int(width_obj);
     g_framebuffer_height = (size_t)mp_obj_get_int(height_obj);
+    const size_t max_pixels = g_framebuffer_len / sizeof(uint16_t);
+    const size_t total_pixels = g_framebuffer_width * g_framebuffer_height;
+    g_framebuffer_max_pixels = (max_pixels < total_pixels) ? max_pixels : total_pixels;
     g_render_y_offset = 0;
     g_render_height = g_framebuffer_height;
 
@@ -189,7 +223,7 @@ static mp_obj_t render(size_t n_args, const mp_obj_t *args) {
 
     // Clear to black.
     const size_t fill_pixels = width * render_rows;
-    for (size_t i = 0; i < fill_pixels; i++) { g_framebuffer[i] = 0x0000; } // RGB565 black
+    memset(g_framebuffer, 0, fill_pixels * sizeof(uint16_t));
 
     const int paddle_y = (int)height - g_paddle_height - 4;
 
