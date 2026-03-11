@@ -73,7 +73,7 @@ class BuzzerCallbacks:
         print("Unmute buzzer")
         self.dac_pin.value(1)  # Unmute
 
-    def mute(self):
+    def mute(self, unused=None): # This is used as rtttl's on_complete function, which passes a string message argument
         print("Mute buzzer")
         self.dac_pin.value(0)  # Mute
 
