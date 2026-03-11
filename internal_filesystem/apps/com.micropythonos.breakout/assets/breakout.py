@@ -37,8 +37,6 @@ class Breakout(Activity):
     chunk_rows_per = 0
     chunk_total = 0
     chunk_index = 0
-    _draw_scheduled = False
-    _scheduled_draw_cb = None
 
     # Widgets:
     screen = None
@@ -81,7 +79,7 @@ class Breakout(Activity):
 
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
-        lv.timer_create(self.startit, 5000, None).set_repeat_count(1) # this needs to be delayed, otherwise the whole thing hangs
+        self.startit()
 
     def onPause(self, screen):
         lv.log_register_print_cb(None)
@@ -119,45 +117,15 @@ class Breakout(Activity):
                 print("focus isn't on next or previous, leaving it...")
 
     def startit(self, arg1=None):
-        print("starting it!")
         breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
         mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-        # Using a scheduled draw would be faster than a periodic one (lv.timer or mpos.ui.task_handler.add_event_cb) but no...
-        self._scheduled_draw_cb = self._scheduled_draw
-        self._request_draw()
+        lv.timer_create(self.drawframe, 5, None)
 
     def flush_ready_cb(self, arg1=None, arg2=None):
         # This is called in IRQ (interrupt) context so it can't allocate memory
-        # So no printf, no calling drawframe() directly, just setting variables or scheduling...
+        # So no printf, no calling drawframe() directly, just setting variables or scheduling a function.
         mpos.ui.main_display._disp_drv.flush_ready()
         self.flush_ready = True
-        self._request_draw()
-
-    def send_to_display(self, y_offset=0, rows=None, is_last=True):
-        x1 = 0
-        x2 = mpos.ui.main_display.get_horizontal_resolution() - 1
-        x2 = x2 + mpos.ui.main_display._offset_x
-        x1 = x1 + mpos.ui.main_display._offset_x
-
-        if rows is None:
-            rows = mpos.ui.main_display.get_vertical_resolution()
-        y1 = y_offset
-        y2 = y_offset + rows - 1
-        y1 = y1 + mpos.ui.main_display._offset_y
-        y2 = y2 + mpos.ui.main_display._offset_y
-
-        cmd = mpos.ui.main_display._set_memory_location(x1, y1, x2, y2)
-        bytes_needed = rows * mpos.ui.main_display.get_horizontal_resolution() * 2
-        data_view = memoryview(mpos.ui.main_display._frame_buffer1)[:bytes_needed]
-
-        tx_last = True
-        mpos.ui.main_display._data_bus.tx_color(
-            cmd,
-            data_view,
-            x1, y1, x2, y2,
-            mpos.ui.main_display._rotation,
-            tx_last,
-        )
 
     def drawframe(self, arg1=None, arg2=None):
         if self.chunk_waiting:
@@ -168,7 +136,6 @@ class Breakout(Activity):
                 if self.chunk_index >= self.chunk_total:
                     self.chunk_in_progress = False
                     self.render_next = True
-                    self._request_draw()
                 else:
                     self._render_and_send_chunk()
             return
@@ -222,17 +189,31 @@ class Breakout(Activity):
         breakout.render(y_offset, rows, advance)
         self.send_to_display(y_offset, rows, is_last)
 
-    def _request_draw(self):
-        if not self._draw_scheduled and self._scheduled_draw_cb:
-            self._draw_scheduled = True
-            try:
-                micropython.schedule(self._scheduled_draw_cb, 0)
-            except Exception:
-                self._draw_scheduled = False
+    def send_to_display(self, y_offset=0, rows=None, is_last=True):
+        x1 = 0
+        x2 = mpos.ui.main_display.get_horizontal_resolution() - 1
+        x2 = x2 + mpos.ui.main_display._offset_x
+        x1 = x1 + mpos.ui.main_display._offset_x
 
-    def _scheduled_draw(self, _):
-        self._draw_scheduled = False
-        self.drawframe()
+        if rows is None:
+            rows = mpos.ui.main_display.get_vertical_resolution()
+        y1 = y_offset
+        y2 = y_offset + rows - 1
+        y1 = y1 + mpos.ui.main_display._offset_y
+        y2 = y2 + mpos.ui.main_display._offset_y
+
+        cmd = mpos.ui.main_display._set_memory_location(x1, y1, x2, y2)
+        bytes_needed = rows * mpos.ui.main_display.get_horizontal_resolution() * 2
+        data_view = memoryview(mpos.ui.main_display._frame_buffer1)[:bytes_needed]
+
+        tx_last = True
+        mpos.ui.main_display._data_bus.tx_color(
+            cmd,
+            data_view,
+            x1, y1, x2, y2,
+            mpos.ui.main_display._rotation,
+            tx_last,
+        )
 
     def touch_cb(self, event):
         event_code = event.get_code()
