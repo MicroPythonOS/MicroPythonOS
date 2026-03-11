@@ -58,16 +58,18 @@ if [ -f "$script" ]; then
 	echo "Running script $script"
 	"$binary"  -v -i "$script"
 else
-	echo "Running app $script"
-	CONFIG_FILE="data/com.micropythonos.settings/config.json"
-	# Check if config.json exists
-	if [ -f "$CONFIG_FILE" ]; then
-		# Update the auto_start_app field using sed
-		sed -i '' -e 's/"auto_start_app": ".*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
-	else
-		# If config.json doesn't exist, create it with auto_start_app
-		mkdir -p data/com.micropythonos.settings
-		echo '{"auto_start_app": "'$script'"}' > "$CONFIG_FILE"
+	if [ ! -z "$script" ]; then
+		echo "Running app $script"
+		CONFIG_FILE="data/com.micropythonos.settings/config.json"
+		# Check if config.json exists
+		if [ -f "$CONFIG_FILE" ]; then
+			# Update the auto_start_app field using sed
+			sed -i '' -e 's/"auto_start_app": ".*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
+		else
+			# If config.json doesn't exist, create it with auto_start_app
+			mkdir -p data/com.micropythonos.settings
+			echo '{"auto_start_app": "'$script'"}' > "$CONFIG_FILE"
+		fi
 	fi
 	"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat main.py)"
 fi
