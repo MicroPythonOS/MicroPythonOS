@@ -1,22 +1,10 @@
 #!/bin/bash
 
-sudo find / -iname "activate"
-
-echo which pip
-which pip
-echo which python3
-which python3
-echo PATH:
-echo $PATH
-
-ls -al ~/.espressif/python_env/idf5.4_py3.11_env/bin/
-ls -al ~/.espressif/python_env/idf5.4_py3.11_env/
-ls -al ~/.espressif/python_env/
-ls -al ~/.espressif/
-ls -al ~
-
+# NOTE: ~/.espressif doesn't exist on MacOS
+export PATH=~/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin:$PATH
 . ~/.espressif/python_env/idf5.4_py3.11_env/bin/activate
 
+# Even though MacOS installs pyelftools, it still complains about No module named 'elftools'
 pip install pyelftools ar
 
 mydir=$(readlink -f "$0")
@@ -27,12 +15,6 @@ cd "$mydir"
 rm -rf build
 rm *.mpy
 
-ls -al ~/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin
-ls -al ~/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf
-ls -al ~/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119
-ls -al ~/.espressif/tools/xtensa-esp-elf
-ls -al ~/.espressif/tools
-ls -al ~/.espressif
-PATH=~/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin:$PATH make </dev/null
+make </dev/null
 
 mv "$mydir"/breakout*.mpy "$mydir"/../../internal_filesystem/apps/com.micropythonos.breakout/assets/
