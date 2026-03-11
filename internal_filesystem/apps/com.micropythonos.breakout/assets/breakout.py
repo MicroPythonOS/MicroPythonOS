@@ -1,21 +1,5 @@
-# On the 320x170 T-Display-S3:
-# This gets just 7.5 FPS on actual ESP32S3 hardware
-# Probably because the double buffer copies.
-# With a direct buffer, it's still only 10 FPS. (and flickering buttons on black screen)
-# direct framebuffer + without self.canvas.invalidate() and self.canvas.center(), it's still only 13.5 FPS (and black screen)
-# AHA! with a send_to_display() it is running at 21.5 FPS but with heavy flicker
-# adding a wait for the render of 10ms gives a non-flicker 17.5 FPS
-# not waiting for the render but adding a callback brings the FPS to 25.5 !
-
-# on the emulator, it gets around 8 FPS (LVGL) and 3.5 FPS (breakout.c)
-# at 33ms, it's 4.5 and 2.5 FPS (mpong)
-
-# On the 320x230 (instead of 240 because memory limitation) it gets 17 FPS (LVGL) or 12 FPS (breakout.c)
-
 import lvgl as lv
-
 import time
-
 import mpos.ui
 from mpos import Activity, DisplayMetrics, InputManager
 
@@ -40,6 +24,12 @@ class Breakout(Activity):
     old_callback = None
 
     render_next = True
+    flush_ready = False
+    chunk_in_progress = False
+    chunk_waiting = False
+    chunk_rows_per = 0
+    chunk_total = 0
+    chunk_index = 0
 
     # Widgets:
     screen = None
@@ -57,18 +47,6 @@ class Breakout(Activity):
         self.hor_res = d.get_horizontal_resolution()
         self.paddle_move_step = round(self.hor_res/16)
         self.ver_res = d.get_vertical_resolution()
-
-        '''
-        self.canvas = lv.canvas(self.screen)
-        self.canvas.set_size(self.hor_res, self.ver_res)
-        #self.buffer = bytearray(self.hor_res * self.ver_res * 2)
-        #self.canvas.set_buffer(self.buffer, self.hor_res, self.ver_res, lv.COLOR_FORMAT.NATIVE)
-        #self.canvas.set_buffer(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res, lv.COLOR_FORMAT.NATIVE)
-        #self.canvas.add_flag(lv.obj.FLAG.CLICKABLE)
-        #self.canvas.add_event_cb(self.touch_cb, lv.EVENT.ALL, None)
-        self.layer = lv.layer_t()
-        self.canvas.init_layer(self.layer)
-        '''
 
         self.leftbutton = lv.button(self.screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
@@ -94,20 +72,7 @@ class Breakout(Activity):
 
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
-        #mpong.init(self.buffer, self.hor_res, self.ver_res)
-
-        #self.old_callback = mpos.ui.main_display._data_bus.
-        #self.refresh_timer = lv.timer_create(self.run_mpong, 5, None) # max 1000ms/60fps = 16ms/frame
-        #self.refresh_timer = lv.timer_create(self.run_mpong, 16, None) # max 1000ms/60fps = 16ms/frame
-        #self.refresh_timer = lv.timer_create(self.run_mpong, 33, None) # max 1000ms/30fps = 33ms/frame
-        #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_STARTED)
-        #mpos.ui.task_handler.add_event_cb(self.run_mpong, mpos.ui.task_handler.TASK_HANDLER_FINISHED) # just 18 FPS
-
-        #mpos.ui.main_display.delete_refr_timer() # how to enable after? also it doesnt help
-        #lv.timer_create(self.startit, 1000, None).set_repeat_count(1)
-        # 10ms is fine on real hardware but needs > 1000ms on emulator
-        lv.timer_create(self.startit, 5000, None).set_repeat_count(1) # this needs to be delayed, otherwise the whole thing hangs
-        #lv.async_call(self.startit, None)
+        lv.timer_create(self.startit, 4000, None).set_repeat_count(1) # this needs to be delayed, otherwise the whole thing hangs
 
     def onPause(self, screen):
         if self.refresh_timer:
@@ -117,19 +82,13 @@ class Breakout(Activity):
 
     def startit(self, arg1=None):
         print("starting it!")
-        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, min(self.ver_res, 230))
+        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
         mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-        self.refresh_timer = lv.timer_create(self.drawframe, 20, None) # max 1000ms/50fps = 20ms/frame
-        #self.refresh_timer = lv.timer_create(self.run_mpong, 33, None).set_repeat_count(1) # max 1000ms/60fps = 16ms/frame
-        #lv.async_call(self.run_mpong, None)
+        self.refresh_timer = lv.timer_create(self.drawframe, 16, None) # max 1000ms/60fps ~= 16ms/frame
 
     def flush_ready_cb(self, arg1=None, arg2=None):
-        #print("cbb")
         mpos.ui.main_display._disp_drv.flush_ready() # with this, it hangs, and without it, the device crashes
-        #print("cba")
-        #self.refresh_timer = lv.timer_create(self.run_mpong, 33, None).set_repeat_count(1) # max 1000ms/60fps = 16ms/frame
-        #lv.async_call(self.run_mpong, None)
-        self.render_next = True
+        self.flush_ready = True
 
     def move_left(self):
         breakout.move_paddle(-self.paddle_move_step)
@@ -155,67 +114,100 @@ class Breakout(Activity):
             return
         focused = focusgroup.get_focused()
         if focused:
-            #print(f"got focus button: {focused}")
-            #label = focused.get_child(0)
-            #print(f"got label for button: {label.get_text()}")
-            #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
-            #print("checking which button is focused")
             if focused == self.rightbutton:
-                #print("next is focused")
                 focusgroup.focus_prev()
             elif focused == self.leftbutton:
-                #print("prev is focused")
                 focusgroup.focus_next()
             else:
                 print("focus isn't on next or previous, leaving it...")
 
-    def send_to_display(self):
-        # full-screen area
-        x1, y1 = 0, 0
+    def send_to_display(self, y_offset=0, rows=None, is_last=True):
+        x1 = 0
         x2 = mpos.ui.main_display.get_horizontal_resolution() - 1
         x2 = x2 + mpos.ui.main_display._offset_x
         x1 = x1 + mpos.ui.main_display._offset_x
-        y2 = mpos.ui.main_display.get_vertical_resolution() - 1
-        y2 = y2 + mpos.ui.main_display._offset_y
+
+        if rows is None:
+            rows = mpos.ui.main_display.get_vertical_resolution()
+        y1 = y_offset
+        y2 = y_offset + rows - 1
         y1 = y1 + mpos.ui.main_display._offset_y
+        y2 = y2 + mpos.ui.main_display._offset_y
 
         cmd = mpos.ui.main_display._set_memory_location(x1, y1, x2, y2)
-        data_view = mpos.ui.main_display._frame_buffer1
+        bytes_needed = rows * mpos.ui.main_display.get_horizontal_resolution() * 2
+        data_view = memoryview(mpos.ui.main_display._frame_buffer1)[:bytes_needed]
 
+        tx_last = True
         mpos.ui.main_display._data_bus.tx_color(
             cmd,
             data_view,
             x1, y1, x2, y2,
             mpos.ui.main_display._rotation,
-            True,
+            tx_last,
         )
 
     def drawframe(self, arg1=None, arg2=None):
-        if self.render_next == False:
+        if self.chunk_waiting:
+            if self.flush_ready:
+                self.flush_ready = False
+                self.chunk_waiting = False
+                self.chunk_index += 1
+                if self.chunk_index >= self.chunk_total:
+                    self.chunk_in_progress = False
+                    self.render_next = True
+                else:
+                    self._render_and_send_chunk()
             return
+
+        if self.chunk_in_progress or not self.render_next:
+            return
+
         self.render_next = False
-        breakout.render()
-        #self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN) # works to force refresh on desktop but not esp32
-        #self.screen.invalidate()
-        #lv.refr_now(None)
-        #self.canvas.invalidate() # force redraw
-        #self.canvas.center()
-        #self.canvas.refre
-        #self.screen.invalidate()
-        #self.screen.center()
-        #mpong.render()
-        '''
-        import lvgl as lv
-        area = lv.area_t()
-        area.x1 = 0
-        area.y1 = 0
-        area.x2 = 170
-        area.y2 = 170
-        import mpos.ui
-        mpos.ui.main_display._flush_cb(None, area, mpos.ui.main_display._frame_buffer1) # color_p should be pointer, not memoryview
-        '''
-        self.send_to_display()
-        #time.sleep_ms(10) # give it time to flush, otherwise there's heavy flicker. 5ms is fine!
+
+        buffer_len = len(mpos.ui.main_display._frame_buffer1)
+        bytes_per_row = self.hor_res * 2
+        if bytes_per_row <= 0:
+            self.render_next = True
+            return
+
+        rows_per_chunk = buffer_len // bytes_per_row
+        if rows_per_chunk <= 0:
+            self.render_next = True
+            return
+
+        if rows_per_chunk >= self.ver_res:
+            self.chunk_rows_per = self.ver_res
+            self.chunk_index = 0
+            self.chunk_total = 1
+        else:
+            self.chunk_rows_per = rows_per_chunk
+            self.chunk_index = 0
+            self.chunk_total = (self.ver_res + rows_per_chunk - 1) // rows_per_chunk
+
+        self.chunk_in_progress = True
+        self.chunk_waiting = False
+        self.flush_ready = False
+        self._render_and_send_chunk()
+
+    def _render_and_send_chunk(self):
+        if not self.chunk_in_progress:
+            return
+        if self.chunk_waiting:
+            return
+        if self.chunk_index >= self.chunk_total:
+            self.chunk_in_progress = False
+            self.render_next = True
+            return
+
+        y_offset = self.chunk_index * self.chunk_rows_per
+        rows = min(self.chunk_rows_per, self.ver_res - y_offset)
+        advance = (self.chunk_index == 0)
+        is_last = (self.chunk_index + 1) == self.chunk_total
+
+        self.chunk_waiting = True
+        breakout.render(y_offset, rows, advance)
+        self.send_to_display(y_offset, rows, is_last)
 
     def touch_cb(self, event):
         event_code = event.get_code()
