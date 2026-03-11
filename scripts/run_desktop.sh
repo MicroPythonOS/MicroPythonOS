@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 scriptdir=$(readlink -f "$0")
 scriptdir=$(dirname "$scriptdir")
 script="$1"
@@ -58,17 +58,27 @@ if [ -f "$script" ]; then
 	echo "Running script $script"
 	"$binary"  -v -i "$script"
 else
+	CONFIG_FILE="data/com.micropythonos.settings/config.json"
 	if [ ! -z "$script" ]; then
-		echo "Running app $script"
-		CONFIG_FILE="data/com.micropythonos.settings/config.json"
+		echo "run_desktop.sh: running app $script"
 		# Check if config.json exists
 		if [ -f "$CONFIG_FILE" ]; then
-			# Update the auto_start_app field using sed
-			sed -i '' -e 's/"auto_start_app": ".*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
+			if grep -q '"auto_start_app"' "$CONFIG_FILE"; then
+				echo "Updating auto_start_app field using sed"
+				sed -i.backup -e 's/"auto_start_app": ".*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
+			else
+				echo "Adding auto_start_app to config file"
+				sed -i.backup -E 's/[[:space:]]*}[[:space:]]*$/,"auto_start_app": "'$script'"}/' "$CONFIG_FILE"
+			fi
 		else
 			# If config.json doesn't exist, create it with auto_start_app
 			mkdir -p data/com.micropythonos.settings
 			echo '{"auto_start_app": "'$script'"}' > "$CONFIG_FILE"
+		fi
+	else
+		if [ -f "$CONFIG_FILE" ]; then
+			echo "Removing auto_start_app from config file"
+			sed -i.backup -E 's/[[:space:]]*,?[[:space:]]*"auto_start_app"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*//g; s/\{[[:space:]]*,/\{/g; s/,[[:space:]]*\}/\}/g' "$CONFIG_FILE"
 		fi
 	fi
 	"$binary" -X heapsize=$HEAPSIZE  -v -i -c "$(cat main.py)"
