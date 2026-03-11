@@ -1,6 +1,13 @@
 #!/bin/bash
 
-find / -iname "activate"
+sudo find / -iname "activate"
+
+echo which pip
+which pip
+echo which python3
+which python3
+echo PATH:
+echo $PATH
 
 ls -al ~/.espressif/python_env/idf5.4_py3.11_env/bin/
 ls -al ~/.espressif/python_env/idf5.4_py3.11_env/
