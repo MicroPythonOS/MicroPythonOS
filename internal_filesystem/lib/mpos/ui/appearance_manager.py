@@ -103,7 +103,6 @@ class AppearanceManager:
             theme_dark_bool,
             lv.font_montserrat_12
         )
-
         # Reset keyboard button fix style so it's recreated with new theme colors
         cls._keyboard_button_fix_style = None
         

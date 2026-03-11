@@ -82,4 +82,4 @@ def print_event(event):
     name = get_event_name(code)
     target = event.get_target_obj()
     key = f", key: {event.get_key()}" if code == lv.EVENT.KEY else ""
-    print(f"{target} → {name}{key}")
+    print(f"{target} → {code}:{name}{key}")
