@@ -29,10 +29,6 @@ TP_SCL = 47
 TP_ADDR = 0x15
 TP_REGBITS = 8
 
-TFT_HOR_RES=320
-TFT_VER_RES=240
-
-
 print("waveshare_esp32_s3_touch_lcd_2.py machine.SPI.Bus() initialization")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, miso=LCD_MISO, sck=LCD_SCLK)
@@ -57,7 +53,14 @@ display_bus = lcd_bus.SPIBus(
  # /2 = 19200 works, including camera at 9FPS
  # 28800 is between the two and still works with camera!
  # 30720 is /5 and is already too much
-_BUFFER_SIZE = const(28800)
+
+# Max buffer size (breaks SPI camera because it also needs DMA memory)
+# 148480 (320*232*2) is too much
+# 147841 (320*231*2) is too much
+# 147200 (320*230*2) is fine!
+# 140800 (320*220*2) is fine!
+
+_BUFFER_SIZE = const(320 * 45 * 2) # 28800
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
@@ -65,8 +68,8 @@ mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
-    display_width=TFT_VER_RES,
-    display_height=TFT_HOR_RES,
+    display_width=240,
+    display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
