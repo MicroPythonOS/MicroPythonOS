@@ -29,25 +29,15 @@ except Exception as e:
     time.sleep(3)
     machine.reset()
 
-#_BUFFER_SIZE = const(28800) # 320*240*2 / 5.33
-# 153600 (320*240*2) is too much
-# 150400 (320*235*2) is too much
-# 148480 (320*232*2) is too much
-#
-# 147200 (320*230*2) is fine!
-# 140800 (320*220*2) is fine!
-# 108800 (320*170*2) is fine
-_BUFFER_SIZE = const(320 * 170 * 2 + 1) # without the + 1 this triggers render_mode = lv.DISPLAY_RENDER_MODE.FULL which is broken on emulated hardware (actual hardware still to test)
+_BUFFER_SIZE = const(320 * 170 * 2 + 1) # + 1 is needed to avoid render_mode = lv.DISPLAY_RENDER_MODE.FULL which is buggy
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-#fb1_aligned = lv.draw_buf_align(fb1, lv.COLOR_FORMAT.RGB565)
-#fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
 import drivers.display.st7789 as st7789
 import mpos.ui
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
-    #frame_buffer2=fb2,
+    # frame_buffer_2 doesn't seem to improve anything
     display_width=170,
     display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
