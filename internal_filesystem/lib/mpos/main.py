@@ -161,7 +161,7 @@ except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
-prefs = SharedPreferences("com.micropythonos.settings", defaults={"auto_start_app": "com.micropythonos.firstrun"}) # if not value is set, it will start the FirstRun app
+prefs = SharedPreferences("com.micropythonos.settings", defaults={"auto_start_app_early": "com.micropythonos.firstrun"}) # if not value is set, it will start the FirstRun app
 
 AppearanceManager.init(prefs)
 init_rootscreen() # shows the boot logo
@@ -208,12 +208,18 @@ except Exception as e:
 # Start launcher first so it's always at bottom of stack
 launcher_app = AppManager.get_launcher()
 started_launcher = AppManager.start_app(launcher_app.fullname)
-# Then start auto_start_app if configured
-auto_start_app = prefs.get_string("auto_start_app", None)
-if auto_start_app and launcher_app.fullname != auto_start_app:
-    result = AppManager.start_app(auto_start_app)
+# Then start auto_start_app_early if configured
+auto_start_app_early = prefs.get_string("auto_start_app_early", "com.micropythonos.firstrun")
+if auto_start_app_early and launcher_app.fullname != auto_start_app_early:
+    result = AppManager.start_app(auto_start_app_early)
     if result is not True:
-        print(f"WARNING: could not run {auto_start_app} app")
+        print(f"WARNING: could not run {auto_start_app_early} app")
+else: # if no auto_start_app_early was configured (this could be improved to start it *after* auto_start_app_early finishes)
+    auto_start_app = prefs.get_string("auto_start_app", None)
+    if auto_start_app and launcher_app.fullname != auto_start_app and auto_start_app_early != auto_start_app:
+        result = AppManager.start_app(auto_start_app)
+        if result is not True:
+            print(f"WARNING: could not run {auto_start_app} app")
 
 # Create limited aiorepl because it's better than nothing:
 import aiorepl

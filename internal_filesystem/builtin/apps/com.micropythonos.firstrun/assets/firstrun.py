@@ -1,8 +1,12 @@
-from mpos import Activity
+from mpos import Activity, SharedPreferences
 
 class FirstRun(Activity):
 
+    appname = "com.micropythonos.firstrun"
+
     dontshow_checkbox = None
+    prefs = None
+    autostart_enabled = None
 
     def onCreate(self):
         screen = lv.obj()
@@ -33,7 +37,22 @@ If you've got 2 buttons, one is PREVIOUS, the other is NEXT. To ENTER, press bot
 
         self.setContentView(screen)
 
+    def onResume(self, screen):
+        # Autostart can only be disabled if nothing was enabled or if this app was enabled
+        self.prefs = SharedPreferences("com.micropythonos.settings")
+        auto_start_app_early = self.prefs.get_string("auto_start_app_early")
+        print(f"auto_start_app_early: {auto_start_app_early}")
+        if auto_start_app_early is None or auto_start_app_early == self.appname: # empty also means autostart because then it's the default
+            self.dontshow_checkbox.remove_state(lv.STATE.CHECKED)
+        else:
+            self.dontshow_checkbox.add_state(lv.STATE.CHECKED)
+
     def onPause(self, screen):
         checked = self.dontshow_checkbox.get_state() & lv.STATE.CHECKED
+        print("Removing this app from autostart")
+        editor = self.prefs.edit()
         if checked:
-            print("TODO: make sure this doesn't appear again")
+            editor.put_string("auto_start_app_early", "") # None might result in the OS starting it, empty string means explictly don't start it
+        else:
+            editor.put_string("auto_start_app_early", self.appname)
+        editor.commit()
