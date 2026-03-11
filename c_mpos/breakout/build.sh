@@ -1,5 +1,7 @@
 . ~/.espressif/python_env/idf5.4_py3.11_env/bin/activate
 
+pip install pyelftools
+
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
 
