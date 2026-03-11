@@ -32,7 +32,7 @@ __pycache__/
 c_mpos/c_mpos
 
 # build output
-c_mpos/mpong/build
+c_mpos/breakout/build
 
 # build files
 *.bin
