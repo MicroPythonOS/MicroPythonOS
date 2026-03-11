@@ -86,7 +86,7 @@ class Launcher(Activity):
         iconcont_height = icon_size + label_height
 
         for app in AppManager.get_app_list():
-            if app.category == "launcher" or app.fullname == "com.micropythonos.firstrun":
+            if app.category == "launcher":
                 continue
 
             app_name = app.name

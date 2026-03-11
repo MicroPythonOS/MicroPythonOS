@@ -10,6 +10,7 @@ OS:
 - New board support: LilyGo T-Display-S3
 - New board support: M5Stack Fire
 - New board support: ODroid Go
+- Add FreeRTOS module for low-level ESP32 functions
 
 0.8.0
 =====

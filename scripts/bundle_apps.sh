@@ -18,10 +18,10 @@ rm "$outputjson"
 # com.quasikili.quasidoodle doesn't work on touch screen devices
 # com.micropythonos.filemanager doesn't do anything other than let you browse the filesystem, so it's confusing
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
-# com.micropythonos.doom_launcher isn't ready because the firmware doesn't have doom built-in yet
 # com.micropythonos.nostr isn't ready for release yet
-# cz.ucw.pavel.calendar isn't ready for release yet
-blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.doom_launcher com.micropythonos.nostr cz.ucw.pavel.calendar"
+blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
+blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.doom" # not ready yet
+blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.navstar" # not ready yet
 
 echo "[" | tee -a "$outputjson"
 

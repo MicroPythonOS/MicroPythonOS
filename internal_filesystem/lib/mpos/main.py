@@ -161,7 +161,7 @@ except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
-prefs = SharedPreferences("com.micropythonos.settings")
+prefs = SharedPreferences("com.micropythonos.settings", defaults={"auto_start_app": "com.micropythonos.firstrun"}) # if not value is set, it will start the FirstRun app
 
 AppearanceManager.init(prefs)
 init_rootscreen() # shows the boot logo
@@ -190,13 +190,10 @@ def custom_exception_handler(e):
         #focusgroup.delete()
     #lv.deinit()
 
-import sys
 import task_handler
-if sys.platform == "esp32":
-    mpos.ui.task_handler = task_handler.TaskHandler(duration=5, exception_hook=custom_exception_handler) # 1ms gives highest framerate on esp32-s3's but might have side effects?
-else:
-    mpos.ui.task_handler = task_handler.TaskHandler(duration=5, exception_hook=custom_exception_handler) # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate)
-
+# 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate but still okay)
+# 1ms gives highest framerate on esp32-s3's but might have side effects?
+mpos.ui.task_handler = task_handler.TaskHandler(duration=1, exception_hook=custom_exception_handler)
 # Convenient for apps to be able to access these:
 mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
 mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED

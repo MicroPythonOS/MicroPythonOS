@@ -68,9 +68,13 @@ $mpremote fs mkdir :/data/com.micropythonos.system.wifiservice
 $mpremote fs cp ../internal_filesystem_excluded/data/com.micropythonos.system.wifiservice/config.json :/data/com.micropythonos.system.wifiservice/
 
 $mpremote fs mkdir :/apps
-$mpremote fs cp -r apps/com.micropythonos.musicplayer :/apps/
-$mpremote fs cp -r apps/com.micropythonos.soundrecorder :/apps/
-exit 1
+
+# Use this to install just a few apps:
+#$mpremote fs cp -r apps/com.micropythonos.musicplayer :/apps/
+#$mpremote fs cp -r apps/com.micropythonos.soundrecorder :/apps/
+#$mpremote fs cp -r apps/com.micropythonos.breakout :/apps/
+#exit 1
+
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -maxdepth 1 -type l | while read symlink; do
         if echo $symlink | grep quasiboats; then
