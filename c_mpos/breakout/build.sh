@@ -1,5 +1,7 @@
 #!/bin/bash
 
+find / -iname "activate"
+
 ls -al ~/.espressif/python_env/idf5.4_py3.11_env/bin/
 ls -al ~/.espressif/python_env/idf5.4_py3.11_env/
 ls -al ~/.espressif/python_env/
