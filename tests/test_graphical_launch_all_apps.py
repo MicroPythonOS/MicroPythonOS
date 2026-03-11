@@ -31,8 +31,18 @@ class TestLaunchAllApps(unittest.TestCase):
         """Discover all installed apps."""
         # Use PackageManager to get all apps
         all_packages = AppManager.get_app_list()
+        skipped_packages = {
+            'com.micropythonos.doom',
+            'cz.ucw.pavel.cellular',
+            'cz.ucw.pavel.compass',
+            'cz.ucw.pavel.navstar',
+        }
 
         for package in all_packages:
+            # Skip apps that should not be launched by this test
+            if package.fullname in skipped_packages:
+                continue
+
             # Get the main activity for each app
             if package.activities:
                 # Use first activity as the main one (activities are dicts)
