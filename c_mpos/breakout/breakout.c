@@ -1,3 +1,9 @@
+// Breakout native module renderer. Draws into a framebuffer that may be
+// smaller than the full display (partial framebuffer). Rendering is done
+// per-slice using a y-offset/row count so MicroPythonOS can refresh displays
+// larger than 320x230 without allocating a full-size framebuffer. This keeps
+// the simulation state global while allowing sequential chunk flushes.
+
 // Include the header file to get access to the MicroPython API
 #include "py/dynruntime.h"
 #include <stdbool.h>

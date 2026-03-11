@@ -1,6 +1,13 @@
+# Breakout app UI/driver glue. This app renders into a framebuffer that may be
+# smaller than the full display (partial framebuffer). The draw loop is more
+# complex because it slices the screen into chunks, renders each slice in C,
+# and flushes them sequentially using a flush-ready IRQ callback. A scheduled
+# (non-IRQ) handler advances chunks so it can work on larger-than-320x230
+# displays without requiring a full-size framebuffer.
 import lvgl as lv
 import time
 import mpos.ui
+import micropython
 from mpos import Activity, DisplayMetrics, InputManager
 
 import sys
@@ -30,8 +37,8 @@ class Breakout(Activity):
     chunk_rows_per = 0
     chunk_total = 0
     chunk_index = 0
-
-    refresh_timer = None
+    _draw_scheduled = False
+    _scheduled_draw_cb = None
 
     # Widgets:
     screen = None
@@ -47,7 +54,7 @@ class Breakout(Activity):
 
         d = lv.display_get_default()
         self.hor_res = d.get_horizontal_resolution()
-        self.paddle_move_step = round(self.hor_res/16)
+        self.paddle_move_step = round(self.hor_res/10)
         self.ver_res = d.get_vertical_resolution()
 
         self.leftbutton = lv.button(self.screen)
@@ -74,24 +81,11 @@ class Breakout(Activity):
 
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
-        lv.timer_create(self.startit, 4000, None).set_repeat_count(1) # this needs to be delayed, otherwise the whole thing hangs
+        lv.timer_create(self.startit, 5000, None).set_repeat_count(1) # this needs to be delayed, otherwise the whole thing hangs
 
     def onPause(self, screen):
-        if self.refresh_timer:
-            self.refresh_timer.delete()
-        mpos.ui.task_handler.remove_event_cb(self.drawframe)
         lv.log_register_print_cb(None)
         mpos.ui.main_display._data_bus.register_callback(mpos.ui.main_display._flush_ready_cb)
-
-    def startit(self, arg1=None):
-        print("starting it!")
-        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
-        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-        mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_STARTED)
-
-    def flush_ready_cb(self, arg1=None, arg2=None):
-        mpos.ui.main_display._disp_drv.flush_ready() # with this, it hangs, and without it, the device crashes
-        self.flush_ready = True
 
     def move_left(self):
         breakout.move_paddle(-self.paddle_move_step)
@@ -123,6 +117,21 @@ class Breakout(Activity):
                 focusgroup.focus_next()
             else:
                 print("focus isn't on next or previous, leaving it...")
+
+    def startit(self, arg1=None):
+        print("starting it!")
+        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
+        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
+        # Using a scheduled draw would be faster than a periodic one (lv.timer or mpos.ui.task_handler.add_event_cb) but no...
+        self._scheduled_draw_cb = self._scheduled_draw
+        self._request_draw()
+
+    def flush_ready_cb(self, arg1=None, arg2=None):
+        # This is called in IRQ (interrupt) context so it can't allocate memory
+        # So no printf, no calling drawframe() directly, just setting variables or scheduling...
+        mpos.ui.main_display._disp_drv.flush_ready()
+        self.flush_ready = True
+        self._request_draw()
 
     def send_to_display(self, y_offset=0, rows=None, is_last=True):
         x1 = 0
@@ -159,6 +168,7 @@ class Breakout(Activity):
                 if self.chunk_index >= self.chunk_total:
                     self.chunk_in_progress = False
                     self.render_next = True
+                    self._request_draw()
                 else:
                     self._render_and_send_chunk()
             return
@@ -211,6 +221,18 @@ class Breakout(Activity):
         self.chunk_waiting = True
         breakout.render(y_offset, rows, advance)
         self.send_to_display(y_offset, rows, is_last)
+
+    def _request_draw(self):
+        if not self._draw_scheduled and self._scheduled_draw_cb:
+            self._draw_scheduled = True
+            try:
+                micropython.schedule(self._scheduled_draw_cb, 0)
+            except Exception:
+                self._draw_scheduled = False
+
+    def _scheduled_draw(self, _):
+        self._draw_scheduled = False
+        self.drawframe()
 
     def touch_cb(self, event):
         event_code = event.get_code()
