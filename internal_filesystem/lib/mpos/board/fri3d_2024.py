@@ -25,7 +25,6 @@ LCD_MOSI = 6
 LCD_MISO = 8
 LCD_DC = 4
 LCD_CS = 5
-#LCD_BL = 1 # backlight can't be controlled on this hardware
 LCD_RST = 48
 
 TFT_HOR_RES=296
