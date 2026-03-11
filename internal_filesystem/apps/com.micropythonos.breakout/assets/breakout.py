@@ -31,6 +31,8 @@ class Breakout(Activity):
     chunk_total = 0
     chunk_index = 0
 
+    refresh_timer = None
+
     # Widgets:
     screen = None
     canvas = None
@@ -77,6 +79,7 @@ class Breakout(Activity):
     def onPause(self, screen):
         if self.refresh_timer:
             self.refresh_timer.delete()
+        mpos.ui.task_handler.remove_event_cb(self.drawframe)
         lv.log_register_print_cb(None)
         mpos.ui.main_display._data_bus.register_callback(mpos.ui.main_display._flush_ready_cb)
 
@@ -84,7 +87,7 @@ class Breakout(Activity):
         print("starting it!")
         breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
         mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-        self.refresh_timer = lv.timer_create(self.drawframe, 16, None) # max 1000ms/60fps ~= 16ms/frame
+        mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_STARTED)
 
     def flush_ready_cb(self, arg1=None, arg2=None):
         mpos.ui.main_display._disp_drv.flush_ready() # with this, it hangs, and without it, the device crashes
