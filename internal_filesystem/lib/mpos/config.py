@@ -172,7 +172,7 @@ class Editor:
 
     def put_string(self, key, value):
         """Store a string value."""
-        self.temp_data[key] = str(value)
+        self.temp_data[key] = None if value is None else str(value)
         return self
 
     def put_int(self, key, value):

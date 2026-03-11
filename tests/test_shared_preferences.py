@@ -432,6 +432,14 @@ class TestSharedPreferences(unittest.TestCase):
         # Getting a nonexistent key should return None or default
         self.assertIsNone(prefs.get_string("nonexistent"))
 
+    def test_put_string_none_value(self):
+        """Test that putting None stores and returns a real None."""
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_string("auto_start_app_early", None).commit()
+
+        prefs2 = SharedPreferences(self.test_app_name)
+        self.assertIsNone(prefs2.get_string("auto_start_app_early"))
+
     def test_special_characters_in_keys(self):
         """Test keys with special characters."""
         prefs = SharedPreferences(self.test_app_name)
