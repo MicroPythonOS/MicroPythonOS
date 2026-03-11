@@ -18,12 +18,21 @@ class IIODriver(IMUDriverBase):
     def __init__(self):
         super().__init__()
         self.accel_path = self.find_iio_device_with_file("in_accel_x_raw")
-        self.ensure_sampling_frequency_max(self.accel_path)
         self.mag_path = self.find_iio_device_with_file("in_magn_x_raw")
-        self.ensure_sampling_frequency_max(self.mag_path)
         self.gyro_path = self.find_iio_device_with_file("in_anglvel_x_raw")
-        self.ensure_sampling_frequency_max(self.gyro_path)
-        
+        self.available = any((self.accel_path, self.mag_path, self.gyro_path))
+
+        if not self.available:
+            print("IIO: no IIO sensors detected")
+            return
+
+        if self.accel_path:
+            self.ensure_sampling_frequency_max(self.accel_path)
+        if self.mag_path:
+            self.ensure_sampling_frequency_max(self.mag_path)
+        if self.gyro_path:
+            self.ensure_sampling_frequency_max(self.gyro_path)
+
     def _p(self, name: str):
         return self.accel_path + "/" + name
 
@@ -126,6 +135,9 @@ class IIODriver(IMUDriverBase):
         Returns:
           (changed: bool, max_freq: float or None, current: float or None)
         """
+        if not dev_path:
+            return (False, None, None)
+
         sf = dev_path + "/sampling_frequency"
         sfa = dev_path + "/sampling_frequency_available"
 
@@ -280,8 +292,11 @@ class IIODriver(IMUDriverBase):
         )
 
     def read_magnetometer(self) -> tuple[float, float, float]:
+        if not self.mag_path:
+            return (0.0, 0.0, 0.0)
+
         gx = self._read_raw_scaled(self.mag_path + "/" + "in_magn_x_raw", self.mag_path + "/" + "in_magn_x_scale")
         gy = self._read_raw_scaled(self.mag_path + "/" + "in_magn_y_raw", self.mag_path + "/" + "in_magn_y_scale")
-        gz = self._read_raw_scaled(self.mag_path + "/" + "in_magn_z_raw", self.mag_path + "/" + "in_magn_z_scale")        
+        gz = self._read_raw_scaled(self.mag_path + "/" + "in_magn_z_raw", self.mag_path + "/" + "in_magn_z_scale")
 
         return self._apply_mount_matrix(gx, gy, gz, self.mag_path)

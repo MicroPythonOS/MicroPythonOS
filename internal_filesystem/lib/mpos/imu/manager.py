@@ -50,6 +50,12 @@ class ImuManager:
 
     def init_iio(self):
         self._imu_driver = IIODriver()
+        if not getattr(self._imu_driver, "available", True):
+            self._imu_driver = None
+            self._sensor_list = []
+            self._initialized = False
+            return False
+
         self._sensor_list = [
             Sensor(
                 name="Magnetometer",
