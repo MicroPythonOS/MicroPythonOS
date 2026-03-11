@@ -1,0 +1,24 @@
+{
+"name": "Gyro",
+"publisher": "Pavel Machek",
+"short_description": "Gyro",
+"long_description": "Simple gyro app.",
+"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.gyro/icons/cz.ucw.pavel.gyro_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.gyro/mpks/cz.ucw.pavel.gyro_0.0.1.mpk",
+"fullname": "cz.ucw.pavel.gyro",
+"version": "0.0.1",
+"category": "utilities",
+"activities": [
+    {
+      "entrypoint": "assets/main.py",
+      "classname": "Main",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
