@@ -5,9 +5,7 @@
 # (non-IRQ) handler advances chunks so it can work on larger-than-320x230
 # displays without requiring a full-size framebuffer.
 import lvgl as lv
-import time
 import mpos.ui
-import micropython
 from mpos import Activity, DisplayMetrics, InputManager
 
 import sys
@@ -79,7 +77,9 @@ class Breakout(Activity):
 
     def onResume(self, screen):
         lv.log_register_print_cb(self.log_callback)
-        self.startit()
+        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
+        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
+        mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
 
     def onPause(self, screen):
         lv.log_register_print_cb(None)
@@ -115,11 +115,6 @@ class Breakout(Activity):
                 focusgroup.focus_next()
             else:
                 print("focus isn't on next or previous, leaving it...")
-
-    def startit(self, arg1=None):
-        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
-        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-        lv.timer_create(self.drawframe, 5, None)
 
     def flush_ready_cb(self, arg1=None, arg2=None):
         # This is called in IRQ (interrupt) context so it can't allocate memory
@@ -233,7 +228,7 @@ class Breakout(Activity):
             if self.touch_last_x is not None:
                 delta = x - self.touch_last_x
                 if delta:
-                    breakout.move_paddle(delta)
+                    breakout.move_paddle(round(delta*1.3)) # amplify movement to avoid sides
             self.touch_last_x = x
             return
 
