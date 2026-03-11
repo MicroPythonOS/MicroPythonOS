@@ -84,6 +84,9 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 #echo "Applying lvgl_micropython i2c patch..."
 #patch -p0 --forward < "$codebasedir"/patches/i2c_ng.patch
 
+echo "Building breakout app..."
+"$codebasedir"/c_mpos/breakout/build.sh
+
 echo "Minifying and inlining HTML..."
 pushd "$codebasedir"/webrepl/
 python3 inline_minify_webrepl.py

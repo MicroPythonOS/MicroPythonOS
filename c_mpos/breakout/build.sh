@@ -10,4 +10,4 @@ rm *.mpy
 
 PATH=~/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/:$PATH make </dev/null
 
-mv breakout*.mpy "$mydir"/../../internal_filesystem/apps/com.micropythonos.breakout/assets/
+mv "$mydir"/breakout*.mpy "$mydir"/../../internal_filesystem/apps/com.micropythonos.breakout/assets/
