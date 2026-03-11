@@ -1,0 +1,24 @@
+{
+"name": "Cellular",
+"publisher": "Pavel Machek",
+"short_description": "Application for placing phone calls",
+"long_description": "Simple application for monitoring network state and placing phone calls.",
+"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.cellular/icons/cz.ucw.pavel.cellular_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.cellular/mpks/cz.ucw.pavel.cellular_0.0.1.mpk",
+"fullname": "cz.ucw.pavel.cellular",
+"version": "0.0.1",
+"category": "utilities",
+"activities": [
+    {
+      "entrypoint": "assets/main.py",
+      "classname": "Main",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
