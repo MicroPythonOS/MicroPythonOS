@@ -7,13 +7,18 @@ import mpos.ui
 # Used to list and edit all settings:
 class SettingsActivity(Activity):
 
-    # Taken the Intent:
+    # Taken from the Intent (initialized in onCreate)
     prefs = None
-    settings = None
+    settings = ()
 
     def onCreate(self):
-        self.prefs = self.getIntent().extras.get("prefs")
-        self.settings = self.getIntent().extras.get("settings")
+        extras = self.getIntent().extras or {}
+        self.prefs = extras.get("prefs")
+        self.settings = extras.get("settings") or ()
+        if not self.prefs:
+            print("ERROR: SettingsActivity missing 'prefs' in Intent extras")
+        if not self.settings:
+            print("WARNING: SettingsActivity has no settings to display")
 
         print("creating SettingsActivity ui...")
         screen = lv.obj()
@@ -25,6 +30,9 @@ class SettingsActivity(Activity):
     def onResume(self, screen):
         # Create settings entries
         screen.clean()
+        if not self.prefs:
+            print("ERROR: SettingsActivity cannot render without prefs")
+            return
         # Get the group for focusable objects
         focusgroup = lv.group_get_default()
         if not focusgroup:
