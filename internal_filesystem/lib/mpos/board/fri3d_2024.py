@@ -12,7 +12,6 @@ import lvgl as lv
 import task_handler
 
 import drivers.display.st7789 as st7789
-import drivers.indev.cst816s as cst816s
 
 import mpos.ui
 import mpos.ui.focus_direction
@@ -251,9 +250,9 @@ indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(keypad_read_cb)
 indev.set_group(group) # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
-disp = lv.display_get_default()  # NOQA
+disp = lv.display_get_default()
 indev.set_display(disp)  # different from display
-indev.enable(True)  # NOQA
+indev.enable(True)
 
 # Register the input device with InputManager
 InputManager.register_indev(indev)

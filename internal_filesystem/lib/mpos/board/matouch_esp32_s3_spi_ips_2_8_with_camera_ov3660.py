@@ -156,6 +156,7 @@ def init_cam(width, height, colormode):
                     break
 
         if toreturn:
+            # disable and enable touch pad because camera initialization breaks it
             try:
                 from mpos import InputManager
                 indev = InputManager.list_indevs()[0]
