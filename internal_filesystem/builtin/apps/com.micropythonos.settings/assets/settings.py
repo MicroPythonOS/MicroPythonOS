@@ -1,10 +1,16 @@
 import lvgl as lv
 
-from mpos import Intent, AppearanceManager, AppManager, SettingActivity, SettingsActivity, TimeZone
+from mpos import Activity, Intent, AppearanceManager, AppManager, SettingActivity, SettingsActivity, TimeZone
 
 from bootloader import ResetIntoBootloader
 from calibrate_imu import CalibrateIMUActivity
 from check_imu_calibration import CheckIMUCalibrationActivity
+
+class LaunchWiFi(Activity):
+
+    def onCreate(self):
+        AppManager.start_app("com.micropythonos.wifi")
+
 
 class Settings(SettingsActivity):
 
@@ -39,6 +45,7 @@ class Settings(SettingsActivity):
         from mpos import SharedPreferences
         intent.putExtra("prefs", SharedPreferences("com.micropythonos.settings"))
         intent.putExtra("settings", [
+            {"title": "Wi-Fi", "key": "wifi_settings", "ui": "activity", "activity_class": LaunchWiFi},
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},
