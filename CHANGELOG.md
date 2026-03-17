@@ -1,6 +1,10 @@
 0.9.0
 =====
 
+Builtin Apps:
+- Hotspot Settings
+- WebServer Settings
+
 Frameworks:
 - AudioManager: add support for multiple speakers and microphones
 - AudioManager: add support for ADC-based microphone (adc_mic)
