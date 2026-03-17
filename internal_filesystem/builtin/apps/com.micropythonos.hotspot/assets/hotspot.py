@@ -50,6 +50,21 @@ class Hotspot(SettingsActivity):
                     "placeholder": "Leave empty for open network",
                 },
                 {
+                    "title": "Auth Mode",
+                    "key": "authmode",
+                    "ui": "dropdown",
+                    "ui_options": [
+                        ("Auto", None),
+                        ("Open", "open"),
+                        ("WPA", "wpa"),
+                        ("WPA2", "wpa2"),
+                        ("WPA/WPA2", "wpa_wpa2"),
+                    ],
+                    "changed_callback": self.toggle_hotspot,
+                },
+                '''
+                # These settings are too much:
+                {
                     "title": "Channel",
                     "key": "channel",
                     "placeholder": "Wi-Fi channel, e.g. 1",
@@ -65,19 +80,6 @@ class Hotspot(SettingsActivity):
                     "title": "Max Clients",
                     "key": "max_clients",
                     "placeholder": "Max connections, e.g. 4",
-                },
-                {
-                    "title": "Auth Mode",
-                    "key": "authmode",
-                    "ui": "dropdown",
-                    "ui_options": [
-                        ("Auto", None),
-                        ("Open", "open"),
-                        ("WPA", "wpa"),
-                        ("WPA2", "wpa2"),
-                        ("WPA/WPA2", "wpa_wpa2"),
-                    ],
-                    "changed_callback": self.toggle_hotspot,
                 },
                 {
                     "title": "IP Address",
@@ -99,6 +101,7 @@ class Hotspot(SettingsActivity):
                     "key": "dns",
                     "placeholder": "DNS, e.g. 8.8.8.8",
                 },
+                '''
             ],
         )
         return intent
