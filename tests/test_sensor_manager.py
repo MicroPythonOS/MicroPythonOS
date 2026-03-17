@@ -2,91 +2,17 @@
 import unittest
 import sys
 
+# Allow importing shared test mocks
+sys.path.insert(0, "../tests")
 
-# Mock hardware before importing SensorManager
-class MockI2C:
-    """Mock I2C bus for testing."""
-    def __init__(self, bus_id, sda=None, scl=None):
-        self.bus_id = bus_id
-        self.sda = sda
-        self.scl = scl
-        self.memory = {}  # addr -> {reg -> value}
-
-    def readfrom_mem(self, addr, reg, nbytes):
-        """Read from memory (simulates I2C read)."""
-        if addr not in self.memory:
-            raise OSError("I2C device not found")
-        if reg not in self.memory[addr]:
-            return bytes([0] * nbytes)
-        return bytes(self.memory[addr][reg])
-
-    def writeto_mem(self, addr, reg, data):
-        """Write to memory (simulates I2C write)."""
-        if addr not in self.memory:
-            self.memory[addr] = {}
-        self.memory[addr][reg] = list(data)
-
-
-class MockQMI8658:
-    """Mock QMI8658 IMU sensor."""
-    def __init__(self, i2c_bus, address=0x6B, accel_scale=0b10, gyro_scale=0b100):
-        self.i2c = i2c_bus
-        self.address = address
-        self.accel_scale = accel_scale
-        self.gyro_scale = gyro_scale
-
-    @property
-    def temperature(self):
-        """Return mock temperature."""
-        return 25.5  # Mock temperature in °C
-
-    @property
-    def acceleration(self):
-        """Return mock acceleration (in G)."""
-        return (0.0, 0.0, 1.0)  # At rest, Z-axis = 1G
-
-    @property
-    def gyro(self):
-        """Return mock gyroscope (in deg/s)."""
-        return (0.0, 0.0, 0.0)  # Stationary
-
-
-class MockWsenIsds:
-    """Mock WSEN_ISDS IMU sensor."""
-    def __init__(self, i2c, address=0x6B, acc_range="8g", acc_data_rate="104Hz",
-                 gyro_range="500dps", gyro_data_rate="104Hz"):
-        self.i2c = i2c
-        self.address = address
-        self.acc_range = acc_range
-        self.gyro_range = gyro_range
-        self.acc_sensitivity = 0.244  # mg/digit for 8g
-        self.gyro_sensitivity = 17.5  # mdps/digit for 500dps
-        self.acc_offset_x = 0
-        self.acc_offset_y = 0
-        self.acc_offset_z = 0
-        self.gyro_offset_x = 0
-        self.gyro_offset_y = 0
-        self.gyro_offset_z = 0
-
-    def get_chip_id(self):
-        """Return WHO_AM_I value."""
-        return 0x6A
-
-    def _read_raw_accelerations(self):
-        """Return mock acceleration (in mg)."""
-        return (0.0, 0.0, 1000.0)  # At rest, Z-axis = 1000 mg
-
-    def read_angular_velocities(self):
-        """Return mock gyroscope (in mdps)."""
-        return (0.0, 0.0, 0.0)
-
-    def acc_calibrate(self, samples=None):
-        """Mock calibration."""
-        pass
-
-    def gyro_calibrate(self, samples=None):
-        """Mock calibration."""
-        pass
+from mocks import (
+    MockI2C,
+    MockQMI8658,
+    MockSharedPreferences,
+    MockWsenIsds,
+    make_config_module,
+    make_machine_i2c_module,
+)
 
 
 # Mock constants from drivers
@@ -96,57 +22,20 @@ _ACCELSCALE_RANGE_8G = 0b10
 _GYROSCALE_RANGE_256DPS = 0b100
 
 
-# Mock SharedPreferences to prevent loading real calibration
-class MockSharedPreferences:
-    """Mock SharedPreferences for testing."""
-    def __init__(self, package, filename=None):
-        self.package = package
-        self.filename = filename
-        self.data = {}
-    
-    def get_list(self, key):
-        """Get list value."""
-        return self.data.get(key)
-    
-    def edit(self):
-        """Return editor."""
-        return MockEditor(self.data)
-
-class MockEditor:
-    """Mock SharedPreferences editor."""
-    def __init__(self, data):
-        self.data = data
-    
-    def put_list(self, key, value):
-        """Put list value."""
-        self.data[key] = value
-        return self
-    
-    def commit(self):
-        """Commit changes."""
-        pass
-
-mock_config = type('module', (), {
-    'SharedPreferences': MockSharedPreferences
-})()
+mock_config = make_config_module(MockSharedPreferences)
 
 # Create mock modules
-mock_machine = type('module', (), {
-    'I2C': MockI2C,
-    'Pin': type('Pin', (), {})
+mock_machine = make_machine_i2c_module(MockI2C)
+
+mock_qmi8658 = type("module", (), {
+    "QMI8658": MockQMI8658,
+    "_QMI8685_PARTID": _QMI8685_PARTID,
+    "_REG_PARTID": _REG_PARTID,
+    "_ACCELSCALE_RANGE_8G": _ACCELSCALE_RANGE_8G,
+    "_GYROSCALE_RANGE_256DPS": _GYROSCALE_RANGE_256DPS,
 })()
 
-mock_qmi8658 = type('module', (), {
-    'QMI8658': MockQMI8658,
-    '_QMI8685_PARTID': _QMI8685_PARTID,
-    '_REG_PARTID': _REG_PARTID,
-    '_ACCELSCALE_RANGE_8G': _ACCELSCALE_RANGE_8G,
-    '_GYROSCALE_RANGE_256DPS': _GYROSCALE_RANGE_256DPS
-})()
-
-mock_wsen_isds = type('module', (), {
-    'Wsen_Isds': MockWsenIsds
-})()
+mock_wsen_isds = type("module", (), {"Wsen_Isds": MockWsenIsds})()
 
 # Mock esp32 module
 def _mock_mcu_temperature(*args, **kwargs):

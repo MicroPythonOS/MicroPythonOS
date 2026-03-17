@@ -2,70 +2,20 @@ import unittest
 import sys
 
 # Add tests directory to path for network_test_helper
-sys.path.insert(0, '../tests')
+sys.path.insert(0, "../tests")
 
 # Import network test helpers
 from network_test_helper import MockNetwork, MockTime
 
-# Mock config classes
-class MockSharedPreferences:
-    """Mock SharedPreferences for testing."""
-    _all_data = {}  # Class-level storage
-
-    def __init__(self, app_id):
-        self.app_id = app_id
-        if app_id not in MockSharedPreferences._all_data:
-            MockSharedPreferences._all_data[app_id] = {}
-
-    def get_dict(self, key):
-        return MockSharedPreferences._all_data.get(self.app_id, {}).get(key, {})
-
-    def edit(self):
-        return MockEditor(self)
-
-    @classmethod
-    def reset_all(cls):
-        cls._all_data = {}
-
-
-class MockEditor:
-    """Mock editor for SharedPreferences."""
-
-    def __init__(self, prefs):
-        self.prefs = prefs
-        self.pending = {}
-
-    def put_dict(self, key, value):
-        self.pending[key] = value
-
-    def commit(self):
-        if self.prefs.app_id not in MockSharedPreferences._all_data:
-            MockSharedPreferences._all_data[self.prefs.app_id] = {}
-        MockSharedPreferences._all_data[self.prefs.app_id].update(self.pending)
-
-
-# Create mock mpos module
-class MockMpos:
-    """Mock mpos module with config and time."""
-
-    class config:
-        @staticmethod
-        def SharedPreferences(app_id):
-            return MockSharedPreferences(app_id)
-
-    class time:
-        @staticmethod
-        def sync_time():
-            pass  # No-op for testing
-
+from mocks import HotspotMockNetwork, MockMpos, MockSharedPreferences
 
 # Inject mocks before importing WifiService
-sys.modules['mpos'] = MockMpos
-sys.modules['mpos.config'] = MockMpos.config
-sys.modules['mpos.time'] = MockMpos.time
+sys.modules["mpos"] = MockMpos
+sys.modules["mpos.config"] = MockMpos.config
+sys.modules["mpos.time"] = MockMpos.time
 
 # Add path to wifi_service.py
-sys.path.append('lib/mpos/net')
+sys.path.append("lib/mpos/net")
 
 # Import WifiService
 from wifi_service import WifiService
@@ -331,7 +281,9 @@ class TestWifiServiceIsConnected(unittest.TestCase):
 
     def test_is_connected_when_disconnected(self):
         """Test is_connected returns False when WiFi is disconnected."""
-        mock_network = MockNetwork(connected=False)
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(False)
 
         result = WifiService.is_connected(network_module=mock_network)
 
@@ -346,6 +298,17 @@ class TestWifiServiceIsConnected(unittest.TestCase):
 
         # Should return False even though connected
         self.assertFalse(result)
+
+    def test_is_connected_when_hotspot_enabled(self):
+        """Test is_connected checks AP state when hotspot is enabled."""
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        WifiService.hotspot_enabled = True
+
+        result = WifiService.is_connected(network_module=mock_network)
+
+        self.assertTrue(result)
 
     def test_is_connected_desktop_mode(self):
         """Test is_connected in desktop mode."""
@@ -424,6 +387,329 @@ class TestWifiServiceNetworkManagement(unittest.TestCase):
         self.assertEqual(len(saved), 0)
 
 
+class TestWifiServiceHotspot(unittest.TestCase):
+    """Test hotspot configuration and mode switching."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        MockSharedPreferences.reset_all()
+        WifiService.hotspot_enabled = False
+        WifiService.wifi_busy = False
+        WifiService._needs_hotspot_restore = False
+
+    def tearDown(self):
+        """Clean up after test."""
+        WifiService.hotspot_enabled = False
+        WifiService.wifi_busy = False
+        WifiService._needs_hotspot_restore = False
+        MockSharedPreferences.reset_all()
+
+    def test_enable_hotspot_applies_config(self):
+        """Test enable_hotspot reads config and configures AP."""
+        prefs = MockSharedPreferences("com.micropythonos.system.hotspot")
+        editor = prefs.edit()
+        editor.put_bool("enabled", True)
+        editor.put_string("ssid", "MyAP")
+        editor.put_string("password", "ap-pass")
+        editor.put_int("channel", 6)
+        editor.put_bool("hidden", True)
+        editor.put_int("max_clients", 3)
+        editor.put_string("authmode", "wpa2")
+        editor.put_string("ip", "192.168.4.2")
+        editor.put_string("netmask", "255.255.255.0")
+        editor.put_string("gateway", "192.168.4.1")
+        editor.put_string("dns", "1.1.1.1")
+        editor.commit()
+
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        sta_wlan = mock_network.WLAN(mock_network.STA_IF)
+        sta_wlan.active(True)
+        sta_wlan._connected = True
+
+        result = WifiService.enable_hotspot(network_module=mock_network)
+
+        self.assertTrue(result)
+        self.assertTrue(WifiService.hotspot_enabled)
+        self.assertTrue(ap_wlan.active())
+        self.assertFalse(sta_wlan.active())
+        self.assertEqual(ap_wlan._config.get("essid"), "MyAP")
+        self.assertEqual(ap_wlan._config.get("channel"), 6)
+        self.assertTrue(ap_wlan._config.get("hidden"))
+        self.assertEqual(ap_wlan._config.get("max_clients"), 3)
+        self.assertEqual(ap_wlan._config.get("authmode"), mock_network.AUTH_WPA2_PSK)
+        self.assertEqual(ap_wlan._config.get("password"), "ap-pass")
+        self.assertEqual(
+            ap_wlan.ifconfig(),
+            ("192.168.4.2", "255.255.255.0", "192.168.4.1", "1.1.1.1"),
+        )
+
+    def test_enable_hotspot_respects_busy_flag(self):
+        """Test enable_hotspot returns False when WiFi is busy."""
+        WifiService.wifi_busy = True
+        mock_network = HotspotMockNetwork()
+
+        result = WifiService.enable_hotspot(network_module=mock_network)
+
+        self.assertFalse(result)
+        self.assertFalse(WifiService.hotspot_enabled)
+
+    def test_disable_hotspot_deactivates_ap(self):
+        """Test disable_hotspot turns off AP and updates flag."""
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        WifiService.hotspot_enabled = True
+
+        WifiService.disable_hotspot(network_module=mock_network)
+
+        self.assertFalse(ap_wlan.active())
+        self.assertFalse(WifiService.hotspot_enabled)
+
+    def test_enable_hotspot_desktop_mode(self):
+        """Test enable_hotspot in desktop mode uses simulated flag."""
+        result = WifiService.enable_hotspot(network_module=None)
+
+        self.assertTrue(result)
+        self.assertTrue(WifiService.hotspot_enabled)
+
+    def test_disable_hotspot_desktop_mode(self):
+        """Test disable_hotspot in desktop mode uses simulated flag."""
+        WifiService.hotspot_enabled = True
+
+        WifiService.disable_hotspot(network_module=None)
+
+        self.assertFalse(WifiService.hotspot_enabled)
+
+    def test_auto_connect_with_hotspot_enabled_prefers_ap_mode(self):
+        """Test auto_connect uses hotspot mode when enabled in config."""
+        prefs = MockSharedPreferences("com.micropythonos.system.hotspot")
+        editor = prefs.edit()
+        editor.put_bool("enabled", True)
+        editor.commit()
+
+        mock_network = HotspotMockNetwork()
+
+        WifiService.auto_connect(network_module=mock_network, time_module=MockTime())
+
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        self.assertTrue(ap_wlan.active())
+        self.assertTrue(WifiService.hotspot_enabled)
+
+    def test_attempt_connecting_temporarily_disables_hotspot(self):
+        """Test STA connect disables hotspot and leaves it off on success."""
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        WifiService.hotspot_enabled = True
+
+        sta_wlan = mock_network.WLAN(mock_network.STA_IF)
+        call_count = [0]
+
+        def mock_isconnected():
+            call_count[0] += 1
+            return call_count[0] >= 1
+
+        sta_wlan.isconnected = mock_isconnected
+
+        result = WifiService.attempt_connecting(
+            "TestSSID",
+            "pass",
+            network_module=mock_network,
+            time_module=MockTime(),
+        )
+
+        self.assertTrue(result)
+        self.assertFalse(WifiService.hotspot_enabled)
+        self.assertFalse(ap_wlan.active())
+
+    def test_attempt_connecting_restores_hotspot_on_timeout(self):
+        """Test STA connect restores hotspot when connection times out."""
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        WifiService.hotspot_enabled = True
+
+        sta_wlan = mock_network.WLAN(mock_network.STA_IF)
+
+        def mock_isconnected():
+            return False
+
+        sta_wlan.isconnected = mock_isconnected
+
+        result = WifiService.attempt_connecting(
+            "TestSSID",
+            "pass",
+            network_module=mock_network,
+            time_module=MockTime(),
+        )
+
+        self.assertFalse(result)
+        self.assertTrue(WifiService.hotspot_enabled)
+        self.assertTrue(ap_wlan.active())
+
+    def test_attempt_connecting_restores_hotspot_on_abort(self):
+        """Test STA connect restores hotspot if WiFi is disabled mid-try."""
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        WifiService.hotspot_enabled = True
+
+        sta_wlan = mock_network.WLAN(mock_network.STA_IF)
+
+        def mock_isconnected():
+            return False
+
+        def mock_active(state=None):
+            if state is not None:
+                sta_wlan._active = state
+                return None
+            return False
+
+        sta_wlan.isconnected = mock_isconnected
+        sta_wlan.active = mock_active
+
+        result = WifiService.attempt_connecting(
+            "TestSSID",
+            "pass",
+            network_module=mock_network,
+            time_module=MockTime(),
+        )
+
+        self.assertFalse(result)
+        self.assertTrue(WifiService.hotspot_enabled)
+        self.assertTrue(ap_wlan.active())
+
+
+class TestWifiServiceTemporaryDisable(unittest.TestCase):
+    """Test temporarily_disable/temporarily_enable behavior."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        WifiService.wifi_busy = False
+        WifiService._temp_disable_state = None
+        WifiService.hotspot_enabled = False
+
+    def tearDown(self):
+        """Clean up after test."""
+        WifiService.wifi_busy = False
+        WifiService._temp_disable_state = None
+        WifiService.hotspot_enabled = False
+
+    def test_temporarily_disable_raises_when_busy(self):
+        """Test temporarily_disable raises if wifi_busy is set."""
+        WifiService.wifi_busy = True
+
+        with self.assertRaises(RuntimeError):
+            WifiService.temporarily_disable(network_module=HotspotMockNetwork())
+
+    def test_temporarily_disable_disconnects_and_tracks_state(self):
+        """Test temporarily_disable stores state and disconnects."""
+        mock_network = HotspotMockNetwork()
+        sta_wlan = mock_network.WLAN(mock_network.STA_IF)
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        sta_wlan._connected = True
+        ap_wlan.active(True)
+        WifiService.hotspot_enabled = True
+
+        disconnect_called = [False]
+
+        def mock_disconnect(network_module=None):
+            disconnect_called[0] = True
+
+        original_disconnect = WifiService.disconnect
+        WifiService.disconnect = mock_disconnect
+        try:
+            was_connected = WifiService.temporarily_disable(network_module=mock_network)
+        finally:
+            WifiService.disconnect = original_disconnect
+
+        self.assertTrue(was_connected)
+        self.assertTrue(WifiService.wifi_busy)
+        self.assertEqual(
+            WifiService._temp_disable_state,
+            {"was_connected": True, "hotspot_was_enabled": True},
+        )
+        self.assertTrue(disconnect_called[0])
+
+    def test_temporarily_enable_restores_hotspot_and_reconnects(self):
+        """Test temporarily_enable restores hotspot and triggers reconnect."""
+        mock_network = HotspotMockNetwork()
+        WifiService._temp_disable_state = {"was_connected": True, "hotspot_was_enabled": True}
+        WifiService.wifi_busy = True
+
+        thread_calls = []
+
+        class MockThreadModule:
+            @staticmethod
+            def start_new_thread(func, args):
+                thread_calls.append((func, args))
+
+        original_thread = sys.modules.get("_thread")
+        sys.modules["_thread"] = MockThreadModule
+
+        try:
+            WifiService.temporarily_enable(True, network_module=mock_network)
+        finally:
+            if original_thread is not None:
+                sys.modules["_thread"] = original_thread
+            else:
+                sys.modules.pop("_thread", None)
+
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        self.assertFalse(WifiService.wifi_busy)
+        self.assertIsNone(WifiService._temp_disable_state)
+        self.assertTrue(ap_wlan.active())
+        self.assertTrue(WifiService.hotspot_enabled)
+        self.assertEqual(thread_calls[0][0], WifiService.auto_connect)
+
+
+class TestWifiServiceIPv4Info(unittest.TestCase):
+    """Test IPv4 info accessors for AP/STA modes."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        WifiService.wifi_busy = False
+        WifiService.hotspot_enabled = False
+
+    def tearDown(self):
+        """Clean up after test."""
+        WifiService.wifi_busy = False
+        WifiService.hotspot_enabled = False
+
+    def test_get_ipv4_info_from_ap_when_hotspot_enabled(self):
+        """Test IPv4 getters use AP info when hotspot is enabled."""
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        ap_wlan.ifconfig(("192.168.4.1", "255.255.255.0", "192.168.4.1", "8.8.4.4"))
+        WifiService.hotspot_enabled = True
+
+        address = WifiService.get_ipv4_address(network_module=mock_network)
+        gateway = WifiService.get_ipv4_gateway(network_module=mock_network)
+
+        self.assertEqual(address, "192.168.4.1")
+        self.assertEqual(gateway, "192.168.4.1")
+
+    def test_get_ipv4_info_returns_none_when_busy(self):
+        """Test IPv4 getters return None when wifi_busy is set."""
+        WifiService.wifi_busy = True
+
+        address = WifiService.get_ipv4_address(network_module=HotspotMockNetwork())
+        gateway = WifiService.get_ipv4_gateway(network_module=HotspotMockNetwork())
+
+        self.assertIsNone(address)
+        self.assertIsNone(gateway)
+
+    def test_get_ipv4_info_desktop_mode(self):
+        """Test IPv4 getters return simulated values in desktop mode."""
+        address = WifiService.get_ipv4_address(network_module=None)
+        gateway = WifiService.get_ipv4_gateway(network_module=None)
+
+        self.assertEqual(address, "123.456.789.000")
+        self.assertEqual(gateway, "000.123.456.789")
+
+
 class TestWifiServiceDisconnect(unittest.TestCase):
     """Test WifiService.disconnect() method."""
 
@@ -452,6 +738,21 @@ class TestWifiServiceDisconnect(unittest.TestCase):
         # Should have called both
         self.assertTrue(disconnect_called[0])
         self.assertTrue(active_false_called[0])
+
+    def test_disconnect_disables_ap(self):
+        """Test disconnect also disables AP and clears hotspot flag."""
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        sta_wlan = mock_network.WLAN(mock_network.STA_IF)
+        ap_wlan.active(True)
+        sta_wlan._connected = True
+
+        WifiService.hotspot_enabled = True
+
+        WifiService.disconnect(network_module=mock_network)
+
+        self.assertFalse(ap_wlan.active())
+        self.assertFalse(WifiService.hotspot_enabled)
 
     def test_disconnect_desktop_mode(self):
         """Test disconnect in desktop mode."""

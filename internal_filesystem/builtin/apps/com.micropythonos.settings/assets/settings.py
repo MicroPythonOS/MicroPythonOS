@@ -12,6 +12,12 @@ class LaunchWiFi(Activity):
         AppManager.start_app("com.micropythonos.wifi")
 
 
+class LaunchHotspot(Activity):
+
+    def onCreate(self):
+        AppManager.start_app("com.micropythonos.hotspot")
+
+
 class Settings(SettingsActivity):
 
     """Override getIntent to provide prefs and settings via Intent extras"""
@@ -46,6 +52,7 @@ class Settings(SettingsActivity):
         intent.putExtra("prefs", SharedPreferences("com.micropythonos.settings"))
         intent.putExtra("settings", [
             {"title": "Wi-Fi", "key": "wifi_settings", "ui": "activity", "activity_class": LaunchWiFi},
+            {"title": "Hotspot", "key": "hotspot_settings", "ui": "activity", "activity_class": LaunchHotspot},
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},

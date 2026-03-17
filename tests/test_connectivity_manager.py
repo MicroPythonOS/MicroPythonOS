@@ -1,31 +1,18 @@
 import unittest
 import sys
 
-# Add parent directory to path so we can import network_test_helper
+# Add parent directory to path so we can import shared mocks/network_test_helper
 # When running from unittest.sh, we're in internal_filesystem/, so tests/ is ../tests/
-sys.path.insert(0, '../tests')
+sys.path.insert(0, "../tests")
+
+from mocks import make_machine_timer_module, make_usocket_module
 
 # Import our network test helpers
 from network_test_helper import MockNetwork, MockTimer, MockTime, MockRequests, MockSocket
 
-# Mock machine module with Timer
-class MockMachine:
-    """Mock machine module."""
-    Timer = MockTimer
-
-# Mock usocket module
-class MockUsocket:
-    """Mock usocket module."""
-    AF_INET = MockSocket.AF_INET
-    SOCK_STREAM = MockSocket.SOCK_STREAM
-
-    @staticmethod
-    def socket(af, sock_type):
-        return MockSocket(af, sock_type)
-
 # Inject mocks into sys.modules BEFORE importing connectivity_manager
-sys.modules['machine'] = MockMachine
-sys.modules['usocket'] = MockUsocket
+sys.modules["machine"] = make_machine_timer_module(MockTimer)
+sys.modules["usocket"] = make_usocket_module(MockSocket)
 
 # Mock requests module
 mock_requests = MockRequests()

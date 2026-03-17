@@ -7,86 +7,17 @@ Tests ADC1/ADC2 detection, caching, WiFi coordination, and voltage calculations.
 import unittest
 import sys
 
+# Allow importing shared test mocks
+sys.path.insert(0, "../tests")
+
+from mocks import MockADC, MockMachineADC, MockWifiService
+
 # Add parent directory to path for imports
-sys.path.insert(0, '../internal_filesystem')
-
-# Mock modules before importing BatteryManager
-class MockADC:
-    """Mock ADC for testing."""
-    ATTN_11DB = 3
-
-    def __init__(self, pin):
-        self.pin = pin
-        self._atten = None
-        self._read_value = 2048  # Default mid-range value
-
-    def atten(self, value):
-        self._atten = value
-
-    def read(self):
-        return self._read_value
-
-    def set_read_value(self, value):
-        """Test helper to set ADC reading."""
-        self._read_value = value
-
-
-class MockPin:
-    """Mock Pin for testing."""
-    def __init__(self, pin_num):
-        self.pin_num = pin_num
-
-
-class MockMachine:
-    """Mock machine module."""
-    ADC = MockADC
-    Pin = MockPin
-
-
-class MockWifiService:
-    """Mock WifiService for testing."""
-    wifi_busy = False
-    _connected = False
-    _temporarily_disabled = False
-
-    @classmethod
-    def is_connected(cls):
-        return cls._connected
-
-    @classmethod
-    def disconnect(cls):
-        cls._connected = False
-
-    @classmethod
-    def temporarily_disable(cls):
-        """Temporarily disable WiFi and return whether it was connected."""
-        if cls.wifi_busy:
-            raise RuntimeError("Cannot disable WiFi: WifiService is already busy")
-        was_connected = cls._connected
-        cls.wifi_busy = True
-        cls._connected = False
-        cls._temporarily_disabled = True
-        return was_connected
-
-    @classmethod
-    def temporarily_enable(cls, was_connected):
-        """Re-enable WiFi and reconnect if it was connected before."""
-        cls.wifi_busy = False
-        cls._temporarily_disabled = False
-        if was_connected:
-            cls._connected = True  # Simulate reconnection
-
-    @classmethod
-    def reset(cls):
-        """Test helper to reset state."""
-        cls.wifi_busy = False
-        cls._connected = False
-        cls._temporarily_disabled = False
-
+sys.path.insert(0, "../internal_filesystem")
 
 # Inject mocks
-sys.modules['machine'] = MockMachine
-sys.modules['mpos.net.wifi_service'] = type('module', (), {'WifiService': MockWifiService})()
+sys.modules["machine"] = MockMachineADC
+sys.modules["mpos.net.wifi_service"] = type("module", (), {"WifiService": MockWifiService})()
 
 # Now import BatteryManager
 from mpos.battery_manager import BatteryManager
