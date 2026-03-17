@@ -3,7 +3,7 @@ import socket
 import uio
 
 import _webrepl
-import webrepl
+from . import webrepl
 import websocket
 
 WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html"

@@ -229,11 +229,10 @@ async def asyncio_repl():
 TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
 
 try:
-    import webrepl
-    from mpos.webserver import accept_handler as webrepl_accept_handler
-    webrepl.start(port=7890, password="MPOSweb26", accept_handler=webrepl_accept_handler)  # password is max 9 characters
+    from mpos import WebServer
+    WebServer.auto_start()
 except Exception as e:
-    print(f"Could not start webrepl - this is normal on desktop systems: {e}")
+    print(f"Could not start webserver - this is normal on desktop systems: {e}")
 
 async def ota_rollback_cancel():
     try:

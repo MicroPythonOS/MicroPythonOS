@@ -155,6 +155,16 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
 
+	# Ensure WebREPL native module is enabled for unix/macOS builds.
+	mpconfig_unix="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/mpconfigport.h
+	if ! grep -q "MICROPY_PY_WEBREPL" "$mpconfig_unix"; then
+		echo "Enabling MICROPY_PY_WEBREPL in $mpconfig_unix"
+		sed -i.backup '/#include "mpconfigvariant.h"/a \
+\n#ifndef MICROPY_PY_WEBREPL\n#define MICROPY_PY_WEBREPL (1)\n#endif\n' "$mpconfig_unix"
+	else
+		echo "MICROPY_PY_WEBREPL already configured in $mpconfig_unix"
+	fi
+
 	# Comment out @micropython.viper decorator for Unix/macOS builds
 	# (cross-compiler doesn't support Viper native code emitter)
 	echo "Temporarily commenting out @micropython.viper decorator for Unix/macOS build..."
