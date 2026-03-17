@@ -1,9 +1,9 @@
 import lvgl as lv
 
-from mpos import Activity, Intent, SettingsActivity, SharedPreferences, WifiService
+from mpos import Activity, DisplayMetrics, Intent, SettingsActivity, SharedPreferences, WifiService
 
 
-class Hotspot(SettingsActivity):
+class Hotspot(Activity):
     """
     Hotspot configuration app.
 
@@ -25,86 +25,104 @@ class Hotspot(SettingsActivity):
         "dns": "8.8.8.8",
     }
 
-    def getIntent(self):
-        prefs = SharedPreferences("com.micropythonos.system.hotspot", defaults=self.DEFAULTS)
-        intent = Intent()
-        intent.putExtra("prefs", prefs)
-        intent.putExtra(
-            "settings",
-            [
-                {
-                    "title": "Hotspot Enabled",
-                    "key": "enabled",
-                    "ui": "radiobuttons",
-                    "ui_options": [("On", "True"), ("Off", "False")],
-                    "changed_callback": self.toggle_hotspot,
-                },
-                {
-                    "title": "Network Name (SSID)",
-                    "key": "ssid",
-                    "placeholder": "Hotspot SSID",
-                },
-                {
-                    "title": "Password",
-                    "key": "password",
-                    "placeholder": "Leave empty for open network",
-                },
-                {
-                    "title": "Auth Mode",
-                    "key": "authmode",
-                    "ui": "dropdown",
-                    "ui_options": [
-                        ("Auto", None),
-                        ("Open", "open"),
-                        ("WPA", "wpa"),
-                        ("WPA2", "wpa2"),
-                        ("WPA/WPA2", "wpa_wpa2"),
-                    ],
-                    "changed_callback": self.toggle_hotspot,
-                },
-                '''
-                # These settings are too much:
-                {
-                    "title": "Channel",
-                    "key": "channel",
-                    "placeholder": "Wi-Fi channel, e.g. 1",
-                },
-                {
-                    "title": "Hidden Network",
-                    "key": "hidden",
-                    "ui": "radiobuttons",
-                    "ui_options": [("Visible", "False"), ("Hidden", "True")],
-                    "changed_callback": self.toggle_hotspot,
-                },
-                {
-                    "title": "Max Clients",
-                    "key": "max_clients",
-                    "placeholder": "Max connections, e.g. 4",
-                },
-                {
-                    "title": "IP Address",
-                    "key": "ip",
-                    "placeholder": "Hotspot IP, e.g. 192.168.4.1",
-                },
-                {
-                    "title": "Netmask",
-                    "key": "netmask",
-                    "placeholder": "Netmask, e.g. 255.255.255.0",
-                },
-                {
-                    "title": "Gateway",
-                    "key": "gateway",
-                    "placeholder": "Gateway, e.g. 192.168.4.1",
-                },
-                {
-                    "title": "DNS",
-                    "key": "dns",
-                    "placeholder": "DNS, e.g. 8.8.8.8",
-                },
-                '''
-            ],
-        )
-        return intent
+    status_label = None
+    action_button = None
+    action_label = None
+    settings_button = None
+    prefs = None
+
+    def onCreate(self):
+        self.prefs = SharedPreferences("com.micropythonos.system.hotspot", defaults=self.DEFAULTS)
+        screen = lv.obj()
+        screen.set_style_border_width(0, lv.PART.MAIN)
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(3), lv.PART.MAIN)
+        screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+
+        header = lv.label(screen)
+        header.set_text("Hotspot")
+        header.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+
+        self.status_label = lv.label(screen)
+        self.status_label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
+        self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.status_label.set_width(lv.pct(100))
+
+        button_row = lv.obj(screen)
+        button_row.set_width(lv.pct(100))
+        button_row.set_height(lv.SIZE_CONTENT)
+        button_row.set_style_border_width(0, lv.PART.MAIN)
+        button_row.set_style_pad_all(0, lv.PART.MAIN)
+        button_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        button_row.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
+
+        self.action_button = lv.button(button_row)
+        self.action_button.set_size(lv.pct(45), lv.SIZE_CONTENT)
+        self.action_button.add_event_cb(self.toggle_hotspot_button, lv.EVENT.CLICKED, None)
+        self.action_label = lv.label(self.action_button)
+        self.action_label.center()
+
+        self.settings_button = lv.button(button_row)
+        self.settings_button.set_size(lv.pct(45), lv.SIZE_CONTENT)
+        self.settings_button.add_event_cb(self.open_settings, lv.EVENT.CLICKED, None)
+        settings_label = lv.label(self.settings_button)
+        settings_label.set_text("Settings")
+        settings_label.center()
+
+        self.setContentView(screen)
+
+    def onResume(self, screen):
+        super().onResume(screen)
+        self.refresh_status()
+
+    def refresh_status(self):
+        is_running = WifiService.is_hotspot_enabled()
+        state_text = "Running" if is_running else "Stopped"
+        self.status_label.set_text(f"Status: {state_text}")
+        button_text = "Stop" if is_running else "Start"
+        self.action_label.set_text(button_text)
+        self.action_label.center()
+
+    def toggle_hotspot_button(self, event):
+        if WifiService.is_hotspot_enabled():
+            WifiService.disable_hotspot()
+            self._set_enabled_pref(False)
+        else:
+            WifiService.enable_hotspot()
+            self._set_enabled_pref(True)
+        self.refresh_status()
+
+    def open_settings(self, event):
+        intent = Intent(activity_class=SettingsActivity)
+        intent.putExtra("prefs", self.prefs)
+        intent.putExtra("settings", self._settings_entries())
+        self.startActivity(intent)
+
+    def _settings_entries(self):
+        return [
+            {
+                "title": "Network Name (SSID)",
+                "key": "ssid",
+                "placeholder": "Hotspot SSID",
+            },
+            {
+                "title": "Password",
+                "key": "password",
+                "placeholder": "Leave empty for open network",
+            },
+            {
+                "title": "Auth Mode",
+                "key": "authmode",
+                "ui": "dropdown",
+                "ui_options": [
+                    ("Auto", None),
+                    ("Open", "open"),
+                    ("WPA", "wpa"),
+                    ("WPA2", "wpa2"),
+                    ("WPA/WPA2", "wpa_wpa2"),
+                ],
+                "changed_callback": self.toggle_hotspot,
+            },
+        ]
 
     def toggle_hotspot(self, new_value):
         enabled_value = self.prefs.get_string("enabled", "False")
@@ -113,3 +131,51 @@ class Hotspot(SettingsActivity):
             WifiService.enable_hotspot()
         else:
             WifiService.disable_hotspot()
+        self.refresh_status()
+
+    def _set_enabled_pref(self, enabled):
+        editor = self.prefs.edit()
+        editor.put_string("enabled", "True" if enabled else "False")
+        editor.apply()
+
+
+'''
+# These settings are too much:
+{
+    "title": "Channel",
+    "key": "channel",
+    "placeholder": "Wi-Fi channel, e.g. 1",
+},
+{
+    "title": "Hidden Network",
+    "key": "hidden",
+    "ui": "radiobuttons",
+    "ui_options": [("Visible", "False"), ("Hidden", "True")],
+    "changed_callback": self.toggle_hotspot,
+},
+{
+    "title": "Max Clients",
+    "key": "max_clients",
+    "placeholder": "Max connections, e.g. 4",
+},
+{
+    "title": "IP Address",
+    "key": "ip",
+    "placeholder": "Hotspot IP, e.g. 192.168.4.1",
+},
+{
+    "title": "Netmask",
+    "key": "netmask",
+    "placeholder": "Netmask, e.g. 255.255.255.0",
+},
+{
+    "title": "Gateway",
+    "key": "gateway",
+    "placeholder": "Gateway, e.g. 192.168.4.1",
+},
+{
+    "title": "DNS",
+    "key": "dns",
+    "placeholder": "DNS, e.g. 8.8.8.8",
+},
+'''
