@@ -554,6 +554,13 @@ class WifiService:
         return WifiService.wifi_busy
 
     @staticmethod
+    def _ensure_access_points_loaded():
+        if not WifiService.access_points:
+            WifiService.access_points = mpos.config.SharedPreferences(
+                "com.micropythonos.system.wifiservice"
+            ).get_dict("access_points")
+
+    @staticmethod
     def get_saved_networks():
         """
         Get list of saved network SSIDs.
@@ -561,11 +568,7 @@ class WifiService:
         Returns:
             list: List of saved SSIDs
         """
-        if not WifiService.access_points:
-            WifiService.access_points = mpos.config.SharedPreferences(
-                "com.micropythonos.system.wifiservice"
-            ).get_dict("access_points")
-
+        WifiService._ensure_access_points_loaded()
         return list(WifiService.access_points.keys())
 
     @staticmethod
@@ -662,10 +665,7 @@ class WifiService:
         Returns:
             str or None: Password if found, None otherwise
         """
-        if not WifiService.access_points:
-            WifiService.access_points = mpos.config.SharedPreferences(
-                "com.micropythonos.system.wifiservice"
-            ).get_dict("access_points")
+        WifiService._ensure_access_points_loaded()
 
         ap = WifiService.access_points.get(ssid)
         if ap:
@@ -683,10 +683,7 @@ class WifiService:
         Returns:
             bool: True if network is hidden, False otherwise
         """
-        if not WifiService.access_points:
-            WifiService.access_points = mpos.config.SharedPreferences(
-                "com.micropythonos.system.wifiservice"
-            ).get_dict("access_points")
+        WifiService._ensure_access_points_loaded()
 
         ap = WifiService.access_points.get(ssid)
         if ap:

@@ -9,10 +9,8 @@ class WebServerSettings(Activity):
     action_button = None
     action_label = None
     settings_button = None
-    prefs = None
 
     def onCreate(self):
-        self.prefs = SharedPreferences(WebServer.PREFS_NAMESPACE, defaults=WebServer.DEFAULTS)
         self.ui_prefs = SharedPreferences(WebServer.PREFS_NAMESPACE)
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
