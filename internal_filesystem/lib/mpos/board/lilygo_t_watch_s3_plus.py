@@ -47,7 +47,9 @@ import drivers.indev.ft6x36 as ft6x36
 i2c_bus = i2c.I2C.Bus(host=0, sda=39, scl=40, freq=400000, use_locks=False)
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=ft6x36.I2C_ADDR, reg_bits=ft6x36.BITS)
 import pointer_framework
-indev=ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180)
+indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180)
+from mpos import InputManager
+InputManager.register_indev(indev)
 
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
 

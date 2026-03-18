@@ -11,20 +11,39 @@ class HowTo(Activity):
     def onCreate(self):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        '''
+        welcome_label = lv.label(screen)
+        welcome_label.set_width(lv.pct(100))
+        welcome_label.set_text("Welcome!")
+        welcome_label.set_style_text_font(lv.font_montserrat_34, lv.PART.MAIN)
+        welcome_label.set_style_margin_bottom(2, lv.PART.MAIN)
+        '''
+        preamble = "How to Navigate"
+        title_label = lv.label(screen)
+        title_label.set_width(lv.pct(100))
+        title_label.set_text(preamble)
+        title_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         label = lv.label(screen)
         label.set_width(lv.pct(100))
-        touchhelp = "swipe from the left edge to go back and from the top edge to open the menu."
-        label.set_text(f'''
-Welcome!
+        label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
+        buttonhelp = '''As you don't have a touch screen, you need to use the buttons to navigate:
+        
+- If you have a joystick and at least 2 buttons, then use the joystick to move around. Use one of the buttons to ENTER and another to go BACK.
 
-This app will explain how to move around in MicroPythonOS.
+- If you have 3 buttons, then one is PREVIOUS, one is ENTER and one is NEXT. To go back, press PREVIOUS and NEXT together.
 
-If you're on a touch screen, {touchhelp}
-
-If you've got 3 buttons, one is PREVIOUS, one is ENTER and one is NEXT. To go back, press PREVIOUS and NEXT together.
-
-If you've got 2 buttons, one is PREVIOUS, the other is NEXT. To ENTER, press both at the same time. To go back, long-press PREVIOUS.
-        ''')
+- If you have just 2 buttons, then one is PREVIOUS, the other is NEXT. To ENTER, press both at the same time. To go back, long-press the PREVIOUS button.
+        '''
+        touchhelp = "Swipe from the left edge to go back and from the top edge to open the menu."
+        from mpos import InputManager
+        if InputManager.has_pointer():
+            label.set_text(f'''
+{touchhelp}
+            ''')
+        else:
+            label.set_text(f'''
+{buttonhelp}
+            ''')
         label.set_long_mode(lv.label.LONG_MODE.WRAP)
 
         self.dontshow_checkbox = lv.checkbox(screen)

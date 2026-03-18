@@ -50,9 +50,10 @@ mpos.ui.main_display = sdl_display.SDLDisplay(data_bus=bus,display_width=TFT_HOR
 # display.set_dpi(65) # doesn't seem to change the default 130...
 mpos.ui.main_display.init()
 # main_display.set_dpi(65) # doesn't seem to change the default 130...
-
 import sdl_pointer
 mouse = sdl_pointer.SDLPointer()
+InputManager.register_indev(mouse)
+
 
 def catch_escape_key(indev, indev_data):
     global sdlkeyboard
