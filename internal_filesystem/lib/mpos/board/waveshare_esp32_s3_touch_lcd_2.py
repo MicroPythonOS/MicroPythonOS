@@ -11,6 +11,7 @@ import lcd_bus
 import lvgl as lv
 import machine
 import mpos.ui
+from mpos import InputManager
 
 # Pin configuration
 SPI_BUS = 2
@@ -83,7 +84,8 @@ mpos.ui.main_display.set_backlight(100)
 # Touch handling:
 i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_locks=False)
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=TP_ADDR, reg_bits=TP_REGBITS)
-indev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
+indev = cst816s.CST816S(touch_dev, startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
+InputManager.register_indev(indev)
 
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 

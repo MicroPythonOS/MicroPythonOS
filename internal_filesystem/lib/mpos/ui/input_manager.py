@@ -7,6 +7,8 @@ focus management, and input device registration.
 All methods are class methods, so no instance creation is needed.
 """
 
+import lvgl as lv
+
 
 class InputManager:
     """
@@ -68,36 +70,11 @@ class InputManager:
     @classmethod
     def has_pointer(cls):
         """Check if any registered input device is a pointer/touch device."""
-        import lvgl as lv
-        if cls.has_indev_type(lv.INDEV_TYPE.POINTER):
-            return True
-        get_next = getattr(lv, "indev_get_next", None)
-        if get_next:
-            indev = get_next(None)
-            while indev:
-                try:
-                    if indev.get_type() == lv.INDEV_TYPE.POINTER:
-                        return True
-                except Exception:
-                    pass
-                indev = get_next(indev)
-        get_active = getattr(lv, "indev_active", None) or getattr(lv, "indev_get_act", None)
-        if get_active:
-            try:
-                indev = get_active()
-            except Exception:
-                indev = None
-            if indev:
-                try:
-                    return indev.get_type() == lv.INDEV_TYPE.POINTER
-                except Exception:
-                    return False
-        return False
+        return cls.has_indev_type(lv.INDEV_TYPE.POINTER)
     
     @classmethod
     def pointer_xy(cls):
         """Get current pointer/touch coordinates."""
-        import lvgl as lv
         indev = lv.indev_active()
         if indev:
             p = lv.point_t()
