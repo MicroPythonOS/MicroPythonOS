@@ -6,12 +6,13 @@ try:
     import network
 except ImportError:
     network = None
+import errno
 import os
 import socket
 import sys
-import _thread
 import websocket
 import _webrepl
+from mpos import TaskManager
 
 listen_s = None
 client_s = None
@@ -106,6 +107,8 @@ def setup_conn(port, accept_handler):
     listen_s.listen(1)
     accept_installed = False
     if accept_handler:
+        # Unix/macOS (and Windows) ports don't support the accept-handler sockopt,
+        # which raises buffer-protocol errors. We fall back to a TaskManager loop.
         if sys.platform in ("linux", "darwin", "win32"):
             accept_installed = False
         else:
@@ -150,14 +153,30 @@ def accept_conn(listen_sock):
     return True
 
 
-def _accept_loop(listen_sock, handler):
+async def _accept_loop(listen_sock, handler):
+    try:
+        listen_sock.setblocking(False)
+    except Exception:
+        try:
+            listen_sock.settimeout(0)
+        except Exception:
+            pass
     while True:
         try:
             handler(listen_sock)
-        except OSError:
+        except OSError as exc:
+            # Non-blocking accept: ignore EAGAIN-style errors and back off briefly.
+            err = exc.args[0] if exc.args else None
+            exc_errno = getattr(exc, "errno", None)
+            eagain = getattr(errno, "EAGAIN", 11)
+            retry_errors = (eagain, 11)
+            if (err in retry_errors) or (exc_errno in retry_errors):
+                await TaskManager.sleep_ms(100)
+                continue
             break
         except Exception:
             pass
+        await TaskManager.sleep_ms(100)
 
 
 def stop():
@@ -192,7 +211,9 @@ def start(port=8266, password=None, accept_handler=accept_conn):
         while not accept_conn(s):
             pass
     elif not accept_installed:
-        _thread.start_new_thread(_accept_loop, (s, accept_handler))
+        # TaskManager workaround: drive accept() in a non-blocking loop when the
+        # platform cannot install an accept_handler via socket options (Unix/macOS).
+        TaskManager.create_task(_accept_loop(s, accept_handler))
         if password is None:
             print("Started webrepl in normal mode")
         else:
