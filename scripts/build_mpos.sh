@@ -159,8 +159,17 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	mpconfig_unix="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/mpconfigport.h
 	if ! grep -q "MICROPY_PY_WEBREPL" "$mpconfig_unix"; then
 		echo "Enabling MICROPY_PY_WEBREPL in $mpconfig_unix"
-		sed -i.backup '/#include "mpconfigvariant.h"/a \
-\n#ifndef MICROPY_PY_WEBREPL\n#define MICROPY_PY_WEBREPL (1)\n#endif\n' "$mpconfig_unix"
+		python3 - "$mpconfig_unix" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+needle = '#include "mpconfigvariant.h"'
+insert = "\n\n#ifndef MICROPY_PY_WEBREPL\n#define MICROPY_PY_WEBREPL (1)\n#endif\n"
+if needle in text and "MICROPY_PY_WEBREPL" not in text:
+	   path.write_text(text.replace(needle, needle + insert))
+PY
 	else
 		echo "MICROPY_PY_WEBREPL already configured in $mpconfig_unix"
 	fi
