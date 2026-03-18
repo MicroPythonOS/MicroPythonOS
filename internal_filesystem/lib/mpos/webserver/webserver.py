@@ -79,6 +79,12 @@ class WebServer:
             cls._last_error = exc
             cls._started = False
             print(f"WebServer start failed: {exc}")
+            try:
+                import sys
+
+                sys.print_exception(exc)
+            except Exception:
+                pass
             return False
 
     @classmethod
