@@ -12,7 +12,6 @@ class HotspotSettings(Activity):
     """
 
     DEFAULTS = {
-        "enabled": False,
         "ssid": "MicroPythonOS",
         "password": "",
         "channel": 1,
@@ -77,7 +76,12 @@ class HotspotSettings(Activity):
     def refresh_status(self):
         is_running = WifiService.is_hotspot_enabled()
         state_text = "Running" if is_running else "Stopped"
-        self.status_label.set_text(f"Status: {state_text}")
+        ssid = self.prefs.get_string("ssid", self.DEFAULTS["ssid"])
+        authmode = self.prefs.get_string("authmode", None)
+        security_text = self._format_security_label(authmode)
+        self.status_label.set_text(
+            f"Status: {state_text}\nHotspot name: {ssid}\nSecurity: {security_text}"
+        )
         button_text = "Stop" if is_running else "Start"
         self.action_label.set_text(button_text)
         self.action_label.center()
@@ -85,10 +89,8 @@ class HotspotSettings(Activity):
     def toggle_hotspot_button(self, event):
         if WifiService.is_hotspot_enabled():
             WifiService.disable_hotspot()
-            self._set_enabled_pref(False)
         else:
             WifiService.enable_hotspot()
-            self._set_enabled_pref(True)
         self.refresh_status()
 
     def open_settings(self, event):
@@ -108,6 +110,7 @@ class HotspotSettings(Activity):
                 "title": "Password",
                 "key": "password",
                 "placeholder": "Leave empty for open network",
+                "should_show": self.should_show_password,
             },
             {
                 "title": "Auth Mode",
@@ -115,28 +118,35 @@ class HotspotSettings(Activity):
                 "ui": "dropdown",
                 "ui_options": [
                     ("Auto", None),
-                    ("Open", "open"),
-                    ("WPA", "wpa"),
+                    ("None", "none"),
+                    #("Open", "open"),
+                    #("WPA", "wpa"),
                     ("WPA2", "wpa2"),
-                    ("WPA/WPA2", "wpa_wpa2"),
+                    #("WPA/WPA2", "wpa_wpa2"),
                 ],
                 "changed_callback": self.toggle_hotspot,
             },
         ]
 
     def toggle_hotspot(self, new_value):
-        enabled_value = self.prefs.get_string("enabled", "False")
-        should_enable = str(enabled_value).lower() in ("true", "1", "yes", "on")
-        if should_enable:
+        if WifiService.is_hotspot_enabled():
             WifiService.enable_hotspot()
-        else:
-            WifiService.disable_hotspot()
         self.refresh_status()
 
-    def _set_enabled_pref(self, enabled):
-        editor = self.prefs.edit()
-        editor.put_string("enabled", "True" if enabled else "False")
-        editor.apply()
+    def should_show_password(self, setting):
+        authmode = self.prefs.get_string("authmode", None)
+        return authmode != "none"
+
+    def _format_security_label(self, authmode):
+        labels = {
+            None: "Auto",
+            "none": "None",
+            "open": "Open",
+            #"wpa": "WPA",
+            "wpa2": "WPA2",
+            #"wpa_wpa2": "WPA/WPA2",
+        }
+        return labels.get(authmode, "Auto")
 
 
 '''

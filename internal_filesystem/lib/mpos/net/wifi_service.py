@@ -82,7 +82,6 @@ class WifiService:
                 "open": net.AUTH_OPEN,
                 "wpa": net.AUTH_WPA_PSK,
                 "wpa2": net.AUTH_WPA2_PSK,
-                "wpa_wpa2": net.AUTH_WPA_WPA2_PSK,
                 "wpa-wpa2": net.AUTH_WPA_WPA2_PSK,
             }
             return mapping.get(authmode_key, net.AUTH_WPA_WPA2_PSK)
