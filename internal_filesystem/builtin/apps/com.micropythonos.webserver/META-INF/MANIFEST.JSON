@@ -10,8 +10,8 @@
 "category": "networking",
 "activities": [
     {
-      "entrypoint": "assets/webserver.py",
-      "classname": "WebServerApp",
+      "entrypoint": "assets/webserver_settings.py",
+      "classname": "WebServerSettings",
       "intent_filters": [
         {
           "action": "main",

@@ -10,8 +10,8 @@
 "category": "networking",
 "activities": [
     {
-      "entrypoint": "assets/hotspot.py",
-      "classname": "Hotspot",
+      "entrypoint": "assets/hotspot_settings.py",
+      "classname": "HotspotSettings",
       "intent_filters": [
         {
           "action": "main",

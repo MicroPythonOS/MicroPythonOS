@@ -3,7 +3,7 @@ import lvgl as lv
 from mpos import Activity, DisplayMetrics, Intent, SettingsActivity, SharedPreferences, WifiService
 
 
-class Hotspot(Activity):
+class HotspotSettings(Activity):
     """
     Hotspot configuration app.
 
