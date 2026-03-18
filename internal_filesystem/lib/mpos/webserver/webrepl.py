@@ -9,6 +9,7 @@ except ImportError:
 import os
 import socket
 import sys
+import _thread
 import websocket
 import _webrepl
 
@@ -103,14 +104,22 @@ def setup_conn(port, accept_handler):
 
     listen_s.bind(addr)
     listen_s.listen(1)
+    accept_installed = False
     if accept_handler:
-        listen_s.setsockopt(socket.SOL_SOCKET, 20, accept_handler)
+        if sys.platform in ("linux", "darwin", "win32"):
+            accept_installed = False
+        else:
+            try:
+                listen_s.setsockopt(socket.SOL_SOCKET, 20, accept_handler)
+                accept_installed = True
+            except (TypeError, OSError):
+                accept_installed = False
     if network:
         for i in (network.WLAN.IF_AP, network.WLAN.IF_STA):
             iface = network.WLAN(i)
             if iface.active():
                 print("WebREPL server started on http://%s:%d/" % (iface.ifconfig()[0], port))
-    return listen_s
+    return listen_s, accept_installed
 
 
 def accept_conn(listen_sock):
@@ -141,6 +150,16 @@ def accept_conn(listen_sock):
     return True
 
 
+def _accept_loop(listen_sock, handler):
+    while True:
+        try:
+            handler(listen_sock)
+        except OSError:
+            break
+        except Exception:
+            pass
+
+
 def stop():
     global listen_s, client_s
     os.dupterm(None)
@@ -165,13 +184,19 @@ def start(port=8266, password=None, accept_handler=accept_conn):
             print("WebREPL is not configured, run 'import webrepl_setup'")
 
     _webrepl.password(webrepl_pass)
-    s = setup_conn(port, accept_handler)
+    s, accept_installed = setup_conn(port, accept_handler)
 
     if accept_handler is None:
         print("Starting webrepl in foreground mode")
         # Run accept_conn to serve HTML until we get a websocket connection.
         while not accept_conn(s):
             pass
+    elif not accept_installed:
+        _thread.start_new_thread(_accept_loop, (s, accept_handler))
+        if password is None:
+            print("Started webrepl in normal mode")
+        else:
+            print("Started webrepl in manual override mode")
     elif password is None:
         print("Started webrepl in normal mode")
     else:
