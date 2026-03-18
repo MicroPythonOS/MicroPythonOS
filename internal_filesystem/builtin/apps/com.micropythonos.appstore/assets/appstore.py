@@ -14,7 +14,7 @@ class AppStore(Activity):
     _GITHUB_LIST = "/app_index.json"
 
     _BADGEHUB_TEST_BASE_URL = "https://badgehub.p1m.nl/api/v3"
-    _BADGEHUB_PROD_BASE_URL = "https://badge.why2025.org/api/v3"
+    _BADGEHUB_PROD_BASE_URL = "https://badgehub.eu/api/v3"
     _BADGEHUB_LIST = "project-summaries?badge=fri3d_2024"
     _BADGEHUB_DETAILS = "projects"
 
@@ -26,10 +26,9 @@ class AppStore(Activity):
     # Hardcoded list for now:
     backends = [
         ("Apps.MicroPythonOS.com on GitHub", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
-        ("Badge.WHY2025.org (beta)", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
+        ("BadgeHub.eu (beta)", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
         ("BadgeHub.p1m.nl Testing (unstable)", _BACKEND_API_BADGEHUB, _BADGEHUB_TEST_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
     ]
-
 
     apps = []
     can_check_network = True
