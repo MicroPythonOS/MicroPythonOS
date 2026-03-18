@@ -8,13 +8,13 @@ class HotspotSettings(Activity):
     Hotspot configuration app.
 
     Uses SettingsActivity to render and edit hotspot preferences stored under
-    com.micropythonos.system.hotspot.
+    com.micropythonos.hotspot.
     """
 
     DEFAULTS = {
         "ssid": "MicroPythonOS",
         "password": "",
-        "authmode": "wpa2",
+        "authmode": "none",
     }
 
     status_label = None
@@ -24,7 +24,8 @@ class HotspotSettings(Activity):
     prefs = None
 
     def onCreate(self):
-        self.prefs = SharedPreferences("com.micropythonos.system.hotspot", defaults=self.DEFAULTS)
+        self.prefs = SharedPreferences("com.micropythonos.hotspot", defaults=self.DEFAULTS)
+        self.ui_prefs = SharedPreferences("com.micropythonos.hotspot")
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(3), lv.PART.MAIN)
@@ -88,7 +89,7 @@ class HotspotSettings(Activity):
 
     def open_settings(self, event):
         intent = Intent(activity_class=SettingsActivity)
-        intent.putExtra("prefs", self.prefs)
+        intent.putExtra("prefs", self.ui_prefs)
         intent.putExtra("settings", self._settings_entries())
         self.startActivity(intent)
 
@@ -98,11 +99,13 @@ class HotspotSettings(Activity):
                 "title": "Network Name (SSID)",
                 "key": "ssid",
                 "placeholder": "Hotspot SSID",
+                "default_value": self.DEFAULTS["ssid"],
             },
             {
                 "title": "Password",
                 "key": "password",
                 "placeholder": "Leave empty for open network",
+                "default_value": self.DEFAULTS["password"],
                 "should_show": self.should_show_password,
             },
             {
@@ -113,6 +116,7 @@ class HotspotSettings(Activity):
                     ("None", "none"),
                     ("WPA2", "wpa2"),
                 ],
+                "default_value": self.DEFAULTS["authmode"],
                 "changed_callback": self.toggle_hotspot,
             },
         ]
@@ -124,6 +128,8 @@ class HotspotSettings(Activity):
 
     def should_show_password(self, setting):
         authmode = self.prefs.get_string("authmode", None)
+        if authmode is None:
+            authmode = self.DEFAULTS["authmode"]
         return authmode != "none"
 
     def _format_security_label(self, authmode):

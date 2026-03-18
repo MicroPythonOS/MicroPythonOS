@@ -13,6 +13,7 @@ class WebServerSettings(Activity):
 
     def onCreate(self):
         self.prefs = SharedPreferences(WebServer.PREFS_NAMESPACE, defaults=WebServer.DEFAULTS)
+        self.ui_prefs = SharedPreferences(WebServer.PREFS_NAMESPACE)
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(3), lv.PART.MAIN)
@@ -85,7 +86,7 @@ class WebServerSettings(Activity):
 
     def open_settings(self, event):
         intent = Intent(activity_class=SettingsActivity)
-        intent.putExtra("prefs", self.prefs)
+        intent.putExtra("prefs", self.ui_prefs)
         intent.putExtra(
             "settings",
             [
@@ -94,18 +95,21 @@ class WebServerSettings(Activity):
                     "key": "autostart",
                     "ui": "radiobuttons",
                     "ui_options": [("On", "True"), ("Off", "False")],
+                    "default_value": WebServer.DEFAULTS["autostart"],
                     "changed_callback": self.settings_changed,
                 },
                 {
                     "title": "Port",
                     "key": "port",
                     "placeholder": "WebServer port, e.g. 7890",
+                    "default_value": WebServer.DEFAULTS["port"],
                     "changed_callback": self.settings_changed,
                 },
                 {
                     "title": "Password",
                     "key": "password",
                     "placeholder": "Max 9 characters",
+                    "default_value": WebServer.DEFAULTS["password"],
                     "changed_callback": self.settings_changed,
                 },
             ],
