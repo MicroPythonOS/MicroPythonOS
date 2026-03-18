@@ -2,8 +2,10 @@
 =====
 
 Builtin Apps:
+- AppStore: update BadgeHub.eu URL
 - Hotspot Settings
 - WebServer Settings
+
 
 Frameworks:
 - AudioManager: add support for multiple speakers and microphones
