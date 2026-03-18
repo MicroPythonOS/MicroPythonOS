@@ -4,7 +4,7 @@ import _thread
 
 from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager
 
-class WiFi(Activity):
+class WiFiSettings(Activity):
     """
     WiFi settings app for MicroPythonOS.
     

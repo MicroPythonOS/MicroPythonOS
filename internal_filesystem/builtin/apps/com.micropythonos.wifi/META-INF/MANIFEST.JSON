@@ -10,8 +10,8 @@
 "category": "networking",
 "activities": [
     {
-      "entrypoint": "assets/wifi.py",
-      "classname": "WiFi",
+      "entrypoint": "assets/wifi_settings.py",
+      "classname": "WiFiSettings",
       "intent_filters": [
         {
           "action": "main",
