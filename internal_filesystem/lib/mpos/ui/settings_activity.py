@@ -62,7 +62,22 @@ class SettingsActivity(Activity):
 
             # Value label (smaller, below title)
             value = lv.label(setting_cont)
-            value.set_text(self.prefs.get_string(setting["key"], "(not set)" if not setting.get("dont_persist") else "(not persisted)"))
+            if setting.get("activity_class"):
+                placeholder = setting.get("placeholder") or ""
+                value_text = placeholder
+            elif setting.get("dont_persist"):
+                value_text = "(not persisted)"
+            else:
+                stored_value = self.prefs.get_string(setting["key"])
+                if stored_value is None:
+                    default_value = setting.get("default_value")
+                    if default_value is not None:
+                        value_text = f"(defaults to {default_value})"
+                    else:
+                        value_text = "(not set)"
+                else:
+                    value_text = stored_value
+            value.set_text(value_text)
             value.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
             value.set_style_text_color(lv.color_hex(0x666666), lv.PART.MAIN)
             value.set_pos(0, 20)

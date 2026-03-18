@@ -57,9 +57,27 @@ class Settings(SettingsActivity):
         from mpos import SharedPreferences
         intent.putExtra("prefs", SharedPreferences("com.micropythonos.settings"))
         intent.putExtra("settings", [
-            {"title": "Wi-Fi", "key": "wifi_settings", "ui": "activity", "activity_class": LaunchWiFi},
-            {"title": "Hotspot", "key": "hotspot_settings", "ui": "activity", "activity_class": LaunchHotspot},
-            {"title": "WebServer", "key": "webserver_settings", "ui": "activity", "activity_class": LaunchWebServer},
+            {
+                "title": "Wi-Fi",
+                "key": "wifi_settings",
+                "ui": "activity",
+                "activity_class": LaunchWiFi,
+                "placeholder": "Scan and connect to Wi-Fi",
+            },
+            {
+                "title": "Hotspot",
+                "key": "hotspot_settings",
+                "ui": "activity",
+                "activity_class": LaunchHotspot,
+                "placeholder": "Standalone Wi-Fi access point",
+            },
+            {
+                "title": "WebServer",
+                "key": "webserver_settings",
+                "ui": "activity",
+                "activity_class": LaunchWebServer,
+                "placeholder": "WebREPL, password, port etc",
+            },
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},
