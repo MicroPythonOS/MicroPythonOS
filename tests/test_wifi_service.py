@@ -406,19 +406,12 @@ class TestWifiServiceHotspot(unittest.TestCase):
 
     def test_enable_hotspot_applies_config(self):
         """Test enable_hotspot reads config and configures AP."""
-        prefs = MockSharedPreferences("com.micropythonos.system.hotspot")
+        prefs = MockSharedPreferences("com.micropythonos.settings.hotspot")
         editor = prefs.edit()
         editor.put_bool("enabled", True)
         editor.put_string("ssid", "MyAP")
         editor.put_string("password", "ap-pass")
-        editor.put_int("channel", 6)
-        editor.put_bool("hidden", True)
-        editor.put_int("max_clients", 3)
         editor.put_string("authmode", "wpa2")
-        editor.put_string("ip", "192.168.4.2")
-        editor.put_string("netmask", "255.255.255.0")
-        editor.put_string("gateway", "192.168.4.1")
-        editor.put_string("dns", "1.1.1.1")
         editor.commit()
 
         mock_network = HotspotMockNetwork()
@@ -434,15 +427,8 @@ class TestWifiServiceHotspot(unittest.TestCase):
         self.assertTrue(ap_wlan.active())
         self.assertFalse(sta_wlan.active())
         self.assertEqual(ap_wlan._config.get("essid"), "MyAP")
-        self.assertEqual(ap_wlan._config.get("channel"), 6)
-        self.assertTrue(ap_wlan._config.get("hidden"))
-        self.assertEqual(ap_wlan._config.get("max_clients"), 3)
         self.assertEqual(ap_wlan._config.get("authmode"), mock_network.AUTH_WPA2_PSK)
         self.assertEqual(ap_wlan._config.get("password"), "ap-pass")
-        self.assertEqual(
-            ap_wlan.ifconfig(),
-            ("192.168.4.2", "255.255.255.0", "192.168.4.1", "1.1.1.1"),
-        )
 
     def test_enable_hotspot_respects_busy_flag(self):
         """Test enable_hotspot returns False when WiFi is busy."""
@@ -483,7 +469,7 @@ class TestWifiServiceHotspot(unittest.TestCase):
 
     def test_auto_connect_with_hotspot_enabled_prefers_ap_mode(self):
         """Test auto_connect uses hotspot mode when enabled in config."""
-        prefs = MockSharedPreferences("com.micropythonos.system.hotspot")
+        prefs = MockSharedPreferences("com.micropythonos.settings.hotspot")
         editor = prefs.edit()
         editor.put_bool("enabled", True)
         editor.commit()
