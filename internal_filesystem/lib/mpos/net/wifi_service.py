@@ -58,34 +58,23 @@ class WifiService:
             "enabled": prefs.get_bool("enabled", False),
             "ssid": prefs.get_string("ssid", "MicroPythonOS"),
             "password": prefs.get_string("password", ""),
-            "channel": prefs.get_int("channel", 1),
-            "hidden": prefs.get_bool("hidden", False),
-            "max_clients": prefs.get_int("max_clients", 4),
-            "authmode": prefs.get_string("authmode", None),
-            "ip": prefs.get_string("ip", "192.168.4.1"),
-            "netmask": prefs.get_string("netmask", "255.255.255.0"),
-            "gateway": prefs.get_string("gateway", "192.168.4.1"),
-            "dns": prefs.get_string("dns", "8.8.8.8"),
+            "authmode": prefs.get_string("authmode", "wpa2"),
         }
 
     @staticmethod
     def _resolve_hotspot_authmode(net, password, authmode_value):
-        if authmode_value is None:
-            if password:
-                return net.AUTH_WPA_WPA2_PSK
-            return net.AUTH_OPEN
         if isinstance(authmode_value, int):
             return authmode_value
         if isinstance(authmode_value, str):
             authmode_key = authmode_value.lower().strip()
-            mapping = {
-                "open": net.AUTH_OPEN,
-                "wpa": net.AUTH_WPA_PSK,
-                "wpa2": net.AUTH_WPA2_PSK,
-                "wpa-wpa2": net.AUTH_WPA_WPA2_PSK,
-            }
-            return mapping.get(authmode_key, net.AUTH_WPA_WPA2_PSK)
-        return net.AUTH_WPA_WPA2_PSK
+            if authmode_key == "none":
+                return net.AUTH_OPEN
+            return net.AUTH_WPA2_PSK
+        if authmode_value is None:
+            if password:
+                return net.AUTH_WPA2_PSK
+            return net.AUTH_OPEN
+        return net.AUTH_WPA2_PSK
 
     @staticmethod
     def enable_hotspot(network_module=None):
@@ -116,23 +105,13 @@ class WifiService:
 
             ap_config = {
                 "essid": config.get("ssid"),
-                "channel": config.get("channel"),
-                "hidden": config.get("hidden"),
-                "max_clients": config.get("max_clients"),
                 "authmode": authmode,
             }
             if config.get("password"):
                 ap_config["password"] = config.get("password")
 
             ap.config(**ap_config)
-            ap.ifconfig(
-                (
-                    config.get("ip"),
-                    config.get("netmask"),
-                    config.get("gateway"),
-                    config.get("dns"),
-                )
-            )
+            ap.ifconfig(("192.168.4.1", "255.255.255.0", "192.168.4.1", "8.8.8.8"))
 
             WifiService.hotspot_enabled = True
             print("WifiService: Hotspot enabled")

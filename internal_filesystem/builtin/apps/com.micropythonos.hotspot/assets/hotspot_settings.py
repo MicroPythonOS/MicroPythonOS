@@ -14,14 +14,7 @@ class HotspotSettings(Activity):
     DEFAULTS = {
         "ssid": "MicroPythonOS",
         "password": "",
-        "channel": 1,
-        "hidden": False,
-        "max_clients": 4,
-        "authmode": None,
-        "ip": "192.168.4.1",
-        "netmask": "255.255.255.0",
-        "gateway": "192.168.4.1",
-        "dns": "8.8.8.8",
+        "authmode": "wpa2",
     }
 
     status_label = None
@@ -117,12 +110,8 @@ class HotspotSettings(Activity):
                 "key": "authmode",
                 "ui": "dropdown",
                 "ui_options": [
-                    ("Auto", None),
                     ("None", "none"),
-                    #("Open", "open"),
-                    #("WPA", "wpa"),
                     ("WPA2", "wpa2"),
-                    #("WPA/WPA2", "wpa_wpa2"),
                 ],
                 "changed_callback": self.toggle_hotspot,
             },
@@ -139,53 +128,8 @@ class HotspotSettings(Activity):
 
     def _format_security_label(self, authmode):
         labels = {
-            None: "Auto",
             "none": "None",
-            "open": "Open",
-            #"wpa": "WPA",
             "wpa2": "WPA2",
-            #"wpa_wpa2": "WPA/WPA2",
         }
-        return labels.get(authmode, "Auto")
+        return labels.get(authmode, "WPA2")
 
-
-'''
-# These settings are too much:
-{
-    "title": "Channel",
-    "key": "channel",
-    "placeholder": "Wi-Fi channel, e.g. 1",
-},
-{
-    "title": "Hidden Network",
-    "key": "hidden",
-    "ui": "radiobuttons",
-    "ui_options": [("Visible", "False"), ("Hidden", "True")],
-    "changed_callback": self.toggle_hotspot,
-},
-{
-    "title": "Max Clients",
-    "key": "max_clients",
-    "placeholder": "Max connections, e.g. 4",
-},
-{
-    "title": "IP Address",
-    "key": "ip",
-    "placeholder": "Hotspot IP, e.g. 192.168.4.1",
-},
-{
-    "title": "Netmask",
-    "key": "netmask",
-    "placeholder": "Netmask, e.g. 255.255.255.0",
-},
-{
-    "title": "Gateway",
-    "key": "gateway",
-    "placeholder": "Gateway, e.g. 192.168.4.1",
-},
-{
-    "title": "DNS",
-    "key": "dns",
-    "placeholder": "DNS, e.g. 8.8.8.8",
-},
-'''
