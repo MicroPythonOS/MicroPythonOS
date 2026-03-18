@@ -9,19 +9,19 @@ from check_imu_calibration import CheckIMUCalibrationActivity
 class LaunchWiFi(Activity):
 
     def onCreate(self):
-        AppManager.start_app("com.micropythonos.wifi")
+        AppManager.start_app("com.micropythonos.settings.wifi")
 
 
 class LaunchHotspot(Activity):
 
     def onCreate(self):
-        AppManager.start_app("com.micropythonos.hotspot")
+        AppManager.start_app("com.micropythonos.settings.hotspot")
 
 
 class LaunchWebServer(Activity):
 
     def onCreate(self):
-        AppManager.start_app("com.micropythonos.webserver")
+        AppManager.start_app("com.micropythonos.settings.webserver")
 
 
 class Settings(SettingsActivity):

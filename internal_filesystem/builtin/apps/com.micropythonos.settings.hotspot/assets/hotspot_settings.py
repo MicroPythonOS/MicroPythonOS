@@ -8,7 +8,7 @@ class HotspotSettings(Activity):
     Hotspot configuration app.
 
     Uses SettingsActivity to render and edit hotspot preferences stored under
-    com.micropythonos.hotspot.
+    com.micropythonos.settings.hotspot.
     """
 
     DEFAULTS = {
@@ -24,8 +24,8 @@ class HotspotSettings(Activity):
     prefs = None
 
     def onCreate(self):
-        self.prefs = SharedPreferences("com.micropythonos.hotspot", defaults=self.DEFAULTS)
-        self.ui_prefs = SharedPreferences("com.micropythonos.hotspot")
+        self.prefs = SharedPreferences("com.micropythonos.settings.hotspot", defaults=self.DEFAULTS)
+        self.ui_prefs = SharedPreferences("com.micropythonos.settings.hotspot")
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(3), lv.PART.MAIN)

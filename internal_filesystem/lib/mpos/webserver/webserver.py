@@ -5,7 +5,7 @@ from .webrepl_http import accept_handler
 
 
 class WebServer:
-    PREFS_NAMESPACE = "com.micropythonos.webserver"
+    PREFS_NAMESPACE = "com.micropythonos.settings.webserver"
     DEFAULTS = {
         "autostart": "False",
         "port": "7890",

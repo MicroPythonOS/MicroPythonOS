@@ -3,9 +3,9 @@
 "publisher": "MicroPythonOS",
 "short_description": "Configure and control the WebServer.",
 "long_description": "Configure WebServer settings, start or stop the WebREPL web server.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.webserver/icons/com.micropythonos.webserver_0.1.0_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.webserver/mpks/com.micropythonos.webserver_0.1.0.mpk",
-"fullname": "com.micropythonos.webserver",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.webserver/icons/com.micropythonos.settings.webserver_0.1.0_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.webserver/mpks/com.micropythonos.settings.webserver_0.1.0.mpk",
+"fullname": "com.micropythonos.settings.webserver",
 "version": "0.1.0",
 "category": "networking",
 "activities": [

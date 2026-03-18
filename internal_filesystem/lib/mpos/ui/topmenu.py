@@ -273,7 +273,7 @@ def create_drawer():
     wifi_label.center()
     def wifi_event(e):
         close_drawer()
-        AppManager.start_app("com.micropythonos.wifi")
+        AppManager.start_app("com.micropythonos.settings.wifi")
     wifi_btn.add_event_cb(wifi_event,lv.EVENT.CLICKED,None)
     settings_btn=lv.button(drawer)
     settings_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
