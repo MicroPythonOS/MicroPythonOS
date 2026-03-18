@@ -1,9 +1,9 @@
 import lvgl as lv
 
-from mpos import Activity, DisplayMetrics, Intent, SettingsActivity, SharedPreferences, WebServer
+from mpos import Activity, DisplayMetrics, Intent, SettingsActivity, SharedPreferences, WebServer, WifiService
 
 
-class WebServerApp(Activity):
+class WebServerSettings(Activity):
     status_label = None
     detail_label = None
     action_button = None
@@ -65,7 +65,12 @@ class WebServerApp(Activity):
         self.status_label.set_text(f"Status: {state_text}")
         autostart_text = "On" if status.get("autostart") else "Off"
         port = status.get("port")
-        self.detail_label.set_text(f"Port: {port}\nAutostart: {autostart_text}")
+        ip_address = WifiService.get_ipv4_address()
+        if ip_address:
+            url_text = f"http://{ip_address}:{port}"
+        else:
+            url_text = f"http://<wifi ip>:{port}"
+        self.detail_label.set_text(f"URL: {url_text}\nAutostart: {autostart_text}")
 
         button_text = "Stop" if status.get("started") else "Start"
         self.action_label.set_text(button_text)
