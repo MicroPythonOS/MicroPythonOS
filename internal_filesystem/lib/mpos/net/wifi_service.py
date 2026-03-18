@@ -17,6 +17,9 @@ import time
 import mpos.config
 import mpos.time
 
+WIFI_SERVICE_PREFS_KEY = "com.micropythonos.system.wifiservice" # com.micropythonos.settings.wifi would make more sense but legacy devices use this
+HOTSPOT_PREFS_KEY = "com.micropythonos.settings.hotspot"
+
 # Try to import network module (not available on desktop)
 HAS_NETWORK_MODULE = False
 try:
@@ -52,8 +55,30 @@ class WifiService:
     _needs_hotspot_restore = False
 
     @staticmethod
+    def _is_desktop_mode(network_module=None):
+        return not HAS_NETWORK_MODULE and network_module is None
+
+    @staticmethod
+    def _get_network_module(network_module=None):
+        return network_module if network_module else network
+
+    @staticmethod
+    def _get_sta_wlan(net):
+        return net.WLAN(net.STA_IF)
+
+    @staticmethod
+    def _get_ap_wlan(net):
+        return net.WLAN(net.AP_IF)
+
+    @staticmethod
+    def _restore_hotspot_if_needed(network_module=None):
+        if WifiService._needs_hotspot_restore:
+            WifiService._needs_hotspot_restore = False
+            WifiService.enable_hotspot(network_module=network_module)
+
+    @staticmethod
     def _get_hotspot_config():
-        prefs = mpos.config.SharedPreferences("com.micropythonos.system.hotspot")
+        prefs = mpos.config.SharedPreferences(HOTSPOT_PREFS_KEY)
         return {
             "enabled": prefs.get_bool("enabled", False),
             "ssid": prefs.get_string("ssid", "MicroPythonOS"),
@@ -82,21 +107,21 @@ class WifiService:
             print("WifiService: Cannot enable hotspot, WiFi is busy")
             return False
 
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             WifiService.hotspot_enabled = True
             print("WifiService: Desktop mode, hotspot enabled (simulated)")
             return True
 
-        net = network_module if network_module else network
+        net = WifiService._get_network_module(network_module)
         config = WifiService._get_hotspot_config()
 
         try:
-            sta = net.WLAN(net.STA_IF)
+            sta = WifiService._get_sta_wlan(net)
             if sta.active() or sta.isconnected():
                 sta.disconnect()
                 sta.active(False)
 
-            ap = net.WLAN(net.AP_IF)
+            ap = WifiService._get_ap_wlan(net)
             ap.active(True)
 
             authmode = WifiService._resolve_hotspot_authmode(
@@ -122,14 +147,14 @@ class WifiService:
 
     @staticmethod
     def disable_hotspot(network_module=None):
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             WifiService.hotspot_enabled = False
             print("WifiService: Desktop mode, hotspot disabled (simulated)")
             return
 
         try:
-            net = network_module if network_module else network
-            ap = net.WLAN(net.AP_IF)
+            net = WifiService._get_network_module(network_module)
+            ap = WifiService._get_ap_wlan(net)
             ap.active(False)
             WifiService.hotspot_enabled = False
             print("WifiService: Hotspot disabled")
@@ -138,11 +163,11 @@ class WifiService:
 
     @staticmethod
     def is_hotspot_enabled(network_module=None):
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             return WifiService.hotspot_enabled
         try:
-            net = network_module if network_module else network
-            ap = net.WLAN(net.AP_IF)
+            net = WifiService._get_network_module(network_module)
+            ap = WifiService._get_ap_wlan(net)
             return ap.active()
         except Exception:
             return WifiService.hotspot_enabled
@@ -233,26 +258,21 @@ class WifiService:
         time_mod = time_module if time_module else time
 
         # Desktop mode - simulate successful connection
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             print("WifiService: Desktop mode, simulating connection...")
             time_mod.sleep(2)
             WifiService._desktop_connected_ssid = ssid
             print(f"WifiService: Simulated connection to '{ssid}' successful")
             return True
 
-        net = network_module if network_module else network
-
-        def _restore_hotspot_if_needed():
-            if WifiService._needs_hotspot_restore:
-                WifiService._needs_hotspot_restore = False
-                WifiService.enable_hotspot(network_module=network_module)
+        net = WifiService._get_network_module(network_module)
 
         try:
             if WifiService.is_hotspot_enabled(network_module=network_module):
                 WifiService._needs_hotspot_restore = True
                 WifiService.disable_hotspot(network_module=network_module)
 
-            wlan = net.WLAN(net.STA_IF)
+            wlan = WifiService._get_sta_wlan(net)
             wlan.connect(ssid, password)
 
             # Wait up to 10 seconds for connection
@@ -272,19 +292,19 @@ class WifiService:
                 elif not wlan.active():
                     # WiFi was disabled during connection attempt
                     print("WifiService: WiFi disabled during connection, aborting")
-                    _restore_hotspot_if_needed()
+                    WifiService._restore_hotspot_if_needed(network_module=network_module)
                     return False
 
                 print(f"WifiService: Waiting for connection, attempt {i+1}/10")
                 time_mod.sleep(1)
 
             print(f"WifiService: Connection timeout for '{ssid}'")
-            _restore_hotspot_if_needed()
+            WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
         except Exception as e:
             print(f"WifiService: Connection error: {e}")
-            _restore_hotspot_if_needed()
+            WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
     @staticmethod
@@ -312,21 +332,17 @@ class WifiService:
 
         # Load saved access points from config
         WifiService.access_points = mpos.config.SharedPreferences(
-            "com.micropythonos.system.wifiservice"
+            WIFI_SERVICE_PREFS_KEY
         ).get_dict("access_points")
 
         if not len(WifiService.access_points):
-            if WifiService._needs_hotspot_restore:
-                WifiService._needs_hotspot_restore = False
-                WifiService.enable_hotspot(network_module=network_module)
+            WifiService._restore_hotspot_if_needed(network_module=network_module)
             print("WifiService: No access points configured, exiting")
             return
 
         # Check if WiFi is busy (e.g., WiFi app is scanning)
         if WifiService.wifi_busy:
-            if WifiService._needs_hotspot_restore:
-                WifiService._needs_hotspot_restore = False
-                WifiService.enable_hotspot(network_module=network_module)
+            WifiService._restore_hotspot_if_needed(network_module=network_module)
             print("WifiService: WiFi busy, auto-connect aborted")
             return
 
@@ -334,7 +350,7 @@ class WifiService:
         connected = False
 
         try:
-            if not HAS_NETWORK_MODULE and network_module is None:
+            if WifiService._is_desktop_mode(network_module):
                 # Desktop mode - simulate connection delay
                 print("WifiService: Desktop mode, simulating connection...")
                 time_mod = time_module if time_module else time
@@ -353,19 +369,14 @@ class WifiService:
                     print("WifiService: Auto-connect failed")
 
                     # Disable WiFi to conserve power if connection failed
-                    if network_module:
-                        net = network_module
-                    else:
-                        net = network
-
-                    wlan = net.WLAN(net.STA_IF)
+                    net = WifiService._get_network_module(network_module)
+                    wlan = WifiService._get_sta_wlan(net)
                     wlan.active(False)
                     print("WifiService: WiFi disabled to conserve power")
 
         finally:
-            if not connected and WifiService._needs_hotspot_restore:
-                WifiService._needs_hotspot_restore = False
-                WifiService.enable_hotspot(network_module=network_module)
+            if not connected:
+                WifiService._restore_hotspot_if_needed(network_module=network_module)
             WifiService.wifi_busy = False
             print("WifiService: Auto-connect thread finished")
 
@@ -393,10 +404,10 @@ class WifiService:
         hotspot_was_enabled = False
         if HAS_NETWORK_MODULE or network_module:
             try:
-                net = network_module if network_module else network
-                wlan = net.WLAN(net.STA_IF)
+                net = WifiService._get_network_module(network_module)
+                wlan = WifiService._get_sta_wlan(net)
                 was_connected = wlan.isconnected()
-                ap = net.WLAN(net.AP_IF)
+                ap = WifiService._get_ap_wlan(net)
                 hotspot_was_enabled = ap.active()
             except Exception as e:
                 print(f"WifiService: Error checking connection: {e}")
@@ -458,15 +469,15 @@ class WifiService:
             return False
 
         # Desktop mode - always report connected
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             return True
 
         try:
-            net = network_module if network_module else network
+            net = WifiService._get_network_module(network_module)
             if WifiService.is_hotspot_enabled(network_module=network_module):
-                ap = net.WLAN(net.AP_IF)
+                ap = WifiService._get_ap_wlan(net)
                 return ap.active()
-            wlan = net.WLAN(net.STA_IF)
+            wlan = WifiService._get_sta_wlan(net)
             return wlan.isconnected()
         except Exception as e:
             print(f"WifiService: Error checking connection: {e}")
@@ -474,46 +485,43 @@ class WifiService:
 
 
     @staticmethod
-    def get_ipv4_address(network_module=None):
-        # If WiFi operations are in progress, report not connected
+    def _get_ipv4_value(network_module, ap_index, sta_key, desktop_value, label):
         if WifiService.wifi_busy:
             return None
 
-        # Desktop mode - always report connected
-        if not HAS_NETWORK_MODULE and network_module is None:
-            return "123.456.789.000"
+        if WifiService._is_desktop_mode(network_module):
+            return desktop_value
 
         try:
-            net = network_module if network_module else network
+            net = WifiService._get_network_module(network_module)
             if WifiService.is_hotspot_enabled(network_module=network_module):
-                ap = net.WLAN(net.AP_IF)
-                return ap.ifconfig()[0]
-            wlan = net.WLAN(net.STA_IF)
-            return wlan.ipconfig("addr4")
+                ap = WifiService._get_ap_wlan(net)
+                return ap.ifconfig()[ap_index]
+            wlan = WifiService._get_sta_wlan(net)
+            return wlan.ipconfig(sta_key)
         except Exception as e:
-            print(f"WifiService: Error retrieving ip4v address: {e}")
+            print(f"WifiService: Error retrieving ip4v {label}: {e}")
             return None
 
     @staticmethod
+    def get_ipv4_address(network_module=None):
+        return WifiService._get_ipv4_value(
+            network_module=network_module,
+            ap_index=0,
+            sta_key="addr4",
+            desktop_value="123.456.789.000",
+            label="address",
+        )
+
+    @staticmethod
     def get_ipv4_gateway(network_module=None):
-        # If WiFi operations are in progress, report not connected
-        if WifiService.wifi_busy:
-            return None
-
-        # Desktop mode - always report connected
-        if not HAS_NETWORK_MODULE and network_module is None:
-            return "000.123.456.789"
-
-        try:
-            net = network_module if network_module else network
-            if WifiService.is_hotspot_enabled(network_module=network_module):
-                ap = net.WLAN(net.AP_IF)
-                return ap.ifconfig()[2]
-            wlan = net.WLAN(net.STA_IF)
-            return wlan.ipconfig("gw4")
-        except Exception as e:
-            print(f"WifiService: Error retrieving ip4v gateway: {e}")
-            return None
+        return WifiService._get_ipv4_value(
+            network_module=network_module,
+            ap_index=2,
+            sta_key="gw4",
+            desktop_value="000.123.456.789",
+            label="gateway",
+        )
 
     @staticmethod
     def disconnect(network_module=None):
@@ -523,16 +531,16 @@ class WifiService:
         Args:
             network_module: Network module for dependency injection (testing)
         """
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             print("WifiService: Desktop mode, cannot disconnect")
             return
 
         try:
-            net = network_module if network_module else network
-            wlan = net.WLAN(net.STA_IF)
+            net = WifiService._get_network_module(network_module)
+            wlan = WifiService._get_sta_wlan(net)
             wlan.disconnect()
             wlan.active(False)
-            ap = net.WLAN(net.AP_IF)
+            ap = WifiService._get_ap_wlan(net)
             ap.active(False)
             WifiService.hotspot_enabled = False
             print("WifiService: Disconnected and WiFi disabled")
@@ -557,7 +565,7 @@ class WifiService:
     def _ensure_access_points_loaded():
         if not WifiService.access_points:
             WifiService.access_points = mpos.config.SharedPreferences(
-                "com.micropythonos.system.wifiservice"
+                WIFI_SERVICE_PREFS_KEY
             ).get_dict("access_points")
 
     @staticmethod
@@ -582,12 +590,12 @@ class WifiService:
         Returns:
             list: Raw network tuples from wlan.scan(), or empty list on desktop
         """
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             # Desktop mode - return empty (no raw data available)
             return []
 
-        net = network_module if network_module else network
-        wlan = net.WLAN(net.STA_IF)
+        net = WifiService._get_network_module(network_module)
+        wlan = WifiService._get_sta_wlan(net)
 
         # Restart WiFi hardware in case it is in a bad state (only if not connected)
         if not wlan.isconnected():
@@ -612,7 +620,7 @@ class WifiService:
             list: List of SSIDs found, empty list if busy, or mock data on desktop
         """
         # Desktop mode - return mock SSIDs (no busy flag needed)
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             time.sleep(1)
             return ["Home WiFi", "Pretty Fly for a Wi Fi", "Winternet is coming", "The Promised LAN"]
 
@@ -641,15 +649,15 @@ class WifiService:
         Returns:
             str or None: Current SSID if connected, None otherwise
         """
-        if not HAS_NETWORK_MODULE and network_module is None:
+        if WifiService._is_desktop_mode(network_module):
             # Desktop mode - return simulated connected SSID
             return WifiService._desktop_connected_ssid
 
-        net = network_module if network_module else network
+        net = WifiService._get_network_module(network_module)
         try:
-            wlan = net.WLAN(net.STA_IF)
+            wlan = WifiService._get_sta_wlan(net)
             if wlan.isconnected():
-                return wlan.config('essid')
+                return wlan.config("essid")
         except Exception as e:
             print(f"WifiService: Error getting current SSID: {e}")
         return None
@@ -701,7 +709,7 @@ class WifiService:
             hidden: Whether this is a hidden network (always try connecting)
         """
         # Load current saved networks
-        prefs = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice")
+        prefs = mpos.config.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
         access_points = prefs.get_dict("access_points")
 
         # Add or update the network
@@ -732,7 +740,7 @@ class WifiService:
             bool: True if network was found and removed, False otherwise
         """
         # Load current saved networks
-        prefs = mpos.config.SharedPreferences("com.micropythonos.system.wifiservice")
+        prefs = mpos.config.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
         access_points = prefs.get_dict("access_points")
 
         # Remove the network if it exists
