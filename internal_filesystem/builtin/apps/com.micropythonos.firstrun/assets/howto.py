@@ -1,8 +1,8 @@
 from mpos import Activity, SharedPreferences
 
-class FirstRun(Activity):
+class HowTo(Activity):
 
-    appname = "com.micropythonos.firstrun"
+    appname = "com.micropythonos.howto"
 
     dontshow_checkbox = None
     prefs = None

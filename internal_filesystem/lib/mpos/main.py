@@ -161,7 +161,7 @@ except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
-prefs = SharedPreferences("com.micropythonos.settings", defaults={"auto_start_app_early": "com.micropythonos.firstrun"}) # if not value is set, it will start the FirstRun app
+prefs = SharedPreferences("com.micropythonos.settings") # if not value is set, it will start the HowTo app
 
 AppearanceManager.init(prefs)
 init_rootscreen() # shows the boot logo
@@ -209,7 +209,7 @@ except Exception as e:
 launcher_app = AppManager.get_launcher()
 started_launcher = AppManager.start_app(launcher_app.fullname)
 # Then start auto_start_app_early if configured
-auto_start_app_early = prefs.get_string("auto_start_app_early", "com.micropythonos.firstrun")
+auto_start_app_early = prefs.get_string("auto_start_app_early", "com.micropythonos.howto")
 if auto_start_app_early and launcher_app.fullname != auto_start_app_early:
     result = AppManager.start_app(auto_start_app_early)
     if result is not True:
@@ -240,7 +240,6 @@ async def ota_rollback_cancel():
         Partition.mark_app_valid_cancel_rollback()
     except Exception as e:
         print("main.py: warning: could not mark this update as valid:", e)
-
 
 if not started_launcher:
     print(f"WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
