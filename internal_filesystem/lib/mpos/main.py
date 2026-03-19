@@ -93,7 +93,7 @@ def detect_board():
         unique_id_prefixes = machine.unique_id()[0:3]
 
         print("unPhone ?")
-        if unique_id_prefixes == b'00\xf9': # '30:30:F9'
+        if unique_id_prefixes == b'\x30\x30\xf9':
             return "unphone"
 
         print("(emulated) lilygo_t_display_s3 ?")
