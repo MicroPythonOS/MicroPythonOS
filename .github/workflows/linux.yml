@@ -70,6 +70,14 @@ jobs:
       - name: Build LVGL MicroPython for unix
         run: |
           ./scripts/build_mpos.sh unix
+          mv lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          path: lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          retention-days: 7
 
       - name: Run syntax tests on unix
         run: |
@@ -79,15 +87,7 @@ jobs:
       - name: Run unit tests on unix
         run: |
           ./tests/unittest.sh
-          mv lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
         continue-on-error: true
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
-          path: lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
-          retention-days: 7
 
       - name: Build LVGL MicroPython esp32
         run: |
