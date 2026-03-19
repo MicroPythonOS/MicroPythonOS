@@ -108,8 +108,7 @@ print("(x,y,z): ", sensor.get_xyz())
 
 # TODO:
 # - battery
-# - IMU
-# - vibrator
+# - real IMU driver (instead of proof-of-concept above)
 # - GPS
 # - LoRa
 

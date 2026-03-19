@@ -3,7 +3,7 @@ mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
 # This needs python and the esptool
 
-python3 lvgl_micropython/lib/esp-idf/components/partition_table/gen_esp32part.py --flash-size 16MB partitions_with_retro-go.csv > partitions_with_retro-go_16mb.bin
+python3 lvgl_micropython/lib/esp-idf/components/partition_table/gen_esp32part.py --flash-size 16MB partitions_with_retro-go_16mb.csv > partitions_with_retro-go_16mb.bin
 #python3 lvgl_micropython/lib/esp-idf/components/partition_table/gen_esp32part.py --flash-size 4MB partitions_4mb.csv > partitions_4mb.bin
 #python3 lvgl_micropython/lib/esp-idf/components/partition_table/gen_esp32part.py --flash-size 8MB partitions_8mb.csv > partitions_8mb.bin
 

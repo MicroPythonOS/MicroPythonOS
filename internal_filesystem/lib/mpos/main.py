@@ -101,7 +101,7 @@ def detect_board():
             return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
 
         print("odroid_go ?")
-        if unique_id_prefixes[0] == 0x30:
+        if unique_id_prefixes == b'\x30\xae\xa4':
             return "odroid_go"
 
         print("fri3d_2026 ?")
