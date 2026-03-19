@@ -193,7 +193,13 @@ PY
 	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
 	# python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer "$frozenmanifest"
-        python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP= DISPLAY=sdl_display INDEV=sdl_pointer SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_X11=ON -DSDL_WAYLAND=ON" FROZEN_MANIFEST=../manifests/manifest.py
+	python3 make.py "$target" \
+		LV_CFLAGS="-g -O0 -ggdb" \
+		STRIP= \
+		DISPLAY=sdl_display \
+		INDEV=sdl_pointer \
+		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_DBUS=OFF -DSDL_X11=ON -DSDL_WAYLAND=ON" \
+		"$frozenmanifest"
 
 	popd
 
