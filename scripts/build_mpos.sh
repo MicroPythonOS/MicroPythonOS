@@ -155,24 +155,30 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
 
-	# Ensure WebREPL native module is enabled for unix/macOS builds.
+	# Ensure WebREPL and dupterm are enabled for unix/macOS builds.
 	mpconfig_unix="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/mpconfigport.h
-	if ! grep -q "MICROPY_PY_WEBREPL" "$mpconfig_unix"; then
-		echo "Enabling MICROPY_PY_WEBREPL in $mpconfig_unix"
-		python3 - "$mpconfig_unix" <<'PY'
+	ensure_mpconfig_define() {
+		local name="$1"
+		if ! grep -q "$name" "$mpconfig_unix"; then
+			echo "Enabling $name in $mpconfig_unix"
+			python3 - "$mpconfig_unix" "$name" <<'PY'
 import pathlib
 import sys
 
 path = pathlib.Path(sys.argv[1])
+name = sys.argv[2]
 text = path.read_text()
 needle = '#include "mpconfigvariant.h"'
-insert = "\n\n#ifndef MICROPY_PY_WEBREPL\n#define MICROPY_PY_WEBREPL (1)\n#endif\n"
-if needle in text and "MICROPY_PY_WEBREPL" not in text:
-	   path.write_text(text.replace(needle, needle + insert))
+insert = f"\n\n#ifndef {name}\n#define {name} (1)\n#endif\n"
+if needle in text and name not in text:
+	path.write_text(text.replace(needle, needle + insert))
 PY
-	else
-		echo "MICROPY_PY_WEBREPL already configured in $mpconfig_unix"
-	fi
+		else
+			echo "$name already configured in $mpconfig_unix"
+		fi
+	}
+	ensure_mpconfig_define MICROPY_PY_WEBREPL
+	ensure_mpconfig_define MICROPY_PY_OS_DUPTERM
 
 	# Comment out @micropython.viper decorator for Unix/macOS builds
 	# (cross-compiler doesn't support Viper native code emitter)
@@ -186,7 +192,9 @@ PY
 	# STRIP= makes it so that debug symbols are kept
 	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
-	python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer "$frozenmanifest"
+	# python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer "$frozenmanifest"
+        python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP= DISPLAY=sdl_display INDEV=sdl_pointer SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_X11=ON -DSDL_WAYLAND=ON" FROZEN_MANIFEST=../manifests/manifest.py
+
 	popd
 
 	# Restore @micropython.viper decorator after build
