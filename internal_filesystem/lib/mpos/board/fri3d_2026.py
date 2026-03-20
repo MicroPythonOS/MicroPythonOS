@@ -25,14 +25,10 @@ import lvgl as lv
 import task_handler
 
 import drivers.display.st7789 as st7789
-import drivers.indev.cst816s as cst816s
 
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager
-
-TFT_HOR_RES=320
-TFT_VER_RES=240
 
 import machine
 spi_bus = machine.SPI.Bus(
@@ -60,30 +56,36 @@ buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-STATE_HIGH = 1
-STATE_LOW = 0
+# Quick and dirty LCD reset using the CH32 microcontroller
+from machine import I2C, Pin
+ADDRESS = 0x50
+expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
+expander_i2c.writeto_mem(ADDRESS, 22, b'\x01') # 3v3 aux on + LCD off
+import time
+time.sleep_ms(200)
+expander_i2c.writeto_mem(ADDRESS, 22, b'\x03') # 3v3 aux + LCD on
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
-    display_width=TFT_VER_RES,
-    display_height=TFT_HOR_RES,
+    display_width=240,
+    display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
-    reset_pin=48, # LCD reset: TODO: this is now on the CH32
-    reset_state=STATE_LOW # TODO: is this correct?
+    # reset_pin = driven by the CH32 microcontroller
 )
 
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
-mpos.ui.main_display.set_color_inversion(False)
+mpos.ui.main_display.set_color_inversion(True)
 
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13
+import drivers.indev.cst816s as cst816s
 i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
 try:
@@ -94,7 +96,6 @@ except Exception as e:
 
 lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
-mpos.ui.main_display.set_params(0x36, bytearray([0x28]))
 
 # Button handling code:
 from machine import ADC, Pin
