@@ -23,13 +23,6 @@ LCD_DC = 42
 LCD_CS = 45
 LCD_BL = 1
 
-I2C_BUS = 0
-I2C_FREQ = 400000
-TP_SDA = 48
-TP_SCL = 47
-TP_ADDR = 0x15
-TP_REGBITS = 8
-
 print("waveshare_esp32_s3_touch_lcd_2.py machine.SPI.Bus() initialization")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, miso=LCD_MISO, sck=LCD_SCLK)
@@ -82,8 +75,8 @@ mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 
 # Touch handling:
-i2c_bus = i2c.I2C.Bus(host=I2C_BUS, scl=TP_SCL, sda=TP_SDA, freq=I2C_FREQ, use_locks=False)
-touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=TP_ADDR, reg_bits=TP_REGBITS)
+i2c_bus = i2c.I2C.Bus(host=0, scl=47, sda=48, freq=400000, use_locks=False)
+touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
 indev = cst816s.CST816S(touch_dev, startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
 InputManager.register_indev(indev)
 
@@ -124,7 +117,6 @@ except Exception as e:
 from mpos import SensorManager
 
 # IMU is on I2C0 (same bus as touch): SDA=48, SCL=47, addr=0x6B
-# i2c_bus was created on line 75 for touch, reuse it for IMU
 SensorManager.init(i2c_bus, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 # === CAMERA HARDWARE ===
