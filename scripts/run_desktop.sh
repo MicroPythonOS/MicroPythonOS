@@ -54,7 +54,7 @@ else
 			sed -i.backup -E 's/[[:space:]]*,?[[:space:]]*"auto_start_app"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*//g; s/\{[[:space:]]*,/\{/g; s/,[[:space:]]*\}/\}/g' "$CONFIG_FILE"
 		fi
 	fi
-	"$binary" -X heapsize=$HEAPSIZE -v -i -c "$(cat main.py)"
+	"$binary" -X heapsize=$HEAPSIZE -v -i -m main # internal_filesystem/main.py is frozen in and can't be changed at runtime
 fi
 
 popd
