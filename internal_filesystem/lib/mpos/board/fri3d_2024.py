@@ -54,9 +54,6 @@ buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-STATE_HIGH = 1
-STATE_LOW = 0
-
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
@@ -79,7 +76,7 @@ mpos.ui.main_display.set_color_inversion(False)
 
 lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
-mpos.ui.main_display.set_params(0x36, bytearray([0x28]))
+mpos.ui.main_display.set_params(0x36, bytearray([0x28])) # mirror
 
 # Button and joystick handling code:
 from machine import ADC, Pin
