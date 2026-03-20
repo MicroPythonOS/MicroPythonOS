@@ -15,7 +15,15 @@ if [ -z "$target" ]; then
 	echo "Example: $0 esp32"
 	echo "Example: $0 esp32s3"
 	echo "Example: $0 unphone"
+	echo "Example: $0 clean"
 	exit 1
+fi
+
+
+if [ "$target" == "clean" ]; then
+	rm -rf "$mydir"/../lvgl_micropython/lib/micropython/ports/unix/build-standard/
+	rm -rf "$mydir"/../lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
+	exit 0
 fi
 
 # This assumes all the git submodules have been checked out recursively
@@ -192,17 +200,14 @@ PY
 	# STRIP= makes it so that debug symbols are kept
 	pushd "$codebasedir"/lvgl_micropython/
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
-	# python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer "$frozenmanifest"
-	# SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_DBUS=OFF -DSDL_IBUS=OFF -DSDL_LOADSO=OFF -DSDL_X11_SHARED=OFF -DSDL_WAYLAND_SHARED=OFF -DSDL_KMSDRM_SHARED=OFF -DSDL_X11=ON -DSDL_WAYLAND=ON" \
-	# SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_DBUS=OFF -DSDL_IBUS=OFF -DSDL_LOADSO=OFF" \
-	# SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_X11=ON -DSDL_WAYLAND=ON" \
-	# SDL_FLAGS="-DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_WAYLAND=ON -DSDL_X11=ON" \
+	# To avoid X11/Wayland being loaded dynamically at runtime, you can use: -DSDL_LOADSO=OFF
+	# but then those need to be provided at compile time, or excluded by using: -DSDL_WAYLAND=OFF -DSDL_X11=OFF
 	python3 make.py "$target" \
 		LV_CFLAGS="-g -O0 -ggdb" \
 		STRIP= \
 		DISPLAY=sdl_display \
 		INDEV=sdl_pointer \
-		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_LOADSO=OFF" \
+		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
 		"$frozenmanifest"
 
 	popd
