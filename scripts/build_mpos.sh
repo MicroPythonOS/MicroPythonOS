@@ -220,8 +220,4 @@ else
 	echo "invalid target $target"
 fi
 
-if uname | grep -q Linux; then # only compile it on Linux because MacOS complains about No module named 'elftools', even thought it gets pip installed...
-	echo "Building breakout app..."
-	"$codebasedir"/c_mpos/breakout/build.sh
-fi
 
