@@ -17,29 +17,17 @@ import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager
 
-# Pin configuration
-SPI_BUS = 2
-LCD_SCLK = 7
-LCD_MOSI = 6
-LCD_MISO = 8
-LCD_DC = 4
-LCD_CS = 5
-LCD_RST = 48
-
-TFT_HOR_RES=296
-TFT_VER_RES=240
-
 spi_bus = machine.SPI.Bus(
-    host=SPI_BUS,
-    mosi=LCD_MOSI,
-    miso=LCD_MISO,
-    sck=LCD_SCLK
+    host=2,
+    mosi=6,
+    miso=8, # not connected to the display, only to the SD card, so can't read from it
+    sck=7
 )
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
     freq=40000000,
-    dc=LCD_DC,
-    cs=LCD_CS
+    dc=4,
+    cs=5
 )
 
 # lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
@@ -59,13 +47,13 @@ mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
     frame_buffer2=fb2,
-    display_width=TFT_VER_RES,
-    display_height=TFT_HOR_RES,
+    display_width=240,
+    display_height=296,
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
-    reset_pin=LCD_RST, # doesn't seem needed
-    reset_state=STATE_LOW # doesn't seem needed
+    reset_pin=48,
+    reset_state=0
 )
 
 mpos.ui.main_display.init()
