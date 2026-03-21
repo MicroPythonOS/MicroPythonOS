@@ -109,6 +109,10 @@ def detect_board():
             # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
             return "fri3d_2026"
 
+        print("SQUiXL ?")
+        if unique_id_prefixes == b'\xb8\xf8b':
+            return "squixl"
+
         print("lilygo_t_watch_s3_plus ?")
         if i2c0 := fail_save_i2c(sda=10, scl=11):
             if single_address_i2c_scan(i2c0, 0x19): # IMU on 0x19, vibrator on 0x5A and scan also shows: [52, 81]
