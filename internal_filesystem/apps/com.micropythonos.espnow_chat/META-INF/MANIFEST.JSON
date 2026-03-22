@@ -1,0 +1,24 @@
+{
+"name": "ESPNowChat",
+"publisher": "MicroPythonOS",
+"short_description": "ESPNow Chat",
+"long_description": "Simple chat app using EspNow protocol for communication between devices.",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.espnow_chat/icons/com.micropythonos.espnow_chat_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.espnow_chat/mpks/com.micropythonos.espnow_chat_0.0.1.mpk",
+"fullname": "com.micropythonos.espnow_chat",
+"version": "0.1.0",
+"category": "development",
+"activities": [
+    {
+      "entrypoint": "assets/espnow_chat.py",
+      "classname": "EspNowChat",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+
