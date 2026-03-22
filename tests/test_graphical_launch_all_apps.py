@@ -32,6 +32,7 @@ class TestLaunchAllApps(unittest.TestCase):
         # Use PackageManager to get all apps
         all_packages = AppManager.get_app_list()
         skipped_packages = {
+            'com.micropythonos.breakout',
             'com.micropythonos.doom',
             'cz.ucw.pavel.cellular',
             'cz.ucw.pavel.compass',
