@@ -294,7 +294,15 @@ class Wsen_Isds:
         raw_g_y = self._convert_from_raw(raw[2], raw[3])
         raw_g_z = self._convert_from_raw(raw[4], raw[5])
 
-        return raw_g_x * self.gyro_sensitivity, raw_g_y * self.gyro_sensitivity, raw_g_z * self.gyro_sensitivity
+        return (
+            raw_g_x * self.gyro_sensitivity,
+            raw_g_y * self.gyro_sensitivity,
+            raw_g_z * self.gyro_sensitivity,
+        )
+
+    def read_angular_velocities(self):
+        """Read gyroscope data in mdps."""
+        return self._read_raw_angular_velocities()
 
     @staticmethod
     def _convert_from_raw(b_l, b_h):
