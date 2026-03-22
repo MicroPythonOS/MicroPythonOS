@@ -326,15 +326,16 @@ class BMA423:
             raw = -((~raw)+1) # Conver 2 complement to signed integer.
         return 23+raw
 
-    def irq(self,pin):
-        if self.callback == None:
-            printf("BMA423: not handled IRQ. Please, set a callback.")
+    def irq(self, pin):
+        if self.callback is None:
+            print("BMA423: not handled IRQ. Please, set a callback.")
             return
         data = {}
 
         print("IRQ CALLED")
 
-        if len(data) == None: return
+        if len(data) is None:
+            return
         self.callback(data)
 
     # Return the single byte at the specified register
