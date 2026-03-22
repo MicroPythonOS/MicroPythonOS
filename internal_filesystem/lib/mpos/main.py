@@ -1,6 +1,8 @@
 import _thread
 import lvgl as lv
 
+from machine import Pin
+
 import mpos.ui
 import mpos.ui.topmenu
 
@@ -55,38 +57,39 @@ def single_address_i2c_scan(i2c_bus, address):
 
 
 def fail_save_i2c(sda, scl):
-    from machine import I2C, Pin
+    from machine import I2C
 
     print(f"Try to I2C initialized on {sda=} {scl=}")
     try:
         i2c0 = I2C(0, sda=Pin(sda), scl=Pin(scl))
     except Exception as e:
-        print(f"Failed: {e}")
+        print(f"fail_save_i2c failed: {e}")
         return None
     else:
-        print("OK")
+        print("fail_save_i2c ok")
         return i2c0
 
-
-def check_pins(*pins):
-    from machine import Pin
-
-    print(f"Test {pins=}...")
-    for pin in pins:
-        try:
-            Pin(pin)
-        except Exception as e:
-            print(f"Failed to initialize {pin=}: {e}")
-            return True
-    print("All pins initialized successfully")
-    return True
-
+def restore_i2c(sda, scl):
+    Pin(sda, Pin.IN, pull=None)
+    Pin(scl, Pin.IN, pull=None)
 
 def detect_board():
     import sys
     if sys.platform == "linux" or sys.platform == "darwin": # linux and macOS
         return "linux"
     elif sys.platform == "esp32":
+
+        '''
+        # Reading and storing all pinstates can be useful for board detection
+        # But reading some pins can break peripherals
+        # So it's disabled by default - it's more for development
+        try:
+            import mpos
+            from mpos.board import pinstates
+            mpos.pinstates = pinstates.read_all_pins(skiplist = [7,8])
+        except Exception as e:
+            print("pinstates: WARNING: failed to read pins:", e)
+        '''
 
         # First do unique_id-based board detections because they're fast and don't mess with actual hardware configurations
         import machine
@@ -95,10 +98,6 @@ def detect_board():
         print("unPhone ?")
         if unique_id_prefixes == b'\x30\x30\xf9':
             return "unphone"
-
-        print("(emulated) lilygo_t_display_s3 ?")
-        if unique_id_prefixes == b'\x10\x01\x00' or unique_id_prefixes == b'\xc0\x4e\x30':
-            return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
 
         print("odroid_go ?")
         if unique_id_prefixes == b'\x30\xae\xa4':
@@ -109,36 +108,52 @@ def detect_board():
             # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
             return "fri3d_2026"
 
+        # Do I2C-based board detection
+
         print("lilygo_t_watch_s3_plus ?")
         if i2c0 := fail_save_i2c(sda=10, scl=11):
             if single_address_i2c_scan(i2c0, 0x19): # IMU on 0x19, vibrator on 0x5A and scan also shows: [52, 81]
                 return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
+            restore_i2c(sda=10, scl=11)
 
-        # Then do I2C-based board detection
         print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
         if i2c0 := fail_save_i2c(sda=39, scl=38):
             if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
                 return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
+            restore_i2c(sda=39, scl=38) # fix pin 39 (data0) breaking lilygo_t_display_s3's display
 
         print("waveshare_esp32_s3_touch_lcd_2 ?")
         if i2c0 := fail_save_i2c(sda=48, scl=47):
             # IO48 is floating on matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
             if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
                 return "waveshare_esp32_s3_touch_lcd_2"
+            restore_i2c(sda=48, scl=47) # fix pin 47 (data6) and 48 (data7) breaking lilygo_t_display_s3's display
 
         print("m5stack_fire ?")
         if i2c0 := fail_save_i2c(sda=21, scl=22):
             if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
                 return "m5stack_fire"
+            restore_i2c(sda=21, scl=22)
 
         print("fri3d_2024 ?")
         if i2c0 := fail_save_i2c(sda=9, scl=18):
             if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
+            restore_i2c(sda=9, scl=18)
 
+        # On devices without I2C, we use known GPIO states
+
+        print("(emulated) lilygo_t_display_s3 ?")
+        try:
+            # 2 buttons have PCB pull-ups so they'll be high unless pressed
+            pin0 = Pin(0, Pin.IN)
+            pin14 = Pin(14, Pin.IN)
+            if pin0.value() == 1 and pin14.value() == 1:
+                return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
+        except Exception as e:
+            print(f"lilygo_t_display_s3 detection got exception: {e}")
 
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
-
 
 # EXECUTION STARTS HERE
 
