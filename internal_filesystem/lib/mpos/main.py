@@ -1,8 +1,6 @@
 import _thread
 import lvgl as lv
 
-from machine import Pin
-
 import mpos.ui
 import mpos.ui.topmenu
 
@@ -57,7 +55,7 @@ def single_address_i2c_scan(i2c_bus, address):
 
 
 def fail_save_i2c(sda, scl):
-    from machine import I2C
+    from machine import I2C, Pin
 
     print(f"Try to I2C initialized on {sda=} {scl=}")
     try:
@@ -70,6 +68,8 @@ def fail_save_i2c(sda, scl):
         return i2c0
 
 def restore_i2c(sda, scl):
+    from machine import Pin
+
     Pin(sda, Pin.IN, pull=None)
     Pin(scl, Pin.IN, pull=None)
 
@@ -142,6 +142,7 @@ def detect_board():
             restore_i2c(sda=9, scl=18)
 
         # On devices without I2C, we use known GPIO states
+        from machine import Pin
 
         print("(emulated) lilygo_t_display_s3 ?")
         try:
