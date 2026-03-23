@@ -15,7 +15,6 @@ https://github.com/meshtastic/device-ui/blob/master/include/graphics/LGFX/LGFX_U
 Original author: https://github.com/jedie
 """
 
-import struct
 import sys
 import time
 
@@ -27,6 +26,7 @@ import machine
 import mpos.ui
 from drivers.display.hx8357d import hx8357d
 from drivers.indev.xpt2046 import XPT2046
+from drivers.io_expander.tca9555 import TCA9555
 from machine import Pin
 from micropython import const
 from mpos import InputManager
@@ -68,6 +68,7 @@ SPI_TOUCH_FREQ = const(2_500_000)
 # SPI_TOUCH_FREQ = const(500_000)
 # SPI_TOUCH_FREQ = const(100_000)
 
+TCA9555_I2C_DEV_ID = const(38)  # 0x26 - TI TCA9555's I²C addr
 EXPANDER_POWER = const(0x40)
 LED_GREEN = const(0x49)
 LED_BLUE = const(0x4D)  # 13 | 0x40
@@ -95,83 +96,6 @@ time.sleep(1)
 print("unphone.py init...")
 
 
-class UnPhoneTCA:
-    """
-    unPhone spin 9 - TCA9555 IO expansion chip
-    """
-
-    I2C_DEV_ID = const(38)  # 0x26 - TI TCA9555's I²C addr
-
-    # Register addresses
-    REG_INPUT = const(0x00)
-    REG_OUTPUT = const(0x02)
-    REG_CONFIG = const(0x06)
-
-    def __init__(self, i2c_bus: i2c.I2C.Bus):
-        self.tca_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=self.I2C_DEV_ID)
-        self.directions = 0xFFFF  # All inputs by default
-        self.output_states = 0x0000  # All low by default
-
-        # Set IO expander initially as all inputs
-        self._write_word(0x06, self.directions)
-
-        # Read current directions and states
-        self.directions = self._read_word(0x06)
-        self.output_states = self._read_word(0x02)
-
-    def _write_word(self, reg, value):
-        print(f"Writing to TCA9555: reg={reg:#02x}, value={value:#04x}")
-        self.tca_dev.write(bytes([reg, value & 0xFF, (value >> 8) & 0xFF]))
-
-    def _read_word(self, reg):
-        self.tca_dev.write(bytes([reg]))
-        data = self.tca_dev.read(2)
-        return struct.unpack("<H", data)[0]
-
-    def pin_mode(self, pin, mode):
-        if pin & 0x40:  # Pins with 0x40 bit set are controlled by TCA9555
-            pin &= 0xBF  # Mask out high bit
-            if mode == machine.Pin.OUT:
-                self.directions &= ~(1 << pin)
-            else:
-                self.directions |= 1 << pin
-            self._write_word(self.REG_OUTPUT, self.directions)
-        else:
-            # Handle standard ESP32 pin
-            machine.Pin(pin, mode)
-
-    def digital_write(self, pin, value):
-        if pin & 0x40:  # Pins with 0x40 bit set are controlled by TCA9555
-            pin &= 0xBF
-            if value:
-                self.output_states |= 1 << pin
-            else:
-                self.output_states &= ~(1 << pin)
-            self._write_word(self.REG_OUTPUT, self.output_states)
-
-            # Ensure pin is set to output
-            self.directions &= ~(1 << pin)
-            self._write_word(self.REG_CONFIG, self.directions)
-        else:
-            # Handle standard ESP32 pin
-            p = machine.Pin(pin, machine.Pin.OUT)
-            p.value(value)
-
-    def digital_read(self, pin):
-        if pin & 0x40:  # Pins with 0x40 bit set are controlled by TCA9555
-            pin &= 0xBF
-            # Ensure pin is set to input
-            self.directions |= 1 << pin
-            self._write_word(self.REG_CONFIG, self.directions)
-
-            inputs = self._read_word(self.REG_INPUT)
-            return 1 if (inputs & (1 << pin)) else 0
-        else:
-            # Handle standard ESP32 pin
-            p = machine.Pin(pin, machine.Pin.IN)
-            return p.value()
-
-
 class UnPhone:
     # Power management chip API
     BM_I2CADD = const(0x6B)
@@ -183,7 +107,7 @@ class UnPhone:
 
     def __init__(self, i2c: i2c.I2C.Bus):
         self.i2c = i2c
-        self.tca = UnPhoneTCA(self.i2c)
+        self.tca = TCA9555(self.i2c, dev_id=TCA9555_I2C_DEV_ID)
 
         # TODO: Persistent Store
         # # https://docs.micropython.org/en/latest/library/esp32.html#esp32.NVS
