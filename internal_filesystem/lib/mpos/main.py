@@ -103,11 +103,6 @@ def detect_board():
         if unique_id_prefixes == b'\x30\xae\xa4':
             return "odroid_go"
 
-        print("fri3d_2026 ?")
-        if unique_id_prefixes == b'\xdc\xb4\xd9':
-            # or: if single_address_i2c_scan(i2c0, 0x6A): # IMU currently not installed on prototype board
-            return "fri3d_2026"
-
         # Do I2C-based board detection
 
         print("lilygo_t_watch_s3_plus ?")
@@ -137,6 +132,8 @@ def detect_board():
 
         print("fri3d_2024 ?")
         if i2c0 := fail_save_i2c(sda=9, scl=18):
+            if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
+                return "fri3d_2026"
             if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
                 return "fri3d_2024"
             restore_i2c(sda=9, scl=18)
