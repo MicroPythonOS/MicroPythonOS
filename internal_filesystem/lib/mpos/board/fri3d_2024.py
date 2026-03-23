@@ -59,7 +59,6 @@ mpos.ui.main_display = st7789.ST7789(
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
-
 mpos.ui.main_display.set_color_inversion(False)
 
 lv.init()
@@ -238,9 +237,10 @@ indev.set_group(group) # is this needed? maybe better to move the default group 
 disp = lv.display_get_default()
 indev.set_display(disp)  # different from display
 indev.enable(True)
-
-# Register the input device with InputManager
 InputManager.register_indev(indev)
+
+import mpos.sdcard
+mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # Battery voltage ADC measuring
 # NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
@@ -270,9 +270,6 @@ def adc_to_voltage(adc_value):
     return (0.001651* adc_value + 0.08709)
 
 BatteryManager.init_adc(13, adc_to_voltage)
-
-import mpos.sdcard
-mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
@@ -336,10 +333,6 @@ import time
 import _thread
 
 def startup_wow_effect():
-    """
-    Epic startup effect with rainbow LED chase and upbeat startup jingle.
-    Runs in background thread to avoid blocking boot.
-    """
     try:
         # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
         startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"

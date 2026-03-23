@@ -13,7 +13,7 @@
 #       - audio DAC emulation using buzzer might be slow or need specific buffered protocol
 # - test it on the Waveshare to make sure no syntax / variable errors
 
-from machine import Pin, SPI, SDCard
+from machine import ADC, I2C, Pin, SPI, SDCard
 import lcd_bus
 import i2c
 import math
@@ -30,8 +30,7 @@ import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager
 
-import machine
-spi_bus = machine.SPI.Bus(
+spi_bus = SPI.Bus(
     host=2,
     mosi=6,
     miso=8,
@@ -57,7 +56,6 @@ fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
 # Quick and dirty LCD reset using the CH32 microcontroller
-from machine import I2C, Pin
 ADDRESS = 0x50
 expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
 expander_i2c.writeto_mem(ADDRESS, 22, b'\x01') # 3v3 aux on + LCD off
@@ -98,7 +96,6 @@ lv.init()
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 # Button handling code:
-from machine import ADC, Pin
 import time
 
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
@@ -183,18 +180,16 @@ indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(keypad_read_cb)
 indev.set_group(group) # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
-disp = lv.display_get_default()  # NOQA
+disp = lv.display_get_default()
 indev.set_display(disp)  # different from display
-indev.enable(True)  # NOQA
+indev.enable(True)
 InputManager.register_indev(indev)
 
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
 # === AUDIO HARDWARE ===
-
-# Initialize buzzer: now sits on PC14/CC1 of the CH32X035GxUx so needs custom code
-#buzzer = PWM(Pin(46), freq=550, duty=0)
+from mpos import AudioManager
 
 # I2S pin configuration for audio output (DAC) and input (microphone)
 # Note: I2S is created per-stream, not at boot (only one instance can exist)
@@ -220,13 +215,19 @@ i2s_output_pins = {
     'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator
 }
 
-from mpos import AudioManager
-
 speaker_output = AudioManager.add(
     AudioManager.Output(
         name="speaker",
         kind="i2s",
         i2s_pins=i2s_output_pins,
+    )
+)
+
+buzzer_output = AudioManager.add(
+    AudioManager.Output(
+        name="buzzer",
+        kind="buzzer",
+        buzzer_pin=38,
     )
 )
 
@@ -242,7 +243,6 @@ mic_input = AudioManager.add(
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
 # Create I2C bus for IMU (LSM6DSOTR-C / LSM6DSO)
-from machine import I2C
 SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH)
 
 # === LED HARDWARE ===
@@ -263,8 +263,13 @@ def startup_wow_effect():
         #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
 
         # Start the jingle
-        # Disabled until buzzer works
-        #AudioManager.play_rtttl(startup_jingle,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60)
+        player = AudioManager.player(
+            rtttl=startup_jingle,
+            stream_type=AudioManager.STREAM_NOTIFICATION,
+            volume=60,
+            output=buzzer_output,
+        )
+        player.start()
 
         # Rainbow colors for the 5 LEDs
         rainbow = [
