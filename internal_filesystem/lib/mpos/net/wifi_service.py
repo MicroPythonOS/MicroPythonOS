@@ -498,7 +498,10 @@ class WifiService:
                 ap = WifiService._get_ap_wlan(net)
                 return ap.ifconfig()[ap_index]
             wlan = WifiService._get_sta_wlan(net)
-            return wlan.ipconfig(sta_key)
+            value = wlan.ipconfig(sta_key)
+            if isinstance(value, tuple):
+                return value[0] if value else None
+            return value
         except Exception as e:
             print(f"WifiService: Error retrieving ip4v {label}: {e}")
             return None
@@ -514,12 +517,22 @@ class WifiService:
         )
 
     @staticmethod
+    def get_ipv4_netmask(network_module=None):
+        return WifiService._get_ipv4_value(
+            network_module=network_module,
+            ap_index=1,
+            sta_key="addr4",
+            desktop_value="255.255.255.0",
+            label="netmask",
+        )
+
+    @staticmethod
     def get_ipv4_gateway(network_module=None):
         return WifiService._get_ipv4_value(
             network_module=network_module,
             ap_index=2,
             sta_key="gw4",
-            desktop_value="000.123.456.789",
+            desktop_value="",
             label="gateway",
         )
 
@@ -760,3 +773,4 @@ class WifiService:
         else:
             print(f"WifiService: Network '{ssid}' not found in saved networks")
             return False
+

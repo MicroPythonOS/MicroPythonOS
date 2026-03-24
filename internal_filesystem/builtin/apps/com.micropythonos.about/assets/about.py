@@ -105,16 +105,20 @@ class About(Activity):
                 self.logger.warning(error)
                 self._add_label(screen, error)
 
-            # Network info (ESP32 only)
-            try:
-                self._add_label(screen, f"{lv.SYMBOL.WIFI} Network Info", is_header=True)
-                from mpos import WifiService
-                self._add_label(screen, f"IPv4 Address: {WifiService.get_ipv4_address()}")
-                self._add_label(screen, f"IPv4 Gateway: {WifiService.get_ipv4_gateway()}")
-            except Exception as e:
-                error = f"Could not find network info because: {e}"
-                self.logger.warning(error)
-                self._add_label(screen, error)
+        # Network info
+        try:
+            self._add_label(screen, f"{lv.SYMBOL.WIFI} Network Info", is_header=True)
+            from mpos import WifiService
+            ipv4_address = WifiService.get_ipv4_address() or "127.0.0.1"
+            ipv4_netmask = WifiService.get_ipv4_netmask() or "255.255.255.0"
+            ipv4_gateway = WifiService.get_ipv4_gateway() or ""
+            self._add_label(screen, f"IPv4 Address: {ipv4_address}")
+            self._add_label(screen, f"IPv4 Netmask: {ipv4_netmask}")
+            self._add_label(screen, f"IPv4 Gateway: {ipv4_gateway}")
+        except Exception as e:
+            error = f"Could not find network info because: {e}"
+            self.logger.warning(error)
+            self._add_label(screen, error)
 
 
         # Freezefs info (production builds only)
