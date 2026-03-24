@@ -103,8 +103,11 @@ def detect_board():
         if unique_id_prefixes == b'\x30\xae\xa4':
             return "odroid_go"
 
-        # Do I2C-based board detection
+        print("lilygo_t_hmi ?")
+        if unique_id_prefixes == b'\xdc\xb4\xd9':
+            return "lilygo_t_hmi"
 
+        # Do I2C-based board detection
         print("lilygo_t_watch_s3_plus ?")
         if i2c0 := fail_save_i2c(sda=10, scl=11):
             if single_address_i2c_scan(i2c0, 0x19): # IMU on 0x19, vibrator on 0x5A and scan also shows: [52, 81]

@@ -14,6 +14,7 @@ if [ -z "$target" ]; then
 	echo "Example: $0 macOS"
 	echo "Example: $0 esp32"
 	echo "Example: $0 esp32s3"
+	echo "Example: $0 t-hmi"
 	echo "Example: $0 unphone"
 	echo "Example: $0 clean"
 	exit 1
@@ -106,14 +107,15 @@ popd
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "t-hmi" ]; then
     partition_size="4194304"
     flash_size="16"
 	extra_configs=""
+	CUSTOM_FLAGS=""
     if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
-	else # esp32s3 or unphone
+	elif [ "$target" == "esp32s3" -o "$target" == "unphone" ]; then
 	    if [ "$target" == "unphone" ]; then
 	        partition_size="3900000"
 	        flash_size="8"
@@ -125,6 +127,17 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ];
 		extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
 		# --py-freertos: add MicroPython FreeRTOS module to expose internals
 		extra_configs="$extra_configs --py-freertos"
+	elif [ "$target" == "t-hmi" ]; then
+		BOARD=ESP32_GENERIC_S3
+		BOARD_VARIANT=SPIRAM_OCT
+
+		partition_size="4194304"
+		flash_size="16"
+
+		extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
+		extra_configs="$extra_configs --py-freertos"
+		
+		CUSTOM_FLAGS='DISPLAY=st7789 INDEV=xpt2046 --enable-jtag-repl=y --enable-cdc-repl=n --enable-uart-repl=n'
 	fi
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
@@ -148,6 +161,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ];
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
 #	python3 make.py --ota --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 	python3 make.py --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+		$CUSTOM_FLAGS \
 	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
