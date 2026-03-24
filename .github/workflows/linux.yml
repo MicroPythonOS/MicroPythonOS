@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # Ubuntu is Debian-based and commonly used in GitHub Actions
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository with submodules
