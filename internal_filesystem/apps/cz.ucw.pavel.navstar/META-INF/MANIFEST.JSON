@@ -3,9 +3,9 @@
 "publisher": "Pavel Machek",
 "short_description": "Simple navigation app.",
 "long_description": "Simple navigation app using data from NAVSTAR GPS and other GNSS systems.",
-"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.xxx/icons/cz.ucw.pavel.xxx_0.0.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.xxx/mpks/cz.ucw.pavel.xxx_0.0.1.mpk",
-"fullname": "cz.ucw.pavel.xxx",
+"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.navstar/icons/cz.ucw.pavel.navstar_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.navstar/mpks/cz.ucw.pavel.navstar_0.0.1.mpk",
+"fullname": "cz.ucw.pavel.navstar",
 "version": "0.0.1",
 "category": "utilities",
 "activities": [
