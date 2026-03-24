@@ -1,4 +1,4 @@
-name: Build LVGL MicroPython for MacOS
+name: Build LVGL MicroPython for MacOS arm64 (M1), esp32 and esp32s3
 
 on:
   push:

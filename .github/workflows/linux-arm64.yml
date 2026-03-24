@@ -1,4 +1,4 @@
-name: Build LVGL MicroPython on Linux for ARM64
+name: Build LVGL MicroPython on Linux for arm64
 
 on:
   push:

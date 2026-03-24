@@ -1,4 +1,4 @@
-name: Build LVGL MicroPython on Linux
+name: Build LVGL MicroPython for Linux x64, esp32 and esp32s3
 
 on:
   push:
