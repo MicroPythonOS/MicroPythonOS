@@ -1,1 +1,1 @@
-This folder will be filled by the inline_minify_webrepl.py script.
+This folder gets filled by the webrepl/inline_minify_webrepl.py script.

@@ -37,5 +37,6 @@ c_mpos/breakout/build
 # build files
 *.bin
 
-# auto created by inline_minify_webrepl.py
-internal_filesystem/builtin/html/webrepl_inlined_minified.html
+# auto created by inline_minify_webrepl.py but still checked in because it's a small file
+# and when users download internal_filesystem/ from git (to run a statically compiled Linux build, for example) they need this
+# internal_filesystem/builtin/html/webrepl_inlined_minified.html

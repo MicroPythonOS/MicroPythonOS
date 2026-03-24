@@ -129,12 +129,14 @@ def inline_assets() -> None:
     term_js = jsmin((base_dir / "term.js").read_text(encoding="utf-8"))
     file_saver_js = jsmin((base_dir / "FileSaver.js").read_text(encoding="utf-8"))
     webrepl_js = jsmin((base_dir / "webrepl.js").read_text(encoding="utf-8"))
+    webrepl_tweaks_js = jsmin((base_dir / "webrepl_tweaks.js").read_text(encoding="utf-8"))
 
     replacements = [
         (r"<link\s+rel=\"stylesheet\"\s+href=\"webrepl\.css\"\s*/?>", f"<style>{css}</style>"),
         (r"<script\s+src=\"term\.js\"\s*>\s*</script>", f"<script>{term_js}</script>"),
         (r"<script\s+src=\"FileSaver\.js\"\s*>\s*</script>", f"<script>{file_saver_js}</script>"),
         (r"<script\s+src=\"webrepl\.js\"\s*>\s*</script>", f"<script>{webrepl_js}</script>"),
+        (r"<script\s+src=\"webrepl_tweaks\.js\"\s*>\s*</script>", f"<script>{webrepl_tweaks_js}</script>"),
     ]
 
     for pattern, replacement in replacements:
