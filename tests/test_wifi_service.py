@@ -692,8 +692,8 @@ class TestWifiServiceIPv4Info(unittest.TestCase):
         address = WifiService.get_ipv4_address(network_module=None)
         gateway = WifiService.get_ipv4_gateway(network_module=None)
 
-        self.assertEqual(address, "123.456.789.000")
-        self.assertEqual(gateway, "000.123.456.789")
+        self.assertEqual(address, "127.0.0.1")
+        self.assertEqual(gateway, "")
 
 
 class TestWifiServiceDisconnect(unittest.TestCase):
