@@ -44,7 +44,7 @@ class HotspotSettings(Activity):
         button_row.set_width(lv.pct(100))
         button_row.set_height(lv.SIZE_CONTENT)
         button_row.set_style_border_width(0, lv.PART.MAIN)
-        button_row.set_style_pad_all(0, lv.PART.MAIN)
+        button_row.set_style_pad_all(10, lv.PART.MAIN)
         button_row.set_flex_flow(lv.FLEX_FLOW.ROW)
         button_row.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
 
