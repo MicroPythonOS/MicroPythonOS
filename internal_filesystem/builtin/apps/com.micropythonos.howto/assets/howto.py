@@ -11,40 +11,27 @@ class HowTo(Activity):
     def onCreate(self):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        '''
-        welcome_label = lv.label(screen)
-        welcome_label.set_width(lv.pct(100))
-        welcome_label.set_text("Welcome!")
-        welcome_label.set_style_text_font(lv.font_montserrat_34, lv.PART.MAIN)
-        welcome_label.set_style_margin_bottom(2, lv.PART.MAIN)
-        '''
+        # Make the screen focusable so it can be scrolled with the arrow keys
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(screen)
         preamble = "How to Navigate"
-        title_label = lv.label(screen)
-        title_label.set_width(lv.pct(100))
-        title_label.set_text(preamble)
-        title_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
-        label = lv.label(screen)
-        label.set_width(lv.pct(100))
-        label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
-        buttonhelp = '''As you don't have a touch screen, you need to use the buttons to navigate:
-        
-- If you have a joystick and at least 2 buttons, then use the joystick to move around. Use one of the buttons to ENTER and another to go BACK.
+        self._add_label(screen, preamble, is_header=True)
 
-- If you have 3 buttons, then one is PREVIOUS, one is ENTER and one is NEXT. To go back, press PREVIOUS and NEXT together.
-
-- If you have just 2 buttons, then one is PREVIOUS, the other is NEXT. To ENTER, press both at the same time. To go back, long-press the PREVIOUS button.
-        '''
+        buttonhelp_intro = "As you don't have a touch screen, you need to use the buttons to navigate:"
+        buttonhelp_items = [
+            "If you have a joystick and at least 2 buttons, then use the joystick to move around. Use one of the buttons to ENTER and another to go BACK.",
+            "If you have 3 buttons, then one is PREVIOUS, one is ENTER and one is NEXT. To go back, press PREVIOUS and NEXT together.",
+            "If you have just 2 buttons, then one is PREVIOUS, the other is NEXT. To ENTER, press both at the same time. To go back, long-press the PREVIOUS button.",
+        ]
         touchhelp = "Swipe from the left edge to go back and from the top edge to open the menu."
         from mpos import InputManager
         if InputManager.has_pointer():
-            label.set_text(f'''
-{touchhelp}
-            ''')
+            self._add_label(screen, touchhelp)
         else:
-            label.set_text(f'''
-{buttonhelp}
-            ''')
-        label.set_long_mode(lv.label.LONG_MODE.WRAP)
+            self._add_label(screen, buttonhelp_intro)
+            for item in buttonhelp_items:
+                self._add_label(screen, f"• {item}")
 
         self.dontshow_checkbox = lv.checkbox(screen)
         self.dontshow_checkbox.set_text("Don't show again")
@@ -55,6 +42,36 @@ class HowTo(Activity):
         closelabel.set_text("Close")
 
         self.setContentView(screen)
+
+    @staticmethod
+    def _focus_obj(event):
+        target = event.get_target_obj()
+        target.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+        target.set_style_border_width(1, lv.PART.MAIN)
+        target.scroll_to_view(True)
+
+    @staticmethod
+    def _defocus_obj(event):
+        target = event.get_target_obj()
+        target.set_style_border_width(0, lv.PART.MAIN)
+
+    def _add_label(self, parent, text, is_header=False):
+        label = lv.label(parent)
+        label.set_width(lv.pct(100))
+        label.set_text(text)
+        label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
+        label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(label)
+        if is_header:
+            label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+            label.set_style_margin_bottom(4, lv.PART.MAIN)
+        else:
+            label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
+            label.set_style_margin_bottom(2, lv.PART.MAIN)
+        return label
 
     def onResume(self, screen):
         # Autostart can only be disabled if nothing was enabled or if this app was enabled
