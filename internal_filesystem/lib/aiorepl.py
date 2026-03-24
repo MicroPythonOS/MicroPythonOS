@@ -114,8 +114,9 @@ async def task(g=None, prompt="--> "):
             curs = 0  # cursor offset from end of cmd buffer
             while True:
                 b = await s.read(1)
+                # MPOS: return on EOF to avoid infinite prompt spam with /dev/null (differs from upstream).
                 if not b:  # Handle EOF/empty read
-                    break
+                    return
                 pc = c  # save previous character
                 c = ord(b)
                 pt = t  # save previous time
