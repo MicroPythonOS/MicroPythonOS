@@ -66,9 +66,9 @@ class WebServerSettings(Activity):
         port = status.get("port")
         ip_address = WifiService.get_ipv4_address()
         if ip_address:
-            url_text = f"http://{ip_address}:{port}"
+            url_text = f"http://{ip_address}:{port}/"
         else:
-            url_text = f"http://<wifi ip>:{port}"
+            url_text = f"http://<wifi ip>:{port}/"
         self.detail_label.set_text(f"URL: {url_text}\nAutostart: {autostart_text}")
 
         button_text = "Stop" if status.get("started") else "Start"

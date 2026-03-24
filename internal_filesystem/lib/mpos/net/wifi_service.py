@@ -509,7 +509,7 @@ class WifiService:
             network_module=network_module,
             ap_index=0,
             sta_key="addr4",
-            desktop_value="123.456.789.000",
+            desktop_value="127.0.0.1",
             label="address",
         )
 
