@@ -3,19 +3,35 @@
 
 Builtin Apps:
 - AppStore: update BadgeHub.eu URL
-- Hotspot Settings
-- WebServer Settings
-
+- About: show netmask separately, make labels focusable
+- HowTo: new onboarding app with auto-start handling to explain controls
+- Settings: add sub-groups of setings as separate apps, including WiFi app
+- Settings: add Hotspot sub-group (SSID, password, security)
+- Settings: add WebServer sub-group (autostart, port, password)
+- Launcher: ignore launchers and MPOS settings (except WiFi)
 
 Frameworks:
-- AudioManager: add support for multiple speakers and microphones
-- AudioManager: add support for ADC-based microphone (adc_mic)
+- Audio streams: WAV playback/recording improvements (duration/progress, hardware volume control)
+- AudioManager: registry/session model, multi-speaker/mic routing, ADC-based mic (adc_mic)
+- DownloadManager: explicit certificate handling
+- InputManager: pointer detection helpers and board registrations
+- SensorManager: refactor to IMU drivers with magnetometer support and desktop IIO fallback
+- SharedPreferences: fix None handling
+- WebServer: new framework with Linux/macOS fixes and no background thread
+- WifiService: hotspot support, IP address helpers, simplified connect/auto-connect
+- Websocket library: renamed to uaiowebsocket to avoid conflicts
 
 OS:
-- ESP32 boards: add webrepl
-- New board support: LilyGo T-Display-S3
+- ESP32 boards: bundle WebREPL (disabled by default, password protected, can be enabled in Settings)
+- New board support: LilyGo T-Display-S3 (physical and emulated by QEMU)
+- New board support: LilyGo T-Watch S3 Plus
 - New board support: M5Stack Fire
 - New board support: ODroid Go
+- New board support: unPhone 9
+- Fri3d 2024/2026 updates: display reset support using CH32 microcontroller, communicator/expander drivers
+- ADC microphone C module and tests
+- Build system: switch to static builds for desktop systems to bundle LIBC and fix LIBC version issue
+- Build system: add linux-arm64 and macos-intel GitHub workflows to support more precompiled binaries
 - Add FreeRTOS module for low-level ESP32 functions
 
 0.8.0
