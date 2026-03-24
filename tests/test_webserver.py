@@ -90,7 +90,7 @@ class TestWebServer(unittest.TestCase):
             raise response_state["error"]
 
         response_text = response_state["data"].decode("utf-8", "replace")
-        self.assertIn("<title>MicroPython WebREPL</title>", response_text)
+        self.assertIn("<title>MicroPythonOS WebREPL</title>", response_text)
 
         WebServer.stop()
         self.assertFalse(WebServer.is_started())
