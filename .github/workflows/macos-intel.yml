@@ -39,6 +39,7 @@ jobs:
       - name: Build LVGL MicroPython for macOS dev
         run: |
           ./scripts/build_mpos.sh macOS
+          cp lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_intel_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
 
       - name: Run syntax tests on macOS
         run: |
@@ -48,7 +49,6 @@ jobs:
       - name: Run unit tests on macOS
         run: |
           ./tests/unittest.sh
-          mv lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_intel_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
         continue-on-error: true
 
       - name: Upload built binary as artifact
