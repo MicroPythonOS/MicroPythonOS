@@ -70,13 +70,13 @@ jobs:
       - name: Build LVGL MicroPython for unix
         run: |
           ./scripts/build_mpos.sh unix
-          cp lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          cp lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
-          path: lvgl_micropython/build/MicroPythonOS_amd64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          name: MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          path: lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
           retention-days: 7
 
       - name: Run syntax tests on unix
