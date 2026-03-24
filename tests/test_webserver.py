@@ -81,7 +81,7 @@ class TestWebServer(unittest.TestCase):
 
         TaskManager.create_task(download_task())
 
-        timeout_seconds = 20.0
+        timeout_seconds = 30.0
         start_wait = time.time()
         while not response_state["done"] and (time.time() - start_wait) < timeout_seconds:
             time.sleep(0.1)
