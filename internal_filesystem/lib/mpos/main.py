@@ -53,6 +53,75 @@ def single_address_i2c_scan(i2c_bus, address):
         print(f"scan error: {e}")
         return False
 
+def detect_lilygo_t_hmi():
+    from machine import Pin, SoftSPI
+    import time
+
+    try:
+        sck = Pin(1)
+        mosi = Pin(3)
+        miso = Pin(4)
+        cs = Pin(2, Pin.OUT, value=1)
+        irq = Pin(9, Pin.IN, Pin.PULL_UP)
+
+        spi = SoftSPI(
+            baudrate=500000,
+            polarity=0,
+            phase=0,
+            sck=sck,
+            mosi=mosi,
+            miso=miso,
+        )
+
+        def read_cmd(cmd):
+            tx = bytearray([cmd, 0x00, 0x00])
+            rx = bytearray(3)
+
+            cs(0)
+            spi.write_readinto(tx, rx)
+            cs(1)
+
+            return ((rx[1] << 8) | rx[2]) >> 3
+
+        samples = []
+        for _ in range(5):
+            vals = (
+                read_cmd(0xD0),  # X
+                read_cmd(0x90),  # Y
+                read_cmd(0xB0),  # Z1
+                irq.value(),
+            )
+            samples.append(vals)
+            print("T-HMI touch sample:", vals)
+            time.sleep_ms(20)
+
+        # Observed stable idle signature on LilyGO T-HMI:
+        # X=0, Y=4095, Z1=0/1, IRQ=1
+        signature_hits = sum(
+            x == 0 and y == 4095 and z in (0, 1) and irqv == 1
+            for x, y, z, irqv in samples
+        )
+
+        print(f"T-HMI signature hits: {signature_hits}/5")
+
+        if signature_hits >= 4:
+            print("LilyGO T-HMI touch signature matched")
+            return True
+
+    except Exception as e:
+        print(f"LilyGO T-HMI detection failed: {e}")
+
+    finally:
+        try:
+            Pin(1, Pin.IN, pull=None)
+            Pin(2, Pin.IN, pull=None)
+            Pin(3, Pin.IN, pull=None)
+            Pin(4, Pin.IN, pull=None)
+            Pin(9, Pin.IN, pull=None)
+        except Exception:
+            pass
+
+    return False
 
 def fail_save_i2c(sda, scl):
     from machine import I2C, Pin
@@ -104,7 +173,7 @@ def detect_board():
             return "odroid_go"
 
         print("lilygo_t_hmi ?")
-        if unique_id_prefixes == b'\xdc\xb4\xd9':
+        if detect_lilygo_t_hmi():
             return "lilygo_t_hmi"
 
         # Do I2C-based board detection
