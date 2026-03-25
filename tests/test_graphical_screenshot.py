@@ -12,7 +12,7 @@ import os
 import sys
 import unittest
 import mpos.ui
-from mpos import AppManager, DeviceInfo, capture_screenshot, wait_for_render
+from mpos import AppManager, DeviceInfo, DisplayMetrics, capture_screenshot, wait_for_render
 
 
 class TestScreenshotCapture(unittest.TestCase):
@@ -21,7 +21,7 @@ class TestScreenshotCapture(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         if sys.platform == "esp32":
-            self.screenshot_dir = "tests/screenshots"
+            self.screenshot_dir = "screenshots"
         else:
             self.screenshot_dir = "../tests/screenshots"
 
@@ -54,7 +54,9 @@ class TestScreenshotCapture(unittest.TestCase):
         print(f"\nCapturing screenshot to: {screenshot_path}")
 
         try:
-            buffer = capture_screenshot(screenshot_path, width=320, height=240)
+            width = DisplayMetrics.width()
+            height = DisplayMetrics.height()
+            buffer = capture_screenshot(screenshot_path, width=width, height=height)
             print(f"Screenshot captured: {len(buffer)} bytes")
 
             stat = os.stat(screenshot_path)
@@ -62,8 +64,20 @@ class TestScreenshotCapture(unittest.TestCase):
                 stat[6] > 0,
                 "Screenshot file is empty",
             )
+            expected_size = width * height * 2
+            self.assertEqual(
+                stat[6],
+                expected_size,
+                f"Screenshot file size {stat[6]} does not match expected {expected_size}",
+            )
             print(f"Screenshot file size: {stat[6]} bytes")
         except Exception as exc:
             self.fail(f"Failed to capture screenshot: {exc}")
+        finally:
+            try:
+                print(f"Removing screenshot {screenshot_path}")
+                os.remove(screenshot_path)
+            except OSError:
+                pass
 
         print("\n=== About app screenshot test completed successfully ===")
