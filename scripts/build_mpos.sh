@@ -109,6 +109,7 @@ echo "Refreshing freezefs..."
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ]; then
     partition_size="4194304"
     flash_size="16"
+	otasupport="--ota"
 	extra_configs=""
     if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
@@ -117,6 +118,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ];
 	    if [ "$target" == "unphone" ]; then
 	        partition_size="3900000"
 	        flash_size="8"
+			otasupport="" # too small for 2 OTA partitions + internal storage
         fi
 		BOARD=ESP32_GENERIC_S3
 		BOARD_VARIANT=SPIRAM_OCT
@@ -146,8 +148,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ];
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
-#	python3 make.py --ota --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
-	python3 make.py --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+	python3 make.py "$otasupport" --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
