@@ -70,8 +70,10 @@ class HotspotSettings(Activity):
     def refresh_status(self):
         is_running = WifiService.is_hotspot_enabled()
         state_text = "Running" if is_running else "Stopped"
-        ssid = self.prefs.get_string("ssid", self.DEFAULTS["ssid"])
-        authmode = self.prefs.get_string("authmode", None)
+        self.prefs.load()
+        self.ui_prefs.load()
+        ssid = self.ui_prefs.get_string("ssid", self.DEFAULTS["ssid"])
+        authmode = self.ui_prefs.get_string("authmode", self.DEFAULTS["authmode"])
         security_text = self._format_security_label(authmode)
         self.status_label.set_text(
             f"Status: {state_text}\nHotspot name: {ssid}\nSecurity: {security_text}"
