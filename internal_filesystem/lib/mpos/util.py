@@ -1,4 +1,5 @@
 import lvgl as lv
+import os
 
 def urldecode(s):
     result = ""
@@ -31,3 +32,40 @@ def print_lvgl_widget(obj, depth=0):
             print_lvgl_widget(obj.get_child(childnr), depth+1)
     else:
         print("print_lvgl_widget called on 'None'")
+
+
+def mkdir_parents(path):
+    """
+    Create directory and all parent directories like `mkdir -p`.
+
+    Creates intermediate directories as needed, does nothing if the path
+    already exists, and raises if any component exists as a non-directory.
+    """
+    if not path:
+        return
+
+    def _is_dir(stat_result):
+        return (stat_result[0] & 0x4000) != 0
+
+    parts = path.split("/")
+    current = "/" if path.startswith("/") else ""
+
+    for part in parts:
+        if not part:
+            continue
+        if current in ("", "/"):
+            current = f"{current}{part}"
+        else:
+            current = f"{current}/{part}"
+        try:
+            stat_result = os.stat(current)
+        except OSError:
+            try:
+                os.mkdir(current)
+            except OSError:
+                stat_result = os.stat(current)
+                if not _is_dir(stat_result):
+                    raise
+        else:
+            if not _is_dir(stat_result):
+                raise OSError("Path component exists and is not a directory")
