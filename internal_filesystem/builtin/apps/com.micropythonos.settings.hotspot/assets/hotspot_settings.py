@@ -127,7 +127,7 @@ class HotspotSettings(Activity):
         self.refresh_status()
 
     def should_show_password(self, setting):
-        authmode = self.prefs.get_string("authmode", None)
+        authmode = self.ui_prefs.get_string("authmode", None)
         if authmode is None:
             authmode = self.DEFAULTS["authmode"]
         return authmode != "none"

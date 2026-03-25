@@ -97,6 +97,145 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
 
         print("\n=== Hotspot settings Auth Mode default test completed ===")
 
+    def test_auth_mode_change_hides_password_setting(self):
+        """Verify Password setting disappears after switching Auth Mode to None."""
+        print("\n=== Starting Hotspot Settings Password hide test ===")
+
+        self._reset_hotspot_preferences()
+        screen = self._open_hotspot_settings_screen()
+
+        self.assertFalse(
+            verify_text_present(screen, "Password"),
+            "Password setting should not be visible with Auth Mode None",
+        )
+
+        self.assertTrue(
+            click_label("Auth Mode"),
+            "Could not click Auth Mode setting",
+        )
+        wait_for_render(iterations=40)
+
+        screen = lv.screen_active()
+        dropdown = find_dropdown_widget(screen)
+        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found")
+
+        coords = get_widget_coords(dropdown)
+        self.assertIsNotNone(coords, "Could not get dropdown coordinates")
+
+        print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
+        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
+        wait_for_render(iterations=20)
+
+        self.assertTrue(
+            select_dropdown_option_by_text(dropdown, "WPA2", allow_partial=True),
+            "Could not select WPA2 option in dropdown",
+        )
+        wait_for_render(iterations=20)
+
+        self.assertTrue(
+            click_button("Save"),
+            "Could not click Save button in Auth Mode settings",
+        )
+        wait_for_render(iterations=40)
+
+        screen = lv.screen_active()
+        self.assertTrue(
+            verify_text_present(screen, "Password"),
+            "Password setting did not appear after selecting WPA2",
+        )
+
+        self.assertTrue(
+            click_label("Auth Mode"),
+            "Could not click Auth Mode setting to revert",
+        )
+        wait_for_render(iterations=40)
+
+        screen = lv.screen_active()
+        dropdown = find_dropdown_widget(screen)
+        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found on revert")
+
+        coords = get_widget_coords(dropdown)
+        self.assertIsNotNone(coords, "Could not get dropdown coordinates on revert")
+
+        print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
+        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
+        wait_for_render(iterations=20)
+
+        self.assertTrue(
+            select_dropdown_option_by_text(dropdown, "None", allow_partial=True),
+            "Could not select None option in dropdown",
+        )
+        wait_for_render(iterations=20)
+
+        self.assertTrue(
+            click_button("Save"),
+            "Could not click Save button in Auth Mode settings (revert)",
+        )
+        wait_for_render(iterations=40)
+
+        screen = lv.screen_active()
+        print("\nSettings screen labels after Auth Mode revert:")
+        print_screen_labels(screen)
+
+        self.assertFalse(
+            verify_text_present(screen, "Password"),
+            "Password setting did not disappear after selecting None",
+        )
+
+        print("\n=== Hotspot settings Password hide test completed ===")
+
+    def test_auth_mode_change_shows_password_setting(self):
+        """Verify Password setting appears after switching Auth Mode to WPA2."""
+        print("\n=== Starting Hotspot Settings Password visibility test ===")
+
+        self._reset_hotspot_preferences()
+        screen = self._open_hotspot_settings_screen()
+
+        self.assertFalse(
+            verify_text_present(screen, "Password"),
+            "Password setting should not be visible with Auth Mode None",
+        )
+
+        self.assertTrue(
+            click_label("Auth Mode"),
+            "Could not click Auth Mode setting",
+        )
+        wait_for_render(iterations=40)
+
+        screen = lv.screen_active()
+        dropdown = find_dropdown_widget(screen)
+        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found")
+
+        coords = get_widget_coords(dropdown)
+        self.assertIsNotNone(coords, "Could not get dropdown coordinates")
+
+        print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
+        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
+        wait_for_render(iterations=20)
+
+        self.assertTrue(
+            select_dropdown_option_by_text(dropdown, "WPA2", allow_partial=True),
+            "Could not select WPA2 option in dropdown",
+        )
+        wait_for_render(iterations=20)
+
+        self.assertTrue(
+            click_button("Save"),
+            "Could not click Save button in Auth Mode settings",
+        )
+        wait_for_render(iterations=40)
+
+        screen = lv.screen_active()
+        print("\nSettings screen labels after Auth Mode change:")
+        print_screen_labels(screen)
+
+        self.assertTrue(
+            verify_text_present(screen, "Password"),
+            "Password setting did not appear after selecting WPA2",
+        )
+
+        print("\n=== Hotspot settings Password visibility test completed ===")
+
     def test_auth_mode_dropdown_select_wpa2(self):
         """Change Auth Mode via dropdown and verify stored value label."""
         print("\n=== Starting Hotspot Settings Auth Mode dropdown test ===")
