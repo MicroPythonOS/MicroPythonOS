@@ -83,7 +83,7 @@ class WifiService:
             "enabled": prefs.get_bool("enabled", False),
             "ssid": prefs.get_string("ssid", "MicroPythonOS"),
             "password": prefs.get_string("password", ""),
-            "authmode": prefs.get_string("authmode", "wpa2"),
+            "authmode": prefs.get_string("authmode", None),
         }
 
     @staticmethod
@@ -142,6 +142,12 @@ class WifiService:
             print("WifiService: Hotspot enabled")
             return True
         except Exception as e:
+            try:
+                ap = WifiService._get_ap_wlan(net)
+                ap.active(False)
+            except Exception:
+                pass
+            WifiService.hotspot_enabled = False
             print(f"WifiService: Failed to enable hotspot: {e}")
             return False
 
@@ -168,7 +174,8 @@ class WifiService:
         try:
             net = WifiService._get_network_module(network_module)
             ap = WifiService._get_ap_wlan(net)
-            return ap.active()
+            WifiService.hotspot_enabled = ap.active()
+            return WifiService.hotspot_enabled
         except Exception:
             return WifiService.hotspot_enabled
 
