@@ -1,4 +1,8 @@
 print("lilygo_t_hmi.py initialization")
+# Manufacturer: https://lilygo.cc/en-us/products/t-hmi
+# Hardware reference: https://www.tinytronics.nl/en/development-boards/microcontroller-boards/with-wi-fi/lilygo-t-hmi-esp32-s3-2.8-inch-ips-tft-display-met-touchscreen
+# Vendor repository: https://github.com/Xinyuan-LilyGO/T-HMI
+
 
 # --- POWER HOLD ---
 from machine import Pin
@@ -8,7 +12,7 @@ Pin(14, Pin.OUT, value=1)
 
 import lcd_bus
 import machine
-import xpt2046
+from drivers.indev.xpt2046 import XPT2046
 
 import mpos.ui
 
@@ -36,6 +40,8 @@ _DATA5 = const(42)
 _DATA6 = const(45)
 _DATA7 = const(46)
 _BATTERY_PIN = const(5)
+
+_TOUCH_CS = const(2)
 
 _BUFFER_SIZE = const(28800)
 
@@ -79,10 +85,17 @@ spi_bus = machine.SPI.Bus(
 touch_dev = machine.SPI.Device(
     spi_bus=spi_bus,
     freq=const(1000000),
-    cs=2
+    cs=_TOUCH_CS
 )
 
-indev = xpt2046.XPT2046(touch_dev,debug=False,startup_rotation=lv.DISPLAY_ROTATION._0)
+indev = XPT2046(
+    touch_dev,
+    lcd_cs=_CS,
+    touch_cs=_TOUCH_CS,
+    display_width=_WIDTH,
+    display_height=_HEIGHT,
+    startup_rotation=lv.DISPLAY_ROTATION._0
+)
 
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_color_inversion(False)
