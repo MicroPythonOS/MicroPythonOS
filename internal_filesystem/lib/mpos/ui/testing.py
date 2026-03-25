@@ -259,7 +259,6 @@ def get_screen_text_content(obj):
             pass  # Error getting text
     return texts
 
-
 def verify_text_present(obj, expected_text):
     """
     Verify that expected text is present somewhere on screen.
@@ -279,6 +278,87 @@ def verify_text_present(obj, expected_text):
         assert verify_text_present(lv.screen_active(), "Version")
     """
     return find_label_with_text(obj, expected_text) is not None
+
+
+def find_setting_value_label(obj, setting_title_text):
+    """
+    Find the value label associated with a SettingsActivity setting title.
+
+    SettingsActivity renders each setting as a container with two labels:
+    a title label (large) and a value label (smaller) directly below it.
+    This helper finds the title label, then returns the sibling value label.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        setting_title_text: Text of the setting title (exact or substring)
+
+    Returns:
+        LVGL label object for the value if found, None otherwise
+
+    Example:
+        value_label = find_setting_value_label(lv.screen_active(), "Auth Mode")
+        if value_label:
+            assert value_label.get_text() == "(defaults to none)"
+    """
+    title_label = find_label_with_text(obj, setting_title_text)
+    if not title_label:
+        return None
+    try:
+        parent = title_label.get_parent()
+        if not parent:
+            return None
+        child_count = parent.get_child_count()
+        for i in range(child_count):
+            child = parent.get_child(i)
+            if child is title_label:
+                continue
+            try:
+                if hasattr(child, "get_text"):
+                    text = child.get_text()
+                    if text:
+                        return child
+            except:
+                pass
+    except:
+        pass
+    return None
+
+
+def get_setting_value_text(obj, setting_title_text):
+    """
+    Get the value text associated with a SettingsActivity setting title.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        setting_title_text: Text of the setting title (exact or substring)
+
+    Returns:
+        str or None: The value label text if found
+    """
+    value_label = find_setting_value_label(obj, setting_title_text)
+    if value_label:
+        try:
+            return value_label.get_text()
+        except:
+            return None
+    return None
+
+
+def verify_setting_value_text(obj, setting_title_text, expected_text):
+    """
+    Verify a SettingsActivity value label matches expected text.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        setting_title_text: Text of the setting title (exact or substring)
+        expected_text: Expected text for the value label (exact match)
+
+    Returns:
+        bool: True if value label text matches expected, False otherwise
+    """
+    value_text = get_setting_value_text(obj, setting_title_text)
+    return value_text == expected_text
+
 
 
 def text_to_hex(text):
@@ -412,6 +492,116 @@ def find_button_with_text(obj, search_text):
         except:
             pass
     return None
+
+
+def find_dropdown_widget(obj):
+    """
+    Find a dropdown widget in the object hierarchy.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+
+    Returns:
+        LVGL dropdown object if found, None otherwise
+    """
+    def find_dropdown_recursive(node):
+        try:
+            if node.__class__.__name__ == "dropdown" or hasattr(node, "get_selected"):
+                if hasattr(node, "get_options"):
+                    return node
+        except:
+            pass
+
+        try:
+            child_count = node.get_child_count()
+        except:
+            return None
+
+        for i in range(child_count):
+            child = node.get_child(i)
+            result = find_dropdown_recursive(child)
+            if result:
+                return result
+        return None
+
+    return find_dropdown_recursive(obj)
+
+
+def get_dropdown_options(dropdown):
+    """
+    Get dropdown options as a list of strings.
+
+    Args:
+        dropdown: LVGL dropdown widget
+
+    Returns:
+        list: List of option strings (order preserved)
+    """
+    try:
+        options = dropdown.get_options()
+        if options:
+            lines = options.split("\n")
+            return [line for line in lines if line]
+    except:
+        pass
+    return []
+
+
+def find_dropdown_option_index(dropdown, option_text, allow_partial=True):
+    """
+    Find the index of an option in a dropdown by text.
+
+    Args:
+        dropdown: LVGL dropdown widget
+        option_text: Text to search for
+        allow_partial: If True, match substring (default: True)
+
+    Returns:
+        int or None: Index of matching option
+    """
+    options = get_dropdown_options(dropdown)
+    if options:
+        for idx, text in enumerate(options):
+            if (allow_partial and option_text in text) or (not allow_partial and option_text == text):
+                return idx
+        return None
+
+    try:
+        option_count = dropdown.get_option_count()
+    except:
+        option_count = 0
+
+    for idx in range(option_count):
+        try:
+            text = dropdown.get_option_text(idx)
+            if (allow_partial and option_text in text) or (not allow_partial and option_text == text):
+                return idx
+        except:
+            pass
+
+    return None
+
+
+def select_dropdown_option_by_text(dropdown, option_text, allow_partial=True):
+    """
+    Select a dropdown option by its text.
+
+    Args:
+        dropdown: LVGL dropdown widget
+        option_text: Text to select
+        allow_partial: If True, match substring (default: True)
+
+    Returns:
+        bool: True if option was found and selected
+    """
+    idx = find_dropdown_option_index(dropdown, option_text, allow_partial=allow_partial)
+    if idx is None:
+        return False
+    try:
+        dropdown.set_selected(idx)
+        return True
+    except:
+        return False
 
 
 def get_keyboard_button_coords(keyboard, button_text):
