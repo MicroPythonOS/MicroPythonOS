@@ -257,6 +257,10 @@ class WifiService:
 
         time_mod = time_module if time_module else time
 
+        if WifiService.is_hotspot_enabled(network_module=network_module):
+            WifiService._needs_hotspot_restore = False
+            WifiService.disable_hotspot(network_module=network_module)
+
         # Desktop mode - simulate successful connection
         if WifiService._is_desktop_mode(network_module):
             print("WifiService: Desktop mode, simulating connection...")
@@ -268,10 +272,6 @@ class WifiService:
         net = WifiService._get_network_module(network_module)
 
         try:
-            if WifiService.is_hotspot_enabled(network_module=network_module):
-                WifiService._needs_hotspot_restore = True
-                WifiService.disable_hotspot(network_module=network_module)
-
             wlan = WifiService._get_sta_wlan(net)
             wlan.connect(ssid, password)
 

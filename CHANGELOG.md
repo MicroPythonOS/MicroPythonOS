@@ -22,7 +22,7 @@ Frameworks:
 - Websocket library: renamed to uaiowebsocket to avoid conflicts
 
 OS:
-- ESP32 boards: bundle WebREPL (disabled by default, password protected, can be enabled in Settings)
+- ESP32 boards: bundle WebREPL (not started by default) to offer remote MicroPython shell over the network, accessible through webbrowser
 - New board support: LilyGo T-Display-S3 (physical and emulated by QEMU)
 - New board support: LilyGo T-Watch S3 Plus
 - New board support: M5Stack Fire
