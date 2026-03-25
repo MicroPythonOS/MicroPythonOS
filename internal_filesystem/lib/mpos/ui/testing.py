@@ -44,11 +44,237 @@ Usage in apps:
 import lvgl as lv
 import time
 
+try:
+    import unittest
+except ImportError:  # pragma: no cover - fallback for device builds without unittest
+    unittest = None
+
 # Simulation globals for touch input
 _touch_x = 0
 _touch_y = 0
 _touch_pressed = False
 _touch_indev = None
+
+
+class GraphicalTestCase(unittest.TestCase if unittest else object):
+    """
+    Base class for graphical tests.
+
+    Provides:
+    - Automatic screen creation and cleanup
+    - Common UI testing utilities
+
+    Class Attributes:
+        SCREEN_WIDTH: Default screen width (320)
+        SCREEN_HEIGHT: Default screen height (240)
+        DEFAULT_RENDER_ITERATIONS: Default iterations for wait_for_render (5)
+
+    Instance Attributes:
+        screen: The LVGL screen object for the test
+    """
+
+    SCREEN_WIDTH = 320
+    SCREEN_HEIGHT = 240
+    DEFAULT_RENDER_ITERATIONS = 5
+
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        self.screen = lv.obj()
+        self.screen.set_size(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
+        lv.screen_load(self.screen)
+        self.wait_for_render()
+
+    def tearDown(self):
+        """Clean up after each test method."""
+        lv.screen_load(lv.obj())
+        self.wait_for_render()
+
+    def wait_for_render(self, iterations=None):
+        """Wait for LVGL to render."""
+        if iterations is None:
+            iterations = self.DEFAULT_RENDER_ITERATIONS
+        wait_for_render(iterations)
+
+    def find_label_with_text(self, text, parent=None):
+        """Find a label containing the specified text."""
+        if parent is None:
+            parent = lv.screen_active()
+        return find_label_with_text(parent, text)
+
+    def verify_text_present(self, text, parent=None):
+        """Verify that text is present on screen."""
+        if parent is None:
+            parent = lv.screen_active()
+        return verify_text_present(parent, text)
+
+    def print_screen_labels(self, parent=None):
+        """Print all labels on screen (for debugging)."""
+        if parent is None:
+            parent = lv.screen_active()
+        print_screen_labels(parent)
+
+    def click_button(self, text, use_send_event=True):
+        """Click a button by its text."""
+        return click_button(text, use_send_event=use_send_event)
+
+    def click_label(self, text, use_send_event=True):
+        """Click a label by its text."""
+        return click_label(text, use_send_event=use_send_event)
+
+    def simulate_click(self, x, y):
+        """Simulate a click at specific coordinates."""
+        simulate_click(x, y)
+        self.wait_for_render()
+
+    def assertTextPresent(self, text, msg=None):
+        """Assert that text is present on screen."""
+        if msg is None:
+            msg = f"Text '{text}' not found on screen"
+        self.assertTrue(self.verify_text_present(text), msg)
+
+    def assertTextNotPresent(self, text, msg=None):
+        """Assert that text is NOT present on screen."""
+        if msg is None:
+            msg = f"Text '{text}' should not be on screen"
+        self.assertFalse(self.verify_text_present(text), msg)
+
+
+class KeyboardTestCase(GraphicalTestCase):
+    """
+    Base class for keyboard tests.
+
+    Extends GraphicalTestCase with keyboard-specific functionality.
+
+    Instance Attributes:
+        keyboard: The MposKeyboard instance (after create_keyboard_scene)
+        textarea: The textarea widget (after create_keyboard_scene)
+    """
+
+    DEFAULT_RENDER_ITERATIONS = 10
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        self.keyboard = None
+        self.textarea = None
+
+    def create_keyboard_scene(self, initial_text="", textarea_width=200, textarea_height=30):
+        """
+        Create a standard keyboard test scene with textarea and keyboard.
+
+        Args:
+            initial_text: Initial text in the textarea
+            textarea_width: Width of the textarea
+            textarea_height: Height of the textarea
+
+        Returns:
+            tuple: (keyboard, textarea)
+        """
+        from mpos import MposKeyboard
+
+        self.textarea = lv.textarea(self.screen)
+        self.textarea.set_size(textarea_width, textarea_height)
+        self.textarea.set_one_line(True)
+        self.textarea.align(lv.ALIGN.TOP_MID, 0, 10)
+        self.textarea.set_text(initial_text)
+        self.wait_for_render()
+
+        self.keyboard = MposKeyboard(self.screen)
+        self.keyboard.set_textarea(self.textarea)
+        self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.wait_for_render()
+
+        return self.keyboard, self.textarea
+
+    def click_keyboard_button(self, button_text):
+        """
+        Click a keyboard button by its text.
+
+        Args:
+            button_text: The text of the button to click (e.g., "q", "a", "Enter")
+
+        Returns:
+            bool: True if button was clicked successfully
+        """
+        if self.keyboard is None:
+            raise RuntimeError("No keyboard created. Call create_keyboard_scene() first.")
+
+        return click_keyboard_button(self.keyboard, button_text)
+
+    def get_textarea_text(self):
+        """Get the current text in the textarea."""
+        if self.textarea is None:
+            raise RuntimeError("No textarea created. Call create_keyboard_scene() first.")
+        return self.textarea.get_text()
+
+    def set_textarea_text(self, text):
+        """Set the textarea text."""
+        if self.textarea is None:
+            raise RuntimeError("No textarea created. Call create_keyboard_scene() first.")
+        self.textarea.set_text(text)
+        self.wait_for_render()
+
+    def clear_textarea(self):
+        """Clear the textarea."""
+        self.set_textarea_text("")
+
+    def type_text(self, text):
+        """Type a string by clicking each character on the keyboard."""
+        for char in text:
+            if not self.click_keyboard_button(char):
+                return False
+        return True
+
+    def assertTextareaText(self, expected, msg=None):
+        """Assert that the textarea contains the expected text."""
+        actual = self.get_textarea_text()
+        if msg is None:
+            msg = f"Textarea text mismatch. Expected '{expected}', got '{actual}'"
+        self.assertEqual(actual, expected, msg)
+
+    def assertTextareaEmpty(self, msg=None):
+        """Assert that the textarea is empty."""
+        if msg is None:
+            msg = f"Textarea should be empty, but contains '{self.get_textarea_text()}'"
+        self.assertEqual(self.get_textarea_text(), "", msg)
+
+    def assertTextareaContains(self, substring, msg=None):
+        """Assert that the textarea contains a substring."""
+        actual = self.get_textarea_text()
+        if msg is None:
+            msg = f"Textarea should contain '{substring}', but has '{actual}'"
+        self.assertIn(substring, actual, msg)
+
+    def get_keyboard_button_text(self, index):
+        """Get the text of a keyboard button by index."""
+        if self.keyboard is None:
+            raise RuntimeError("No keyboard created. Call create_keyboard_scene() first.")
+
+        try:
+            return self.keyboard.get_button_text(index)
+        except:
+            return None
+
+    def find_keyboard_button_index(self, button_text):
+        """Find the index of a keyboard button by its text."""
+        for i in range(100):
+            text = self.get_keyboard_button_text(i)
+            if text is None:
+                break
+            if text == button_text:
+                return i
+        return None
+
+    def get_all_keyboard_buttons(self):
+        """Get all keyboard buttons as a list of (index, text) tuples."""
+        buttons = []
+        for i in range(100):
+            text = self.get_keyboard_button_text(i)
+            if text is None:
+                break
+            if text:
+                buttons.append((i, text))
+        return buttons
 
 
 def wait_for_render(iterations=10):

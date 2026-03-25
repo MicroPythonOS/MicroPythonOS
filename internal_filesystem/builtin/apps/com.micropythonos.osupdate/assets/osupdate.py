@@ -708,20 +708,7 @@ class UpdateChecker:
         self.json = json_module if json_module else ujson
 
     def get_update_url(self, hardware_id):
-        """Determine the update JSON URL based on hardware ID.
-
-        Args:
-            hardware_id: Hardware identifier string
-
-        Returns:
-            str: Full URL to update JSON file
-        """
-        if hardware_id == "waveshare_esp32_s3_touch_lcd_2":
-            # First supported device - no hardware ID in URL
-            infofile = "osupdate.json"
-        else:
-            infofile = f"osupdate_{hardware_id}.json"
-        return f"https://updates.micropythonos.com/{infofile}"
+        return f"https://updates.micropythonos.com/osupdate_{hardware_id}.json"
 
     async def fetch_update_info(self, hardware_id):
         """Fetch and parse update information from server.

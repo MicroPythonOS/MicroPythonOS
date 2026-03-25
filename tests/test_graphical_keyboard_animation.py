@@ -13,10 +13,10 @@ import unittest
 import lvgl as lv
 import time
 from mpos.ui.widget_animator import WidgetAnimator
-from base import KeyboardTestBase
+from mpos.ui.testing import KeyboardTestCase
 
 
-class TestKeyboardAnimation(KeyboardTestBase):
+class TestKeyboardAnimation(KeyboardTestCase):
     """Test MposKeyboard compatibility with animation system."""
 
     def test_keyboard_has_set_style_opa(self):

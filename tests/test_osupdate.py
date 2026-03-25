@@ -66,7 +66,7 @@ class TestUpdateChecker(unittest.TestCase):
         """Test URL generation for waveshare hardware."""
         url = self.checker.get_update_url("waveshare_esp32_s3_touch_lcd_2")
 
-        self.assertEqual(url, "https://updates.micropythonos.com/osupdate.json")
+        self.assertEqual(url, "https://updates.micropythonos.com/osupdate_waveshare_esp32_s3_touch_lcd_2.json")
 
     def test_get_update_url_other_hardware(self):
         """Test URL generation for other hardware."""

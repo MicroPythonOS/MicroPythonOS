@@ -10,23 +10,20 @@ Usage:
 
 import unittest
 import lvgl as lv
-from mpos import MposKeyboard, wait_for_render
+from mpos import MposKeyboard
+from mpos.ui.testing import GraphicalTestCase
 
 
-class TestDefaultVsCustomKeyboard(unittest.TestCase):
+class TestDefaultVsCustomKeyboard(GraphicalTestCase):
     """Compare default LVGL keyboard with custom MposKeyboard."""
 
     def setUp(self):
         """Set up test fixtures."""
-        self.screen = lv.obj()
-        self.screen.set_size(320, 240)
-        lv.screen_load(self.screen)
-        wait_for_render(5)
+        super().setUp()
 
     def tearDown(self):
         """Clean up."""
-        lv.screen_load(lv.obj())
-        wait_for_render(5)
+        super().tearDown()
 
     def test_default_lvgl_keyboard_layout(self):
         """
@@ -41,13 +38,13 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         textarea.set_size(280, 40)
         textarea.align(lv.ALIGN.TOP_MID, 0, 10)
         textarea.set_one_line(True)
-        wait_for_render(5)
+        self.wait_for_render(5)
 
         # Create DEFAULT LVGL keyboard
         keyboard = lv.keyboard(self.screen)
         keyboard.set_textarea(textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        wait_for_render(10)
+        self.wait_for_render(10)
 
         print("\nDefault LVGL keyboard buttons (first 40):")
         found_special_labels = {}
@@ -87,13 +84,13 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         textarea.set_size(280, 40)
         textarea.align(lv.ALIGN.TOP_MID, 0, 10)
         textarea.set_one_line(True)
-        wait_for_render(5)
+        self.wait_for_render(5)
 
         # Create CUSTOM MposKeyboard
         keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        wait_for_render(10)
+        self.wait_for_render(10)
 
         print("\nCustom MposKeyboard buttons (first 40):")
         found_special_labels = {}
@@ -130,12 +127,12 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         textarea.set_size(280, 40)
         textarea.align(lv.ALIGN.TOP_MID, 0, 10)
         textarea.set_one_line(True)
-        wait_for_render(5)
+        self.wait_for_render(5)
 
         keyboard = MposKeyboard(self.screen)
         keyboard.set_textarea(textarea)
         keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        wait_for_render(10)
+        self.wait_for_render(10)
 
         # Step 1: Start in lowercase
         print("\nStep 1: Initial lowercase mode")
@@ -146,7 +143,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         # Step 2: Switch to numbers
         print("\nStep 2: Switch to numbers mode")
         keyboard.set_mode(MposKeyboard.MODE_NUMBERS)
-        wait_for_render(5)
+        self.wait_for_render(5)
         labels_step2 = self._get_special_labels(keyboard)
         print(f"  Labels: {list(labels_step2.keys())}")
         self.assertIn("Abc", labels_step2, "Should have 'Abc' in numbers mode")
@@ -154,7 +151,7 @@ class TestDefaultVsCustomKeyboard(unittest.TestCase):
         # Step 3: Switch back to lowercase (this is where bug might happen)
         print("\nStep 3: Switch back to lowercase via set_mode()")
         keyboard.set_mode(MposKeyboard.MODE_LOWERCASE)
-        wait_for_render(5)
+        self.wait_for_render(5)
         labels_step3 = self._get_special_labels(keyboard)
         print(f"  Labels: {list(labels_step3.keys())}")
 

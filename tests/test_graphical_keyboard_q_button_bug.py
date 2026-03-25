@@ -14,10 +14,10 @@ Usage:
 """
 
 import unittest
-from base import KeyboardTestBase
+from mpos.ui.testing import KeyboardTestCase
 
 
-class TestKeyboardQButton(KeyboardTestBase):
+class TestKeyboardQButton(KeyboardTestCase):
     """Test keyboard button functionality (especially 'q' which was at index 0)."""
 
     def test_q_button_works(self):
