@@ -11,7 +11,6 @@ Usage:
     class TestMyApp(GraphicalTestBase):
         def test_something(self):
             # self.screen is already set up
-            # self.screenshot_dir is configured
             pass
 """
 

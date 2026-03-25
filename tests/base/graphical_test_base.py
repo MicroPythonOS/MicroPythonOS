@@ -4,7 +4,6 @@ Base class for graphical tests in MicroPythonOS.
 This class provides common setup/teardown patterns for tests that require
 LVGL/UI initialization. It handles:
 - Screen creation and cleanup
-- Screenshot directory configuration
 - Common UI testing utilities
 
 Usage:
@@ -13,17 +12,13 @@ Usage:
     class TestMyApp(GraphicalTestBase):
         def test_something(self):
             # self.screen is already set up (320x240)
-            # self.screenshot_dir is configured
             label = lv.label(self.screen)
             label.set_text("Hello")
             self.wait_for_render()
-            self.capture_screenshot("my_test")
 """
 
 import unittest
 import lvgl as lv
-import sys
-import os
 
 
 class GraphicalTestBase(unittest.TestCase):
@@ -42,32 +37,11 @@ class GraphicalTestBase(unittest.TestCase):
     
     Instance Attributes:
         screen: The LVGL screen object for the test
-        screenshot_dir: Path to the screenshots directory
     """
     
     SCREEN_WIDTH = 320
     SCREEN_HEIGHT = 240
     DEFAULT_RENDER_ITERATIONS = 5
-    
-    @classmethod
-    def setUpClass(cls):
-        """
-        Set up class-level fixtures.
-        
-        Configures the screenshot directory based on platform.
-        """
-        # Determine screenshot directory based on platform
-        if sys.platform == "esp32":
-            cls.screenshot_dir = "tests/screenshots"
-        else:
-            # On desktop, tests directory is in parent
-            cls.screenshot_dir = "../tests/screenshots"
-        
-        # Ensure screenshots directory exists
-        try:
-            os.mkdir(cls.screenshot_dir)
-        except OSError:
-            pass  # Directory already exists
     
     def setUp(self):
         """
@@ -102,28 +76,6 @@ class GraphicalTestBase(unittest.TestCase):
         if iterations is None:
             iterations = self.DEFAULT_RENDER_ITERATIONS
         wait_for_render(iterations)
-    
-    def capture_screenshot(self, name, width=None, height=None):
-        """
-        Capture a screenshot with standardized naming.
-        
-        Args:
-            name: Name for the screenshot (without extension)
-            width: Screenshot width (default: SCREEN_WIDTH)
-            height: Screenshot height (default: SCREEN_HEIGHT)
-            
-        Returns:
-            bytes: The screenshot buffer
-        """
-        from mpos import capture_screenshot
-        
-        if width is None:
-            width = self.SCREEN_WIDTH
-        if height is None:
-            height = self.SCREEN_HEIGHT
-            
-        path = f"{self.screenshot_dir}/{name}.raw"
-        return capture_screenshot(path, width=width, height=height)
     
     def find_label_with_text(self, text, parent=None):
         """

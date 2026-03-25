@@ -23,7 +23,6 @@ from mpos import (
     find_label_with_text,
     get_widget_coords,
     print_screen_labels,
-    capture_screenshot,
     click_label,
     click_button,
     find_text_on_screen,
@@ -84,9 +83,6 @@ class TestIMUCalibrationUI(unittest.TestCase):
         print("Current screen content:")
         print_screen_labels(lv.screen_active())
         print()
-    
-        # Capture screenshot before
-        capture_screenshot("../tests/screenshots/check_imu_before_calib.raw")
     
         # Look for actual values (not "--")
         has_values_before = False
@@ -153,9 +149,6 @@ class TestIMUCalibrationUI(unittest.TestCase):
         print("Current screen content:")
         print_screen_labels(lv.screen_active())
         print()
-    
-        # Capture screenshot after
-        capture_screenshot("../tests/screenshots/check_imu_after_calib.raw")
     
         # Look for actual values (not "--")
         has_values_after = False

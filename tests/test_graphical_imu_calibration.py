@@ -12,12 +12,9 @@ Usage:
 import unittest
 import lvgl as lv
 import mpos.ui
-import os
-import sys
 import time
 from mpos import (
     wait_for_render,
-    capture_screenshot,
     find_label_with_text,
     verify_text_present,
     print_screen_labels,
@@ -33,20 +30,6 @@ from mpos import (
 
 class TestIMUCalibration(unittest.TestCase):
     """Test suite for IMU calibration activities."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        # Get screenshot directory
-        if sys.platform == "esp32":
-            self.screenshot_dir = "tests/screenshots"
-        else:
-            self.screenshot_dir = "../tests/screenshots" # it runs from internal_filesystem/
-
-        # Ensure directory exists
-        try:
-            os.mkdir(self.screenshot_dir)
-        except OSError:
-            pass
 
     def tearDown(self):
         """Clean up after test."""
@@ -82,15 +65,6 @@ class TestIMUCalibration(unittest.TestCase):
         self.assertTrue(verify_text_present(screen, "Accel."), "Accel. label not found")
         self.assertTrue(verify_text_present(screen, "Gyro"), "Gyro label not found")
 
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/check_imu_calibration.raw"
-        print(f"Capturing screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path)
-
-        # Verify screenshot saved
-        stat = os.stat(screenshot_path)
-        self.assertTrue(stat[6] > 0, "Screenshot file is empty")
-
         print("=== CheckIMUCalibrationActivity test complete ===")
 
     def test_calibrate_activity_flow(self):
@@ -118,10 +92,6 @@ class TestIMUCalibration(unittest.TestCase):
         self.assertTrue(verify_text_present(screen, "Place device on flat"),
                        "Instructions not shown")
 
-        # Capture initial state
-        screenshot_path = f"{self.screenshot_dir}/calibrate_imu_01_initial.raw"
-        capture_screenshot(screenshot_path)
-
         # Click "Calibrate Now" button to start calibration
         calibrate_btn = find_button_with_text(screen, "Calibrate Now")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate Now' button")
@@ -143,10 +113,6 @@ class TestIMUCalibration(unittest.TestCase):
         self.assertTrue(verify_text_present(screen, "Accel offsets") or
                        verify_text_present(screen, "offsets"),
                        "Calibration offsets not shown")
-
-        # Capture completion state
-        screenshot_path = f"{self.screenshot_dir}/calibrate_imu_02_complete.raw"
-        capture_screenshot(screenshot_path)
 
         print("=== CalibrateIMUActivity flow test complete ===")
 

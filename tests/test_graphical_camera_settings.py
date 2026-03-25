@@ -20,11 +20,9 @@ Usage:
 import unittest
 import lvgl as lv
 import mpos.ui
-import os
 import sys
 from mpos import (
     wait_for_render,
-    capture_screenshot,
     find_label_with_text,
     find_button_with_text,
     verify_text_present,
@@ -50,19 +48,6 @@ class TestGraphicalCameraSettings(unittest.TestCase):
                 self.has_webcam = False  # Has internal camera instead
             except:
                 self.skipTest("No camera module available (webcam or internal)")
-
-        # Get absolute path to screenshots directory
-        import sys
-        if sys.platform == "esp32":
-            self.screenshot_dir = "tests/screenshots"
-        else:
-            self.screenshot_dir = "../tests/screenshots"
-
-        # Ensure screenshots directory exists
-        try:
-            os.mkdir(self.screenshot_dir)
-        except OSError:
-            pass  # Directory already exists
 
     def tearDown(self):
         """Clean up after each test method."""
@@ -109,10 +94,9 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         Steps:
         1. Start camera app
         2. Wait for camera to initialize
-        3. Capture initial screenshot
-        4. Click settings button (found dynamically by lv.SYMBOL.SETTINGS)
-        5. Verify settings dialog opened
-        6. If we get here without crash, test passes
+        3. Click settings button (found dynamically by lv.SYMBOL.SETTINGS)
+        4. Verify settings dialog opened
+        5. If we get here without crash, test passes
         """
         print("\n=== Testing settings button click (no crash) ===")
 
@@ -129,11 +113,6 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         # Debug: Print all text on screen
         print("\nInitial screen labels:")
         print_screen_labels(screen)
-
-        # Capture screenshot before clicking settings
-        screenshot_path = f"{self.screenshot_dir}/camera_before_settings.raw"
-        print(f"\nCapturing initial screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
 
         # Find and click settings button dynamically
         found = self._find_and_click_settings_button(screen)
@@ -170,11 +149,6 @@ class TestGraphicalCameraSettings(unittest.TestCase):
             has_settings_ui,
             "Settings screen did not open (no Save/Cancel buttons or expected UI elements found)"
         )
-
-        # Capture screenshot of settings dialog
-        screenshot_path = f"{self.screenshot_dir}/camera_settings_dialog.raw"
-        print(f"\nCapturing settings dialog screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
 
         # If we got here without segfault, the test passes!
         print("\n✓ Settings button clicked successfully without crash!")
@@ -296,11 +270,6 @@ class TestGraphicalCameraSettings(unittest.TestCase):
 
         wait_for_render(iterations=15)
 
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/camera_dropdown_open.raw"
-        print(f"Capturing dropdown screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
-
         screen = lv.screen_active()
         print("\nScreen after dropdown interaction:")
         print_screen_labels(screen)
@@ -318,11 +287,6 @@ class TestGraphicalCameraSettings(unittest.TestCase):
         # Wait for reconfiguration to complete
         print("\nWaiting for reconfiguration...")
         wait_for_render(iterations=30)
-
-        # Capture screenshot after reconfiguration
-        screenshot_path = f"{self.screenshot_dir}/camera_after_resolution_change.raw"
-        print(f"Capturing post-change screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
 
         # If we got here without segfault, the test passes!
         print("\n✓ Resolution changed successfully without crash!")

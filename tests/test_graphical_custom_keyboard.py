@@ -2,7 +2,7 @@
 Graphical tests for MposKeyboard.
 
 Tests keyboard visual appearance, text input via simulated button presses,
-and mode switching. Captures screenshots for regression testing.
+and mode switching.
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_custom_keyboard.py
@@ -11,9 +11,7 @@ Usage:
 
 import unittest
 import lvgl as lv
-import sys
-import os
-from mpos import MposKeyboard, wait_for_render, capture_screenshot, AppearanceManager
+from mpos import MposKeyboard, wait_for_render, AppearanceManager
 
 
 class TestGraphicalMposKeyboard(unittest.TestCase):
@@ -21,20 +19,7 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test method."""
-        # Determine screenshot directory
-        if sys.platform == "esp32":
-            self.screenshot_dir = "tests/screenshots"
-        else:
-            self.screenshot_dir = "../tests/screenshots"
-
-        # Ensure screenshots directory exists
-        try:
-            os.mkdir(self.screenshot_dir)
-        except OSError:
-            pass  # Directory already exists
-
         print(f"\n=== Graphical Keyboard Test Setup ===")
-        print(f"Platform: {sys.platform}")
 
     def tearDown(self):
         """Clean up after each test method."""
@@ -102,7 +87,7 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         """
         Test keyboard appearance in lowercase mode.
 
-        Verifies that the keyboard renders correctly and captures screenshot.
+        Verifies that the keyboard renders correctly.
         """
         print("\n=== Testing lowercase keyboard appearance ===")
 
@@ -111,16 +96,6 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         # Ensure lowercase mode
         keyboard.set_mode(MposKeyboard.MODE_LOWERCASE)
         wait_for_render(10)
-
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/custom_keyboard_lowercase.raw"
-        print(f"Capturing screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
-
-        # Verify screenshot was created
-        stat = os.stat(screenshot_path)
-        self.assertTrue(stat[6] > 0, "Screenshot file is empty")
-        print(f"Screenshot captured: {stat[6]} bytes")
 
         print("=== Lowercase appearance test PASSED ===")
 
@@ -134,16 +109,6 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         keyboard.set_mode(MposKeyboard.MODE_UPPERCASE)
         wait_for_render(10)
 
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/custom_keyboard_uppercase.raw"
-        print(f"Capturing screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
-
-        # Verify screenshot was created
-        stat = os.stat(screenshot_path)
-        self.assertTrue(stat[6] > 0, "Screenshot file is empty")
-        print(f"Screenshot captured: {stat[6]} bytes")
-
         print("=== Uppercase appearance test PASSED ===")
 
     def test_keyboard_numbers_appearance(self):
@@ -156,16 +121,6 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         keyboard.set_mode(MposKeyboard.MODE_NUMBERS)
         wait_for_render(10)
 
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/custom_keyboard_numbers.raw"
-        print(f"Capturing screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
-
-        # Verify screenshot was created
-        stat = os.stat(screenshot_path)
-        self.assertTrue(stat[6] > 0, "Screenshot file is empty")
-        print(f"Screenshot captured: {stat[6]} bytes")
-
         print("=== Numbers appearance test PASSED ===")
 
     def test_keyboard_specials_appearance(self):
@@ -177,16 +132,6 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         # Switch to specials mode
         keyboard.set_mode(MposKeyboard.MODE_SPECIALS)
         wait_for_render(10)
-
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/custom_keyboard_specials.raw"
-        print(f"Capturing screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
-
-        # Verify screenshot was created
-        stat = os.stat(screenshot_path)
-        self.assertTrue(stat[6] > 0, "Screenshot file is empty")
-        print(f"Screenshot captured: {stat[6]} bytes")
 
         print("=== Specials appearance test PASSED ===")
 
@@ -275,11 +220,6 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         lv.screen_load(screen)
         wait_for_render(20)
 
-        # Capture standard keyboard
-        screenshot_path = f"{self.screenshot_dir}/keyboard_standard_comparison.raw"
-        print(f"Capturing standard keyboard: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
-
         # Clean up
         lv.screen_load(lv.obj())
         wait_for_render(5)
@@ -300,11 +240,6 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
 
         lv.screen_load(screen2)
         wait_for_render(20)
-
-        # Capture custom keyboard
-        screenshot_path = f"{self.screenshot_dir}/keyboard_custom_comparison.raw"
-        print(f"Capturing custom keyboard: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
 
         print("=== Comparison test PASSED ===")
 

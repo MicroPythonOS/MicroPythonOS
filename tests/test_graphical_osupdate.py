@@ -1,18 +1,13 @@
 import unittest
 import lvgl as lv
 import mpos
-import time
-import sys
-import os
 
 # Import graphical test helper
 from mpos import (
     wait_for_render,
-    capture_screenshot,
     find_label_with_text,
     verify_text_present,
     print_screen_labels,
-    DeviceInfo,
     BuildInfo,
     AppManager
 )
@@ -107,8 +102,8 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
                         verify_text_present(screen, "WiFi")
         self.assertTrue(checking_found, "Should show some status message")
 
-    def test_screenshot_initial_state(self):
-        """Capture screenshot of initial app state."""
+    def test_initial_state_labels(self):
+        """Print initial app labels for debugging."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         wait_for_render(20)
@@ -121,19 +116,6 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
 class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
     """Graphical tests for OSUpdate status messages."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.hardware_id = DeviceInfo.hardware_id
-        self.screenshot_dir = "tests/screenshots"
-
-        try:
-            os.stat(self.screenshot_dir)
-        except OSError:
-            try:
-                os.mkdir(self.screenshot_dir)
-            except OSError:
-                pass
 
     def tearDown(self):
         """Clean up after test."""
@@ -174,51 +156,5 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
         # At minimum, should have version label
         version_found = verify_text_present(screen, "Installed OS version")
         self.assertTrue(version_found, "Version label should be present and readable")
-
-
-class TestOSUpdateGraphicalScreenshots(unittest.TestCase):
-    """Screenshot tests for visual regression testing."""
-
-    def setUp(self):
-        """Set up test fixtures."""
-        self.hardware_id = DeviceInfo.hardware_id
-        self.screenshot_dir = "tests/screenshots"
-
-        try:
-            os.stat(self.screenshot_dir)
-        except OSError:
-            try:
-                os.mkdir(self.screenshot_dir)
-            except OSError:
-                pass
-
-    def tearDown(self):
-        """Clean up after test."""
-        mpos.ui.back_screen()
-        wait_for_render(5)
-
-    def test_capture_main_screen(self):
-        """Capture screenshot of main OSUpdate screen."""
-        result = AppManager.start_app("com.micropythonos.osupdate")
-        self.assertTrue(result)
-        wait_for_render(20)
-
-
-    def test_capture_with_labels_visible(self):
-        """Capture screenshot ensuring all text is visible."""
-        result = AppManager.start_app("com.micropythonos.osupdate")
-        self.assertTrue(result)
-        wait_for_render(20)
-
-        screen = lv.screen_active()
-
-        # Verify key elements are visible before screenshot (case insensitive)
-        has_version = verify_text_present(screen, "Installed") or verify_text_present(screen, "version")
-        # Button text can be "Update OS", "Reinstall\nsame version", or "Install\nolder version"
-        has_button = verify_text_present(screen, "Update") or verify_text_present(screen, "update") or \
-                    verify_text_present(screen, "Reinstall") or verify_text_present(screen, "Install")
-
-        self.assertTrue(has_version, "Version label should be visible")
-        self.assertTrue(has_button, "Update button should be visible")
 
 

@@ -5,9 +5,8 @@ This test verifies that keyboard buttons have proper visible contrast
 in both light and dark modes. It checks for the bug where keyboard buttons
 appear white-on-white in light mode on ESP32.
 
-The test uses two approaches:
-1. Programmatic: Query LVGL style properties to verify button background colors
-2. Visual: Capture screenshots for manual verification and regression testing
+The test uses a programmatic approach: Query LVGL style properties to verify
+button background colors.
 
 This test should INITIALLY FAIL, demonstrating the bug before the fix is applied.
 
@@ -21,10 +20,8 @@ import lvgl as lv
 import mpos.ui
 import mpos.config
 import sys
-import os
 from mpos import (
     wait_for_render,
-    capture_screenshot,
     AppearanceManager,
 )
 
@@ -34,18 +31,6 @@ class TestKeyboardStyling(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test method."""
-        # Determine screenshot directory
-        if sys.platform == "esp32":
-            self.screenshot_dir = "tests/screenshots"
-        else:
-            self.screenshot_dir = "../tests/screenshots"
-
-        # Ensure screenshots directory exists
-        try:
-            os.mkdir(self.screenshot_dir)
-        except OSError:
-            pass  # Directory already exists
-
         # Save current theme setting
         prefs = mpos.config.SharedPreferences("theme_settings")
         self.original_theme = prefs.get_string("theme_light_dark", "light")
@@ -243,11 +228,6 @@ class TestKeyboardStyling(unittest.TestCase):
         print(f"  Screen background: {screen_bg}")
         print(f"  Button background: {button_bg}")
 
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/keyboard_light_mode.raw"
-        print(f"\nCapturing screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
-
         # Verify contrast
         print("\nChecking button/screen contrast...")
         has_contrast = self._color_contrast_sufficient(button_bg, screen_bg, min_difference=20)
@@ -296,11 +276,6 @@ class TestKeyboardStyling(unittest.TestCase):
         print("\nDark mode colors:")
         print(f"  Screen background: {screen_bg}")
         print(f"  Button background: {button_bg}")
-
-        # Capture screenshot
-        screenshot_path = f"{self.screenshot_dir}/keyboard_dark_mode.raw"
-        print(f"\nCapturing screenshot: {screenshot_path}")
-        capture_screenshot(screenshot_path, width=320, height=240)
 
         # Verify contrast
         print("\nChecking button/screen contrast...")
