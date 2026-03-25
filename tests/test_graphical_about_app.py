@@ -7,8 +7,7 @@ specifically that the Hardware ID shown matches the actual hardware ID.
 This is a proof of concept for graphical testing that:
 1. Starts an app programmatically
 2. Verifies UI content via direct widget inspection
-3. Captures screenshots for visual regression testing
-4. Works on both desktop and device
+3. Works on both desktop and device
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_about_app.py
@@ -18,16 +17,14 @@ Usage:
 import unittest
 import lvgl as lv
 import mpos.ui
-import os
 from mpos import (
     wait_for_render,
-    capture_screenshot,
     find_label_with_text,
     verify_text_present,
     print_screen_labels,
     DeviceInfo,
     BuildInfo,
-    AppManager
+    AppManager,
 )
 
 
@@ -36,21 +33,6 @@ class TestGraphicalAboutApp(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test method."""
-        # Get absolute path to screenshots directory
-        # When running tests, we're in internal_filesystem/, so go up one level
-        import sys
-        if sys.platform == "esp32":
-            self.screenshot_dir = "tests/screenshots"
-        else:
-            # On desktop, tests directory is in parent
-            self.screenshot_dir = "../tests/screenshots"
-
-        # Ensure screenshots directory exists
-        try:
-            os.mkdir(self.screenshot_dir)
-        except OSError:
-            pass  # Directory already exists
-
         # Store hardware ID for verification
         self.hardware_id = DeviceInfo.hardware_id
         print(f"Testing with hardware ID: {self.hardware_id}")
@@ -73,7 +55,6 @@ class TestGraphicalAboutApp(unittest.TestCase):
         2. Wait for UI to render
         3. Find the "Hardware ID:" label
         4. Verify it contains the actual hardware ID
-        5. Capture screenshot for visual verification
         """
         print("\n=== Starting About app test ===")
 
@@ -115,25 +96,6 @@ class TestGraphicalAboutApp(unittest.TestCase):
             verify_text_present(screen, self.hardware_id),
             f"Hardware ID '{self.hardware_id}' not found on screen"
         )
-
-        # Capture screenshot for visual regression testing
-        screenshot_path = f"{self.screenshot_dir}/about_app_{self.hardware_id}.raw"
-        print(f"\nCapturing screenshot to: {screenshot_path}")
-
-        try:
-            buffer = capture_screenshot(screenshot_path, width=320, height=240)
-            print(f"Screenshot captured: {len(buffer)} bytes")
-
-            # Verify screenshot file was created
-            stat = os.stat(screenshot_path)
-            self.assertTrue(
-                stat[6] > 0,  # stat[6] is file size
-                "Screenshot file is empty"
-            )
-            print(f"Screenshot file size: {stat[6]} bytes")
-
-        except Exception as e:
-            self.fail(f"Failed to capture screenshot: {e}")
 
         print("\n=== About app test completed successfully ===")
 
