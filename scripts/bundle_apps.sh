@@ -20,8 +20,8 @@ rm "$outputjson"
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.nostr isn't ready for release yet
 blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
-blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.doom" # not ready yet
-blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.navstar" # not ready yet
+blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.doom com.micropythonos.breakout" # not ready yet
+blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.navstar cz.ucw.pavel.weather" # not ready yet
 
 echo "[" | tee -a "$outputjson"
 
