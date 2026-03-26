@@ -11,7 +11,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14 # 15 was giving a blank screen for some MacOS users
 
     steps:
       - name: Checkout repository with submodules
