@@ -1,3 +1,6 @@
+#!/bin/bash
+# Bash is used for pushd and popd
+
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
 
@@ -73,7 +76,14 @@ $mpremote fs mkdir :/apps
 #$mpremote fs cp -r apps/com.micropythonos.musicplayer :/apps/
 #$mpremote fs cp -r apps/com.micropythonos.soundrecorder :/apps/
 #$mpremote fs cp -r apps/com.micropythonos.breakout :/apps/
-#exit 1
+
+if [ ! -z "$appname" ]; then
+	echo "Not resetting so the installed app can be used immediately."
+	$mpremote reset
+fi
+
+# Uncomment this line if you really want all apps the be installed:
+echo "Not installing all apps by default because it takes a long time, uses lots of storage and makes the boot slower..." ; popd ; exit 1
 
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -maxdepth 1 -type l | while read symlink; do
@@ -89,12 +99,3 @@ done
 
 popd
 
-# Install test infrastructure (for running ondevice tests)
-echo "Installing test infrastructure..."
-$mpremote fs mkdir :/tests
-$mpremote fs mkdir :/tests/screenshots
-
-if [ ! -z "$appname" ]; then
-	echo "Not resetting so the installed app can be used immediately."
-	$mpremote reset
-fi
