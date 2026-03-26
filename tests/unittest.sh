@@ -79,7 +79,7 @@ result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 		if [ ! -z "$ondevice" ]; then
 			echo "Hack: reset the device to make sure no previous UnitTest classes have been registered..."
 			"$mpremote" reset
-			sleep 20
+			sleep 30
 		fi
 
 		echo "Device execution"
