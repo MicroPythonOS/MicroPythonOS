@@ -19,7 +19,10 @@ from .build_info import BuildInfo
 
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
-from .webserver.webserver import WebServer
+try:
+    from .webserver.webserver import WebServer
+except ImportError:
+    WebServer = None  # _webrepl not available on desktop/Unix builds
 
 # Common activities
 from .app.activities.chooser import ChooserActivity
