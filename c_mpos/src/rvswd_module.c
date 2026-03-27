@@ -40,7 +40,6 @@ typedef struct {
     rvswd_handle_t handle;
 } rvswd_obj_t;
 
-static const mp_obj_type_t rvswd_type;  // forward declaration
 
 // ---------------------------------------------------------------------------
 // Callback bridge
@@ -352,12 +351,13 @@ static const mp_rom_map_elem_t rvswd_locals_dict_table[] = {
 };
 static MP_DEFINE_CONST_DICT(rvswd_locals_dict, rvswd_locals_dict_table);
 
-static const mp_obj_type_t rvswd_type = {
-    { &mp_type_type },
-    .name = MP_QSTR_RVSWD,
-    .make_new = rvswd_make_new,
-    .locals_dict = (mp_obj_dict_t *)&rvswd_locals_dict,
-};
+MP_DEFINE_CONST_OBJ_TYPE(
+    rvswd_type,
+    MP_QSTR_RVSWD,
+    MP_TYPE_FLAG_NONE,
+    make_new, rvswd_make_new,
+    locals_dict, &rvswd_locals_dict
+);
 
 // ---------------------------------------------------------------------------
 // Module definition
