@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Activity, Intent, AppearanceManager, AppManager, SettingActivity, SettingsActivity, TimeZone
+from mpos import Activity, Intent, AppearanceManager, AppManager, NumberFormat, SettingActivity, SettingsActivity, TimeZone
 
 from bootloader import ResetIntoBootloader
 from calibrate_imu import CalibrateIMUActivity
@@ -82,6 +82,7 @@ class Settings(SettingsActivity):
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},
             {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in TimeZone.get_timezones()], "changed_callback": lambda *args: TimeZone.refresh_timezone_preference()},
+            {"title": "Number Format", "key": "number_format", "ui": "dropdown", "ui_options": NumberFormat.get_format_options(), "changed_callback": lambda *args: NumberFormat.refresh_preference(), "default_value": "comma_dot"},
             # Advanced settings, alphabetically:
             {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in AppManager.get_app_list()]},
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},

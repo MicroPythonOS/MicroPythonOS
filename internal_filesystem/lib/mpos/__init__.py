@@ -14,6 +14,7 @@ from .task_manager import TaskManager
 from .camera_manager import CameraManager
 from .sensor_manager import SensorManager
 from .time_zone import TimeZone
+from .number_format import NumberFormat
 from .device_info import DeviceInfo
 from .build_info import BuildInfo
 
