@@ -94,57 +94,57 @@ static mp_obj_t rvswd_make_new(const mp_obj_type_t *type, size_t n_args, size_t 
 // Low-level RVSWD protocol
 // ---------------------------------------------------------------------------
 
-static mp_obj_t rvswd_reset(mp_obj_t self_in) {
+static mp_obj_t mprvswd_reset(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     raise_rvswd_result(rvswd_reset(&self->handle));
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_reset_obj, rvswd_reset);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_reset_obj, mprvswd_reset);
 
-static mp_obj_t rvswd_write_reg(mp_obj_t self_in, mp_obj_t reg_in, mp_obj_t val_in) {
+static mp_obj_t mprvswd_write_reg(mp_obj_t self_in, mp_obj_t reg_in, mp_obj_t val_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     uint8_t reg = (uint8_t)mp_obj_get_int(reg_in);
     uint32_t val = (uint32_t)mp_obj_get_int(val_in);
     raise_rvswd_result(rvswd_write(&self->handle, reg, val));
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_3(rvswd_write_reg_obj, rvswd_write_reg);
+MP_DEFINE_CONST_FUN_OBJ_3(rvswd_write_reg_obj, mprvswd_write_reg);
 
-static mp_obj_t rvswd_read_reg(mp_obj_t self_in, mp_obj_t reg_in) {
+static mp_obj_t mprvswd_read_reg(mp_obj_t self_in, mp_obj_t reg_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     uint8_t reg = (uint8_t)mp_obj_get_int(reg_in);
     uint32_t val = 0;
     raise_rvswd_result(rvswd_read(&self->handle, reg, &val));
     return mp_obj_new_int_from_uint(val);
 }
-MP_DEFINE_CONST_FUN_OBJ_2(rvswd_read_reg_obj, rvswd_read_reg);
+MP_DEFINE_CONST_FUN_OBJ_2(rvswd_read_reg_obj, mprvswd_read_reg);
 
 // ---------------------------------------------------------------------------
 // CH32 generic debug operations
 // ---------------------------------------------------------------------------
 
-static mp_obj_t rvswd_halt(mp_obj_t self_in) {
+static mp_obj_t mprvswd_halt(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     raise_rvswd_result(ch32_halt_microprocessor(&self->handle));
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_halt_obj, rvswd_halt);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_halt_obj, mprvswd_halt);
 
-static mp_obj_t rvswd_resume(mp_obj_t self_in) {
+static mp_obj_t mprvswd_resume(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     raise_rvswd_result(ch32_resume_microprocessor(&self->handle));
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_resume_obj, rvswd_resume);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_resume_obj, mprvswd_resume);
 
-static mp_obj_t rvswd_reset_and_run(mp_obj_t self_in) {
+static mp_obj_t mprvswd_reset_and_run(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     raise_rvswd_result(ch32_reset_microprocessor_and_run(&self->handle));
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_reset_and_run_obj, rvswd_reset_and_run);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_reset_and_run_obj, mprvswd_reset_and_run);
 
-static mp_obj_t rvswd_read_memory(mp_obj_t self_in, mp_obj_t addr_in) {
+static mp_obj_t mprvswd_read_memory(mp_obj_t self_in, mp_obj_t addr_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     uint32_t addr = (uint32_t)mp_obj_get_int(addr_in);
     uint32_t val = 0;
@@ -153,9 +153,9 @@ static mp_obj_t rvswd_read_memory(mp_obj_t self_in, mp_obj_t addr_in) {
     }
     return mp_obj_new_int_from_uint(val);
 }
-MP_DEFINE_CONST_FUN_OBJ_2(rvswd_read_memory_obj, rvswd_read_memory);
+MP_DEFINE_CONST_FUN_OBJ_2(rvswd_read_memory_obj, mprvswd_read_memory);
 
-static mp_obj_t rvswd_write_memory(mp_obj_t self_in, mp_obj_t addr_in, mp_obj_t val_in) {
+static mp_obj_t mprvswd_write_memory(mp_obj_t self_in, mp_obj_t addr_in, mp_obj_t val_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     uint32_t addr = (uint32_t)mp_obj_get_int(addr_in);
     uint32_t val = (uint32_t)mp_obj_get_int(val_in);
@@ -164,10 +164,10 @@ static mp_obj_t rvswd_write_memory(mp_obj_t self_in, mp_obj_t addr_in, mp_obj_t 
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_3(rvswd_write_memory_obj, rvswd_write_memory);
+MP_DEFINE_CONST_FUN_OBJ_3(rvswd_write_memory_obj, mprvswd_write_memory);
 
 // Returns a 4-tuple of uint32 vendor bytes for chip identification.
-static mp_obj_t rvswd_read_vendor_bytes(mp_obj_t self_in) {
+static mp_obj_t mprvswd_read_vendor_bytes(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     uint32_t vendor_bytes[4] = {0, 0, 0, 0};
     if (!ch32_read_vendor_bytes(&self->handle, vendor_bytes)) {
@@ -179,34 +179,34 @@ static mp_obj_t rvswd_read_vendor_bytes(mp_obj_t self_in) {
     }
     return mp_obj_new_tuple(4, tuple);
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_read_vendor_bytes_obj, rvswd_read_vendor_bytes);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_read_vendor_bytes_obj, mprvswd_read_vendor_bytes);
 
 // ---------------------------------------------------------------------------
 // CH32V20x flash operations
 // ---------------------------------------------------------------------------
 
-static mp_obj_t rvswd_v20x_unlock_flash(mp_obj_t self_in) {
+static mp_obj_t mprvswd_v20x_unlock_flash(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (!ch32v20x_unlock_flash(&self->handle)) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("ch32v20x_unlock_flash failed"));
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_v20x_unlock_flash_obj, rvswd_v20x_unlock_flash);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_v20x_unlock_flash_obj, mprvswd_v20x_unlock_flash);
 
-static mp_obj_t rvswd_v20x_lock_flash(mp_obj_t self_in) {
+static mp_obj_t mprvswd_v20x_lock_flash(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (!ch32v20x_lock_flash(&self->handle)) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("ch32v20x_lock_flash failed"));
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_v20x_lock_flash_obj, rvswd_v20x_lock_flash);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_v20x_lock_flash_obj, mprvswd_v20x_lock_flash);
 
 // v20x_write_flash(addr, data[, callback])
 // data: bytes-like object with firmware content
 // callback: optional callable(msg: str, progress: int)
-static mp_obj_t rvswd_v20x_write_flash(size_t n_args, const mp_obj_t *args) {
+static mp_obj_t mprvswd_v20x_write_flash(size_t n_args, const mp_obj_t *args) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(args[0]);
     uint32_t addr = (uint32_t)mp_obj_get_int(args[1]);
     mp_buffer_info_t bufinfo;
@@ -222,16 +222,16 @@ static mp_obj_t rvswd_v20x_write_flash(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(rvswd_v20x_write_flash_obj, 3, 4, rvswd_v20x_write_flash);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(rvswd_v20x_write_flash_obj, 3, 4, mprvswd_v20x_write_flash);
 
-static mp_obj_t rvswd_v20x_clear_ops(mp_obj_t self_in) {
+static mp_obj_t mprvswd_v20x_clear_ops(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (!ch32v20x_clear_running_operations(&self->handle)) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("ch32v20x_clear_running_operations failed"));
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_v20x_clear_ops_obj, rvswd_v20x_clear_ops);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_v20x_clear_ops_obj, mprvswd_v20x_clear_ops);
 
 // ---------------------------------------------------------------------------
 // CH32x03x flash operations
@@ -239,7 +239,7 @@ MP_DEFINE_CONST_FUN_OBJ_1(rvswd_v20x_clear_ops_obj, rvswd_v20x_clear_ops);
 
 // x03x_program(firmware[, callback])
 // High-level: halts, erases, writes, verifies and restarts the target.
-static mp_obj_t rvswd_x03x_program(size_t n_args, const mp_obj_t *args) {
+static mp_obj_t mprvswd_x03x_program(size_t n_args, const mp_obj_t *args) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(args[0]);
     mp_buffer_info_t bufinfo;
     mp_get_buffer_raise(args[1], &bufinfo, MP_BUFFER_READ);
@@ -254,28 +254,28 @@ static mp_obj_t rvswd_x03x_program(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(rvswd_x03x_program_obj, 2, 3, rvswd_x03x_program);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(rvswd_x03x_program_obj, 2, 3, mprvswd_x03x_program);
 
-static mp_obj_t rvswd_x03x_unlock_flash(mp_obj_t self_in) {
+static mp_obj_t mprvswd_x03x_unlock_flash(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (!ch32x03x_unlock_flash(&self->handle)) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("ch32x03x_unlock_flash failed"));
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_x03x_unlock_flash_obj, rvswd_x03x_unlock_flash);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_x03x_unlock_flash_obj, mprvswd_x03x_unlock_flash);
 
-static mp_obj_t rvswd_x03x_lock_flash(mp_obj_t self_in) {
+static mp_obj_t mprvswd_x03x_lock_flash(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (!ch32x03x_lock_flash(&self->handle)) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("ch32x03x_lock_flash failed"));
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_x03x_lock_flash_obj, rvswd_x03x_lock_flash);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_x03x_lock_flash_obj, mprvswd_x03x_lock_flash);
 
 // x03x_write_flash(addr, data[, callback])
-static mp_obj_t rvswd_x03x_write_flash(size_t n_args, const mp_obj_t *args) {
+static mp_obj_t mprvswd_x03x_write_flash(size_t n_args, const mp_obj_t *args) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(args[0]);
     uint32_t addr = (uint32_t)mp_obj_get_int(args[1]);
     mp_buffer_info_t bufinfo;
@@ -291,16 +291,16 @@ static mp_obj_t rvswd_x03x_write_flash(size_t n_args, const mp_obj_t *args) {
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(rvswd_x03x_write_flash_obj, 3, 4, rvswd_x03x_write_flash);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(rvswd_x03x_write_flash_obj, 3, 4, mprvswd_x03x_write_flash);
 
-static mp_obj_t rvswd_x03x_clear_ops(mp_obj_t self_in) {
+static mp_obj_t mprvswd_x03x_clear_ops(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (!ch32x03x_clear_running_operations(&self->handle)) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("ch32x03x_clear_running_operations failed"));
     }
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_1(rvswd_x03x_clear_ops_obj, rvswd_x03x_clear_ops);
+MP_DEFINE_CONST_FUN_OBJ_1(rvswd_x03x_clear_ops_obj, mprvswd_x03x_clear_ops);
 
 // ---------------------------------------------------------------------------
 // Type definition
