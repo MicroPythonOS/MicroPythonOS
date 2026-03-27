@@ -185,6 +185,25 @@ MP_DEFINE_CONST_FUN_OBJ_1(rvswd_read_vendor_bytes_obj, mprvswd_read_vendor_bytes
 // CH32V20x flash operations
 // ---------------------------------------------------------------------------
 
+// v20x_program(firmware[, callback])
+// High-level: halts, erases, writes, verifies and restarts the target.
+static mp_obj_t mprvswd_v20x_program(size_t n_args, const mp_obj_t *args) {
+    rvswd_obj_t *self = MP_OBJ_TO_PTR(args[0]);
+    mp_buffer_info_t bufinfo;
+    mp_get_buffer_raise(args[1], &bufinfo, MP_BUFFER_READ);
+
+    g_status_callback = (n_args > 2) ? args[2] : mp_const_none;
+    ch32v20x_status_callback cb = (g_status_callback != mp_const_none) ? c_status_callback : NULL;
+    bool ok = ch32v20x_program(&self->handle, bufinfo.buf, bufinfo.len, cb);
+    g_status_callback = MP_OBJ_NULL;
+
+    if (!ok) {
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("ch32v20x_program failed"));
+    }
+    return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(rvswd_v20x_program_obj, 2, 3, mprvswd_v20x_program);
+
 static mp_obj_t mprvswd_v20x_unlock_flash(mp_obj_t self_in) {
     rvswd_obj_t *self = MP_OBJ_TO_PTR(self_in);
     if (!ch32v20x_unlock_flash(&self->handle)) {
@@ -319,6 +338,7 @@ static const mp_rom_map_elem_t rvswd_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_write_memory),      MP_ROM_PTR(&rvswd_write_memory_obj) },
     { MP_ROM_QSTR(MP_QSTR_read_vendor_bytes), MP_ROM_PTR(&rvswd_read_vendor_bytes_obj) },
     // CH32V20x
+    { MP_ROM_QSTR(MP_QSTR_v20x_program),      MP_ROM_PTR(&rvswd_v20x_program_obj) },
     { MP_ROM_QSTR(MP_QSTR_v20x_unlock_flash), MP_ROM_PTR(&rvswd_v20x_unlock_flash_obj) },
     { MP_ROM_QSTR(MP_QSTR_v20x_lock_flash),   MP_ROM_PTR(&rvswd_v20x_lock_flash_obj) },
     { MP_ROM_QSTR(MP_QSTR_v20x_write_flash),  MP_ROM_PTR(&rvswd_v20x_write_flash_obj) },
