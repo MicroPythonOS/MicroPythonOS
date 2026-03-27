@@ -15,3 +15,6 @@
 [submodule "micropython-nostr"]
 	path = micropython-nostr
 	url = https://github.com/MicroPythonOS/micropython-nostr
+[submodule "esp32-component-rvswd"]
+	path = esp32-component-rvswd
+	url = https://github.com/Fri3dCamp/esp32-component-rvswd.git
