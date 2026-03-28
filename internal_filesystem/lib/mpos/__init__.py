@@ -14,12 +14,16 @@ from .task_manager import TaskManager
 from .camera_manager import CameraManager
 from .sensor_manager import SensorManager
 from .time_zone import TimeZone
+from .number_format import NumberFormat
 from .device_info import DeviceInfo
 from .build_info import BuildInfo
 
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
-from .webserver.webserver import WebServer
+try:
+    from .webserver.webserver import WebServer
+except ImportError:
+    WebServer = None  # _webrepl not available on desktop/Unix builds
 
 # Common activities
 from .app.activities.chooser import ChooserActivity
