@@ -220,5 +220,3 @@ PY
 else
 	echo "invalid target $target"
 fi
-
-
