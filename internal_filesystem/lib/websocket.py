@@ -274,7 +274,7 @@ class WebSocketApp:
                 _log_error(f"_async_main's await self._connect_and_run() for {self.url} got exception: {e}")
                 self.has_errored = True
                 _run_callback(self.on_error, self, e)
-                if reconnect is not True:
+                if not reconnect:
                     _log_debug("No reconnect configured, breaking loop")
                     break
                 _log_debug(f"Reconnecting after error in {reconnect}s")
