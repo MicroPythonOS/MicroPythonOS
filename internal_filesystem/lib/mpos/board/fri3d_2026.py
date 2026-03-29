@@ -55,13 +55,17 @@ buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
+# initialize the expander
+from drivers.fri3d.expander import Expander
+expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
+expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
+expander = Expander(i2c_bus=expander_i2c)
+
 # Quick and dirty LCD reset using the CH32 microcontroller
-ADDRESS = 0x50
-expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
-expander_i2c.writeto_mem(ADDRESS, 22, b'\x01') # 3v3 aux on + LCD off
+expander.config = 0x01 # 3v3 aux on + LCD off
 import time
 time.sleep_ms(200)
-expander_i2c.writeto_mem(ADDRESS, 22, b'\x03') # 3v3 aux + LCD on
+expander.config = 0x03 # 3v3 aux + LCD on
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
@@ -184,6 +188,17 @@ disp = lv.display_get_default()
 indev.set_display(disp)  # different from display
 indev.enable(True)
 InputManager.register_indev(indev)
+
+# initialize the expander as indev driver
+from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
+try:
+    tindev_buttons=Fri3d2026Expander(expander, int_pin=expander_int_pin)
+    tindev_buttons.set_group(group)
+    tindev_buttons.set_display(disp)
+    tindev_buttons.enable(True)
+    InputManager.register_indev(tindev_buttons)
+except Exception as e:
+    print(f"expander init got exception: {e}")
 
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
