@@ -3,23 +3,40 @@
  * Exposes an RVSWD class for programming WCH CH32 microcontrollers from Python.
  *
  * Usage:
- *   import rvswd
- *   prog = rvswd.RVSWD(swdio=39, swclk=42)
+ *   from rvswd import RVSWD
+ *   from lib.drivers.fri3d.expander import Expander
+ *   from machine import Pin, I2C
+ *   import time
  *
- *   # Read chip identity
- *   vendor = prog.read_vendor_bytes()  # returns tuple of 4 uint32 values
+ *   expander_i2c = I2C(0, sda=Pin(39), scl=Pin(42), freq=400000)
+ *   expander = Expander(i2c_bus=expander_i2c)
+ *   time.sleep(.1)
  *
- *   # Program a CH32x03x chip (e.g. CH32X035)
+ *   # TODO: check the version before flashing
+ *   print("version:", ".".join(str(i) for i in expander.version))
+ *
+ *   expander.config = 0x0B # trigger SWD enable
+ *   time.sleep(.2)
+ *
+ *   prog = RVSWD(39, 42)
+ *
+ *   # optional check, already halts the MCU
+ *   vendor = prog.read_vendor_bytes()
+ *   if (vendor[1] & 0xffffff0f) != 0x03560601:
+ *       raise RuntimeError("CH32X035G8U6 not detected")
+ *
+ *   # flash
  *   with open('firmware.bin', 'rb') as f:
  *       fw = f.read()
  *   prog.x03x_program(fw, lambda msg, pct: print(f"{msg}: {pct}%"))
  *
- *   # Program a CH32V20x chip (e.g. CH32V203)
- *   prog.halt()
- *   prog.v20x_unlock_flash()
- *   prog.v20x_write_flash(0x08000000, fw, lambda msg, pct: print(f"{msg}: {pct}%"))
- *   prog.v20x_lock_flash()
- *   prog.reset_and_run()
+ *   # give it some time to boot
+ *   time.sleep(4)
+ *
+ *   # check the new version number
+ *   expander_i2c = I2C(0, sda=Pin(39), scl=Pin(42), freq=400000)
+ *   expander = Expander(i2c_bus=expander_i2c)
+ *   print("version:", ".".join(str(i) for i in expander.version))
  */
 
 #include "py/obj.h"
