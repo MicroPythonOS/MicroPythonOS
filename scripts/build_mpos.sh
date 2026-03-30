@@ -195,6 +195,11 @@ PY
 	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
 	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
 
+	# Suppress warnings that newer Clang (17+) treats as errors
+	echo "Temporarily suppressing Clang warnings for unix/macOS build..."
+	unix_makefile="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/Makefile
+	sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers/' "$unix_makefile"
+
 	# If it's still running, kill it, otherwise "text file busy"
 	pkill -9 -f /lvgl_micropy_unix
 	# LV_CFLAGS are passed to USER_C_MODULES (compiler flags only, no linker flags)
@@ -217,6 +222,10 @@ PY
 	echo "Restoring @micropython.viper decorator..."
 	sed -i.backup 's/^#@micropython\.viper$/@micropython.viper/' "$stream_wav_file"
 	rm "$stream_wav_file".backup
+
+	# Restore original Makefile CWARN
+	echo "Restoring unix Makefile CWARN..."
+	mv "$unix_makefile".backup "$unix_makefile"
 else
 	echo "invalid target $target"
 fi
