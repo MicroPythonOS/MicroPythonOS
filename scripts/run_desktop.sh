@@ -39,7 +39,7 @@ else
 		if [ -f "$CONFIG_FILE" ]; then
 			if grep -q '"auto_start_app"' "$CONFIG_FILE"; then
 				echo "Updating auto_start_app field using sed"
-				sed -i.backup -e 's/"auto_start_app": ".*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
+				sed -i.backup -e 's/"auto_start_app": "[^"]*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
 			else
 				echo "Adding auto_start_app to config file"
 				sed -i.backup -E 's/[[:space:]]*}[[:space:]]*$/,"auto_start_app": "'$script'"}/' "$CONFIG_FILE"
