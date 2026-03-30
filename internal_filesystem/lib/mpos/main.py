@@ -53,6 +53,75 @@ def single_address_i2c_scan(i2c_bus, address):
         print(f"scan error: {e}")
         return False
 
+def detect_lilygo_t_hmi():
+    from machine import Pin, SoftSPI
+    import time
+
+    try:
+        sck = Pin(1)
+        mosi = Pin(3)
+        miso = Pin(4)
+        cs = Pin(2, Pin.OUT, value=1)
+        irq = Pin(9, Pin.IN, Pin.PULL_UP)
+
+        spi = SoftSPI(
+            baudrate=500000,
+            polarity=0,
+            phase=0,
+            sck=sck,
+            mosi=mosi,
+            miso=miso,
+        )
+
+        def read_cmd(cmd):
+            tx = bytearray([cmd, 0x00, 0x00])
+            rx = bytearray(3)
+
+            cs(0)
+            spi.write_readinto(tx, rx)
+            cs(1)
+
+            return ((rx[1] << 8) | rx[2]) >> 3
+
+        samples = []
+        for _ in range(5):
+            vals = (
+                read_cmd(0xD0),  # X
+                read_cmd(0x90),  # Y
+                read_cmd(0xB0),  # Z1
+                irq.value(),
+            )
+            samples.append(vals)
+            print("T-HMI touch sample:", vals)
+            time.sleep_ms(20)
+
+        # Observed stable idle signature on LilyGO T-HMI:
+        # X=0, Y=4095, Z1=0/1, IRQ=1
+        signature_hits = sum(
+            x == 0 and y == 4095 and z in (0, 1) and irqv == 1
+            for x, y, z, irqv in samples
+        )
+
+        print(f"T-HMI signature hits: {signature_hits}/5")
+
+        if signature_hits >= 4:
+            print("LilyGO T-HMI touch signature matched")
+            return True
+
+    except Exception as e:
+        print(f"LilyGO T-HMI detection failed: {e}")
+
+    finally:
+        try:
+            Pin(1, Pin.IN, pull=None)
+            Pin(2, Pin.IN, pull=None)
+            Pin(3, Pin.IN, pull=None)
+            Pin(4, Pin.IN, pull=None)
+            Pin(9, Pin.IN, pull=None)
+        except Exception:
+            pass
+
+    return False
 
 def fail_save_i2c(sda, scl):
     from machine import I2C, Pin
@@ -104,52 +173,69 @@ def detect_board():
             return "odroid_go"
 
         # Do I2C-based board detection
+        # IMPORTANT: ESP32 GPIO 6-11 are internal SPI flash pins and will cause WDT reset if used.
+        # ESP32-S3 has more usable GPIOs (up to 48). Detect chip variant first to skip unsafe probes.
+        is_esp32s3 = "S3" in sys.implementation._machine.upper()
 
-        print("lilygo_t_watch_s3_plus ?")
-        if i2c0 := fail_save_i2c(sda=10, scl=11):
-            if single_address_i2c_scan(i2c0, 0x19): # IMU on 0x19, vibrator on 0x5A and scan also shows: [52, 81]
-                return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
-            restore_i2c(sda=10, scl=11)
+        if is_esp32s3:
+            print("lilygo_t_hmi ?")
+            if detect_lilygo_t_hmi():
+                return "lilygo_t_hmi"
 
-        print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
-        if i2c0 := fail_save_i2c(sda=39, scl=38):
-            if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
-                return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
-            restore_i2c(sda=39, scl=38) # fix pin 39 (data0) breaking lilygo_t_display_s3's display
+            # Do I2C-based board detection
+            print("lilygo_t_watch_s3_plus ?")
+            if i2c0 := fail_save_i2c(sda=10, scl=11):
+                if single_address_i2c_scan(i2c0, 0x19): # IMU on 0x19, vibrator on 0x5A and scan also shows: [52, 81]
+                    return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
+                restore_i2c(sda=10, scl=11)
 
-        print("waveshare_esp32_s3_touch_lcd_2 ?")
-        if i2c0 := fail_save_i2c(sda=48, scl=47):
-            # IO48 is floating on matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
-            if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
-                return "waveshare_esp32_s3_touch_lcd_2"
-            restore_i2c(sda=48, scl=47) # fix pin 47 (data6) and 48 (data7) breaking lilygo_t_display_s3's display
+            print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
+            if i2c0 := fail_save_i2c(sda=39, scl=38):
+                if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
+                    return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
+                restore_i2c(sda=39, scl=38) # fix pin 39 (data0) breaking lilygo_t_display_s3's display
 
-        print("m5stack_fire ?")
-        if i2c0 := fail_save_i2c(sda=21, scl=22):
-            if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
-                return "m5stack_fire"
-            restore_i2c(sda=21, scl=22)
+            print("waveshare_esp32_s3_touch_lcd_2 ?")
+            if i2c0 := fail_save_i2c(sda=48, scl=47):
+                # IO48 is floating on matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
+                if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
+                    return "waveshare_esp32_s3_touch_lcd_2"
+                restore_i2c(sda=48, scl=47) # fix pin 47 (data6) and 48 (data7) breaking lilygo_t_display_s3's display
+                
+            print("fri3d_2024 ?")
+            if i2c0 := fail_save_i2c(sda=9, scl=18):
+                if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
+                    return "fri3d_2026"
+                if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
+                    return "fri3d_2024"
+                restore_i2c(sda=9, scl=18)
 
-        print("fri3d_2024 ?")
-        if i2c0 := fail_save_i2c(sda=9, scl=18):
-            if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
-                return "fri3d_2026"
-            if single_address_i2c_scan(i2c0, 0x6B): # IMU (plus possibly the Communicator's LANA TNY at 0x38)
-                return "fri3d_2024"
-            restore_i2c(sda=9, scl=18)
+        else: # not is_esp32s3
+          
+            print("m5stack_core2 ?")
+            if i2c0 := fail_save_i2c(sda=21, scl=22):
+                if single_address_i2c_scan(i2c0, 0x34): # AXP192 power management (Core2 has it, Fire doesn't)
+                    return "m5stack_core2"
+
+            print("m5stack_fire ?")
+            if i2c0 := fail_save_i2c(sda=21, scl=22):
+                if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
+                    return "m5stack_fire"
+                restore_i2c(sda=21, scl=22)
 
         # On devices without I2C, we use known GPIO states
         from machine import Pin
 
-        print("(emulated) lilygo_t_display_s3 ?")
-        try:
-            # 2 buttons have PCB pull-ups so they'll be high unless pressed
-            pin0 = Pin(0, Pin.IN)
-            pin14 = Pin(14, Pin.IN)
-            if pin0.value() == 1 and pin14.value() == 1:
-                return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
-        except Exception as e:
-            print(f"lilygo_t_display_s3 detection got exception: {e}")
+        if is_esp32s3:
+            print("(emulated) lilygo_t_display_s3 ?")
+            try:
+                # 2 buttons have PCB pull-ups so they'll be high unless pressed
+                pin0 = Pin(0, Pin.IN)
+                pin14 = Pin(14, Pin.IN)
+                if pin0.value() == 1 and pin14.value() == 1:
+                    return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
+            except Exception as e:
+                print(f"lilygo_t_display_s3 detection got exception: {e}")
 
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 
