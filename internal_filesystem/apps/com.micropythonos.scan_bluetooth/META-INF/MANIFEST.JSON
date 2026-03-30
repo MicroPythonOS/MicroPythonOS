@@ -1,17 +1,8 @@
 {
-"name": "ScanBluetooth",
-"publisher": "MicroPythonOS",
-"short_description": "Scan Bluetooth",
-"long_description": "Lists all nearby Bluetooth devices with some information",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.scan_bluetooth/icons/com.micropythonos.scan_bluetooth_0.1.0_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.scan_bluetooth/mpks/com.micropythonos.scan_bluetooth_0.1.0.mpk",
-"fullname": "com.micropythonos.scan_bluetooth",
-"version": "0.1.0",
-"category": "development",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/scan_bluetooth.py",
       "classname": "ScanBluetooth",
+      "entrypoint": "assets/scan_bluetooth.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "development",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.scan_bluetooth/mpks/com.micropythonos.scan_bluetooth_0.1.0.mpk",
+  "fullname": "com.micropythonos.scan_bluetooth",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.scan_bluetooth/icons/com.micropythonos.scan_bluetooth_0.1.0_64x64.png",
+  "long_description": "Lists all nearby Bluetooth devices with some information",
+  "name": "ScanBluetooth",
+  "publisher": "MicroPythonOS",
+  "short_description": "Scan Bluetooth",
+  "version": "0.1.0"
 }
-

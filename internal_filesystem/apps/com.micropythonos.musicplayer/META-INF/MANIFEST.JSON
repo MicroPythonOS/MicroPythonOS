@@ -1,17 +1,8 @@
 {
-"name": "Music Player",
-"publisher": "MicroPythonOS",
-"short_description": "Player audio files",
-"long_description": "Traverse around the filesystem and play audio files that you select.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/icons/com.micropythonos.musicplayer_0.1.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/mpks/com.micropythonos.musicplayer_0.1.1.mpk",
-"fullname": "com.micropythonos.musicplayer",
-"version": "0.1.1",
-"category": "development",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/music_player.py",
       "classname": "MusicPlayer",
+      "entrypoint": "assets/music_player.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "development",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/mpks/com.micropythonos.musicplayer_0.1.1.mpk",
+  "fullname": "com.micropythonos.musicplayer",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.musicplayer/icons/com.micropythonos.musicplayer_0.1.1_64x64.png",
+  "long_description": "Traverse around the filesystem and play audio files that you select.",
+  "name": "Music Player",
+  "publisher": "MicroPythonOS",
+  "short_description": "Player audio files",
+  "version": "0.1.1"
 }
-

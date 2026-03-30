@@ -1,17 +1,8 @@
 {
-"name": "Weather",
-"publisher": "Pavel Machek",
-"short_description": "Display weather information.",
-"long_description": "This displays weather information from open-meteo.com.",
-"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.weather/icons/cz.ucw.pavel.weather_0.0.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.weather/mpks/cz.ucw.pavel.weather_0.0.1.mpk",
-"fullname": "cz.ucw.pavel.weather",
-"version": "0.0.1",
-"category": "utilities",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/main.py",
       "classname": "Main",
+      "entrypoint": "assets/main.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "utilities",
+  "download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.weather/mpks/cz.ucw.pavel.weather_0.0.1.mpk",
+  "fullname": "cz.ucw.pavel.weather",
+  "icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.weather/icons/cz.ucw.pavel.weather_0.0.1_64x64.png",
+  "long_description": "This displays weather information from open-meteo.com.",
+  "name": "Weather",
+  "publisher": "Pavel Machek",
+  "short_description": "Display weather information.",
+  "version": "0.0.1"
 }
-

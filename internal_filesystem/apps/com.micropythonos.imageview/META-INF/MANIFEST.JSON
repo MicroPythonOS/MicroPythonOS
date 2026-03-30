@@ -1,17 +1,8 @@
 {
-"name": "ImageView",
-"publisher": "MicroPythonOS",
-"short_description": "Image Viewer",
-"long_description": "Opens and shows images on the display.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/icons/com.micropythonos.imageview_0.1.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/mpks/com.micropythonos.imageview_0.1.1.mpk",
-"fullname": "com.micropythonos.imageview",
-"version": "0.1.1",
-"category": "graphics",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/imageview.py",
       "classname": "ImageView",
+      "entrypoint": "assets/imageview.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "graphics",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/mpks/com.micropythonos.imageview_0.1.1.mpk",
+  "fullname": "com.micropythonos.imageview",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.imageview/icons/com.micropythonos.imageview_0.1.1_64x64.png",
+  "long_description": "Opens and shows images on the display.",
+  "name": "ImageView",
+  "publisher": "MicroPythonOS",
+  "short_description": "Image Viewer",
+  "version": "0.1.1"
 }
-

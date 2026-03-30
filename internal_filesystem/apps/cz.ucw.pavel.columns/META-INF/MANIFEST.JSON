@@ -1,17 +1,8 @@
 {
-"name": "Columns",
-"publisher": "Pavel Machek",
-"short_description": "Falling columns game",
-"long_description": "Blocks of 3 colors are falling. Align the colors to make blocks disappear.",
-"icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.columns/icons/cz.ucw.pavel.columns_0.0.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.columns/mpks/cz.ucw.pavel.columns_0.0.1.mpk",
-"fullname": "cz.ucw.pavel.columns",
-"version": "0.0.1",
-"category": "utilities",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/main.py",
       "classname": "Main",
+      "entrypoint": "assets/main.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "utilities",
+  "download_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.columns/mpks/cz.ucw.pavel.columns_0.0.1.mpk",
+  "fullname": "cz.ucw.pavel.columns",
+  "icon_url": "https://apps.micropythonos.com/apps/cz.ucw.pavel.columns/icons/cz.ucw.pavel.columns_0.0.1_64x64.png",
+  "long_description": "Blocks of 3 colors are falling. Align the colors to make blocks disappear.",
+  "name": "Columns",
+  "publisher": "Pavel Machek",
+  "short_description": "Falling columns game",
+  "version": "0.0.1"
 }
-

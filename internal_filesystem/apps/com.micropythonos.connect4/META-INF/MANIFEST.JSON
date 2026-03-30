@@ -1,17 +1,8 @@
 {
-"name": "Connect 4",
-"publisher": "MicroPythonOS",
-"short_description": "Classic Connect 4 game",
-"long_description": "Play Connect 4 against the computer with three difficulty levels: Easy, Medium, and Hard. Drop colored discs and try to connect four in a row!",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.connect4/icons/com.micropythonos.connect4_0.1.0_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.connect4/mpks/com.micropythonos.connect4_0.1.0.mpk",
-"fullname": "com.micropythonos.connect4",
-"version": "0.1.0",
-"category": "games",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/connect4.py",
       "classname": "Connect4",
+      "entrypoint": "assets/connect4.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,5 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "games",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.connect4/mpks/com.micropythonos.connect4_0.1.0.mpk",
+  "fullname": "com.micropythonos.connect4",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.connect4/icons/com.micropythonos.connect4_0.1.0_64x64.png",
+  "long_description": "Play Connect 4 against the computer with three difficulty levels: Easy, Medium, and Hard. Drop colored discs and try to connect four in a row!",
+  "name": "Connect 4",
+  "publisher": "MicroPythonOS",
+  "short_description": "Classic Connect 4 game",
+  "version": "0.1.0"
 }

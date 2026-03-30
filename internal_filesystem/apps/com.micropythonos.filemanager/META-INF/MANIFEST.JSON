@@ -1,17 +1,8 @@
 {
-"name": "File Manager",
-"publisher": "MicroPythonOS",
-"short_description": "Manage files",
-"long_description": "Traverse around the filesystem and manage files and folders you find..",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.filemanager/icons/com.micropythonos.filemanager_0.0.5_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.filemanager/mpks/com.micropythonos.filemanager_0.0.5.mpk",
-"fullname": "com.micropythonos.filemanager",
-"version": "0.0.5",
-"category": "development",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/file_manager.py",
       "classname": "FileManager",
+      "entrypoint": "assets/file_manager.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "development",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.filemanager/mpks/com.micropythonos.filemanager_0.0.5.mpk",
+  "fullname": "com.micropythonos.filemanager",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.filemanager/icons/com.micropythonos.filemanager_0.0.5_64x64.png",
+  "long_description": "Traverse around the filesystem and manage files and folders you find..",
+  "name": "File Manager",
+  "publisher": "MicroPythonOS",
+  "short_description": "Manage files",
+  "version": "0.0.5"
 }
-

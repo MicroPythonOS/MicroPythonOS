@@ -97,6 +97,9 @@ class TestAppsManifest(unittest.TestCase):
                         f"{classname=} not found in {entrypoint=} of {manifest=}",
                     )
 
+                # Just reformat the JSON to keep changes minimal and avoid merge conflicts:
+                content = json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True)
+                manifest.write_text(content, encoding="utf-8")
 
 if __name__ == "__main__":
     unittest.main()

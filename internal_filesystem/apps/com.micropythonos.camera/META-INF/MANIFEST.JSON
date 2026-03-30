@@ -1,17 +1,8 @@
 {
-"name": "Camera",
-"publisher": "MicroPythonOS",
-"short_description": "Camera with QR decoding",
-"long_description": "Camera for both internal camera's and webcams, that includes QR decoding.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.camera/icons/com.micropythonos.camera_0.2.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.camera/mpks/com.micropythonos.camera_0.2.1.mpk",
-"fullname": "com.micropythonos.camera",
-"version": "0.2.1",
-"category": "camera",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/camera_app.py",
       "classname": "CameraActivity",
+      "entrypoint": "assets/camera_app.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "camera",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.camera/mpks/com.micropythonos.camera_0.2.1.mpk",
+  "fullname": "com.micropythonos.camera",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.camera/icons/com.micropythonos.camera_0.2.1_64x64.png",
+  "long_description": "Camera for both internal camera's and webcams, that includes QR decoding.",
+  "name": "Camera",
+  "publisher": "MicroPythonOS",
+  "short_description": "Camera with QR decoding",
+  "version": "0.2.1"
 }
-

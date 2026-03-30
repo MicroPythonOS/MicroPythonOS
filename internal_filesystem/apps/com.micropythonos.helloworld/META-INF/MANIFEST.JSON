@@ -1,17 +1,8 @@
 {
-"name": "HelloWorld",
-"publisher": "MicroPythonOS",
-"short_description": "Minimal app",
-"long_description": "Demonstrates the simplest app.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/icons/com.micropythonos.helloworld_0.0.5_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/mpks/com.micropythonos.helloworld_0.0.5.mpk",
-"fullname": "com.micropythonos.helloworld",
-"version": "0.0.5",
-"category": "development",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/hello.py",
       "classname": "Hello",
+      "entrypoint": "assets/hello.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "development",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/mpks/com.micropythonos.helloworld_0.0.5.mpk",
+  "fullname": "com.micropythonos.helloworld",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.helloworld/icons/com.micropythonos.helloworld_0.0.5_64x64.png",
+  "long_description": "Demonstrates the simplest app.",
+  "name": "HelloWorld",
+  "publisher": "MicroPythonOS",
+  "short_description": "Minimal app",
+  "version": "0.0.5"
 }
-

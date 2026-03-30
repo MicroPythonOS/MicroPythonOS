@@ -1,17 +1,8 @@
 {
-"name": "Nostr",
-"publisher": "MicroPythonOS",
-"short_description": "Nostr",
-"long_description": "Notest and Other Stuff Transmitted by Relays",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.nostr/icons/com.micropythonos.nostr_0.1.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.nostr/mpks/com.micropythonos.nostr_0.1.1.mpk",
-"fullname": "com.micropythonos.nostr",
-"version": "0.1.1",
-"category": "communication",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/nostr_app.py",
       "classname": "NostrApp",
+      "entrypoint": "assets/nostr_app.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,5 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "communication",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.nostr/mpks/com.micropythonos.nostr_0.1.1.mpk",
+  "fullname": "com.micropythonos.nostr",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.nostr/icons/com.micropythonos.nostr_0.1.1_64x64.png",
+  "long_description": "Notest and Other Stuff Transmitted by Relays",
+  "name": "Nostr",
+  "publisher": "MicroPythonOS",
+  "short_description": "Nostr",
+  "version": "0.1.1"
 }
