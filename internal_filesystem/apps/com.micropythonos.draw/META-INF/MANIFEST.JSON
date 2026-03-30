@@ -1,17 +1,8 @@
 {
-"name": "Draw",
-"publisher": "MicroPythonOS",
-"short_description": "Simple drawing app",
-"long_description": "Draw simple shapes on the screen.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/icons/com.micropythonos.draw_0.1.0_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/mpks/com.micropythonos.draw_0.1.0.mpk",
-"fullname": "com.micropythonos.draw",
-"version": "0.1.0",
-"category": "graphics",
-"activities": [
+  "activities": [
     {
-      "entrypoint": "assets/draw.py",
       "classname": "Draw",
+      "entrypoint": "assets/draw.py",
       "intent_filters": [
         {
           "action": "main",
@@ -19,6 +10,14 @@
         }
       ]
     }
-  ]
+  ],
+  "category": "graphics",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/mpks/com.micropythonos.draw_0.1.0.mpk",
+  "fullname": "com.micropythonos.draw",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.draw/icons/com.micropythonos.draw_0.1.0_64x64.png",
+  "long_description": "Draw simple shapes on the screen.",
+  "name": "Draw",
+  "publisher": "MicroPythonOS",
+  "short_description": "Simple drawing app",
+  "version": "0.1.0"
 }
-
