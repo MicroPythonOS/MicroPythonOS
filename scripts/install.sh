@@ -83,7 +83,7 @@ if [ ! -z "$appname" ]; then
 fi
 
 # Uncomment this line if you really want all apps the be installed:
-echo "Not installing all apps by default because it takes a long time, uses lots of storage and makes the boot slower..." ; popd ; exit 1
+echo "Not installing all apps by default because it takes a long time, uses lots of storage and makes the boot slower..." ; popd ; exit 0
 
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -maxdepth 1 -type l | while read symlink; do
