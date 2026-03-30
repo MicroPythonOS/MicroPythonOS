@@ -1,7 +1,7 @@
 print("squixl.py initialization")
 """
 Hardware initialization for the SQUiXL device by "Unexpected Maker"
-https://unexpectedmaker.com/shop.html#!/SQUiXL/p/743870537
+https://squixl.io
 
 https://github.com/UnexpectedMaker/SQUiXL-DevOS
 https://github.com/UnexpectedMaker/SQUiXL-DevOS/blob/main/platformio/src/squixl.h
@@ -117,7 +117,7 @@ import lvgl as lv
 import machine
 import mpos.ui
 from drivers.display.st7701s.st7701s import ST7701S
-from drivers.io_expander.tca9555 import TCA9555
+from drivers.io_expander.tca9555 import TCA9555, TCA9555Pin
 from micropython import const
 
 # S3 IO
@@ -328,6 +328,16 @@ squixl.set_lcd_backlight(on=True)
 
 try:
     print("squixl.py RGB parallel bus display initialization")
+
+    mosi_pin = TCA9555Pin(squixl.tca, SQUiXL.MOSI)
+    clk_pin = TCA9555Pin(squixl.tca, SQUiXL.CLK)
+    cs_pin = TCA9555Pin(squixl.tca, SQUiXL.CS)
+
+    # lvgl_micropython/api_drivers/common_api_drivers/frozen/other/spi3wire.py:
+    from spi3wire import Spi3Wire
+
+    spi_3wire = Spi3Wire(mosi_pin=mosi_pin, clk_pin=clk_pin, cs_pin=cs_pin)
+
     display_bus = lcd_bus.RGBBus(
         hsync=HSYNC,
         vsync=VSYNC,
@@ -345,8 +355,10 @@ try:
     print("squixl.py ST7701S() display initialization")
     mpos.ui.main_display = ST7701S(
         data_bus=display_bus,
+        spi_3wire=spi_3wire,
         display_width=480,
         display_height=480,
+        bus_shared_pins=False,
         set_params_func=squixl.set_params,
     )
 except Exception as e:

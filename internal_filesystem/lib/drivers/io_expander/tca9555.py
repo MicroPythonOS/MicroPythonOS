@@ -66,7 +66,7 @@ class TCA9555:
             p = machine.Pin(pin, machine.Pin.OUT)
             p.value(value)
 
-    def digital_read(self, pin):
+    def digital_read(self, pin: int):
         if pin & 0x40:  # Pins with 0x40 bit set are controlled by TCA9555
             pin &= 0xBF
             # Ensure pin is set to input
@@ -79,3 +79,24 @@ class TCA9555:
             # Handle standard ESP32 pin
             p = machine.Pin(pin, machine.Pin.IN)
             return p.value()
+
+
+class TCA9555Pin:
+    """
+    Minimal Pin-like wrapper for TCA9555 IO expander pins.
+    Provides value() and __call__() for compatibility with bit-bang drivers.
+    """
+
+    def __init__(self, tca: TCA9555, pin: int, mode=machine.Pin.OUT):
+        self.tca = tca
+        self.pin = pin
+        self.tca.pin_mode(pin, mode)
+
+    def value(self, v=None):
+        if v is None:
+            # No readback support for output-only pins
+            return None
+        self.tca.digital_write(self.pin, v)
+
+    def __call__(self, v=None):
+        return self.value(v)
