@@ -225,15 +225,12 @@ PY
 	echo "Restoring @micropython.viper decorator..."
 	sed -i.backup 's/^#@micropython\.viper$/@micropython.viper/' "$stream_wav_file"
 	rm "$stream_wav_file".backup
-<<<<<<< HEAD
-=======
 
 	# Restore original Makefile CWARN (only if we patched it on macOS)
 	if [ -f "$unix_makefile".backup ]; then
 		echo "Restoring unix Makefile CWARN..."
 		mv "$unix_makefile".backup "$unix_makefile"
 	fi
->>>>>>> 8a6ff0f4e81d0a4ae707907e5ec960239751472d
 else
 	echo "invalid target $target"
 fi
