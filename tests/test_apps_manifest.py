@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from pathlib import Path
 
@@ -6,7 +7,12 @@ APPS_BASE_PATH = Path(__file__).parent.parent / "internal_filesystem" / "apps"
 
 
 def iter_app_path():
-    for app in APPS_BASE_PATH.iterdir():
+    try:
+        entries = os.listdir(str(APPS_BASE_PATH))
+    except OSError:
+        entries = []
+    for app_name in entries:
+        app = APPS_BASE_PATH / app_name
         if app.is_dir():
             yield app
 
