@@ -28,4 +28,11 @@ print(
 )
 
 print("Passing execution over to mpos.main")
-import mpos.main  # noqa: F401
+try:
+    import mpos.main  # noqa: F401
+except Exception as e:
+    sys.print_exception(e)
+    import time
+    print(f"Error in mpos.main, sleep for 5 seconds and end then...")
+    time.sleep(5)
+
