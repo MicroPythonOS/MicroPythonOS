@@ -8,14 +8,15 @@ target="$1"
 buildtype="$2"
 
 if [ -z "$target" ]; then
-	echo "Usage: $0 target"
-	echo "Usage: $0 <esp32 or unix or macOS>"
-	echo "Example: $0 unix"
-	echo "Example: $0 macOS"
-	echo "Example: $0 esp32"
-	echo "Example: $0 esp32s3"
-	echo "Example: $0 unphone"
-	echo "Example: $0 clean"
+    echo "Usage: $0 target"
+    echo "Usage: $0 <esp32 or esp32-small or unix or macOS>"
+    echo "Example: $0 unix"
+    echo "Example: $0 macOS"
+    echo "Example: $0 esp32"
+    echo "Example: $0 esp32-small"
+    echo "Example: $0 esp32s3"
+    echo "Example: $0 unphone"
+    echo "Example: $0 clean"
 	exit 1
 fi
 
@@ -106,20 +107,27 @@ popd
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ]; then
-    partition_size="4194304"
-    flash_size="16"
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" ]; then
+	partition_size="4194304"
+	flash_size="16"
 	otasupport="--ota"
 	extra_configs=""
-    if [ "$target" == "esp32" ]; then
+	if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
+	elif [ "$target" == "esp32-small" ]; then
+        # No PSRAM, so do not set SPIRAM-specific options
+		BOARD=ESP32_GENERIC
+		BOARD_VARIANT=
+		partition_size="3900000"
+		flash_size="4"
+		otasupport="" # too small for 2 OTA partitions + internal storage
 	else # esp32s3 or unphone
-	    if [ "$target" == "unphone" ]; then
-	        partition_size="3900000"
-	        flash_size="8"
+		if [ "$target" == "unphone" ]; then
+			partition_size="3900000"
+			flash_size="8"
 			otasupport="" # too small for 2 OTA partitions + internal storage
-        fi
+		fi
 		BOARD=ESP32_GENERIC_S3
 		BOARD_VARIANT=SPIRAM_OCT
 		# These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
@@ -128,6 +136,12 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ];
 		# --py-freertos: add MicroPython FreeRTOS module to expose internals
 		extra_configs="$extra_configs --py-freertos"
 	fi
+
+	if [ "$BOARD_VARIANT" == "SPIRAM" -o "$BOARD_VARIANT" == "SPIRAM_OCT" ]; then
+		# Camera only works on boards configured with spiram, otherwise the build breaks
+		extra_configs="$extra_configs USER_C_MODULE=$codebasedir/micropython-camera-API/src/micropython.cmake"
+	fi
+
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
 	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
@@ -148,17 +162,17 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" ];
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
-	python3 make.py "$otasupport" --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
-	    USER_C_MODULE="$codebasedir"/micropython-camera-API/src/micropython.cmake \
-	    USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
-	    USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
-	    CONFIG_FREERTOS_USE_TRACE_FACILITY=y \
-	    CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
-	    CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
-	    CONFIG_ADC_MIC_TASK_CORE=1 \
-	    $extra_configs \
-	    "$frozenmanifest"
-
+	set -x
+	python3 make.py $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
+		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
+		CONFIG_FREERTOS_USE_TRACE_FACILITY=y \
+		CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
+		CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
+		CONFIG_ADC_MIC_TASK_CORE=1 \
+		$extra_configs \
+		"$frozenmanifest"
+    set +x
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
