@@ -114,12 +114,7 @@ class DownloadManager:
             if headers is None:
                 headers = {}
             
-            try:
-                resp_ctx = session.get(url, headers=headers, ssl=sslctx, timeout=_CHUNK_TIMEOUT_SECONDS)
-            except TypeError:
-                # Desktop aiohttp doesn't support timeout kwarg
-                resp_ctx = session.get(url, headers=headers, ssl=sslctx)
-            async with resp_ctx as response:
+            async with session.get(url, headers=headers, ssl=sslctx, timeout=_CHUNK_TIMEOUT_SECONDS) as response:
                 if response.status < 200 or response.status >= 400:
                     print(f"DownloadManager: HTTP error {response.status}")
                     raise RuntimeError(f"HTTP {response.status}")
