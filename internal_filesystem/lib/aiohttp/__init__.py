@@ -109,12 +109,12 @@ class ClientSession:
     async def __aexit__(self, *args):
         return await asyncio.sleep(0)
 
-    # TODO: Implement timeouts
+    # Connection timeout is supported via the timeout parameter on request methods
 
-    async def _request(self, method, url, data=None, json=None, ssl=None, params=None, headers={}):
+    async def _request(self, method, url, data=None, json=None, ssl=None, params=None, headers={}, timeout=None):
         redir_cnt = 0
         while redir_cnt < 2:
-            reader = await self.request_raw(method, url, data, json, ssl, params, headers)
+            reader = await self.request_raw(method, url, data, json, ssl, params, headers, timeout=timeout)
             _headers = []
             sline = await reader.readline()
             sline = sline.split(None, 2)
@@ -167,6 +167,7 @@ class ClientSession:
         headers={},
         is_handshake=False,
         version=None,
+        timeout=None,
     ):
         if json and isinstance(json, dict):
             data = _json.dumps(json)
@@ -193,7 +194,12 @@ class ClientSession:
             host, port = host.split(":", 1)
             port = int(port)
 
-        reader, writer = await asyncio.open_connection(host, port, ssl=ssl)
+        if timeout is not None:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port, ssl=ssl), timeout
+            )
+        else:
+            reader, writer = await asyncio.open_connection(host, port, ssl=ssl)
 
         # Use protocol 1.0, because 1.1 always allows to use chunked transfer-encoding
         # But explicitly set Connection: close, even though this should be default for 1.0,
@@ -232,7 +238,7 @@ class ClientSession:
             await writer.awrite(query)
             return reader, writer
 
-    def request(self, method, url, data=None, json=None, ssl=None, params=None, headers={}):
+    def request(self, method, url, data=None, json=None, ssl=None, params=None, headers={}, timeout=None):
         return _RequestContextManager(
             self,
             self._request(
@@ -243,6 +249,7 @@ class ClientSession:
                 ssl=ssl,
                 params=params,
                 headers=dict(**self._base_headers, **headers),
+                timeout=timeout,
             ),
         )
 
