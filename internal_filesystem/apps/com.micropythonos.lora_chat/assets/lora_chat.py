@@ -99,6 +99,18 @@ class LoRaChat(Activity):
         _, result = self.lora_device.send(to_send)
         print(f"send result {result}: {SX1262.STATUS[result]}")
 
+        if result == 0:
+            # The callback for TX_DONE is never called and the device gets stuck in TX mode unless
+            # startReceive is set here. Maybe it should even be unconditional, or at least retried?
+            try:
+                import time
+                time.sleep_ms(200)
+                if self.lora_device.getIrqStatus() & SX1262.TX_DONE:
+                    self.lora_device.clearIrqStatus()
+                    self.lora_device.startReceive()
+            except Exception:
+                pass
+
     def receive_callback(self, events):
         print(f"receive_callback for events: {events}")
         print(f"getRSSI: {self.lora_device.getRSSI()}")
@@ -158,7 +170,7 @@ class LoRaChat(Activity):
 
         self.lora_device = mpos.sx
 
-        self.lora_device.begin(freq=869.618, bw=62.5, sf=8, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True)
+        self.lora_device.begin(freq=869.618, bw=62.5, sf=8, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True, currentLimit=140.0, power=22)
         self.lora_device.setBlockingCallback(False, self.receive_callback)
 
         if DeviceInfo.hardware_id == "fri3d_2026":
