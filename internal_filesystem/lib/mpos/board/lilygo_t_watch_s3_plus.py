@@ -3,14 +3,17 @@ print("lilygo_t_watch_s3_plus.py initialization")
 from machine import I2C, Pin, SPI
 
 try:
-    lora_spi_bus = SPI.Bus(host=1,mosi=1,miso=4,sck=3)
-    lora_spi_device = SPI.Device(spi_bus=lora_spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+    # Doesn't work with the new split Bus/Device Hardware SPI driver and drivers.lora.sx1262 yet
+    # so use the original drivers.lora.micropySX126X.sx1262 that's patched to fallback to Software SPI
+    #lora_spi_bus = SPI.Bus(host=1,mosi=1,miso=4,sck=3)
+    #lora_spi_device = SPI.Device(spi_bus=lora_spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+    pass
 except Exception as e:
     import sys
     sys.print_exception(e)
 else:
-    from drivers.lora.sx1262 import SX1262
-    sx = SX1262(lora_spi_device, irq=9, rst=8, gpio=7, cs_pin=5)
+    from drivers.lora.micropySX126X.sx1262 import SX1262
+    sx = SX1262(spi_bus=1, clk=3, mosi=1, miso=4, cs=5, irq=9, rst=8, gpio=7)
     import mpos
     mpos.sx = sx
 
