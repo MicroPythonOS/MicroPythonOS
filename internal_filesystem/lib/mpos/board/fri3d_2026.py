@@ -16,13 +16,8 @@
 from machine import ADC, I2C, Pin, SPI, SDCard
 import lcd_bus
 import i2c
-import math
-
-import micropython
-import gc
 
 import lvgl as lv
-import task_handler
 
 import drivers.display.st7789 as st7789
 
@@ -36,6 +31,20 @@ spi_bus = SPI.Bus(
     miso=8,
     sck=7
 )
+
+try:
+    lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+except Exception as e:
+    import sys
+    sys.print_exception(e)
+else:
+    from drivers.lora.sx1262 import SX1262
+    rf_sw = Pin(46, Pin.OUT)    # <--- Your RF switch pin
+    rf_sw.value(1) ; print("RF_SW set to HIGH") # Logic high level means enable receiver mode
+    sx = SX1262(lora_spi_device, 40, 11, 41, 45)
+    import mpos
+    mpos.sx = sx
+
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
     freq=40000000, # 40 Mhz
@@ -74,7 +83,7 @@ mpos.ui.main_display = st7789.ST7789(
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
     # reset_pin = driven by the CH32 microcontroller
-)
+) # calls lv.init()
 
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
@@ -92,8 +101,7 @@ try:
 except Exception as e:
     print(f"Touch screen init got exception: {e}")
 
-lv.init()
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 
 # Button handling code:
 import time
