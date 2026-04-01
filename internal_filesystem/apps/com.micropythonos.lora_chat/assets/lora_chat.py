@@ -19,6 +19,22 @@ class LoRaChat(Activity):
     # Widgets:
     messages = None
 
+    @staticmethod
+    def _format_bytes_python_hex(message):
+        parts = []
+        for byte in message:
+            if 32 <= byte <= 126 and byte not in (34, 92):
+                parts.append(chr(byte))
+            else:
+                parts.append("\\x%02x" % byte)
+        return "b\"" + "".join(parts) + "\""
+
+    @staticmethod
+    def _ellipsize_center(text, head=8, tail=20):
+        if len(text) <= head + tail + 3:
+            return text
+        return text[:head] + "..." + text[-tail:]
+
     def onCreate(self):
         main_content = lv.obj()
         main_content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -112,8 +128,9 @@ class LoRaChat(Activity):
                         try:
                             decoded_msg = msg.decode("utf8")
                         except UnicodeError as e:
-                            print("decode failed, using hex:", repr(e))
-                            decoded_msg = msg.hex()
+                            #print("decode failed, using hex:", repr(e))
+                            decoded_msg = self._format_bytes_python_hex(msg)
+                            decoded_msg = self._ellipsize_center(decoded_msg, head=10, tail=20)
                     else:
                         decoded_msg = str(msg)
                     print("decoded_msg repr:", repr(decoded_msg))
