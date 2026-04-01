@@ -1,18 +1,22 @@
 print("lilygo_t_watch_s3_plus.py initialization")
 # Manufacturer's website at https://lilygo.cc/products/t-watch-s3-plus
+from machine import I2C, Pin, SPI
+
+try:
+    lora_spi_bus = SPI.Bus(host=1,mosi=1,miso=4,sck=3)
+    lora_spi_device = SPI.Device(spi_bus=lora_spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+except Exception as e:
+    import sys
+    sys.print_exception(e)
+else:
+    from drivers.lora.sx1262 import SX1262
+    sx = SX1262(lora_spi_device, irq=9, rst=8, gpio=7, cs_pin=5)
+    import mpos
+    mpos.sx = sx
+
+spi_bus = SPI.Bus(host=2,mosi=13,sck=18)
+
 import lcd_bus
-import machine
-
-import lvgl as lv
-import task_handler
-
-import mpos.ui
-
-spi_bus = machine.SPI.Bus(
-    host=2,
-    mosi=13,
-    sck=18
-)
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
     freq=40000000,
@@ -25,6 +29,8 @@ fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | l
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
 import drivers.display.st7789 as st7789
+import mpos.ui
+import lvgl as lv
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
@@ -84,7 +90,6 @@ mic_input = AudioManager.add(
 # Vibrator test
 
 # One strong & fairly long buzz (repeat as needed)
-from machine import I2C, Pin
 i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 
 def write_reg(reg, val):
