@@ -1,3 +1,6 @@
+from drivers.lora.sx1262 import SX1262
+from machine import Pin, SPI
+
 from mpos import Activity, TaskManager
 
 import mpos
@@ -5,6 +8,7 @@ import mpos
 class LoRaChat(Activity):
 
     alltext = ""
+    lora_device = None
 
     # Widgets:
     messages = None
@@ -30,33 +34,12 @@ class LoRaChat(Activity):
         print("LoRa Chat backgrounded, putting LoRa to sleep")
         mpos.sx.sleep(retainConfig=False)
 
-    def receive_thread(self):
-        print("starting lora in 3 seconds")
-        import time
-        time.sleep(5)
-        # test LoRa
-        from drivers.lora.sx1262 import SX1262
-        from machine import Pin, SPI
-        rf_sw = Pin(46, Pin.OUT)
-        rf_sw.value(1) ; print("RF_SW set to HIGH") # Logic high level means enable receiver mode
-
-        sx =  mpos.sx
-
-        sx.begin(freq=869.618, bw=62.5, sf=8, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True)
-
-        rf_sw.value(1) ; print("RF_SW set to HIGH")
-
-        sx.setDio2AsRfSwitch(False)
-
-        rf_sw.value(1) ; print("RF_SW set to HIGH")
-
-        import time
-        while self.has_foreground():
+    def receive_callback(self, events):
+        if events & SX1262.RX_DONE:
             try:
-                print("sx.recv")
-                msg, err = sx.recv()
-                #msg, err = sx.recv(timeout_en=True, timeout_ms=1000)
-                print("after sx.recv")
+                print("self.lora_device.recv")
+                msg, err = self.lora_device.recv()
+                print("after self.lora_device.recv")
                 if len(msg) > 0:
                     print(msg)
                     self.alltext += "Message: " + msg.hex() + "\n"
@@ -65,15 +48,30 @@ class LoRaChat(Activity):
                     print("len(msg) was 0")
                 status = SX1262.STATUS[err]
                 print(f"status: {status}")
-                print(f"getRSSI: {sx.getRSSI()}")
-                print(f"getSNR: {sx.getSNR()}")
-                print(f"getStatus: {sx.getStatus()}")
-                print(f"getPacketStatus: {sx.getPacketStatus()}")
+                print(f"getRSSI: {self.lora_device.getRSSI()}")
+                print(f"getSNR: {self.lora_device.getSNR()}")
+                print(f"getStatus: {self.lora_device.getStatus()}")
+                print(f"getPacketStatus: {self.lora_device.getPacketStatus()}")
 
-                print("Sending...")
-                result = sx.send(b"BLAAAA")
-                print(f"send result: {result}")
+                #print("Sending...")
+                #result = sx.send(b"BLAAAA")
+                #print(f"send result: {result}")
             except Exception as e:
                 print(f"receive_thread got exception: {e}")
-        
-        print("receive_thread stopped")
+
+    def receive_thread(self):
+        print("starting lora in 3 seconds")
+        import time
+        time.sleep(5)
+
+        rf_sw = Pin(46, Pin.OUT)
+        rf_sw.value(1) ; print("RF_SW set to HIGH") # Logic high level means enable receiver mode
+
+        self.lora_device = mpos.sx
+
+        self.lora_device.begin(freq=869.618, bw=62.5, sf=8, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True)
+        self.lora_device.setBlockingCallback(False, self.receive_callback)
+        self.lora_device.setDio2AsRfSwitch(False)
+
+        rf_sw.value(1) ; print("RF_SW set to HIGH")
+
