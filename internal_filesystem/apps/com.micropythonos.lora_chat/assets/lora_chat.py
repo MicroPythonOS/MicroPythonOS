@@ -70,8 +70,11 @@ class LoRaChat(Activity):
         self.alltext += "Sent: " + message + "\n"
         lv.async_call(lambda _: self.messages.set_text(self.alltext), None)
 
-        to_send = message.encode('utf8')
-        print(f"Sending {to_send}")
+        if isinstance(message, (bytes, bytearray)):
+            to_send = bytes(message)
+        else:
+            to_send = str(message).encode("utf8")
+        print(f"Sending {to_send} (type={type(to_send)}, len={len(to_send)})")
 
         if simulation_mode:
             print("Not actually sending because simulation mode")
@@ -97,17 +100,29 @@ class LoRaChat(Activity):
                 print(f"after self.lora_device.recv, status: {status}")
                 if len(msg) > 0:
                     print(msg)
-                    decoded_msg = (
-                        msg.decode("utf8", "replace")
-                        if isinstance(msg, bytes)
-                        else str(msg)
+                    print(
+                        "msg type:",
+                        type(msg),
+                        "len:",
+                        len(msg),
+                        "hex:",
+                        msg.hex() if isinstance(msg, (bytes, bytearray)) else "(not bytes)",
                     )
+                    if isinstance(msg, bytes):
+                        try:
+                            decoded_msg = msg.decode("utf8")
+                        except UnicodeError as e:
+                            print("decode failed, using hex:", repr(e))
+                            decoded_msg = msg.hex()
+                    else:
+                        decoded_msg = str(msg)
+                    print("decoded_msg repr:", repr(decoded_msg))
                     self.alltext += "Received: " + decoded_msg + "\n"
                     lv.async_call(lambda _: self.messages.set_text(self.alltext), None)
                 else:
                     print("len(msg) was 0")
             except Exception as e:
-                print(f"receive_callback got exception: {e}")
+                print("receive_callback got exception:", repr(e), "type:", type(e))
 
     def receive_thread(self):
         print("starting lora in 1 second")
