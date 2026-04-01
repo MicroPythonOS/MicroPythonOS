@@ -97,12 +97,17 @@ class LoRaChat(Activity):
                 print(f"after self.lora_device.recv, status: {status}")
                 if len(msg) > 0:
                     print(msg)
-                    self.alltext += "Received: " + msg + "\n"
+                    decoded_msg = (
+                        msg.decode("utf8", "replace")
+                        if isinstance(msg, bytes)
+                        else str(msg)
+                    )
+                    self.alltext += "Received: " + decoded_msg + "\n"
                     lv.async_call(lambda _: self.messages.set_text(self.alltext), None)
                 else:
                     print("len(msg) was 0")
             except Exception as e:
-                print(f"receive_thread got exception: {e}")
+                print(f"receive_callback got exception: {e}")
 
     def receive_thread(self):
         print("starting lora in 1 second")
