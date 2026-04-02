@@ -10,12 +10,12 @@ from uaiowebsocket import WebSocketApp
 
 class TestMutlipleWebsocketsAsyncio(unittest.TestCase):
 
-    max_allowed_connections = 3 # max that echo.websocket.org allows
+    max_allowed_connections = 3 # this used to be the max that echo.websocket.org allowed, and we were checking that, but now it seems to allow at least 10!
 
     #relays = ["wss://echo.websocket.org" ]
     #relays = ["wss://echo.websocket.org", "wss://echo.websocket.org"]
     #relays = ["wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org" ] # more gives "too many requests" error
-    relays = ["wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org", "wss://echo.websocket.org" ] # more might give "too many requests" error
+    relays = max_allowed_connections * ["wss://echo.websocket.org"] # more might give "too many requests" error
     wslist = []
 
     on_open_called = 0
