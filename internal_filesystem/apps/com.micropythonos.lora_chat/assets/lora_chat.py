@@ -170,7 +170,11 @@ class LoRaChat(Activity):
 
         self.lora_device = mpos.sx
 
+        # MeshCore settings:
         self.lora_device.begin(freq=869.618, bw=62.5, sf=8, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True, currentLimit=140.0, power=22)
+        # Meshtastic settings for Europe (868Mhz) at default LongFast profile (untested)
+        # https://meshtastic.org/docs/configuration/radio/lora/
+        #self.lora_device.begin(freq=869.525, bw=250, sf=12, cr=8, syncWord=0x2B, preambleLength=16, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True, currentLimit=140.0, power=22)
         self.lora_device.setBlockingCallback(False, self.receive_callback)
 
         if DeviceInfo.hardware_id == "fri3d_2026":
