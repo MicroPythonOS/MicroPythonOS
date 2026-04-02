@@ -90,23 +90,37 @@ mic_input = AudioManager.add(
     )
 )
 
-# Vibrator test
-
-# One strong & fairly long buzz (repeat as needed)
 i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 
-def write_reg(reg, val):
-    i2c.writeto_mem(0x5A, reg, bytes([val]))
-
-write_reg(0x01, 0x00)                # internal trigger
-write_reg(0x03, 0)                   # Library A
-write_reg(0x04, 47)                  # Strong Buzz 100%
-write_reg(0x0C, 1)                   # GO
 import time
-time.sleep(1)                        # ~0.8s strong buzz
-write_reg(0x0C, 0)                   # stop (optional)
+time.sleep(5)
 
-# IMU:
+# AXP2101 PMU settings:
+AXP2101_ADDR = 0x34
+
+# ALDO4 enable @ 3.3V for LoRa: reg 0x95 LDO_VOL3_CTRL: bits[4:0] set ALDO4 voltage (500 mV + step*100 mV)
+i2c.writeto_mem(AXP2101_ADDR,0x95,bytes([(i2c.readfrom_mem(AXP2101_ADDR, 0x95, 1)[0] & 0xE0) | 0x1C]))  # 3.3V: (3300 - 500) / 100 = 28 = 0x1C
+i2c.writeto_mem(AXP2101_ADDR, 0x90, bytes([i2c.readfrom_mem(AXP2101_ADDR, 0x90, 1)[0] | (1 << 3)])) # reg 0x90 LDO_ONOFF_CTRL0: bit3 enables ALDO4
+
+# BLDO2 enable @ 3.3V for vibrator: reg 0x97 LDO_VOL5_CTRL: bits[4:0] set BLDO2 voltage (500 mV + step*100 mV)
+i2c.writeto_mem(AXP2101_ADDR,0x97,bytes([(i2c.readfrom_mem(AXP2101_ADDR, 0x97, 1)[0] & 0xE0) | 0x1C]))  # 3.3V: (3300 - 500) / 100 = 28 = 0x1C
+i2c.writeto_mem(AXP2101_ADDR, 0x90, bytes([i2c.readfrom_mem(AXP2101_ADDR, 0x90, 1)[0] | (1 << 5)])) # reg 0x90 LDO_ONOFF_CTRL0: bit5 enables BLDO2
+
+print("AXP2101 status: enabled + voltage setting for ALDO4/BLDO2")
+ldo_onoff = i2c.readfrom_mem(AXP2101_ADDR, 0x90, 1)[0]
+print("ALDO4: {} @ {} mV".format("EN" if (ldo_onoff & (1 << 3)) else "DIS",500 + (i2c.readfrom_mem(AXP2101_ADDR, 0x95, 1)[0] & 0x1F * 100),)) # bits[4:0] voltage steps
+print("BLDO2: {} @ {} mV".format("EN" if (ldo_onoff & (1 << 5)) else "DIS",500 + (i2c.readfrom_mem(AXP2101_ADDR, 0x97, 1)[0] & 0x1F * 100),)) # bits[4:0] voltage steps
+
+print("DRV2605L vibrator test")
+DRV2605L_ADDR = 0x5A
+i2c.writeto_mem(DRV2605L_ADDR, 0x01, bytes([0x00])) # reg 0x01 = mode (0x00 = internal trigger)
+i2c.writeto_mem(DRV2605L_ADDR, 0x03, bytes([0x00])) # reg 0x03 = waveform sequence slot 1 (0 = Library A)
+i2c.writeto_mem(DRV2605L_ADDR, 0x04, bytes([47])) # reg 0x04 = waveform sequence slot 2 (47 = strong buzz 100%)
+i2c.writeto_mem(DRV2605L_ADDR, 0x0C, bytes([1])) # reg 0x0C = GO (1 = start, 0 = stop)
+time.sleep(5)
+i2c.writeto_mem(DRV2605L_ADDR, 0x0C, bytes([0])) # reg 0x0C = GO (0 = stop)
+
+print("BMA423 IMU test")
 import drivers.imu_sensor.bma423.bma423 as bma423
 sensor = bma423.BMA423(i2c, address=0x19)
 time.sleep_ms(500) # some sleep is needed before reading values
@@ -118,6 +132,5 @@ print("(x,y,z): ", sensor.get_xyz())
 # - battery
 # - real IMU driver (instead of proof-of-concept above)
 # - GPS
-# - LoRa
 
 print("lilygo_t_watch_s3_plus.py finished")
