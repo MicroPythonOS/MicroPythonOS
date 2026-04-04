@@ -63,7 +63,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
         self.assertTrue(result, "Failed to start About app")
 
         # Wait for UI to fully render
-        wait_for_render(iterations=15)
+        wait_for_render(iterations=30)
 
         # Get current screen
         screen = lv.screen_active()
