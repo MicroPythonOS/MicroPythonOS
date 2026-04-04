@@ -2,7 +2,7 @@ import os
 import json
 import lvgl as lv
 
-from mpos import Activity, App, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
+from mpos import Activity, App, BuildInfo, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
 
 from app_detail import AppDetail
 
@@ -15,7 +15,7 @@ class AppStore(Activity):
 
     _BADGEHUB_TEST_BASE_URL = "https://badgehub.p1m.nl/api/v3"
     _BADGEHUB_PROD_BASE_URL = "https://badgehub.eu/api/v3"
-    _BADGEHUB_LIST = "project-summaries?badge=fri3d_2024"
+    _BADGEHUB_LIST = f"project-summaries?badge=mpos_api_{BuildInfo.version.api_level}"
     _BADGEHUB_DETAILS = "projects"
 
     _BACKEND_API_GITHUB = "github"
@@ -45,6 +45,7 @@ class AppStore(Activity):
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.PACKAGE)
+        self._migrate_backend_pref()
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self.main_screen = lv.obj()
         self.please_wait_label = lv.label(self.main_screen)
@@ -91,6 +92,14 @@ class AppStore(Activity):
     def backend_changed(self, new_value):
         print(f"backend changed to {new_value}, refreshing...")
         self.refresh_list()
+
+    def _migrate_backend_pref(self):
+        old_pref = "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=fri3d_2024,https://badgehub.eu/api/v3/projects"
+        new_pref = f"badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_{BuildInfo.version.api_level},https://badgehub.eu/api/v3/projects"
+        current_pref = self.prefs.get_string("backend")
+        if current_pref == old_pref:
+            print(f"Migrating AppStore backend preference to mpos_api_{BuildInfo.version.api_level}")
+            self.prefs.edit().put_string("backend", new_pref).commit()
 
     async def download_app_index(self, json_url):
         try:
