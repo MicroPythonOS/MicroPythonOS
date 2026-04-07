@@ -1,8 +1,8 @@
 inputfile="$1"
 if [ -z "$inputfile" ]; then
-	echo "Usage: $0 inputfile"
-	echo "Example: $0 camera_capture_1764503331_960x960_GRAY.raw"
-	exit 1
+    echo "Usage: $0 inputfile"
+    echo "Example: $0 camera_capture_1764503331_960x960_GRAY.raw"
+    exit 1
 fi
 
 outputfile="$inputfile".png
