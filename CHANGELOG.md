@@ -18,7 +18,8 @@ OS:
 - Add esp32-component-rvswd and MicroPython bindings to flash WCH's CH32 microcontrollers
 - Add glyphs to fonts: diacritics 0x7F-0xFF, Bitcoin symbol ₿ 0x20BF, italic satoshi symbol 丯 0x4E2F and regular satoshi symbol 丰 0x4E30
 - Add LVGL symbols to fonts: 0xf002,0xf004,0xf005,0xf00e,0xf010,0xf029,0xf030 for search, heart, star, search-plus, search-minus, qrcode, camera
-- Add LVGL symbols to fonts: 0xf15a,0xf164,0xf165,0xf379 # btc (without circle), thumbs-up, thumbs-down, bitcoin (in circle)
+- Add LVGL symbols to fonts: 0xf15a,0xf164,0xf165,0xf1e0 for btc (without circle), thumbs-up, thumbs-down, share-alt
+- Add LVGL symbols to fonts: 0xf2ea,0xf379,0xf58f for undo-alt, bitcoin (in circle), headphones-alt
 - Improve handling of "mpos.main" errors
 - Fix empty black window issue on macOS desktop
 - Fix macOS/unix desktop build with newer Clang (17+)
