@@ -247,6 +247,9 @@ if board:
     print(f"Detected {board} system, importing mpos.board.{board}")
     DeviceInfo.set_hardware_id(board)
     __import__(f"mpos.board.{board}")
+else:
+    # It makes no sense to continue, because we have no display etc...
+    raise RuntimeError("No board detected, exit initialization!")
 
 # Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
 import mpos.fs_driver
