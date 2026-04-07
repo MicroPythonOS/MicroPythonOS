@@ -1,3 +1,28 @@
+0.9.1
+=====
+
+Builtin Apps:
+- AppStore: use BadgeHub.eu filter mpos_api_0 instead of old hardware IDs
+- HowTo: add padding
+
+Frameworks:
+- DownloadManager: add connection timeout to DownloadManager session.get()
+- Settings: add international number format setting
+
+OS:
+- New board support: M5Stack Core2
+- New board support: LilyGo T-HMI
+- LilyGo T-Watch S3 Plus: initialize Power Management Unit (for LoRa)
+- Add driver for LoRa SX1262 with lvgl_micropython-style (= split Bus/Device) hardware SPI
+- Add drivers for LoRa SX126X with SoftSPI (and default MicroPython hardware SPI)
+- Add esp32-component-rvswd and MicroPython bindings to flash WCH's CH32 microcontrollers
+- Add glyphs to fonts: diacritics 0x7F-0xFF, Bitcoin symbol ₿ 0x20BF, italic satoshi symbol 丯 0x4E2F and regular satoshi symbol 丰 0x4E30
+- Add LVGL symbols to fonts: 0xf002,0xf004,0xf005,0xf00e,0xf010,0xf029,0xf030 for search, heart, star, search-plus, search-minus, qrcode, camera
+- Add LVGL symbols to fonts: 0xf15a,0xf164,0xf165,0xf379 # btc (without circle), thumbs-up, thumbs-down, bitcoin (in circle)
+- Improve handling of "mpos.main" errors
+- Fix empty black window issue on macOS desktop
+- Fix macOS/unix desktop build with newer Clang (17+)
+
 0.9.0
 =====
 
