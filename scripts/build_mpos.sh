@@ -84,6 +84,12 @@ else
 	echo "No need to add asyncio to $manifile"
 fi
 
+echo "Installing customized font sources to lvgl_micropython/lib/lvgl"
+if ! cp "$codebasedir"/lvgl_micropython/lib_lvgl_src_font/* "$codebasedir"/lvgl_micropython/lib/lvgl/src/font/ ; then
+	echo "Could not install $codebasedir/lvgl_micropython/lib_lvgl_src_fonts/ so you probably need to update or re-clone the lvgl_micropython folder. See https://docs.micropythonos.com/os-development/"
+	exit 1
+fi
+
 # unix and macOS builds need these symlinks because make.py doesn't handle USER_C_MODULE arguments for them:
 echo "Symlinking secp256k1-embedded-ecdh for unix and macOS builds..."
 ln -sf ../../secp256k1-embedded-ecdh "$codebasedir"/lvgl_micropython/ext_mod/secp256k1-embedded-ecdh
