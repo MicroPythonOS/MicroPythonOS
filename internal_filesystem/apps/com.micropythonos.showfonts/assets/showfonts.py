@@ -41,7 +41,9 @@ class ShowFonts(Activity):
         for font, name in fonts:
             title = lv.label(screen)
             title.set_style_text_font(font, lv.PART.MAIN)
-            title.set_text(f"{name}: 2357 !@#$%^&*( {lv.SYMBOL.OK} {lv.SYMBOL.BACKSPACE} 丰 😀")
+            bitcoin_symbol = "\uf15a"
+            bitcoin_symbol_in_circle = "\uf379"
+            title.set_text(f"{name}: 2357 !@#$%^&*( {lv.SYMBOL.OK} {lv.SYMBOL.BACKSPACE} ₿ {bitcoin_symbol} {bitcoin_symbol_in_circle} 丯 丰")
             title.set_pos(0, y)
             y += font.get_line_height() + 4
 
