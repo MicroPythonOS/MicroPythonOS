@@ -129,18 +129,17 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
 	else # esp32s3 or unphone
-		if [ "$target" == "unphone" ]; then
-			partition_size="3900000"
-			flash_size="8"
-			otasupport="" # too small for 2 OTA partitions + internal storage
-		fi
-		BOARD=ESP32_GENERIC_S3
-		BOARD_VARIANT=SPIRAM_OCT
-		# These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
-		# There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
-		extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
-		# --py-freertos: add MicroPython FreeRTOS module to expose internals
-		extra_configs="$extra_configs --py-freertos"
+        if [ "$target" == "unphone" ]; then
+            flash_size="8"
+            otasupport="" # too small for 2 OTA partitions + internal storage
+        fi
+        BOARD=ESP32_GENERIC_S3
+        BOARD_VARIANT=SPIRAM_OCT
+        # These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
+        # There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
+        extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
+        # --py-freertos: add MicroPython FreeRTOS module to expose internals
+        extra_configs="$extra_configs --py-freertos"
 	fi
 
 	if [ "$BOARD_VARIANT" == "SPIRAM" -o "$BOARD_VARIANT" == "SPIRAM_OCT" ]; then
