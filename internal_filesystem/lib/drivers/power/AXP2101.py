@@ -1924,8 +1924,13 @@ class AXP2101(I2CInterface):
 
     # @brief  Clear interrupt controller state.
     def clearIrqStatus(self) -> None:
+        for _ in range(2):
+            for i in range(0, _AXP2101_INTSTS_CNT):
+                super().writeRegister(_AXP2101_INTSTS1 + i, 0xFF)
+            pending = super().readRegister(_AXP2101_INTSTS1, _AXP2101_INTSTS_CNT)
+            if not any(pending):
+                break
         for i in range(0, _AXP2101_INTSTS_CNT):
-            super().writeRegister(_AXP2101_INTSTS1 + i, 0xFF)
             self.statusRegister[i] = 0
 
     # @brief  Enable PMU interrupt control mask .
@@ -2135,14 +2140,14 @@ class AXP2101(I2CInterface):
             self.intRegister[0] = ((data & (~value)), (data | value))[enable]
             super().writeRegister(_AXP2101_INTEN1, self.intRegister[0])
         if (opts & 0x00FF00):
-            value = opts >> 8
+            value = (opts >> 8) & 0xFF
             if debug:
                 print('write in ints1 0b{0}'.format(self.__to_bin(value, 8)))
             data = super().readRegister(_AXP2101_INTEN2)[0]
             self.intRegister[1] = ((data & (~value)), (data | value))[enable]
             super().writeRegister(_AXP2101_INTEN2, self.intRegister[1])
         if (opts & 0xFF0000):
-            value = opts >> 16
+            value = (opts >> 16) & 0xFF
             if debug:
                 print('write in ints2 0b{0}'.format(self.__to_bin(value, 8)))
             data = super().readRegister(_AXP2101_INTEN3)[0]
