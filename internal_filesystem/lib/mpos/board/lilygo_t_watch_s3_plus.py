@@ -67,11 +67,17 @@ def init_pmu(m_i2c):
     pmu.setChargerTerminationCurr(AXP2101.XPOWERS_AXP2101_CHG_ITERM_25MA)
     # T-Watch-S3 uses a high-voltage(4.35V) battery by default but a bit less to increase battery life
     pmu.setChargeTargetVoltage(AXP2101.XPOWERS_AXP2101_CHG_VOL_4V2)
+    mpos.pmu = pmu
     print("Initializing AXP2101 PMU completed.")
 
 
+import mpos
 from machine import I2C, Pin, SPI
+import micropython
 import time
+
+PMU_INT_PIN = const(21)
+_PMU_IRQ_SCHEDULED = False
 
 m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 
@@ -79,6 +85,33 @@ try:
     init_pmu(m_i2c)
 except Exception as e:
     print(f"Exception while initializing PMU: {e}")
+
+
+def _pmu_irq_task(_arg):
+    global _PMU_IRQ_SCHEDULED
+    _PMU_IRQ_SCHEDULED = False
+    status = mpos.pmu.getIrqStatus()
+    print("PMU interrupt: status=0x{0:06X}".format(status))
+    if mpos.pmu.isPekeyShortPressIrq():
+        print("PMU interrupt: PEKEY short press")
+    if mpos.pmu.isPekeyLongPressIrq():
+        print("PMU interrupt: PEKEY long press")
+    mpos.pmu.clearIrqStatus()
+
+
+def _handle_pmu_irq(_pin):
+    global _PMU_IRQ_SCHEDULED
+    if _PMU_IRQ_SCHEDULED:
+        return
+    _PMU_IRQ_SCHEDULED = True
+    try:
+        micropython.schedule(_pmu_irq_task, 0)
+    except Exception:
+        _PMU_IRQ_SCHEDULED = False
+
+pmu_int = Pin(PMU_INT_PIN, Pin.IN, Pin.PULL_UP)
+pmu_int.irq(trigger=Pin.IRQ_FALLING, handler=_handle_pmu_irq)
+
 
 print("DRV2605L vibrator test")
 DRV2605L_ADDR = 0x5A
@@ -147,6 +180,7 @@ mpos.ui.main_display = st7789.ST7789(
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
+display_on = True
 
 import i2c
 import drivers.indev.ft6x36 as ft6x36
