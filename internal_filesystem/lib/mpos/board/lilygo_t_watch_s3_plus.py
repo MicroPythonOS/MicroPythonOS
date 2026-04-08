@@ -94,6 +94,10 @@ def _pmu_irq_task(_arg):
     print("PMU interrupt: status=0x{0:06X}".format(status))
     if mpos.pmu.isPekeyShortPressIrq():
         print("PMU interrupt: PEKEY short press")
+        if mpos.pmu.isEnableALDO2():
+            mpos.pmu.disableALDO2()
+        else:
+            mpos.pmu.enableALDO2()
     if mpos.pmu.isPekeyLongPressIrq():
         print("PMU interrupt: PEKEY long press")
     mpos.pmu.clearIrqStatus()
@@ -180,7 +184,6 @@ mpos.ui.main_display = st7789.ST7789(
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
-display_on = True
 
 import i2c
 import drivers.indev.ft6x36 as ft6x36
