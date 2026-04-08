@@ -14,6 +14,7 @@ OS:
 - New board support: LilyGo T-HMI
 - New board support: M5Stack Core2
 - LilyGo T-Watch S3 Plus: initialize Power Management Unit at startup
+- LilyGo T-Watch S3 Plus: power button short press for display backlight on/off, long press for power down
 - Add driver for LoRa SX1262 with lvgl_micropython-style (= split Bus/Device) hardware SPI
 - Add drivers for LoRa SX126X with SoftSPI (and default MicroPython hardware SPI)
 - Add esp32-component-rvswd and MicroPython bindings to flash WCH's CH32 microcontrollers
