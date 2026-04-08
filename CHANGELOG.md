@@ -2,16 +2,17 @@
 =====
 
 Builtin Apps:
-- AppStore: use BadgeHub.eu filter mpos_api_0 instead of old hardware IDs
+- AppStore: use BadgeHub.eu filter mpos_api_0 instead of device-specific hardware ID
 - HowTo: add padding
+- Settings: add Number Format setting
 
 Frameworks:
+- Add new NumberFormat framework for decimal and thousands separators
 - DownloadManager: add connection timeout to DownloadManager session.get()
-- Settings: add international number format setting
 
 OS:
-- New board support: M5Stack Core2
 - New board support: LilyGo T-HMI
+- New board support: M5Stack Core2
 - LilyGo T-Watch S3 Plus: initialize Power Management Unit (for LoRa)
 - Add driver for LoRa SX1262 with lvgl_micropython-style (= split Bus/Device) hardware SPI
 - Add drivers for LoRa SX126X with SoftSPI (and default MicroPython hardware SPI)
@@ -20,7 +21,7 @@ OS:
 - Add LVGL symbols to fonts: 0xf002,0xf004,0xf005,0xf00e,0xf010,0xf029,0xf030 for search, heart, star, search-plus, search-minus, qrcode, camera
 - Add LVGL symbols to fonts: 0xf15a,0xf164,0xf165,0xf1e0 for btc (without circle), thumbs-up, thumbs-down, share-alt
 - Add LVGL symbols to fonts: 0xf2ea,0xf379,0xf58f for undo-alt, bitcoin (in circle), headphones-alt
-- Improve handling of "mpos.main" errors
+- Improve handling of 'mpos.main' errors
 - Fix empty black window issue on macOS desktop
 - Fix macOS/unix desktop build with newer Clang (17+)
 
