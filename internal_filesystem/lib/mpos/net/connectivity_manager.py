@@ -31,7 +31,7 @@ class ConnectivityManager:
         self.callbacks = []
         self._reconnect_in_progress = False
         self._offline_checks = 0       # Count consecutive offline checks
-        self._RECONNECT_INTERVAL = 15  # Attempt reconnect every 15 checks (~2 minutes at 8s interval)
+        self._RECONNECT_INTERVAL = 38  # Attempt reconnect every 38 checks (~5 minutes at 8s interval)
 
         if not self.can_check_network:
             self.is_connected = True # If there's no way to check, then assume we're always "connected" and online
