@@ -1,26 +1,84 @@
-print("lilygo_t_watch_s3_plus.py initialization")
 # Manufacturer's website at https://lilygo.cc/products/t-watch-s3-plus
+
+print("lilygo_t_watch_s3_plus.py initialization")
+
+def init_pmu(m_i2c):
+    print("Initializing AXP2101 PMU")
+    from drivers.power.AXP2101 import AXP2101
+    pmu = AXP2101(m_i2c, addr=0x34)
+    # Set the minimum common working voltage of the PMU VBUS input, below this value will turn off the PMU
+    pmu.setVbusVoltageLimit(AXP2101.XPOWERS_AXP2101_VBUS_VOL_LIM_4V36);
+    # Set the maximum current of the PMU VBUS input, higher than this value will turn off the PMU
+    pmu.setVbusCurrentLimit(AXP2101.XPOWERS_AXP2101_VBUS_CUR_LIM_900MA);
+    # Set VSY off voltage as 2600mV , Adjustment range 2600mV ~ 3300mV
+    pmu.setSysPowerDownVoltage(2600);
+    # Display backlight
+    pmu.setALDO2Voltage(3300)
+    pmu.enableALDO2()
+    # Display chip
+    pmu.setALDO3Voltage(3300)
+    pmu.enableALDO3()
+    # LoRa radio (might be better to only power this on if LoRa is used)
+    pmu.setALDO4Voltage(3300)
+    pmu.enableALDO4()
+    # Vibrator
+    pmu.setBLDO2Voltage(3300)
+    pmu.enableBLDO2()
+    # GPS (not implemented yet)
+    #pmu.setDC3Voltage(3300);    # Earlier versions use DC3 (without BOOT button and RST)
+    #pmu.enableDC3();    # Earlier versions use DC3 (without BOOT button and RST)
+    #pmu.setBLDO1Voltage(3300);  # The version with BOOT button and RST on the back cover
+    #pmu.enableBLDO1();  # The version with BOOT button and RST on the back cover
+    # RTC backup battery:
+    pmu.setButtonBatteryChargeVoltage(3300)
+    pmu.enableButtonBatteryCharge()
+    # Others
+    pmu.setPowerKeyPressOffTime(AXP2101.XPOWERS_POWEROFF_4S)
+    pmu.setPowerKeyPressOnTime(AXP2101.XPOWERS_POWERON_512MS)
+    pmu.enableBattDetection()
+    pmu.enableVbusVoltageMeasure()
+    pmu.enableBattVoltageMeasure()
+    pmu.enableSystemVoltageMeasure()
+    pmu.enableTemperatureMeasure()
+    # Disable unused:
+    pmu.disableDC2();
+    pmu.disableDC4();
+    pmu.disableDC5();
+    pmu.disableALDO1();
+    pmu.disableCPUSLDO();
+    pmu.disableDLDO1();
+    pmu.disableDLDO2();
+    # PMU interrupts
+    pmu.disableIRQ(AXP2101.XPOWERS_AXP2101_ALL_IRQ);
+    # Enable the required interrupt function
+    pmu.enableIRQ(
+        AXP2101.XPOWERS_AXP2101_BAT_INSERT_IRQ    | AXP2101.XPOWERS_AXP2101_BAT_REMOVE_IRQ      |   # BATTERY
+        AXP2101.XPOWERS_AXP2101_VBUS_INSERT_IRQ   | AXP2101.XPOWERS_AXP2101_VBUS_REMOVE_IRQ     |   # VBUS
+        AXP2101.XPOWERS_AXP2101_PKEY_SHORT_IRQ    | AXP2101.XPOWERS_AXP2101_PKEY_LONG_IRQ       |   # POWER KEY
+        AXP2101.XPOWERS_AXP2101_BAT_CHG_DONE_IRQ  | AXP2101.XPOWERS_AXP2101_BAT_CHG_START_IRQ       # CHARGE
+    )
+    # Clear all interrupt flags
+    pmu.clearIrqStatus()
+    # Set the precharge charging current
+    pmu.setPrechargeCurr(AXP2101.XPOWERS_AXP2101_PRECHARGE_50MA)
+    # It is recommended to charge at less than 130mA
+    pmu.setChargerConstantCurr(AXP2101.XPOWERS_AXP2101_CHG_CUR_125MA)
+    # Set stop charging termination current
+    pmu.setChargerTerminationCurr(AXP2101.XPOWERS_AXP2101_CHG_ITERM_25MA)
+    # T-Watch-S3 uses a high-voltage(4.35V) battery by default but a bit less to increase battery life
+    pmu.setChargeTargetVoltage(AXP2101.XPOWERS_AXP2101_CHG_VOL_4V2)
+    print("Initializing AXP2101 PMU completed.")
+
+
 from machine import I2C, Pin, SPI
 import time
 
 m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 
-# AXP2101 PMU settings:
-AXP2101_ADDR = 0x34
-
-# ALDO4 enable @ 3.3V for LoRa: reg 0x95 LDO_VOL3_CTRL: bits[4:0] set ALDO4 voltage (500 mV + step*100 mV)
-m_i2c.writeto_mem(AXP2101_ADDR,0x95,bytes([(m_i2c.readfrom_mem(AXP2101_ADDR, 0x95, 1)[0] & 0xE0) | 0x1C]))  # 3.3V: (3300 - 500) / 100 = 28 = 0x1C
-m_i2c.writeto_mem(AXP2101_ADDR, 0x90, bytes([m_i2c.readfrom_mem(AXP2101_ADDR, 0x90, 1)[0] | (1 << 3)])) # reg 0x90 LDO_ONOFF_CTRL0: bit3 enables ALDO4
-
-# BLDO2 enable @ 3.3V for vibrator: reg 0x97 LDO_VOL5_CTRL: bits[4:0] set BLDO2 voltage (500 mV + step*100 mV)
-m_i2c.writeto_mem(AXP2101_ADDR,0x97,bytes([(m_i2c.readfrom_mem(AXP2101_ADDR, 0x97, 1)[0] & 0xE0) | 0x1C]))  # 3.3V: (3300 - 500) / 100 = 28 = 0x1C
-m_i2c.writeto_mem(AXP2101_ADDR, 0x90, bytes([m_i2c.readfrom_mem(AXP2101_ADDR, 0x90, 1)[0] | (1 << 5)])) # reg 0x90 LDO_ONOFF_CTRL0: bit5 enables BLDO2
-
-print("AXP2101 status: enabled + voltage setting for ALDO4/BLDO2")
-ldo_onoff = m_i2c.readfrom_mem(AXP2101_ADDR, 0x90, 1)[0]
-print("ALDO4: {} @ {} mV".format("EN" if (ldo_onoff & (1 << 3)) else "DIS",500 + ((m_i2c.readfrom_mem(AXP2101_ADDR, 0x95, 1)[0] & 0x1F) * 100))) # bits[4:0] voltage steps
-print("BLDO2: {} @ {} mV".format("EN" if (ldo_onoff & (1 << 5)) else "DIS",500 + ((m_i2c.readfrom_mem(AXP2101_ADDR, 0x97, 1)[0] & 0x1F) * 100))) # bits[4:0] voltage steps
-
+try:
+    init_pmu(m_i2c)
+except Exception as e:
+    print(f"Exception while initializing PMU: {e}")
 
 print("DRV2605L vibrator test")
 DRV2605L_ADDR = 0x5A

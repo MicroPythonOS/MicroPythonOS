@@ -27,7 +27,7 @@ SOFTWARE.
 
 '''
 
-from I2CInterface import *
+from .I2CInterface import I2CInterface
 
 
 _AXP2101_STATUS1 = const(0x00)
