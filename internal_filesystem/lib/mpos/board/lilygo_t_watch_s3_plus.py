@@ -32,6 +32,8 @@ def init_pmu(m_i2c):
     # RTC backup battery:
     pmu.setButtonBatteryChargeVoltage(3300)
     pmu.enableButtonBatteryCharge()
+    # Speaker
+    pmu.enableDLDO1()
     # Others
     pmu.setPowerKeyPressOffTime(AXP2101.XPOWERS_POWEROFF_4S)
     pmu.setPowerKeyPressOnTime(AXP2101.XPOWERS_POWERON_512MS)
@@ -41,13 +43,12 @@ def init_pmu(m_i2c):
     pmu.enableSystemVoltageMeasure()
     pmu.enableTemperatureMeasure()
     # Disable unused:
-    pmu.disableDC2();
-    pmu.disableDC4();
-    pmu.disableDC5();
-    pmu.disableALDO1();
-    pmu.disableCPUSLDO();
-    pmu.disableDLDO1();
-    pmu.disableDLDO2();
+    pmu.disableDC2()
+    pmu.disableDC4()
+    pmu.disableDC5()
+    pmu.disableALDO1()
+    pmu.disableCPUSLDO()
+    pmu.disableDLDO2()
     # PMU interrupts
     pmu.disableIRQ(AXP2101.XPOWERS_AXP2101_ALL_IRQ);
     # Enable the required interrupt function
