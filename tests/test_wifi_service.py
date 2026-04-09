@@ -7,7 +7,7 @@ sys.path.insert(0, "../tests")
 # Import network test helpers
 from network_test_helper import MockNetwork, MockTime
 
-from mocks import HotspotMockNetwork, MockMpos, MockSharedPreferences
+from mpos.testing.mocks import HotspotMockNetwork, MockMpos, MockSharedPreferences
 
 # Inject mocks before importing WifiService
 sys.modules["mpos"] = MockMpos

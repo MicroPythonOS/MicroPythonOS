@@ -2,10 +2,7 @@
 import unittest
 import sys
 
-# Allow importing shared test mocks
-sys.path.insert(0, "../tests")
-
-from mocks import (
+from mpos.testing.mocks import (
     MockI2C,
     MockQMI8658,
     MockSharedPreferences,

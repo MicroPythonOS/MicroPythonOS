@@ -10,7 +10,7 @@ import sys
 # Allow importing shared test mocks
 sys.path.insert(0, "../tests")
 
-from mocks import MockADC, MockMachineADC, MockWifiService
+from mpos.testing.mocks import MockADC, MockMachineADC, MockWifiService
 
 # Add parent directory to path for imports
 sys.path.insert(0, "../internal_filesystem")
