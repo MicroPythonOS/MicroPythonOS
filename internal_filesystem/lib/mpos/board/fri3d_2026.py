@@ -216,35 +216,66 @@ from mpos import AudioManager
 # - try similar combinations: hss + cs, cm + hsm
 # - try cross combinations: hss + cm, cs + hsm
 
-i2s_output_pins = {
+headset_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     'sck': 17,      # SCLK aka BCLK (appears mandatory) BUT this pin is sck_in on the communicator
     'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator
 }
 
-speaker_output = AudioManager.add(
+AudioManager.add(
     AudioManager.Output(
-        name="speaker",
+        name="Headset Output",
         kind="i2s",
-        i2s_pins=i2s_output_pins,
+        i2s_pins=headset_i2s_output_pins,
     )
 )
 
-buzzer_output = AudioManager.add(
+AudioManager.add(
+    AudioManager.Input(
+        name="Headset Input",
+        kind="adc",
+        adc_mic_pin=1, # ADC microphone is on GPIO 1
+    )
+)
+
+# Add this after the headset output so that it doesn't become the default:
+AudioManager.add(
     AudioManager.Output(
-        name="buzzer",
+        name="Badge Buzzer",
         kind="buzzer",
         buzzer_pin=38,
     )
 )
 
-# ADC microphone is on GPIO 1
+
+# Would be better to only add these if the communicator is connected:
+
+communicator_i2s_output_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+}
+
+communicator_i2s_input_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck_in': 17,   # SCLK - Serial Clock for microphone input
+    'sd_in': 15,    # DIN - Serial Data IN (microphone)
+}
+
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="Communicator Output",
+        kind="i2s",
+        i2s_pins=communicator_i2s_output_pins,
+    )
+)
+
 mic_input = AudioManager.add(
     AudioManager.Input(
-        name="mic",
-        kind="adc",
-        adc_mic_pin=1,
+        name="Communicator Input",
+        kind="i2s",
+        i2s_pins=communicator_i2s_input_pins,
     )
 )
 
