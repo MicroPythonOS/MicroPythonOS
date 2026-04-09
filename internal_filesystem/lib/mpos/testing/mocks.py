@@ -8,6 +8,37 @@ for testing without actual hardware. Works on both desktop and device.
 import sys
 
 
+_REAL_MACHINE = None
+
+
+def _capture_real_machine(mock_to_inject=None):
+    global _REAL_MACHINE
+    if _REAL_MACHINE is not None:
+        return _REAL_MACHINE
+
+    existing = sys.modules.get("machine")
+    if existing is None:
+        try:
+            import machine as existing  # type: ignore[no-redef]
+        except Exception:
+            existing = None
+
+    if existing is None:
+        return None
+
+    if mock_to_inject is not None and existing is mock_to_inject:
+        return None
+
+    if getattr(existing, "__mpos_mock_machine__", False):
+        return None
+
+    _REAL_MACHINE = existing
+    return _REAL_MACHINE
+
+
+_capture_real_machine()
+
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -46,6 +77,9 @@ def inject_mocks(mock_specs):
         mock_specs: Dict mapping module names to mock instances/classes
                    e.g., {'machine': MockMachine(), 'mpos.task_manager': mock_tm}
     """
+    if "machine" in mock_specs:
+        _capture_real_machine(mock_to_inject=mock_specs["machine"])
+
     for name, mock in mock_specs.items():
         sys.modules[name] = mock
 
@@ -255,6 +289,8 @@ class MockMachine:
     Usage:
         sys.modules['machine'] = MockMachine()
     """
+
+    __mpos_mock_machine__ = True
     
     Pin = MockPin
     PWM = MockPWM
@@ -268,8 +304,11 @@ class MockMachine:
     
     @staticmethod
     def reset():
-        """Reset the device (no-op in mock)."""
-        pass
+        """Reset the device via the real machine module."""
+        real_machine = _capture_real_machine(mock_to_inject=None)
+        if real_machine is None or not hasattr(real_machine, "reset"):
+            raise RuntimeError("Real machine module not captured; cannot reset.")
+        return real_machine.reset()
     
     @staticmethod
     def soft_reset():
@@ -1066,8 +1105,18 @@ class MockPin:
 class MockMachineADC:
     """Mock machine module with ADC/Pin."""
 
+    __mpos_mock_machine__ = True
+
     ADC = MockADC
     Pin = MockPin
+
+    @staticmethod
+    def reset():
+        """Reset the device via the real machine module."""
+        real_machine = _capture_real_machine(mock_to_inject=None)
+        if real_machine is None or not hasattr(real_machine, "reset"):
+            raise RuntimeError("Real machine module not captured; cannot reset.")
+        return real_machine.reset()
 
 
 class MockWifiService:
@@ -1210,11 +1259,28 @@ class MockWsenIsds:
 def make_machine_i2c_module(i2c_cls, pin_cls=None):
     if pin_cls is None:
         pin_cls = type("Pin", (), {})
-    return type("module", (), {"I2C": i2c_cls, "Pin": pin_cls})()
+    return type(
+        "module",
+        (),
+        {
+            "I2C": i2c_cls,
+            "Pin": pin_cls,
+            "reset": staticmethod(MockMachine.reset),
+            "__mpos_mock_machine__": True,
+        },
+    )()
 
 
 def make_machine_timer_module(timer_cls):
-    return type("module", (), {"Timer": timer_cls})()
+    return type(
+        "module",
+        (),
+        {
+            "Timer": timer_cls,
+            "reset": staticmethod(MockMachine.reset),
+            "__mpos_mock_machine__": True,
+        },
+    )()
 
 
 def make_usocket_module(socket_cls):
