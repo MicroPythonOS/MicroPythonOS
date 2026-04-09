@@ -224,6 +224,32 @@ AudioManager.add(
     )
 )
 
+'''
+# RTC
+import drivers.rtc.pcf8563 as pcf8563
+rtc = pcf8563.PCF8563(m_i2c)
+
+# Example: Set from current system time (if you have network/time)
+#import time
+#now = time.time()          # or time.mktime(...) if needed
+#rtc.set_unix_time(now)
+
+# Get Unix time back
+unix = rtc.unix_time()
+print("Unix time from PCF8563:", unix)
+# Or just raw datetime
+print("Datetime:", rtc.datetime())
+
+if unix:
+    mp_seconds = unix_from_pcf - 946684800
+    from machine import RTC
+    RTC().datetime(time.localtime(mp_seconds))
+else:
+    print("Failed to read time from PCF8563")
+
+# Would be good to also do this:
+# rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
+'''
 
 # TODO:
 # - battery
