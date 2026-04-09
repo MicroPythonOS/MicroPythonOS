@@ -33,6 +33,7 @@ def init_pmu(m_i2c):
     pmu.setButtonBatteryChargeVoltage(3300)
     pmu.enableButtonBatteryCharge()
     # Speaker
+    pmu.setDLDO1Voltage(3300) # even 500mV doesn't seem to cause issues, but Imax=300mA is << 1.6A capability of MAX98357
     pmu.enableDLDO1()
     # Others
     pmu.setPowerKeyPressOffTime(AXP2101.XPOWERS_POWEROFF_4S)
@@ -204,21 +205,20 @@ i2s_output_pins = {
     'sck': 48,      # SCLK or BCLK - Bit Clock for DAC output (mandatory)
     'sd': 46,       # Serial Data OUT (speaker/DAC)
 }
-speaker_output = AudioManager.add(
+AudioManager.add(
     AudioManager.Output(
-        name="speaker",
+        name="Speaker",
         kind="i2s",
         i2s_pins=i2s_output_pins,
     )
 )
-
 pdm_input_pins = {
     'sck_in': 44,   # SCLK - Serial Clock for microphone input
     'sd_in': 47,    # DIN - Serial Data IN (microphone)
 }
-mic_input = AudioManager.add(
+AudioManager.add(
     AudioManager.Input(
-        name="mic",
+        name="Microphone",
         kind="pdm",
         pdm_pins=pdm_input_pins,
     )

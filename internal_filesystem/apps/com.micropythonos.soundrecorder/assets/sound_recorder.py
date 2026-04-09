@@ -2,7 +2,9 @@
 import os
 import time
 
-from mpos import Activity, ui, AudioManager
+import lvgl as lv
+
+from mpos import Activity, AppManager, AudioManager
 
 
 def _makedirs(path):
@@ -65,15 +67,23 @@ class SoundRecorder(Activity):
         # Calculate max duration based on available storage
         self._current_max_duration_ms = self._calculate_max_duration()
 
-        # Title
-        title = lv.label(screen)
-        title.set_text("Sound Recorder")
-        title.align(lv.ALIGN.TOP_MID, 0, 10)
-        title.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+        # Settings button (top-right)
+        self._settings_button = lv.button(screen)
+        settings_margin = 15
+        settings_size = 44
+        self._settings_button.set_size(settings_size, settings_size)
+        self._settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
+        self._settings_button.add_event_cb(self._open_settings, lv.EVENT.CLICKED, None)
+        settings_label = lv.label(self._settings_button)
+        settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        settings_label.center()
 
         # Status label (shows microphone availability)
         self._status_label = lv.label(screen)
-        self._status_label.align(lv.ALIGN.TOP_MID, 0, 40)
+        self._status_label.align(lv.ALIGN.TOP_LEFT, 20, 20)
+        if focusgroup := lv.group_get_default():
+            focusgroup.add_obj(_status_label) # Make focusable so focus_direction can use it too
 
         # Timer display
         self._timer_label = lv.label(screen)
@@ -139,12 +149,19 @@ class SoundRecorder(Activity):
     def _update_status(self):
         """Update status label based on microphone availability."""
         default_input = AudioManager.get_default_input()
+        default_output = AudioManager.get_default_output()
+        input_name = default_input.name if default_input else "None"
+        output_name = default_output.name if default_output else "None"
         if default_input is not None:
-            self._status_label.set_text("Microphone ready")
+            self._status_label.set_text(
+                f"Input: {input_name}\nPlayback to {output_name}"
+            )
             self._status_label.set_style_text_color(lv.color_hex(0x00AA00), lv.PART.MAIN)
             self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
-            self._status_label.set_text("No microphone available")
+            self._status_label.set_text(
+                f"No input device\nPlayback to {output_name}"
+            )
             self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
             self._record_button.add_flag(lv.obj.FLAG.HIDDEN)
 
@@ -430,3 +447,6 @@ class SoundRecorder(Activity):
                 print(f"SoundRecorder: Delete failed: {e}")
                 self._status_label.set_text("Delete failed")
                 self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+
+    def _open_settings(self, event):
+        AppManager.start_app("com.micropythonos.settings.audio")

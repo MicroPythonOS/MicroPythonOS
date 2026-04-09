@@ -4,11 +4,13 @@ Future release (next version)
 Add changes that have been made to the code but haven't made it into a release here.
 
 Builtin Apps:
+- Settings: new Audio subsection to choose default output and input device, for boards with multiple audio devices
 
 Frameworks:
+- AudioManager: load and apply configured default_output and default_input devices
 
 OS:
-- LilyGo T-Watch S3 Plus: enable audio input (microphone) and output (speaker)
+- LilyGo T-Watch S3 Plus: enable audio input (PDM microphone) and output (I2S speaker)
 
 
 

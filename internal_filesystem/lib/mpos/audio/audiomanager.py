@@ -5,6 +5,7 @@ import _thread
 import math
 import os
 
+from ..config import SharedPreferences
 from ..task_manager import TaskManager
 
 
@@ -150,6 +151,7 @@ class AudioManager:
         self._inputs = []
         self._default_output = None
         self._default_input = None
+        self._audio_prefs = SharedPreferences("com.micropythonos.settings.audio")
         self._active_sessions = []
         self._volume = 50
         self._initialized = True
@@ -192,19 +194,23 @@ class AudioManager:
 
     @classmethod
     def get_default_output(cls):
-        return cls.get()._default_output
+        return cls.get()._resolve_default_output()
 
     @classmethod
     def get_default_input(cls):
-        return cls.get()._default_input
+        return cls.get()._resolve_default_input()
 
     @classmethod
     def set_default_output(cls, output):
         cls.get()._default_output = output
+        if output is not None:
+            cls.get()._save_audio_pref("output_device", output.name)
 
     @classmethod
     def set_default_input(cls, input_device):
         cls.get()._default_input = input_device
+        if input_device is not None:
+            cls.get()._save_audio_pref("input_device", input_device.name)
 
     @classmethod
     def set_volume(cls, volume):
@@ -229,6 +235,60 @@ class AudioManager:
     @classmethod
     def get_volume(cls):
         return cls.get()._volume
+
+    def _save_audio_pref(self, key, value):
+        try:
+            editor = self._audio_prefs.edit()
+            editor.put_string(key, value)
+            editor.commit()
+        except Exception as exc:
+            print(f"AudioManager: could not persist {key}: {exc}")
+
+    def _find_output_by_name(self, name):
+        for output in self._outputs:
+            if output.name == name:
+                return output
+        return None
+
+    def _find_input_by_name(self, name):
+        for input_device in self._inputs:
+            if input_device.name == name:
+                return input_device
+        return None
+
+    def _resolve_default_output(self):
+        stored_name = self._audio_prefs.get_string("output_device", "")
+        if stored_name:
+            output = self._find_output_by_name(stored_name)
+            if output:
+                self._default_output = output
+                return output
+            if self._outputs:
+                print(
+                    "AudioManager: preferred output '%s' not found; using '%s'"
+                    % (stored_name, self._outputs[0].name)
+                )
+        if self._outputs:
+            self._default_output = self._outputs[0]
+            return self._default_output
+        return None
+
+    def _resolve_default_input(self):
+        stored_name = self._audio_prefs.get_string("input_device", "")
+        if stored_name:
+            input_device = self._find_input_by_name(stored_name)
+            if input_device:
+                self._default_input = input_device
+                return input_device
+            if self._inputs:
+                print(
+                    "AudioManager: preferred input '%s' not found; using '%s'"
+                    % (stored_name, self._inputs[0].name)
+                )
+        if self._inputs:
+            self._default_input = self._inputs[0]
+            return self._default_input
+        return None
 
     @classmethod
     def get_active_player(cls, stream_type=None, file_path=None):
@@ -458,7 +518,7 @@ class AudioManager:
 
     def _start_player(self, player):
         if player.output is None:
-            player.output = self._default_output
+            player.output = self._resolve_default_output()
         if player.output is None:
             raise ValueError("No output device registered")
 
@@ -482,7 +542,7 @@ class AudioManager:
 
     def _start_recorder(self, recorder):
         if recorder.input_device is None:
-            recorder.input_device = self._default_input
+            recorder.input_device = self._resolve_default_input()
         if recorder.input_device is None:
             raise ValueError("No input device registered")
 

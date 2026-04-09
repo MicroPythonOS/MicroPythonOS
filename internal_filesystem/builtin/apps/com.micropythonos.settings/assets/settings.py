@@ -24,6 +24,12 @@ class LaunchWebServer(Activity):
         AppManager.start_app("com.micropythonos.settings.webserver")
 
 
+class LaunchAudioSettings(Activity):
+
+    def onCreate(self):
+        AppManager.start_app("com.micropythonos.settings.audio")
+
+
 class Settings(SettingsActivity):
 
     """Override getIntent to provide prefs and settings via Intent extras"""
@@ -77,6 +83,13 @@ class Settings(SettingsActivity):
                 "ui": "activity",
                 "activity_class": LaunchWebServer,
                 "placeholder": "WebREPL, password, port etc",
+            },
+            {
+                "title": "Audio",
+                "key": "audio_settings",
+                "ui": "activity",
+                "activity_class": LaunchAudioSettings,
+                "placeholder": "Input/output devices",
             },
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
