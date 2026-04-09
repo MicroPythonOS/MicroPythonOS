@@ -8,10 +8,12 @@ Builtin Apps:
 
 Frameworks:
 - AudioManager: load and apply configured default_output and default_input devices
+- SensorManager: add BMA423 IMU support
 
 OS:
 - LilyGo T-Watch S3 Plus: enable audio input (PDM microphone) and output (I2S speaker)
 - LilyGo T-Watch S3 Plus: enable battery-powered Real Time Clock to keep time
+- LilyGo T-Watch S3 Plus: add IMU accelerometer support so IMU app works
 
 
 
