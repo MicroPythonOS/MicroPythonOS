@@ -274,6 +274,8 @@ BatteryManager.init_adc(13, adc_to_voltage)
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
 
+# Would be better to only add these if the communicator is connected:
+
 # I2S pin configuration for audio output (DAC) and input (microphone)
 # Note: I2S is created per-stream, not at boot (only one instance can exist)
 # The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
@@ -292,25 +294,26 @@ i2s_input_pins = {
 
 speaker_output = AudioManager.add(
     AudioManager.Output(
-        name="speaker",
+        name="Communicator Output",
         kind="i2s",
         i2s_pins=i2s_output_pins,
     )
 )
 
-buzzer_output = AudioManager.add(
-    AudioManager.Output(
-        name="buzzer",
-        kind="buzzer",
-        buzzer_pin=46,
+mic_input = AudioManager.add(
+    AudioManager.Input(
+        name="Communicator Input",
+        kind="i2s",
+        i2s_pins=i2s_input_pins,
     )
 )
 
-mic_input = AudioManager.add(
-    AudioManager.Input(
-        name="mic",
-        kind="i2s",
-        i2s_pins=i2s_input_pins,
+# Add this after the headset output so that it doesn't become the default:
+buzzer_output = AudioManager.add(
+    AudioManager.Output(
+        name="Badge Buzzer",
+        kind="buzzer",
+        buzzer_pin=46,
     )
 )
 
