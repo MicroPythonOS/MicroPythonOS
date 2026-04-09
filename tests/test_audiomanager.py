@@ -144,6 +144,7 @@ class TestAudioManagerRecording(unittest.TestCase):
         """Initialize AudioManager with microphone before each test."""
         # I2S pins with microphone input
         self.i2s_pins_with_mic = {'sck': 2, 'ws': 47, 'sd_in': 15}
+        self.pdm_pins_with_mic = {'sck_in': 44, 'sd_in': 47}
 
         # Reset singleton instance for each test
         AudioManager._instance = None
@@ -163,6 +164,12 @@ class TestAudioManagerRecording(unittest.TestCase):
         inputs = AudioManager.get_inputs()
         self.assertEqual(len(inputs), 1)
         self.assertEqual(inputs[0].kind, "i2s")
+
+    def test_add_pdm_input(self):
+        AudioManager.add(AudioManager.Input("pdm_mic", "pdm", pdm_pins=self.pdm_pins_with_mic))
+        inputs = AudioManager.get_inputs()
+        self.assertEqual(len(inputs), 2)
+        self.assertEqual(inputs[1].kind, "pdm")
 
     def test_default_input(self):
         """Test default input selection."""

@@ -2,6 +2,8 @@
 # Registry-based audio routing with device descriptors and session control
 
 import _thread
+import math
+import os
 
 from ..task_manager import TaskManager
 
@@ -83,10 +85,11 @@ class AudioManager:
             channels=1,
             i2s_pins=None,
             adc_mic_pin=None,
+            pdm_pins=None,
             preferred_sample_rate=None,
         ):
-            if kind not in ("i2s", "adc"):
-                raise ValueError("Input.kind must be 'i2s' or 'adc'")
+            if kind not in ("i2s", "adc", "pdm"):
+                raise ValueError("Input.kind must be 'i2s', 'adc', or 'pdm'")
             if channels != 1:
                 raise StereoNotSupported("Input channels=2 not supported yet")
 
@@ -101,11 +104,20 @@ class AudioManager:
                 self._validate_i2s_pins(i2s_pins)
                 self.i2s_pins = dict(i2s_pins)
                 self.adc_mic_pin = None
+                self.pdm_pins = None
+            elif kind == "pdm":
+                if not pdm_pins:
+                    raise ValueError("Input.pdm_pins required for pdm input")
+                self._validate_pdm_pins(pdm_pins)
+                self.pdm_pins = dict(pdm_pins)
+                self.i2s_pins = None
+                self.adc_mic_pin = None
             else:
                 if adc_mic_pin is None:
                     raise ValueError("Input.adc_mic_pin required for adc input")
                 self.adc_mic_pin = adc_mic_pin
                 self.i2s_pins = None
+                self.pdm_pins = None
 
         @staticmethod
         def _validate_i2s_pins(i2s_pins):
@@ -116,6 +128,15 @@ class AudioManager:
             for key in ("ws", "sd_in"):
                 if key not in i2s_pins:
                     raise ValueError("i2s_pins must include '%s'" % key)
+
+        @staticmethod
+        def _validate_pdm_pins(pdm_pins):
+            allowed = {"sck_in", "sck", "sd_in"}
+            for key in pdm_pins:
+                if key not in allowed:
+                    raise ValueError("Invalid pdm_pins key for input: %s" % key)
+            if "sd_in" not in pdm_pins:
+                raise ValueError("pdm_pins must include 'sd_in'")
 
         def __repr__(self):
             return "<AudioInput %s kind=%s>" % (self.name, self.kind)
@@ -275,6 +296,75 @@ class AudioManager:
             duration_ms=duration_ms,
             adc_config=adc_config,
         )
+
+    # ----------------------------------------------------------------------
+    #  Private recording helpers (shared by stream_record_* modules)
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def _record_makedirs(path):
+        if not path:
+            return
+        parts = path.split("/")
+        current = ""
+        for part in parts:
+            if not part:
+                continue
+            current = current + "/" + part if current else part
+            try:
+                os.mkdir(current)
+            except OSError:
+                pass
+
+    @staticmethod
+    def _record_create_wav_header(sample_rate, num_channels, bits_per_sample, data_size):
+        byte_rate = sample_rate * num_channels * (bits_per_sample // 8)
+        block_align = num_channels * (bits_per_sample // 8)
+        file_size = data_size + 36
+
+        header = bytearray(44)
+        header[0:4] = b"RIFF"
+        header[4:8] = file_size.to_bytes(4, "little")
+        header[8:12] = b"WAVE"
+        header[12:16] = b"fmt "
+        header[16:20] = (16).to_bytes(4, "little")
+        header[20:22] = (1).to_bytes(2, "little")
+        header[22:24] = num_channels.to_bytes(2, "little")
+        header[24:28] = sample_rate.to_bytes(4, "little")
+        header[28:32] = byte_rate.to_bytes(4, "little")
+        header[32:34] = block_align.to_bytes(2, "little")
+        header[34:36] = bits_per_sample.to_bytes(2, "little")
+        header[36:40] = b"data"
+        header[40:44] = data_size.to_bytes(4, "little")
+        return bytes(header)
+
+    @staticmethod
+    def _record_update_wav_header(file_path, data_size):
+        file_size = data_size + 36
+        f = open(file_path, "r+b")
+        f.seek(4)
+        f.write(file_size.to_bytes(4, "little"))
+        f.seek(40)
+        f.write(data_size.to_bytes(4, "little"))
+        f.close()
+
+    @staticmethod
+    def _record_generate_sine_wave_chunk(sample_rate, chunk_size, sample_offset):
+        frequency = 440
+        amplitude = 16000
+        num_samples = chunk_size // 2
+        buf = bytearray(chunk_size)
+
+        for i in range(num_samples):
+            t = (sample_offset + i) / sample_rate
+            sample = int(amplitude * math.sin(2 * math.pi * frequency * t))
+            if sample > 32767:
+                sample = 32767
+            elif sample < -32768:
+                sample = -32768
+            buf[i * 2] = sample & 0xFF
+            buf[i * 2 + 1] = (sample >> 8) & 0xFF
+
+        return buf, num_samples
 
     @classmethod
     def record_wav_adc(
@@ -636,19 +726,23 @@ class Recorder:
             return {self.input_device.adc_mic_pin: "adc"}
         if self.input_device.kind == "i2s":
             return _pin_map_i2s_input(self.input_device.i2s_pins)
+        if self.input_device.kind == "pdm":
+            return _pin_map_pdm_input(self.input_device.pdm_pins)
         return {}
 
     def _record_thread(self):
         try:
             if self.input_device.kind == "adc":
                 self._record_adc()
+            elif self.input_device.kind == "pdm":
+                self._record_pdm()
             else:
                 self._record_i2s()
         finally:
             self._manager._session_finished(self)
 
     def _record_i2s(self):
-        from mpos.audio.stream_record import RecordStream
+        from mpos.audio.stream_record_i2s import RecordStream
 
         self._stream = RecordStream(
             file_path=self.file_path,
@@ -672,6 +766,18 @@ class Recorder:
         )
         self._stream.record()
 
+    def _record_pdm(self):
+        from mpos.audio.stream_record_pdm import PDMRecordStream
+
+        self._stream = PDMRecordStream(
+            file_path=self.file_path,
+            duration_ms=self.duration_ms,
+            sample_rate=self.sample_rate,
+            pdm_pins=self.input_device.pdm_pins,
+            on_complete=self.on_complete,
+        )
+        self._stream.record()
+
 
 def _pin_map_i2s_output(i2s_pins):
     pins = {}
@@ -691,4 +797,14 @@ def _pin_map_i2s_input(i2s_pins):
         pins[sck_pin] = "sck"
     pins[i2s_pins["ws"]] = "ws"
     pins[i2s_pins["sd_in"]] = "sd_in"
+    return pins
+
+
+
+def _pin_map_pdm_input(pdm_pins):
+    pins = {}
+    sck_pin = pdm_pins.get("sck_in", pdm_pins.get("sck"))
+    if sck_pin is not None:
+        pins[sck_pin] = "sck"
+    pins[pdm_pins["sd_in"]] = "sd_in"
     return pins

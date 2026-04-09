@@ -3,11 +3,12 @@
 # Uses timer-based sampling with double buffering in C for high performance
 # Maintains compatibility with AudioManager and existing recording framework
 
-import os
 import sys
 import time
 import gc
 import array
+
+from mpos.audio.audiomanager import AudioManager
 
 # Try to import machine module (not available on desktop)
 try:
@@ -16,27 +17,6 @@ try:
     _HAS_HARDWARE = True
 except ImportError:
     _HAS_HARDWARE = False
-
-
-def _makedirs(path):
-    """
-    Create directory and all parent directories (like os.makedirs).
-    MicroPython doesn't have os.makedirs, so we implement it manually.
-    """
-    if not path:
-        return
-
-    parts = path.split('/')
-    current = ''
-
-    for part in parts:
-        if not part:
-            continue
-        current = current + '/' + part if current else part
-        try:
-            os.mkdir(current)
-        except OSError:
-            pass  # Directory may already exist
 
 
 class ADCRecordStream:
@@ -115,105 +95,26 @@ class ADCRecordStream:
     # -----------------------------------------------------------------------
     @staticmethod
     def _create_wav_header(sample_rate, num_channels, bits_per_sample, data_size):
-        """
-        Create WAV file header.
-
-        Args:
-            sample_rate: Sample rate in Hz
-            num_channels: Number of channels (1 for mono)
-            bits_per_sample: Bits per sample (16)
-            data_size: Size of audio data in bytes
-
-        Returns:
-            bytes: 44-byte WAV header
-        """
-        byte_rate = sample_rate * num_channels * (bits_per_sample // 8)
-        block_align = num_channels * (bits_per_sample // 8)
-        file_size = data_size + 36  # Total file size minus 8 bytes for RIFF header
-
-        header = bytearray(44)
-
-        # RIFF header
-        header[0:4] = b'RIFF'
-        header[4:8] = file_size.to_bytes(4, 'little')
-        header[8:12] = b'WAVE'
-
-        # fmt chunk
-        header[12:16] = b'fmt '
-        header[16:20] = (16).to_bytes(4, 'little')  # fmt chunk size
-        header[20:22] = (1).to_bytes(2, 'little')   # PCM format
-        header[22:24] = num_channels.to_bytes(2, 'little')
-        header[24:28] = sample_rate.to_bytes(4, 'little')
-        header[28:32] = byte_rate.to_bytes(4, 'little')
-        header[32:34] = block_align.to_bytes(2, 'little')
-        header[34:36] = bits_per_sample.to_bytes(2, 'little')
-
-        # data chunk
-        header[36:40] = b'data'
-        header[40:44] = data_size.to_bytes(4, 'little')
-
-        return bytes(header)
+        return AudioManager._record_create_wav_header(
+            sample_rate,
+            num_channels,
+            bits_per_sample,
+            data_size,
+        )
 
     @staticmethod
     def _update_wav_header(file_path, data_size):
-        """
-        Update WAV header with final data size.
-
-        Args:
-            file_path: Path to WAV file
-            data_size: Final size of audio data in bytes
-        """
-        file_size = data_size + 36
-
-        f = open(file_path, 'r+b')
-
-        # Update file size at offset 4
-        f.seek(4)
-        f.write(file_size.to_bytes(4, 'little'))
-
-        # Update data size at offset 40
-        f.seek(40)
-        f.write(data_size.to_bytes(4, 'little'))
-
-        f.close()
+        return AudioManager._record_update_wav_header(file_path, data_size)
 
     # -----------------------------------------------------------------------
     #  Desktop simulation - generate 440Hz sine wave
     # -----------------------------------------------------------------------
     def _generate_sine_wave_chunk(self, chunk_size, sample_offset):
-        """
-        Generate a chunk of 440Hz sine wave samples for desktop testing.
-
-        Args:
-            chunk_size: Number of bytes to generate (must be even for 16-bit samples)
-            sample_offset: Current sample offset for phase continuity
-
-        Returns:
-            tuple: (bytearray of samples, number of samples generated)
-        """
-        import math
-        frequency = 440  # A4 note
-        amplitude = 16000  # ~50% of max 16-bit amplitude
-
-        num_samples = chunk_size // 2
-        buf = bytearray(chunk_size)
-
-        for i in range(num_samples):
-            # Calculate sine wave sample
-            t = (sample_offset + i) / self.sample_rate
-            sample = int(amplitude * math.sin(2 * math.pi * frequency * t))
-
-            # Clamp to 16-bit range
-            if sample > 32767:
-                sample = 32767
-            elif sample < -32768:
-                sample = -32768
-
-            # Write as little-endian 16-bit
-            buf[i * 2] = sample & 0xFF
-            buf[i * 2 + 1] = (sample >> 8) & 0xFF
-
-        return buf, num_samples
+        return AudioManager._record_generate_sine_wave_chunk(
+            self.sample_rate,
+            chunk_size,
+            sample_offset,
+        )
 
     # -----------------------------------------------------------------------
     #  Main recording routine
@@ -235,7 +136,7 @@ class ADCRecordStream:
             # Ensure directory exists
             dir_path = '/'.join(self.file_path.split('/')[:-1])
             if dir_path:
-                _makedirs(dir_path)
+                AudioManager._record_makedirs(dir_path)
 
             # Create file with placeholder header
             print(f"ADCRecordStream: Creating WAV file with header")
@@ -245,7 +146,7 @@ class ADCRecordStream:
                     self.sample_rate,
                     num_channels=1,
                     bits_per_sample=16,
-                    data_size=self.DEFAULT_FILESIZE
+                    data_size=self.DEFAULT_FILESIZE,
                 )
                 f.write(header)
 

@@ -212,16 +212,15 @@ speaker_output = AudioManager.add(
     )
 )
 
-i2s_input_pins = {
-    'ws': 15,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+pdm_input_pins = {
     'sck_in': 44,   # SCLK - Serial Clock for microphone input
     'sd_in': 47,    # DIN - Serial Data IN (microphone)
 }
 mic_input = AudioManager.add(
     AudioManager.Input(
         name="mic",
-        kind="i2s",
-        i2s_pins=i2s_input_pins,
+        kind="pdm",
+        pdm_pins=pdm_input_pins,
     )
 )
 

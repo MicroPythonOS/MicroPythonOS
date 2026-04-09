@@ -8,7 +8,7 @@ Builtin Apps:
 Frameworks:
 
 OS:
-- LilyGo T-Watch S3 Plus: enable audio output
+- LilyGo T-Watch S3 Plus: enable audio input (microphone) and output (speaker)
 
 
 
