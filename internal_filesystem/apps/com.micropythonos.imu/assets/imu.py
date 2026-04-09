@@ -39,6 +39,8 @@ class IMU(Activity):
                 self.temp_sensor = SensorManager.get_default_sensor(SensorManager.TYPE_IMU_TEMPERATURE)
                 print("IMU sensors initialized via SensorManager")
                 print(f"Available sensors: {SensorManager.get_sensor_list()}")
+                if not self.accel_sensor and not self.gyro_sensor:
+                    self.templabel.set_text("No IMU accel/gyro sensors available")
             else:
                 print("Warning: No IMU sensors available")
                 self.templabel.set_text("No IMU sensors available")
@@ -74,53 +76,41 @@ class IMU(Activity):
     
     def refresh(self, timer):
         #print("refresh timer")
-        if self.accel_sensor and self.gyro_sensor:
-            # Read sensor data via SensorManager (returns m/s² for accel, deg/s for gyro)
-            accel = SensorManager.read_sensor(self.accel_sensor)
-            gyro = SensorManager.read_sensor(self.gyro_sensor)
-            temp = SensorManager.read_sensor(self.temp_sensor) if self.temp_sensor else None
+        axp = 50
+        ayp = 50
+        azp = 50
+        gx = 50
+        gy = 50
+        gz = 50
 
-            if accel and gyro:
-                # Convert m/s² to G for display (divide by 9.80665)
-                # Range: ±8G → ±1G = ±10% of range → map to 0-100
-                ax, ay, az = accel
-                ax_g = ax / 9.80665  # Convert m/s² to G
-                ay_g = ay / 9.80665
-                az_g = az / 9.80665
-                axp = int((ax_g * 100 + 100)/2)  # Map ±1G to 0-100
-                ayp = int((ay_g * 100 + 100)/2)
-                azp = int((az_g * 100 + 100)/2)
+        accel = SensorManager.read_sensor(self.accel_sensor) if self.accel_sensor else None
+        gyro = SensorManager.read_sensor(self.gyro_sensor) if self.gyro_sensor else None
+        temp = SensorManager.read_sensor(self.temp_sensor) if self.temp_sensor else None
 
-                # Gyro already in deg/s, map ±200 DPS to 0-100
-                gx, gy, gz = gyro
-                gx = self.convert_percentage(gx)
-                gy = self.convert_percentage(gy)
-                gz = self.convert_percentage(gz)
+        if accel:
+            # Convert m/s² to G for display (divide by 9.80665)
+            # Range: ±1G mapped to 0-100
+            ax, ay, az = accel
+            ax_g = ax / 9.80665
+            ay_g = ay / 9.80665
+            az_g = az / 9.80665
+            axp = int((ax_g * 100 + 100) / 2)
+            ayp = int((ay_g * 100 + 100) / 2)
+            azp = int((az_g * 100 + 100) / 2)
 
-                if temp is not None:
-                    self.templabel.set_text(f"IMU chip temperature: {temp:.2f}°C")
-                else:
-                    self.templabel.set_text("IMU active (no temperature sensor)")
-            else:
-                # Sensor read failed, show random data
-                import random
-                randomnr = random.randint(0,100)
-                axp = randomnr
-                ayp = 50
-                azp = 75
-                gx = 45
-                gy = 50
-                gz = 55
+        if gyro:
+            # Gyro already in deg/s, map ±200 DPS to 0-100
+            gx, gy, gz = gyro
+            gx = self.convert_percentage(gx)
+            gy = self.convert_percentage(gy)
+            gz = self.convert_percentage(gz)
+
+        if temp is not None:
+            self.templabel.set_text(f"IMU chip temperature: {temp:.2f}°C")
+        elif accel or gyro:
+            self.templabel.set_text("IMU active (no temperature sensor)")
         else:
-            # No sensors available, show random data
-            import random
-            randomnr = random.randint(0,100)
-            axp = randomnr
-            ayp = 50
-            azp = 75
-            gx = 45
-            gy = 50
-            gz = 55
+            self.templabel.set_text("IMU inactive")
 
         self.sliderx.set_value(axp, False)
         self.slidery.set_value(ayp, False)

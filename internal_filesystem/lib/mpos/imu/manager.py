@@ -17,6 +17,7 @@ from mpos.imu.drivers.iio import IIODriver
 from mpos.imu.drivers.qmi8658 import QMI8658Driver
 from mpos.imu.drivers.wsen_isds import WsenISDSDriver
 from mpos.imu.drivers.mpu6886 import MPU6886Driver
+from mpos.imu.drivers.bma423 import BMA423Driver
 
 
 class ImuManager:
@@ -130,6 +131,19 @@ class ImuManager:
                     return True
             except Exception as exc:
                 print("No WSEN_ISDS or LSM6DSO:", exc)
+
+            try:
+                print("Try BMA423 (LilyGo T-Watch S3 Plus)")
+                chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]
+                print(f"{chip_id=:#04x}")
+                if chip_id == 0x13:
+                    self._imu_driver = BMA423Driver(self._i2c_bus, self._i2c_address)
+                    self._register_bma423_sensors()
+                    self._load_calibration()
+                    print("Use BMA423, ok")
+                    return True
+            except Exception as exc:
+                print("No BMA423:", exc)
 
             try:
                 print("Try MPU6886 (M5Stack FIRE)")
@@ -466,6 +480,28 @@ class ImuManager:
                 version=1,
                 max_range="-40°C to +85°C",
                 resolution="0.05°C",
+                power_ma=0,
+            ),
+        ]
+
+    def _register_bma423_sensors(self):
+        self._sensor_list = [
+            Sensor(
+                name="BMA423 Accelerometer",
+                sensor_type=TYPE_ACCELEROMETER,
+                vendor="Bosch Sensortec",
+                version=1,
+                max_range="±2g",
+                resolution="0.0006 m/s²",
+                power_ma=0.2,
+            ),
+            Sensor(
+                name="BMA423 Temperature",
+                sensor_type=TYPE_IMU_TEMPERATURE,
+                vendor="Bosch Sensortec",
+                version=1,
+                max_range="-40°C to +85°C",
+                resolution="0.5°C",
                 power_ma=0,
             ),
         ]

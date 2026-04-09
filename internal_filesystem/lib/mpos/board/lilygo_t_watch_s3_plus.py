@@ -128,13 +128,9 @@ m_i2c.writeto_mem(DRV2605L_ADDR, 0x05, bytes([89])) # Transition Ramp Up Long Sh
 m_i2c.writeto_mem(DRV2605L_ADDR, 0x0C, bytes([1])) # reg 0x0C = GO (1 = start, 0 = stop)
 
 
-print("BMA423 IMU test")
-import drivers.imu_sensor.bma423.bma423 as bma423
-sensor = bma423.BMA423(m_i2c, address=0x19)
-time.sleep_ms(250) # some sleep is needed before reading values
-print("temperature: ", sensor.get_temperature())
-print("steps: ", sensor.get_steps())
-print("(x,y,z): ", sensor.get_xyz())
+#print("BMA423 IMU init")
+from mpos import SensorManager
+SensorManager.init(m_i2c, address=0x19, mounted_position=SensorManager.FACING_EARTH)
 
 
 try:
@@ -235,7 +231,7 @@ rtc = pcf8563.PCF8563(m_i2c)
 #rtc.set_unix_time(now)
 
 # Get Unix time back
-unix = rtc.unix_time()
+unix_from_pcf = rtc.unix_time()
 print("Unix time from PCF8563:", unix)
 # Or just raw datetime
 print("Datetime:", rtc.datetime())
@@ -255,5 +251,6 @@ else:
 # - battery
 # - real IMU driver (instead of proof-of-concept above)
 # - GPS
+# - RTC
 
 print("lilygo_t_watch_s3_plus.py finished")
