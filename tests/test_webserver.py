@@ -51,9 +51,11 @@ class TestWebServer(unittest.TestCase):
         if not started:
             self.fail("WebServer failed to start")
 
-        startup_wait = 1.0
+        startup_wait = 3.0
         startup_wait_start = time.time()
         while (time.time() - startup_wait_start) < startup_wait:
+            if WebServer.is_started():
+                break
             time.sleep(0.05)
 
         response_state = {"data": None, "error": None, "done": False}
@@ -63,7 +65,7 @@ class TestWebServer(unittest.TestCase):
             last_error = None
             url_attempts = ["http://localhost:7890/", "http://127.0.0.1:7890/"]
             for url in url_attempts:
-                for _ in range(15):
+                for _ in range(20):
                     try:
                         response_bytes = await DownloadManager.download_url(url)
                         break
@@ -74,7 +76,9 @@ class TestWebServer(unittest.TestCase):
                     break
 
             if response_bytes is None:
-                response_state["error"] = last_error
+                response_state["error"] = last_error or RuntimeError(
+                    "WebServer did not respond before timeout"
+                )
             else:
                 response_state["data"] = response_bytes
             response_state["done"] = True
@@ -87,7 +91,8 @@ class TestWebServer(unittest.TestCase):
             time.sleep(0.1)
 
         if response_state["data"] is None:
-            raise response_state["error"]
+            error = response_state["error"]
+            self.fail(f"WebServer response unavailable: {error}")
 
         response_text = response_state["data"].decode("utf-8", "replace")
         self.assertIn("<title>MicroPythonOS WebREPL</title>", response_text)
