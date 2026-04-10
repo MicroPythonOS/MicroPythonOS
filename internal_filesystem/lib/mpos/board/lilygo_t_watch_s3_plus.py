@@ -70,7 +70,6 @@ def init_pmu(m_i2c):
     # T-Watch-S3 uses a high-voltage(4.35V) battery by default but let's use a bit less (4.2V) to increase battery life
     pmu.setChargeTargetVoltage(AXP2101.XPOWERS_AXP2101_CHG_VOL_4V2)
     # Quick and dirty patch of BatteryManager to use the PMU:
-    from mpos import BatteryManager
     BatteryManager.read_raw_adc =  lambda *args: 0
     BatteryManager.has_battery = lambda *args: True
     BatteryManager.get_battery_percentage = pmu.getBatteryPercent
@@ -86,28 +85,30 @@ import time
 
 m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 
+from mpos import BatteryManager
+
 try:
     init_pmu(m_i2c)
 except Exception as e:
     print(f"Exception while initializing PMU: {e}")
 
-PMU_INT_PIN = const(21)
+# PMU button handling
 _PMU_IRQ_SCHEDULED = False
 
 def _pmu_irq_task(_arg):
     global _PMU_IRQ_SCHEDULED
     _PMU_IRQ_SCHEDULED = False
-    status = mpos.pmu.getIrqStatus()
+    status = BatteryManager.pmu.getIrqStatus()
     print("PMU interrupt: status=0x{0:06X}".format(status))
-    if mpos.pmu.isPekeyShortPressIrq():
+    if BatteryManager.pmu.isPekeyShortPressIrq():
         print("PMU interrupt: PEKEY short press")
-        if mpos.pmu.isEnableALDO2():
-            mpos.pmu.disableALDO2()
+        if BatteryManager.pmu.isEnableALDO2():
+            BatteryManager.pmu.disableALDO2()
         else:
-            mpos.pmu.enableALDO2()
-    if mpos.pmu.isPekeyLongPressIrq():
+            BatteryManager.pmu.enableALDO2()
+    if BatteryManager.pmu.isPekeyLongPressIrq():
         print("PMU interrupt: PEKEY long press")
-    mpos.pmu.clearIrqStatus()
+    BatteryManager.pmu.clearIrqStatus()
 
 
 def _handle_pmu_irq(_pin):
@@ -120,7 +121,7 @@ def _handle_pmu_irq(_pin):
     except Exception:
         _PMU_IRQ_SCHEDULED = False
 
-pmu_int = Pin(PMU_INT_PIN, Pin.IN, Pin.PULL_UP)
+pmu_int = Pin(21, Pin.IN, Pin.PULL_UP)
 pmu_int.irq(trigger=Pin.IRQ_FALLING, handler=_handle_pmu_irq)
 
 
