@@ -20,6 +20,13 @@ def sync_time():
         print('Syncing time with', ntptime.host)
         ntptime.settime()  # Fetch and set time (in UTC)
         print("Time sync'ed successfully")
+        if hasattr(TimeZone, "rtc"):
+            print("Real Time Clock (RTC) found, setting it")
+            try: # RTC driver might throw an exception
+                import time
+                TimeZone.rtc.datetime(time.localtime())
+            except Exception as e:
+                print(f"Exception while setting RTC time: {e}")
         TimeZone.refresh_timezone_preference() # if the time was sync'ed, then it needs refreshing
     except Exception as e:
         print('Failed to sync time:', e)

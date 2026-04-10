@@ -228,6 +228,8 @@ print("Datetime from RTC chip:", dt)
 rtc_tuple = (dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], dt[6], 0)
 from machine import RTC
 RTC().datetime(rtc_tuple)
+from mpos import TimeZone
+TimeZone.rtc = rtc
 # Would be good to also do this:
 # rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
 
