@@ -78,9 +78,6 @@ from machine import I2C, Pin, SPI
 import micropython
 import time
 
-PMU_INT_PIN = const(21)
-_PMU_IRQ_SCHEDULED = False
-
 m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 
 try:
@@ -88,6 +85,8 @@ try:
 except Exception as e:
     print(f"Exception while initializing PMU: {e}")
 
+PMU_INT_PIN = const(21)
+_PMU_IRQ_SCHEDULED = False
 
 def _pmu_irq_task(_arg):
     global _PMU_IRQ_SCHEDULED
@@ -220,37 +219,21 @@ AudioManager.add(
     )
 )
 
-'''
 # RTC
 import drivers.rtc.pcf8563 as pcf8563
 rtc = pcf8563.PCF8563(m_i2c)
-
-# Example: Set from current system time (if you have network/time)
-#import time
-#now = time.time()          # or time.mktime(...) if needed
-#rtc.set_unix_time(now)
-
-# Get Unix time back
-unix_from_pcf = rtc.unix_time()
-print("Unix time from PCF8563:", unix)
-# Or just raw datetime
-print("Datetime:", rtc.datetime())
-
-if unix:
-    mp_seconds = unix_from_pcf - 946684800
-    from machine import RTC
-    RTC().datetime(time.localtime(mp_seconds))
-else:
-    print("Failed to read time from PCF8563")
-
+dt = rtc.datetime() # Get datetime tuple from PCF8563: (year, month, day, wday, hour, min, sec)
+print("Datetime from RTC chip:", dt)
+# machine.RTC expects 8-tuple: (year, month, day, weekday, hour, minute, second, subsecond) so need to set subsecond
+rtc_tuple = (dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], dt[6], 0)
+from machine import RTC
+RTC().datetime(rtc_tuple)
 # Would be good to also do this:
 # rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
-'''
 
 # TODO:
-# - battery
-# - real IMU driver (instead of proof-of-concept above)
+# - battery level
 # - GPS
-# - RTC
+# - set RTC time after NTP sync (rtc.set_unix_time or rtc.datetime)
 
 print("lilygo_t_watch_s3_plus.py finished")

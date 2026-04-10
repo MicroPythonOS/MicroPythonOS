@@ -12,7 +12,7 @@ Frameworks:
 
 OS:
 - LilyGo T-Watch S3 Plus: enable audio input (PDM microphone) and output (I2S speaker)
-- LilyGo T-Watch S3 Plus: enable battery-powered Real Time Clock to keep time
+- LilyGo T-Watch S3 Plus: get time from battery-powered Real Time Clock at startup
 - LilyGo T-Watch S3 Plus: add IMU accelerometer support so IMU app works
 
 
