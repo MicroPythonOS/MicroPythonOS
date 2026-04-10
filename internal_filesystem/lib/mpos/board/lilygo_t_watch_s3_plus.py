@@ -67,9 +67,15 @@ def init_pmu(m_i2c):
     pmu.setChargerConstantCurr(AXP2101.XPOWERS_AXP2101_CHG_CUR_125MA)
     # Set stop charging termination current
     pmu.setChargerTerminationCurr(AXP2101.XPOWERS_AXP2101_CHG_ITERM_25MA)
-    # T-Watch-S3 uses a high-voltage(4.35V) battery by default but a bit less to increase battery life
+    # T-Watch-S3 uses a high-voltage(4.35V) battery by default but let's use a bit less (4.2V) to increase battery life
     pmu.setChargeTargetVoltage(AXP2101.XPOWERS_AXP2101_CHG_VOL_4V2)
-    mpos.pmu = pmu
+    # Quick and dirty patch of BatteryManager to use the PMU:
+    from mpos import BatteryManager
+    BatteryManager.read_raw_adc =  lambda *args: 0
+    BatteryManager.has_battery = lambda *args: True
+    BatteryManager.get_battery_percentage = pmu.getBatteryPercent
+    BatteryManager.read_battery_voltage = lambda *args: pmu.getBattVoltage() / 1000
+    BatteryManager.pmu = pmu # make the PMU object accessible just in case
     print("Initializing AXP2101 PMU completed.")
 
 
