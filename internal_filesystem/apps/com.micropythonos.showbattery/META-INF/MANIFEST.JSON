@@ -1,12 +1,12 @@
 {
-"name": "ShowBattery",
+"name": "Show Battery",
 "publisher": "MicroPythonOS",
 "short_description": "Minimal app",
 "long_description": "Demonstrates the simplest app.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/icons/com.micropythonos.showbattery_0.2.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/mpks/com.micropythonos.showbattery_0.2.1.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/icons/com.micropythonos.showbattery_0.2.2_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/mpks/com.micropythonos.showbattery_0.2.2.mpk",
 "fullname": "com.micropythonos.showbattery",
-"version": "0.2.1",
+"version": "0.2.2",
 "category": "development",
 "activities": [
     {
