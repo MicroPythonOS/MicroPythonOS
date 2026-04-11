@@ -92,34 +92,25 @@ try:
 except Exception as e:
     print(f"Exception while initializing PMU: {e}")
 
-# PMU button handling
-_PMU_IRQ_SCHEDULED = False
-
 def _pmu_irq_task(_arg):
-    global _PMU_IRQ_SCHEDULED
-    _PMU_IRQ_SCHEDULED = False
-    status = BatteryManager.pmu.getIrqStatus()
+    pmu = BatteryManager.pmu
+    status = pmu.getIrqStatus()
     print("PMU interrupt: status=0x{0:06X}".format(status))
-    if BatteryManager.pmu.isPekeyShortPressIrq():
+    if pmu.isPekeyShortPressIrq():
         print("PMU interrupt: PEKEY short press")
-        if BatteryManager.pmu.isEnableALDO2():
-            BatteryManager.pmu.disableALDO2()
+        if pmu.isEnableALDO2():
+            pmu.disableALDO2()
         else:
-            BatteryManager.pmu.enableALDO2()
-    if BatteryManager.pmu.isPekeyLongPressIrq():
+            pmu.enableALDO2()
+    if pmu.isPekeyLongPressIrq():
         print("PMU interrupt: PEKEY long press")
-    BatteryManager.pmu.clearIrqStatus()
-
+    pmu.clearIrqStatus()
 
 def _handle_pmu_irq(_pin):
-    global _PMU_IRQ_SCHEDULED
-    if _PMU_IRQ_SCHEDULED:
-        return
-    _PMU_IRQ_SCHEDULED = True
     try:
         micropython.schedule(_pmu_irq_task, 0)
-    except Exception:
-        _PMU_IRQ_SCHEDULED = False
+    except Exception as e:
+        print(f"Exception when scheduling PMU button press handler: {e}")
 
 pmu_int = Pin(21, Pin.IN, Pin.PULL_UP)
 pmu_int.irq(trigger=Pin.IRQ_FALLING, handler=_handle_pmu_irq)
