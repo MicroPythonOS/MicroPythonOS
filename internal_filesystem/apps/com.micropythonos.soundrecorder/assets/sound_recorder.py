@@ -83,7 +83,7 @@ class SoundRecorder(Activity):
         self._status_label = lv.label(screen)
         self._status_label.align(lv.ALIGN.TOP_LEFT, 20, 20)
         if focusgroup := lv.group_get_default():
-            focusgroup.add_obj(_status_label) # Make focusable so focus_direction can use it too
+            focusgroup.add_obj(self._status_label) # Make focusable so focus_direction can use it too
 
         # Timer display
         self._timer_label = lv.label(screen)
