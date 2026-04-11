@@ -125,7 +125,7 @@ m_i2c.writeto_mem(DRV2605L_ADDR, 0x05, bytes([89])) # Transition Ramp Up Long Sh
 m_i2c.writeto_mem(DRV2605L_ADDR, 0x0C, bytes([1])) # reg 0x0C = GO (1 = start, 0 = stop)
 
 
-#print("BMA423 IMU init")
+print("BMA423 IMU init")
 from mpos import SensorManager
 SensorManager.init(m_i2c, address=0x19, mounted_position=SensorManager.FACING_EARTH)
 
@@ -232,8 +232,6 @@ TimeZone.rtc = rtc
 # rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
 
 # TODO:
-# - battery level
 # - GPS
-# - set RTC time after NTP sync (rtc.set_unix_time or rtc.datetime)
 
 print("lilygo_t_watch_s3_plus.py finished")
