@@ -24,7 +24,8 @@ def sync_time():
             print("Real Time Clock (RTC) found, setting it")
             try: # RTC driver might throw an exception
                 import time
-                TimeZone.rtc.datetime(time.localtime())
+                lt = time.localtime() # (year, month, mday, hour, minute, second, weekday, yearday)
+                TimeZone.rtc.datetime((lt[0],lt[1],lt[2],lt[6],lt[3],lt[4],lt[5])) # weekday order is different
             except Exception as e:
                 print(f"Exception while setting RTC time: {e}")
         TimeZone.refresh_timezone_preference() # if the time was sync'ed, then it needs refreshing
