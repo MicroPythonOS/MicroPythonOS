@@ -8,6 +8,7 @@ Builtin Apps:
 
 Frameworks:
 - AudioManager: load and apply configured default_output and default_input devices
+- AudioManager: fix final 1-2 seconds of WAV files not being played
 - SensorManager: add BMA423 IMU support
 - TimeZone: set Real Time Clock if present
 

@@ -510,6 +510,7 @@ class WAVStream:
                 #chunk_size = int(bytes_per_second / 12) # 18 fps for 8khz mono, 16 fps for 22khz mono, higher stutters
                 #chunk_size = int(bytes_per_second / 11) # still jitters at 22050hz stereo in quasibird
 
+                bytes_per_second_out = playback_rate * 2 * channels
                 total_original = 0
                 while total_original < data_size:
                     if not self._keep_running:
@@ -564,7 +565,15 @@ class WAVStream:
 
                     # 4. Output to I2S (blocking write is OK - we're in a separate thread)
                     if self._i2s:
-                        self._i2s.write(raw)
+                        remaining = memoryview(raw)
+                        while remaining:
+                            written = self._i2s.write(remaining)
+                            if written is None:
+                                written = len(remaining)
+                            if written <= 0:
+                                time.sleep_ms(1)
+                                continue
+                            remaining = remaining[written:]
                     else:
                         # Simulate playback timing if no I2S
                         num_samples = len(raw) // (2 * channels)
@@ -572,6 +581,14 @@ class WAVStream:
 
                     total_original += to_read
                     self._progress_samples = total_original // bytes_per_sample
+
+                if self._i2s and self._keep_running:
+                    try:
+                        drain_ms = int((ibuf / bytes_per_second_out) * 1000)
+                        if drain_ms > 0:
+                            time.sleep_ms(drain_ms)
+                    except Exception as e:
+                        print(f"WAVStream: drain wait failed: {e}")
 
                 print(f"WAVStream: Finished playing {self.file_path}")
                 if self.on_complete:
