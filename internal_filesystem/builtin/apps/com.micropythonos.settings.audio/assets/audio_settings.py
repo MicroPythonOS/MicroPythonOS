@@ -1,6 +1,24 @@
 from mpos import AudioManager, Intent, SettingsActivity, SharedPreferences
 
 
+def _apply_input_device(name):
+    if not name:
+        return
+    for device in AudioManager.get_inputs():
+        if device.name == name:
+            AudioManager.set_default_input(device)
+            return
+
+
+def _apply_output_device(name):
+    if not name:
+        return
+    for device in AudioManager.get_outputs():
+        if device.name == name:
+            AudioManager.set_default_output(device)
+            return
+
+
 class AudioSettings(SettingsActivity):
     PREFS_NAMESPACE = "com.micropythonos.settings.audio"
 
@@ -32,6 +50,7 @@ class AudioSettings(SettingsActivity):
                     "ui": "radiobuttons",
                     "ui_options": input_options,
                     "default_value": default_input.name if default_input else "",
+                    "changed_callback": _apply_input_device,
                 },
                 {
                     "title": "Output Device",
@@ -39,6 +58,7 @@ class AudioSettings(SettingsActivity):
                     "ui": "radiobuttons",
                     "ui_options": output_options,
                     "default_value": default_output.name if default_output else "",
+                    "changed_callback": _apply_output_device,
                 },
             ],
         )
