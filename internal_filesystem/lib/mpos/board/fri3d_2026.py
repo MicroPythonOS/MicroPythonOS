@@ -240,7 +240,7 @@ AudioManager.add(
 )
 
 # Add this after the headset output so that it doesn't become the default:
-AudioManager.add(
+buzzer_output = AudioManager.add(
     AudioManager.Output(
         name="Badge Buzzer",
         kind="buzzer",
