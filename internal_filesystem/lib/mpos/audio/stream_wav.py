@@ -226,6 +226,7 @@ class WAVStream:
     def get_duration_ms(self):
         return self._duration_ms
 
+
     # ----------------------------------------------------------------------
     #  WAV header parser - returns bit-depth and format info
     # ----------------------------------------------------------------------
@@ -370,6 +371,28 @@ class WAVStream:
             out[i * 2] = s16 & 0xFF
             out[i * 2 + 1] = (s16 >> 8) & 0xFF
             j += 4
+
+    @staticmethod
+    def _get_freq_duty(sample_rate):
+        # Would be good to do this default when no communicator (external speaker) is connected, as it's better for quality:
+        #return (sample_rate * 256, 32768)
+        if sample_rate == 8000:
+            return (640000,1365)
+        elif sample_rate == 11025:
+            return (1060800,1024)
+        elif sample_rate == 16000:
+            return (512000,512)
+        elif sample_rate == 22050:
+            return (705600,1024)
+        elif sample_rate == 32000:
+            print("Warning: sample rate 32kHz hasn't been testing, guessing!")
+            return (1024000,1024)
+        elif sample_rate == 44100:
+            return (1411200,2048)
+        else:
+            print(f"Uncommon sample rate {sample_rate} hasn't been tried, returning default sample_rate * 256 amd 50% duty cycle")
+            return (sample_rate * 256, 32768)
+
         return out
 
     # ----------------------------------------------------------------------
@@ -457,14 +480,12 @@ class WAVStream:
                     if 'mck' in self.i2s_pins:
                         mck_pin = machine.Pin(self.i2s_pins['mck'], machine.Pin.OUT)
                         from machine import Pin, PWM
-                        # Add MCLK generation on GPIO2
                         try:
                             self._mck_pwm = PWM(mck_pin)
-                            # Set frequency to sample_rate * 256 (common ratio for CJC4334H auto-detect)
-                            # Use duty_u16 for finer control (0–65535 range, 32768 = 50%)
-                            self._mck_pwm.freq(playback_rate * 256)
-                            self._mck_pwm.duty_u16(32768)  # 50% duty cycle
-                            print(f"MCLK PWM started on GPIO2 at {playback_rate * 256} Hz")
+                            freq, duty = WAVStream._get_freq_duty(playback_rate)
+                            self._mck_pwm.freq(freq)
+                            self._mck_pwm.duty_u16(duty)  # 50% duty cycle
+                            print(f"MCLK PWM started at {freq} Hz with duty cycle {duty}/65535")
                         except Exception as e:
                             print(f"MCLK PWM init failed: {e}")
                             # fallback or error handling
@@ -560,7 +581,7 @@ class WAVStream:
                                     print(f"_i2s.shift got exception, falling back to software scaling: {e}")
                                     _scale_audio_optimized(raw, len(raw), scale_fixed)
                         else:
-                            print("_i2s has no shift attribute, falling back to software scaling")
+                            #print("_i2s has no shift attribute, falling back to software scaling")
                             _scale_audio_optimized(raw, len(raw), scale_fixed)
 
                     # 4. Output to I2S (blocking write is OK - we're in a separate thread)
