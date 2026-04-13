@@ -3,6 +3,9 @@ Future release (next version)
 
 Add changes that have been made to the code but haven't made it into a release here.
 
+0.9.2
+=====
+
 Builtin Apps:
 - Settings: new Audio subsection to choose default output and input device, for boards with multiple audio devices
 
