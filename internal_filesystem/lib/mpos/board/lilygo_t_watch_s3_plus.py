@@ -54,8 +54,8 @@ def init_pmu(m_i2c):
     pmu.disableIRQ(AXP2101.XPOWERS_AXP2101_ALL_IRQ);
     # Enable the required interrupt function
     pmu.enableIRQ(
-        AXP2101.XPOWERS_AXP2101_BAT_INSERT_IRQ    | AXP2101.XPOWERS_AXP2101_BAT_REMOVE_IRQ      |   # BATTERY
-        AXP2101.XPOWERS_AXP2101_VBUS_INSERT_IRQ   | AXP2101.XPOWERS_AXP2101_VBUS_REMOVE_IRQ     |   # VBUS
+        #AXP2101.XPOWERS_AXP2101_BAT_INSERT_IRQ    | AXP2101.XPOWERS_AXP2101_BAT_REMOVE_IRQ      |   # BATTERY is not removable
+        #AXP2101.XPOWERS_AXP2101_VBUS_INSERT_IRQ   | AXP2101.XPOWERS_AXP2101_VBUS_REMOVE_IRQ     |   # VBUS don't think this will be used
         AXP2101.XPOWERS_AXP2101_PKEY_SHORT_IRQ    | AXP2101.XPOWERS_AXP2101_PKEY_LONG_IRQ       |   # POWER KEY
         AXP2101.XPOWERS_AXP2101_BAT_CHG_DONE_IRQ  | AXP2101.XPOWERS_AXP2101_BAT_CHG_START_IRQ       # CHARGE
     )
@@ -92,19 +92,42 @@ try:
 except Exception as e:
     print(f"Exception while initializing PMU: {e}")
 
+async def pmu_irq_watchdog():
+    # Workaround for IRQ's that don't always get cleared (race condition?)
+    pmu = BatteryManager.pmu
+    while True:
+        await TaskManager.sleep(3)          # check every 3 seconds
+        if pmu_int.value() == 0:        # IRQ pin is still LOW → stuck!
+            print("PMU IRQ line is stuck low - running recovery...")
+            for _ in range(10):
+                pmu.clearIrqStatus()
+                await TaskManager.sleep_ms(10)
+            print("PMU IRQ recovery completed")
+
 def _pmu_irq_task(_arg):
     pmu = BatteryManager.pmu
-    status = pmu.getIrqStatus()
-    print("PMU interrupt: status=0x{0:06X}".format(status))
-    if pmu.isPekeyShortPressIrq():
-        print("PMU interrupt: PEKEY short press")
-        if pmu.isEnableALDO2():
-            pmu.disableALDO2()
-        else:
-            pmu.enableALDO2()
-    if pmu.isPekeyLongPressIrq():
-        print("PMU interrupt: PEKEY long press")
-    pmu.clearIrqStatus()
+    try:
+        status = pmu.getIrqStatus()
+        print(f"PMU interrupt: status=0x{status:06X}")
+        if status == 0:
+            print("PMU: spurious interrupt (status already cleared)")
+            return
+        if pmu.isPekeyShortPressIrq():
+            print("PMU interrupt: PEKEY short press")
+            if pmu.isEnableALDO2():
+                pmu.disableALDO2()
+            else:
+                pmu.enableALDO2()
+        if pmu.isPekeyLongPressIrq():
+            print("PMU interrupt: PEKEY long press")
+    except Exception as e:
+        print(f"Exception in PMU IRQ task: {e}")
+    finally:
+        # clear interrupt, can take multiple tries
+        attempts = 0
+        while pmu.getIrqStatus() != 0 and attempts < 5:   # safety limit
+            attempts += 1
+            pmu.clearIrqStatus()
 
 def _handle_pmu_irq(_pin):
     try:
@@ -114,6 +137,10 @@ def _handle_pmu_irq(_pin):
 
 pmu_int = Pin(21, Pin.IN, Pin.PULL_UP)
 pmu_int.irq(trigger=Pin.IRQ_FALLING, handler=_handle_pmu_irq)
+
+from mpos import TaskManager
+TaskManager.create_task(pmu_irq_watchdog())
+
 
 
 print("DRV2605L vibrator test")
