@@ -9,7 +9,7 @@ import sys
 # Add parent directory to path for shared mocks
 sys.path.insert(0, "../tests")
 
-from mocks import make_machine_timer_module, make_usocket_module
+from mpos.testing.mocks import make_machine_timer_module, make_usocket_module
 from network_test_helper import MockNetwork, MockTimer, MockTime, MockRequests, MockSocket
 
 # Inject machine/socket mocks
