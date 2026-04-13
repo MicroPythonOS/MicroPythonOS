@@ -10,7 +10,7 @@ import time
 
 # Toggle to enable I2S.shift-based volume scaling when available.
 # Set to False to use legacy software scaling only.
-USE_I2S_SHIFT_VOLUME = False
+USE_I2S_SHIFT_VOLUME = False # I2S shift isn't supported on MicroPython 1.25.0
 
 # Volume scaling function - Viper-optimized for ESP32 performance
 # NOTE: The line below is automatically commented out by build_mpos.sh during
@@ -166,6 +166,9 @@ class WAVStream:
     Supports 8/16/24/32-bit PCM, mono and stereo, auto-upsampling to >=8000 Hz.
     """
 
+    WAVE_FORMAT_PCM = 0x1
+    WAVE_FORMAT_EXTENSIBLE = 0xFFFE # often used for 24 and 32 bits per sample
+
     def __init__(
         self,
         file_path,
@@ -265,8 +268,9 @@ class WAVStream:
                 if len(fmt) < 16:
                     raise ValueError("Invalid fmt chunk")
 
-                if int.from_bytes(fmt[0:2], 'little') != 1:
-                    raise ValueError("Only PCM supported")
+                format = int.from_bytes(fmt[0:2], 'little')
+                if format != WAVStream.WAVE_FORMAT_PCM and format != WAVStream.WAVE_FORMAT_EXTENSIBLE:
+                    raise ValueError("Only WAVE_FORMAT_PCM or WAVE_FORMAT_EXTENSIBLE supported")
 
                 channels = int.from_bytes(fmt[2:4], 'little')
                 if channels not in (1, 2):
@@ -371,11 +375,13 @@ class WAVStream:
             out[i * 2] = s16 & 0xFF
             out[i * 2 + 1] = (s16 >> 8) & 0xFF
             j += 4
+        return out
 
     @staticmethod
     def _get_freq_duty(sample_rate):
         # Would be good to do this default when no communicator (external speaker) is connected, as it's better for quality:
-        #return (sample_rate * 256, 32768)
+        return (sample_rate * 256, 32768) # Best for quality
+        # Helps to keep communicator disabled:
         if sample_rate == 8000:
             return (640000,1365)
         elif sample_rate == 11025:
@@ -392,8 +398,6 @@ class WAVStream:
         else:
             print(f"Uncommon sample rate {sample_rate} hasn't been tried, returning default sample_rate * 256 amd 50% duty cycle")
             return (sample_rate * 256, 32768)
-
-        return out
 
     # ----------------------------------------------------------------------
     #  Upsampling (zero-order-hold)
@@ -548,7 +552,7 @@ class WAVStream:
                     if not raw:
                         break
 
-                    # 1. Convert bit-depth to 16-bit
+                    # 1. Convert bit-depth to 16-bit (why? doesn't the i2s support 24 and 32 bits per sample?)
                     if bits_per_sample == 8:
                         raw = self._convert_8_to_16(raw)
                     elif bits_per_sample == 24:
@@ -578,7 +582,7 @@ class WAVStream:
                                 try:
                                     self._i2s.shift(raw, 16, shift) # triggers exception
                                 except Exception as e:
-                                    print(f"_i2s.shift got exception, falling back to software scaling: {e}")
+                                    #print(f"_i2s.shift got exception, falling back to software scaling: {e}")
                                     _scale_audio_optimized(raw, len(raw), scale_fixed)
                         else:
                             #print("_i2s has no shift attribute, falling back to software scaling")
