@@ -484,7 +484,7 @@ class WAVStream:
                             self._mck_pwm = PWM(mck_pin)
                             freq, duty = WAVStream._get_freq_duty(playback_rate)
                             self._mck_pwm.freq(freq)
-                            self._mck_pwm.duty_u16(duty)  # 50% duty cycle
+                            self._mck_pwm.duty_u16(duty)
                             print(f"MCLK PWM started at {freq} Hz with duty cycle {duty}/65535")
                         except Exception as e:
                             print(f"MCLK PWM init failed: {e}")
