@@ -23,6 +23,7 @@ OS:
 - LilyGo T-Watch S3 Plus: add IMU accelerometer support so IMU app works
 - LilyGo T-Watch S3 Plus: enable audio input (PDM microphone) and output (I2S speaker)
 - LilyGo T-Watch S3 Plus: enable Real Time Clock to keep time when powered off
+- Fri3d 2026: don't provide unnecessary SCLK/BCLK to CJC4334 DAC
 
 
 
