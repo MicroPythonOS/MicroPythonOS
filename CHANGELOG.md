@@ -13,16 +13,16 @@ Frameworks:
 - AudioManager: load and apply configured default_output and default_input devices
 - AudioManager: fix final 1-2 seconds of WAV files not being played
 - AudioManager: add support for PDM microphones
-- AudioManager: set MCLK frequency and duty cycle that doesn't wake up Fri3d Communicator when playing to headset
+- AudioManager: fix 24 and 32 bits per sample WAV support
 - SensorManager: add BMA423 IMU support
 - TimeZone: set Real Time Clock if present
 
 OS:
+- Fix lvgl_micropython UI hang when lv.event_handler() throws exception from timers or callbacks
 - LilyGo T-Watch S3 Plus: add battery charge level support
 - LilyGo T-Watch S3 Plus: add IMU accelerometer support so IMU app works
 - LilyGo T-Watch S3 Plus: enable audio input (PDM microphone) and output (I2S speaker)
 - LilyGo T-Watch S3 Plus: enable Real Time Clock to keep time when powered off
-- Fix lvgl_micropython UI hang when lv.event_handler() throws exception from timers or callbacks
 
 
 

@@ -379,9 +379,9 @@ class WAVStream:
 
     @staticmethod
     def _get_freq_duty(sample_rate):
-        # Would be good to do this default when no communicator (external speaker) is connected, as it's better for quality:
-        return (sample_rate * 256, 32768) # Best for quality
-        # Helps to keep communicator disabled:
+        return (sample_rate * 256, 32768) # sensible defaults
+        '''
+        # These frequencies and duty cycles don't wake up the Fri3d Communicator when playing to headset, but that will be fixed so no need:
         if sample_rate == 8000:
             return (640000,1365)
         elif sample_rate == 11025:
@@ -398,6 +398,7 @@ class WAVStream:
         else:
             print(f"Uncommon sample rate {sample_rate} hasn't been tried, returning default sample_rate * 256 amd 50% duty cycle")
             return (sample_rate * 256, 32768)
+        '''
 
     # ----------------------------------------------------------------------
     #  Upsampling (zero-order-hold)
