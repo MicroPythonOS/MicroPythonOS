@@ -86,6 +86,24 @@ class TestNotificationBarVisibility(unittest.TestCase):
             wait_for_render(iterations=10)
         return False
 
+    def _wait_for_bar_hidden(self, bar, timeout_ms=3500):
+        start = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
+            if not topmenu.bar_open:
+                return True
+            coords = get_widget_coords(bar)
+            if coords and coords["y2"] < 0:
+                return True
+            wait_for_render(iterations=20)
+        return False
+
+    def _ensure_bar_closed(self, bar_coords, bar):
+        if self._swipe_up_on_bar(bar_coords, bar):
+            return True
+        topmenu.close_bar()
+        wait_for_render(iterations=100)
+        return self._wait_for_bar_hidden(bar, timeout_ms=4000)
+
     def _ensure_drawer_open(self, bar_coords):
         if self._swipe_down_on_bar(bar_coords):
             return True
@@ -108,6 +126,20 @@ class TestNotificationBarVisibility(unittest.TestCase):
         wait_for_render(iterations=50)
         return self._wait_for_drawer_open()
 
+    def _swipe_up_on_bar(self, bar_coords, bar):
+        start_x = DisplayMetrics.width() // 2
+        start_y = max(1, (bar_coords["y1"] + bar_coords["y2"]) // 2)
+        end_y = -AppearanceManager.NOTIFICATION_BAR_HEIGHT
+        simulate_drag(start_x, start_y, start_x, end_y, steps=30, step_delay_ms=45)
+        wait_for_render(iterations=80)
+        if self._wait_for_bar_hidden(bar):
+            return True
+
+        end_y = -AppearanceManager.NOTIFICATION_BAR_HEIGHT * 2
+        simulate_drag(start_x, start_y, start_x, end_y, steps=36, step_delay_ms=45)
+        wait_for_render(iterations=100)
+        return self._wait_for_bar_hidden(bar)
+
     def test_notification_bar_widgets_visible(self):
         bar = topmenu.notification_bar
         self.assertIsNotNone(bar, "Notification bar was not created")
@@ -117,11 +149,11 @@ class TestNotificationBarVisibility(unittest.TestCase):
         self.assertIsNotNone(bar_coords, "Notification bar coords not available")
         if bar_coords["y1"] < 0:
             topmenu.open_bar()
-            wait_for_render(iterations=40)
+            wait_for_render(iterations=60)
             bar_coords = get_widget_coords(bar)
             if bar_coords and bar_coords["y1"] < 0:
                 bar.set_y(0)
-                wait_for_render(iterations=20)
+                wait_for_render(iterations=30)
                 bar_coords = get_widget_coords(bar)
             self.assertIsNotNone(bar_coords, "Notification bar coords not available")
         self.assertGreaterEqual(
@@ -181,3 +213,13 @@ class TestNotificationBarVisibility(unittest.TestCase):
             any("Off" in text or lv.SYMBOL.POWER in text for _, text in drawer_labels),
             "Power-off label not found in drawer",
         )
+
+        topmenu.close_drawer()
+        wait_for_render(iterations=40)
+        bar_coords = get_widget_coords(bar)
+        self.assertIsNotNone(bar_coords, "Notification bar coords not available")
+        self.assertTrue(
+            self._ensure_bar_closed(bar_coords, bar),
+            "Notification bar did not close after swipe up",
+        )
+        self.assertFalse(topmenu.bar_open, "Notification bar is still open after swipe up")
