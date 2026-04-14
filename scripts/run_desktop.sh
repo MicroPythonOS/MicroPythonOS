@@ -13,7 +13,8 @@ echo "$0 appname # starts the app by appname, for example: com.example.helloworl
 
 #export SDL_WINDOW_FULLSCREEN=true
 
-export HEAPSIZE=8M # default, same a PSRAM on many ESP32-S3 boards
+#export HEAPSIZE=8M # default, same a PSRAM on many ESP32-S3 boards
+export HEAPSIZE=16M # on desktop, a bit more is warranted (different C library etc)
 #export HEAPSIZE=64M # fine for fullscreen 1280x720 slides
 
 os_name=$(uname -s)
