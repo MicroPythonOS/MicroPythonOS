@@ -6,6 +6,19 @@ from .topmenu import open_bar
 
 screen_stack = []
 
+
+def close_top_layer_msgboxes():
+    top = lv.layer_top()
+    if not top:
+        return
+    i = 0
+    while i < top.get_child_count_by_type(lv.msgbox_backdrop_class):
+        child = top.get_child_by_type(i, lv.msgbox_backdrop_class)
+        msgbox = child.get_child_by_type(0, lv.msgbox_class)
+        if msgbox:
+            msgbox.close()
+        i += 1
+
 def setContentView(new_activity, new_screen):
     global screen_stack
     if screen_stack:
@@ -21,7 +34,6 @@ def setContentView(new_activity, new_screen):
             print(f"onStop caught exception:")
             sys.print_exception(e)
 
-    from .util import close_top_layer_msgboxes
     close_top_layer_msgboxes()
 
     screen_stack.append((new_activity, new_screen, lv.group_create(), None))
@@ -72,7 +84,6 @@ def back_screen():
         print("Warning: can't go back — stack empty")
         return False
 
-    from .util import close_top_layer_msgboxes
     close_top_layer_msgboxes()
 
     remove_and_stop_current_activity()

@@ -8,7 +8,7 @@ from .topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .focus import save_and_clear_current_focusgroup
 from .display_metrics import DisplayMetrics
 from .event import get_event_name, print_event
-from .util import shutdown, set_foreground_app, get_foreground_app
+from .util import shutdown, get_foreground_app
 from .setting_activity import SettingActivity
 from .settings_activity import SettingsActivity
 from .widget_animator import WidgetAnimator
@@ -25,7 +25,7 @@ __all__ = [
     "save_and_clear_current_focusgroup",
     "DisplayMetrics",
     "get_event_name", "print_event",
-    "shutdown", "set_foreground_app", "get_foreground_app",
+    "shutdown", "get_foreground_app",
     "SettingActivity",
     "SettingsActivity",
     "WidgetAnimator",

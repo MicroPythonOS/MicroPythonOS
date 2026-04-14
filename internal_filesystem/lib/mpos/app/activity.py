@@ -9,6 +9,7 @@ class Activity:
         self.result = None
         self._result_callback = None
         self._has_foreground = None
+        self.appFullName = None
 
     def onCreate(self):
         pass
@@ -31,10 +32,16 @@ class Activity:
 
     def startActivity(self, intent):
         from mpos.activity_navigator import ActivityNavigator
+        app_fullname = getattr(self, "appFullName", None)
+        if app_fullname is not None:
+            intent.app_fullname = app_fullname
         ActivityNavigator.startActivity(intent)
 
     def startActivityForResult(self, intent, result_callback):
         from mpos.activity_navigator import ActivityNavigator
+        app_fullname = getattr(self, "appFullName", None)
+        if app_fullname is not None:
+            intent.app_fullname = app_fullname
         ActivityNavigator.startActivityForResult(intent, result_callback)
 
     def initError(self, e):

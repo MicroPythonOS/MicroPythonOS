@@ -49,7 +49,7 @@ from .ui.view import setContentView, back_screen
 from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .ui.focus import save_and_clear_current_focusgroup
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
-from .ui.util import shutdown, set_foreground_app, get_foreground_app
+from .ui.util import shutdown, get_foreground_app
 from .ui.widget_animator import WidgetAnimator
 from .ui import focus_direction
 
@@ -88,7 +88,7 @@ __all__ = [
     "open_bar", "close_bar", "open_drawer", "drawer_open",
     "save_and_clear_current_focusgroup",
     "handle_back_swipe", "handle_top_swipe",
-    "shutdown", "set_foreground_app", "get_foreground_app",
+    "shutdown", "get_foreground_app",
     "WidgetAnimator",
     "focus_direction",
     # Testing utilities

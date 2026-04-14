@@ -299,8 +299,9 @@ class AppManager:
                 if main_activity:
                     from ..app.activity import Activity
                     from .intent import Intent
+                    import mpos.ui
                     start_time = utime.ticks_ms()
-                    Activity.startActivity(None, Intent(activity_class=main_activity))
+                    Activity.startActivity(None, Intent(activity_class=main_activity, app_fullname=mpos.ui.get_foreground_app()))
                     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
                     print(f"execute_script: Activity.startActivity took {end_time}ms")
                 else:
@@ -324,8 +325,6 @@ class AppManager:
     @staticmethod
     def start_app(fullname):
         """Start an app by fullname. Returns True if successful."""
-        import mpos.ui
-        mpos.ui.set_foreground_app(fullname)
         import utime
         start_time = utime.ticks_ms()
         app = AppManager.get(fullname)
@@ -344,6 +343,7 @@ class AppManager:
             classname = app.main_launcher_activity.get("classname")
         result = AppManager.execute_script(app.installed_path + "/" + entrypoint, True, classname, app.installed_path + "/assets/")
         # Launchers have the bar, other apps don't have it
+        import mpos.ui
         if app.is_valid_launcher():
             mpos.ui.topmenu.open_bar()
         else:
