@@ -70,8 +70,8 @@ jobs:
       - name: Build LVGL MicroPython esp32-small
         run: |
           ./scripts/build_mpos.sh esp32-small
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC-SPIRAM-4.bin lvgl_micropython/build/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.bin
-          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
+          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC-4.bin lvgl_micropython/build/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.bin
+          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
         uses: actions/upload-artifact@v4
@@ -84,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
+          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
 
       - name: Build LVGL MicroPython unphone

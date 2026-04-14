@@ -23,6 +23,7 @@ fi
 
 if [ "$target" == "clean" ]; then
 	rm -rf "$mydir"/../lvgl_micropython/lib/micropython/ports/unix/build-standard/
+	rm -rf "$mydir"/../lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC/
 	rm -rf "$mydir"/../lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/
 	exit 0
 fi
