@@ -21,10 +21,6 @@ This directory contains the test suite for MicroPythonOS. Tests can run on both 
 
 ```
 tests/
-├── base/                    # Base test classes (DRY patterns)
-│   ├── __init__.py         # Exports GraphicalTestBase, KeyboardTestBase
-│   ├── graphical_test_base.py
-│   └── keyboard_test_base.py
 ├── screenshots/             # Captured screenshots for visual regression
 ├── test_*.py               # Test files
 ├── unittest.sh             # Test runner script
@@ -43,55 +39,53 @@ MicroPythonOS provides two testing modules:
    - Location: `internal_filesystem/lib/mpos/ui/testing.py`
    - Use for: UI interaction, screenshots, widget inspection
 
-## Base Test Classes
+## Graphical Test Utilities
 
-### GraphicalTestBase
+Graphical tests should use the helpers in `mpos.ui.testing` instead of ad hoc LVGL traversal.
 
-Base class for all graphical (LVGL) tests. Provides:
+### GraphicalTestCase
+
+Base class for graphical (LVGL) tests. Provides:
 - Automatic screen creation/cleanup
-- Screenshot capture
 - Widget finding utilities
 - Custom assertions
 
 ```python
-from base import GraphicalTestBase
+from mpos.ui.testing import GraphicalTestCase
+import lvgl as lv
 
-class TestMyUI(GraphicalTestBase):
+class TestMyUI(GraphicalTestCase):
     def test_something(self):
-        # self.screen is already created
         label = lv.label(self.screen)
         label.set_text("Hello")
-        
+
         self.wait_for_render()
         self.assertTextPresent("Hello")
-        self.capture_screenshot("my_test.raw")
 ```
 
 **Key Methods:**
 - `wait_for_render(iterations=5)` - Process LVGL tasks
-- `capture_screenshot(filename)` - Save screenshot
 - `find_label_with_text(text)` - Find label widget
-- `click_button(button)` - Simulate button click
+- `click_button(text)` - Click a button by label text
 - `assertTextPresent(text)` - Assert text is on screen
-- `assertWidgetVisible(widget)` - Assert widget is visible
 
-### KeyboardTestBase
+### KeyboardTestCase
 
-Extends GraphicalTestBase for keyboard tests. Provides:
+Extends GraphicalTestCase for keyboard tests. Provides:
 - Keyboard and textarea creation
 - Reliable keyboard button clicking
 - Textarea assertions
 
 ```python
-from base import KeyboardTestBase
+from mpos.ui.testing import KeyboardTestCase
 
-class TestMyKeyboard(KeyboardTestBase):
+class TestMyKeyboard(KeyboardTestCase):
     def test_typing(self):
         self.create_keyboard_scene()
-        
+
         self.click_keyboard_button("h")
         self.click_keyboard_button("i")
-        
+
         self.assertTextareaText("hi")
 ```
 
@@ -220,33 +214,33 @@ class TestMyFeature(unittest.TestCase):
 ### Graphical Test
 
 ```python
-from base import GraphicalTestBase
+from mpos.ui.testing import GraphicalTestCase
 import lvgl as lv
 
-class TestMyUI(GraphicalTestBase):
+class TestMyUI(GraphicalTestCase):
     def test_button_click(self):
         button = lv.button(self.screen)
         label = lv.label(button)
         label.set_text("Click Me")
-        
+
         self.wait_for_render()
-        self.click_button(button)
-        
+        self.click_button("Click Me")
+
         # Verify result
 ```
 
 ### Keyboard Test
 
 ```python
-from base import KeyboardTestBase
+from mpos.ui.testing import KeyboardTestCase
 
-class TestMyKeyboard(KeyboardTestBase):
+class TestMyKeyboard(KeyboardTestCase):
     def test_input(self):
         self.create_keyboard_scene()
-        
+
         self.type_text("hello")
         self.assertTextareaText("hello")
-        
+
         self.click_keyboard_button("Enter")
 ```
 

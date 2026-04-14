@@ -87,6 +87,7 @@ def create_notification_bar():
     notification_bar.set_scroll_dir(lv.DIR.NONE)
     notification_bar.set_style_border_width(0, lv.PART.MAIN)
     notification_bar.set_style_radius(0, lv.PART.MAIN)
+    notification_bar.add_flag(lv.obj.FLAG.CLICKABLE)
     # Time label
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
@@ -142,6 +143,8 @@ def create_notification_bar():
                 battery_icon.set_text(lv.SYMBOL.BATTERY_1)
             else:
                 battery_icon.set_text(lv.SYMBOL.BATTERY_EMPTY)
+            battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
+            wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
             battery_icon.remove_flag(lv.obj.FLAG.HIDDEN)
             # Percentage is not shown for now:
             #battery_label.set_text(f"{round(percent)}%")

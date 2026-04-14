@@ -110,6 +110,7 @@ def handle_back_swipe():
     rect.set_size(AppearanceManager.NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-AppearanceManager.NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     rect.set_scroll_dir(lv.DIR.NONE)
+    rect.add_flag(lv.obj.FLAG.CLICKABLE)
     rect.set_pos(0, AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     style = lv.style_t()
     style.init()
@@ -141,6 +142,7 @@ def handle_top_swipe():
     rect.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     rect.set_pos(0, 0)
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+    rect.add_flag(lv.obj.FLAG.CLICKABLE)
     style = lv.style_t()
     style.init()
     style.set_bg_opa(lv.OPA.TRANSP)

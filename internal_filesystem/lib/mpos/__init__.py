@@ -32,7 +32,7 @@ from .ui.settings_activity import SettingsActivity
 from .ui.camera_activity import CameraActivity
 from .ui.keyboard import MposKeyboard
 from .ui.testing import (
-    wait_for_render, capture_screenshot, simulate_click, get_widget_coords,
+    wait_for_render, capture_screenshot, simulate_click, simulate_drag, get_widget_coords,
     find_label_with_text, verify_text_present, print_screen_labels, find_text_on_screen,
     click_button, click_label, click_keyboard_button, find_button_with_text,
     get_all_widgets_with_text, find_setting_value_label, get_setting_value_text,
@@ -92,7 +92,7 @@ __all__ = [
     "WidgetAnimator",
     "focus_direction",
     # Testing utilities
-    "wait_for_render", "capture_screenshot", "simulate_click", "get_widget_coords",
+    "wait_for_render", "capture_screenshot", "simulate_click", "simulate_drag", "get_widget_coords",
     "find_label_with_text", "verify_text_present", "print_screen_labels", "find_text_on_screen",
     "click_button", "click_label", "click_keyboard_button", "find_button_with_text",
     "get_all_widgets_with_text", "find_setting_value_label", "get_setting_value_text",
