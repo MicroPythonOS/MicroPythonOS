@@ -116,9 +116,13 @@ class TestNotificationBarVisibility(unittest.TestCase):
         bar_coords = get_widget_coords(bar)
         self.assertIsNotNone(bar_coords, "Notification bar coords not available")
         if bar_coords["y1"] < 0:
-            bar.set_y(0)
-            wait_for_render(iterations=20)
+            topmenu.open_bar()
+            wait_for_render(iterations=40)
             bar_coords = get_widget_coords(bar)
+            if bar_coords and bar_coords["y1"] < 0:
+                bar.set_y(0)
+                wait_for_render(iterations=20)
+                bar_coords = get_widget_coords(bar)
             self.assertIsNotNone(bar_coords, "Notification bar coords not available")
         self.assertGreaterEqual(
             bar_coords["y1"],
