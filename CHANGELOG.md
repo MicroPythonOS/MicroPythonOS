@@ -26,6 +26,7 @@ OS:
 - LilyGo T-Watch S3 Plus: enable Real Time Clock to keep time when powered off
 - LilyGo T-Watch S3 Plus: power down/up display and touch screen upon power button press
 - Fri3d 2026: don't provide unnecessary SCLK/BCLK to CJC4334 DAC
+- Increase default heapsize from 8MB to 16MB on desktop
 
 
 0.9.1
