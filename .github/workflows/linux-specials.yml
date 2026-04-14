@@ -70,7 +70,7 @@ jobs:
       - name: Build LVGL MicroPython esp32-small
         run: |
           ./scripts/build_mpos.sh esp32-small
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC-SPIRAM-16.bin lvgl_micropython/build/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.bin
+          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC-SPIRAM-4.bin lvgl_micropython/build/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.bin
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
@@ -90,7 +90,7 @@ jobs:
       - name: Build LVGL MicroPython unphone
         run: |
           ./scripts/build_mpos.sh unphone
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.bin
+          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-8.bin lvgl_micropython/build/MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.bin
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
