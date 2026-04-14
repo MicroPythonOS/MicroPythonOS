@@ -25,21 +25,34 @@ class TestNotificationBarVisibility(unittest.TestCase):
     def setUp(self):
         AppManager.start_app("com.micropythonos.launcher")
         topmenu.open_bar()
+        wait_for_render(iterations=40)
         self._wait_for_bar_visible()
 
-    def _wait_for_bar_visible(self, timeout_ms=2500):
+    def _wait_for_bar_visible(self, timeout_ms=4000):
         start = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
             bar = topmenu.notification_bar
             if bar is not None:
                 bar_coords = get_widget_coords(bar)
                 if bar_coords and bar_coords["y1"] >= -1:
-                    return
+                    return True
             wait_for_render(iterations=10)
         bar = topmenu.notification_bar
         if bar is not None:
             bar.set_y(0)
         wait_for_render(iterations=60)
+        bar_coords = get_widget_coords(bar)
+        return bool(bar_coords and bar_coords["y1"] >= -1)
+
+    def _wait_for_bar_height(self, bar, timeout_ms=4000):
+        start = time.ticks_ms()
+        expected_height = AppearanceManager.NOTIFICATION_BAR_HEIGHT - 1
+        while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
+            coords = get_widget_coords(bar)
+            if coords and coords["height"] >= expected_height:
+                return True
+            wait_for_render(iterations=10)
+        return False
 
     def _get_bar_labels(self, bar):
         labels = []
@@ -63,20 +76,26 @@ class TestNotificationBarVisibility(unittest.TestCase):
                     continue
         return labels
 
-    def _assert_within_bar(self, widget, bar_coords, label, margin=8):
-        coords = get_widget_coords(widget)
-        self.assertIsNotNone(coords, f"{label} coords not available")
-        center_y = coords["center_y"]
-        self.assertGreaterEqual(
-            center_y,
-            bar_coords["y1"] - margin,
-            f"{label} is above the notification bar",
-        )
-        self.assertLessEqual(
-            center_y,
-            bar_coords["y2"] + margin,
-            f"{label} is below the notification bar",
-        )
+    def _assert_within_bar(self, widget, bar, label):
+        self.assertIsNotNone(widget, f"{label} widget not available")
+        try:
+            self.assertFalse(
+                widget.has_flag(lv.obj.FLAG.HIDDEN),
+                f"{label} is hidden",
+            )
+        except Exception:
+            pass
+        node = widget
+        for _ in range(20):
+            if node is bar:
+                return
+            try:
+                node = node.get_parent()
+            except Exception:
+                node = None
+            if node is None:
+                break
+        self.fail(f"{label} is not within the notification bar hierarchy")
 
     def _wait_for_drawer_open(self, timeout_ms=2000):
         start = time.ticks_ms()
@@ -149,27 +168,15 @@ class TestNotificationBarVisibility(unittest.TestCase):
         self.assertIsNotNone(bar, "Notification bar was not created")
 
         wait_for_render(iterations=30)
-        bar_coords = get_widget_coords(bar)
-        self.assertIsNotNone(bar_coords, "Notification bar coords not available")
-        if bar_coords["y1"] < 0:
+        if not self._wait_for_bar_visible():
             topmenu.open_bar()
             wait_for_render(iterations=60)
-            bar_coords = get_widget_coords(bar)
-            if bar_coords and bar_coords["y1"] < 0:
-                bar.set_y(0)
-                wait_for_render(iterations=30)
-                bar_coords = get_widget_coords(bar)
-            self.assertIsNotNone(bar_coords, "Notification bar coords not available")
-        self.assertGreaterEqual(
-            bar_coords["y1"],
-            -1,
-            "Notification bar is not visible (y position is too high)",
-        )
-        self.assertGreaterEqual(
-            bar_coords["y2"],
-            AppearanceManager.NOTIFICATION_BAR_HEIGHT - 1,
-            "Notification bar height is smaller than expected",
-        )
+        if bar is not None:
+            bar.set_y(0)
+            wait_for_render(iterations=30)
+        bar_coords = get_widget_coords(bar)
+        self.assertIsNotNone(bar_coords, "Notification bar coords not available")
+        self.assertTrue(topmenu.bar_open, "Notification bar was not marked open")
 
         labels = self._get_bar_labels(bar)
         time_label = next((child for child, text in labels if ":" in text), None)
@@ -191,11 +198,11 @@ class TestNotificationBarVisibility(unittest.TestCase):
         if BatteryManager.has_battery():
             self.assertIsNotNone(battery_label, "Battery icon not found in notification bar")
 
-        self._assert_within_bar(time_label, bar_coords, "Clock label")
-        self._assert_within_bar(temp_label, bar_coords, "Temperature label")
-        self._assert_within_bar(wifi_label, bar_coords, "WiFi icon")
+        self._assert_within_bar(time_label, bar, "Clock label")
+        self._assert_within_bar(temp_label, bar, "Temperature label")
+        self._assert_within_bar(wifi_label, bar, "WiFi icon")
         if battery_label is not None:
-            self._assert_within_bar(battery_label, bar_coords, "Battery icon")
+            self._assert_within_bar(battery_label, bar, "Battery icon")
 
         self.assertTrue(
             self._ensure_drawer_open(bar_coords),

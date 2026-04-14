@@ -300,6 +300,21 @@ def wait_for_render(iterations=10):
         assert verify_text_present(lv.screen_active(), "Welcome")
     """
     import time
+    task_handler_running = False
+    try:
+        import mpos
+
+        task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
+        if task_handler is not None:
+            task_handler_running = task_handler.is_running()
+    except Exception:
+        task_handler_running = False
+
+    if task_handler_running:
+        for _ in range(iterations):
+            time.sleep(0.01)
+        return
+
     for _ in range(iterations):
         lv.task_handler()
         time.sleep(0.01)  # Small delay between iterations

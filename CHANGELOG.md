@@ -10,6 +10,7 @@ Builtin Apps:
 - Settings: new Audio subsection to choose default output and input device, for boards with multiple audio devices
 
 Frameworks:
+- Activity: add appFullName property
 - AudioManager: load and apply configured default_output and default_input devices
 - AudioManager: fix final 1-2 seconds of WAV files not being played
 - AudioManager: add support for PDM microphones
