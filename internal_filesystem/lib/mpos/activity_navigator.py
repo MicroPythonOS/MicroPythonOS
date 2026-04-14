@@ -6,6 +6,15 @@ from .content.app_manager import AppManager
 
 import mpos.ui
 
+
+def get_foreground_app():
+    if mpos.ui.screen_stack:
+        current_activity, _, _, _ = mpos.ui.screen_stack[-1]
+        if current_activity:
+            return getattr(current_activity, "appFullName", None)
+    return None
+
+
 class ActivityNavigator:
 
     @staticmethod
@@ -48,7 +57,7 @@ class ActivityNavigator:
     def _launch_activity(intent, result_callback=None):
         """Launch an activity and set up result callback."""
         if intent.app_fullname is None:
-            intent.app_fullname = mpos.ui.get_foreground_app()
+            intent.app_fullname = get_foreground_app()
         activity = intent.activity_class
         if callable(activity):
             # Instantiate the class if necessary

@@ -4,7 +4,6 @@ import mpos.time
 from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
-from .util import (get_foreground_app)
 from .input_manager import InputManager
 from . import focus_direction
 from .widget_animator import WidgetAnimator
@@ -46,6 +45,7 @@ def open_drawer():
 def close_drawer(to_launcher=False):
     global drawer_open, drawer
     if drawer_open:
+        from mpos.activity_navigator import get_foreground_app
         drawer_open=False
         fg = get_foreground_app()
         if not to_launcher and fg is not None and not "launcher" in fg:

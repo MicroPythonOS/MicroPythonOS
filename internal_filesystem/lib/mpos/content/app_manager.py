@@ -299,9 +299,9 @@ class AppManager:
                 if main_activity:
                     from ..app.activity import Activity
                     from .intent import Intent
-                    import mpos.ui
+                    from mpos.activity_navigator import get_foreground_app
                     start_time = utime.ticks_ms()
-                    Activity.startActivity(None, Intent(activity_class=main_activity, app_fullname=mpos.ui.get_foreground_app()))
+                    Activity.startActivity(None, Intent(activity_class=main_activity, app_fullname=get_foreground_app()))
                     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
                     print(f"execute_script: Activity.startActivity took {end_time}ms")
                 else:
