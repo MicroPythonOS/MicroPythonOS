@@ -25,7 +25,7 @@ class TestNotificationBarVisibility(unittest.TestCase):
     def setUp(self):
         AppManager.start_app("com.micropythonos.launcher")
         topmenu.open_bar()
-        wait_for_render(iterations=40)
+        wait_for_render(iterations=20)
         self._wait_for_bar_visible()
 
     def _wait_for_bar_visible(self, timeout_ms=4000):
@@ -36,21 +36,6 @@ class TestNotificationBarVisibility(unittest.TestCase):
                 bar_coords = get_widget_coords(bar)
                 if bar_coords and bar_coords["y1"] >= -1:
                     return True
-            wait_for_render(iterations=10)
-        bar = topmenu.notification_bar
-        if bar is not None:
-            bar.set_y(0)
-        wait_for_render(iterations=60)
-        bar_coords = get_widget_coords(bar)
-        return bool(bar_coords and bar_coords["y1"] >= -1)
-
-    def _wait_for_bar_height(self, bar, timeout_ms=4000):
-        start = time.ticks_ms()
-        expected_height = AppearanceManager.NOTIFICATION_BAR_HEIGHT - 1
-        while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            coords = get_widget_coords(bar)
-            if coords and coords["height"] >= expected_height:
-                return True
             wait_for_render(iterations=10)
         return False
 
@@ -167,13 +152,10 @@ class TestNotificationBarVisibility(unittest.TestCase):
         bar = topmenu.notification_bar
         self.assertIsNotNone(bar, "Notification bar was not created")
 
-        wait_for_render(iterations=30)
+        wait_for_render(iterations=20)
         if not self._wait_for_bar_visible():
             topmenu.open_bar()
-            wait_for_render(iterations=60)
-        if bar is not None:
-            bar.set_y(0)
-            wait_for_render(iterations=30)
+            wait_for_render(iterations=40)
         bar_coords = get_widget_coords(bar)
         self.assertIsNotNone(bar_coords, "Notification bar coords not available")
         self.assertTrue(topmenu.bar_open, "Notification bar was not marked open")
