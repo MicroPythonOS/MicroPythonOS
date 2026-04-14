@@ -115,9 +115,12 @@ def _pmu_irq_task(_arg):
         if pmu.isPekeyShortPressIrq():
             print("PMU interrupt: PEKEY short press")
             if pmu.isEnableALDO2():
-                pmu.disableALDO2()
+                pmu.disableALDO2() # backlight
+                pmu.disableALDO3() # touch chip
+                # Would be good to put the ESP32 in a sleep state, turn off wifi etc...
             else:
-                pmu.enableALDO2()
+                pmu.enableALDO3() # touch chip (takes about 1 second to become operational)
+                pmu.enableALDO2() # backlight
         if pmu.isPekeyLongPressIrq():
             print("PMU interrupt: PEKEY long press")
     except Exception as e:
