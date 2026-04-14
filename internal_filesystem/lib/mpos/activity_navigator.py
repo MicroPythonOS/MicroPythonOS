@@ -11,7 +11,7 @@ def get_foreground_app():
     if mpos.ui.screen_stack:
         current_activity, _, _, _ = mpos.ui.screen_stack[-1]
         if current_activity:
-            return getattr(current_activity, "appFullName", None)
+            return current_activity.appFullName
     return None
 
 

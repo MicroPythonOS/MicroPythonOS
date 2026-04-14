@@ -48,6 +48,7 @@ def close_drawer(to_launcher=False):
         from mpos.activity_navigator import get_foreground_app
         drawer_open=False
         fg = get_foreground_app()
+        print(f"topmenu.py foreground app: {fg}")
         if not to_launcher and fg is not None and not "launcher" in fg:
             print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {get_foreground_app()}")
             close_bar(False)

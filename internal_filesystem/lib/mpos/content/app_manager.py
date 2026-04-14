@@ -252,7 +252,7 @@ class AppManager:
         return AppManager.is_installed_by_path(f"apps/{app_fullname}") or AppManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
-    def execute_script(script_source, is_file, classname, cwd=None):
+    def execute_script(script_source, is_file, classname, cwd=None, app_fullname=None):
         """Run the script in the current thread. Returns True if successful."""
         import utime # for timing read and compile
         import lvgl as lv
@@ -297,13 +297,14 @@ class AppManager:
                 print("Variables:", variables.keys())
                 main_activity = script_globals.get(classname)
                 if main_activity:
-                    from ..app.activity import Activity
+                    from mpos.activity_navigator import ActivityNavigator
                     from .intent import Intent
-                    from mpos.activity_navigator import get_foreground_app
                     start_time = utime.ticks_ms()
-                    Activity.startActivity(None, Intent(activity_class=main_activity, app_fullname=get_foreground_app()))
+                    ActivityNavigator.startActivity(
+                        Intent(activity_class=main_activity, app_fullname=app_fullname)
+                    )
                     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                    print(f"execute_script: Activity.startActivity took {end_time}ms")
+                    print(f"execute_script: ActivityNavigator.startActivity took {end_time}ms")
                 else:
                     print(f"Warning: could not find app's main_activity {classname}")
                     return False
@@ -341,7 +342,13 @@ class AppManager:
         else:
             entrypoint = app.main_launcher_activity.get('entrypoint')
             classname = app.main_launcher_activity.get("classname")
-        result = AppManager.execute_script(app.installed_path + "/" + entrypoint, True, classname, app.installed_path + "/assets/")
+        result = AppManager.execute_script(
+            app.installed_path + "/" + entrypoint,
+            True,
+            classname,
+            app.installed_path + "/assets/",
+            app_fullname=fullname,
+        )
         # Launchers have the bar, other apps don't have it
         import mpos.ui
         if app.is_valid_launcher():
