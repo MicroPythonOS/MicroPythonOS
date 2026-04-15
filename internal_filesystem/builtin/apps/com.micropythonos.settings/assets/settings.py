@@ -61,7 +61,7 @@ class Settings(SettingsActivity):
         ]
         intent = Intent()
         from mpos import SharedPreferences
-        intent.putExtra("prefs", SharedPreferences("com.micropythonos.settings"))
+        intent.putExtra("prefs", SharedPreferences(self.appFullName))
         intent.putExtra("settings", [
             {
                 "title": "Wi-Fi",

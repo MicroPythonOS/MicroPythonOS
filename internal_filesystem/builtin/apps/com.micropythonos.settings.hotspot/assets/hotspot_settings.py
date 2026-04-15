@@ -24,8 +24,8 @@ class HotspotSettings(Activity):
     prefs = None
 
     def onCreate(self):
-        self.prefs = SharedPreferences("com.micropythonos.settings.hotspot", defaults=self.DEFAULTS)
-        self.ui_prefs = SharedPreferences("com.micropythonos.settings.hotspot")
+        self.prefs = SharedPreferences(self.appFullName, defaults=self.DEFAULTS)
+        self.ui_prefs = SharedPreferences(self.appFullName)
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(3), lv.PART.MAIN)
