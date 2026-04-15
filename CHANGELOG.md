@@ -20,14 +20,15 @@ Frameworks:
 
 OS:
 - Fix lvgl_micropython UI hang when lv.event_handler() throws exception from timers or callbacks
+- Fix notification bar hiding after swipe up in Launcher apps
+- Increase default heapsize from 8MB to 16MB on desktop to fix sporadic segfault
+- Fri3d 2026: don't provide unnecessary SCLK/BCLK to CJC4334 DAC
 - LilyGo T-Watch S3 Plus: fix power button sporadically becoming unresponsive
 - LilyGo T-Watch S3 Plus: add battery charge level support
 - LilyGo T-Watch S3 Plus: add IMU accelerometer support so IMU app works
 - LilyGo T-Watch S3 Plus: enable audio input (PDM microphone) and output (I2S speaker)
 - LilyGo T-Watch S3 Plus: enable Real Time Clock to keep time when powered off
 - LilyGo T-Watch S3 Plus: power down/up display and touch screen upon power button press
-- Fri3d 2026: don't provide unnecessary SCLK/BCLK to CJC4334 DAC
-- Increase default heapsize from 8MB to 16MB on desktop
 
 
 0.9.1
