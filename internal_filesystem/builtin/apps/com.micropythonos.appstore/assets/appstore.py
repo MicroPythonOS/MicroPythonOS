@@ -8,8 +8,6 @@ from app_detail import AppDetail
 
 class AppStore(Activity):
 
-    PACKAGE = "com.micropythonos.appstore"
-
     _GITHUB_PROD_BASE_URL = "https://apps.micropythonos.com"
     _GITHUB_LIST = "/app_index.json"
 
@@ -44,7 +42,7 @@ class AppStore(Activity):
     settings_button = None
 
     def onCreate(self):
-        self.prefs = SharedPreferences(self.PACKAGE)
+        self.prefs = SharedPreferences(self.appFullName)
         self._migrate_backend_pref()
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self.main_screen = lv.obj()

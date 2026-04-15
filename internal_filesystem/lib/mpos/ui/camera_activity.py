@@ -9,7 +9,6 @@ from ..app.activity import Activity
 
 class CameraActivity(Activity):
 
-    PACKAGE = "com.micropythonos.camera"
     CONFIGFILE = "config.json"
     SCANQR_CONFIG = "config_scanqr_mode.json"
 
@@ -184,7 +183,7 @@ class CameraActivity(Activity):
                 scanqr_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
                 scanqr_defaults.update(CameraSettingsActivity.SCANQR_DEFAULTS)
                 self.scanqr_prefs = SharedPreferences(
-                    self.PACKAGE,
+                    self.appFullName,
                     filename=self.SCANQR_CONFIG,
                     defaults=scanqr_defaults
                 )
@@ -198,7 +197,7 @@ class CameraActivity(Activity):
                 normal_defaults = {}
                 normal_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
                 normal_defaults.update(CameraSettingsActivity.NORMAL_DEFAULTS)
-                self.prefs = SharedPreferences(self.PACKAGE, defaults=normal_defaults)
+                self.prefs = SharedPreferences(self.appFullName, defaults=normal_defaults)
             # Defaults come from constructor, no need to pass them here
             self.width = self.prefs.get_int("resolution_width")
             self.height = self.prefs.get_int("resolution_height")
