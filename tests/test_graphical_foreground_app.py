@@ -6,7 +6,7 @@ import time
 import unittest
 
 from mpos import AppManager
-from mpos.ui import get_foreground_app
+from mpos.ui import back_screen, get_foreground_app
 from mpos.ui.testing import wait_for_render
 
 
@@ -46,4 +46,29 @@ class TestForegroundApp(unittest.TestCase):
             fg,
             about_fullname,
             f"Foreground app mismatch: expected {about_fullname}, got {fg}",
+        )
+
+    def test_get_foreground_app_after_back_screen(self):
+        launcher_fullname = "com.micropythonos.launcher"
+        about_fullname = "com.micropythonos.about"
+
+        AppManager.start_app(launcher_fullname)
+        wait_for_render(iterations=30)
+        self.assertTrue(
+            self._wait_for_foreground(launcher_fullname),
+            f"Expected foreground app to be {launcher_fullname}, got {get_foreground_app()}",
+        )
+
+        AppManager.start_app(about_fullname)
+        wait_for_render(iterations=30)
+        self.assertTrue(
+            self._wait_for_foreground(about_fullname),
+            f"Expected foreground app to be {about_fullname}, got {get_foreground_app()}",
+        )
+
+        back_screen()
+        wait_for_render(iterations=30)
+        self.assertTrue(
+            self._wait_for_foreground(launcher_fullname),
+            f"Expected foreground app to be {launcher_fullname} after back_screen, got {get_foreground_app()}",
         )
