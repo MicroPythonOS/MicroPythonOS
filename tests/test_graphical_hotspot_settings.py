@@ -179,11 +179,8 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
         mpos.ui.back_screen()
         wait_for_render(iterations=25)
 
-        screen = lv.screen_active()
-        print("\nHotspot overview labels after SSID change:")
-        print_screen_labels(screen)
         self.assertTrue(
-            verify_text_present(screen, f"Hotspot name: {new_ssid}"),
+            self._wait_for_overview_text(f"Hotspot name: {new_ssid}"),
             "Hotspot overview did not update SSID after settings change",
         )
 
