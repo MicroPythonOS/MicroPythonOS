@@ -3,6 +3,9 @@ Future release (next version)
 
 Add changes that have been made to the code but haven't made it into a release here.
 
+Frameworks:
+- AppManager: support .mpk/.zip files with compression and an unnecessary top-level directory
+
 0.9.2
 =====
 
