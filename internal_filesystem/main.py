@@ -31,8 +31,9 @@ print("Passing execution over to mpos.main")
 try:
     import mpos.main  # noqa: F401
 except Exception as e:
-    sys.print_exception(e)
+    print("Error importing mpos.main, sleeping 5 seconds...")
     import time
-    print(f"Error in mpos.main, sleep for 5 seconds and end then...")
-    time.sleep(5)
+    time.sleep(5) # sleep so the user has time to connect to serial console
+    sys.print_exception(e) # print it after the sleep so user can see it on serial console
+    print("MicroPythonOS exiting.")
 
