@@ -186,8 +186,6 @@ class AppManager:
             print("Removed temporary .mpk file")
         except Exception as e:
             print(f"Unzip and cleanup failed: {e}")
-            import sys
-            sys.print_exception(e)
             # Would be good to show error message here if it fails...
         AppManager.refresh_apps()
 
@@ -299,12 +297,14 @@ class AppManager:
                 print("Variables:", variables.keys())
                 main_activity = script_globals.get(classname)
                 if main_activity:
-                    from ..app.activity import Activity
+                    from mpos.activity_navigator import ActivityNavigator
                     from .intent import Intent
                     start_time = utime.ticks_ms()
-                    Activity.startActivity(None, Intent(activity_class=main_activity, app_fullname=app_fullname))
+                    ActivityNavigator.startActivity(
+                        Intent(activity_class=main_activity, app_fullname=app_fullname)
+                    )
                     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                    print(f"execute_script: Activity.startActivity took {end_time}ms")
+                    print(f"execute_script: ActivityNavigator.startActivity took {end_time}ms")
                 else:
                     print(f"Warning: could not find app's main_activity {classname}")
                     return False
