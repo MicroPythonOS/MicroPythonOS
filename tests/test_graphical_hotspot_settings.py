@@ -11,6 +11,7 @@ Usage:
 """
 
 import unittest
+import time
 import lvgl as lv
 import mpos.ui
 from mpos import (
@@ -79,6 +80,17 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
                 return result
         return None
 
+    def _wait_for_overview_text(self, text, attempts=6, render_iterations=30):
+        for attempt in range(1, attempts + 1):
+            screen = lv.screen_active()
+            print(f"\nOverview check attempt {attempt}/{attempts}:")
+            print_screen_labels(screen)
+            if verify_text_present(screen, text):
+                return True
+            wait_for_render(iterations=render_iterations)
+            time.sleep(0.2)
+        return False
+
     def tearDown(self):
         try:
             WifiService.disable_hotspot()
@@ -130,11 +142,8 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
         mpos.ui.back_screen()
         wait_for_render(iterations=25)
 
-        screen = lv.screen_active()
-        print("\nHotspot overview labels after Auth Mode change:")
-        print_screen_labels(screen)
         self.assertTrue(
-            verify_text_present(screen, "Security: WPA2"),
+            self._wait_for_overview_text("Security: WPA2"),
             "Hotspot overview did not update Security after Auth Mode change",
         )
 
