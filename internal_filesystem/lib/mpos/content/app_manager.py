@@ -178,15 +178,75 @@ class AppManager:
 
             # Step 2: Unzip the file
             print("Unzipping it to:", dest_folder)
+
             with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-                zip_ref.extractall(dest_folder)
+                dest_name = dest_folder.rstrip(os.sep).split(os.sep)[-1]
+                nested_prefix = f"{dest_name}/"
+                top_dirs = set()
+                has_top_files = False
+                for member in zip_ref.infolist():
+                    name = member.filename.lstrip("/")
+                    if not name:
+                        continue
+                    stripped = name.strip("/")
+                    if not stripped:
+                        continue
+                    if "/" in stripped:
+                        top_dirs.add(stripped.split("/", 1)[0])
+                    else:
+                        if not member.is_dir():
+                            has_top_files = True
+                        else:
+                            top_dirs.add(stripped)
+
+                strip_prefix = ""
+                if not has_top_files and len(top_dirs) == 1:
+                    sole_top = next(iter(top_dirs))
+                    if sole_top == dest_name:
+                        strip_prefix = nested_prefix
+                    else:
+                        raise ValueError(
+                            "Invalid top-level dir '{}' (expected '{}')".format(
+                                sole_top,
+                                dest_name,
+                            )
+                        )
+
+                for member in zip_ref.infolist():
+                    arcname = member.filename.lstrip("/")
+                    if strip_prefix:
+                        if not arcname.startswith(strip_prefix):
+                            continue
+                        arcname = arcname[len(strip_prefix):]
+                        if not arcname:
+                            continue
+                    original_name = member.filename
+                    try:
+                        member.filename = arcname
+                        zip_ref.extract(member, dest_folder)
+                    finally:
+                        member.filename = original_name
             print("Unzipped successfully")
             # Step 3: Clean up
             os.remove(temp_zip_path)
             print("Removed temporary .mpk file")
         except Exception as e:
-            print(f"Unzip and cleanup failed: {e}")
+            print(f"install_mpk got exception, will attempt cleanup: {e}")
             # Would be good to show error message here if it fails...
+            try:
+                import shutil
+                shutil.rmtree(dest_folder)
+            except Exception as e:
+                #print(f"install_mpk got shutil.rmtree exception: {e}")
+                #import sys
+                #sys.print_exception(e)
+                pass
+            try:
+                os.remove(temp_zip_path)
+            except Exception as e:
+                print(f"install_mpk got os.remove exception: {e}")
+                import sys
+                sys.print_exception(e)
         AppManager.refresh_apps()
 
     @staticmethod
