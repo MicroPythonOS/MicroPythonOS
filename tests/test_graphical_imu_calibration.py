@@ -30,45 +30,13 @@ from mpos import (
 class TestIMUCalibration(unittest.TestCase):
     """Test suite for IMU calibration activities."""
 
-    def _open_settings_item(self, title, timeout=2.0):
-        start = time.time()
-        label = None
-        while time.time() - start < timeout:
-            screen = lv.screen_active()
-            label = find_label_with_text(screen, title)
-            if label:
-                break
-            wait_for_render(iterations=5)
-        self.assertIsNotNone(label, f"Could not find {title} menu item")
-        container = None
-        try:
-            container = label.get_parent()
-        except Exception:
-            container = None
-        if container:
-            try:
-                container.scroll_to_view(True)
-            except Exception:
-                pass
-        else:
-            try:
-                label.scroll_to_view_recursive(True)
-            except Exception:
-                pass
-        wait_for_render(iterations=20)
-        target = container if container else label
-        coords = get_widget_coords(target) or get_widget_coords(label)
-        if coords:
-            simulate_click(coords["center_x"], coords["center_y"])
-        wait_for_render(iterations=30)
-
     def _start_activity_from_settings_assets(self, filename, classname):
         app_fullname = "com.micropythonos.settings"
         entrypoint = f"builtin/apps/{app_fullname}/assets/{filename}"
         cwd = f"builtin/apps/{app_fullname}/assets/"
         result = AppManager.execute_script(entrypoint, True, classname, cwd, app_fullname=app_fullname)
         self.assertTrue(result, f"Failed to start {classname} from {entrypoint}")
-        wait_for_render(iterations=20)
+        wait_for_render(iterations=60)
 
     def tearDown(self):
         """Clean up after test."""
@@ -76,7 +44,7 @@ class TestIMUCalibration(unittest.TestCase):
         try:
             for _ in range(3):  # May need multiple backs
                 mpos.ui.back_screen()
-                wait_for_render(5)
+                wait_for_render(10)
         except:
             pass
 
@@ -115,11 +83,11 @@ class TestIMUCalibration(unittest.TestCase):
         calibrate_btn = find_button_with_text(screen, "Calibrate Now")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate Now' button")
         calibrate_btn.send_event(lv.EVENT.CLICKED, None)
-        wait_for_render(10)
+        wait_for_render(25)
 
         # Wait for calibration to complete (mock takes ~3 seconds)
         time.sleep(4)
-        wait_for_render(40)
+        wait_for_render(50)
 
         # Verify calibration completed
         screen = lv.screen_active()
@@ -153,7 +121,7 @@ class TestIMUCalibration(unittest.TestCase):
             added_path = True
         try:
             calibrate_btn.send_event(lv.EVENT.CLICKED, None)
-            wait_for_render(30)
+            wait_for_render(60)
         finally:
             if added_path:
                 try:
