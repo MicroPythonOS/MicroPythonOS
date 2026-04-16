@@ -7,9 +7,7 @@ except Exception as e:
 
 from drivers.lora.sx1262 import SX1262
 
-from mpos import Activity, MposKeyboard, TaskManager
-
-import mpos
+from mpos import Activity, MposKeyboard, TaskManager, LoRaManager
 
 class LoRaChat(Activity):
 
@@ -74,7 +72,7 @@ class LoRaChat(Activity):
     def onPause(self, screen):
         super().onPause(screen)
         print("LoRa Chat backgrounded, putting LoRa to sleep")
-        mpos.sx.sleep(retainConfig=False)
+        LoRaManager.radioChip.sleep(retainConfig=False)
 
     def send_callback(self, event):
         message = self.input_textarea.get_text()
@@ -168,7 +166,7 @@ class LoRaChat(Activity):
             rf_sw = Pin(46, Pin.OUT)
             rf_sw.value(1) ; print("RF_SW set to HIGH") # Logic high level means enable receiver mode
 
-        self.lora_device = mpos.sx
+        self.lora_device = LoRaManager.radioChip
 
         # MeshCore settings:
         self.lora_device.begin(freq=869.618, bw=62.5, sf=8, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True, currentLimit=140.0, power=22)

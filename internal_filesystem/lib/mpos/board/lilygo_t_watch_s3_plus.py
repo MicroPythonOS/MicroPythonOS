@@ -173,8 +173,8 @@ except Exception as e:
 else:
     from drivers.lora.micropySX126X.sx1262 import SX1262
     sx = SX1262(spi_bus=1, clk=3, mosi=1, miso=4, cs=5, irq=9, rst=8, gpio=7)
-    import mpos
-    mpos.sx = sx
+    from mpos import LoRaManager
+    LoRaManager.radioChip = sx
 
 
 spi_bus = SPI.Bus(host=2,mosi=13,sck=18)

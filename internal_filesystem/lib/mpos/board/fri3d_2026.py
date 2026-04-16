@@ -42,8 +42,8 @@ else:
     rf_sw = Pin(46, Pin.OUT)
     rf_sw.value(1) ; print("RF_SW set to HIGH") # Logic high level means enable receiver mode
     sx = SX1262(lora_spi_device, 40, 11, 41, 45) # reset pin isn't used but driver expects a value so set to 11 (IR receiver) here for now
-    import mpos
-    mpos.sx = sx
+    from mpos import LoRaManager
+    LoRaManager.radioChip = sx
 
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
