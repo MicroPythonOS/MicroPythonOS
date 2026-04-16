@@ -1,0 +1,13 @@
+{
+  "urls": [
+    ["ir_tx/__init__.py", "github:peterhinch/micropython_ir/ir_tx/__init__.py"],
+    ["ir_tx/mce.py", "github:peterhinch/micropython_ir/ir_tx/mce.py"],
+    ["ir_tx/mcetest.py", "github:peterhinch/micropython_ir/ir_tx/mcetest.py"],
+    ["ir_tx/nec.py", "github:peterhinch/micropython_ir/ir_tx/nec.py"],
+    ["ir_tx/philips.py", "github:peterhinch/micropython_ir/ir_tx/philips.py"],
+    ["ir_tx/rp2_rmt.py", "github:peterhinch/micropython_ir/ir_tx/rp2_rmt.py"],
+    ["ir_tx/sony.py", "github:peterhinch/micropython_ir/ir_tx/sony.py"],
+    ["ir_tx/test.py", "github:peterhinch/micropython_ir/ir_tx/test.py"]
+  ],
+  "version": "0.1"
+}

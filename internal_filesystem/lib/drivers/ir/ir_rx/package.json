@@ -1,0 +1,13 @@
+{
+  "urls": [
+    ["ir_rx/__init__.py", "github:peterhinch/micropython_ir/ir_rx/__init__.py"],
+    ["ir_rx/acquire.py", "github:peterhinch/micropython_ir/ir_rx/acquire.py"],
+    ["ir_rx/mce.py", "github:peterhinch/micropython_ir/ir_rx/mce.py"],
+    ["ir_rx/nec.py", "github:peterhinch/micropython_ir/ir_rx/nec.py"],
+    ["ir_rx/philips.py", "github:peterhinch/micropython_ir/ir_rx/philips.py"],
+    ["ir_rx/print_error.py", "github:peterhinch/micropython_ir/ir_rx/print_error.py"],
+    ["ir_rx/sony.py", "github:peterhinch/micropython_ir/ir_rx/sony.py"],
+    ["ir_rx/test.py", "github:peterhinch/micropython_ir/ir_rx/test.py"]
+  ],
+  "version": "0.1"
+}

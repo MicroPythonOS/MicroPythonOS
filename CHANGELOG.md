@@ -7,6 +7,9 @@ Frameworks:
 - AppManager: support .mpk/.zip files with compression and an unnecessary top-level directory
 - Add new LoRaManager framework
 
+OS:
+- Add Infra Red (IR) RMT drivers for ESP32
+
 0.9.2
 =====
 
