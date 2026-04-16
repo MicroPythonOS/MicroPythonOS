@@ -908,7 +908,6 @@ class LocationManagerUART:
     def poll(self):
         while True:
             available = self.uart.any()
-            print("LocationManagerUART uart.any(): %d" % available)
             if not available:
                 break
             chunk = self.uart.read(available)
@@ -918,8 +917,8 @@ class LocationManagerUART:
                 except Exception:
                     preview = "<decode error>"
                 print(
-                    "LocationManagerUART read %d bytes: %r preview=%r"
-                    % (len(chunk), chunk, preview)
+                    "LocationManagerUART read %d bytes preview=%r"
+                    % (len(chunk), preview[:120])
                 )
                 self.data += chunk
 
@@ -929,9 +928,16 @@ class LocationManagerUART:
     def get_nmea(self):
         d = self.data
         self.data = b""
-        if d:
-            print("LocationManagerUART raw buffer: %r" % d)
-        return d.decode("ascii", "ignore")
+        if not d:
+            return ""
+        text = d.decode("ascii", "replace")
+        if "\ufffd" in text:
+            print("LocationManagerUART decode warning: replacement characters found")
+        lines = [line for line in text.split("\r\n") if line]
+        print("LocationManagerUART NMEA lines: %d" % len(lines))
+        for line in lines:
+            print("LocationManagerUART line: %s" % line)
+        return text
 
 # ----------------------------
 # Fake NMEA source
