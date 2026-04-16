@@ -133,10 +133,11 @@ def _pmu_irq_task(_arg):
             pmu.clearIrqStatus()
 
 def _handle_pmu_irq(_pin):
+    print("_handle_pmu_irq")
     try:
         micropython.schedule(_pmu_irq_task, 0)
-    except Exception as e:
-        print(f"Exception when scheduling PMU button press handler: {e}")
+    except Exception:
+        print("_handle_pmu_irq got exception scheduling PMU button press handler")
 
 pmu_int = Pin(21, Pin.IN, Pin.PULL_UP)
 pmu_int.irq(trigger=Pin.IRQ_FALLING, handler=_handle_pmu_irq)
