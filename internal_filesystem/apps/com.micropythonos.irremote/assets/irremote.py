@@ -1,3 +1,4 @@
+import gc
 import lvgl as lv
 
 from mpos import Activity, Intent, SharedPreferences, SettingsActivity
@@ -142,22 +143,36 @@ class IRRemote(Activity):
         name = self._profile_name()
         profile = self.PROFILES.get(name, self.PROFILES[self.DEFAULT_PROFILE])
 
-        self.nec = None
-        self.sony = None
-
         if simulation_mode or not self.ir_pin:
             return
 
         try:
             if profile["protocol"] == "sony":
-                self.sony = SONY_12(self.ir_pin)
+                if self.nec:
+                    self._deinit_ir(self.nec)
+                    self.nec = None
+                if not self.sony:
+                    self.sony = SONY_12(self.ir_pin)
             else:
-                self.nec = NEC(self.ir_pin)
+                if self.sony:
+                    self._deinit_ir(self.sony)
+                    self.sony = None
+                if not self.nec:
+                    self.nec = NEC(self.ir_pin)
                 self.nec.samsung = profile.get("samsung", False)
         except Exception as e:
             print(f"Failed to init IR protocol, switching to simulation mode: {e}")
             self.nec = None
             self.sony = None
+
+    def _deinit_ir(self, driver):
+        try:
+            rmt = getattr(driver, "_rmt", None)
+            if rmt and hasattr(rmt, "deinit"):
+                rmt.deinit()
+        except Exception as e:
+            print(f"Failed to deinit IR driver: {e}")
+        gc.collect()
 
     def _pad(self):
         min_dim = DisplayMetrics.min_dimension()
@@ -181,8 +196,6 @@ class IRRemote(Activity):
 
     def _button_height(self, pad, header_height):
         height = DisplayMetrics.height()
-        if height is None:
-            return lv.pct(30)
         available = height - header_height - pad * 4
         return max(40, int(available / 3))
 
