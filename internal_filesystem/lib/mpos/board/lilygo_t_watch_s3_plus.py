@@ -24,11 +24,11 @@ def init_pmu(m_i2c):
     # Vibrator
     pmu.setBLDO2Voltage(3300)
     pmu.enableBLDO2()
-    # GPS (not implemented yet)
-    #pmu.setDC3Voltage(3300);    # Earlier versions use DC3 (without BOOT button and RST)
-    #pmu.enableDC3();    # Earlier versions use DC3 (without BOOT button and RST)
-    #pmu.setBLDO1Voltage(3300);  # The version with BOOT button and RST on the back cover
-    #pmu.enableBLDO1();  # The version with BOOT button and RST on the back cover
+    # GPS
+    pmu.setDC3Voltage(3300);    # Earlier versions use DC3 (without BOOT button and RST)
+    pmu.enableDC3();    # Earlier versions use DC3 (without BOOT button and RST)
+    pmu.setBLDO1Voltage(3300);  # The version with BOOT button and RST on the back cover
+    pmu.enableBLDO1();  # The version with BOOT button and RST on the back cover
     # RTC backup battery:
     pmu.setButtonBatteryChargeVoltage(3300)
     pmu.enableButtonBatteryCharge()

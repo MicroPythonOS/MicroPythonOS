@@ -2,11 +2,11 @@ from mpos import Activity
 
 """
 micropythonos, give me code to parse nmea data from gps, display lat/lon/speed/... display sky view, allow recording of track to egt, display current track length in kilometers, and allow navigation to a point.
-￼
 """
 
 import time
 import os
+import sys
 import uselect
 import json
 import time
@@ -877,7 +877,7 @@ class LocationManager:
             if not events:
                 break
             self.data += self.f.readline()
-            
+
     def get_cellid(self):
         return None
 
@@ -885,6 +885,52 @@ class LocationManager:
         d = self.data
         print(d)
         self.data = b""
+        return d.decode("ascii", "ignore")
+
+
+class LocationManagerUART:
+    def __init__(self, uart_id=1, baudrate=38400, tx_pin=42, rx_pin=41):
+        from machine import Pin, UART
+
+        self.uart = UART(
+            uart_id,
+            baudrate=baudrate,
+            tx=Pin(tx_pin),
+            rx=Pin(rx_pin),
+            timeout=0,
+        )
+        self.data = b""
+        print(
+            "LocationManagerUART init: uart_id=%s baudrate=%s tx=%s rx=%s"
+            % (uart_id, baudrate, tx_pin, rx_pin)
+        )
+
+    def poll(self):
+        while True:
+            available = self.uart.any()
+            print("LocationManagerUART uart.any(): %d" % available)
+            if not available:
+                break
+            chunk = self.uart.read(available)
+            if chunk:
+                try:
+                    preview = chunk.decode("ascii", "ignore")
+                except Exception:
+                    preview = "<decode error>"
+                print(
+                    "LocationManagerUART read %d bytes: %r preview=%r"
+                    % (len(chunk), chunk, preview)
+                )
+                self.data += chunk
+
+    def get_cellid(self):
+        return None
+
+    def get_nmea(self):
+        d = self.data
+        self.data = b""
+        if d:
+            print("LocationManagerUART raw buffer: %r" % d)
         return d.decode("ascii", "ignore")
 
 # ----------------------------
@@ -1613,9 +1659,11 @@ if False:
     print()
     os.exit(1)
 
-if False:
-    lm = LocationManager()
+if sys.platform == "esp32":
+    lm = LocationManagerUART()
 elif False:
     lm = LocationManagerDBUS()
-else:
+elif False:
     lm = FakeNMEASpiral(center_lat=50.0, center_lon=14.0)
+else:
+    lm = LocationManager()
