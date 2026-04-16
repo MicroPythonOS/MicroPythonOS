@@ -221,6 +221,17 @@ class GPSState:
         # dict prn -> {el, az, snr}
         self.sats_in_view = {}
 
+        # Debug/diagnostic fields
+        self.last_rmc_status = None
+        self.last_gga_quality = None
+        self.last_gsa_mode = None
+        self.last_gsa_fix_type = None
+        self.last_gsa_pdop = None
+        self.last_gsa_hdop = None
+        self.last_gsa_vdop = None
+        self.last_gll_status = None
+        self.last_gsv_total = None
+
         # For display freshness
         self.last_update_ms = 0
 
@@ -306,6 +317,10 @@ class NMEAParser:
             self._parse_gga(fields)
         elif msg_type == "GSV":
             self._parse_gsv(fields)
+        elif msg_type == "GSA":
+            self._parse_gsa(fields)
+        elif msg_type == "GLL":
+            self._parse_gll(fields)
 
         self.gps.last_update_ms = time.ticks_ms()
 
@@ -317,6 +332,7 @@ class NMEAParser:
 
         self.gps.time_hms = parse_hhmmss(f[1])
         status = f[2]
+        self.gps.last_rmc_status = status
         self.gps.fix_valid = (status == "A")
 
         lat = parse_latlon(f[3], f[4])
@@ -352,6 +368,7 @@ class NMEAParser:
         q = safe_int(f[6])
         if q is not None:
             self.gps.fix_quality = q
+            self.gps.last_gga_quality = q
 
         sats = safe_int(f[7])
         if sats is not None:
@@ -375,8 +392,7 @@ class NMEAParser:
         # msg_num = safe_int(f[2])
         total_sats = safe_int(f[3])
         if total_sats is not None:
-            # not exactly "used", but we store it in view count indirectly
-            pass
+            self.gps.last_gsv_total = total_sats
 
         # sat blocks start at index 4
         i = 4
@@ -401,7 +417,38 @@ class NMEAParser:
                 d["az"] = az
             if snr is not None:
                 d["snr"] = snr
-        
+
+    def _parse_gsa(self, f):
+        # $GNGSA,mode1,mode2,sv1,sv2,...,sv12,pdop,hdop,vdop
+        if len(f) < 3:
+            return
+
+        mode1 = f[1] if len(f) > 1 else None
+        mode2 = safe_int(f[2]) if len(f) > 2 else None
+        pdop = safe_float(f[-3]) if len(f) >= 3 else None
+        hdop = safe_float(f[-2]) if len(f) >= 2 else None
+        vdop = safe_float(f[-1]) if len(f) >= 1 else None
+
+        self.gps.last_gsa_mode = mode1
+        self.gps.last_gsa_fix_type = mode2
+        self.gps.last_gsa_pdop = pdop
+        self.gps.last_gsa_hdop = hdop
+        self.gps.last_gsa_vdop = vdop
+
+    def _parse_gll(self, f):
+        # $GNGLL,lat,NS,lon,EW,hhmmss,status,mode
+        if len(f) < 7:
+            return
+
+        lat = parse_latlon(f[1], f[2])
+        lon = parse_latlon(f[3], f[4])
+        if lat is not None and lon is not None:
+            self.gps.lat = lat
+            self.gps.lon = lon
+
+        self.gps.time_hms = parse_hhmmss(f[5])
+        status = f[6]
+        self.gps.last_gll_status = status
 
 # ----------------------------
 # Track recording (EGT)
@@ -664,6 +711,17 @@ class Main(PagedCanvas):
 
         if gps.time_hms:
             ui.text(0, y, "Time: %02d:%02d:%02d" % gps.time_hms)
+        y += st
+
+        rmc = gps.last_rmc_status or "-"
+        gga_q = gps.last_gga_quality if gps.last_gga_quality is not None else "-"
+        gsv = gps.last_gsv_total if gps.last_gsv_total is not None else "-"
+        gsa = gps.last_gsa_fix_type if gps.last_gsa_fix_type is not None else "-"
+        gll = gps.last_gll_status or "-"
+        hdop = gps.hdop if gps.hdop is not None else "-"
+        ui.text(0, y, "RMC:%s GGA:%s GSV:%s" % (rmc, gga_q, gsv))
+        y += st
+        ui.text(0, y, "GSA:%s GLL:%s HDOP:%s" % (gsa, gll, hdop))
         y += st
         #print("Final size: ", y)
 
