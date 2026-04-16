@@ -5,7 +5,7 @@ from mpos.ui.display_metrics import DisplayMetrics
 
 try:
     from machine import Pin
-    from drivers.ir.ir_tx.nec import NEC
+    from ir.ir_tx.nec import NEC
     simulation_mode = False
 except Exception as e:
     print(f"Activating simulation mode because could not import Pin/NEC: {e}")
@@ -90,6 +90,6 @@ class IRRemote(Activity):
 
     def _send_power(self):
         print("Sending on/off")
-        self._transmit(0xE6)
-        self._transmit(0xE6)
+        #self._transmit(0xE6)
+        #self._transmit(0xE6)
         self._transmit(0x02)
