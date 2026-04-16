@@ -5,6 +5,7 @@ Add changes that have been made to the code but haven't made it into a release h
 
 Frameworks:
 - AppManager: support .mpk/.zip files with compression and an unnecessary top-level directory
+- Add new LoRaManager framework
 
 0.9.2
 =====
