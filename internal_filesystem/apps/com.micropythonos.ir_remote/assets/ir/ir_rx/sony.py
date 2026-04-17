@@ -5,7 +5,7 @@
 # Copyright Peter Hinch 2020 Released under the MIT license
 
 from utime import ticks_us, ticks_diff
-from ir_rx import IR_RX
+from . import IR_RX
 
 class SONY_ABC(IR_RX):  # Abstract base class
     def __init__(self, pin, bits, callback, *args):

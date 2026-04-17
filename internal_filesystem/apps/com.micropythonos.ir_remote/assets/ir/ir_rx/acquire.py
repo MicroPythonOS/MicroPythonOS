@@ -9,7 +9,7 @@ from machine import Pin, freq
 from sys import platform
 
 from utime import sleep_ms, ticks_us, ticks_diff
-from ir_rx import IR_RX
+from . import IR_RX
 
 
 class IR_GET(IR_RX):

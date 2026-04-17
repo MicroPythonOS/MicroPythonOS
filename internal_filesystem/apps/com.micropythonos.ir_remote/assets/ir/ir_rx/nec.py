@@ -8,7 +8,7 @@
 # Copyright Peter Hinch 2020-2022 Released under the MIT license
 
 from utime import ticks_us, ticks_diff
-from ir_rx import IR_RX
+from . import IR_RX
 
 class NEC_ABC(IR_RX):
     def __init__(self, pin, extended, samsung, callback, *args):
@@ -19,6 +19,7 @@ class NEC_ABC(IR_RX):
         self._leader = 2500 if samsung else 4000  # 4.5ms for Samsung else 9ms
 
     def decode(self, _):
+        print("ir_rx nec.py trying to decode")
         try:
             if self.edge > 68:
                 raise RuntimeError(self.OVERRUN)

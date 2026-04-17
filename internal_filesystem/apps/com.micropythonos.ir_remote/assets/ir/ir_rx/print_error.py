@@ -3,7 +3,7 @@
 # Author: Peter Hinch
 # Copyright Peter Hinch 2020 Released under the MIT license
 
-from ir_rx import IR_RX
+from . import IR_RX
 
 _errors = {IR_RX.BADSTART : 'Invalid start pulse',
            IR_RX.BADBLOCK : 'Error: bad block',

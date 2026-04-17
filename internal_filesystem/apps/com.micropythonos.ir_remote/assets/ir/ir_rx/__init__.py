@@ -6,9 +6,14 @@
 
 # Thanks are due to @Pax-IT for diagnosing a problem with ESP32C3.
 
+import sys
+
 from machine import Timer, Pin
 from array import array
 from utime import ticks_us
+
+if __name__ != "ir_rx":
+    sys.modules.setdefault("ir_rx", sys.modules[__name__])
 
 # from micropython import alloc_emergency_exception_buf
 # alloc_emergency_exception_buf(100)
@@ -21,7 +26,7 @@ from utime import ticks_us
 
 
 class IR_RX:
-    Timer_id = -1  # Software timer but enable override
+    Timer_id = 2  # Software timer but enable override
     # Result/error codes
     # Repeat button code
     REPEAT = -1
@@ -45,11 +50,12 @@ class IR_RX:
         self._times = array("i", (0 for _ in range(nedges + 1)))  # +1 for overrun
         pin.irq(handler=self._cb_pin, trigger=(Pin.IRQ_FALLING | Pin.IRQ_RISING))
         self.edge = 0
-        self.tim = Timer(self.Timer_id)  # Defaul is sofware timer
+        self.tim = Timer(self.Timer_id)  # Default is sofware timer
         self.cb = self.decode
 
     # Pin interrupt. Save time of each edge for later decode.
     def _cb_pin(self, line):
+        #print("ir_rx irq")
         t = ticks_us()
         # On overrun ignore pulses until software timer times out
         if self.edge <= self._nedges:  # Allow 1 extra pulse to record overrun

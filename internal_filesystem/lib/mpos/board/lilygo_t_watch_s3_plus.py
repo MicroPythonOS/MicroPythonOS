@@ -268,7 +268,4 @@ TimeZone.rtc = rtc
 # Would be good to also do this:
 # rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
 
-# TODO:
-# - GPS
-
 print("lilygo_t_watch_s3_plus.py finished")
