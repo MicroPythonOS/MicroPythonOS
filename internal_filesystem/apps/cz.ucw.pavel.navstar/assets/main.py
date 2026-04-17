@@ -595,9 +595,12 @@ class Main(PagedCanvas):
             self.nav.lat = config.lat
             self.recording = config.recording
             self.toggle_recording()
-        self.timer = lv.timer_create(self.tick, 1000, None)
+        self.timer = lv.timer_create(self.tick, 2000, None)
+
+    # def onPause(self, screen) to stop the timer is done by the super in pcanvas.py
 
     def tick(self, t):
+        #print("Navstar tick")
         lm.poll()
         nmea = lm.get_nmea()
         if nmea:
@@ -1350,9 +1353,10 @@ def draw_nav_screen(ui, gps, trail,
     """
 
     # --- Geometry
-    cx = 200
-    cy = 110
-    R = 90
+    from mpos import DisplayMetrics
+    cx = DisplayMetrics.pct_of_width(50)
+    cy = DisplayMetrics.pct_of_height(50) - 20 # leave space for buttons
+    R = int((DisplayMetrics.min_dimension() - max(cx,cy)) * 0.66)
 
     # --- Draw compass rose
     ui.circle(cx, cy, R)
