@@ -379,8 +379,8 @@ class AppManager:
             return True
         except Exception as e:
             print(f"Thread {thread_id}: error:")
-            tb = getattr(e, '__traceback__', None)
-            traceback.print_exception(type(e), e, tb)
+            import sys
+            sys.print_exception(e)
             return False
 
     @staticmethod
