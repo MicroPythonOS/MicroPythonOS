@@ -4,6 +4,8 @@ import lvgl as lv
 from mpos import Activity, Intent, SharedPreferences, SettingsActivity
 from mpos.ui.display_metrics import DisplayMetrics
 
+from learn_ir import LearnIR
+
 try:
     from machine import Pin
     from ir.ir_tx.nec import NEC
@@ -62,10 +64,9 @@ class IRRemote(Activity):
                 self.ir_pin = None
 
         self.screen = lv.obj()
-        self.screen.set_size(lv.pct(100), lv.pct(100))
         self.screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
-        pad = self._pad()
+        pad = DisplayMetrics.pct_of_height(4)
         self.screen.set_style_pad_all(pad, 0)
         self.screen.set_style_pad_gap(pad, 0)
 
@@ -89,21 +90,15 @@ class IRRemote(Activity):
         self._settings_button.add_event_cb(self._open_settings, lv.EVENT.CLICKED, None)
         settings_label = lv.label(self._settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
-        settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        settings_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         settings_label.center()
 
-        self.buttons_box = lv.obj(self.screen)
-        self.buttons_box.set_size(lv.pct(100), self._buttons_height(pad, header_height))
-        self.buttons_box.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        self.buttons_box.set_style_pad_all(0, 0)
-        self.buttons_box.set_style_pad_gap(pad, 0)
+        button_height = DisplayMetrics.pct_of_height(20)
+        button_width = DisplayMetrics.pct_of_width(92)
 
-        button_height = self._button_height(pad, header_height)
-        button_width = self._button_width(pad)
-
-        self._make_button(self.buttons_box, "On/Off", button_width, button_height, self._send_power)
-        self._make_button(self.buttons_box, "Vol+", button_width, button_height, self._send_vol_up)
-        self._make_button(self.buttons_box, "Vol-", button_width, button_height, self._send_vol_down)
+        self._make_button(self.screen, "On/Off", button_width, button_height, self._send_power)
+        self._make_button(self.screen, "Vol+", button_width, button_height, self._send_vol_up)
+        self._make_button(self.screen, "Vol-", button_width, button_height, self._send_vol_down)
 
         self.setContentView(self.screen)
 
@@ -127,7 +122,15 @@ class IRRemote(Activity):
                     "ui": "radiobuttons",
                     "ui_options": [(name, name) for name in self.PROFILES.keys()],
                     "default_value": self.DEFAULT_PROFILE,
-                }
+                },
+                {
+                "title": "Learn IR",
+                "key": "learn_ir",
+                "dont_persist": True,
+                "ui": "activity",
+                "activity_class": LearnIR,
+                "placeholder": "Receive and decode IR signals (needs receiver diode)",
+                },
             ],
         )
         self.startActivity(intent)
@@ -174,10 +177,6 @@ class IRRemote(Activity):
             print(f"Failed to deinit IR driver: {e}")
         gc.collect()
 
-    def _pad(self):
-        min_dim = DisplayMetrics.min_dimension()
-        return max(6, int(min_dim * 0.04))
-
     def _header_height(self, pad):
         height = DisplayMetrics.height()
         return max(44, int(height * 0.12))
@@ -185,19 +184,6 @@ class IRRemote(Activity):
     def _settings_button_size(self):
         min_dim = DisplayMetrics.min_dimension()
         return max(36, int(min_dim * 0.12))
-
-    def _buttons_height(self, pad, header_height):
-        height = DisplayMetrics.height()
-        return max(120, int(height - header_height - pad * 3))
-
-    def _button_width(self, pad):
-        width = DisplayMetrics.width()
-        return max(40, int(width - pad * 2))
-
-    def _button_height(self, pad, header_height):
-        height = DisplayMetrics.height()
-        available = height - header_height - pad * 4
-        return max(40, int(available / 3))
 
     def _make_button(self, parent, label, width, height, callback):
         btn = lv.button(parent)
