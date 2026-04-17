@@ -970,14 +970,11 @@ class LocationManagerUART:
                 break
             chunk = self.uart.read(available)
             if chunk:
-                try:
-                    preview = chunk.decode("ascii", "ignore")
-                except Exception:
-                    preview = "<decode error>"
-                print(
-                    "LocationManagerUART read %d bytes preview=%r"
-                    % (len(chunk), preview[:120])
-                )
+                #try:
+                #    preview = chunk.decode("ascii", "ignore")
+                #except Exception:
+                #    preview = "<decode error>"
+                #print("LocationManagerUART read %d bytes preview=%r"% (len(chunk), preview[:120]))
                 self.data += chunk
 
     def get_cellid(self):
@@ -1730,4 +1727,8 @@ elif False:
 elif False:
     lm = FakeNMEASpiral(center_lat=50.0, center_lon=14.0)
 else:
-    lm = LocationManager()
+    try:
+        lm = LocationManager()
+    except Exception as e:
+        print("Real GPS LocationManager didn't work, simlating...")
+        lm = FakeNMEASpiral(center_lat=50.0, center_lon=14.0)
