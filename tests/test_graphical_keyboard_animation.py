@@ -19,6 +19,16 @@ from mpos.ui.testing import KeyboardTestCase
 class TestKeyboardAnimation(KeyboardTestCase):
     """Test MposKeyboard compatibility with animation system."""
 
+    def _wait_for_keyboard_hidden_state(self, hidden, attempts=6, render_iterations=30):
+        for attempt in range(1, attempts + 1):
+            is_hidden = self.keyboard.has_flag(lv.obj.FLAG.HIDDEN)
+            print(f"Keyboard hidden check {attempt}/{attempts}: {is_hidden}")
+            if is_hidden == hidden:
+                return True
+            self.wait_for_render(render_iterations)
+            time.sleep(0.2)
+        return False
+
     def test_keyboard_has_set_style_opa(self):
         """
         Test that MposKeyboard has set_style_opa method.
@@ -70,8 +80,8 @@ class TestKeyboardAnimation(KeyboardTestCase):
                      "This is the bug - MposKeyboard missing animation methods")
 
         # Verify keyboard is no longer hidden
-        self.assertFalse(
-            self.keyboard.has_flag(lv.obj.FLAG.HIDDEN),
+        self.assertTrue(
+            self._wait_for_keyboard_hidden_state(False),
             "Keyboard should not be hidden after smooth_show"
         )
 
@@ -96,6 +106,8 @@ class TestKeyboardAnimation(KeyboardTestCase):
         except AttributeError as e:
             self.fail(f"smooth_hide raised AttributeError: {e}\n"
                      "This is the bug - MposKeyboard missing animation methods")
+
+        self.assertTrue(self._wait_for_keyboard_hidden_state(True))
 
         print("=== smooth_hide test PASSED ===")
 
@@ -123,7 +135,7 @@ class TestKeyboardAnimation(KeyboardTestCase):
             self.fail(f"Failed during smooth_show: {e}")
 
         # Should be visible now
-        self.assertFalse(self.keyboard.has_flag(lv.obj.FLAG.HIDDEN))
+        self.assertTrue(self._wait_for_keyboard_hidden_state(False))
 
         # Hide keyboard (simulates pressing Enter)
         try:
@@ -131,6 +143,8 @@ class TestKeyboardAnimation(KeyboardTestCase):
             self.wait_for_render(100)
         except AttributeError as e:
             self.fail(f"Failed during smooth_hide: {e}")
+
+        self.assertTrue(self._wait_for_keyboard_hidden_state(True))
 
         print("=== Full cycle test PASSED ===")
 
