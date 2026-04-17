@@ -21,7 +21,7 @@ except ImportError:
     pass
 
 import mpos
-from mpos import Activity, MposKeyboard
+from mpos import Activity, MposKeyboard, GPSManager
 
 #
 # Features:
@@ -952,20 +952,30 @@ class LocationManager:
 
 
 class LocationManagerUART:
-    def __init__(self, uart_id=1, baudrate=38400, tx_pin=42, rx_pin=41):
+    def __init__(self, baudrate, rx_pin, tx_pin=None, uart_id=1):
         from machine import Pin, UART
 
-        self.uart = UART(
-            uart_id,
-            baudrate=baudrate,
-            tx=Pin(tx_pin),
-            rx=Pin(rx_pin),
-            timeout=0,
-        )
+        if baudrate is None or rx_pin is None:
+            raise ValueError("LocationManagerUART requires baudrate and rx_pin (tx_pin optional)")
+
+        rx = rx_pin if isinstance(rx_pin, Pin) else Pin(rx_pin)
+        tx = None
+        if tx_pin is not None:
+            tx = tx_pin if isinstance(tx_pin, Pin) else Pin(tx_pin)
+
+        uart_kwargs = {
+            "baudrate": baudrate,
+            "rx": rx,
+            "timeout": 0,
+        }
+        if tx is not None:
+            uart_kwargs["tx"] = tx
+
+        self.uart = UART(uart_id, **uart_kwargs)
         self.data = b""
         print(
             "LocationManagerUART init: uart_id=%s baudrate=%s tx=%s rx=%s"
-            % (uart_id, baudrate, tx_pin, rx_pin)
+            % (uart_id, baudrate, tx, rx)
         )
 
     def poll(self):
@@ -1726,8 +1736,14 @@ if False:
     print()
     os.exit(1)
 
-if sys.platform == "esp32":
-    lm = LocationManagerUART()
+if sys.platform == "esp32" and GPSManager.connectionType == "uart":
+    uart_kwargs = {
+        "baudrate": GPSManager.connectionSpeed,
+        "rx_pin": GPSManager.rxPin,
+    }
+    if GPSManager.txPin is not None:
+        uart_kwargs["tx_pin"] = GPSManager.txPin
+    lm = LocationManagerUART(**uart_kwargs)
 elif False:
     lm = LocationManagerDBUS()
 elif False:

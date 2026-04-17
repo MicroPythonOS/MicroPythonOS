@@ -5,8 +5,9 @@ Add changes that have been made to the code but haven't made it into a release h
 
 Frameworks:
 - AppManager: support .mpk/.zip files with compression and an unnecessary top-level directory
-- Add new LoRaManager framework
+- Add new GPSManager framework
 - Add new IRManager framework
+- Add new LoRaManager framework
 
 OS:
 - LilyGo T-Watch S3 Plus: add support for IR Remote app

@@ -82,10 +82,14 @@ import mpos
 from machine import I2C, Pin, SPI
 import micropython
 import time
-from mpos import IRManager
+from mpos import IRManager, GPSManager
 
 m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 IRManager.txPin = Pin(2, Pin.OUT)
+GPSManager.txPin = Pin(42, Pin.OUT)
+GPSManager.rxPin = Pin(41, Pin.IN)
+GPSManager.connectionType = "uart"
+GPSManager.connectionSpeed = 38400
 
 from mpos import BatteryManager
 
