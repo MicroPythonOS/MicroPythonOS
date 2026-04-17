@@ -668,14 +668,14 @@ class Main(PagedCanvas):
 
         ui.clear()
 
-        st = 28
-        y = 1*st
+        st = 14
+        y = int(st/2)
         fix = "FIX" if gps.has_fix() else "NOFIX"
         rec = "REC" if self.recording else "----"
         ui.text(0, y, "%s  %s  sats:%d" % (fix, rec, gps.sats_used))
         y += st
         ui.text(0, y, "%s" % gps.summary())
-        y += 2*st
+        y += st
 
         if gps.lat is not None and gps.lon is not None:
             ui.text(0, y, "Lat: %.6f" % gps.lat)
@@ -733,12 +733,13 @@ class Main(PagedCanvas):
         ui = self.c
 
         ui.clear()
-        ui.text(0, 22, "Sky view")
+        ui.text(0, 16, "Sky")
 
         # Sky view circle
-        cx = 200
-        cy = 110
-        R = 90
+        from mpos import DisplayMetrics
+        cx = DisplayMetrics.pct_of_width(50)
+        cy = DisplayMetrics.pct_of_height(50) - 20 # leave space at bottom for buttons
+        R = int((DisplayMetrics.min_dimension() - max(cx,cy)) * 0.66)
 
         ui.circle(cx, cy, R)
         ui.circle(cx, cy, int(R * 0.66))
@@ -776,7 +777,7 @@ class Main(PagedCanvas):
             ui.fill_circle(x, y, rr)
             count += 1
 
-        ui.text(0, cy + R - 35, "SV: %d" % count)
+        ui.text(0, cy + R - 35, "Sat: %d" % count)
         ui.update()
 
     def draw_page_nav(self):

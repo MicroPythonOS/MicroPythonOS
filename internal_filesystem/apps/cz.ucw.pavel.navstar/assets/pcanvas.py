@@ -100,7 +100,7 @@ class Canvas:
         dsc = lv.draw_label_dsc_t()
         lv.draw_label_dsc_t.init(dsc)
         dsc.text = str(s)
-        dsc.font = lv.font_montserrat_24
+        dsc.font = lv.font_montserrat_14
         dsc.color = lv.color_black()
 
         area = lv.area_t()
