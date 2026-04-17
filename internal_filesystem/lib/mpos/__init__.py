@@ -18,6 +18,7 @@ from .number_format import NumberFormat
 from .device_info import DeviceInfo
 from .build_info import BuildInfo
 from .lora_manager import LoRaManager
+from .ir_manager import IRManager
 
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
@@ -72,7 +73,7 @@ __all__ = [
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
-    "LoRaManager",
+    "LoRaManager", "IRManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",
     # Common activities

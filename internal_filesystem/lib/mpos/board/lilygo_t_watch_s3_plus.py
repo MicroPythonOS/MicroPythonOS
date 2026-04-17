@@ -82,8 +82,10 @@ import mpos
 from machine import I2C, Pin, SPI
 import micropython
 import time
+from mpos import IRManager
 
 m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
+IRManager.txPin = Pin(2, Pin.OUT)
 
 from mpos import BatteryManager
 

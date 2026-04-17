@@ -1,7 +1,7 @@
 import gc
 import lvgl as lv
 
-from mpos import Activity, Intent, SharedPreferences, SettingsActivity
+from mpos import Activity, Intent, SharedPreferences, SettingsActivity, IRManager
 from mpos.ui.display_metrics import DisplayMetrics
 
 from learn_ir import LearnIR
@@ -58,7 +58,7 @@ class IRRemote(Activity):
 
         if not simulation_mode:
             try:
-                self.ir_pin = Pin(2, Pin.OUT)
+                self.ir_pin = IRManager.txPin
             except Exception as e:
                 print(f"Failed to init IR pin, switching to simulation mode: {e}")
                 self.ir_pin = None
@@ -147,6 +147,7 @@ class IRRemote(Activity):
         profile = self.PROFILES.get(name, self.PROFILES[self.DEFAULT_PROFILE])
 
         if simulation_mode or not self.ir_pin:
+            print("IR TX pin not configured; skipping IR profile apply.")
             return
 
         try:

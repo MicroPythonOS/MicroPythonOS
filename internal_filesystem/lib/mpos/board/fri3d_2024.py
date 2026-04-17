@@ -15,7 +15,7 @@ import drivers.display.st7789 as st7789
 
 import mpos.ui
 import mpos.ui.focus_direction
-from mpos import InputManager
+from mpos import InputManager, IRManager
 
 spi_bus = machine.SPI.Bus(
     host=2,
@@ -241,6 +241,9 @@ InputManager.register_indev(indev)
 
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
+
+IRManager.txPin = Pin(10, Pin.OUT)
+IRManager.rxPin = Pin(11, Pin.IN)
 
 # Battery voltage ADC measuring
 # NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
