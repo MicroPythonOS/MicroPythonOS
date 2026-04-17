@@ -244,7 +244,8 @@ class GPSState:
         good = 0
         best_snr = 0
         snrlim = 25
-        print(self.sats_in_view)
+        #print("sats in view:")
+        #print(self.sats_in_view)
         for prn in self.sats_in_view:
             d = self.sats_in_view[prn]
             snr = d.get("snr")
