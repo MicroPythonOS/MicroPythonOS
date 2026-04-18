@@ -81,7 +81,7 @@ mpos.ui.main_display = ili9341.ILI9341(
     color_byte_order=ili9341.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
     backlight_pin=LCD_BL,
-    backlight_on_state=ili9341.STATE_HIGH,
+    backlight_on_state=ili9341.STATE_PWM,
 )
 
 mpos.ui.main_display.init(2)  # ILI9341_2 (alternative) init sequence, same as M5Stack
@@ -115,7 +115,7 @@ i2c_bus._bus = machine_i2c
 
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=ft6x36.I2C_ADDR, reg_bits=ft6x36.BITS)
 try:
-    indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._0)
+    indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._270)
     InputManager.register_indev(indev)
 except Exception as e:
     print(f"Touch init got exception: {e}")
