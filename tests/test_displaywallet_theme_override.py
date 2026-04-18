@@ -82,5 +82,87 @@ class TestAppThemeViewIntegrationWithAppearanceManager(unittest.TestCase):
             AppearanceManager._is_light_mode = saved
 
 
+_HAVE_APPLY_SCREEN_THEME = _HAVE_APP_THEME_VIEW and hasattr(displaywallet, "_apply_screen_theme") if _HAVE_APP_THEME_VIEW else False
+
+
+@unittest.skipUnless(_HAVE_APPLY_SCREEN_THEME, "_apply_screen_theme not installed")
+class TestApplyScreenTheme(unittest.TestCase):
+    """`_apply_screen_theme(screen)` forces an explicit bg colour that matches
+    the app's main display — pure black in dark mode, pure white in light mode.
+    MUST set both directions: once an explicit style is set it overrides LVGL's
+    default-theme bg, so a dark→light toggle would leave a lingering black bg
+    if we only set black."""
+
+    class _RecordingScreen:
+        """Minimal screen stub that records the last `set_style_bg_color` call."""
+        def __init__(self):
+            self.last_color = None
+            self.last_part = None
+            self.calls = 0
+
+        def set_style_bg_color(self, color, part):
+            self.last_color = color
+            self.last_part = part
+            self.calls += 1
+
+    def _force_mode(self, is_light):
+        from mpos import AppearanceManager
+        AppearanceManager._is_light_mode = bool(is_light)
+
+    def test_dark_mode_sets_black_bg(self):
+        from mpos import AppearanceManager
+        saved = AppearanceManager.is_light_mode()
+        try:
+            self._force_mode(False)
+            import lvgl as lv
+            screen = self._RecordingScreen()
+            displaywallet._apply_screen_theme(screen)
+            # Compare underlying 0xRRGGBB int because LVGL color_t objects
+            # don't implement __eq__ across all builds.
+            self.assertEqual(screen.calls, 1)
+            self.assertEqual(screen.last_part, lv.PART.MAIN)
+            # color_black == 0x000000
+            self.assertEqual(screen.last_color.full if hasattr(screen.last_color, 'full') else None,
+                             lv.color_black().full if hasattr(lv.color_black(), 'full') else None)
+        finally:
+            AppearanceManager._is_light_mode = saved
+
+    def test_light_mode_sets_white_bg(self):
+        from mpos import AppearanceManager
+        saved = AppearanceManager.is_light_mode()
+        try:
+            self._force_mode(True)
+            import lvgl as lv
+            screen = self._RecordingScreen()
+            displaywallet._apply_screen_theme(screen)
+            self.assertEqual(screen.calls, 1)
+            self.assertEqual(screen.last_part, lv.PART.MAIN)
+            self.assertEqual(screen.last_color.full if hasattr(screen.last_color, 'full') else None,
+                             lv.color_white().full if hasattr(lv.color_white(), 'full') else None)
+        finally:
+            AppearanceManager._is_light_mode = saved
+
+    def test_applies_in_both_directions(self):
+        """Regression: if only dark mode set a bg, a dark→light flip leaves the
+        black style lingering on screen. Guard that BOTH branches write."""
+        from mpos import AppearanceManager
+        saved = AppearanceManager.is_light_mode()
+        try:
+            screen = self._RecordingScreen()
+
+            self._force_mode(False)
+            displaywallet._apply_screen_theme(screen)
+            dark_count = screen.calls
+
+            self._force_mode(True)
+            displaywallet._apply_screen_theme(screen)
+            light_count = screen.calls
+
+            self.assertEqual(dark_count, 1, "dark mode should set bg once")
+            self.assertEqual(light_count, 2, "light mode should also set bg (not skip)")
+        finally:
+            AppearanceManager._is_light_mode = saved
+
+
 if __name__ == "__main__":
     unittest.main()
