@@ -5,6 +5,8 @@ from mpos import Activity, IRManager
 try:
     from machine import Pin
     from ir.ir_rx.nec import SAMSUNG
+    from ir.ir_rx.acquire import IR_GET
+    from ir.ir_rx.nec import NEC_16
 
     simulation_mode = False
 except Exception as e:
@@ -33,6 +35,8 @@ class LearnIR(Activity):
             return
         try:
             self.ir = SAMSUNG(IRManager.rxPin, self._on_ir)
+            #self.ir = NEC_16(IRManager.rxPin, self._on_ir)
+            #self.ir = IR_GET(IRManager.rxPin)
         except Exception as e:
             print(f"Failed to init IR receiver: {e}")
             self.ir = None

@@ -65,6 +65,7 @@ class IR_RX:
             self.edge += 1
 
     def do_callback(self, cmd, addr, ext, thresh=0):
+        print(f"ir_rx do_callback triggered: {cmd} {addr} {ext} {thresh}")
         self.edge = 0
         if cmd >= thresh:
             self.callback(cmd, addr, ext, *self.args)

@@ -52,6 +52,9 @@ class NEC_ABC(IR_RX):
                 addr |= val & 0xff00  # pass assumed 16 bit address to callback
             self._addr = addr
         except RuntimeError as e:
+            print(f"ir_rx nec.py got exception: {e}")
+            import sys
+            sys.print_exception(e)
             cmd = e.args[0]
             addr = self._addr if cmd == self.REPEAT else 0  # REPEAT uses last address
         # Set up for new data burst and run user callback
