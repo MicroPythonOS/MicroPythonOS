@@ -218,7 +218,7 @@ LightsManager.init(neopixel_pin=42, num_leds=1)
 #   BCK=5  (BCLK, I2S bit clock)
 #   WS=7   (LRCK, I2S word select)
 #   sd=8   (ESP32 I2S TX → ES8311 SDIN → DAC → speaker)
-#   sd_in=6(ES8311 SDOUT → ADC → ESP32 I2S RX → recording)
+#   sd_in=6 (ES8311 SDOUT → ADC → ESP32 I2S RX → recording)
 # I2C addr 0x18, shared bus with touch (SDA=16, SCL=15)
 # ==============================
 print("freenove_esp32s3_display.py: init audio (ES8311 + FM8002E)")
