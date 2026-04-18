@@ -23,6 +23,8 @@ class IR_GET(IR_RX):
             return target * 0.8 < v < target * 1.2
         lb = self.edge - 1  # Possible length of burst
         if lb < 3:
+            print("lb < 3 so it's noise")
+            self.do_callback(0, 0, 0) # resets the state
             return  # Noise
         burst = []
         for x in range(lb):

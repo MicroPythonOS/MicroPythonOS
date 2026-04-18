@@ -5,6 +5,7 @@ from mpos import Activity, Intent, SharedPreferences, SettingsActivity, IRManage
 from mpos.ui.display_metrics import DisplayMetrics
 
 from learn_ir import LearnIR
+from learn_nec_ir import LearnNECIR
 
 try:
     from machine import Pin
@@ -36,7 +37,7 @@ class IRRemote(Activity):
         "Optoma": {
             "protocol": "nec",
             "addr": 50,
-            "power": [2],
+            "power": [129],
             "vol_up": [17],
             "vol_down": [20],
             "samsung": False,
@@ -124,12 +125,20 @@ class IRRemote(Activity):
                     "default_value": self.DEFAULT_PROFILE,
                 },
                 {
-                "title": "Learn IR",
+                "title": "Print IR timings",
                 "key": "learn_ir",
                 "dont_persist": True,
                 "ui": "activity",
                 "activity_class": LearnIR,
                 "placeholder": "Receive and decode IR signals (needs receiver diode)",
+                },
+                {
+                "title": "Decode and print NEC IR",
+                "key": "learn_nec_ir",
+                "dont_persist": True,
+                "ui": "activity",
+                "activity_class": LearnNECIR,
+                "placeholder": "Receive and decode NEC IR signals (needs receiver diode)",
                 },
             ],
         )

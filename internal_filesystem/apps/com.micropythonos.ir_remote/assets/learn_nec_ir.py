@@ -5,8 +5,6 @@ from mpos import Activity, IRManager
 try:
     from machine import Pin
     from ir.ir_rx.nec import SAMSUNG
-    from ir.ir_rx.acquire import IR_GET
-    from ir.ir_rx.nec import NEC_16
 
     simulation_mode = False
 except Exception as e:
@@ -15,7 +13,7 @@ except Exception as e:
     Pin = None
     SAMSUNG = None
 
-class LearnIR(Activity):
+class LearnNECIR(Activity):
 
     status = None
     screen = None
@@ -26,7 +24,7 @@ class LearnIR(Activity):
         print("learn_ir.py")
         self.screen = lv.obj()
         self.status = lv.label(self.screen)
-        self.status.set_text("Listening for IR data...")
+        self.status.set_text("Listening for NEC IR data...")
         self.setContentView(self.screen)
 
     def onResume(self, screen):
@@ -38,11 +36,13 @@ class LearnIR(Activity):
             self.ir = None
             return
         try:
-            self.ir = IR_GET(IRManager.rxPin, display=False)
+            # not 16 bit has more failure possibility and 'samsung' variant has a smaller "leader" (otherwise it refuses)
+            # so NEC_16 is the most generic:
+            self.ir = NEC_16(IRManager.rxPin, self._on_ir)
         except Exception as e:
             print(f"Failed to init IR receiver: {e}")
             self.ir = None
-        self.check_timer = lv.timer_create(self.check_data, 1000, None)
+        #self.check_timer = lv.timer_create(self.check_data, 1000, None)
 
     def onPause(self, screen):
         if self.check_timer is not None:

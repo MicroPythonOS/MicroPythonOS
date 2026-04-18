@@ -19,7 +19,16 @@ class NEC_ABC(IR_RX):
         self._leader = 2500 if samsung else 4000  # 4.5ms for Samsung else 9ms
 
     def decode(self, _):
-        print("ir_rx nec.py trying to decode")
+        print("ir_rx nec.py decoding burst")
+        lb = self.edge - 1  # Possible length of burst
+        # Convert absolute timings to relative timings for later retrieval:
+        self.burst = []
+        for x in range(lb):
+            dt = ticks_diff(self._times[x + 1], self._times[x])
+            if x > 0 and dt > 10000:  # Reached gap between repeats
+                break
+            self.burst.append(dt)
+        print(f"burst: {self.burst}")
         try:
             if self.edge > 68:
                 raise RuntimeError(self.OVERRUN)
