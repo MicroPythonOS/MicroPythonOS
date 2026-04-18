@@ -42,6 +42,7 @@ LCD_BL   = const(45)
 TOUCH_SDA = const(16)
 TOUCH_SCL = const(15)
 TOUCH_I2C_FREQ = const(400000)
+TOUCH_RST = const(18)  # FT6336G reset pin (active low)
 
 # Display resolution
 TFT_WIDTH  = const(240)
@@ -94,7 +95,24 @@ mpos.ui.main_display.set_color_inversion(True)  # TFT_INVERSION_ON in official s
 print("freenove_esp32s3_display.py: init touch (FT6336G)")
 import drivers.indev.ft6x36 as ft6x36
 
+# Hardware reset of FT6336G via RST pin (GPIO18, active low).
+# Freenove's official FT6336U library drives RST low for 10ms then waits
+# for the chip to stabilize before any I2C communication.
+touch_rst = Pin(TOUCH_RST, Pin.OUT)
+touch_rst.value(0)
+time.sleep_ms(10)
+touch_rst.value(1)
+time.sleep_ms(200)  # chip needs time to fully initialize after reset
+
+# Use a plain machine.I2C and override _bus in the LVGL I2C.Bus wrapper.
+# This avoids an IDF I2C driver conflict: fail_save_i2c() in board detection
+# leaves machine.I2C(0) open on the same pins, and creating i2c.I2C.Bus(host=0)
+# on top of it can leave subsequent write_readinto calls returning ENODEV.
+# This is the same pattern used by m5stack_core2 (also FT6x36 touch).
+machine_i2c = machine.I2C(0, sda=Pin(TOUCH_SDA), scl=Pin(TOUCH_SCL), freq=TOUCH_I2C_FREQ)
 i2c_bus = i2c.I2C.Bus(host=0, sda=TOUCH_SDA, scl=TOUCH_SCL, freq=TOUCH_I2C_FREQ, use_locks=False)
+i2c_bus._bus = machine_i2c
+
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=ft6x36.I2C_ADDR, reg_bits=ft6x36.BITS)
 try:
     indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._0)
