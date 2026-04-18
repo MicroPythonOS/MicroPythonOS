@@ -115,7 +115,7 @@ i2c_bus._bus = machine_i2c
 
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=ft6x36.I2C_ADDR, reg_bits=ft6x36.BITS)
 try:
-    indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._270)
+    indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180)
     InputManager.register_indev(indev)
 except Exception as e:
     print(f"Touch init got exception: {e}")
@@ -212,19 +212,61 @@ import mpos.lights as LightsManager
 LightsManager.init(neopixel_pin=42, num_leds=1)
 
 # ==============================
-# Step 7: Audio (ES8311 codec)
-# TODO: The ES8311 codec requires a non-trivial I2C initialization sequence
-# (PLL config, sample rate, bit depth, I2S format) that has no existing driver
-# in this codebase. Audio support is deferred to a follow-up.
-# For now, keep the FM8002E amplifier disabled (HIGH = off) to save power.
-# I2S pins when audio is implemented (confirmed from Sketch_07.1_Music and schematic):
-#   MCK=4, BCK=5, WS=7
-#   sd=8    (ESP32 TX → codec DAC, playback; schematic labels this "input" from codec's view)
-#   sd_in=6 (ESP32 RX ← codec ADC, recording; schematic labels this "output" from codec's view)
-# I2C (shared with touch): SDA=16, SCL=15, ES8311 addr=0x18
+# Step 7: Audio (ES8311 codec + FM8002E amplifier)
+# I2S pins (confirmed from Freenove Sketch_07.1_Music and schematic):
+#   MCK=4  (MCLK to codec — driven by PWM during playback/recording)
+#   BCK=5  (BCLK, I2S bit clock)
+#   WS=7   (LRCK, I2S word select)
+#   sd=8   (ESP32 I2S TX → ES8311 SDIN → DAC → speaker)
+#   sd_in=6(ES8311 SDOUT → ADC → ESP32 I2S RX → recording)
+# I2C addr 0x18, shared bus with touch (SDA=16, SCL=15)
 # ==============================
-print("freenove_esp32s3_display.py: amplifier disabled (audio TODO)")
-amp_enable = Pin(1, Pin.OUT, value=1)  # HIGH = FM8002E amplifier disabled
+print("freenove_esp32s3_display.py: init audio (ES8311 + FM8002E)")
+
+# Initialise the ES8311 codec over the shared I2C bus.
+# machine_i2c is already open on SDA=16, SCL=15 from the touch init above.
+try:
+    import drivers.codec.es8311 as es8311_drv
+    es8311_drv.ES8311(machine_i2c)
+except Exception as e:
+    print(f"ES8311 init failed: {e}")
+
+# Enable the FM8002E speaker amplifier (GPIO1 LOW = enabled).
+amp_enable = Pin(1, Pin.OUT, value=0)  # LOW = FM8002E amplifier enabled
+
+# Register I2S audio devices with AudioManager.
+# Both output and input share MCLK (GPIO4), BCLK (GPIO5), and WS (GPIO7).
+# Only one I2S session can be active at a time; AudioManager handles conflicts.
+from mpos import AudioManager
+
+AudioManager.add(
+    AudioManager.Output(
+        name="Speaker",
+        kind="i2s",
+        channels=1,
+        i2s_pins={
+            'mck': 4,   # MCLK — PWM-driven at 256 × sample_rate during playback
+            'sck': 5,   # BCLK
+            'ws':  7,   # LRCK
+            'sd':  8,   # I2S TX (ESP32 → ES8311 DAC)
+        },
+    )
+)
+
+AudioManager.add(
+    AudioManager.Input(
+        name="Microphone",
+        kind="i2s",
+        channels=1,
+        i2s_pins={
+            'mck':   4,  # MCLK — PWM-driven at 256 × sample_rate during recording
+            'sck':   5,  # BCLK
+            'ws':    7,  # LRCK
+            'sd_in': 6,  # I2S RX (ES8311 ADC → ESP32)
+        },
+        preferred_sample_rate=16000,
+    )
+)
 
 # IMU: not present on this board — SensorManager not initialized
 

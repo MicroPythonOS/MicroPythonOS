@@ -122,7 +122,7 @@ class AudioManager:
 
         @staticmethod
         def _validate_i2s_pins(i2s_pins):
-            allowed = {"sck_in", "sck", "ws", "sd_in"}
+            allowed = {"sck_in", "sck", "ws", "sd_in", "mck"}
             for key in i2s_pins:
                 if key not in allowed:
                     raise ValueError("Invalid i2s_pins key for input: %s" % key)

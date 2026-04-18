@@ -46,6 +46,7 @@ class RecordStream:
         self._keep_running = True
         self._is_recording = False
         self._i2s = None
+        self._mck_pwm = None
         self._bytes_recorded = 0
         self._start_time_ms = 0
 
@@ -138,6 +139,19 @@ class RecordStream:
             if not use_simulation:
                 # Initialize I2S in RX mode with correct pins for microphone
                 try:
+                    # Start MCLK on mck pin if provided (required for I2S codecs such as ES8311)
+                    if 'mck' in self.i2s_pins:
+                        try:
+                            from machine import Pin, PWM
+                            mck_pin = Pin(self.i2s_pins['mck'], Pin.OUT)
+                            self._mck_pwm = PWM(mck_pin)
+                            mck_freq = self.sample_rate * 256
+                            self._mck_pwm.freq(mck_freq)
+                            self._mck_pwm.duty_u16(32768)  # 50% duty cycle
+                            print(f"RecordStream: MCLK PWM started at {mck_freq} Hz")
+                        except Exception as e:
+                            print(f"RecordStream: MCLK PWM init failed: {e}")
+
                     # Use sck_in if available (separate clock for mic), otherwise fall back to sck
                     sck_pin = self.i2s_pins.get('sck_in', self.i2s_pins.get('sck'))
                     print(f"RecordStream: Initializing I2S RX with sck={sck_pin}, ws={self.i2s_pins['ws']}, sd={self.i2s_pins['sd_in']}")
@@ -249,6 +263,12 @@ class RecordStream:
             if self._i2s:
                 self._i2s.deinit()
                 self._i2s = None
+            if self._mck_pwm:
+                try:
+                    self._mck_pwm.deinit()
+                except Exception:
+                    pass
+                self._mck_pwm = None
             print(f"RecordStream: Recording thread finished")
 
     def get_duration_ms(self):
