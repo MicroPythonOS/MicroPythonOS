@@ -27,7 +27,8 @@ class RecordStream:
     DEFAULT_MAX_DURATION_MS = 60000  # 60 seconds max
     DEFAULT_FILESIZE = 1024 * 1024 * 1024 # 1GB data size because it can't be quickly set after recording
 
-    def __init__(self, file_path, duration_ms, sample_rate, i2s_pins, on_complete):
+    def __init__(self, file_path, duration_ms, sample_rate, i2s_pins, on_complete,
+                 on_open=None, on_close=None):
         """
         Initialize recording stream.
 
@@ -37,12 +38,16 @@ class RecordStream:
             sample_rate: Sample rate in Hz
             i2s_pins: Dict with 'sck', 'ws', 'sd_in' pin numbers
             on_complete: Callback function(message) when recording finishes
+            on_open: Optional callable invoked after MCLK starts, before I2S init
+            on_close: Optional callable invoked before I2S deinit
         """
         self.file_path = file_path
         self.duration_ms = duration_ms if duration_ms else self.DEFAULT_MAX_DURATION_MS
         self.sample_rate = sample_rate if sample_rate else self.DEFAULT_SAMPLE_RATE
         self.i2s_pins = i2s_pins
         self.on_complete = on_complete
+        self.on_open = on_open
+        self.on_close = on_close
         self._keep_running = True
         self._is_recording = False
         self._i2s = None
@@ -152,6 +157,13 @@ class RecordStream:
                         except Exception as e:
                             print(f"RecordStream: MCLK PWM init failed: {e}")
 
+                    # Notify codec to prepare for recording (e.g. mute DAC, configure ADC)
+                    if self.on_open:
+                        try:
+                            self.on_open()
+                        except Exception as e:
+                            print(f"RecordStream: on_open failed: {e}")
+
                     # Use sck_in if available (separate clock for mic), otherwise fall back to sck
                     sck_pin = self.i2s_pins.get('sck_in', self.i2s_pins.get('sck'))
                     print(f"RecordStream: Initializing I2S RX with sck={sck_pin}, ws={self.i2s_pins['ws']}, sd={self.i2s_pins['sd_in']}")
@@ -260,6 +272,11 @@ class RecordStream:
 
         finally:
             self._is_recording = False
+            if self.on_close:
+                try:
+                    self.on_close()
+                except Exception as e:
+                    print(f"RecordStream: on_close failed: {e}")
             if self._i2s:
                 self._i2s.deinit()
                 self._i2s = None

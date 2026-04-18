@@ -46,6 +46,7 @@ _REG13_SYS      = const(0x13)  # system: enable HP output driver
 _REG14_MIC      = const(0x14)  # microphone: DMIC select, analog PGA gain
 _REG17_ADC_VOL  = const(0x17)  # ADC volume / gain
 _REG1C_ADC_EQ   = const(0x1C)  # ADC equalizer bypass + DC-offset cancel
+_REG31_DAC_MUTE = const(0x31)  # DAC soft-mute control (bits[6:5] = 11 → muted)
 _REG32_DAC_VOL  = const(0x32)  # DAC output volume (0x00=muted, 0xFF=max)
 _REG37_DAC_EQ   = const(0x37)  # DAC equalizer / ramp-rate control
 
@@ -123,7 +124,27 @@ class ES8311:
         self._wr(_REG32_DAC_VOL, _DEFAULT_VOL_REG)  # set output volume (~85%)
         self._wr(_REG37_DAC_EQ,  0x08)              # bypass DAC equalizer
 
+        # Soft-mute the DAC at boot — unmuted by on_open callback when playback starts
+        self.dac_mute(True)
+
         print("ES8311: codec initialised")
+
+    def dac_mute(self, mute=True):
+        """
+        Soft-mute or unmute the DAC output.
+
+        Uses the ES8311's built-in ramp so the transition is pop-free.
+        Does not affect the DAC power state or volume register.
+
+        Args:
+            mute: True to mute, False to unmute
+        """
+        val = self._rd(_REG31_DAC_MUTE)
+        if mute:
+            val |= 0x60   # bits[6:5] = 11 → soft mute on
+        else:
+            val &= ~0x60  # bits[6:5] = 00 → soft mute off
+        self._wr(_REG31_DAC_MUTE, val)
 
     def set_dac_volume(self, percent):
         """

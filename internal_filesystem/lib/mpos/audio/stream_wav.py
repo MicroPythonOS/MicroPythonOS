@@ -177,6 +177,8 @@ class WAVStream:
         i2s_pins,
         on_complete,
         requested_sample_rate=None,
+        on_open=None,
+        on_close=None,
     ):
         """
         Initialize WAV stream.
@@ -188,6 +190,8 @@ class WAVStream:
             i2s_pins: Dict with 'sck', 'ws', 'sd' pin numbers
             on_complete: Callback function(message) when playback finishes
             requested_sample_rate: Optional negotiated sample rate for shared clocks
+            on_open: Optional callable invoked after MCLK starts, before I2S init
+            on_close: Optional callable invoked before I2S deinit (after audio drains)
         """
         self.file_path = file_path
         self.stream_type = stream_type
@@ -195,6 +199,8 @@ class WAVStream:
         self.i2s_pins = i2s_pins
         self.on_complete = on_complete
         self.requested_sample_rate = requested_sample_rate
+        self.on_open = on_open
+        self.on_close = on_close
         self._keep_running = True
         self._is_playing = False
         self._i2s = None
@@ -449,7 +455,7 @@ class WAVStream:
 
                 self._playback_rate = playback_rate
                 # ibuf = playback_rate # doesnt account for stereo vs mono...
-                ibuf = 32000
+                ibuf = 8192
 
                 print(f"WAVStream: {original_rate} Hz, {bits_per_sample}-bit, {channels}-ch")
                 print(f"WAVStream: Playback at {playback_rate} Hz (factor {upsample_factor})")
@@ -494,6 +500,13 @@ class WAVStream:
                         except Exception as e:
                             print(f"MCLK PWM init failed: {e}")
                             # fallback or error handling
+
+                    # Notify codec/amp to prepare for playback (enable amp, unmute DAC, etc.)
+                    if self.on_open:
+                        try:
+                            self.on_open()
+                        except Exception as e:
+                            print(f"WAVStream: on_open failed: {e}")
 
                     if self.i2s_pins.get("sck"):
                         self._i2s = machine.I2S(
@@ -627,6 +640,11 @@ class WAVStream:
 
         finally:
             self._is_playing = False
+            if self.on_close:
+                try:
+                    self.on_close()
+                except Exception as e:
+                    print(f"WAVStream: on_close failed: {e}")
             if self._i2s:
                 print("Done playing, doing i2s deinit")
                 self._i2s.deinit() # disabling this does not fix the "play just once" issue

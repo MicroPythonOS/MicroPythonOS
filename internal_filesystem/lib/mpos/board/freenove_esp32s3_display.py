@@ -225,14 +225,33 @@ print("freenove_esp32s3_display.py: init audio (ES8311 + FM8002E)")
 
 # Initialise the ES8311 codec over the shared I2C bus.
 # machine_i2c is already open on SDA=16, SCL=15 from the touch init above.
+_es8311 = None
 try:
     import drivers.codec.es8311 as es8311_drv
-    es8311_drv.ES8311(machine_i2c)
+    _es8311 = es8311_drv.ES8311(machine_i2c)
 except Exception as e:
     print(f"ES8311 init failed: {e}")
 
-# Enable the FM8002E speaker amplifier (GPIO1 LOW = enabled).
-amp_enable = Pin(1, Pin.OUT, value=0)  # LOW = FM8002E amplifier enabled
+# FM8002E speaker amplifier enable pin (GPIO1: LOW=enabled, HIGH=disabled).
+# Start disabled at boot — enabled only around active playback to prevent ring noise.
+_amp_enable = Pin(1, Pin.OUT, value=1)  # HIGH = FM8002E amplifier disabled
+
+
+def _audio_on_open():
+    """Called after MCLK starts and before I2S init. Enables amp and unmutes DAC."""
+    _amp_enable.value(0)          # LOW = enable FM8002E amplifier
+    if _es8311:
+        time.sleep_ms(10)         # let amp rail settle before unmuting
+        _es8311.dac_mute(False)   # release DAC soft-mute
+
+
+def _audio_on_close():
+    """Called before I2S deinit. Mutes DAC then disables amp to suppress pops."""
+    if _es8311:
+        _es8311.dac_mute(True)    # soft-mute DAC first (ramp prevents click)
+        time.sleep_ms(20)         # wait for ramp to complete
+    _amp_enable.value(1)          # HIGH = disable FM8002E amplifier
+
 
 # Register I2S audio devices with AudioManager.
 # Both output and input share MCLK (GPIO4), BCLK (GPIO5), and WS (GPIO7).
@@ -250,6 +269,8 @@ AudioManager.add(
             'ws':  7,   # LRCK
             'sd':  8,   # I2S TX (ESP32 → ES8311 DAC)
         },
+        on_open=_audio_on_open,
+        on_close=_audio_on_close,
     )
 )
 
