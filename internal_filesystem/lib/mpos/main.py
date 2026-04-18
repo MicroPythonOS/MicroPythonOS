@@ -292,13 +292,21 @@ def custom_exception_handler(e):
         #focusgroup.delete()
     #lv.deinit()
 
-import task_handler
 # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate but still okay)
-# 1ms gives highest framerate on esp32-s3's but might have side effects?
-mpos.ui.task_handler = task_handler.TaskHandler(duration=1, exception_hook=custom_exception_handler)
-# Convenient for apps to be able to access these:
-mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
-mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED
+# 1ms gives highest framerate on esp32-s3's but might has side effects: RMT (used for IR RX) timing is off
+def change_task_handler(period_ms=1):
+    import mpos.ui
+    if hasattr(mpos.ui, "task_handler"):
+        mpos.ui.task_handler.disable() # this fixes the decode of the real remote!
+        mpos.ui.task_handler.deinit()
+    import task_handler
+    mpos.ui.task_handler = task_handler.TaskHandler(duration=period_ms, exception_hook=custom_exception_handler)
+    # Convenient for apps to be able to access these:
+    mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
+    mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED
+
+mpos.ui.change_task_handler = change_task_handler # make it accessible
+mpos.ui.change_task_handler()
 
 try:
     from mpos.net.wifi_service import WifiService

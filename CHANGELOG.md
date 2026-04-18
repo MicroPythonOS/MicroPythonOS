@@ -8,6 +8,7 @@ Frameworks:
 - Add new GPSManager framework
 - Add new IRManager framework
 - Add new LoRaManager framework
+- Add mpos.ui.change_task_handler() for improving IR timing accuracy
 
 OS:
 - LilyGo T-Watch S3 Plus: add support for IR Remote app
