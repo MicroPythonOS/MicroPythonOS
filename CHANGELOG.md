@@ -9,6 +9,7 @@ Frameworks:
 - Add new IRManager framework
 - Add new LoRaManager framework
 - Add mpos.ui.change_task_handler() for improving IR timing accuracy
+- AppearanceManager: fix set_light_mode() and set_primary_color() — they called a non-existent `prefs.set_string()` and raised AttributeError for every third-party caller; writes now go through `edit().put_string().commit()` and the LVGL theme is reinitialised when the colour changes
 
 OS:
 - LilyGo T-Watch S3 Plus: add support for IR Remote app
