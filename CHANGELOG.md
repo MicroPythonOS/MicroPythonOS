@@ -14,6 +14,7 @@ OS:
 - LilyGo T-Watch S3 Plus: add support for IR Remote app
 - Fri3d 2024: add support for IR remote app
 - Fri3d 2026: add support for IR remote app
+- Fri3d 2026: add CH32 coprocessor firmware handling
 
 
 0.9.2

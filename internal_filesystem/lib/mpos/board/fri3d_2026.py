@@ -64,13 +64,84 @@ buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-# Quick and dirty LCD reset using the CH32 microcontroller
-ADDRESS = 0x50
+# === LED HARDWARE ===
+import mpos.lights as LightsManager
+# Initialize 5 NeoPixel LEDs (GPIO 12)
+LightsManager.init(neopixel_pin=12, num_leds=5)
+# Set left LED red
+LightsManager.set_led(4, 255, 0, 0)
+LightsManager.write()
+
+# CH32 coprocessor / IO expander
+from machine import I2C, Pin
 expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
-expander_i2c.writeto_mem(ADDRESS, 22, b'\x01') # 3v3 aux on + LCD off
+from lib.drivers.fri3d.expander import Expander
+expander = Expander(i2c_bus=expander_i2c)
+
+def progress(msg, pct):
+    print(f"{msg}: {pct}%")
+    twentieth = int(pct / 20)
+    lednr = max(0,4 - twentieth)
+    color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
+    print(f"setting LED {lednr} color {color}")
+    LightsManager.set_led(lednr, *color)
+    LightsManager.write()
+
+def install_expander_firmware(filename):
+    # Would be nice to show some progress using the RGB LEDs here
+    print("Installing latest CH32 firmware")
+    expander.config = 0x0B # trigger SWD enable
+    import time
+    time.sleep(0.2)
+    from rvswd import RVSWD
+    prog = RVSWD(39, 42)
+    # optional check, already halts the MCU
+    vendor = prog.read_vendor_bytes()
+    if (vendor[1] & 0xffffff0f) != 0x03560601:
+        print(f"CH32X035G8U6 not detected, vendor is {vendor} but continuing anyway")
+    # flash
+    with open(filename, 'rb') as f:
+        fw = f.read()
+    f.close()
+    prog.x03x_program(fw, progress) # throws exception if it fails
+    time.sleep(4) # give it some time to boot
+    print("Latest version should be installed...")
+
+# Check expander firmware version and if none or too low: install latest
+try:
+    current_version = expander.version
+    print(f"Current_version of CH32 firmware: {current_version}")
+except Exception as e:
+    print("Could not check CH32 firmware version, assuming 0.0.0")
+    current_version = (0, 0, 0)
+latest_version = (1, 2, 1)
+if latest_version > current_version:
+    print(f"CH32 firmware is lower than latest {latest_version} so updating...")
+    try:
+        install_expander_firmware("/lib/drivers/fri3d/coprocessor_1.2.1.fw")
+        LightsManager.set_all(0,255,0)
+        LightsManager.write()
+        # Need to reinitialize:
+        expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
+        expander = Expander(i2c_bus=expander_i2c)
+    except Exception as e:
+        print(f"CH32 firmware install got exception: {e}")
+        import sys
+        sys.print_exception(e)
+    try:
+        current_version = expander.version
+        print(f"After install, current_version of CH32 firmware: {current_version}")
+    except Exception as e:
+        print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
+
+
+# LCD reset using the CH32 microcontroller
+expander.config= 0x01 # 3v3 aux on + LCD off
 import time
-time.sleep_ms(200)
-expander_i2c.writeto_mem(ADDRESS, 22, b'\x03') # 3v3 aux + LCD on
+time.sleep_ms(100)
+expander.config= 0x03 # 3v3 aux + LCD on
+import mpos
+mpos.io_expander = expander # quick and dirty way to make accessible later
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
@@ -82,7 +153,7 @@ mpos.ui.main_display = st7789.ST7789(
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
-    # reset_pin = driven by the CH32 microcontroller
+    # reset_pin is driven by the CH32 microcontroller
 ) # calls lv.init()
 
 mpos.ui.main_display.init()
@@ -100,12 +171,10 @@ try:
     InputManager.register_indev(tindev)
 except Exception as e:
     print(f"Touch screen init got exception: {e}")
-
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 
 # Button handling code:
 import time
-
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
 
 # Key repeat configuration
@@ -283,15 +352,7 @@ mic_input = AudioManager.add(
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
-# Create I2C bus for IMU (LSM6DSOTR-C / LSM6DSO)
-SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH)
-
-# === LED HARDWARE ===
-import mpos.lights as LightsManager
-# Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12, num_leds=5)
-
-print("Fri3d hardware: Audio, LEDs, and sensors initialized")
+SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH) # IMU (LSM6DSOTR-C / LSM6DSO)
 
 # === STARTUP "WOW" EFFECT ===
 import time

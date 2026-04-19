@@ -1,3 +1,6 @@
+# Uncomment this line if you want to be dropped to a REPL shell without loading any MicroPythonOS code:
+# raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
+
 import _thread
 import lvgl as lv
 
