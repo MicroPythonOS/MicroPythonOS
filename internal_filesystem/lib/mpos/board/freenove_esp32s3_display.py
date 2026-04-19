@@ -193,9 +193,9 @@ print("freenove_esp32s3_display.py: init battery")
 
 def adc_to_voltage(raw_adc):
     # Schematic uses equal 200K/200K resistor divider (1:2), so V_bat = V_pin * 2.
-    # The ESP32-S3 ADC with ATTN_11DB has an effective reference of ~3.467V (not 3.3V).
-    # Calibration: raw=2398 → 4.06V measured, so scale = 4.06/2398 ≈ 0.001694 V/count.
-    return raw_adc * (4.06 / 2398)
+    # ATTN_11DB on the ESP32-S3 allows reading up to ~3.5V (used as reference here).
+    # TODO: switch to adc.read_uv() for per-chip factory calibration.
+    return raw_adc * (3.5 / 4095) * 2
 
 BatteryManager.init_adc(9, adc_to_voltage)
 
