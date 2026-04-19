@@ -78,17 +78,42 @@ expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
 from lib.drivers.fri3d.expander import Expander
 expander = Expander(i2c_bus=expander_i2c)
 
+
+# Show progress using the RGB LEDs:
+def rainbow_color(value: float) -> tuple[int, int, int]:
+    t = max(0.0, min(1.0, value / 100.0))   # normalized 0.0 to 1.0
+    hue = t * 300.0
+    h = hue / 60.0
+    i = int(h)
+    f = h - i                               # fractional part
+
+    if i == 0:
+        r, g, b = 1.0, f, 0.0
+    elif i == 1:
+        r, g, b = 1.0 - f, 1.0, 0.0
+    elif i == 2:
+        r, g, b = 0.0, 1.0, f
+    elif i == 3:
+        r, g, b = 0.0, 1.0 - f, 1.0
+    elif i == 4:
+        r, g, b = f, 0.0, 1.0
+    else:  # i == 5
+        r, g, b = 1.0, 0.0, 1.0 - f
+
+    return (int(r * 255 + 0.5), int(g * 255 + 0.5), int(b * 255 + 0.5))
+
+# Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
-    print(f"{msg}: {pct}%")
+    #print(f"{msg}: {pct}%")
     twentieth = int(pct / 20)
     lednr = max(0,4 - twentieth)
-    color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
-    print(f"setting LED {lednr} color {color}")
+    #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
+    color = rainbow_color(pct)
+    #print(f"setting LED {lednr} color {color}")
     LightsManager.set_led(lednr, *color)
     LightsManager.write()
 
 def install_expander_firmware(filename):
-    # Would be nice to show some progress using the RGB LEDs here
     print("Installing latest CH32 firmware")
     expander.config = 0x0B # trigger SWD enable
     import time
@@ -99,13 +124,15 @@ def install_expander_firmware(filename):
     vendor = prog.read_vendor_bytes()
     if (vendor[1] & 0xffffff0f) != 0x03560601:
         print(f"CH32X035G8U6 not detected, vendor is {vendor} but continuing anyway")
-    # flash
     with open(filename, 'rb') as f:
         fw = f.read()
     f.close()
-    prog.x03x_program(fw, progress) # throws exception if it fails
-    time.sleep(4) # give it some time to boot
-    print("Latest version should be installed...")
+    progress_margin_end = 21 # 21% left for sleep at the end
+    prog.x03x_program(fw, lambda msg, pct: progress(msg, int((100 - progress_margin_end) * pct / 100))) # throws exception if it fails
+    for pct in range(100-progress_margin_end,101):
+        progress("waiting for CH32 boot", pct)
+        time.sleep(4/progress_margin_end) # wait 4 seconds total
+    print("Latest CH32 firmware installed.")
 
 # Check expander firmware version and if none or too low: install latest
 try:
@@ -134,6 +161,8 @@ if latest_version > current_version:
     except Exception as e:
         print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
 
+# quick and dirty way to make accessible later:
+mpos.io_expander = expander
 
 # LCD reset using the CH32 microcontroller
 expander.config= 0x01 # 3v3 aux on + LCD off
@@ -141,7 +170,6 @@ import time
 time.sleep_ms(100)
 expander.config= 0x03 # 3v3 aux + LCD on
 import mpos
-mpos.io_expander = expander # quick and dirty way to make accessible later
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
