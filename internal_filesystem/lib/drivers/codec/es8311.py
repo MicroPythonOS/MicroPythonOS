@@ -44,6 +44,7 @@ _REG0E_SYS      = const(0x0E)  # system: enable analog PGA + ADC modulator
 _REG12_DAC_EN   = const(0x12)  # system: power-up DAC
 _REG13_SYS      = const(0x13)  # system: enable HP output driver
 _REG14_MIC      = const(0x14)  # microphone: DMIC select, analog PGA gain
+_REG16_ADC_GAIN = const(0x16)  # ADC digital gain (separate from volume; default 4 = 24 dB)
 _REG17_ADC_VOL  = const(0x17)  # ADC volume / gain
 _REG1C_ADC_EQ   = const(0x1C)  # ADC equalizer bypass + DC-offset cancel
 _REG31_DAC_MUTE = const(0x31)  # DAC soft-mute control (bits[6:5] = 11 → muted)
@@ -117,6 +118,7 @@ class ES8311:
         self._wr(_REG14_MIC,    0x1A)   # enable analog mic input, max PGA gain
 
         # --- ADC (microphone) ---
+        self._wr(_REG16_ADC_GAIN, 0x04)  # ADC digital gain = 24 dB (default)
         self._wr(_REG17_ADC_VOL, 0xC8)  # ADC gain/volume (Espressif default)
         self._wr(_REG1C_ADC_EQ,  0x6A)  # ADC equalizer bypass, cancel DC offset
 
