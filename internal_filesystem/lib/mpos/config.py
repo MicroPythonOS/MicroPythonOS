@@ -29,7 +29,14 @@ class SharedPreferences:
         try:
             with open(self.filepath, 'r') as f:
                 self.data = ujson.load(f)
-                print(f"load: Loaded preferences from {self.filepath}: {self.data}")
+                # Deliberately log only the filepath and key count, NOT the
+                # values. Prefs often hold secrets (WiFi passwords in
+                # access_points, wallet API keys / NWC secrets / xpubs in
+                # third-party apps, etc.) — printing self.data leaked those
+                # to serial/REPL every time any app loaded its prefs. An
+                # app that wants rich debug output can opt in by logging
+                # selected keys itself.
+                print(f"load: Loaded preferences from {self.filepath} ({len(self.data)} keys)")
         except Exception as e:
             print(f"SharedPreferences.load didn't find preferences: {e}")
             self.data = {}
