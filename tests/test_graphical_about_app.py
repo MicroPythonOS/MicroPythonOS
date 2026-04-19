@@ -15,6 +15,7 @@ Usage:
 """
 
 import unittest
+import time
 import lvgl as lv
 import mpos.ui
 from mpos import (
@@ -30,6 +31,29 @@ from mpos import (
 
 class TestGraphicalAboutApp(unittest.TestCase):
     """Test suite for About app graphical verification."""
+
+    def _wait_for_text(self, text, attempts=6, render_iterations=30):
+        for attempt in range(1, attempts + 1):
+            screen = lv.screen_active()
+            print(f"\nText check attempt {attempt}/{attempts}:")
+            print_screen_labels(screen)
+            if verify_text_present(screen, text):
+                return True
+            wait_for_render(iterations=render_iterations)
+            time.sleep(0.2)
+        return False
+
+    def _wait_for_label_with_text(self, text, attempts=6, render_iterations=30):
+        for attempt in range(1, attempts + 1):
+            screen = lv.screen_active()
+            label = find_label_with_text(screen, text)
+            if label is not None:
+                return label
+            print(f"\nLabel '{text}' not found (attempt {attempt}/{attempts}).")
+            print_screen_labels(screen)
+            wait_for_render(iterations=render_iterations)
+            time.sleep(0.2)
+        return None
 
     def setUp(self):
         """Set up test fixtures before each test method."""
@@ -73,7 +97,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
         print_screen_labels(screen)
 
         # Verify that Hardware ID text is present
-        hardware_id_label = find_label_with_text(screen, "Hardware ID:")
+        hardware_id_label = self._wait_for_label_with_text("Hardware ID:")
         self.assertIsNotNone(
             hardware_id_label,
             "Could not find 'Hardware ID:' label on screen"
@@ -93,7 +117,7 @@ class TestGraphicalAboutApp(unittest.TestCase):
 
         # Also verify using the helper function
         self.assertTrue(
-            verify_text_present(screen, self.hardware_id),
+            self._wait_for_text(self.hardware_id),
             f"Hardware ID '{self.hardware_id}' not found on screen"
         )
 
@@ -119,14 +143,14 @@ class TestGraphicalAboutApp(unittest.TestCase):
 
         # Verify that MicroPythonOS version text is present
         self.assertTrue(
-            verify_text_present(screen, "Release version:"),
+            self._wait_for_text("Release version:"),
             "Could not find 'Release version:' on screen"
         )
 
         # Verify the actual version string is present
         os_version = BuildInfo.version.release
         self.assertTrue(
-            verify_text_present(screen, os_version),
+            self._wait_for_text(os_version),
             f"OS version '{os_version}' not found on screen"
         )
 
