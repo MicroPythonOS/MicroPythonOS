@@ -299,23 +299,6 @@ IRManager.rxPin = Pin(11, Pin.IN)
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
 
-# I2S pin configuration for audio output (DAC) and input (microphone)
-# Note: I2S is created per-stream, not at boot (only one instance can exist)
-# The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
-# See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
-
-# recording and playback at the same time:
-# - no issue for the headset
-# - communicator: must be same sample rate because shared sck 17 BUT this will result in feedback, probably
-#                   fix: playback headset speaker, record communicator microphone: should work
-#                   fix: playback communicator speaker, record headset microphone: should work
-# TODO:
-# - revamp to multiple audio framework so all 4 items can be defined: 2 speakers (hss, cs) and 2 microphones (hsm, cm)
-# - try each 4 of the items separately: hss, hsm, cs, cm
-# - try trivial combinations: hss + hsm, cs + cm
-# - try similar combinations: hss + cs, cm + hsm
-# - try cross combinations: hss + cm, cs + hsm
-
 headset_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
@@ -347,7 +330,6 @@ buzzer_output = AudioManager.add(
         buzzer_pin=38,
     )
 )
-
 
 # Would be better to only add these if the communicator is connected:
 communicator_i2s_output_pins = {
