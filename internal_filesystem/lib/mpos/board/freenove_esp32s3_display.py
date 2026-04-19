@@ -8,7 +8,7 @@ print("freenove_esp32s3_display.py initialization")
 # - Touch: FT6336G capacitive touch, I2C addr 0x38, SDA=16, SCL=15
 # - NeoPixel: WS2812B, 1 LED, GPIO 42
 # - Button: GPIO 0 (INPUT_PULLUP)
-# - Battery ADC: GPIO 9 (voltage divider 2:1 → volts = adcMillivolts × 2.0 / 1000)
+# - Battery ADC: GPIO 9 (200K/200K voltage divider → V_bat = raw_adc × 3.3/4095 × 2)
 # - SD Card: SDMMC 4-bit (CLK=38, CMD=40, D0=39, D1=41, D2=48, D3=47)
 # - Audio: ES8311 codec (I2C SDA=16/SCL=15, I2S MCK=4/BCK=5/DOUT=8/DIN=6/WS=7)
 #          FM8002E amplifier (enable pin GPIO 1, LOW=enabled)
@@ -191,9 +191,10 @@ InputManager.register_indev(btn_indev)
 # ==============================
 print("freenove_esp32s3_display.py: init battery")
 
-def adc_to_voltage(adc_millivolts):
-    # Schematic uses a 2:1 resistor divider; multiply by 2 and convert mV → V
-    return adc_millivolts * 2.0 / 1000.0
+def adc_to_voltage(raw_adc):
+    # Schematic uses equal 200K/200K resistor divider (1:2), so V_bat = V_pin * 2.
+    # raw_adc is a 12-bit value (0-4095) where 4095 = 3.3V at the ADC pin.
+    return raw_adc * (3.3 / 4095) * 2
 
 BatteryManager.init_adc(9, adc_to_voltage)
 
