@@ -15,9 +15,6 @@ OS:
 - Fri3d 2024: add support for IR remote app
 - Fri3d 2026: add support for IR remote app
 
-Tests:
-- Add unit tests for Lightning Piggy app: on-chain wallet (OnchainWallet parsers + constructor validation), per-slot wallet_cache, and app-local theme override (_AppThemeView)
-
 
 0.9.2
 =====
