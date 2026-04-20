@@ -159,16 +159,29 @@ if latest_version > current_version:
     except Exception as e:
         print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
 
-'''
+
 # Quick and dirty patch of BatteryManager to use the CH32 battery level:
-# mpos.io_expander.analog causes keypresses
 def get_voltage(force_refresh=False, raw_adc_value=None):
-    return (0.001651 * mpos.io_expander.analog[2] + 0.08709) # copied from fri3d_2024.py
+    # First workaround Fri3dCamp/badge_2026_fw/issues/2 by disabling input polling
+    from mpos import InputManager
+    InputManager.list_indevs()
+    e = InputManager.list_indevs()[2]
+    e.enable(False)
+    # Wait to ensure more than 5ms between input polls
+    import time
+    time.sleep_ms(6)
+    # Do the read:
+    returnval = (0.001651 * mpos.io_expander.analog[2] + 0.08709) # copied from fri3d_2024.py
+    # Wait again to ensure more than 5ms between input polls
+    time.sleep_ms(6)
+    # Enable input polling again:
+    e.enable(True)
+    return returnval
 from mpos import BatteryManager
 BatteryManager.read_raw_adc =  lambda *args: mpos.io_expander.analog[2]
 BatteryManager.has_battery = lambda *args: True
 BatteryManager.read_battery_voltage = get_voltage
-'''
+
 
 # quick and dirty way to make accessible later:
 mpos.io_expander = expander
@@ -379,16 +392,13 @@ import _thread
 def startup_wow_effect():
     try:
         # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
-        startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
+        #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
         #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
+        import time
+        time.sleep(3) # wait until it's calmed down
+        megalovania = "Megalovania:d=16,o=5,b=150:d5,d5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,c5,c5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,b4,b4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,a#4,a#4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,d5,d5"
 
-        # Start the jingle
-        player = AudioManager.player(
-            rtttl=startup_jingle,
-            stream_type=AudioManager.STREAM_NOTIFICATION,
-            volume=60,
-            output=buzzer_output,
-        )
+        player = AudioManager.player(rtttl=megalovania,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output)
         player.start()
 
         # Rainbow colors for the 5 LEDs
@@ -423,6 +433,7 @@ def startup_wow_effect():
     except Exception as e:
         print(f"Startup effect error: {e}")
 
+# Would be nice if this were a setting:
 from mpos import TaskManager
 _thread.stack_size(TaskManager.good_stack_size()) # default stack size won't work, crashes!
 _thread.start_new_thread(startup_wow_effect, ())
