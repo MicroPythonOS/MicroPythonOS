@@ -146,9 +146,15 @@ class SettingActivity(Activity):
         current_checkbox_index = target_obj.get_index()
         print(f"current_checkbox_index: {current_checkbox_index}")
         if not checked:
+            # Radio-button convention: clicking the already-selected option
+            # must NOT un-select it. Exactly one option is always selected
+            # once the user has made a choice. Without this guard, a user
+            # could land on Settings, tap the current wallet type, and save
+            # an empty wallet_type — leading to the welcome screen coming
+            # back even though they meant to keep the config intact.
             if self.active_radio_index == current_checkbox_index:
-                print(f"unchecking {current_checkbox_index}")
-                self.active_radio_index = -1 # nothing checked
+                print(f"radio: ignoring un-check of active option {current_checkbox_index} (radios require exactly one)")
+                target_obj.add_state(lv.STATE.CHECKED)
             return
         else:
             if self.active_radio_index >= 0: # is there something to uncheck?
