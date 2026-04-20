@@ -5,13 +5,11 @@
 # - IMU (LSM6DSO) is different from fri3d_2024 (and address 0x6A instead of 0x6B) but the API seems the same, except different chip ID (0x6C iso 0x6A)
 # - I2S audio (communicator) is the same
 # - headphone jack microphone is on ESP.IO1
+# - buzzer
 # - CH32X035GxUx over I2C:
 #   - battery voltage measurement
 #   - analog joystick
 #   - digital buttons (X,Y,A,B, MENU)
-#   - buzzer
-#       - audio DAC emulation using buzzer might be slow or need specific buffered protocol
-# - test it on the Waveshare to make sure no syntax / variable errors
 
 from machine import ADC, I2C, Pin, SPI, SDCard
 import lcd_bus
@@ -391,29 +389,25 @@ def startup_wow_effect():
             (0, 0, 255),    # Blue
         ]
 
-        # Rainbow sweep effect (3 passes, getting faster)
-        for pass_num in range(3):
-            for i in range(5):
-                # Light up LEDs progressively
-                for j in range(i + 1):
-                    LightsManager.set_led(j, *rainbow[j])
-                LightsManager.write()
-                time.sleep_ms(80 - pass_num * 20)  # Speed up each pass
+        # Single rainbow sweep
+        for i in range(5):
+            # Light up LEDs progressively
+            for j in range(i + 1):
+                LightsManager.set_led(j, *rainbow[j])
+            LightsManager.write()
+            time.sleep_ms(500)
 
-        # Flash all LEDs bright white
+        # Hold white, then fade out over 4 seconds
         LightsManager.set_all(255, 255, 255)
         LightsManager.write()
-        time.sleep_ms(150)
+        time.sleep_ms(500)
 
-        # Rainbow finale
-        for i in range(5):
-            LightsManager.set_led(i, *rainbow[i])
-        LightsManager.write()
-        time.sleep_ms(300)
-
-        # Fade out
-        LightsManager.clear()
-        LightsManager.write()
+        fade_steps = 80
+        for step in range(fade_steps):
+            level = int(255 * (fade_steps - 1 - step) / (fade_steps - 1))
+            LightsManager.set_all(level, level, level)
+            LightsManager.write()
+            time.sleep_ms(25)
 
     except Exception as e:
         print(f"Startup effect error: {e}")

@@ -362,29 +362,25 @@ def startup_wow_effect():
             (0, 0, 255),    # Blue
         ]
 
-        # Rainbow sweep effect (3 passes, getting faster)
-        for pass_num in range(3):
-            for i in range(5):
-                # Light up LEDs progressively
-                for j in range(i + 1):
-                    LightsManager.set_led(j, *rainbow[j])
-                LightsManager.write()
-                time.sleep_ms(80 - pass_num * 20)  # Speed up each pass
+        # Single rainbow sweep
+        for i in range(5):
+            # Light up LEDs progressively
+            for j in range(i + 1):
+                LightsManager.set_led(j, *rainbow[j])
+            LightsManager.write()
+            time.sleep_ms(500)
 
-        # Flash all LEDs bright white
+        # Hold white, then fade out over 4 seconds
         LightsManager.set_all(255, 255, 255)
         LightsManager.write()
-        time.sleep_ms(150)
+        time.sleep_ms(500)
 
-        # Rainbow finale
-        for i in range(5):
-            LightsManager.set_led(i, *rainbow[i])
-        LightsManager.write()
-        time.sleep_ms(300)
-
-        # Fade out
-        LightsManager.clear()
-        LightsManager.write()
+        fade_steps = 80
+        for step in range(fade_steps):
+            level = int(255 * (fade_steps - 1 - step) / (fade_steps - 1))
+            LightsManager.set_all(level, level, level)
+            LightsManager.write()
+            time.sleep_ms(25)
 
     except Exception as e:
         print(f"Startup effect error: {e}")
