@@ -290,6 +290,18 @@ indev.set_display(disp)  # different from display
 indev.enable(True)
 InputManager.register_indev(indev)
 
+# initialize the expander as indev driver
+try:
+    from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
+    expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
+    tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because unreliable
+    tindev_buttons.set_group(group)
+    #tindev_buttons.set_display(disp)
+    tindev_buttons.enable(True)
+    InputManager.register_indev(tindev_buttons)
+except Exception as e:
+    print(f"expander init got exception: {e}")
+
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
