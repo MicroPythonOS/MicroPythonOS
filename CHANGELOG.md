@@ -12,6 +12,9 @@ Frameworks:
 - AppearanceManager: fix set_light_mode() and set_primary_color() — they called a non-existent `prefs.set_string()` and raised AttributeError for every third-party caller; writes now go through `edit().put_string().commit()` and the LVGL theme is reinitialised when the colour changes
 - SharedPreferences: security fix — `load()` no longer prints the entire prefs dict to serial/REPL. Any pref holding a secret (WiFi password in `access_points`, Lightning wallet API keys, NWC secrets, xpubs, etc.) was being leaked to logs every time an app loaded its prefs. Now logs only the filepath and key count
 
+Builtin Apps:
+- Settings → Wi-Fi: security fix — password no longer printed to serial/REPL during connection attempts, EditNetwork form returns, or Wi-Fi QR scans. Redacts the three print sites that were leaking the password on every Wi-Fi interaction
+
 OS:
 - LilyGo T-Watch S3 Plus: add support for IR Remote app
 - Fri3d 2024: add support for IR remote app
