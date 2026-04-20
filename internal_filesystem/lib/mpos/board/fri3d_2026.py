@@ -159,6 +159,17 @@ if latest_version > current_version:
     except Exception as e:
         print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
 
+'''
+# Quick and dirty patch of BatteryManager to use the CH32 battery level:
+# mpos.io_expander.analog causes keypresses
+def get_voltage(force_refresh=False, raw_adc_value=None):
+    return (0.001651 * mpos.io_expander.analog[2] + 0.08709) # copied from fri3d_2024.py
+from mpos import BatteryManager
+BatteryManager.read_raw_adc =  lambda *args: mpos.io_expander.analog[2]
+BatteryManager.has_battery = lambda *args: True
+BatteryManager.read_battery_voltage = get_voltage
+'''
+
 # quick and dirty way to make accessible later:
 mpos.io_expander = expander
 

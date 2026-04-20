@@ -332,8 +332,6 @@ import mpos.lights as LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12, num_leds=5)
 
-print("Fri3d hardware: Audio, LEDs, and sensors initialized")
-
 # === STARTUP "WOW" EFFECT ===
 import time
 import _thread
