@@ -190,7 +190,7 @@ class TimeOfFlight(Activity):
 
     def _distance_color(self, distance_mm):
         intensity = self._distance_intensity(distance_mm)
-        return lv.color_make(intensity, intensity, intensity)
+        return lv.color_make(0, intensity, 0)
 
     def _distance_intensity(self, distance_mm):
         return int(self._distance_norm(distance_mm) * 255)
@@ -310,8 +310,8 @@ class TimeOfFlight(Activity):
                 cell = "{:4}".format(d)
                 print(cell, end=" ")
             else:
-                cell = "xxxx"
-                print("xxxx", end=" ")
+                cell = "{:4}".format(d)
+                print(f"{cell}?", end=" ")
 
             row_cells.append(cell)
 
