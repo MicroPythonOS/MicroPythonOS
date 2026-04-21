@@ -79,8 +79,10 @@ expander = Expander(i2c_bus=expander_i2c)
 
 
 # Show progress using the RGB LEDs:
-def rainbow_color(value: float) -> tuple[int, int, int]:
-    t = max(0.0, min(1.0, value / 100.0))   # normalized 0.0 to 1.0
+def percent_to_rainbow_color(value: float) -> tuple[int, int, int]:
+    return rainbow_color(max(0.0, min(1.0, value / 100.0))) # normalized 0.0 to 1.0
+
+def rainbow_color(t: float) -> tuple[int, int, int]:
     hue = t * 300.0
     h = hue / 60.0
     i = int(h)
@@ -107,7 +109,7 @@ def progress(msg, pct):
     twentieth = int(pct / 20)
     lednr = max(0,4 - twentieth)
     #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
-    color = rainbow_color(pct)
+    color = percent_to_rainbow_color(pct)
     #print(f"setting LED {lednr} color {color}")
     LightsManager.set_led(lednr, *color)
     LightsManager.write()
