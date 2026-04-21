@@ -303,7 +303,7 @@ InputManager.register_indev(indev)
 try:
     from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
     expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
-    tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because unreliable
+    tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because MicroPython interrupts are unreliable under high load
     tindev_buttons.set_group(group)
     #tindev_buttons.set_display(disp)
     tindev_buttons.enable(True)
@@ -391,12 +391,12 @@ import _thread
 
 def startup_wow_effect():
     try:
-        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
-        #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
-        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
         import time
         time.sleep(3) # wait until it's calmed down
-        megalovania = "Megalovania:d=16,o=5,b=150:d5,d5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,c5,c5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,b4,b4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,a#4,a#4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,d5,d5"
+        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
+        #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
+        startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
+        #megalovania = "Megalovania:d=16,o=5,b=150:d5,d5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,c5,c5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,b4,b4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,a#4,a#4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,d5,d5"
 
         player = AudioManager.player(rtttl=megalovania,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output)
         player.start()
@@ -428,7 +428,7 @@ def startup_wow_effect():
             level = int(255 * (fade_steps - 1 - step) / (fade_steps - 1))
             LightsManager.set_all(level, level, level)
             LightsManager.write()
-            time.sleep_ms(25)
+            time.sleep_ms(20)
 
     except Exception as e:
         print(f"Startup effect error: {e}")
