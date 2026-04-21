@@ -330,7 +330,8 @@ SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12, num_leds=5)
+LightsManager.init(neopixel_pin=12)
+LightsManager.set_led_num(5)
 
 # === STARTUP "WOW" EFFECT ===
 import time

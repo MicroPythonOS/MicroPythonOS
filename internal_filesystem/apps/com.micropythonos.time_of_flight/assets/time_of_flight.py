@@ -4,6 +4,7 @@ import sys
 import i2c
 import lvgl as lv
 from mpos import Activity
+import mpos.lights as LightsManager
 
 try:
     _dirname = os.path.dirname
@@ -133,6 +134,10 @@ class TimeOfFlight(Activity):
     def onResume(self, screen):
         if self.tof is None:
             return
+        LightsManager.set_led_num(5+8)
+        for lednr in range(0,5+8):
+            LightsManager.set_led(lednr, 255, 0, 0)
+        LightsManager.write()
         if self.timer is None:
             self.timer = lv.timer_create(self.refresh, 2000, None)
 
@@ -140,6 +145,9 @@ class TimeOfFlight(Activity):
         if self.timer:
             self.timer.delete()
             self.timer = None
+        LightsManager.clear()
+        LightsManager.set_led_num(5)
+        LightsManager.write()
 
     def refresh(self, timer):
         if self.tof is None:

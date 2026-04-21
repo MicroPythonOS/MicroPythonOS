@@ -4,35 +4,56 @@
 
 # Module-level state (singleton pattern)
 _neopixel = None
+_neopixel_pin = None
 _num_leds = 0
 
 
-def init(neopixel_pin, num_leds=5):
-    """
-    Initialize NeoPixel LEDs.
+def _init_neopixel(clear_on_init):
+    global _neopixel
 
-    Args:
-        neopixel_pin: GPIO pin number for NeoPixel data line
-        num_leds: Number of LEDs in the strip (default 5 for Fri3d badge)
-    """
-    global _neopixel, _num_leds
+    if _neopixel_pin is None or _num_leds <= 0:
+        _neopixel = None
+        return False
 
     try:
         from machine import Pin
         from neopixel import NeoPixel
 
-        _neopixel = NeoPixel(Pin(neopixel_pin, Pin.OUT), num_leds)
-        _num_leds = num_leds
+        _neopixel = NeoPixel(Pin(_neopixel_pin, Pin.OUT), _num_leds)
 
-        # Clear all LEDs on initialization
-        for i in range(num_leds):
-            _neopixel[i] = (0, 0, 0)
-        _neopixel.write()
+        if clear_on_init:
+            for i in range(_num_leds):
+                _neopixel[i] = (0, 0, 0)
+            _neopixel.write()
 
-        print(f"LightsManager initialized: {num_leds} LEDs on GPIO {neopixel_pin}")
+        return True
     except Exception as e:
         print(f"LightsManager: Failed to initialize LEDs: {e}")
         print("  - LED functions will return False (no-op)")
+        _neopixel = None
+        return False
+
+
+def init(neopixel_pin):
+    """
+    Initialize NeoPixel LED hardware.
+
+    Args:
+        neopixel_pin: GPIO pin number for NeoPixel data line
+    """
+    global _neopixel_pin
+
+    _neopixel_pin = neopixel_pin
+
+    if _num_leds <= 0:
+        _neopixel = None
+        print(
+            "LightsManager initialized: LED count not set yet (call set_led_num())"
+        )
+        return
+
+    if _init_neopixel(clear_on_init=True):
+        print(f"LightsManager initialized: {_num_leds} LEDs on GPIO {neopixel_pin}")
 
 
 def is_available():
@@ -53,6 +74,36 @@ def get_led_count():
         int: Number of LEDs, or 0 if not initialized
     """
     return _num_leds
+
+
+def set_led_num(num_leds):
+    """
+    Set the number of LEDs and (re)initialize the NeoPixel buffer.
+
+    Args:
+        num_leds: Number of LEDs in the strip
+
+    Returns:
+        bool: True if successful, False if invalid count or pin not set
+    """
+    global _num_leds
+
+    if num_leds <= 0:
+        print(f"LightsManager: Invalid LED count {num_leds}")
+        return False
+
+    _num_leds = num_leds
+
+    if _neopixel_pin is None:
+        _neopixel = None
+        print("LightsManager: LED pin not initialized (call init() first)")
+        return False
+
+    if _init_neopixel(clear_on_init=False):
+        print(f"LightsManager: LED count set to {_num_leds}")
+        return True
+
+    return False
 
 
 def set_led(index, r, g, b):

@@ -10,6 +10,7 @@ Frameworks:
 - Add new LoRaManager framework
 - Add mpos.ui.change_task_handler() for improving IR timing accuracy
 - AppearanceManager: fix set_light_mode() and set_primary_color()
+- LightsManager: allow changing number of LEDs after initialization
 - SharedPreferences: don't print values on serial/REPL
 - WebServer: add basic "View Screen" functionality to view the device's display remotely
 

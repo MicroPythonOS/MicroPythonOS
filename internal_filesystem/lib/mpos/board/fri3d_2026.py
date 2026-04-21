@@ -65,7 +65,8 @@ fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12, num_leds=5)
+LightsManager.init(neopixel_pin=12)
+LightsManager.set_led_num(5)
 # Set left LED red
 LightsManager.set_led(4, 255, 0, 0)
 LightsManager.write()
