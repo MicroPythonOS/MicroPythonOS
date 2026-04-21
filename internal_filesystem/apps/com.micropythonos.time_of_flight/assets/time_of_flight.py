@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 
 import i2c
@@ -25,6 +26,58 @@ from vl53l5cx import RESOLUTION_4X4, RESOLUTION_8X8, STATUS_VALID
 from vl53l5cx.mp import VL53L5CXMP
 
 
+class _MockRangingData:
+
+    def __init__(self, distance_mm, target_status):
+        self.distance_mm = distance_mm
+        self.target_status = target_status
+
+
+class MockVL53L5CXMP:
+
+    def __init__(self, seed=1337):
+        self._resolution = RESOLUTION_8X8
+        self.ranging_freq = 2
+        self._rng = random.Random(seed)
+
+    @property
+    def resolution(self):
+        return self._resolution
+
+    @resolution.setter
+    def resolution(self, value):
+        self._resolution = value
+
+    def is_alive(self):
+        return True
+
+    def init(self):
+        return True
+
+    def start_ranging(self, *_):
+        return True
+
+    def check_data_ready(self):
+        return True
+
+    def get_ranging_data(self):
+        side = 4 if self._resolution == RESOLUTION_4X4 else 8
+        distance = []
+        status = []
+        for index in range(side * side):
+            row = index // side
+            col = index % side
+            value = (row * 650 + col * 210 + 200) % 4001
+            distance.append(value)
+            if (row + col) % 5 == 0:
+                status.append(0)
+            else:
+                status.append(STATUS_VALID)
+        import time
+        time.sleep(1)
+        return _MockRangingData(distance, status)
+
+
 class TimeOfFlight(Activity):
 
     def onCreate(self):
@@ -35,10 +88,13 @@ class TimeOfFlight(Activity):
         label.align(lv.ALIGN.TOP_LEFT, 0, 0)
         self.setContentView(screen)
 
-        i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
-        # i2c_bus.scan() # address 0x29 = 41
+        try:
+            i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
+            # i2c_bus.scan() # address 0x29 = 41
+            tof = VL53L5CXMP(i2c_bus)
+        except AttributeError:
+            tof = MockVL53L5CXMP()
 
-        tof = VL53L5CXMP(i2c_bus)
         # don't call to.reset() because that's not needed (and errors) when there's no LPn pin
 
         if not tof.is_alive():
