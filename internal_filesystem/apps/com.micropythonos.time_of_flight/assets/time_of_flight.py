@@ -122,7 +122,7 @@ class TimeOfFlight(Activity):
             LightsManager.set_led(lednr, 255, 0, 0)
         LightsManager.write()
         if self.timer is None:
-            self.timer = lv.timer_create(self.refresh, 2000, None)
+            self.timer = lv.timer_create(self.refresh, 1000, None)
 
     def onPause(self, screen):
         if self.timer:
@@ -143,6 +143,7 @@ class TimeOfFlight(Activity):
 
         rows = []
         row_cells = []
+
         for i, d in enumerate(distance):
             if status[i] == STATUS_VALID:
                 cell = "{:4}".format(d)
