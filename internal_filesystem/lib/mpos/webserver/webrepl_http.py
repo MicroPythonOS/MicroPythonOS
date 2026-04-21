@@ -131,9 +131,6 @@ def _snapshot_to_bmp():
             dest_start = y * row_stride
             view[dest_start : dest_start + width * 3] = rgb_buffer[src_start:src_end]
 
-    for i in range(0, rgb_size, 3):
-        view[i], view[i + 2] = view[i + 2], view[i]
-
     return bmp
 
 
