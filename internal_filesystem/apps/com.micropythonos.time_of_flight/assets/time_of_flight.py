@@ -1,5 +1,4 @@
 import os
-import random
 import sys
 
 import i2c
@@ -38,7 +37,12 @@ class MockVL53L5CXMP:
     def __init__(self, seed=1337):
         self._resolution = RESOLUTION_8X8
         self.ranging_freq = 2
-        self._rng = random.Random(seed)
+        self._seed = seed & 0x7FFFFFFF
+
+    def _randint(self, low, high):
+        self._seed = (1103515245 * self._seed + 12345) & 0x7FFFFFFF
+        span = high - low + 1
+        return low + (self._seed % span)
 
     @property
     def resolution(self):
@@ -67,9 +71,11 @@ class MockVL53L5CXMP:
         for index in range(side * side):
             row = index // side
             col = index % side
-            value = (row * 650 + col * 210 + 200) % 4001
+            base_value = (row * 650 + col * 210 + 200) % 4001
+            jitter = self._randint(-45, 45)
+            value = max(0, min(4000, base_value + jitter))
             distance.append(value)
-            if (row + col) % 5 == 0:
+            if (row + col + self._randint(0, 3)) % 6 == 0:
                 status.append(0)
             else:
                 status.append(STATUS_VALID)
