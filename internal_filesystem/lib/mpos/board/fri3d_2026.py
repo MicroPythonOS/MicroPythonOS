@@ -172,11 +172,11 @@ def get_voltage(force_refresh=False, raw_adc_value=None):
     e.enable(False)
     # Wait to ensure more than 5ms between input polls
     import time
-    time.sleep_ms(6)
+    time.sleep_ms(10)
     # Do the read:
-    returnval = (0.001651 * mpos.io_expander.analog[2] + 0.08709) # copied from fri3d_2024.py
+    returnval = (0.001857993861607339 * mpos.io_expander.analog[2] - 0.9965856090206169)
     # Wait again to ensure more than 5ms between input polls
-    time.sleep_ms(6)
+    time.sleep_ms(10)
     # Enable input polling again:
     e.enable(True)
     return returnval
