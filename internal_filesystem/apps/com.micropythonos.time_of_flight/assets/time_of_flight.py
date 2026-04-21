@@ -193,22 +193,39 @@ class TimeOfFlight(Activity):
         return lv.color_make(intensity, intensity, intensity)
 
     def _distance_intensity(self, distance_mm):
-        distance_mm = max(0, min(4000, distance_mm))
-        return 255 - int((distance_mm / 4000) * 255)
+        return int(self._distance_norm(distance_mm) * 255)
 
-    def _avg_intensity(self, distance, status, start, end):
-        total = 0
-        count = 0
-        for idx in range(start, end):
-            if idx >= len(distance):
-                break
-            if status[idx] != STATUS_VALID:
-                continue
-            total += self._distance_intensity(distance[idx])
-            count += 1
-        if count == 0:
-            return 0
-        return total // count
+    def _distance_norm(self, distance_mm):
+        distance_mm = max(0, min(4000, distance_mm))
+        return 1.0 - (distance_mm / 4000)
+
+    def _clamp01(self, value):
+        if value < 0.0:
+            return 0.0
+        if value > 1.0:
+            return 1.0
+        return value
+
+    def _rainbow_color(self, t):
+        hue = t * 300.0
+        h = hue / 60.0
+        i = int(h)
+        f = h - i
+
+        if i == 0:
+            r, g, b = 1.0, f, 0.0
+        elif i == 1:
+            r, g, b = 1.0 - f, 1.0, 0.0
+        elif i == 2:
+            r, g, b = 0.0, 1.0, f
+        elif i == 3:
+            r, g, b = 0.0, 1.0 - f, 1.0
+        elif i == 4:
+            r, g, b = f, 0.0, 1.0
+        else:
+            r, g, b = 1.0, 0.0, 1.0 - f
+
+        return (int(r * 255 + 0.5), int(g * 255 + 0.5), int(b * 255 + 0.5))
 
     def _update_leds(self, distance, status):
         if self.grid is None:
@@ -220,13 +237,40 @@ class TimeOfFlight(Activity):
 
         for row in range(rows):
             row_start = row * grid
-            row_end = row_start + grid
-            first_end = row_start + min(3, grid)
-            second_end = row_start + min(6, grid)
+            best_idx = None
+            best_closeness = -1.0
+            total_closeness = 0.0
+            count = 0
 
-            red = self._avg_intensity(distance, status, row_start, first_end)
-            green = self._avg_intensity(distance, status, first_end, second_end)
-            blue = self._avg_intensity(distance, status, second_end, row_end)
+            for col in range(grid):
+                idx = row_start + col
+                if idx >= len(distance):
+                    break
+                if status[idx] != STATUS_VALID:
+                    continue
+                closeness = self._distance_norm(distance[idx])
+                total_closeness += closeness
+                count += 1
+                if closeness > best_closeness:
+                    best_closeness = closeness
+                    best_idx = col
+
+            if count == 0:
+                LightsManager.set_led(5 + row, 0, 0, 0)
+                continue
+
+            avg_closeness = total_closeness / count
+            brightness = self._clamp01(max(best_closeness, avg_closeness) * 1.2)
+
+            if grid == 1:
+                pos = 0.0
+            else:
+                pos = best_idx / (grid - 1)
+
+            base_r, base_g, base_b = self._rainbow_color(pos)
+            red = int(base_r * brightness)
+            green = int(base_g * brightness)
+            blue = int(base_b * brightness)
 
             LightsManager.set_led(5 + row, red, green, blue)
 
