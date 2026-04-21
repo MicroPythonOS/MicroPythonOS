@@ -10,23 +10,11 @@ import lvgl as lv
 
 from mpos.ui.display_metrics import DisplayMetrics
 
-WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html"
-'''
-# Unused as these files are minified and inlined:
-#WEBREPL_HTML_PATH = "/builtin/html/webrepl.html"
-WEBREPL_CONTENT_PATH = "/builtin/html/webrepl.js"
-WEBREPL_TERM_PATH = "/builtin/html/term.js"
-WEBREPL_CSS_PATH = "/builtin/html/webrepl.css"
-WEBREPL_FILE_SAVER_PATH = "/builtin/html/FileSaver.js"
-'''
+WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html" # built by MicroPythonOS/webrepl/inline_minify_webrepl.py
 
 WEBREPL_ASSETS = {
     b"/": (WEBREPL_HTML_PATH, b"text/html"),
     b"/index.html": (WEBREPL_HTML_PATH, b"text/html"),
-    #b"/webrepl.css": (WEBREPL_CSS_PATH, b"text/css"),
-    #b"/webrepl.js": (WEBREPL_CONTENT_PATH, b"application/javascript"),
-    #b"/term.js": (WEBREPL_TERM_PATH, b"application/javascript"),
-    #b"/FileSaver.js": (WEBREPL_FILE_SAVER_PATH, b"application/javascript"),
 }
 
 
