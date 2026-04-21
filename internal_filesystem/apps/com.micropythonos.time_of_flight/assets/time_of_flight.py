@@ -3,7 +3,7 @@ import sys
 
 import i2c
 import lvgl as lv
-from mpos import Activity
+from mpos import Activity, DisplayMetrics
 import mpos.lights as LightsManager
 
 from vl53l5cx import DATA_DISTANCE_MM, DATA_TARGET_STATUS
@@ -70,19 +70,19 @@ class TimeOfFlight(Activity):
 
     def __init__(self):
         super().__init__()
-        self.label = None
+        self.canvas = None
+        self.canvas_layer = None
+        self.canvas_buf = None
+        self.canvas_width = None
+        self.canvas_height = None
+        self.rect_dsc = None
         self.timer = None
         self.tof = None
         self.grid = None
 
     def onCreate(self):
         screen = lv.obj()
-        label = lv.label(screen)
-        label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        label.set_width(lv.pct(100))
-        label.align(lv.ALIGN.TOP_LEFT, 0, 0)
-
-        self.label = label
+        self._init_canvas(screen)
         self.timer = None
 
         try:
@@ -100,10 +100,10 @@ class TimeOfFlight(Activity):
         tof.init()
 
         # tof.resolution = RESOLUTION_4X4
-        # grid = 3
+        # grid = 4
 
         tof.resolution = RESOLUTION_8X8
-        grid = 7
+        grid = 8
 
         tof.ranging_freq = 2
 
@@ -113,6 +113,85 @@ class TimeOfFlight(Activity):
         self.grid = grid
 
         self.setContentView(screen)
+
+    def _init_canvas(self, screen):
+        self.canvas_width = DisplayMetrics.width()
+        self.canvas_height = DisplayMetrics.height()
+
+        canvas = lv.canvas(screen)
+        canvas.set_size(self.canvas_width, self.canvas_height)
+        canvas.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        canvas.set_style_border_width(0, 0)
+        canvas.set_style_bg_color(lv.color_black(), lv.PART.MAIN)
+
+        self.canvas_buf = bytearray(self.canvas_width * self.canvas_height * 4)
+        canvas.set_buffer(self.canvas_buf, self.canvas_width, self.canvas_height, lv.COLOR_FORMAT.NATIVE)
+
+        self.canvas_layer = lv.layer_t()
+        canvas.init_layer(self.canvas_layer)
+
+        rect_dsc = lv.draw_rect_dsc_t()
+        lv.draw_rect_dsc_t.init(rect_dsc)
+        rect_dsc.bg_opa = lv.OPA.COVER
+        rect_dsc.border_width = 0
+        self.rect_dsc = rect_dsc
+
+        self.canvas = canvas
+        self._clear_canvas()
+
+    def _clear_canvas(self):
+        if self.canvas is None:
+            return
+        self.canvas.fill_bg(lv.color_black(), lv.OPA.COVER)
+
+    def _draw_grid(self, distance, status):
+        if self.canvas is None:
+            return
+        self._clear_canvas()
+
+        grid = self.grid or 1
+        cell_w = max(1, self.canvas_width // grid)
+        cell_h = max(1, self.canvas_height // grid)
+
+        self.canvas.init_layer(self.canvas_layer)
+        for i, d in enumerate(distance):
+            if status[i] != STATUS_VALID:
+                continue
+            row = i // grid
+            col = i % grid
+            if row >= grid:
+                continue
+
+            color = self._distance_color(d)
+            self._fill_rect(col, row, cell_w, cell_h, grid, color)
+
+        self.canvas.finish_layer(self.canvas_layer)
+
+    def _fill_rect(self, col, row, cell_w, cell_h, grid, color):
+        x1 = col * cell_w
+        y1 = row * cell_h
+        if col == grid - 1:
+            x2 = self.canvas_width - 1
+        else:
+            x2 = (col + 1) * cell_w - 1
+        if row == grid - 1:
+            y2 = self.canvas_height - 1
+        else:
+            y2 = (row + 1) * cell_h - 1
+
+        area = lv.area_t()
+        area.x1 = x1
+        area.y1 = y1
+        area.x2 = x2
+        area.y2 = y2
+
+        self.rect_dsc.bg_color = color
+        lv.draw_rect(self.canvas_layer, self.rect_dsc, area)
+
+    def _distance_color(self, distance_mm):
+        distance_mm = max(0, min(4000, distance_mm))
+        intensity = 255 - int((distance_mm / 4000) * 255)
+        return lv.color_make(0, intensity, 0)
 
     def onResume(self, screen):
         if self.tof is None:
@@ -141,7 +220,6 @@ class TimeOfFlight(Activity):
         distance = results.distance_mm
         status = results.target_status
 
-        rows = []
         row_cells = []
 
         for i, d in enumerate(distance):
@@ -154,10 +232,9 @@ class TimeOfFlight(Activity):
 
             row_cells.append(cell)
 
-            if (i & self.grid) == self.grid:
+            if (i + 1) % self.grid == 0:
                 print("")
-                rows.append(" ".join(row_cells))
                 row_cells = []
 
         print("")
-        self.label.set_text("\n".join(rows))
+        self._draw_grid(distance, status)
