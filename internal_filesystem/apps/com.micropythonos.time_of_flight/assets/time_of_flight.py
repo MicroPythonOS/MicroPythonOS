@@ -1,5 +1,4 @@
-import os
-import sys
+# This has only been tested with the Fri3d 2026 Badge and the Time of Flight addon
 
 import i2c
 import lvgl as lv
