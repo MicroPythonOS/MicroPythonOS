@@ -189,9 +189,48 @@ class TimeOfFlight(Activity):
         lv.draw_rect(self.canvas_layer, self.rect_dsc, area)
 
     def _distance_color(self, distance_mm):
+        intensity = self._distance_intensity(distance_mm)
+        return lv.color_make(intensity, intensity, intensity)
+
+    def _distance_intensity(self, distance_mm):
         distance_mm = max(0, min(4000, distance_mm))
-        intensity = 255 - int((distance_mm / 4000) * 255)
-        return lv.color_make(0, intensity, 0)
+        return 255 - int((distance_mm / 4000) * 255)
+
+    def _avg_intensity(self, distance, status, start, end):
+        total = 0
+        count = 0
+        for idx in range(start, end):
+            if idx >= len(distance):
+                break
+            if status[idx] != STATUS_VALID:
+                continue
+            total += self._distance_intensity(distance[idx])
+            count += 1
+        if count == 0:
+            return 0
+        return total // count
+
+    def _update_leds(self, distance, status):
+        if self.grid is None:
+            return
+        grid = self.grid or 1
+        rows = min(8, len(distance) // grid)
+        if rows == 0:
+            return
+
+        for row in range(rows):
+            row_start = row * grid
+            row_end = row_start + grid
+            first_end = row_start + min(3, grid)
+            second_end = row_start + min(6, grid)
+
+            red = self._avg_intensity(distance, status, row_start, first_end)
+            green = self._avg_intensity(distance, status, first_end, second_end)
+            blue = self._avg_intensity(distance, status, second_end, row_end)
+
+            LightsManager.set_led(5 + row, red, green, blue)
+
+        LightsManager.write()
 
     def onResume(self, screen):
         if self.tof is None:
@@ -238,3 +277,4 @@ class TimeOfFlight(Activity):
 
         print("")
         self._draw_grid(distance, status)
+        self._update_leds(distance, status)
