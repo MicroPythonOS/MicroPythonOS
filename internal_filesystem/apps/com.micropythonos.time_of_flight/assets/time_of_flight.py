@@ -144,6 +144,44 @@ class TimeOfFlight(Activity):
             return
         self.canvas.fill_bg(lv.color_black(), lv.OPA.COVER)
 
+    def _flip_over_y(self, distance, status):
+        grid = self.grid or 1
+        if grid <= 1:
+            return distance, status
+        length = min(len(distance), len(status))
+        flipped_distance = [0] * length
+        flipped_status = [0] * length
+        for idx in range(length):
+            row = idx // grid
+            col = idx % grid
+            if row >= grid:
+                continue
+            flipped_idx = row * grid + (grid - 1 - col)
+            if flipped_idx >= length:
+                continue
+            flipped_distance[flipped_idx] = distance[idx]
+            flipped_status[flipped_idx] = status[idx]
+        return flipped_distance, flipped_status
+
+    def _flip_over_x(self, distance, status):
+        grid = self.grid or 1
+        if grid <= 1:
+            return distance, status
+        length = min(len(distance), len(status))
+        flipped_distance = [0] * length
+        flipped_status = [0] * length
+        for idx in range(length):
+            row = idx // grid
+            col = idx % grid
+            if row >= grid:
+                continue
+            flipped_idx = (grid - 1 - row) * grid + col
+            if flipped_idx >= length:
+                continue
+            flipped_distance[flipped_idx] = distance[idx]
+            flipped_status[flipped_idx] = status[idx]
+        return flipped_distance, flipped_status
+
     def _draw_grid(self, distance, status):
         if self.canvas is None:
             return
@@ -196,8 +234,8 @@ class TimeOfFlight(Activity):
         return int(self._distance_norm(distance_mm) * 255)
 
     def _distance_norm(self, distance_mm):
-        distance_mm = max(0, min(4000, distance_mm))
-        return 1.0 - (distance_mm / 4000)
+        distance_mm = max(0, min(1000, distance_mm))
+        return 1.0 - (distance_mm / 1000)
 
     def _clamp01(self, value):
         if value < 0.0:
@@ -302,6 +340,7 @@ class TimeOfFlight(Activity):
         results = self.tof.get_ranging_data()
         distance = results.distance_mm
         status = results.target_status
+        distance, status = self._flip_over_x(distance, status)
 
         row_cells = []
 
