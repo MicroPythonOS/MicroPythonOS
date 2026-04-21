@@ -6,32 +6,15 @@ import lvgl as lv
 from mpos import Activity
 import mpos.lights as LightsManager
 
-try:
-    _dirname = os.path.dirname
-except AttributeError:
-    def _dirname(path):
-        if not path:
-            return ""
-        slash_index = path.rfind("/")
-        if slash_index == -1:
-            return ""
-        return path[:slash_index]
-
-ASSETS_DIR = _dirname(__file__) if "__file__" in globals() else "."
-if ASSETS_DIR not in sys.path:
-    sys.path.append(ASSETS_DIR)
-
 from vl53l5cx import DATA_DISTANCE_MM, DATA_TARGET_STATUS
 from vl53l5cx import RESOLUTION_4X4, RESOLUTION_8X8, STATUS_VALID
 from vl53l5cx.mp import VL53L5CXMP
-
 
 class _MockRangingData:
 
     def __init__(self, distance_mm, target_status):
         self.distance_mm = distance_mm
         self.target_status = target_status
-
 
 class MockVL53L5CXMP:
 
@@ -146,8 +129,8 @@ class TimeOfFlight(Activity):
             self.timer.delete()
             self.timer = None
         LightsManager.clear()
-        LightsManager.set_led_num(5)
         LightsManager.write()
+        LightsManager.set_led_num(5)
 
     def refresh(self, timer):
         if self.tof is None:
