@@ -79,12 +79,17 @@ class MockVL53L5CXMP:
                 status.append(0)
             else:
                 status.append(STATUS_VALID)
-        import time
-        time.sleep(1)
         return _MockRangingData(distance, status)
 
 
 class TimeOfFlight(Activity):
+
+    def __init__(self):
+        super().__init__()
+        self.label = None
+        self.timer = None
+        self.tof = None
+        self.grid = None
 
     def onCreate(self):
         screen = lv.obj()
@@ -92,7 +97,9 @@ class TimeOfFlight(Activity):
         label.set_long_mode(lv.label.LONG_MODE.WRAP)
         label.set_width(lv.pct(100))
         label.align(lv.ALIGN.TOP_LEFT, 0, 0)
-        self.setContentView(screen)
+
+        self.label = label
+        self.timer = None
 
         try:
             i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
@@ -118,29 +125,47 @@ class TimeOfFlight(Activity):
 
         tof.start_ranging({DATA_DISTANCE_MM, DATA_TARGET_STATUS})
 
-        for count in range(0, 10):
-            while not tof.check_data_ready():
-                pass
-            results = tof.get_ranging_data()
-            distance = results.distance_mm
-            status = results.target_status
+        self.tof = tof
+        self.grid = grid
 
-            rows = []
-            row_cells = []
-            for i, d in enumerate(distance):
-                if status[i] == STATUS_VALID:
-                    cell = "{:4}".format(d)
-                    print(cell, end=" ")
-                else:
-                    cell = "xxxx"
-                    print("xxxx", end=" ")
+        self.setContentView(screen)
 
-                row_cells.append(cell)
+    def onResume(self, screen):
+        if self.tof is None:
+            return
+        if self.timer is None:
+            self.timer = lv.timer_create(self.refresh, 2000, None)
 
-                if (i & grid) == grid:
-                    print("")
-                    rows.append(" ".join(row_cells))
-                    row_cells = []
+    def onPause(self, screen):
+        if self.timer:
+            self.timer.delete()
+            self.timer = None
 
-            print("")
-            label.set_text("\n".join(rows))
+    def refresh(self, timer):
+        if self.tof is None:
+            return
+        while not self.tof.check_data_ready():
+            pass
+        results = self.tof.get_ranging_data()
+        distance = results.distance_mm
+        status = results.target_status
+
+        rows = []
+        row_cells = []
+        for i, d in enumerate(distance):
+            if status[i] == STATUS_VALID:
+                cell = "{:4}".format(d)
+                print(cell, end=" ")
+            else:
+                cell = "xxxx"
+                print("xxxx", end=" ")
+
+            row_cells.append(cell)
+
+            if (i & self.grid) == self.grid:
+                print("")
+                rows.append(" ".join(row_cells))
+                row_cells = []
+
+        print("")
+        self.label.set_text("\n".join(rows))
