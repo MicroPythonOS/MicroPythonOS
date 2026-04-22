@@ -4,22 +4,22 @@ Future release (next version)
 Add changes that have been made to the code but haven't made it into a release here.
 
 Frameworks:
-- AppManager: support .mpk/.zip files with compression and an unnecessary top-level directory
 - Add new GPSManager framework
 - Add new IRManager framework
 - Add new LoRaManager framework
-- Add mpos.ui.change_task_handler() for improving IR timing accuracy
+- Add mpos.ui.change_task_handler() function for improving IR timing accuracy
 - AppearanceManager: fix set_light_mode() and set_primary_color()
+- AppManager: support .mpk/.zip files with compression and a redundant top-level directory
 - LightsManager: allow changing number of LEDs after initialization
 - SharedPreferences: don't print values on serial/REPL
 - WebServer: add basic "View Screen" functionality to view the device's display remotely
 
 OS:
-- LilyGo T-Watch S3 Plus: add support for IR Remote app
-- Fri3d 2024: add support for IR remote app
-- Fri3d 2026: add support for IR remote app
+- LilyGo T-Watch S3 Plus: add support for IR Remote app (TX only)
+- Fri3d 2024: add support for IR remote app (RX only)
 - Fri3d 2026: add CH32 coprocessor firmware handling (credit @bertouttier)
 - Fri3d 2026: add CH32 indev driver (credit @bertouttier)
+- Fri3d 2026: add calibrated battery voltage measurements using CH32
 
 
 0.9.2
