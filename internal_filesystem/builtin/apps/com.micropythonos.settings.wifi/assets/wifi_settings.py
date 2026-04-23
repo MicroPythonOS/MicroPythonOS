@@ -155,7 +155,15 @@ class WiFiSettings(Activity):
         self.startActivityForResult(intent, self.edit_network_result_callback)
 
     def edit_network_result_callback(self, result):
-        print(f"EditNetwork finished, result: {result}")
+        # Redact the password field from the dict dump — `result["data"]`
+        # contains the WiFi password in plaintext and gets printed to
+        # serial/REPL every time the user saves an EditNetwork screen.
+        _redacted = dict(result) if isinstance(result, dict) else result
+        if isinstance(_redacted, dict) and isinstance(_redacted.get("data"), dict):
+            _redacted["data"] = dict(_redacted["data"])
+            if "password" in _redacted["data"]:
+                _redacted["data"]["password"] = "***"
+        print(f"EditNetwork finished, result: {_redacted}")
         if result.get("result_code") is True:
             data = result.get("data")
             if data:
@@ -172,7 +180,9 @@ class WiFiSettings(Activity):
                     self.start_attempt_connecting(ssid, password)
 
     def start_attempt_connecting(self, ssid, password):
-        print(f"start_attempt_connecting: Attempting to connect to SSID '{ssid}' with password '{password}'")
+        # Log only the SSID — the password is sensitive and was being
+        # printed to serial/REPL on every connect attempt.
+        print(f"start_attempt_connecting: Attempting to connect to SSID '{ssid}'")
         self.scan_button.add_state(lv.STATE.DISABLED)
         self.scan_button_label.set_text("Connecting...")
         if self.busy_connecting:
@@ -382,10 +392,14 @@ class EditNetwork(Activity):
             self.startActivityForResult(Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True), self.gotqr_result_callback)
 
     def gotqr_result_callback(self, result):
-        print(f"QR capture finished, result: {result}")
+        # Don't print the raw result — a WiFi QR code's payload
+        # (`WIFI:T:...;S:SSID;P:password;H:...;;`) contains the password
+        # in plaintext and this runs every time a QR is scanned.
+        print("QR capture finished, result_code={}".format(
+            result.get("result_code") if isinstance(result, dict) else None))
         if result.get("result_code"):
             data = result.get("data")
-            print(f"Setting textarea data: {data}")
+            # Not logging `data` either — same reason: it's the raw QR.
             authentication_type, ssid, password, hidden = self.decode_wifi_qr_code(data)
             if ssid and self.ssid_ta: # not always present
                 self.ssid_ta.set_text(ssid)
