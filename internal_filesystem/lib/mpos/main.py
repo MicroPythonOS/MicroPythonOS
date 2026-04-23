@@ -4,6 +4,7 @@
 import _thread
 import lvgl as lv
 
+import mpos
 import mpos.ui
 import mpos.ui.topmenu
 
@@ -337,8 +338,8 @@ else: # if no auto_start_app_early was configured (this could be improved to sta
 # Create limited aiorepl because it's better than nothing:
 import aiorepl
 async def asyncio_repl():
-    print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: import mpos ; mpos.TaskManager.stop()")
-    await aiorepl.task()
+    print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
+    await aiorepl.task(g={'lv': lv, 'mpos': mpos}, prompt=">>> ") # same prompt as normal REPL, not to confuse ViperIDE
 TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
 
 try:

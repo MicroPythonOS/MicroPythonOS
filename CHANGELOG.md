@@ -15,6 +15,7 @@ Frameworks:
 - WebServer: add basic "View Screen" functionality to view the device's display remotely
 
 OS:
+- aioREPL: use >>> prompt (for ViperIDE) and explort 'lv' and 'mpos' globals for convenience
 - LilyGo T-Watch S3 Plus: add support for IR Remote app (TX only)
 - Fri3d 2024: add support for IR remote app (RX only)
 - Fri3d 2026: add CH32 coprocessor firmware handling (credit @bertouttier)
