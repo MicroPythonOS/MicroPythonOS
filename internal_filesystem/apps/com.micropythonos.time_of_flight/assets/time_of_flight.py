@@ -89,7 +89,9 @@ class TimeOfFlight(Activity):
             if i2c_bus is None:
                 raise AttributeError("I2C bus not available")
             tof = VL53L5CXMP(i2c_bus, addr=0x29)
+            print("Time of Flight starting in actual hardware mode.")
         except AttributeError:
+            print("Time of Flight starting in simulation mode.")
             tof = MockVL53L5CXMP()
 
         # don't call to.reset() because that's not needed (and errors) when there's no LPn pin
