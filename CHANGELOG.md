@@ -16,6 +16,9 @@ Frameworks:
 - SharedPreferences: don't print values on serial/REPL
 - WebServer: add basic "View Screen" functionality to view the device's display remotely
 
+Builtin Apps:
+- Settings → Wi-Fi: security fix — password no longer printed to serial/REPL during connection attempts, EditNetwork form returns, or Wi-Fi QR scans. Redacts the three print sites that were leaking the password on every Wi-Fi interaction
+
 OS:
 - aioREPL: use >>> prompt (for ViperIDE) and export 'lv' and 'mpos' globals for convenience
 - LilyGo T-Watch S3 Plus: add support for IR Remote app (TX only)
