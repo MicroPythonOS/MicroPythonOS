@@ -84,14 +84,14 @@ import micropython
 import time
 from mpos import IRManager, GPSManager
 
-m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
-IRManager.txPin = Pin(2, Pin.OUT)
-GPSManager.txPin = Pin(42, Pin.OUT)
+IRManager.txPin = Pin(2, Pin.OUT, value=0)
+GPSManager.txPin = Pin(42, Pin.OUT, value=0)
 GPSManager.rxPin = Pin(41, Pin.IN)
 GPSManager.connectionType = "uart"
 GPSManager.connectionSpeed = 38400
 
 from mpos import BatteryManager
+m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 
 try:
     init_pmu(m_i2c)
