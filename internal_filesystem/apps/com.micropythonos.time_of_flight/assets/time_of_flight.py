@@ -86,8 +86,7 @@ class TimeOfFlight(Activity):
 
         try:
             i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
-            # i2c_bus.scan() # address 0x29 = 41
-            tof = VL53L5CXMP(i2c_bus)
+            tof = VL53L5CXMP(i2c_bus, addr=0x29)
         except AttributeError:
             tof = MockVL53L5CXMP()
 
