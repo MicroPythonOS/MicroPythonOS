@@ -20,6 +20,7 @@ from .build_info import BuildInfo
 from .lora_manager import LoRaManager
 from .ir_manager import IRManager
 from .gps_manager import GPSManager
+from .device_manager import DeviceManager
 
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
@@ -74,7 +75,7 @@ __all__ = [
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
-    "LoRaManager", "IRManager", "GPSManager",
+    "LoRaManager", "IRManager", "GPSManager", "DeviceManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",
     # Common activities

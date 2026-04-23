@@ -1,6 +1,6 @@
 # This has only been tested with the Fri3d 2026 Badge and the Time of Flight addon
 
-import i2c
+from mpos import DeviceManager
 import lvgl as lv
 from mpos import Activity, DisplayMetrics
 import mpos.lights as LightsManager
@@ -85,7 +85,9 @@ class TimeOfFlight(Activity):
         self.timer = None
 
         try:
-            i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
+            i2c_bus = DeviceManager.getBus(type="i2c")
+            if i2c_bus is None:
+                raise AttributeError("I2C bus not available")
             tof = VL53L5CXMP(i2c_bus, addr=0x29)
         except AttributeError:
             tof = MockVL53L5CXMP()

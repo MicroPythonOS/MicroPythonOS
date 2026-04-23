@@ -7,6 +7,7 @@ Frameworks:
 - Add new GPSManager framework
 - Add new IRManager framework
 - Add new LoRaManager framework
+- Add new DeviceManager framework
 - Add mpos.ui.change_task_handler() function for improving IR timing accuracy
 - AppearanceManager: fix set_light_mode() and set_primary_color()
 - AppManager: support .mpk/.zip files with compression and a redundant top-level directory
