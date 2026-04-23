@@ -84,7 +84,7 @@ import micropython
 import time
 from mpos import IRManager, GPSManager
 
-IRManager.txPin = Pin(2, Pin.OUT, value=0)
+IRManager.txPin = Pin(2, Pin.OUT, value=0) # don't leave default high because it drains current!
 GPSManager.txPin = Pin(42, Pin.OUT, value=0)
 GPSManager.rxPin = Pin(41, Pin.IN)
 GPSManager.connectionType = "uart"
