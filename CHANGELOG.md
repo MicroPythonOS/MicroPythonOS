@@ -11,7 +11,7 @@ Frameworks:
 - Add mpos.ui.change_task_handler() for improving IR timing accuracy
 - AppearanceManager: fix set_light_mode() and set_primary_color()
 - SharedPreferences: don't print values on serial/REPL
-- SettingActivity: clicking the already-selected option of a radio group no longer un-selects it. Previously a stray tap could save an empty string for a required radio setting (e.g. clearing `wallet_type` in a downstream app), leaving the app in an unconfigured state. Radios now enforce the convention that exactly one option stays selected once a choice has been made; the user changes the pick by clicking a different option
+- SettingActivity: clicking the already-selected option of a radio group no longer un-selects it. Previously a stray tap could save an empty string for a required radio setting (e.g. clearing `wallet_type` in a downstream app), leaving the app in an unconfigured state. Radios now enforce the convention that exactly one option stays selected once a choice has been made; the user changes the pick by clicking a different option. Settings that legitimately need the empty-string state (e.g. the Settings app's `Auto Start App`, where empty means "boot straight to the launcher") can opt out of the invariant by passing `allow_deselect=True` in the setting definition
 - WebServer: add basic "View Screen" functionality to view the device's display remotely
 
 OS:

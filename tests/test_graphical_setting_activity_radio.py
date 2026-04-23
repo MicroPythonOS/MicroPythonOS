@@ -37,9 +37,10 @@ class _RadioHandlerFixture:
     """Holds the same attributes SettingActivity.radio_event_handler reads on
     `self`. Avoids instantiating the full Activity (which needs a running
     AppManager) just to exercise one callback."""
-    def __init__(self, container, active_index):
+    def __init__(self, container, active_index, allow_deselect=False):
         self.radio_container = container
         self.active_radio_index = active_index
+        self._radio_allow_deselect = allow_deselect
 
 
 class TestSettingActivityRadioInvariant(unittest.TestCase):
@@ -65,11 +66,12 @@ class TestSettingActivityRadioInvariant(unittest.TestCase):
         lv.screen_load(lv.obj())
         wait_for_render(2)
 
-    def _invoke(self, target, active_index):
+    def _invoke(self, target, active_index, allow_deselect=False):
         """Run radio_event_handler as it would run in production — we bind the
         unbound function to a fixture that exposes the attributes the handler
         reads on `self`."""
-        fixture = _RadioHandlerFixture(self.container, active_index)
+        fixture = _RadioHandlerFixture(
+            self.container, active_index, allow_deselect=allow_deselect)
         SettingActivity.radio_event_handler(fixture, _FakeEvent(target))
         return fixture
 
@@ -128,3 +130,27 @@ class TestSettingActivityRadioInvariant(unittest.TestCase):
 
         self.assertTrue(bool(self.cb1.get_state() & lv.STATE.CHECKED))
         self.assertEqual(fixture.active_radio_index, 1)
+
+    def test_allow_deselect_opt_in_lets_user_un_select_active(self):
+        """With `allow_deselect=True` (set by settings whose empty-string
+        value is a legitimate choice — e.g. OS Settings "Auto Start App"
+        where empty means "don't autostart anything"), clicking the
+        currently-active option DOES un-select it and active_radio_index
+        flips to -1. The invariant from the other tests is opt-out for
+        this class of setting."""
+        self.cb0.add_state(lv.STATE.CHECKED)
+        # User taps the already-selected option → LVGL strips CHECKED and
+        # fires VALUE_CHANGED.
+        self.cb0.remove_state(lv.STATE.CHECKED)
+        self.assertFalse(bool(self.cb0.get_state() & lv.STATE.CHECKED))
+
+        fixture = self._invoke(self.cb0, active_index=0, allow_deselect=True)
+
+        self.assertFalse(
+            bool(self.cb0.get_state() & lv.STATE.CHECKED),
+            "with allow_deselect=True the active option must stay un-checked",
+        )
+        self.assertEqual(
+            fixture.active_radio_index, -1,
+            "active_radio_index must flip to -1 so save_setting persists ''",
+        )

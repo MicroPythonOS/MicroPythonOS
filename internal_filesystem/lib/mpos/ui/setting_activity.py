@@ -54,6 +54,12 @@ class SettingActivity(Activity):
             self.radio_container.set_height(lv.SIZE_CONTENT)
             self.radio_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
             self.radio_container.add_event_cb(self.radio_event_handler, lv.EVENT.VALUE_CHANGED, None)
+            # `allow_deselect` is an opt-in for settings where "nothing
+            # selected" is a legitimate value (e.g. Auto Start App: empty
+            # means "don't autostart anything"). Default is False so the
+            # normal "exactly one option always selected" radio-group
+            # convention holds for the typical case.
+            self._radio_allow_deselect = bool(setting.get("allow_deselect", False))
             # Create radio buttons and check the right one
             self.active_radio_index = -1 # none
             for i, (option_text, option_value) in enumerate(ui_options):
@@ -152,9 +158,20 @@ class SettingActivity(Activity):
             # could land on Settings, tap the current wallet type, and save
             # an empty wallet_type — leading to the welcome screen coming
             # back even though they meant to keep the config intact.
+            #
+            # Opt-out: a setting definition can pass `allow_deselect=True`
+            # for groups where "nothing selected" is a legitimate value.
+            # Example: the OS Settings "Auto Start App" picker — an empty
+            # value means "boot straight to the launcher", which is a
+            # first-class option users need to be able to select by tapping
+            # the currently-active app.
             if self.active_radio_index == current_checkbox_index:
-                print(f"radio: ignoring un-check of active option {current_checkbox_index} (radios require exactly one)")
-                target_obj.add_state(lv.STATE.CHECKED)
+                if getattr(self, '_radio_allow_deselect', False):
+                    print(f"radio: un-check of active option {current_checkbox_index} (allow_deselect=True)")
+                    self.active_radio_index = -1
+                else:
+                    print(f"radio: ignoring un-check of active option {current_checkbox_index} (radios require exactly one)")
+                    target_obj.add_state(lv.STATE.CHECKED)
             return
         else:
             if self.active_radio_index >= 0: # is there something to uncheck?
