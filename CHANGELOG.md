@@ -10,12 +10,13 @@ Frameworks:
 - Add mpos.ui.change_task_handler() function for improving IR timing accuracy
 - AppearanceManager: fix set_light_mode() and set_primary_color()
 - AppManager: support .mpk/.zip files with compression and a redundant top-level directory
+- AppManager: export "mpos" global to apps for convenience
 - LightsManager: allow changing number of LEDs after initialization
 - SharedPreferences: don't print values on serial/REPL
 - WebServer: add basic "View Screen" functionality to view the device's display remotely
 
 OS:
-- aioREPL: use >>> prompt (for ViperIDE) and explort 'lv' and 'mpos' globals for convenience
+- aioREPL: use >>> prompt (for ViperIDE) and export 'lv' and 'mpos' globals for convenience
 - LilyGo T-Watch S3 Plus: add support for IR Remote app (TX only)
 - Fri3d 2024: add support for IR remote app (RX only)
 - Fri3d 2026: add CH32 coprocessor firmware handling (credit @bertouttier)

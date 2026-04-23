@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Minimal app",
 "long_description": "Demonstrates the simplest app.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/icons/com.micropythonos.showbattery_0.2.2_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/mpks/com.micropythonos.showbattery_0.2.2.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/icons/com.micropythonos.showbattery_0.2.3_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.showbattery/mpks/com.micropythonos.showbattery_0.2.3.mpk",
 "fullname": "com.micropythonos.showbattery",
-"version": "0.2.2",
+"version": "0.2.3",
 "category": "development",
 "activities": [
     {
