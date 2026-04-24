@@ -30,6 +30,7 @@ spi_bus = SPI.Bus(
     sck=7
 )
 
+# Would be better to do this only when the LoRa app starts:
 try:
     lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
 except Exception as e:
@@ -95,6 +96,10 @@ if expander.install_firmware_if_needed(
     expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
     expander = Expander(i2c_bus=expander_i2c)
 
+# quick and dirty way to make accessible later:
+import mpos
+mpos.io_expander = expander
+
 # Quick and dirty patch of BatteryManager to use the CH32 battery level:
 def get_voltage(force_refresh=False, raw_adc_value=None):
     # First workaround Fri3dCamp/badge_2026_fw/issues/2 by disabling input polling
@@ -106,27 +111,23 @@ def get_voltage(force_refresh=False, raw_adc_value=None):
     import time
     time.sleep_ms(10)
     # Do the read:
-    returnval = (0.001857993861607339 * mpos.io_expander.analog[2] - 0.9965856090206169)
+    returnval = (0.001857993861607339 * mpos.io_expander.analog()[2] - 0.9965856090206169)
     # Wait again to ensure more than 5ms between input polls
     time.sleep_ms(10)
     # Enable input polling again:
     e.enable(True)
     return returnval
+
 from mpos import BatteryManager
-BatteryManager.read_raw_adc =  lambda *args: mpos.io_expander.analog[2]
+BatteryManager.read_raw_adc = lambda *args: mpos.io_expander.analog()[2]
 BatteryManager.has_battery = lambda *args: True
 BatteryManager.read_battery_voltage = get_voltage
-
-
-# quick and dirty way to make accessible later:
-mpos.io_expander = expander
 
 # LCD reset using the CH32 microcontroller
 expander.config= 0x01 # 3v3 aux on + LCD off
 import time
 time.sleep_ms(100)
 expander.config= 0x03 # 3v3 aux + LCD on
-import mpos
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
