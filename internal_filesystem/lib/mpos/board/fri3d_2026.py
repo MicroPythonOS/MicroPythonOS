@@ -306,10 +306,10 @@ InputManager.register_indev(indev)
 # initialize the expander as indev driver
 try:
     from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
-    expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
+    #expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
     tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because MicroPython interrupts are unreliable under high load
     tindev_buttons.set_group(group)
-    #tindev_buttons.set_display(disp)
+    #tindev_buttons.set_display(disp) # error? weird? probably a fluke...
     tindev_buttons.enable(True)
     InputManager.register_indev(tindev_buttons)
 except Exception as e:

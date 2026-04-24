@@ -8,9 +8,9 @@ from .device import Device
 # registers
 _EXPANDER_REG_INPUTS = const(0x04)
 _EXPANDER_REG_ANALOG = const(0x06)
-_EXPANDER_REG_LCD_BRIGHTNESS = const(0x12)
-_EXPANDER_REG_DEBUG_LED = const(0x14)
-_EXPANDER_REG_CONFIG = const(0x16)
+_EXPANDER_REG_LCD_BRIGHTNESS = const(0x10)
+_EXPANDER_REG_DEBUG_LED = const(0x12)
+_EXPANDER_REG_CONFIG = const(0x14)
 
 _EXPANDER_I2CADDR_DEFAULT = const(0x50)
 
@@ -39,9 +39,9 @@ class Expander(Device):
         self.i2c.readfrom_mem_into(self.address, _EXPANDER_REG_INPUTS, self._rx_mv)
 
     @property
-    def analog(self) -> tuple[int, int, int, int, int, int]:
-        """Read the analog inputs: ain1, ain0, battery_monitor, usb_monitor, joystick_y, joystick_x"""
-        return self._read("<HHHHHH", _EXPANDER_REG_ANALOG, 12)
+    def analog(self) -> tuple[int, int, int, int, int]:
+        """Read the analog inputs: ain1, battery_monitor, usb_monitor, joystick_y, joystick_x"""
+        return self._read("<HHHHH", _EXPANDER_REG_ANALOG, 10)
 
     @property
     def digital(
@@ -77,10 +77,10 @@ class Expander(Device):
             self._write(_EXPANDER_REG_DEBUG_LED, struct.pack("<H", value))
 
     @property
-    def config(self) -> tuple[bool, bool, bool]:
-        """Read the configuration bits: reboot, lcd_reset, aux_power"""
+    def config(self) -> tuple[bool, bool, bool, bool, bool, bool]:
+        """Read the configuration bits: ain0_pd, lora_reset, remap, reboot, lcd_reset, aux_power"""
         config = self._read("B", _EXPANDER_REG_CONFIG, 1)[0]
-        return tuple([bool(int(digit)) for digit in "{:08b}".format(config)[5:]])
+        return tuple([bool(int(digit)) for digit in "{:08b}".format(config)[2:]])
 
     @config.setter
     def config(self, value: int):
