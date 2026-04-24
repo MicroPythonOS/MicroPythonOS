@@ -18,6 +18,7 @@ Frameworks:
 - AppManager: support .mpk/.zip files with compression and a redundant top-level directory
 - AppManager: export 'mpos' global to apps for convenience
 - LightsManager: allow changing number of LEDs after initialization
+- SettingActivity: add `allow_deselect` option (default False) to radiobuttons
 - SharedPreferences: don't print potentially sensitive values on serial port
 - WebServer: add basic 'View Screen' functionality to view the device's display remotely
 
