@@ -104,7 +104,6 @@ mpos.io_expander = expander
 def get_voltage(force_refresh=False, raw_adc_value=None):
     # First workaround Fri3dCamp/badge_2026_fw/issues/2 by disabling input polling
     from mpos import InputManager
-    InputManager.list_indevs()
     e = InputManager.list_indevs()[2]
     e.enable(False)
     # Wait to ensure more than 5ms between input polls
@@ -124,6 +123,7 @@ BatteryManager.has_battery = lambda *args: True
 BatteryManager.read_battery_voltage = get_voltage
 
 # LCD reset using the CH32 microcontroller
+time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
 expander.config= 0x01 # 3v3 aux on + LCD off
 import time
 time.sleep_ms(100)
@@ -328,8 +328,6 @@ import _thread
 
 def startup_wow_effect():
     try:
-        import time
-        time.sleep(3) # wait until it's calmed down
         # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
         #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
         startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"

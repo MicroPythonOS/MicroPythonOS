@@ -1,5 +1,7 @@
 import struct
 
+import time
+
 from micropython import const
 from machine import I2C, Pin
 
@@ -89,6 +91,7 @@ class Expander(Device):
 
     def install_firmware(self, filename: str, progress_cb=None):
         print("Installing latest CH32 firmware")
+        time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
         self.config = 0x0B # trigger SWD enable
         import time
         time.sleep(0.2)
@@ -133,6 +136,7 @@ class Expander(Device):
     ) -> bool:
         # Check expander firmware version and if none or too low: install latest
         try:
+            time.sleep_ms(10) # desparate attempt to try avoid sporadic version misreads like (0, 255, 15) maybe Fri3dCamp/badge_2026_fw/issues/2
             current_version = self.version
             print(f"Current_version of CH32 firmware: {current_version}")
         except Exception as e:
