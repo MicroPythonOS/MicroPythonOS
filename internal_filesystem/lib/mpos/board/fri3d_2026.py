@@ -86,15 +86,15 @@ def progress(msg, pct):
     LightsManager.write()
 
 # CH32 coprocessor / IO expander
-expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 from drivers.fri3d.expander import Expander
+expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 expander = Expander(i2c_bus=expander_i2c)
-expander.wait_for_normal_mode()
+expander.wait_for_normal_mode(min_uptime_ms=1500) # 1000 should be enough but gets version (0, 255, 15) every so often...
 if expander.install_firmware_if_needed(
         "/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw", (1, 2, 1), progress_cb=progress,
         success_cb=lambda: (LightsManager.set_all(0, 255, 0), LightsManager.write())):
-    # Reinitialize after firmware install:
-    expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
+    print("Firmware was installed, re-initializing expander_i2c")
+    expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
     expander = Expander(i2c_bus=expander_i2c)
 
 # quick and dirty way to make accessible later:
