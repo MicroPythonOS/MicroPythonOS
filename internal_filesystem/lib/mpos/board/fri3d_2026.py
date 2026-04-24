@@ -71,51 +71,29 @@ LightsManager.set_led_num(5)
 LightsManager.set_led(4, 255, 0, 0)
 LightsManager.write()
 
-# CH32 coprocessor / IO expander
-from machine import I2C, Pin
-expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
-from drivers.fri3d.expander import Expander
-expander = Expander(i2c_bus=expander_i2c)
-from mpos import AppearanceManager
-
 # Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
     #print(f"{msg}: {pct}%")
     twentieth = int(pct / 20)
     lednr = max(0,4 - twentieth)
     #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
+    from mpos import AppearanceManager
     color = AppearanceManager.percent_to_rainbow_color(pct)
     #print(f"setting LED {lednr} color {color}")
     LightsManager.set_led(lednr, *color)
     LightsManager.write()
 
-# Check expander firmware version and if none or too low: install latest
-try:
-    current_version = expander.version
-    print(f"Current_version of CH32 firmware: {current_version}")
-except Exception as e:
-    print("Could not check CH32 firmware version, assuming 0.0.0")
-    current_version = (0, 0, 0)
-latest_version = (1, 2, 1)
-if latest_version > current_version:
-    print(f"CH32 firmware is lower than latest {latest_version} so updating...")
-    try:
-        expander.install_firmware("/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw", progress)
-        LightsManager.set_all(0,255,0)
-        LightsManager.write()
-        # Need to reinitialize:
-        expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
-        expander = Expander(i2c_bus=expander_i2c)
-    except Exception as e:
-        print(f"CH32 firmware install got exception: {e}")
-        import sys
-        sys.print_exception(e)
-    try:
-        current_version = expander.version
-        print(f"After install, current_version of CH32 firmware: {current_version}")
-    except Exception as e:
-        print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
-
+# CH32 coprocessor / IO expander
+expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
+from drivers.fri3d.expander import Expander
+expander = Expander(i2c_bus=expander_i2c)
+expander.wait_for_normal_mode()
+if expander.install_firmware_if_needed(
+        "/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw", (1, 2, 1), progress_cb=progress,
+        success_cb=lambda: (LightsManager.set_all(0, 255, 0), LightsManager.write())):
+    # Reinitialize after firmware install:
+    expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
+    expander = Expander(i2c_bus=expander_i2c)
 
 # Quick and dirty patch of BatteryManager to use the CH32 battery level:
 def get_voltage(force_refresh=False, raw_adc_value=None):

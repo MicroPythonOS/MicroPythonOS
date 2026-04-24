@@ -118,3 +118,42 @@ class Expander(Device):
                 progress_cb("waiting for CH32 boot", pct)
             time.sleep(4 / progress_margin_end) # wait 4 seconds total
         print("Latest CH32 firmware installed.")
+
+    def wait_for_normal_mode(self, min_uptime_ms: int = 1000, poll_ms: int = 10):
+        import time
+        start = time.ticks_ms()
+        while time.ticks_diff(time.ticks_ms(), start) < min_uptime_ms:
+            time.sleep_ms(poll_ms)
+
+    def install_firmware_if_needed(
+        self,
+        filename: str,
+        latest_version: tuple[int, int, int],
+        progress_cb=None,
+        success_cb=None,
+    ) -> bool:
+        # Check expander firmware version and if none or too low: install latest
+        try:
+            current_version = self.version
+            print(f"Current_version of CH32 firmware: {current_version}")
+        except Exception as e:
+            print("Could not check CH32 firmware version, assuming 0.0.0")
+            current_version = (0, 0, 0)
+        if latest_version > current_version:
+            print(f"CH32 firmware is lower than latest {latest_version} so updating...")
+            try:
+                self.install_firmware(filename, progress_cb)
+                if success_cb:
+                    success_cb()
+            except Exception as e:
+                print(f"CH32 firmware install got exception: {e}")
+                import sys
+                sys.print_exception(e)
+                return False
+            try:
+                current_version = self.version
+                print(f"After install, current_version of CH32 firmware: {current_version}")
+            except Exception as e:
+                print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
+            return True
+        return False
