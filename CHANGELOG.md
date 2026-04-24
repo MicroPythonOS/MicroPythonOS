@@ -6,6 +6,7 @@ Add changes that have been made to the code but haven't made it into a release h
 Builtin Apps:
 - AppStore: fallback to .zip file if no .mpk file found in filelist
 - AppStore: fetch new long_description from BadgeHub details API
+- Settings - Wi-Fi: don't print password on serial port
 
 Frameworks:
 - Add new GPSManager framework
@@ -17,11 +18,8 @@ Frameworks:
 - AppManager: support .mpk/.zip files with compression and a redundant top-level directory
 - AppManager: export "mpos" global to apps for convenience
 - LightsManager: allow changing number of LEDs after initialization
-- SharedPreferences: don't print values on serial/REPL
+- SharedPreferences: don't print potentially sensitive values on serial port
 - WebServer: add basic "View Screen" functionality to view the device's display remotely
-
-Builtin Apps:
-- Settings → Wi-Fi: security fix — password no longer printed to serial/REPL during connection attempts, EditNetwork form returns, or Wi-Fi QR scans. Redacts the three print sites that were leaking the password on every Wi-Fi interaction
 
 OS:
 - aioREPL: use >>> prompt (for ViperIDE)
