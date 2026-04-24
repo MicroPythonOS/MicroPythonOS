@@ -1,6 +1,10 @@
+# Uncomment this line if you want to be dropped to a REPL shell without loading any MicroPythonOS code:
+# raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
+
 import _thread
 import lvgl as lv
 
+import mpos
 import mpos.ui
 import mpos.ui.topmenu
 
@@ -172,7 +176,6 @@ def detect_board():
         if unique_id_prefixes == b'\x30\xae\xa4':
             return "odroid_go"
 
-          
         # Do I2C-based board detection
         # IMPORTANT: ESP32 GPIO 6-11 are internal SPI flash pins and will cause WDT reset if used.
         # ESP32-S3 has more usable GPIOs (up to 48). Detect chip variant first to skip unsafe probes.
@@ -240,7 +243,6 @@ def detect_board():
 
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 
-
 # EXECUTION STARTS HERE
 
 print(f"MicroPythonOS {BuildInfo.version.release} running lib/mpos/main.py")
@@ -249,6 +251,9 @@ if board:
     print(f"Detected {board} system, importing mpos.board.{board}")
     DeviceInfo.set_hardware_id(board)
     __import__(f"mpos.board.{board}")
+else:
+    # It makes no sense to continue, because we have no display etc...
+    raise RuntimeError("No board detected, exit initialization!")
 
 # Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
 import mpos.fs_driver
@@ -291,13 +296,21 @@ def custom_exception_handler(e):
         #focusgroup.delete()
     #lv.deinit()
 
-import task_handler
 # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate but still okay)
-# 1ms gives highest framerate on esp32-s3's but might have side effects?
-mpos.ui.task_handler = task_handler.TaskHandler(duration=1, exception_hook=custom_exception_handler)
-# Convenient for apps to be able to access these:
-mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
-mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED
+# 1ms gives highest framerate on esp32-s3's but might has side effects: RMT (used for IR RX) timing is off
+def change_task_handler(period_ms=1):
+    import mpos.ui
+    if hasattr(mpos.ui, "task_handler"):
+        mpos.ui.task_handler.disable() # this fixes the decode of the real remote!
+        mpos.ui.task_handler.deinit()
+    import task_handler
+    mpos.ui.task_handler = task_handler.TaskHandler(duration=period_ms, exception_hook=custom_exception_handler)
+    # Convenient for apps to be able to access these:
+    mpos.ui.task_handler.TASK_HANDLER_STARTED = task_handler.TASK_HANDLER_STARTED
+    mpos.ui.task_handler.TASK_HANDLER_FINISHED = task_handler.TASK_HANDLER_FINISHED
+
+mpos.ui.change_task_handler = change_task_handler # make it accessible
+mpos.ui.change_task_handler()
 
 try:
     from mpos.net.wifi_service import WifiService
@@ -325,8 +338,8 @@ else: # if no auto_start_app_early was configured (this could be improved to sta
 # Create limited aiorepl because it's better than nothing:
 import aiorepl
 async def asyncio_repl():
-    print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: import mpos ; mpos.TaskManager.stop()")
-    await aiorepl.task()
+    print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
+    await aiorepl.task(g={'lv': lv, 'mpos': mpos}, prompt=">>> ") # same prompt as normal REPL, not to confuse ViperIDE
 TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
 
 try:

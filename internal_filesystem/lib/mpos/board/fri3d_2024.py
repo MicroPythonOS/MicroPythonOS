@@ -15,7 +15,7 @@ import drivers.display.st7789 as st7789
 
 import mpos.ui
 import mpos.ui.focus_direction
-from mpos import InputManager
+from mpos import InputManager, IRManager
 
 spi_bus = machine.SPI.Bus(
     host=2,
@@ -242,6 +242,9 @@ InputManager.register_indev(indev)
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
+IRManager.txPin = Pin(10, Pin.OUT)
+IRManager.rxPin = Pin(11, Pin.IN)
+
 # Battery voltage ADC measuring
 # NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
 # BatteryManager handles this automatically: disables WiFi, reads ADC, reconnects WiFi.
@@ -274,6 +277,8 @@ BatteryManager.init_adc(13, adc_to_voltage)
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
 
+# Would be better to only add these if the communicator is connected:
+
 # I2S pin configuration for audio output (DAC) and input (microphone)
 # Note: I2S is created per-stream, not at boot (only one instance can exist)
 # The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
@@ -292,25 +297,26 @@ i2s_input_pins = {
 
 speaker_output = AudioManager.add(
     AudioManager.Output(
-        name="speaker",
+        name="Communicator Output",
         kind="i2s",
         i2s_pins=i2s_output_pins,
     )
 )
 
-buzzer_output = AudioManager.add(
-    AudioManager.Output(
-        name="buzzer",
-        kind="buzzer",
-        buzzer_pin=46,
+mic_input = AudioManager.add(
+    AudioManager.Input(
+        name="Communicator Input",
+        kind="i2s",
+        i2s_pins=i2s_input_pins,
     )
 )
 
-mic_input = AudioManager.add(
-    AudioManager.Input(
-        name="mic",
-        kind="i2s",
-        i2s_pins=i2s_input_pins,
+# Add this after the headset output so that it doesn't become the default:
+buzzer_output = AudioManager.add(
+    AudioManager.Output(
+        name="Badge Buzzer",
+        kind="buzzer",
+        buzzer_pin=46,
     )
 )
 
@@ -324,9 +330,8 @@ SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12, num_leds=5)
-
-print("Fri3d hardware: Audio, LEDs, and sensors initialized")
+LightsManager.init(neopixel_pin=12)
+LightsManager.set_led_num(5)
 
 # === STARTUP "WOW" EFFECT ===
 import time
@@ -356,29 +361,25 @@ def startup_wow_effect():
             (0, 0, 255),    # Blue
         ]
 
-        # Rainbow sweep effect (3 passes, getting faster)
-        for pass_num in range(3):
-            for i in range(5):
-                # Light up LEDs progressively
-                for j in range(i + 1):
-                    LightsManager.set_led(j, *rainbow[j])
-                LightsManager.write()
-                time.sleep_ms(80 - pass_num * 20)  # Speed up each pass
+        # Single rainbow sweep
+        for i in range(5):
+            # Light up LEDs progressively
+            for j in range(i + 1):
+                LightsManager.set_led(j, *rainbow[j])
+            LightsManager.write()
+            time.sleep_ms(500)
 
-        # Flash all LEDs bright white
+        # Hold white, then fade out over 4 seconds
         LightsManager.set_all(255, 255, 255)
         LightsManager.write()
-        time.sleep_ms(150)
+        time.sleep_ms(500)
 
-        # Rainbow finale
-        for i in range(5):
-            LightsManager.set_led(i, *rainbow[i])
-        LightsManager.write()
-        time.sleep_ms(300)
-
-        # Fade out
-        LightsManager.clear()
-        LightsManager.write()
+        fade_steps = 80
+        for step in range(fade_steps):
+            level = int(255 * (fade_steps - 1 - step) / (fade_steps - 1))
+            LightsManager.set_all(level, level, level)
+            LightsManager.write()
+            time.sleep_ms(25)
 
     except Exception as e:
         print(f"Startup effect error: {e}")

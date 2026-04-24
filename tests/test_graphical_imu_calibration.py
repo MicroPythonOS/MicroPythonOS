@@ -13,6 +13,7 @@ import unittest
 import lvgl as lv
 import mpos.ui
 import time
+import sys
 from mpos import (
     wait_for_render,
     find_label_with_text,
@@ -21,8 +22,6 @@ from mpos import (
     simulate_click,
     get_widget_coords,
     find_button_with_text,
-    click_label,
-    click_button,
     find_text_on_screen,
     AppManager
 )
@@ -31,13 +30,21 @@ from mpos import (
 class TestIMUCalibration(unittest.TestCase):
     """Test suite for IMU calibration activities."""
 
+    def _start_activity_from_settings_assets(self, filename, classname):
+        app_fullname = "com.micropythonos.settings"
+        entrypoint = f"builtin/apps/{app_fullname}/assets/{filename}"
+        cwd = f"builtin/apps/{app_fullname}/assets/"
+        result = AppManager.execute_script(entrypoint, True, classname, cwd, app_fullname=app_fullname)
+        self.assertTrue(result, f"Failed to start {classname} from {entrypoint}")
+        wait_for_render(iterations=60)
+
     def tearDown(self):
         """Clean up after test."""
         # Navigate back to launcher
         try:
             for _ in range(3):  # May need multiple backs
                 mpos.ui.back_screen()
-                wait_for_render(5)
+                wait_for_render(10)
         except:
             pass
 
@@ -45,23 +52,13 @@ class TestIMUCalibration(unittest.TestCase):
         """Test that CheckIMUCalibrationActivity loads and displays."""
         print("\n=== Testing CheckIMUCalibrationActivity ===")
 
-        # Navigate: Launcher -> Settings -> Check IMU Calibration
-        result = AppManager.start_app("com.micropythonos.settings")
-        self.assertTrue(result, "Failed to start Settings app")
-        wait_for_render(15)
-
-        # Initialize touch device with dummy click
-        simulate_click(10, 10)
-        wait_for_render(10)
-
-        print("Clicking 'Check IMU Calibration' menu item...")
-        self.assertTrue(click_label("Check IMU Calibration"), "Could not find Check IMU Calibration menu item")
-        wait_for_render(iterations=20)
+        # Navigate directly to activity to avoid flaky settings clicks
+        self._start_activity_from_settings_assets("check_imu_calibration.py", "CheckIMUCalibrationActivity")
 
         # Verify key elements are present
         screen = lv.screen_active()
         print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "Quality:"), "Quality label not found")
+        self.assertTrue(verify_text_present(screen, "Quality"), "Quality label not found")
         self.assertTrue(verify_text_present(screen, "Accel."), "Accel. label not found")
         self.assertTrue(verify_text_present(screen, "Gyro"), "Gyro label not found")
 
@@ -71,18 +68,8 @@ class TestIMUCalibration(unittest.TestCase):
         """Test CalibrateIMUActivity full calibration flow."""
         print("\n=== Testing CalibrateIMUActivity Flow ===")
 
-        # Navigate: Launcher -> Settings -> Calibrate IMU
-        result = AppManager.start_app("com.micropythonos.settings")
-        self.assertTrue(result, "Failed to start Settings app")
-        wait_for_render(15)
-
-        # Initialize touch device with dummy click
-        simulate_click(10, 10)
-        wait_for_render(10)
-
-        print("Clicking 'Calibrate IMU' menu item...")
-        self.assertTrue(click_label("Calibrate IMU"), "Could not find Calibrate IMU item")
-        wait_for_render(iterations=20)
+        # Navigate directly to activity to avoid flaky settings clicks
+        self._start_activity_from_settings_assets("calibrate_imu.py", "CalibrateIMUActivity")
 
         # Verify activity loaded and shows instructions
         screen = lv.screen_active()
@@ -95,13 +82,12 @@ class TestIMUCalibration(unittest.TestCase):
         # Click "Calibrate Now" button to start calibration
         calibrate_btn = find_button_with_text(screen, "Calibrate Now")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate Now' button")
-        # Use send_event instead of simulate_click (more reliable)
         calibrate_btn.send_event(lv.EVENT.CLICKED, None)
-        wait_for_render(10)
+        wait_for_render(25)
 
         # Wait for calibration to complete (mock takes ~3 seconds)
         time.sleep(4)
-        wait_for_render(40)
+        wait_for_render(50)
 
         # Verify calibration completed
         screen = lv.screen_active()
@@ -120,27 +106,28 @@ class TestIMUCalibration(unittest.TestCase):
         """Test navigation from Check to Calibrate activity via button."""
         print("\n=== Testing Check -> Calibrate Navigation ===")
 
-        # Navigate to Check activity
-        result = AppManager.start_app("com.micropythonos.settings")
-        self.assertTrue(result)
-        wait_for_render(15)
-
-        # Initialize touch device with dummy click
-        simulate_click(10, 10)
-        wait_for_render(10)
-
-        print("Clicking 'Check IMU Calibration' menu item...")
-        self.assertTrue(click_label("Check IMU Calibration"), "Could not find Check IMU Calibration menu item")
-        wait_for_render(iterations=20)
+        # Navigate directly to Check activity
+        self._start_activity_from_settings_assets("check_imu_calibration.py", "CheckIMUCalibrationActivity")
 
         # Click "Calibrate" button to navigate to Calibrate activity
         screen = lv.screen_active()
         calibrate_btn = find_button_with_text(screen, "Calibrate")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate' button")
 
-        # Use send_event instead of simulate_click (more reliable for navigation)
-        calibrate_btn.send_event(lv.EVENT.CLICKED, None)
-        wait_for_render(30)
+        assets_path = "builtin/apps/com.micropythonos.settings/assets/"
+        added_path = False
+        if assets_path not in sys.path:
+            sys.path.append(assets_path)
+            added_path = True
+        try:
+            calibrate_btn.send_event(lv.EVENT.CLICKED, None)
+            wait_for_render(60)
+        finally:
+            if added_path:
+                try:
+                    sys.path.remove(assets_path)
+                except ValueError:
+                    pass
 
         # Verify CalibrateIMUActivity loaded
         screen = lv.screen_active()

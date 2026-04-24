@@ -11,6 +11,7 @@ Usage:
 """
 
 import unittest
+import time
 import lvgl as lv
 import mpos.ui
 from mpos import (
@@ -41,7 +42,7 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
     def _open_hotspot_settings_screen(self):
         result = AppManager.start_app("com.micropythonos.settings.hotspot")
         self.assertTrue(result, "Failed to start hotspot settings app")
-        wait_for_render(iterations=20)
+        wait_for_render(iterations=40)
 
         screen = lv.screen_active()
         print("\nHotspot overview labels:")
@@ -51,7 +52,7 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
             click_button("Settings"),
             "Could not find Settings button in hotspot app",
         )
-        wait_for_render(iterations=40)
+        wait_for_render(iterations=60)
 
         screen = lv.screen_active()
         print("\nHotspot settings labels:")
@@ -79,6 +80,17 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
                 return result
         return None
 
+    def _wait_for_overview_text(self, text, attempts=6, render_iterations=30):
+        for attempt in range(1, attempts + 1):
+            screen = lv.screen_active()
+            print(f"\nOverview check attempt {attempt}/{attempts}:")
+            print_screen_labels(screen)
+            if verify_text_present(screen, text):
+                return True
+            wait_for_render(iterations=render_iterations)
+            time.sleep(0.2)
+        return False
+
     def tearDown(self):
         try:
             WifiService.disable_hotspot()
@@ -87,7 +99,7 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
 
         try:
             mpos.ui.back_screen()
-            wait_for_render(5)
+            wait_for_render(25)
         except Exception:
             pass
 
@@ -102,7 +114,7 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
             click_label("Auth Mode"),
             "Could not click Auth Mode setting",
         )
-        wait_for_render(iterations=40)
+        wait_for_render(iterations=50)
 
         screen = lv.screen_active()
         dropdown = find_dropdown_widget(screen)
@@ -113,28 +125,25 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
 
         print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
         simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
-        wait_for_render(iterations=20)
+        wait_for_render(iterations=25)
 
         self.assertTrue(
             select_dropdown_option_by_text(dropdown, "WPA2", allow_partial=True),
             "Could not select WPA2 option in dropdown",
         )
-        wait_for_render(iterations=20)
+        wait_for_render(iterations=25)
 
         self.assertTrue(
             click_button("Save"),
             "Could not click Save button in Auth Mode settings",
         )
-        wait_for_render(iterations=40)
+        wait_for_render(iterations=50)
 
         mpos.ui.back_screen()
-        wait_for_render(iterations=20)
+        wait_for_render(iterations=25)
 
-        screen = lv.screen_active()
-        print("\nHotspot overview labels after Auth Mode change:")
-        print_screen_labels(screen)
         self.assertTrue(
-            verify_text_present(screen, "Security: WPA2"),
+            self._wait_for_overview_text("Security: WPA2"),
             "Hotspot overview did not update Security after Auth Mode change",
         )
 
@@ -159,7 +168,7 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
         textarea = self._find_textarea(screen)
         self.assertIsNotNone(textarea, "SSID textarea not found")
         textarea.set_text(new_ssid)
-        wait_for_render(iterations=10)
+        wait_for_render(iterations=25)
 
         self.assertTrue(
             click_button("Save"),
@@ -168,13 +177,10 @@ class TestGraphicalHotspotSettings(unittest.TestCase):
         wait_for_render(iterations=40)
 
         mpos.ui.back_screen()
-        wait_for_render(iterations=20)
+        wait_for_render(iterations=25)
 
-        screen = lv.screen_active()
-        print("\nHotspot overview labels after SSID change:")
-        print_screen_labels(screen)
         self.assertTrue(
-            verify_text_present(screen, f"Hotspot name: {new_ssid}"),
+            self._wait_for_overview_text(f"Hotspot name: {new_ssid}"),
             "Hotspot overview did not update SSID after settings change",
         )
 

@@ -4,7 +4,6 @@ import mpos.time
 from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
-from .util import (get_foreground_app)
 from .input_manager import InputManager
 from . import focus_direction
 from .widget_animator import WidgetAnimator
@@ -46,8 +45,10 @@ def open_drawer():
 def close_drawer(to_launcher=False):
     global drawer_open, drawer
     if drawer_open:
+        from mpos.activity_navigator import get_foreground_app
         drawer_open=False
         fg = get_foreground_app()
+        print(f"topmenu.py foreground app: {fg}")
         if not to_launcher and fg is not None and not "launcher" in fg:
             print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {get_foreground_app()}")
             close_bar(False)
@@ -87,6 +88,7 @@ def create_notification_bar():
     notification_bar.set_scroll_dir(lv.DIR.NONE)
     notification_bar.set_style_border_width(0, lv.PART.MAIN)
     notification_bar.set_style_radius(0, lv.PART.MAIN)
+    notification_bar.add_flag(lv.obj.FLAG.CLICKABLE)
     # Time label
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
@@ -142,6 +144,8 @@ def create_notification_bar():
                 battery_icon.set_text(lv.SYMBOL.BATTERY_1)
             else:
                 battery_icon.set_text(lv.SYMBOL.BATTERY_EMPTY)
+            battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
+            wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
             battery_icon.remove_flag(lv.obj.FLAG.HIDDEN)
             # Percentage is not shown for now:
             #battery_label.set_text(f"{round(percent)}%")
@@ -294,6 +298,7 @@ def create_drawer():
     def launcher_event(e):
         print("Launch button pressed!")
         close_drawer(True)
+        AppManager.refresh_apps()
         AppManager.restart_launcher()
     launcher_btn.add_event_cb(launcher_event,lv.EVENT.CLICKED,None)
     '''

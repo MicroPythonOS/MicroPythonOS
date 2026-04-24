@@ -69,7 +69,7 @@ class NostrApp(Activity):
     events_label = None
 
     def onCreate(self):
-        self.prefs = SharedPreferences("com.micropythonos.nostr")
+        self.prefs = SharedPreferences(self.appFullName)
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(10, lv.PART.MAIN)
         # Header line

@@ -1,4 +1,4 @@
-from mpos import Activity, SharedPreferences
+from mpos import Activity, SharedPreferences, DisplayMetrics
 
 class HowTo(Activity):
 
@@ -10,7 +10,9 @@ class HowTo(Activity):
 
     def onCreate(self):
         screen = lv.obj()
+        screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(5), lv.PART.MAIN)
         # Make the screen focusable so it can be scrolled with the arrow keys
         focusgroup = lv.group_get_default()
         if focusgroup:

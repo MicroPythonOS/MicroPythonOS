@@ -8,11 +8,13 @@ from mpos.testing import (
     MockThread,
     inject_mocks,
 )
+from mpos.testing.mocks import MockSharedPreferences, create_mock_module
 
 # Inject mocks before importing AudioManager
 inject_mocks({
-    'machine': MockMachine(),
-    '_thread': MockThread,
+    "machine": MockMachine(),
+    "_thread": MockThread,
+    "mpos.config": create_mock_module("mpos.config", SharedPreferences=MockSharedPreferences),
 })
 
 # Now import the module to test
@@ -25,10 +27,11 @@ class TestAudioManager(unittest.TestCase):
     def setUp(self):
         """Initialize AudioManager before each test."""
         self.buzzer_pin = 46
-        self.i2s_pins = {'sck': 2, 'ws': 47, 'sd': 16}
+        self.i2s_pins = {"sck": 2, "ws": 47, "sd": 16}
 
         # Reset singleton instance for each test
         AudioManager._instance = None
+        MockSharedPreferences.reset_all()
 
         AudioManager()
         AudioManager.add(AudioManager.Output("speaker", "i2s", i2s_pins=self.i2s_pins))
@@ -143,10 +146,12 @@ class TestAudioManagerRecording(unittest.TestCase):
     def setUp(self):
         """Initialize AudioManager with microphone before each test."""
         # I2S pins with microphone input
-        self.i2s_pins_with_mic = {'sck': 2, 'ws': 47, 'sd_in': 15}
+        self.i2s_pins_with_mic = {"sck": 2, "ws": 47, "sd_in": 15}
+        self.pdm_pins_with_mic = {"sck_in": 44, "sd_in": 47}
 
         # Reset singleton instance for each test
         AudioManager._instance = None
+        MockSharedPreferences.reset_all()
 
         AudioManager()
         AudioManager.add(AudioManager.Input("mic", "i2s", i2s_pins=self.i2s_pins_with_mic))
@@ -163,6 +168,12 @@ class TestAudioManagerRecording(unittest.TestCase):
         inputs = AudioManager.get_inputs()
         self.assertEqual(len(inputs), 1)
         self.assertEqual(inputs[0].kind, "i2s")
+
+    def test_add_pdm_input(self):
+        AudioManager.add(AudioManager.Input("pdm_mic", "pdm", pdm_pins=self.pdm_pins_with_mic))
+        inputs = AudioManager.get_inputs()
+        self.assertEqual(len(inputs), 2)
+        self.assertEqual(inputs[1].kind, "pdm")
 
     def test_default_input(self):
         """Test default input selection."""
@@ -193,3 +204,56 @@ class TestAudioManagerRecording(unittest.TestCase):
         """Test that stop() can be called when nothing is recording."""
         # Should not raise exception
         AudioManager.stop()
+
+
+class TestAudioManagerPreferences(unittest.TestCase):
+    """Test cases for AudioManager preference-based selection."""
+
+    def setUp(self):
+        self.i2s_pins = {"sck": 2, "ws": 47, "sd": 16}
+        self.i2s_pins_with_mic = {"sck": 2, "ws": 47, "sd_in": 15}
+        AudioManager._instance = None
+        MockSharedPreferences.reset_all()
+
+        AudioManager()
+        AudioManager.add(AudioManager.Output("speaker", "i2s", i2s_pins=self.i2s_pins))
+        AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=46))
+        AudioManager.add(AudioManager.Input("mic", "i2s", i2s_pins=self.i2s_pins_with_mic))
+        AudioManager.add(AudioManager.Input("mic2", "adc", adc_mic_pin=4))
+        self._prefs = MockSharedPreferences("com.micropythonos.settings.audio")
+        AudioManager.get()._audio_prefs = self._prefs
+
+    def tearDown(self):
+        AudioManager.stop()
+
+    def test_pref_selects_output(self):
+        editor = self._prefs.edit()
+        editor.put_string("output_device", "buzzer")
+        editor.commit()
+        default_output = AudioManager.get_default_output()
+        self.assertIsNotNone(default_output)
+        self.assertEqual(default_output.name, "buzzer")
+
+    def test_pref_selects_input(self):
+        editor = self._prefs.edit()
+        editor.put_string("input_device", "mic2")
+        editor.commit()
+        default_input = AudioManager.get_default_input()
+        self.assertIsNotNone(default_input)
+        self.assertEqual(default_input.name, "mic2")
+
+    def test_pref_missing_output_falls_back(self):
+        editor = self._prefs.edit()
+        editor.put_string("output_device", "missing")
+        editor.commit()
+        default_output = AudioManager.get_default_output()
+        self.assertIsNotNone(default_output)
+        self.assertEqual(default_output.name, "speaker")
+
+    def test_pref_missing_input_falls_back(self):
+        editor = self._prefs.edit()
+        editor.put_string("input_device", "missing")
+        editor.commit()
+        default_input = AudioManager.get_default_input()
+        self.assertIsNotNone(default_input)
+        self.assertEqual(default_input.name, "mic")

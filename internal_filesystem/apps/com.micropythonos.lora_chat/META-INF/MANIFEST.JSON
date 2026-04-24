@@ -1,0 +1,24 @@
+{
+"name": "LoRa Chat",
+"publisher": "MicroPythonOS",
+"short_description": "Chat using LoRa",
+"long_description": "Send messages back and forth with your friends using LoRa.",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.lora_chat/icons/com.micropythonos.lora_chat_0.0.6_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.lora_chat/mpks/com.micropythonos.lora_chat_0.0.6.mpk",
+"fullname": "com.micropythonos.lora_chat",
+"version": "0.0.6",
+"category": "development",
+"activities": [
+    {
+      "entrypoint": "assets/lora_chat.py",
+      "classname": "LoRaChat",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
+

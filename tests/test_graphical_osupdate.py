@@ -20,14 +20,14 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         """Clean up after each test method."""
         # Navigate back to launcher
         mpos.ui.back_screen()
-        wait_for_render(5)
+        wait_for_render(60)
 
     def test_app_launches_successfully(self):
         """Test that OSUpdate app launches without errors."""
         result = AppManager.start_app("com.micropythonos.osupdate")
 
         self.assertTrue(result, "Failed to start OSUpdate app")
-        wait_for_render(10)
+        wait_for_render(60)
 
         # Get active screen
         screen = lv.screen_active()
@@ -37,7 +37,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         """Test that all required UI elements are created."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
-        wait_for_render(15)
+        wait_for_render(60)
 
         screen = lv.screen_active()
 
@@ -56,7 +56,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         """Test that install button with update text exists on screen."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
-        wait_for_render(15)
+        wait_for_render(60)
 
         screen = lv.screen_active()
 
@@ -71,7 +71,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         """Test that current OS version is displayed correctly."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
-        wait_for_render(15)
+        wait_for_render(60)
 
         screen = lv.screen_active()
 
@@ -91,7 +91,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         # On actual hardware without wifi, it would show error
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
-        wait_for_render(15)
+        wait_for_render(60)
 
         screen = lv.screen_active()
 
@@ -106,7 +106,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         """Print initial app labels for debugging."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
-        wait_for_render(20)
+        wait_for_render(60)
 
         screen = lv.screen_active()
 
@@ -120,13 +120,13 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
     def tearDown(self):
         """Clean up after test."""
         mpos.ui.back_screen()
-        wait_for_render(5)
+        wait_for_render(60)
 
     def test_status_label_exists(self):
         """Test that status label is created and visible."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
-        wait_for_render(15)
+        wait_for_render(60)
 
         screen = lv.screen_active()
 
@@ -145,7 +145,7 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
         """Test that all labels are readable (no truncation issues)."""
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
-        wait_for_render(15)
+        wait_for_render(60)
 
         screen = lv.screen_active()
 

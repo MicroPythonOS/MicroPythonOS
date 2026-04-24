@@ -10,7 +10,7 @@ import time
 
 # Toggle to enable I2S.shift-based volume scaling when available.
 # Set to False to use legacy software scaling only.
-USE_I2S_SHIFT_VOLUME = False
+USE_I2S_SHIFT_VOLUME = False # I2S shift isn't supported on MicroPython 1.25.0
 
 # Volume scaling function - Viper-optimized for ESP32 performance
 # NOTE: The line below is automatically commented out by build_mpos.sh during
@@ -166,6 +166,9 @@ class WAVStream:
     Supports 8/16/24/32-bit PCM, mono and stereo, auto-upsampling to >=8000 Hz.
     """
 
+    WAVE_FORMAT_PCM = 0x1
+    WAVE_FORMAT_EXTENSIBLE = 0xFFFE # often used for 24 and 32 bits per sample
+
     def __init__(
         self,
         file_path,
@@ -226,6 +229,7 @@ class WAVStream:
     def get_duration_ms(self):
         return self._duration_ms
 
+
     # ----------------------------------------------------------------------
     #  WAV header parser - returns bit-depth and format info
     # ----------------------------------------------------------------------
@@ -264,8 +268,9 @@ class WAVStream:
                 if len(fmt) < 16:
                     raise ValueError("Invalid fmt chunk")
 
-                if int.from_bytes(fmt[0:2], 'little') != 1:
-                    raise ValueError("Only PCM supported")
+                format = int.from_bytes(fmt[0:2], 'little')
+                if format != WAVStream.WAVE_FORMAT_PCM and format != WAVStream.WAVE_FORMAT_EXTENSIBLE:
+                    raise ValueError("Only WAVE_FORMAT_PCM or WAVE_FORMAT_EXTENSIBLE supported")
 
                 channels = int.from_bytes(fmt[2:4], 'little')
                 if channels not in (1, 2):
@@ -372,6 +377,29 @@ class WAVStream:
             j += 4
         return out
 
+    @staticmethod
+    def _get_freq_duty(sample_rate):
+        return (sample_rate * 256, 32768) # sensible defaults
+        '''
+        # These frequencies and duty cycles don't wake up the Fri3d Communicator when playing to headset, but that will be fixed so no need:
+        if sample_rate == 8000:
+            return (640000,1365)
+        elif sample_rate == 11025:
+            return (1060800,1024)
+        elif sample_rate == 16000:
+            return (512000,512)
+        elif sample_rate == 22050:
+            return (705600,1024)
+        elif sample_rate == 32000:
+            print("Warning: sample rate 32kHz hasn't been testing, guessing!")
+            return (1024000,1024)
+        elif sample_rate == 44100:
+            return (1411200,2048)
+        else:
+            print(f"Uncommon sample rate {sample_rate} hasn't been tried, returning default sample_rate * 256 amd 50% duty cycle")
+            return (sample_rate * 256, 32768)
+        '''
+
     # ----------------------------------------------------------------------
     #  Upsampling (zero-order-hold)
     # ----------------------------------------------------------------------
@@ -457,14 +485,12 @@ class WAVStream:
                     if 'mck' in self.i2s_pins:
                         mck_pin = machine.Pin(self.i2s_pins['mck'], machine.Pin.OUT)
                         from machine import Pin, PWM
-                        # Add MCLK generation on GPIO2
                         try:
                             self._mck_pwm = PWM(mck_pin)
-                            # Set frequency to sample_rate * 256 (common ratio for CJC4334H auto-detect)
-                            # Use duty_u16 for finer control (0–65535 range, 32768 = 50%)
-                            self._mck_pwm.freq(playback_rate * 256)
-                            self._mck_pwm.duty_u16(32768)  # 50% duty cycle
-                            print(f"MCLK PWM started on GPIO2 at {playback_rate * 256} Hz")
+                            freq, duty = WAVStream._get_freq_duty(playback_rate)
+                            self._mck_pwm.freq(freq)
+                            self._mck_pwm.duty_u16(duty)
+                            print(f"MCLK PWM started at {freq} Hz with duty cycle {duty}/65535")
                         except Exception as e:
                             print(f"MCLK PWM init failed: {e}")
                             # fallback or error handling
@@ -510,6 +536,7 @@ class WAVStream:
                 #chunk_size = int(bytes_per_second / 12) # 18 fps for 8khz mono, 16 fps for 22khz mono, higher stutters
                 #chunk_size = int(bytes_per_second / 11) # still jitters at 22050hz stereo in quasibird
 
+                bytes_per_second_out = playback_rate * 2 * channels
                 total_original = 0
                 while total_original < data_size:
                     if not self._keep_running:
@@ -526,7 +553,7 @@ class WAVStream:
                     if not raw:
                         break
 
-                    # 1. Convert bit-depth to 16-bit
+                    # 1. Convert bit-depth to 16-bit (why? doesn't the i2s support 24 and 32 bits per sample?)
                     if bits_per_sample == 8:
                         raw = self._convert_8_to_16(raw)
                     elif bits_per_sample == 24:
@@ -556,15 +583,23 @@ class WAVStream:
                                 try:
                                     self._i2s.shift(raw, 16, shift) # triggers exception
                                 except Exception as e:
-                                    print(f"_i2s.shift got exception, falling back to software scaling: {e}")
+                                    #print(f"_i2s.shift got exception, falling back to software scaling: {e}")
                                     _scale_audio_optimized(raw, len(raw), scale_fixed)
                         else:
-                            print("_i2s has no shift attribute, falling back to software scaling")
+                            #print("_i2s has no shift attribute, falling back to software scaling")
                             _scale_audio_optimized(raw, len(raw), scale_fixed)
 
                     # 4. Output to I2S (blocking write is OK - we're in a separate thread)
                     if self._i2s:
-                        self._i2s.write(raw)
+                        remaining = memoryview(raw)
+                        while remaining:
+                            written = self._i2s.write(remaining)
+                            if written is None:
+                                written = len(remaining)
+                            if written <= 0:
+                                time.sleep_ms(1)
+                                continue
+                            remaining = remaining[written:]
                     else:
                         # Simulate playback timing if no I2S
                         num_samples = len(raw) // (2 * channels)
@@ -572,6 +607,14 @@ class WAVStream:
 
                     total_original += to_read
                     self._progress_samples = total_original // bytes_per_sample
+
+                if self._i2s and self._keep_running:
+                    try:
+                        drain_ms = int((ibuf / bytes_per_second_out) * 1000)
+                        if drain_ms > 0:
+                            time.sleep_ms(drain_ms)
+                    except Exception as e:
+                        print(f"WAVStream: drain wait failed: {e}")
 
                 print(f"WAVStream: Finished playing {self.file_path}")
                 if self.on_complete:

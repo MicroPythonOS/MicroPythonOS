@@ -1,3 +1,5 @@
+# This file is used to build for desktop systems, like Linux and MacOS
+
 MOD_DIR := $(USERMOD_DIR)
 
 ifneq (,$(findstring -Wno-missing-field-initializers, $(CFLAGS_USERMOD)))

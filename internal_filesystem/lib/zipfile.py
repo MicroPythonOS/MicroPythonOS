@@ -799,7 +799,7 @@ class DeflateCompressor:
         # wbits for DeflateIO is 5 through 15 inclusive
         wbits = 5+self.compresslevel
         stream = io.BytesIO()
-        with deflate.DeflateIO(stream, deflate.ZLIB, wbits) as d:
+        with deflate.DeflateIO(stream, deflate.RAW, wbits) as d:
             d.write(data)
         compressed = stream.getvalue()
         return compressed
@@ -818,7 +818,7 @@ class DeflateDecompressor:
     def decompress(self, data):
         stream = io.BytesIO(data)
         try:
-            with deflate.DeflateIO(stream, deflate.AUTO) as d:
+            with deflate.DeflateIO(stream, deflate.RAW, 15) as d:
                 decompressed = d.read()
         except EOFError:
             return b''

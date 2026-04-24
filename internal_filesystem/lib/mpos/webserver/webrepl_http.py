@@ -1,28 +1,20 @@
 import os
 import socket
 import uio
+import struct
 
 import _webrepl
 from . import webrepl
 import websocket
+import lvgl as lv
 
-WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html"
-'''
-# Unused as these files are minified and inlined:
-#WEBREPL_HTML_PATH = "/builtin/html/webrepl.html"
-WEBREPL_CONTENT_PATH = "/builtin/html/webrepl.js"
-WEBREPL_TERM_PATH = "/builtin/html/term.js"
-WEBREPL_CSS_PATH = "/builtin/html/webrepl.css"
-WEBREPL_FILE_SAVER_PATH = "/builtin/html/FileSaver.js"
-'''
+from mpos.ui.display_metrics import DisplayMetrics
+
+WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html" # built by MicroPythonOS/webrepl/inline_minify_webrepl.py
 
 WEBREPL_ASSETS = {
     b"/": (WEBREPL_HTML_PATH, b"text/html"),
     b"/index.html": (WEBREPL_HTML_PATH, b"text/html"),
-    #b"/webrepl.css": (WEBREPL_CSS_PATH, b"text/css"),
-    #b"/webrepl.js": (WEBREPL_CONTENT_PATH, b"application/javascript"),
-    #b"/term.js": (WEBREPL_TERM_PATH, b"application/javascript"),
-    #b"/FileSaver.js": (WEBREPL_FILE_SAVER_PATH, b"application/javascript"),
 }
 
 
@@ -80,6 +72,56 @@ def _send_response(cl, status, content_type, body):
     cl.close()
 
 
+def _build_bmp_header(width, height, pixel_data_size):
+    bmp_header_size = 54
+    file_size = bmp_header_size + pixel_data_size
+    header = bytearray(bmp_header_size)
+    header[0:2] = b"BM"
+    header[2:6] = struct.pack("<I", file_size)
+    header[10:14] = struct.pack("<I", bmp_header_size)
+    header[14:18] = struct.pack("<I", 40)
+    header[18:22] = struct.pack("<I", width)
+    header[22:26] = struct.pack("<i", -height)
+    header[26:28] = struct.pack("<H", 1)
+    header[28:30] = struct.pack("<H", 24)
+    header[30:34] = struct.pack("<I", 0)
+    header[34:38] = struct.pack("<I", pixel_data_size)
+    return header
+
+
+def _snapshot_to_bmp():
+    width = DisplayMetrics.width()
+    height = DisplayMetrics.height()
+    rgb_size = width * height * 3
+    row_stride = ((width * 3 + 3) // 4) * 4
+    pixel_data_size = row_stride * height
+
+    rgb_buffer = bytearray(rgb_size)
+    image_dsc = lv.image_dsc_t()
+    lv.snapshot_take_to_buf(
+        lv.screen_active(),
+        lv.COLOR_FORMAT.RGB888,
+        image_dsc,
+        rgb_buffer,
+        rgb_size,
+    )
+
+    bmp = bytearray(54 + pixel_data_size)
+    bmp[0:54] = _build_bmp_header(width, height, pixel_data_size)
+
+    view = memoryview(bmp)[54:]
+    if row_stride == width * 3:
+        view[:rgb_size] = rgb_buffer
+    else:
+        for y in range(height):
+            src_start = y * width * 3
+            src_end = src_start + width * 3
+            dest_start = y * row_stride
+            view[dest_start : dest_start + width * 3] = rgb_buffer[src_start:src_end]
+
+    return bmp
+
+
 def _send_file_response(cl, path, content_type):
     try:
         with open(path, "rb") as handle:
@@ -124,6 +166,11 @@ def accept_handler(listen_sock):
         if path in WEBREPL_ASSETS:
             asset_path, content_type = WEBREPL_ASSETS[path]
             return _send_file_response(cl, asset_path, content_type)
+
+        if path == b"/screenshot.bmp":
+            bmp = _snapshot_to_bmp()
+            _send_response(cl, b"200 OK", b"image/bmp", bmp)
+            return False
 
         _send_response(cl, b"404 Not Found", b"text/plain", b"Not Found")
         return False

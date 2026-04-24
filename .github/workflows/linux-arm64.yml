@@ -82,12 +82,10 @@ jobs:
       - name: Run syntax tests on unix
         run: |
           ./tests/syntax.sh
-        continue-on-error: true
 
       - name: Run unit tests on unix
         run: |
           ./tests/unittest.sh
-        continue-on-error: true
 
 
 

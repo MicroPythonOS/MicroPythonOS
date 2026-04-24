@@ -82,6 +82,7 @@ def _top_swipe_cb(event):
     y = point.y
     dx = abs(x - down_start_x)
     dy = abs(y - down_start_y)
+    dy_signed = y - down_start_y
     # print(f"visual_back_swipe_cb event_code={event_code} and event_name={name} and pos: {x}, {y}")
     if event_code == lv.EVENT.PRESSED:
         down_start_x = x
@@ -98,7 +99,10 @@ def _top_swipe_cb(event):
             WidgetAnimator.smooth_hide(downbutton)
         dx = abs(x - down_start_x)
         dy = abs(y - down_start_y)
-        if y > DisplayMetrics.height() / 5:
+        dy_signed = y - down_start_y
+        if dy_signed <= -(AppearanceManager.NOTIFICATION_BAR_HEIGHT // 2):
+            topmenu.close_bar()
+        elif y > DisplayMetrics.height() / 5:
             topmenu.open_drawer()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
@@ -110,6 +114,7 @@ def handle_back_swipe():
     rect.set_size(AppearanceManager.NOTIFICATION_BAR_HEIGHT, lv.layer_top().get_height()-AppearanceManager.NOTIFICATION_BAR_HEIGHT) # narrow because it overlaps buttons
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     rect.set_scroll_dir(lv.DIR.NONE)
+    rect.add_flag(lv.obj.FLAG.CLICKABLE)
     rect.set_pos(0, AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     style = lv.style_t()
     style.init()
@@ -141,6 +146,7 @@ def handle_top_swipe():
     rect.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     rect.set_pos(0, 0)
     rect.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+    rect.add_flag(lv.obj.FLAG.CLICKABLE)
     style = lv.style_t()
     style.init()
     style.set_bg_opa(lv.OPA.TRANSP)

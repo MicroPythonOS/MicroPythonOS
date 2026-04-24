@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Configure Wi-Fi hotspot settings.",
 "long_description": "Configure and toggle the device Wi-Fi hotspot, including SSID, security, and network options.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.hotspot/icons/com.micropythonos.settings.hotspot_0.1.0_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.hotspot/mpks/com.micropythonos.settings.hotspot_0.1.0.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.hotspot/icons/com.micropythonos.settings.hotspot_0.1.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.hotspot/mpks/com.micropythonos.settings.hotspot_0.1.1.mpk",
 "fullname": "com.micropythonos.settings.hotspot",
-"version": "0.1.0",
+"version": "0.1.1",
 "category": "networking",
 "activities": [
     {

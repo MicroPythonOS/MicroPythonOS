@@ -2,7 +2,7 @@ import machine
 import os
 import time
 
-from mpos import Activity, Intent, sdcard, get_event_name, AudioManager
+from mpos import Activity, AppManager, Intent, sdcard, get_event_name, AudioManager
 
 slider_max = 16
 
@@ -15,6 +15,18 @@ class MusicPlayer(Activity):
         screen = lv.obj()
         # the user might have recently plugged in the sd card so try to mount it
         sdcard.mount_with_optional_format('/sdcard')
+
+        # Settings button (top-right)
+        self._settings_button = lv.button(screen)
+        settings_margin = 15
+        settings_size = 44
+        self._settings_button.set_size(settings_size, settings_size)
+        self._settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
+        self._settings_button.add_event_cb(lambda *args: AppManager.start_app("com.micropythonos.settings.audio"), lv.EVENT.CLICKED, None)
+        settings_label = lv.label(self._settings_button)
+        settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        settings_label.center()
 
         active_track = AudioManager.get_active_track(stream_type=AudioManager.STREAM_MUSIC)
         if active_track:
@@ -31,6 +43,7 @@ class MusicPlayer(Activity):
         self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.HOME_DIR, f"M:{local_filesystem_dir}/sdcard")
         self.file_explorer.explorer_set_quick_access_path(lv.EXPLORER.MUSIC_DIR, f"M:{local_filesystem_dir}/sdcard/music")
         #self.file_explorer.explorer_set_sort(lv.EXPLORER_SORT.KIND)
+        self._settings_button.move_to_index(-1)
         self.setContentView(screen)
 
     def onResume(self, screen):

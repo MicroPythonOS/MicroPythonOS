@@ -5,30 +5,23 @@
 # - IMU (LSM6DSO) is different from fri3d_2024 (and address 0x6A instead of 0x6B) but the API seems the same, except different chip ID (0x6C iso 0x6A)
 # - I2S audio (communicator) is the same
 # - headphone jack microphone is on ESP.IO1
+# - buzzer
 # - CH32X035GxUx over I2C:
 #   - battery voltage measurement
 #   - analog joystick
 #   - digital buttons (X,Y,A,B, MENU)
-#   - buzzer
-#       - audio DAC emulation using buzzer might be slow or need specific buffered protocol
-# - test it on the Waveshare to make sure no syntax / variable errors
 
 from machine import ADC, I2C, Pin, SPI, SDCard
 import lcd_bus
 import i2c
-import math
-
-import micropython
-import gc
 
 import lvgl as lv
-import task_handler
 
 import drivers.display.st7789 as st7789
 
 import mpos.ui
 import mpos.ui.focus_direction
-from mpos import InputManager
+from mpos import InputManager, IRManager, DeviceManager
 
 spi_bus = SPI.Bus(
     host=2,
@@ -36,6 +29,20 @@ spi_bus = SPI.Bus(
     miso=8,
     sck=7
 )
+
+try:
+    lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+except Exception as e:
+    import sys
+    sys.print_exception(e)
+else:
+    from drivers.lora.sx1262 import SX1262
+    rf_sw = Pin(46, Pin.OUT)
+    rf_sw.value(1) ; print("RF_SW set to HIGH") # Logic high level means enable receiver mode
+    sx = SX1262(lora_spi_device, 40, 11, 41, 45) # reset pin isn't used but driver expects a value so set to 11 (IR receiver) here for now
+    from mpos import LoRaManager
+    LoRaManager.radioChip = sx
+
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
     freq=40000000, # 40 Mhz
@@ -55,17 +62,139 @@ buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-# initialize the expander
-from drivers.fri3d.expander import Expander
+# === LED HARDWARE ===
+import mpos.lights as LightsManager
+# Initialize 5 NeoPixel LEDs (GPIO 12)
+LightsManager.init(neopixel_pin=12)
+LightsManager.set_led_num(5)
+# Set left LED red
+LightsManager.set_led(4, 255, 0, 0)
+LightsManager.write()
+
+# CH32 coprocessor / IO expander
+from machine import I2C, Pin
 expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
-expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
+from lib.drivers.fri3d.expander import Expander
 expander = Expander(i2c_bus=expander_i2c)
 
-# Quick and dirty LCD reset using the CH32 microcontroller
-expander.config = 0x01 # 3v3 aux on + LCD off
+
+# Show progress using the RGB LEDs:
+def percent_to_rainbow_color(value: float) -> tuple[int, int, int]:
+    return rainbow_color(max(0.0, min(1.0, value / 100.0))) # normalized 0.0 to 1.0
+
+def rainbow_color(t: float) -> tuple[int, int, int]:
+    hue = t * 300.0
+    h = hue / 60.0
+    i = int(h)
+    f = h - i                               # fractional part
+
+    if i == 0:
+        r, g, b = 1.0, f, 0.0
+    elif i == 1:
+        r, g, b = 1.0 - f, 1.0, 0.0
+    elif i == 2:
+        r, g, b = 0.0, 1.0, f
+    elif i == 3:
+        r, g, b = 0.0, 1.0 - f, 1.0
+    elif i == 4:
+        r, g, b = f, 0.0, 1.0
+    else:  # i == 5
+        r, g, b = 1.0, 0.0, 1.0 - f
+
+    return (int(r * 255 + 0.5), int(g * 255 + 0.5), int(b * 255 + 0.5))
+
+# Avoid excessive prints here because it slows down if the serial connects during printing?!
+def progress(msg, pct):
+    #print(f"{msg}: {pct}%")
+    twentieth = int(pct / 20)
+    lednr = max(0,4 - twentieth)
+    #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
+    color = percent_to_rainbow_color(pct)
+    #print(f"setting LED {lednr} color {color}")
+    LightsManager.set_led(lednr, *color)
+    LightsManager.write()
+
+def install_expander_firmware(filename):
+    print("Installing latest CH32 firmware")
+    expander.config = 0x0B # trigger SWD enable
+    import time
+    time.sleep(0.2)
+    from rvswd import RVSWD
+    prog = RVSWD(39, 42)
+    # optional check, already halts the MCU
+    vendor = prog.read_vendor_bytes()
+    if (vendor[1] & 0xffffff0f) != 0x03560601:
+        print(f"CH32X035G8U6 not detected, vendor is {vendor} but continuing anyway")
+    with open(filename, 'rb') as f:
+        fw = f.read()
+    f.close()
+    progress_margin_end = 21 # 21% left for sleep at the end
+    prog.x03x_program(fw, lambda msg, pct: progress(msg, int((100 - progress_margin_end) * pct / 100))) # throws exception if it fails
+    for pct in range(100-progress_margin_end,101):
+        progress("waiting for CH32 boot", pct)
+        time.sleep(4/progress_margin_end) # wait 4 seconds total
+    print("Latest CH32 firmware installed.")
+
+# Check expander firmware version and if none or too low: install latest
+try:
+    current_version = expander.version
+    print(f"Current_version of CH32 firmware: {current_version}")
+except Exception as e:
+    print("Could not check CH32 firmware version, assuming 0.0.0")
+    current_version = (0, 0, 0)
+latest_version = (1, 2, 1)
+if latest_version > current_version:
+    print(f"CH32 firmware is lower than latest {latest_version} so updating...")
+    try:
+        install_expander_firmware("/lib/drivers/fri3d/coprocessor_1.2.1.fw")
+        LightsManager.set_all(0,255,0)
+        LightsManager.write()
+        # Need to reinitialize:
+        expander_i2c = I2C(sda=Pin(39), scl=Pin(42), freq=400000)
+        expander = Expander(i2c_bus=expander_i2c)
+    except Exception as e:
+        print(f"CH32 firmware install got exception: {e}")
+        import sys
+        sys.print_exception(e)
+    try:
+        current_version = expander.version
+        print(f"After install, current_version of CH32 firmware: {current_version}")
+    except Exception as e:
+        print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
+
+
+# Quick and dirty patch of BatteryManager to use the CH32 battery level:
+def get_voltage(force_refresh=False, raw_adc_value=None):
+    # First workaround Fri3dCamp/badge_2026_fw/issues/2 by disabling input polling
+    from mpos import InputManager
+    InputManager.list_indevs()
+    e = InputManager.list_indevs()[2]
+    e.enable(False)
+    # Wait to ensure more than 5ms between input polls
+    import time
+    time.sleep_ms(10)
+    # Do the read:
+    returnval = (0.001857993861607339 * mpos.io_expander.analog[2] - 0.9965856090206169)
+    # Wait again to ensure more than 5ms between input polls
+    time.sleep_ms(10)
+    # Enable input polling again:
+    e.enable(True)
+    return returnval
+from mpos import BatteryManager
+BatteryManager.read_raw_adc =  lambda *args: mpos.io_expander.analog[2]
+BatteryManager.has_battery = lambda *args: True
+BatteryManager.read_battery_voltage = get_voltage
+
+
+# quick and dirty way to make accessible later:
+mpos.io_expander = expander
+
+# LCD reset using the CH32 microcontroller
+expander.config= 0x01 # 3v3 aux on + LCD off
 import time
-time.sleep_ms(200)
-expander.config = 0x03 # 3v3 aux + LCD on
+time.sleep_ms(100)
+expander.config= 0x03 # 3v3 aux + LCD on
+import mpos
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
@@ -77,8 +206,8 @@ mpos.ui.main_display = st7789.ST7789(
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
-    # reset_pin = driven by the CH32 microcontroller
-)
+    # reset_pin is driven by the CH32 microcontroller
+) # calls lv.init()
 
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
@@ -89,19 +218,17 @@ mpos.ui.main_display.set_color_inversion(True)
 # touch pad interrupt TP Int is on ESP.IO13
 import drivers.indev.cst816s as cst816s
 i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
+DeviceManager.registerBus(i2c_bus=i2c_bus) # register because Time of Flight app needs it
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
 try:
     tindev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
     InputManager.register_indev(tindev)
 except Exception as e:
     print(f"Touch screen init got exception: {e}")
-
-lv.init()
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 
 # Button handling code:
 import time
-
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
 
 # Key repeat configuration
@@ -163,19 +290,6 @@ def keypad_read_cb(indev, data):
         key_press_start = 0
         last_repeat_time = 0
 
-    # Handle ESC for back navigation (only on initial PRESSED)
-    if last_state == lv.INDEV_STATE.PRESSED:
-        if current_key == lv.KEY.ESC and since_last_repeat == 0:
-            mpos.ui.back_screen()
-        elif current_key == lv.KEY.RIGHT:
-            mpos.ui.focus_direction.move_focus_direction(90)
-        elif current_key == lv.KEY.LEFT:
-            mpos.ui.focus_direction.move_focus_direction(270)
-        elif current_key == lv.KEY.UP:
-            mpos.ui.focus_direction.move_focus_direction(0)
-        elif current_key == lv.KEY.DOWN:
-            mpos.ui.focus_direction.move_focus_direction(180)
-
 group = lv.group_create()
 group.set_default()
 
@@ -190,11 +304,12 @@ indev.enable(True)
 InputManager.register_indev(indev)
 
 # initialize the expander as indev driver
-from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
 try:
-    tindev_buttons=Fri3d2026Expander(expander, int_pin=expander_int_pin)
+    from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
+    #expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
+    tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because MicroPython interrupts are unreliable under high load
     tindev_buttons.set_group(group)
-    tindev_buttons.set_display(disp)
+    #tindev_buttons.set_display(disp) # error? weird? probably a fluke...
     tindev_buttons.enable(True)
     InputManager.register_indev(tindev_buttons)
 except Exception as e:
@@ -203,69 +318,76 @@ except Exception as e:
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
+IRManager.txPin = Pin(10, Pin.OUT)
+IRManager.rxPin = Pin(11, Pin.IN)
+
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
 
-# I2S pin configuration for audio output (DAC) and input (microphone)
-# Note: I2S is created per-stream, not at boot (only one instance can exist)
-# The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
-# See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
-
-# recording and playback at the same time:
-# - no issue for the headset
-# - communicator: must be same sample rate because shared sck 17 BUT this will result in feedback, probably
-#                   fix: playback headset speaker, record communicator microphone: should work
-#                   fix: playback communicator speaker, record headset microphone: should work
-# TODO:
-# - revamp to multiple audio framework so all 4 items can be defined: 2 speakers (hss, cs) and 2 microphones (hsm, cm)
-# - try each 4 of the items separately: hss, hsm, cs, cm
-# - try trivial combinations: hss + hsm, cs + cm
-# - try similar combinations: hss + cs, cm + hsm
-# - try cross combinations: hss + cm, cs + hsm
-
-i2s_output_pins = {
+headset_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
-    'sck': 17,      # SCLK aka BCLK (appears mandatory) BUT this pin is sck_in on the communicator
+    'sck': 10,      # SCLK aka BCLK (optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin) so set it to IO10 (badge link) for now
     'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator
 }
 
-speaker_output = AudioManager.add(
+AudioManager.add(
     AudioManager.Output(
-        name="speaker",
+        name="Headset Output",
         kind="i2s",
-        i2s_pins=i2s_output_pins,
+        i2s_pins=headset_i2s_output_pins,
     )
 )
 
+AudioManager.add(
+    AudioManager.Input(
+        name="Headset Input",
+        kind="adc",
+        adc_mic_pin=1, # ADC microphone is on GPIO 1
+    )
+)
+
+# Add this after the headset output so that it doesn't become the default:
 buzzer_output = AudioManager.add(
     AudioManager.Output(
-        name="buzzer",
+        name="Badge Buzzer",
         kind="buzzer",
         buzzer_pin=38,
     )
 )
 
-# ADC microphone is on GPIO 1
+# Would be better to only add these if the communicator is connected:
+communicator_i2s_output_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory)
+}
+
+communicator_i2s_input_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck_in': 17,   # SCLK - Serial Clock for microphone input
+    'sd_in': 15,    # DIN - Serial Data IN (microphone)
+}
+
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="Communicator Output",
+        kind="i2s",
+        i2s_pins=communicator_i2s_output_pins,
+    )
+)
+
 mic_input = AudioManager.add(
     AudioManager.Input(
-        name="mic",
-        kind="adc",
-        adc_mic_pin=1,
+        name="Communicator Input",
+        kind="i2s",
+        i2s_pins=communicator_i2s_input_pins,
     )
 )
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
-# Create I2C bus for IMU (LSM6DSOTR-C / LSM6DSO)
-SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH)
-
-# === LED HARDWARE ===
-import mpos.lights as LightsManager
-# Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12, num_leds=5)
-
-print("Fri3d hardware: Audio, LEDs, and sensors initialized")
+SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH) # IMU (LSM6DSOTR-C / LSM6DSO)
 
 # === STARTUP "WOW" EFFECT ===
 import time
@@ -273,17 +395,14 @@ import _thread
 
 def startup_wow_effect():
     try:
+        import time
+        time.sleep(3) # wait until it's calmed down
         # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
-        startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
-        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
+        #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
+        startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
+        #startup_jingle = "Megalovania:d=16,o=5,b=150:d5,d5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,c5,c5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,b4,b4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,a#4,a#4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,d5,d5"
 
-        # Start the jingle
-        player = AudioManager.player(
-            rtttl=startup_jingle,
-            stream_type=AudioManager.STREAM_NOTIFICATION,
-            volume=60,
-            output=buzzer_output,
-        )
+        player = AudioManager.player(rtttl=startup_jingle,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output)
         player.start()
 
         # Rainbow colors for the 5 LEDs
@@ -295,33 +414,30 @@ def startup_wow_effect():
             (0, 0, 255),    # Blue
         ]
 
-        # Rainbow sweep effect (3 passes, getting faster)
-        for pass_num in range(3):
-            for i in range(5):
-                # Light up LEDs progressively
-                for j in range(i + 1):
-                    LightsManager.set_led(j, *rainbow[j])
-                LightsManager.write()
-                time.sleep_ms(80 - pass_num * 20)  # Speed up each pass
+        # Single rainbow sweep
+        for i in range(5):
+            # Light up LEDs progressively
+            for j in range(i + 1):
+                LightsManager.set_led(j, *rainbow[j])
+            LightsManager.write()
+            time.sleep_ms(500)
 
-        # Flash all LEDs bright white
+        # Hold white, then fade out over 4 seconds
         LightsManager.set_all(255, 255, 255)
         LightsManager.write()
-        time.sleep_ms(150)
+        time.sleep_ms(500)
 
-        # Rainbow finale
-        for i in range(5):
-            LightsManager.set_led(i, *rainbow[i])
-        LightsManager.write()
-        time.sleep_ms(300)
-
-        # Fade out
-        LightsManager.clear()
-        LightsManager.write()
+        fade_steps = 80
+        for step in range(fade_steps):
+            level = int(255 * (fade_steps - 1 - step) / (fade_steps - 1))
+            LightsManager.set_all(level, level, level)
+            LightsManager.write()
+            time.sleep_ms(20)
 
     except Exception as e:
         print(f"Startup effect error: {e}")
 
+# Would be nice if this were a setting:
 from mpos import TaskManager
 _thread.stack_size(TaskManager.good_stack_size()) # default stack size won't work, crashes!
 _thread.start_new_thread(startup_wow_effect, ())

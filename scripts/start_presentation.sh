@@ -2,5 +2,3 @@
 export SDL_WINDOW_FULLSCREEN=true
 
 ./scripts/run_desktop.sh
-
-

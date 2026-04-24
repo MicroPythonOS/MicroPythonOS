@@ -21,7 +21,7 @@ rm "$outputjson"
 # com.micropythonos.nostr isn't ready for release yet
 blacklist="com.micropythonos.filemanager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
 blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.doom com.micropythonos.breakout" # not ready yet
-blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.navstar cz.ucw.pavel.weather" # not ready yet
+blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.weather" # not ready yet
 
 echo "[" | tee -a "$outputjson"
 
@@ -31,32 +31,32 @@ echo "[" | tee -a "$outputjson"
 for apprepo in internal_filesystem/apps; do
     echo "Listing apps in $apprepo"
     ls -1 "$apprepo" | sort | while read appdir; do
-	if echo "$blacklist" | grep "$appdir"; then
-		echo "Skipping $appdir because it's in blacklist $blacklist"
-	else
-		echo "Bundling $apprepo/$appdir"
-		pushd "$apprepo"/"$appdir"
-		manifest=META-INF/MANIFEST.JSON
-		version=$( jq -r '.version' "$manifest" )
-		result=$?
-		if [ $result -ne 0 ]; then
-			echo "Failed to parse $apprepo/$appdir/$manifest !"
-			exit 1
-		fi
-		cat "$manifest" | tee -a "$outputjson"
-		echo -n "," | tee -a "$outputjson"
-		thisappdir="$output"/apps/"$appdir"
-		mkdir -p "$thisappdir"
-		mkdir -p "$thisappdir"/mpks
-		mkdir -p "$thisappdir"/icons
-		mpkname="$thisappdir"/mpks/"$appdir"_"$version".mpk
-		echo "Setting file modification times to a fixed value..."
-		find . -type f -exec touch -t 202501010000.00 {} \;
-		echo "Creating $mpkname with deterministic file order..."
-		find . -type f | grep -v ".git/" | sort | TZ=CET zip -X -r0 "$mpkname" -@
-		cp res/mipmap-mdpi/icon_64x64.png "$thisappdir"/icons/"$appdir"_"$version"_64x64.png
-		popd
-	fi
+        if echo "$blacklist" | grep "$appdir"; then
+            echo "Skipping $appdir because it's in blacklist $blacklist"
+        else
+            echo "Bundling $apprepo/$appdir"
+            pushd "$apprepo"/"$appdir"
+            manifest=META-INF/MANIFEST.JSON
+            version=$( jq -r '.version' "$manifest" )
+            result=$?
+            if [ $result -ne 0 ]; then
+                echo "Failed to parse $apprepo/$appdir/$manifest !"
+                exit 1
+            fi
+            cat "$manifest" | tee -a "$outputjson"
+            echo -n "," | tee -a "$outputjson"
+            thisappdir="$output"/apps/"$appdir"
+            mkdir -p "$thisappdir"
+            mkdir -p "$thisappdir"/mpks
+            mkdir -p "$thisappdir"/icons
+            mpkname="$thisappdir"/mpks/"$appdir"_"$version".mpk
+            echo "Setting file modification times to a fixed value..."
+            find . -type f -exec touch -t 202501010000.00 {} \;
+            echo "Creating $mpkname with deterministic file order..."
+            find . -type f | grep -v ".git/" | sort | TZ=CET zip -X -r0 "$mpkname" -@
+            cp res/mipmap-mdpi/icon_64x64.png "$thisappdir"/icons/"$appdir"_"$version"_64x64.png
+            popd
+        fi
     done
 done
 

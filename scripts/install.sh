@@ -19,36 +19,37 @@ mpremote=$(readlink -f "$mydir/../lvgl_micropython/lib/micropython/tools/mpremot
 pushd "$mydir"/../internal_filesystem/
 
 # Maybe also do: import mpos ; mpos.TaskManager.stop()
-echo "Disabling wifi because it writes to REPL from time to time when doing disconnect/reconnect for ADC2..."
-$mpremote exec "import mpos ; mpos.net.wifi_service.WifiService.disconnect()"
+# Should check if BatteryManager uses ADC2 and only do this if it does:
+#echo "Disabling wifi because it writes to REPL from time to time when doing disconnect/reconnect for ADC2..."
+#$mpremote exec "import mpos ; mpos.net.wifi_service.WifiService.disconnect()"
 sleep 2
 
 if [ ! -z "$appname" ]; then
-	echo "Installing one app: $appname"
-	appdir="apps/$appname"
-        target="apps/"
-	if [ ! -d "$appdir" ]; then
-		echo "$appdir doesn't exist so taking the builtin/"
-		appdir="builtin/apps/$appname/"
-                target="builtin/apps/"
-		if [ ! -d "$appdir" ]; then
-			echo "$appdir also doesn't exist, exiting..."
-			exit 1
-		fi
-	fi
-        $mpremote mkdir "/apps"
-        #$mpremote mkdir "/builtin" # dont do this because it breaks the mount!
-        #$mpremote mkdir "/builtin/apps"
-	if test -L "$appdir"; then
-		$mpremote fs mkdir :/"$appdir"
-		$mpremote fs cp -r "$appdir"/* :/"$appdir"/
-	else
-		$mpremote fs cp -r "$appdir" :/"$target"
-	fi
-	echo "start_app(\"/$appdir\")"
-	$mpremote
-	popd
-	exit
+    echo "Installing one app: $appname"
+    appdir="apps/$appname"
+    target="apps/"
+    if [ ! -d "$appdir" ]; then
+        echo "$appdir doesn't exist so taking the builtin/"
+        appdir="builtin/apps/$appname/"
+        target="builtin/apps/"
+        if [ ! -d "$appdir" ]; then
+            echo "$appdir also doesn't exist, exiting..."
+            exit 1
+        fi
+    fi
+    $mpremote mkdir "/apps"
+    #$mpremote mkdir "/builtin" # dont do this because it breaks the mount!
+    #$mpremote mkdir "/builtin/apps"
+    if test -L "$appdir"; then
+        $mpremote fs mkdir :/"$appdir"
+        $mpremote fs cp -r "$appdir"/* :/"$appdir"/
+    else
+        $mpremote fs cp -r "$appdir" :/"$target"
+    fi
+    echo "start_app(\"/$appdir\")"
+    $mpremote
+    popd
+    exit
 fi
 
 # boot.py is not copied because it can't be overridden anyway
@@ -78,22 +79,22 @@ $mpremote fs mkdir :/apps
 #$mpremote fs cp -r apps/com.micropythonos.breakout :/apps/
 
 if [ ! -z "$appname" ]; then
-	echo "Not resetting so the installed app can be used immediately."
-	$mpremote reset
+    echo "Not resetting so the installed app can be used immediately."
+    $mpremote reset
 fi
 
 # Uncomment this line if you really want all apps the be installed:
-echo "Not installing all apps by default because it takes a long time, uses lots of storage and makes the boot slower..." ; popd ; exit 1
+echo "Not installing all apps by default because it takes a long time, uses lots of storage and makes the boot slower..." ; popd ; exit 0
 
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
 find apps/ -maxdepth 1 -type l | while read symlink; do
-        if echo $symlink | grep quasiboats; then
-		echo "Skipping $symlink because it's needlessly big..."
-		continue
-	fi
-	echo "Handling symlink $symlink"
-	$mpremote fs mkdir :/"$symlink"
-	$mpremote fs cp -r "$symlink"/* :/"$symlink"/
+    if echo $symlink | grep quasiboats; then
+        echo "Skipping $symlink because it's needlessly big..."
+        continue
+    fi
+    echo "Handling symlink $symlink"
+    $mpremote fs mkdir :/"$symlink"
+    $mpremote fs cp -r "$symlink"/* :/"$symlink"/
 
 done
 

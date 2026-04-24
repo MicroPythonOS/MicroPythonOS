@@ -2,7 +2,7 @@
 from .app.app import App
 from .app.activity import Activity
 from .content.intent import Intent
-from .activity_navigator import ActivityNavigator
+from .activity_navigator import ActivityNavigator, get_foreground_app
 
 from .content.app_manager import AppManager
 from .config import SharedPreferences
@@ -17,13 +17,14 @@ from .time_zone import TimeZone
 from .number_format import NumberFormat
 from .device_info import DeviceInfo
 from .build_info import BuildInfo
+from .lora_manager import LoRaManager
+from .ir_manager import IRManager
+from .gps_manager import GPSManager
+from .device_manager import DeviceManager
 
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
-try:
-    from .webserver.webserver import WebServer
-except ImportError:
-    WebServer = None  # _webrepl not available on desktop/Unix builds
+from .webserver.webserver import WebServer
 
 # Common activities
 from .app.activities.chooser import ChooserActivity
@@ -35,7 +36,7 @@ from .ui.settings_activity import SettingsActivity
 from .ui.camera_activity import CameraActivity
 from .ui.keyboard import MposKeyboard
 from .ui.testing import (
-    wait_for_render, capture_screenshot, simulate_click, get_widget_coords,
+    wait_for_render, capture_screenshot, simulate_click, simulate_drag, get_widget_coords,
     find_label_with_text, verify_text_present, print_screen_labels, find_text_on_screen,
     click_button, click_label, click_keyboard_button, find_button_with_text,
     get_all_widgets_with_text, find_setting_value_label, get_setting_value_text,
@@ -52,7 +53,6 @@ from .ui.view import setContentView, back_screen
 from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .ui.focus import save_and_clear_current_focusgroup
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
-from .ui.util import shutdown, set_foreground_app, get_foreground_app
 from .ui.widget_animator import WidgetAnimator
 from .ui import focus_direction
 
@@ -75,6 +75,7 @@ __all__ = [
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
+    "LoRaManager", "IRManager", "GPSManager", "DeviceManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",
     # Common activities
@@ -91,11 +92,11 @@ __all__ = [
     "open_bar", "close_bar", "open_drawer", "drawer_open",
     "save_and_clear_current_focusgroup",
     "handle_back_swipe", "handle_top_swipe",
-    "shutdown", "set_foreground_app", "get_foreground_app",
+    "get_foreground_app",
     "WidgetAnimator",
     "focus_direction",
     # Testing utilities
-    "wait_for_render", "capture_screenshot", "simulate_click", "get_widget_coords",
+    "wait_for_render", "capture_screenshot", "simulate_click", "simulate_drag", "get_widget_coords",
     "find_label_with_text", "verify_text_present", "print_screen_labels", "find_text_on_screen",
     "click_button", "click_label", "click_keyboard_button", "find_button_with_text",
     "get_all_widgets_with_text", "find_setting_value_label", "get_setting_value_text",

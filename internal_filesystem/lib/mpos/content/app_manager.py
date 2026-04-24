@@ -178,15 +178,75 @@ class AppManager:
 
             # Step 2: Unzip the file
             print("Unzipping it to:", dest_folder)
+
             with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-                zip_ref.extractall(dest_folder)
+                dest_name = dest_folder.rstrip(os.sep).split(os.sep)[-1]
+                nested_prefix = f"{dest_name}/"
+                top_dirs = set()
+                has_top_files = False
+                for member in zip_ref.infolist():
+                    name = member.filename.lstrip("/")
+                    if not name:
+                        continue
+                    stripped = name.strip("/")
+                    if not stripped:
+                        continue
+                    if "/" in stripped:
+                        top_dirs.add(stripped.split("/", 1)[0])
+                    else:
+                        if not member.is_dir():
+                            has_top_files = True
+                        else:
+                            top_dirs.add(stripped)
+
+                strip_prefix = ""
+                if not has_top_files and len(top_dirs) == 1:
+                    sole_top = next(iter(top_dirs))
+                    if sole_top == dest_name:
+                        strip_prefix = nested_prefix
+                    else:
+                        raise ValueError(
+                            "Invalid top-level dir '{}' (expected '{}')".format(
+                                sole_top,
+                                dest_name,
+                            )
+                        )
+
+                for member in zip_ref.infolist():
+                    arcname = member.filename.lstrip("/")
+                    if strip_prefix:
+                        if not arcname.startswith(strip_prefix):
+                            continue
+                        arcname = arcname[len(strip_prefix):]
+                        if not arcname:
+                            continue
+                    original_name = member.filename
+                    try:
+                        member.filename = arcname
+                        zip_ref.extract(member, dest_folder)
+                    finally:
+                        member.filename = original_name
             print("Unzipped successfully")
             # Step 3: Clean up
             os.remove(temp_zip_path)
             print("Removed temporary .mpk file")
         except Exception as e:
-            print(f"Unzip and cleanup failed: {e}")
+            print(f"install_mpk got exception, will attempt cleanup: {e}")
             # Would be good to show error message here if it fails...
+            try:
+                import shutil
+                shutil.rmtree(dest_folder)
+            except Exception as e:
+                #print(f"install_mpk got shutil.rmtree exception: {e}")
+                #import sys
+                #sys.print_exception(e)
+                pass
+            try:
+                os.remove(temp_zip_path)
+            except Exception as e:
+                print(f"install_mpk got os.remove exception: {e}")
+                import sys
+                sys.print_exception(e)
         AppManager.refresh_apps()
 
     @staticmethod
@@ -252,7 +312,7 @@ class AppManager:
         return AppManager.is_installed_by_path(f"apps/{app_fullname}") or AppManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
-    def execute_script(script_source, is_file, classname, cwd=None):
+    def execute_script(script_source, is_file, classname, cwd=None, app_fullname=None):
         """Run the script in the current thread. Returns True if successful."""
         import utime # for timing read and compile
         import lvgl as lv
@@ -271,6 +331,7 @@ class AppManager:
                     print(f"execute_script: reading script_source took {read_time}ms")
             script_globals = {
                 'lv': lv,
+                'mpos': mpos,
                 '__name__': "__main__", # in case the script wants this
                 '__file__': compile_name
             }
@@ -297,12 +358,14 @@ class AppManager:
                 print("Variables:", variables.keys())
                 main_activity = script_globals.get(classname)
                 if main_activity:
-                    from ..app.activity import Activity
+                    from mpos.activity_navigator import ActivityNavigator
                     from .intent import Intent
                     start_time = utime.ticks_ms()
-                    Activity.startActivity(None, Intent(activity_class=main_activity))
+                    ActivityNavigator.startActivity(
+                        Intent(activity_class=main_activity, app_fullname=app_fullname)
+                    )
                     end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                    print(f"execute_script: Activity.startActivity took {end_time}ms")
+                    print(f"execute_script: ActivityNavigator.startActivity took {end_time}ms")
                 else:
                     print(f"Warning: could not find app's main_activity {classname}")
                     return False
@@ -317,15 +380,13 @@ class AppManager:
             return True
         except Exception as e:
             print(f"Thread {thread_id}: error:")
-            tb = getattr(e, '__traceback__', None)
-            traceback.print_exception(type(e), e, tb)
+            import sys
+            sys.print_exception(e)
             return False
 
     @staticmethod
     def start_app(fullname):
         """Start an app by fullname. Returns True if successful."""
-        import mpos.ui
-        mpos.ui.set_foreground_app(fullname)
         import utime
         start_time = utime.ticks_ms()
         app = AppManager.get(fullname)
@@ -342,8 +403,15 @@ class AppManager:
         else:
             entrypoint = app.main_launcher_activity.get('entrypoint')
             classname = app.main_launcher_activity.get("classname")
-        result = AppManager.execute_script(app.installed_path + "/" + entrypoint, True, classname, app.installed_path + "/assets/")
+        result = AppManager.execute_script(
+            app.installed_path + "/" + entrypoint,
+            True,
+            classname,
+            app.installed_path + "/assets/",
+            app_fullname=fullname,
+        )
         # Launchers have the bar, other apps don't have it
+        import mpos.ui
         if app.is_valid_launcher():
             mpos.ui.topmenu.open_bar()
         else:

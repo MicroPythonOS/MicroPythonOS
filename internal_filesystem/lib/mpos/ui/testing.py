@@ -126,6 +126,11 @@ class GraphicalTestCase(unittest.TestCase if unittest else object):
         simulate_click(x, y)
         self.wait_for_render()
 
+    def simulate_drag(self, start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
+        """Simulate a drag gesture from start to end coordinates."""
+        simulate_drag(start_x, start_y, end_x, end_y, steps=steps, step_delay_ms=step_delay_ms)
+        self.wait_for_render()
+
     def assertTextPresent(self, text, msg=None):
         """Assert that text is present on screen."""
         if msg is None:
@@ -295,6 +300,21 @@ def wait_for_render(iterations=10):
         assert verify_text_present(lv.screen_active(), "Welcome")
     """
     import time
+    task_handler_running = False
+    try:
+        import mpos
+
+        task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
+        if task_handler is not None:
+            task_handler_running = task_handler.is_running()
+    except Exception:
+        task_handler_running = False
+
+    if task_handler_running:
+        for _ in range(iterations):
+            time.sleep(0.01)
+        return
+
     for _ in range(iterations):
         lv.task_handler()
         time.sleep(0.01)  # Small delay between iterations
@@ -1026,6 +1046,54 @@ def simulate_click(x, y, press_duration_ms=100):
     _touch_pressed = False
 
     # Process the release event - this triggers the CLICKED event
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+
+
+def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
+    """
+    Simulate a drag gesture from start to end coordinates.
+
+    Args:
+        start_x: Starting X coordinate.
+        start_y: Starting Y coordinate.
+        end_x: Ending X coordinate.
+        end_y: Ending Y coordinate.
+        steps: Number of intermediate steps to simulate (default: 5).
+        step_delay_ms: Delay between steps in milliseconds (default: 20).
+    """
+    global _touch_x, _touch_y, _touch_pressed
+
+    _ensure_touch_indev()
+
+    _touch_x = start_x
+    _touch_y = start_y
+    _touch_pressed = True
+
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+    time.sleep(step_delay_ms / 1000.0)
+
+    if steps < 1:
+        steps = 1
+    dx = (end_x - start_x) / steps
+    dy = (end_y - start_y) / steps
+
+    for step in range(1, steps + 1):
+        _touch_x = int(start_x + dx * step)
+        _touch_y = int(start_y + dy * step)
+        lv.task_handler()
+        time.sleep(0.02)
+        lv.task_handler()
+        time.sleep(step_delay_ms / 1000.0)
+
+    _touch_pressed = False
     lv.task_handler()
     time.sleep(0.02)
     lv.task_handler()

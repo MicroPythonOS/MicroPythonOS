@@ -6,6 +6,15 @@ from .content.app_manager import AppManager
 
 import mpos.ui
 
+
+def get_foreground_app():
+    if mpos.ui.screen_stack:
+        current_activity, _, _, _ = mpos.ui.screen_stack[-1]
+        if current_activity:
+            return current_activity.appFullName
+    return None
+
+
 class ActivityNavigator:
 
     @staticmethod
@@ -47,12 +56,15 @@ class ActivityNavigator:
     @staticmethod
     def _launch_activity(intent, result_callback=None):
         """Launch an activity and set up result callback."""
+        if intent.app_fullname is None:
+            intent.app_fullname = get_foreground_app()
         activity = intent.activity_class
         if callable(activity):
             # Instantiate the class if necessary
             activity = activity()
         activity.intent = intent
         activity._result_callback = result_callback  # Pass callback to activity
+        activity.appFullName = intent.app_fullname
         start_time = utime.ticks_ms()
         mpos.ui.save_and_clear_current_focusgroup()
         try:
@@ -67,5 +79,6 @@ class ActivityNavigator:
     @staticmethod
     def _show_chooser(intent, handlers):
         chooser_intent = Intent(ChooserActivity, extras={"original_intent": intent, "handlers": [h.__name__ for h in handlers]})
+        chooser_intent.app_fullname = intent.app_fullname
         ActivityNavigator._launch_activity(chooser_intent)
 

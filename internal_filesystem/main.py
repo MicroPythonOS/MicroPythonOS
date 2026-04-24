@@ -28,4 +28,12 @@ print(
 )
 
 print("Passing execution over to mpos.main")
-import mpos.main  # noqa: F401
+try:
+    import mpos.main  # noqa: F401
+except Exception as e:
+    print("Error importing mpos.main, sleeping 5 seconds...")
+    import time
+    time.sleep(5) # sleep so the user has time to connect to serial console
+    sys.print_exception(e) # print it after the sleep so user can see it on serial console
+    print("MicroPythonOS exiting.")
+

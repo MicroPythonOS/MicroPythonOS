@@ -24,6 +24,12 @@ class LaunchWebServer(Activity):
         AppManager.start_app("com.micropythonos.settings.webserver")
 
 
+class LaunchAudioSettings(Activity):
+
+    def onCreate(self):
+        AppManager.start_app("com.micropythonos.settings.audio")
+
+
 class Settings(SettingsActivity):
 
     """Override getIntent to provide prefs and settings via Intent extras"""
@@ -55,7 +61,7 @@ class Settings(SettingsActivity):
         ]
         intent = Intent()
         from mpos import SharedPreferences
-        intent.putExtra("prefs", SharedPreferences("com.micropythonos.settings"))
+        intent.putExtra("prefs", SharedPreferences(self.appFullName))
         intent.putExtra("settings", [
             {
                 "title": "Wi-Fi",
@@ -78,13 +84,24 @@ class Settings(SettingsActivity):
                 "activity_class": LaunchWebServer,
                 "placeholder": "WebREPL, password, port etc",
             },
+            {
+                "title": "Audio",
+                "key": "audio_settings",
+                "ui": "activity",
+                "activity_class": LaunchAudioSettings,
+                "placeholder": "Input/output devices",
+            },
             # Basic settings, alphabetically:
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},
             {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in TimeZone.get_timezones()], "changed_callback": lambda *args: TimeZone.refresh_timezone_preference()},
             {"title": "Number Format", "key": "number_format", "ui": "dropdown", "ui_options": NumberFormat.get_format_options(), "changed_callback": lambda *args: NumberFormat.refresh_preference(), "default_value": "comma_dot"},
             # Advanced settings, alphabetically:
-            {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in AppManager.get_app_list()]},
+            # `allow_deselect=True` because saving an empty string here is
+            # meaningful: it means "boot straight to the launcher, don't
+            # autostart anything". The user needs to be able to reach that
+            # state by tapping the currently-selected app to un-select it.
+            {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in AppManager.get_app_list()], "allow_deselect": True},
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
             {"title": "Calibrate IMU", "key": "calibrate_imu", "ui": "activity", "activity_class": CalibrateIMUActivity},
             # Expert settings, alphabetically

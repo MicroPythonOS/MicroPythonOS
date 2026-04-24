@@ -7,6 +7,9 @@ testdir="$mydir"
 scriptdir=$(readlink -f "$mydir"/../scripts/)
 fs="$mydir"/../internal_filesystem/
 mpremote="$mydir"/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py
+#heapsize=8M
+#heapsize=16M # on desktop, a bit more is warranted (different C library etc)
+heapsize=32M # on desktop, a bit more is warranted (different C library etc)
 
 # Parse arguments
 ondevice=""
@@ -64,13 +67,13 @@ one_test() {
 		# Desktop execution
 		if [ $is_graphical -eq 1 ]; then
 			echo "Graphical test: include main.py"
-			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+			"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 	           result=$?
 		else
 			echo "Regular test: no boot files"
-			"$binary" -X heapsize=8M -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+			"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
 	           result=$?

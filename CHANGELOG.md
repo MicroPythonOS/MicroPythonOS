@@ -1,3 +1,94 @@
+Future release (next version)
+=====
+
+Add changes that have been made to the code but haven't made it into a release here.
+
+Builtin Apps:
+- AppStore: fallback to .zip file if no .mpk file found in filelist
+- AppStore: fetch new long_description from BadgeHub details API
+- Settings - Wi-Fi: don't print password on serial port
+
+Frameworks:
+- Add new GPSManager framework
+- Add new IRManager framework
+- Add new LoRaManager framework
+- Add new DeviceManager framework
+- Add mpos.ui.change_task_handler() function for improving IR timing accuracy
+- AppearanceManager: fix set_light_mode() and set_primary_color()
+- AppManager: support .mpk/.zip files with compression and a redundant top-level directory
+- AppManager: export 'mpos' global to apps for convenience
+- LightsManager: allow changing number of LEDs after initialization
+- SettingActivity: add `allow_deselect` option (default False) to radiobuttons
+- SharedPreferences: don't print potentially sensitive values on serial port
+- WebServer: add basic 'View Screen' functionality to view the device's display remotely
+
+OS:
+- aioREPL: use >>> prompt (for ViperIDE)
+- drawer menu: reload apps when Launch(er) is (re)started
+- export 'lv' and 'mpos' globals to aioREPL and apps for convenience
+- LilyGo T-Watch S3 Plus: add support for IR Remote app (TX only)
+- Fri3d 2024: add support for IR remote app (RX only)
+- Fri3d 2026: add CH32 coprocessor firmware handling (credit @bertouttier)
+- Fri3d 2026: add CH32 indev driver (credit @bertouttier)
+- Fri3d 2026: add calibrated battery voltage measurements using CH32
+
+
+0.9.2
+=====
+
+Builtin Apps:
+- Settings: new Audio subsection to choose default output and input device, for boards with multiple audio devices
+
+Frameworks:
+- Activity: add appFullName property
+- AudioManager: load and apply configured default_output and default_input devices
+- AudioManager: fix final 1-2 seconds of WAV files not being played
+- AudioManager: add support for PDM microphones
+- AudioManager: fix 24 and 32 bits per sample WAV support
+- SensorManager: add BMA423 IMU support
+- TimeZone: set Real Time Clock if present
+
+OS:
+- Fix lvgl_micropython UI hang when lv.event_handler() throws exception from timers or callbacks
+- Fix notification bar hiding after swipe up in Launcher apps
+- Increase default heapsize from 8MB to 16MB on desktop to fix sporadic segfault
+- Fri3d 2026: don't provide unnecessary SCLK/BCLK to CJC4334 DAC
+- LilyGo T-Watch S3 Plus: fix power button sporadically becoming unresponsive
+- LilyGo T-Watch S3 Plus: add battery charge level support
+- LilyGo T-Watch S3 Plus: add IMU accelerometer support so IMU app works
+- LilyGo T-Watch S3 Plus: enable audio input (PDM microphone) and output (I2S speaker)
+- LilyGo T-Watch S3 Plus: enable Real Time Clock to keep time when powered off
+- LilyGo T-Watch S3 Plus: power down/up display and touch screen upon power button press
+
+
+0.9.1
+=====
+
+Builtin Apps:
+- AppStore: use BadgeHub.eu filter mpos_api_0 instead of device-specific hardware ID
+- HowTo: add padding
+- Settings: add Number Format setting
+
+Frameworks:
+- Add new NumberFormat framework for decimal and thousands separators
+- DownloadManager: add connection timeout to DownloadManager session.get()
+
+OS:
+- New board support: LilyGo T-HMI
+- New board support: M5Stack Core2
+- LilyGo T-Watch S3 Plus: initialize Power Management Unit at startup
+- LilyGo T-Watch S3 Plus: power button short press for display backlight on/off, long press for power down
+- Add driver for LoRa SX1262 with lvgl_micropython-style (= split Bus/Device) hardware SPI
+- Add drivers for LoRa SX126X with SoftSPI (and default MicroPython hardware SPI)
+- Add esp32-component-rvswd and MicroPython bindings to flash WCH's CH32 microcontrollers
+- Add glyphs to fonts: diacritics 0x7F-0xFF, Bitcoin symbol ₿ 0x20BF, italic satoshi symbol 丯 0x4E2F and regular satoshi symbol 丰 0x4E30
+- Add LVGL symbols to fonts: 0xf002,0xf004,0xf005,0xf00e,0xf010,0xf029,0xf030 for search, heart, star, search-plus, search-minus, qrcode, camera
+- Add LVGL symbols to fonts: 0xf15a,0xf164,0xf165,0xf1e0 for btc (without circle), thumbs-up, thumbs-down, share-alt
+- Add LVGL symbols to fonts: 0xf2ea,0xf379,0xf58f for undo-alt, bitcoin (in circle), headphones-alt
+- Improve handling of 'mpos.main' errors
+- Fix empty black window issue on macOS desktop
+- Fix macOS/unix desktop build with newer Clang (17+)
+
 0.9.0
 =====
 

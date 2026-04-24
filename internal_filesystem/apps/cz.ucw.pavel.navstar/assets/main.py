@@ -2,11 +2,11 @@ from mpos import Activity
 
 """
 micropythonos, give me code to parse nmea data from gps, display lat/lon/speed/... display sky view, allow recording of track to egt, display current track length in kilometers, and allow navigation to a point.
-￼
 """
 
 import time
 import os
+import sys
 import uselect
 import json
 import time
@@ -21,7 +21,7 @@ except ImportError:
     pass
 
 import mpos
-from mpos import Activity, MposKeyboard
+from mpos import Activity, MposKeyboard, GPSManager
 
 #
 # Features:
@@ -221,6 +221,17 @@ class GPSState:
         # dict prn -> {el, az, snr}
         self.sats_in_view = {}
 
+        # Debug/diagnostic fields
+        self.last_rmc_status = None
+        self.last_gga_quality = None
+        self.last_gsa_mode = None
+        self.last_gsa_fix_type = None
+        self.last_gsa_pdop = None
+        self.last_gsa_hdop = None
+        self.last_gsa_vdop = None
+        self.last_gll_status = None
+        self.last_gsv_total = None
+
         # For display freshness
         self.last_update_ms = 0
 
@@ -233,7 +244,8 @@ class GPSState:
         good = 0
         best_snr = 0
         snrlim = 25
-        print(self.sats_in_view)
+        #print("sats in view:")
+        #print(self.sats_in_view)
         for prn in self.sats_in_view:
             d = self.sats_in_view[prn]
             snr = d.get("snr")
@@ -306,6 +318,10 @@ class NMEAParser:
             self._parse_gga(fields)
         elif msg_type == "GSV":
             self._parse_gsv(fields)
+        elif msg_type == "GSA":
+            self._parse_gsa(fields)
+        elif msg_type == "GLL":
+            self._parse_gll(fields)
 
         self.gps.last_update_ms = time.ticks_ms()
 
@@ -317,6 +333,7 @@ class NMEAParser:
 
         self.gps.time_hms = parse_hhmmss(f[1])
         status = f[2]
+        self.gps.last_rmc_status = status
         self.gps.fix_valid = (status == "A")
 
         lat = parse_latlon(f[3], f[4])
@@ -352,6 +369,7 @@ class NMEAParser:
         q = safe_int(f[6])
         if q is not None:
             self.gps.fix_quality = q
+            self.gps.last_gga_quality = q
 
         sats = safe_int(f[7])
         if sats is not None:
@@ -375,8 +393,7 @@ class NMEAParser:
         # msg_num = safe_int(f[2])
         total_sats = safe_int(f[3])
         if total_sats is not None:
-            # not exactly "used", but we store it in view count indirectly
-            pass
+            self.gps.last_gsv_total = total_sats
 
         # sat blocks start at index 4
         i = 4
@@ -401,7 +418,38 @@ class NMEAParser:
                 d["az"] = az
             if snr is not None:
                 d["snr"] = snr
-        
+
+    def _parse_gsa(self, f):
+        # $GNGSA,mode1,mode2,sv1,sv2,...,sv12,pdop,hdop,vdop
+        if len(f) < 3:
+            return
+
+        mode1 = f[1] if len(f) > 1 else None
+        mode2 = safe_int(f[2]) if len(f) > 2 else None
+        pdop = safe_float(f[-3]) if len(f) >= 3 else None
+        hdop = safe_float(f[-2]) if len(f) >= 2 else None
+        vdop = safe_float(f[-1]) if len(f) >= 1 else None
+
+        self.gps.last_gsa_mode = mode1
+        self.gps.last_gsa_fix_type = mode2
+        self.gps.last_gsa_pdop = pdop
+        self.gps.last_gsa_hdop = hdop
+        self.gps.last_gsa_vdop = vdop
+
+    def _parse_gll(self, f):
+        # $GNGLL,lat,NS,lon,EW,hhmmss,status,mode
+        if len(f) < 7:
+            return
+
+        lat = parse_latlon(f[1], f[2])
+        lon = parse_latlon(f[3], f[4])
+        if lat is not None and lon is not None:
+            self.gps.lat = lat
+            self.gps.lon = lon
+
+        self.gps.time_hms = parse_hhmmss(f[5])
+        status = f[6]
+        self.gps.last_gll_status = status
 
 # ----------------------------
 # Track recording (EGT)
@@ -547,9 +595,12 @@ class Main(PagedCanvas):
             self.nav.lat = config.lat
             self.recording = config.recording
             self.toggle_recording()
-        self.timer = lv.timer_create(self.tick, 1000, None)
+        self.timer = lv.timer_create(self.tick, 2000, None)
+
+    # def onPause(self, screen) to stop the timer is done by the super in pcanvas.py
 
     def tick(self, t):
+        #print("Navstar tick")
         lm.poll()
         nmea = lm.get_nmea()
         if nmea:
@@ -620,14 +671,14 @@ class Main(PagedCanvas):
 
         ui.clear()
 
-        st = 28
-        y = 1*st
+        st = 14
+        y = int(st/2)
         fix = "FIX" if gps.has_fix() else "NOFIX"
         rec = "REC" if self.recording else "----"
         ui.text(0, y, "%s  %s  sats:%d" % (fix, rec, gps.sats_used))
         y += st
         ui.text(0, y, "%s" % gps.summary())
-        y += 2*st
+        y += st
 
         if gps.lat is not None and gps.lon is not None:
             ui.text(0, y, "Lat: %.6f" % gps.lat)
@@ -665,6 +716,17 @@ class Main(PagedCanvas):
         if gps.time_hms:
             ui.text(0, y, "Time: %02d:%02d:%02d" % gps.time_hms)
         y += st
+
+        rmc = gps.last_rmc_status or "-"
+        gga_q = gps.last_gga_quality if gps.last_gga_quality is not None else "-"
+        gsv = gps.last_gsv_total if gps.last_gsv_total is not None else "-"
+        gsa = gps.last_gsa_fix_type if gps.last_gsa_fix_type is not None else "-"
+        gll = gps.last_gll_status or "-"
+        hdop = gps.hdop if gps.hdop is not None else "-"
+        ui.text(0, y, "RMC:%s GGA:%s GSV:%s" % (rmc, gga_q, gsv))
+        y += st
+        ui.text(0, y, "GSA:%s GLL:%s HDOP:%s" % (gsa, gll, hdop))
+        y += st
         #print("Final size: ", y)
 
         ui.update()
@@ -674,12 +736,13 @@ class Main(PagedCanvas):
         ui = self.c
 
         ui.clear()
-        ui.text(0, 22, "Sky view")
+        ui.text(0, 16, "Sky")
 
         # Sky view circle
-        cx = 200
-        cy = 110
-        R = 90
+        from mpos import DisplayMetrics
+        cx = DisplayMetrics.pct_of_width(50)
+        cy = DisplayMetrics.pct_of_height(50) - 20 # leave space at bottom for buttons
+        R = int((DisplayMetrics.min_dimension() - max(cx,cy)) * 0.66)
 
         ui.circle(cx, cy, R)
         ui.circle(cx, cy, int(R * 0.66))
@@ -717,7 +780,7 @@ class Main(PagedCanvas):
             ui.fill_circle(x, y, rr)
             count += 1
 
-        ui.text(0, cy + R - 35, "SV: %d" % count)
+        ui.text(0, cy + R - 35, "Sat: %d" % count)
         ui.update()
 
     def draw_page_nav(self):
@@ -877,7 +940,7 @@ class LocationManager:
             if not events:
                 break
             self.data += self.f.readline()
-            
+
     def get_cellid(self):
         return None
 
@@ -886,6 +949,65 @@ class LocationManager:
         print(d)
         self.data = b""
         return d.decode("ascii", "ignore")
+
+
+class LocationManagerUART:
+    def __init__(self, baudrate, rx_pin, tx_pin=None, uart_id=1):
+        from machine import Pin, UART
+
+        if baudrate is None or rx_pin is None:
+            raise ValueError("LocationManagerUART requires baudrate and rx_pin (tx_pin optional)")
+
+        rx = rx_pin if isinstance(rx_pin, Pin) else Pin(rx_pin)
+        tx = None
+        if tx_pin is not None:
+            tx = tx_pin if isinstance(tx_pin, Pin) else Pin(tx_pin)
+
+        uart_kwargs = {
+            "baudrate": baudrate,
+            "rx": rx,
+            "timeout": 0,
+        }
+        if tx is not None:
+            uart_kwargs["tx"] = tx
+
+        self.uart = UART(uart_id, **uart_kwargs)
+        self.data = b""
+        print(
+            "LocationManagerUART init: uart_id=%s baudrate=%s tx=%s rx=%s"
+            % (uart_id, baudrate, tx, rx)
+        )
+
+    def poll(self):
+        while True:
+            available = self.uart.any()
+            if not available:
+                break
+            chunk = self.uart.read(available)
+            if chunk:
+                #try:
+                #    preview = chunk.decode("ascii", "ignore")
+                #except Exception:
+                #    preview = "<decode error>"
+                #print("LocationManagerUART read %d bytes preview=%r"% (len(chunk), preview[:120]))
+                self.data += chunk
+
+    def get_cellid(self):
+        return None
+
+    def get_nmea(self):
+        d = self.data
+        self.data = b""
+        if not d:
+            return ""
+        text = d.decode("ascii", "replace")
+        if "\ufffd" in text:
+            print("LocationManagerUART decode warning: replacement characters found")
+        lines = [line for line in text.split("\r\n") if line]
+        print("LocationManagerUART NMEA lines: %d" % len(lines))
+        for line in lines:
+            print("LocationManagerUART line: %s" % line)
+        return text
 
 # ----------------------------
 # Fake NMEA source
@@ -1241,9 +1363,10 @@ def draw_nav_screen(ui, gps, trail,
     """
 
     # --- Geometry
-    cx = 200
-    cy = 110
-    R = 90
+    from mpos import DisplayMetrics
+    cx = DisplayMetrics.pct_of_width(50)
+    cy = DisplayMetrics.pct_of_height(50) - 20 # leave space for buttons
+    R = int((DisplayMetrics.min_dimension() - max(cx,cy)) * 0.66)
 
     # --- Draw compass rose
     ui.circle(cx, cy, R)
@@ -1613,9 +1736,21 @@ if False:
     print()
     os.exit(1)
 
-if False:
-    lm = LocationManager()
+if sys.platform == "esp32" and GPSManager.connectionType == "uart":
+    uart_kwargs = {
+        "baudrate": GPSManager.connectionSpeed,
+        "rx_pin": GPSManager.rxPin,
+    }
+    if GPSManager.txPin is not None:
+        uart_kwargs["tx_pin"] = GPSManager.txPin
+    lm = LocationManagerUART(**uart_kwargs)
 elif False:
     lm = LocationManagerDBUS()
-else:
+elif False:
     lm = FakeNMEASpiral(center_lat=50.0, center_lon=14.0)
+else:
+    try:
+        lm = LocationManager()
+    except Exception as e:
+        print("Real GPS LocationManager didn't work, simlating...")
+        lm = FakeNMEASpiral(center_lat=50.0, center_lon=14.0)

@@ -143,16 +143,17 @@ class AppearanceManager:
             AppearanceManager.set_light_mode(False)  # Switch to dark mode
         """
         cls._is_light_mode = is_light
-        
-        # Save to preferences if provided
+
+        # Save to preferences if provided, then reinitialise LVGL theme.
+        # SharedPreferences doesn't have a set_string() — writes go through
+        # edit().put_string().commit().
         if prefs:
             theme_str = "light" if is_light else "dark"
-            prefs.set_string("theme_light_dark", theme_str)
-        
-        # Reinitialize LVGL theme with new mode
-        if prefs:
+            editor = prefs.edit()
+            editor.put_string("theme_light_dark", theme_str)
+            editor.commit()
             cls.init(prefs)
-        
+
         print(f"[AppearanceManager] Light mode set to: {is_light}")
     
     @classmethod
@@ -210,11 +211,16 @@ class AppearanceManager:
             AppearanceManager.set_primary_color(lv.color_hex(0xFF5722))
         """
         cls._primary_color = color
-        
-        # Save to preferences if provided
+
+        # Save to preferences if provided, then reinitialise LVGL theme so the
+        # new colour is actually applied. SharedPreferences doesn't have a
+        # set_string() — writes go through edit().put_string().commit().
         if prefs and isinstance(color, int):
-            prefs.set_string("theme_primary_color", f"0x{color:06X}")
-        
+            editor = prefs.edit()
+            editor.put_string("theme_primary_color", f"0x{color:06X}")
+            editor.commit()
+            cls.init(prefs)
+
         print(f"[AppearanceManager] Primary color set to: {color}")
     
     # ========== UI Dimensions ==========

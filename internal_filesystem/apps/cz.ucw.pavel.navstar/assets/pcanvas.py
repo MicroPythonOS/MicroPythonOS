@@ -100,7 +100,7 @@ class Canvas:
         dsc = lv.draw_label_dsc_t()
         lv.draw_label_dsc_t.init(dsc)
         dsc.text = str(s)
-        dsc.font = lv.font_montserrat_24
+        dsc.font = lv.font_montserrat_14
         dsc.color = lv.color_black()
 
         area = lv.area_t()
@@ -276,7 +276,7 @@ class PagedCanvas(Activity):
         self.template_buttons(["Pg0", "Pg1", "Pg2", "Pg3", "..."])
 
     def onResume(self, screen):
-        self.timer = lv.timer_create(self.tick, 1000, None)
+        self.timer = lv.timer_create(self.tick, 2000, None)
 
     def onPause(self, screen):
         if self.timer:
@@ -284,6 +284,7 @@ class PagedCanvas(Activity):
             self.timer = None
             
     def tick(self, t):
+        print("PagedCanvas tick")
         self.update()
         self.draw()
 

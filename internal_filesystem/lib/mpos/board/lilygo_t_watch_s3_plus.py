@@ -1,18 +1,191 @@
-print("lilygo_t_watch_s3_plus.py initialization")
 # Manufacturer's website at https://lilygo.cc/products/t-watch-s3-plus
+
+print("lilygo_t_watch_s3_plus.py initialization")
+
+def init_pmu(m_i2c):
+    print("Initializing AXP2101 PMU")
+    from drivers.power.AXP2101 import AXP2101
+    pmu = AXP2101(m_i2c, addr=0x34)
+    # Set the minimum common working voltage of the PMU VBUS input, below this value will turn off the PMU
+    pmu.setVbusVoltageLimit(AXP2101.XPOWERS_AXP2101_VBUS_VOL_LIM_4V36);
+    # Set the maximum current of the PMU VBUS input, higher than this value will turn off the PMU
+    pmu.setVbusCurrentLimit(AXP2101.XPOWERS_AXP2101_VBUS_CUR_LIM_900MA);
+    # Set VSY off voltage as 2600mV , Adjustment range 2600mV ~ 3300mV
+    pmu.setSysPowerDownVoltage(2600);
+    # Display backlight
+    pmu.setALDO2Voltage(3300)
+    pmu.enableALDO2()
+    # Display chip
+    pmu.setALDO3Voltage(3300)
+    pmu.enableALDO3()
+    # LoRa radio (might be better to only power this on if LoRa is used)
+    pmu.setALDO4Voltage(3300)
+    pmu.enableALDO4()
+    # Vibrator
+    pmu.setBLDO2Voltage(3300)
+    pmu.enableBLDO2()
+    # GPS
+    #pmu.setDC3Voltage(3300);    # Earlier versions use DC3 (without BOOT button and RST)
+    #pmu.enableDC3();    # Earlier versions use DC3 (without BOOT button and RST)
+    pmu.setBLDO1Voltage(3300);  # The version with BOOT button and RST on the back cover
+    pmu.enableBLDO1();  # The version with BOOT button and RST on the back cover
+    # RTC backup battery:
+    pmu.setButtonBatteryChargeVoltage(3300)
+    pmu.enableButtonBatteryCharge()
+    # Speaker
+    pmu.setDLDO1Voltage(3300) # even 500mV doesn't seem to cause issues, but Imax=300mA is << 1.6A capability of MAX98357
+    pmu.enableDLDO1()
+    # Others
+    pmu.setPowerKeyPressOffTime(AXP2101.XPOWERS_POWEROFF_4S)
+    pmu.setPowerKeyPressOnTime(AXP2101.XPOWERS_POWERON_512MS)
+    pmu.enableBattDetection()
+    pmu.enableVbusVoltageMeasure()
+    pmu.enableBattVoltageMeasure()
+    pmu.enableSystemVoltageMeasure()
+    pmu.enableTemperatureMeasure()
+    # Disable unused:
+    pmu.disableDC2()
+    pmu.disableDC4()
+    pmu.disableDC5()
+    pmu.disableALDO1()
+    pmu.disableCPUSLDO()
+    pmu.disableDLDO2()
+    # PMU interrupts
+    pmu.disableIRQ(AXP2101.XPOWERS_AXP2101_ALL_IRQ);
+    # Enable the required interrupt function
+    pmu.enableIRQ(
+        #AXP2101.XPOWERS_AXP2101_BAT_INSERT_IRQ    | AXP2101.XPOWERS_AXP2101_BAT_REMOVE_IRQ      |   # BATTERY is not removable
+        #AXP2101.XPOWERS_AXP2101_VBUS_INSERT_IRQ   | AXP2101.XPOWERS_AXP2101_VBUS_REMOVE_IRQ     |   # VBUS don't think this will be used
+        AXP2101.XPOWERS_AXP2101_PKEY_SHORT_IRQ    | AXP2101.XPOWERS_AXP2101_PKEY_LONG_IRQ       |   # POWER KEY
+        AXP2101.XPOWERS_AXP2101_BAT_CHG_DONE_IRQ  | AXP2101.XPOWERS_AXP2101_BAT_CHG_START_IRQ       # CHARGE
+    )
+    # Clear all interrupt flags
+    pmu.clearIrqStatus()
+    # Set the precharge charging current
+    pmu.setPrechargeCurr(AXP2101.XPOWERS_AXP2101_PRECHARGE_50MA)
+    # It is recommended to charge at less than 130mA
+    pmu.setChargerConstantCurr(AXP2101.XPOWERS_AXP2101_CHG_CUR_125MA)
+    # Set stop charging termination current
+    pmu.setChargerTerminationCurr(AXP2101.XPOWERS_AXP2101_CHG_ITERM_25MA)
+    # T-Watch-S3 uses a high-voltage(4.35V) battery by default but let's use a bit less (4.2V) to increase battery life
+    pmu.setChargeTargetVoltage(AXP2101.XPOWERS_AXP2101_CHG_VOL_4V2)
+    # Quick and dirty patch of BatteryManager to use the PMU:
+    BatteryManager.read_raw_adc =  lambda *args: 0
+    BatteryManager.has_battery = lambda *args: True
+    BatteryManager.get_battery_percentage = pmu.getBatteryPercent
+    BatteryManager.read_battery_voltage = lambda *args: pmu.getBattVoltage() / 1000
+    BatteryManager.pmu = pmu # make the PMU object accessible just in case
+    print("Initializing AXP2101 PMU completed.")
+
+
+import mpos
+from machine import I2C, Pin, SPI
+import micropython
+import time
+from mpos import IRManager, GPSManager
+
+IRManager.txPin = Pin(2, Pin.OUT, value=0) # don't leave default high because it drains current!
+GPSManager.txPin = Pin(42, Pin.OUT, value=0)
+GPSManager.rxPin = Pin(41, Pin.IN)
+GPSManager.connectionType = "uart"
+GPSManager.connectionSpeed = 38400
+
+from mpos import BatteryManager
+m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
+
+try:
+    init_pmu(m_i2c)
+except Exception as e:
+    print(f"Exception while initializing PMU: {e}")
+
+async def pmu_irq_watchdog():
+    # Workaround for IRQ's that don't always get cleared (race condition?)
+    pmu = BatteryManager.pmu
+    while True:
+        await TaskManager.sleep(3)          # check every 3 seconds
+        if pmu_int.value() == 0:        # IRQ pin is still LOW → stuck!
+            print("PMU IRQ line is stuck low - running recovery...")
+            for _ in range(10):
+                pmu.clearIrqStatus()
+                await TaskManager.sleep_ms(10)
+            print("PMU IRQ recovery completed")
+
+def _pmu_irq_task(_arg):
+    pmu = BatteryManager.pmu
+    try:
+        status = pmu.getIrqStatus()
+        print(f"PMU interrupt: status=0x{status:06X}")
+        if status == 0:
+            print("PMU: spurious interrupt (status already cleared)")
+            return
+        if pmu.isPekeyShortPressIrq():
+            print("PMU interrupt: PEKEY short press")
+            if pmu.isEnableALDO2():
+                pmu.disableALDO2() # backlight
+                pmu.disableALDO3() # touch chip
+                # Would be good to put the ESP32 in a sleep state, turn off wifi etc...
+            else:
+                pmu.enableALDO3() # touch chip (takes about 1 second to become operational)
+                pmu.enableALDO2() # backlight
+        if pmu.isPekeyLongPressIrq():
+            print("PMU interrupt: PEKEY long press")
+    except Exception as e:
+        print(f"Exception in PMU IRQ task: {e}")
+    finally:
+        # clear interrupt, can take multiple tries
+        attempts = 0
+        while pmu.getIrqStatus() != 0 and attempts < 5:   # safety limit
+            attempts += 1
+            pmu.clearIrqStatus()
+
+def _handle_pmu_irq(_pin):
+    print("_handle_pmu_irq")
+    try:
+        micropython.schedule(_pmu_irq_task, 0)
+    except Exception:
+        print("_handle_pmu_irq got exception scheduling PMU button press handler")
+
+pmu_int = Pin(21, Pin.IN, Pin.PULL_UP)
+pmu_int.irq(trigger=Pin.IRQ_FALLING, handler=_handle_pmu_irq)
+
+from mpos import TaskManager
+TaskManager.create_task(pmu_irq_watchdog())
+
+
+
+print("DRV2605L vibrator test")
+DRV2605L_ADDR = 0x5A
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x01, bytes([0x00])) # reg 0x01 = mode (0x00 = internal trigger)
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x03, bytes([0x00])) # reg 0x03 = waveform sequence slot 1 (0 = Library A)
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x04, bytes([12])) # Triple Click - 100%
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x05, bytes([89])) # Transition Ramp Up Long Sharp 2 – 0 to 100%
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x0C, bytes([1])) # reg 0x0C = GO (1 = start, 0 = stop)
+
+
+print("BMA423 IMU init")
+from mpos import SensorManager
+SensorManager.init(m_i2c, address=0x19, mounted_position=SensorManager.FACING_EARTH)
+
+
+try:
+    # Doesn't work with the new split Bus/Device Hardware SPI driver and drivers.lora.sx1262 yet
+    # so use the original drivers.lora.micropySX126X.sx1262 that's patched to fallback to Software SPI
+    #lora_spi_bus = SPI.Bus(host=1,mosi=1,miso=4,sck=3)
+    #lora_spi_device = SPI.Device(spi_bus=lora_spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+    pass
+except Exception as e:
+    import sys
+    sys.print_exception(e)
+else:
+    from drivers.lora.micropySX126X.sx1262 import SX1262
+    sx = SX1262(spi_bus=1, clk=3, mosi=1, miso=4, cs=5, irq=9, rst=8, gpio=7)
+    from mpos import LoRaManager
+    LoRaManager.radioChip = sx
+
+
+spi_bus = SPI.Bus(host=2,mosi=13,sck=18)
+
 import lcd_bus
-import machine
-
-import lvgl as lv
-import task_handler
-
-import mpos.ui
-
-spi_bus = machine.SPI.Bus(
-    host=2,
-    mosi=13,
-    sck=18
-)
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
     freq=40000000,
@@ -25,6 +198,8 @@ fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | l
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
 import drivers.display.st7789 as st7789
+import mpos.ui
+import lvgl as lv
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
@@ -44,8 +219,8 @@ mpos.ui.main_display.set_backlight(100)
 
 import i2c
 import drivers.indev.ft6x36 as ft6x36
-i2c_bus = i2c.I2C.Bus(host=0, sda=39, scl=40, freq=400000, use_locks=False)
-touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=ft6x36.I2C_ADDR, reg_bits=ft6x36.BITS)
+touch_i2c_bus = i2c.I2C.Bus(host=0, sda=39, scl=40, freq=400000, use_locks=False)
+touch_dev = i2c.I2C.Device(bus=touch_i2c_bus, dev_id=ft6x36.I2C_ADDR, reg_bits=ft6x36.BITS)
 import pointer_framework
 indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180)
 from mpos import InputManager
@@ -60,56 +235,37 @@ i2s_output_pins = {
     'sck': 48,      # SCLK or BCLK - Bit Clock for DAC output (mandatory)
     'sd': 46,       # Serial Data OUT (speaker/DAC)
 }
-speaker_output = AudioManager.add(
+AudioManager.add(
     AudioManager.Output(
-        name="speaker",
+        name="Speaker",
         kind="i2s",
         i2s_pins=i2s_output_pins,
     )
 )
-
-i2s_input_pins = {
-    'ws': 15,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+pdm_input_pins = {
     'sck_in': 44,   # SCLK - Serial Clock for microphone input
     'sd_in': 47,    # DIN - Serial Data IN (microphone)
 }
-mic_input = AudioManager.add(
+AudioManager.add(
     AudioManager.Input(
-        name="mic",
-        kind="i2s",
-        i2s_pins=i2s_input_pins,
+        name="Microphone",
+        kind="pdm",
+        pdm_pins=pdm_input_pins,
     )
 )
 
-# Vibrator test
-
-# One strong & fairly long buzz (repeat as needed)
-from machine import I2C, Pin
-i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
-
-def write_reg(reg, val):
-    i2c.writeto_mem(0x5A, reg, bytes([val]))
-
-write_reg(0x01, 0x00)                # internal trigger
-write_reg(0x03, 0)                   # Library A
-write_reg(0x04, 47)                  # Strong Buzz 100%
-write_reg(0x0C, 1)                   # GO
-import time
-time.sleep(1)                        # ~0.8s strong buzz
-write_reg(0x0C, 0)                   # stop (optional)
-
-# IMU:
-import drivers.imu_sensor.bma423.bma423 as bma423
-sensor = bma423.BMA423(i2c, address=0x19)
-time.sleep_ms(500) # some sleep is needed before reading values
-print("temperature: ", sensor.get_temperature())
-print("steps: ", sensor.get_steps())
-print("(x,y,z): ", sensor.get_xyz())
-
-# TODO:
-# - battery
-# - real IMU driver (instead of proof-of-concept above)
-# - GPS
-# - LoRa
+# RTC
+import drivers.rtc.pcf8563 as pcf8563
+rtc = pcf8563.PCF8563(m_i2c)
+dt = rtc.datetime() # Get datetime tuple from PCF8563: (year, month, day, wday, hour, min, sec)
+print("Datetime from RTC chip:", dt)
+# machine.RTC expects 8-tuple: (year, month, day, weekday, hour, minute, second, subsecond) so need to set subsecond
+rtc_tuple = (dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], dt[6], 0)
+from machine import RTC
+RTC().datetime(rtc_tuple)
+from mpos import TimeZone
+TimeZone.rtc = rtc
+# Would be good to also do this:
+# rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
 
 print("lilygo_t_watch_s3_plus.py finished")

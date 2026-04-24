@@ -3,6 +3,9 @@ import micropython
 import keypad_framework
 from micropython import const
 
+import mpos.ui
+import mpos.ui.focus_direction
+
 # Indices in expander.digital tuple:
 # (usb_plugged, joy_right, joy_left, joy_down, joy_up,
 #  button_menu, button_b, button_a, button_y, button_x,
@@ -31,9 +34,9 @@ _BUTTON_INDICES = (
 
 # joy_up/down/left/right -> navigation
 # button_a               -> ENTER
-# button_b               -> ESC
+# button_b               -> NEXT  (tab forward)
 # button_menu            -> HOME
-# button_x               -> NEXT  (tab forward)
+# button_x               -> ESC
 # button_y               -> PREV  (tab backward)
 _KEY_MAP = {
     _IDX_JOY_RIGHT: lv.KEY.RIGHT,
@@ -41,9 +44,9 @@ _KEY_MAP = {
     _IDX_JOY_DOWN:  lv.KEY.DOWN,
     _IDX_JOY_UP:    lv.KEY.UP,
     _IDX_BTN_A:     lv.KEY.ENTER,
-    _IDX_BTN_B:     lv.KEY.ESC,
+    _IDX_BTN_B:     lv.KEY.NEXT,
     _IDX_BTN_MENU:  lv.KEY.HOME,
-    _IDX_BTN_X:     lv.KEY.NEXT,
+    _IDX_BTN_X:     lv.KEY.ESC,
     _IDX_BTN_Y:     lv.KEY.PREV,
 }
 
@@ -115,6 +118,18 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
             self._poll_state()
 
         if self._queue:
-            return self._queue.pop(0)
+            state, key = self._queue.pop(0)
+            if state == self.PRESSED:
+                if key == lv.KEY.ESC:
+                    mpos.ui.back_screen()
+                elif key == lv.KEY.RIGHT:
+                    mpos.ui.focus_direction.move_focus_direction(90)
+                elif key == lv.KEY.LEFT:
+                    mpos.ui.focus_direction.move_focus_direction(270)
+                elif key == lv.KEY.UP:
+                    mpos.ui.focus_direction.move_focus_direction(0)
+                elif key == lv.KEY.DOWN:
+                    mpos.ui.focus_direction.move_focus_direction(180)
+            return state, key
 
         return None

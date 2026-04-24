@@ -1,0 +1,23 @@
+{
+  "name": "Audio Settings",
+  "publisher": "MicroPythonOS",
+  "short_description": "Configure audio input/output.",
+  "long_description": "Select system-wide audio input and output devices.",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.audio/icons/com.micropythonos.settings.audio_0.1.0_64x64.png",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.settings.audio/mpks/com.micropythonos.settings.audio_0.1.0.mpk",
+  "fullname": "com.micropythonos.settings.audio",
+  "version": "0.1.0",
+  "category": "settings",
+  "activities": [
+    {
+      "entrypoint": "assets/audio_settings.py",
+      "classname": "AudioSettings",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,6 @@ from ..app.activity import Activity
 
 class CameraActivity(Activity):
 
-    PACKAGE = "com.micropythonos.camera"
     CONFIGFILE = "config.json"
     SCANQR_CONFIG = "config_scanqr_mode.json"
 
@@ -53,12 +52,14 @@ class CameraActivity(Activity):
         self.close_button = lv.button(self.main_screen)
         close_label = lv.label(self.close_button)
         close_label.set_text(lv.SYMBOL.CLOSE)
+        close_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         close_label.center()
         self.close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
         # Settings button
         self.settings_button = lv.button(self.main_screen)
         settings_label = lv.label(self.settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         settings_label.center()
         self.settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
         #self.zoom_button = lv.button(self.main_screen)
@@ -72,8 +73,8 @@ class CameraActivity(Activity):
         self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.qr_button.add_event_cb(self.qr_button_click,lv.EVENT.CLICKED,None)
         self.qr_label = lv.label(self.qr_button)
-        #self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
-        self.qr_label.set_text("QR")
+        self.qr_label.set_text(mpos_ui.QR_SYMBOL) # QR code symbol
+        self.qr_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         self.qr_label.center()
 
         self.snap_button = lv.button(self.main_screen)
@@ -184,7 +185,7 @@ class CameraActivity(Activity):
                 scanqr_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
                 scanqr_defaults.update(CameraSettingsActivity.SCANQR_DEFAULTS)
                 self.scanqr_prefs = SharedPreferences(
-                    self.PACKAGE,
+                    self.appFullName,
                     filename=self.SCANQR_CONFIG,
                     defaults=scanqr_defaults
                 )
@@ -198,7 +199,7 @@ class CameraActivity(Activity):
                 normal_defaults = {}
                 normal_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
                 normal_defaults.update(CameraSettingsActivity.NORMAL_DEFAULTS)
-                self.prefs = SharedPreferences(self.PACKAGE, defaults=normal_defaults)
+                self.prefs = SharedPreferences(self.appFullName, defaults=normal_defaults)
             # Defaults come from constructor, no need to pass them here
             self.width = self.prefs.get_int("resolution_width")
             self.height = self.prefs.get_int("resolution_height")

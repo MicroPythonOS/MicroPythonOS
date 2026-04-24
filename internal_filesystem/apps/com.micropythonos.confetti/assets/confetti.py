@@ -82,9 +82,6 @@ class Confetti:
             self._spawn_one()
         
         self.update_timer = lv.timer_create(self._update_frame, 16, None) # max 60 fps = 16ms/frame
-        
-        # Stop spawning after duration
-        lv.timer_create(self.stop, self.duration, None).set_repeat_count(1)
     
     def stop(self, timer=None):
         """Stop the confetti animation."""
