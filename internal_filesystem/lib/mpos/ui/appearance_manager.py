@@ -52,6 +52,36 @@ class AppearanceManager:
     _accent_color = None
     _keyboard_button_fix_style = None
     
+    # ========== Utility Colors ==========
+
+    @staticmethod
+    def percent_to_rainbow_color(value: float) -> tuple[int, int, int]:
+        return AppearanceManager.rainbow_color(
+            max(0.0, min(1.0, value / 100.0))
+        ) # normalized 0.0 to 1.0
+
+    @staticmethod
+    def rainbow_color(t: float) -> tuple[int, int, int]:
+        hue = t * 300.0
+        h = hue / 60.0
+        i = int(h)
+        f = h - i                               # fractional part
+
+        if i == 0:
+            r, g, b = 1.0, f, 0.0
+        elif i == 1:
+            r, g, b = 1.0 - f, 1.0, 0.0
+        elif i == 2:
+            r, g, b = 0.0, 1.0, f
+        elif i == 3:
+            r, g, b = 0.0, 1.0 - f, 1.0
+        elif i == 4:
+            r, g, b = f, 0.0, 1.0
+        else:  # i == 5
+            r, g, b = 1.0, 0.0, 1.0 - f
+
+        return (int(r * 255 + 0.5), int(g * 255 + 0.5), int(b * 255 + 0.5))
+
     # ========== Initialization ==========
     
     @classmethod

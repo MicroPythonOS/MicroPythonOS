@@ -76,31 +76,7 @@ from machine import I2C, Pin
 expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 from drivers.fri3d.expander import Expander
 expander = Expander(i2c_bus=expander_i2c)
-
-# Show progress using the RGB LEDs:
-def percent_to_rainbow_color(value: float) -> tuple[int, int, int]:
-    return rainbow_color(max(0.0, min(1.0, value / 100.0))) # normalized 0.0 to 1.0
-
-def rainbow_color(t: float) -> tuple[int, int, int]:
-    hue = t * 300.0
-    h = hue / 60.0
-    i = int(h)
-    f = h - i                               # fractional part
-
-    if i == 0:
-        r, g, b = 1.0, f, 0.0
-    elif i == 1:
-        r, g, b = 1.0 - f, 1.0, 0.0
-    elif i == 2:
-        r, g, b = 0.0, 1.0, f
-    elif i == 3:
-        r, g, b = 0.0, 1.0 - f, 1.0
-    elif i == 4:
-        r, g, b = f, 0.0, 1.0
-    else:  # i == 5
-        r, g, b = 1.0, 0.0, 1.0 - f
-
-    return (int(r * 255 + 0.5), int(g * 255 + 0.5), int(b * 255 + 0.5))
+from mpos import AppearanceManager
 
 # Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
@@ -108,31 +84,10 @@ def progress(msg, pct):
     twentieth = int(pct / 20)
     lednr = max(0,4 - twentieth)
     #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
-    color = percent_to_rainbow_color(pct)
+    color = AppearanceManager.percent_to_rainbow_color(pct)
     #print(f"setting LED {lednr} color {color}")
     LightsManager.set_led(lednr, *color)
     LightsManager.write()
-
-def install_expander_firmware(filename):
-    print("Installing latest CH32 firmware")
-    expander.config = 0x0B # trigger SWD enable
-    import time
-    time.sleep(0.2)
-    from rvswd import RVSWD
-    prog = RVSWD(39, 42)
-    # optional check, already halts the MCU
-    vendor = prog.read_vendor_bytes()
-    if (vendor[1] & 0xffffff0f) != 0x03560601:
-        print(f"CH32X035G8U6 not detected, vendor is {vendor} but continuing anyway")
-    with open(filename, 'rb') as f:
-        fw = f.read()
-    f.close()
-    progress_margin_end = 21 # 21% left for sleep at the end
-    prog.x03x_program(fw, lambda msg, pct: progress(msg, int((100 - progress_margin_end) * pct / 100))) # throws exception if it fails
-    for pct in range(100-progress_margin_end,101):
-        progress("waiting for CH32 boot", pct)
-        time.sleep(4/progress_margin_end) # wait 4 seconds total
-    print("Latest CH32 firmware installed.")
 
 # Check expander firmware version and if none or too low: install latest
 try:
@@ -145,7 +100,7 @@ latest_version = (1, 2, 1)
 if latest_version > current_version:
     print(f"CH32 firmware is lower than latest {latest_version} so updating...")
     try:
-        install_expander_firmware("/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw")
+        expander.install_firmware("/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw", progress)
         LightsManager.set_all(0,255,0)
         LightsManager.write()
         # Need to reinitialize:

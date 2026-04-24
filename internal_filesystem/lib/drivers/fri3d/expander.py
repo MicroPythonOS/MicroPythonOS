@@ -87,3 +87,34 @@ class Expander(Device):
         """set the configuration byte"""
         if value >= 0 and value <= 0xFF:
             self._write(_EXPANDER_REG_CONFIG, struct.pack("B", value))
+
+    def install_firmware(self, filename: str, progress_cb=None):
+        print("Installing latest CH32 firmware")
+        self.config = 0x0B # trigger SWD enable
+        import time
+        time.sleep(0.2)
+        from rvswd import RVSWD
+        prog = RVSWD(39, 42)
+        # optional check, already halts the MCU
+        vendor = prog.read_vendor_bytes()
+        if (vendor[1] & 0xffffff0f) != 0x03560601:
+            print(f"CH32X035G8U6 not detected, vendor is {vendor} but continuing anyway")
+        with open(filename, "rb") as f:
+            fw = f.read()
+        f.close()
+        progress_margin_end = 21 # 21% left for sleep at the end
+        if progress_cb:
+            prog.x03x_program(
+                fw,
+                lambda msg, pct: progress_cb(
+                    msg,
+                    int((100 - progress_margin_end) * pct / 100),
+                ),
+            ) # throws exception if it fails
+        else:
+            prog.x03x_program(fw, None) # throws exception if it fails
+        for pct in range(100 - progress_margin_end, 101):
+            if progress_cb:
+                progress_cb("waiting for CH32 boot", pct)
+            time.sleep(4 / progress_margin_end) # wait 4 seconds total
+        print("Latest CH32 firmware installed.")
