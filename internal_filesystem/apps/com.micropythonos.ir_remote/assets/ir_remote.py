@@ -111,6 +111,12 @@ class IRRemote(Activity):
         self._apply_profile()
         self._refresh_setting_label()
 
+    def onPause(self, screen):
+        try:
+            self.ir_pin.value(0) # make sure it's low because some devices use a lot of power if left high accidentally
+        except Exception as e:
+            pass
+
     def _open_settings(self, event):
         intent = Intent(activity_class=SettingsActivity)
         intent.putExtra("prefs", self.prefs)

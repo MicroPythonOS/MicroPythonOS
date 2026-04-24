@@ -47,7 +47,8 @@ class TestLightsManager(unittest.TestCase):
 
     def setUp(self):
         """Initialize LightsManager before each test."""
-        LightsManager.init(neopixel_pin=12, num_leds=5)
+        LightsManager.init(neopixel_pin=12)
+        LightsManager.set_led_num(5)
 
     def test_initialization(self):
         """Test that LightsManager initializes correctly."""

@@ -1,0 +1,23 @@
+{
+"name": "Time of Flight",
+"publisher": "MicroPythonOS",
+"short_description": "Time-of-flight sensor demo",
+"long_description": "Shows off time-of-flight range imaging camera sensors by describing distance measurements per pixel based on round-trip light time.",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.time_of_flight/icons/com.micropythonos.time_of_flight_0.0.1_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.time_of_flight/mpks/com.micropythonos.time_of_flight_0.0.1.mpk",
+"fullname": "com.micropythonos.time_of_flight",
+"version": "0.0.1",
+"category": "development",
+"activities": [
+    {
+      "entrypoint": "assets/time_of_flight.py",
+      "classname": "TimeOfFlight",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}

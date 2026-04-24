@@ -331,6 +331,7 @@ class AppManager:
                     print(f"execute_script: reading script_source took {read_time}ms")
             script_globals = {
                 'lv': lv,
+                'mpos': mpos,
                 '__name__': "__main__", # in case the script wants this
                 '__file__': compile_name
             }

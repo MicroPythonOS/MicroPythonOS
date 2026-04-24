@@ -298,6 +298,7 @@ def create_drawer():
     def launcher_event(e):
         print("Launch button pressed!")
         close_drawer(True)
+        AppManager.refresh_apps()
         AppManager.restart_launcher()
     launcher_btn.add_event_cb(launcher_event,lv.EVENT.CLICKED,None)
     '''

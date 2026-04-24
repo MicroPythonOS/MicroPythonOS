@@ -21,7 +21,7 @@ import drivers.display.st7789 as st7789
 
 import mpos.ui
 import mpos.ui.focus_direction
-from mpos import InputManager, IRManager
+from mpos import InputManager, IRManager, DeviceManager
 
 spi_bus = SPI.Bus(
     host=2,
@@ -65,7 +65,8 @@ fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12, num_leds=5)
+LightsManager.init(neopixel_pin=12)
+LightsManager.set_led_num(5)
 # Set left LED red
 LightsManager.set_led(4, 255, 0, 0)
 LightsManager.write()
@@ -78,8 +79,10 @@ expander = Expander(i2c_bus=expander_i2c)
 
 
 # Show progress using the RGB LEDs:
-def rainbow_color(value: float) -> tuple[int, int, int]:
-    t = max(0.0, min(1.0, value / 100.0))   # normalized 0.0 to 1.0
+def percent_to_rainbow_color(value: float) -> tuple[int, int, int]:
+    return rainbow_color(max(0.0, min(1.0, value / 100.0))) # normalized 0.0 to 1.0
+
+def rainbow_color(t: float) -> tuple[int, int, int]:
     hue = t * 300.0
     h = hue / 60.0
     i = int(h)
@@ -106,7 +109,7 @@ def progress(msg, pct):
     twentieth = int(pct / 20)
     lednr = max(0,4 - twentieth)
     #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
-    color = rainbow_color(pct)
+    color = percent_to_rainbow_color(pct)
     #print(f"setting LED {lednr} color {color}")
     LightsManager.set_led(lednr, *color)
     LightsManager.write()
@@ -169,11 +172,11 @@ def get_voltage(force_refresh=False, raw_adc_value=None):
     e.enable(False)
     # Wait to ensure more than 5ms between input polls
     import time
-    time.sleep_ms(6)
+    time.sleep_ms(10)
     # Do the read:
-    returnval = (0.001651 * mpos.io_expander.analog[2] + 0.08709) # copied from fri3d_2024.py
+    returnval = (0.001857993861607339 * mpos.io_expander.analog[2] - 0.9965856090206169)
     # Wait again to ensure more than 5ms between input polls
-    time.sleep_ms(6)
+    time.sleep_ms(10)
     # Enable input polling again:
     e.enable(True)
     return returnval
@@ -215,6 +218,7 @@ mpos.ui.main_display.set_color_inversion(True)
 # touch pad interrupt TP Int is on ESP.IO13
 import drivers.indev.cst816s as cst816s
 i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
+DeviceManager.registerBus(i2c_bus=i2c_bus) # register because Time of Flight app needs it
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
 try:
     tindev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
@@ -303,7 +307,7 @@ InputManager.register_indev(indev)
 try:
     from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
     expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
-    tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because unreliable
+    tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because MicroPython interrupts are unreliable under high load
     tindev_buttons.set_group(group)
     #tindev_buttons.set_display(disp)
     tindev_buttons.enable(True)
@@ -391,14 +395,14 @@ import _thread
 
 def startup_wow_effect():
     try:
-        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
-        #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
-        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
         import time
         time.sleep(3) # wait until it's calmed down
-        megalovania = "Megalovania:d=16,o=5,b=150:d5,d5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,c5,c5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,b4,b4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,a#4,a#4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,d5,d5"
+        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
+        #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
+        startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
+        #startup_jingle = "Megalovania:d=16,o=5,b=150:d5,d5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,c5,c5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,b4,b4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,a#4,a#4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,d5,d5"
 
-        player = AudioManager.player(rtttl=megalovania,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output)
+        player = AudioManager.player(rtttl=startup_jingle,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output)
         player.start()
 
         # Rainbow colors for the 5 LEDs
@@ -428,7 +432,7 @@ def startup_wow_effect():
             level = int(255 * (fade_steps - 1 - step) / (fade_steps - 1))
             LightsManager.set_all(level, level, level)
             LightsManager.write()
-            time.sleep_ms(25)
+            time.sleep_ms(20)
 
     except Exception as e:
         print(f"Startup effect error: {e}")

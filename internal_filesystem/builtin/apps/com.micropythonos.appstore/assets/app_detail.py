@@ -55,6 +55,17 @@ class AppDetail(Activity):
         self.progress_bar.set_value(0, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
 
+    @staticmethod
+    def _find_download_file(files, preferred_exts):
+        for preferred_ext in preferred_exts:
+            for file in files:
+                print(f"parsing file: {file}")
+                ext = file.get("ext").lower()
+                print(f"file has extension: {ext}")
+                if ext == preferred_ext:
+                    return file
+        return None
+
     def onCreate(self):
         print("Creating app detail screen...")
         self.app = self.getIntent().extras.get("app")
@@ -287,12 +298,10 @@ class AppDetail(Activity):
             if DownloadManager.is_network_error(e):
                 print("Network error while fetching app details")
             return
-        print(f"Got response text: {response[0:20]}")
+        print(f"fetch_badgehub_app_details got response text: {response[0:42]}")
         try:
             parsed = json.loads(response)
             #print(f"parsed json: {parsed}")
-            print("Using short_description as long_description because backend doesn't support it...")
-            app_obj.long_description = app_obj.short_description
             print("Finding version number...")
             try:
                 version = parsed.get("version")
@@ -303,14 +312,10 @@ class AppDetail(Activity):
             # Find .mpk download URL:
             try:
                 files = version.get("files")
-                for file in files:
-                    print(f"parsing file: {file}")
-                    ext = file.get("ext").lower()
-                    print(f"file has extension: {ext}")
-                    if ext == ".mpk":
-                        app_obj.download_url = file.get("url")
-                        app_obj.download_url_size = file.get("size_of_content")
-                        break # only one .mpk per app is supported
+                download_file = self._find_download_file(files, [".mpk", ".zip"])
+                if download_file:
+                    app_obj.download_url = download_file.get("url")
+                    app_obj.download_url_size = download_file.get("size_of_content")
             except Exception as e:
                 print(f"Could not get files from version: {e}")
             try:
@@ -318,13 +323,20 @@ class AppDetail(Activity):
             except Exception as e:
                 print(f"Could not get app_metadata object from version object: {e}")
                 return
+            # publisher / author:
             try:
                 app_obj.publisher = app_metadata.get("author")
             except Exception as e:
                 print(f"Could not get author from version object: {e}")
+            # long_description
+            try:
+                app_obj.long_description = app_metadata.get("long_description")
+            except Exception as e:
+                print(f"Could not get long_description from version object: {e}")
+            # version
             try:
                 app_version = app_metadata.get("version")
-                print(f"what: {version.get('app_metadata')}")
+                #print(f"what: {version.get('app_metadata')}")
                 print(f"app has app_version: {app_version}")
                 app_obj.version = app_version
             except Exception as e:

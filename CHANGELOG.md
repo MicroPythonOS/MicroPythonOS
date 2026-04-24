@@ -3,23 +3,34 @@ Future release (next version)
 
 Add changes that have been made to the code but haven't made it into a release here.
 
+Builtin Apps:
+- AppStore: fallback to .zip file if no .mpk file found in filelist
+- AppStore: fetch new long_description from BadgeHub details API
+- Settings - Wi-Fi: don't print password on serial port
+
 Frameworks:
-- AppManager: support .mpk/.zip files with compression and an unnecessary top-level directory
 - Add new GPSManager framework
 - Add new IRManager framework
 - Add new LoRaManager framework
-- Add mpos.ui.change_task_handler() for improving IR timing accuracy
+- Add new DeviceManager framework
+- Add mpos.ui.change_task_handler() function for improving IR timing accuracy
 - AppearanceManager: fix set_light_mode() and set_primary_color()
-- SharedPreferences: don't print values on serial/REPL
-- SettingActivity: clicking the already-selected option of a radio group no longer un-selects it. Previously a stray tap could save an empty string for a required radio setting (e.g. clearing `wallet_type` in a downstream app), leaving the app in an unconfigured state. Radios now enforce the convention that exactly one option stays selected once a choice has been made; the user changes the pick by clicking a different option. Settings that legitimately need the empty-string state (e.g. the Settings app's `Auto Start App`, where empty means "boot straight to the launcher") can opt out of the invariant by passing `allow_deselect=True` in the setting definition
-- WebServer: add basic "View Screen" functionality to view the device's display remotely
+- AppManager: support .mpk/.zip files with compression and a redundant top-level directory
+- AppManager: export 'mpos' global to apps for convenience
+- LightsManager: allow changing number of LEDs after initialization
+- SettingActivity: add `allow_deselect` option (default False) to radiobuttons
+- SharedPreferences: don't print potentially sensitive values on serial port
+- WebServer: add basic 'View Screen' functionality to view the device's display remotely
 
 OS:
-- LilyGo T-Watch S3 Plus: add support for IR Remote app
-- Fri3d 2024: add support for IR remote app
-- Fri3d 2026: add support for IR remote app
+- aioREPL: use >>> prompt (for ViperIDE)
+- drawer menu: reload apps when Launch(er) is (re)started
+- export 'lv' and 'mpos' globals to aioREPL and apps for convenience
+- LilyGo T-Watch S3 Plus: add support for IR Remote app (TX only)
+- Fri3d 2024: add support for IR remote app (RX only)
 - Fri3d 2026: add CH32 coprocessor firmware handling (credit @bertouttier)
 - Fri3d 2026: add CH32 indev driver (credit @bertouttier)
+- Fri3d 2026: add calibrated battery voltage measurements using CH32
 
 
 0.9.2
