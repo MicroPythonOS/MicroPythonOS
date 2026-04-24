@@ -73,7 +73,7 @@ LightsManager.write()
 
 # CH32 coprocessor / IO expander
 from machine import I2C, Pin
-expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freqint=400000)
+expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 from drivers.fri3d.expander import Expander
 expander = Expander(i2c_bus=expander_i2c)
 
