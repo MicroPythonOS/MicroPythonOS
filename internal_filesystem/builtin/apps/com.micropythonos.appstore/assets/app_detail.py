@@ -55,6 +55,17 @@ class AppDetail(Activity):
         self.progress_bar.set_value(0, False)
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
 
+    @staticmethod
+    def _find_download_file(files, preferred_exts):
+        for preferred_ext in preferred_exts:
+            for file in files:
+                print(f"parsing file: {file}")
+                ext = file.get("ext").lower()
+                print(f"file has extension: {ext}")
+                if ext == preferred_ext:
+                    return file
+        return None
+
     def onCreate(self):
         print("Creating app detail screen...")
         self.app = self.getIntent().extras.get("app")
@@ -303,14 +314,10 @@ class AppDetail(Activity):
             # Find .mpk download URL:
             try:
                 files = version.get("files")
-                for file in files:
-                    print(f"parsing file: {file}")
-                    ext = file.get("ext").lower()
-                    print(f"file has extension: {ext}")
-                    if ext == ".mpk":
-                        app_obj.download_url = file.get("url")
-                        app_obj.download_url_size = file.get("size_of_content")
-                        break # only one .mpk per app is supported
+                download_file = self._find_download_file(files, [".mpk", ".zip"])
+                if download_file:
+                    app_obj.download_url = download_file.get("url")
+                    app_obj.download_url_size = download_file.get("size_of_content")
             except Exception as e:
                 print(f"Could not get files from version: {e}")
             try:

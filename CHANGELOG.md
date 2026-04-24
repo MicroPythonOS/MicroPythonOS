@@ -3,6 +3,9 @@ Future release (next version)
 
 Add changes that have been made to the code but haven't made it into a release here.
 
+Builtin Apps:
+- AppStore: fallback to .zip file if no .mpk file found in filelist
+
 Frameworks:
 - Add new GPSManager framework
 - Add new IRManager framework
