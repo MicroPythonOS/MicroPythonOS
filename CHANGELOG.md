@@ -16,10 +16,10 @@ Frameworks:
 - Add mpos.ui.change_task_handler() function for improving IR timing accuracy
 - AppearanceManager: fix set_light_mode() and set_primary_color()
 - AppManager: support .mpk/.zip files with compression and a redundant top-level directory
-- AppManager: export "mpos" global to apps for convenience
+- AppManager: export 'mpos' global to apps for convenience
 - LightsManager: allow changing number of LEDs after initialization
 - SharedPreferences: don't print potentially sensitive values on serial port
-- WebServer: add basic "View Screen" functionality to view the device's display remotely
+- WebServer: add basic 'View Screen' functionality to view the device's display remotely
 
 OS:
 - aioREPL: use >>> prompt (for ViperIDE)
