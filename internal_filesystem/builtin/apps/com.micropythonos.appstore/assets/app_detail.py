@@ -298,12 +298,10 @@ class AppDetail(Activity):
             if DownloadManager.is_network_error(e):
                 print("Network error while fetching app details")
             return
-        print(f"Got response text: {response[0:20]}")
+        print(f"fetch_badgehub_app_details got response text: {response[0:42]}")
         try:
             parsed = json.loads(response)
             #print(f"parsed json: {parsed}")
-            print("Using short_description as long_description because backend doesn't support it...")
-            app_obj.long_description = app_obj.short_description
             print("Finding version number...")
             try:
                 version = parsed.get("version")
@@ -325,13 +323,18 @@ class AppDetail(Activity):
             except Exception as e:
                 print(f"Could not get app_metadata object from version object: {e}")
                 return
+            # Other details:
             try:
                 app_obj.publisher = app_metadata.get("author")
             except Exception as e:
                 print(f"Could not get author from version object: {e}")
             try:
+                app_obj.long_description = app_metadata.get("long_description")
+            except Exception as e:
+                print(f"Could not get long_description from version object: {e}")
+            try:
                 app_version = app_metadata.get("version")
-                print(f"what: {version.get('app_metadata')}")
+                #print(f"what: {version.get('app_metadata')}")
                 print(f"app has app_version: {app_version}")
                 app_obj.version = app_version
             except Exception as e:

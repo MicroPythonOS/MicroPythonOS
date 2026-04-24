@@ -5,6 +5,7 @@ Add changes that have been made to the code but haven't made it into a release h
 
 Builtin Apps:
 - AppStore: fallback to .zip file if no .mpk file found in filelist
+- AppStore: fetch new long_description from BadgeHub details API
 
 Frameworks:
 - Add new GPSManager framework

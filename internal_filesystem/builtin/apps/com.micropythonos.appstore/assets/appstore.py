@@ -245,6 +245,7 @@ class AppStore(Activity):
         name = bhapp.get("name")
         print(f"Got app name: {name}")
         short_description = bhapp.get("description")
+        # long_description is not available in the project-summaries, only in the project details
         fullname = bhapp.get("slug")
         # Safely extract nested icon URL
         icon_url = None
