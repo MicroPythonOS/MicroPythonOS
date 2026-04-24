@@ -323,15 +323,17 @@ class AppDetail(Activity):
             except Exception as e:
                 print(f"Could not get app_metadata object from version object: {e}")
                 return
-            # Other details:
+            # publisher / author:
             try:
                 app_obj.publisher = app_metadata.get("author")
             except Exception as e:
                 print(f"Could not get author from version object: {e}")
+            # long_description
             try:
                 app_obj.long_description = app_metadata.get("long_description")
             except Exception as e:
                 print(f"Could not get long_description from version object: {e}")
+            # version
             try:
                 app_version = app_metadata.get("version")
                 #print(f"what: {version.get('app_metadata')}")
