@@ -244,8 +244,15 @@ def detect_board():
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 
 # EXECUTION STARTS HERE
-
 print(f"MicroPythonOS {BuildInfo.version.release} running lib/mpos/main.py")
+
+# Needed to load the logo and firmware files for boards from storage:
+try:
+    import freezefs_mount_builtin
+except Exception as e:
+    # This will throw an exception if there is already a "/builtin" folder present
+    print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
+
 board = detect_board()
 if board:
     print(f"Detected {board} system, importing mpos.board.{board}")
@@ -259,13 +266,6 @@ else:
 import mpos.fs_driver
 fs_drv = lv.fs_drv_t()
 mpos.fs_driver.fs_register(fs_drv, 'M')
-
-# Needed to load the logo from storage:
-try:
-    import freezefs_mount_builtin
-except Exception as e:
-    # This will throw an exception if there is already a "/builtin" folder present
-    print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
 prefs = SharedPreferences("com.micropythonos.settings") # if not value is set, it will start the HowTo app
 

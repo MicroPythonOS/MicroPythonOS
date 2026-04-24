@@ -145,7 +145,7 @@ latest_version = (1, 2, 1)
 if latest_version > current_version:
     print(f"CH32 firmware is lower than latest {latest_version} so updating...")
     try:
-        install_expander_firmware("/lib/drivers/fri3d/coprocessor_1.2.1.fw")
+        install_expander_firmware("/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw")
         LightsManager.set_all(0,255,0)
         LightsManager.write()
         # Need to reinitialize:
