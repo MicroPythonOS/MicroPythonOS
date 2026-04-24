@@ -14,6 +14,7 @@
 from machine import ADC, I2C, Pin, SPI, SDCard
 import lcd_bus
 import i2c
+import time
 
 import lvgl as lv
 
@@ -107,7 +108,6 @@ def get_voltage(force_refresh=False, raw_adc_value=None):
     e = InputManager.list_indevs()[2]
     e.enable(False)
     # Wait to ensure more than 5ms between input polls
-    import time
     time.sleep_ms(10)
     # Do the read:
     returnval = (0.001857993861607339 * mpos.io_expander.analog()[2] - 0.9965856090206169)
@@ -125,7 +125,6 @@ BatteryManager.read_battery_voltage = get_voltage
 # LCD reset using the CH32 microcontroller
 time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
 expander.config= 0x01 # 3v3 aux on + LCD off
-import time
 time.sleep_ms(100)
 expander.config= 0x03 # 3v3 aux + LCD on
 
@@ -161,7 +160,6 @@ except Exception as e:
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 
 # Button handling code:
-import time
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
 
 # Key repeat configuration
@@ -323,7 +321,6 @@ from mpos import SensorManager
 SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH) # IMU (LSM6DSOTR-C / LSM6DSO)
 
 # === STARTUP "WOW" EFFECT ===
-import time
 import _thread
 
 def startup_wow_effect():

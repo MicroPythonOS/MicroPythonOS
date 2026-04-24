@@ -93,7 +93,6 @@ class Expander(Device):
         print("Installing latest CH32 firmware")
         time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
         self.config = 0x0B # trigger SWD enable
-        import time
         time.sleep(0.2)
         from rvswd import RVSWD
         prog = RVSWD(39, 42)
@@ -122,7 +121,6 @@ class Expander(Device):
         print("Latest CH32 firmware installed.")
 
     def wait_for_normal_mode(self, min_uptime_ms: int = 1000, poll_ms: int = 10):
-        import time
         start = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), start) < min_uptime_ms:
             time.sleep_ms(poll_ms)
