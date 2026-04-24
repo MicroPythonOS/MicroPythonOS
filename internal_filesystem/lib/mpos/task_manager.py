@@ -74,3 +74,7 @@ class TaskManager:
             stacksize = 16*1024
         return stacksize
 
+    @staticmethod
+    def start_new_thread():
+        print("Starting new threads is really not recommended for regular apps, as we're limited to just a few in total, and they can't be stopped from the outside - they have to stop themselves.")
+        print("We could add some framework with a 'halting' variable that the thread *should* check and then stop itself, but there's no guarantees.")
