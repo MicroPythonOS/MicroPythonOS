@@ -8,7 +8,8 @@ scriptdir=$(readlink -f "$mydir"/../scripts/)
 fs="$mydir"/../internal_filesystem/
 mpremote="$mydir"/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py
 #heapsize=8M
-heapsize=16M # on desktop, a bit more is warranted (different C library etc)
+#heapsize=16M # on desktop, a bit more is warranted (different C library etc)
+heapsize=32M# on desktop, a bit more is warranted (different C library etc)
 
 # Parse arguments
 ondevice=""
