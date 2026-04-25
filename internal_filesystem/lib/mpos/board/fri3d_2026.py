@@ -122,11 +122,11 @@ if expander.install_firmware_if_needed(
     expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
     expander = Expander(i2c_bus=expander_i2c)
 
-# quick and dirty way to make accessible later:
+# Make expander accessible later
 import mpos
 mpos.io_expander = expander
 
-# Quick and dirty patch of BatteryManager to use the CH32 battery level:
+# Patch of BatteryManager to use the CH32 battery level:
 def get_voltage(force_refresh=False, raw_adc_value=None):
     # First workaround Fri3dCamp/badge_2026_fw/issues/2 by disabling input polling
     from mpos import InputManager
