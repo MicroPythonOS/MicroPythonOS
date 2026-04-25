@@ -13,13 +13,13 @@
 
 # Multicolor LEDs are used for feedback. Counting from left:
 #
-# 1: board detected, earliest startup (green)
-# 2: coprocessor firmware version read warning (orange) or error (red)
-# 3: coprocessor firmware install failure (red)
+# 0: board detected, earliest startup (green)
+# 1: coprocessor firmware version read warning (orange) or error (red)
+# 2: coprocessor firmware install failure (red)
 #
-# During coprocessor firmware install progress: 1 to 5 (rainbow colors)
+# During coprocessor firmware install progress: 0 to 4 (rainbow colors)
 #
-# After board initialization: 5 to 1 (rainbow colors)
+# After board initialization: 4 to 0 (rainbow colors)
 
 from machine import ADC, I2C, Pin, SPI, SDCard
 import lcd_bus
@@ -376,7 +376,7 @@ def startup_wow_effect():
             time.sleep_ms(500)
 
         fade_steps = 80
-        max_brightness = 128 # instead of 255 because that's too bright
+        max_brightness = 64 # instead of 255 because that's too bright
         for step in range(fade_steps):
             level = int(max_brightness * (fade_steps - 1 - step) / (fade_steps - 1))
             LightsManager.set_all(level, level, level)
