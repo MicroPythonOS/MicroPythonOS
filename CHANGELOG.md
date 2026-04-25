@@ -24,8 +24,8 @@ Frameworks:
 
 OS:
 - aioREPL: use >>> prompt (for ViperIDE)
-- drawer menu: reload apps when Launch(er) is (re)started
-- export 'lv' and 'mpos' globals to aioREPL and apps for convenience
+- Drawer menu: reload apps when Launch(er) is (re)started
+- Export 'lv' and 'mpos' globals to aioREPL and apps for convenience
 - Compress largest fonts to reduce build size by ~208KiB
 - LilyGo T-Watch S3 Plus: add support for IR Remote app (TX only)
 - Fri3d 2024: add support for IR remote app (RX only)
