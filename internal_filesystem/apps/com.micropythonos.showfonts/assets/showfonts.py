@@ -31,7 +31,7 @@ class ShowFonts(Activity):
             (lv.font_montserrat_20, "Montserrat 20"), # +2
             (lv.font_montserrat_24, "Montserrat 24"), # +4
             (lv.font_unscii_16, "Unscii 16"),
-            (lv.font_montserrat_28_compressed, "Montserrat 28"), # +4
+            (lv.font_montserrat_28, "Montserrat 28"), # +4
             (lv.font_montserrat_34, "Montserrat 34"), # +6
             (lv.font_montserrat_40, "Montserrat 40"), # +6
             (lv.font_montserrat_48, "Montserrat 48"), # +8
