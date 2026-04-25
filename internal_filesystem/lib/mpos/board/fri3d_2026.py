@@ -11,6 +11,16 @@
 #   - analog joystick
 #   - digital buttons (X,Y,A,B, MENU)
 
+# Multicolor LEDs are used for feedback. Counting from left:
+#
+# 1: board detected, earliest startup (green)
+# 2: coprocessor firmware version read warning (orange) or error (red)
+# 3: coprocessor firmware install failure (red)
+#
+# During coprocessor firmware install progress: 1 to 5 (rainbow colors)
+#
+# After board initialization: 5 to 1 (rainbow colors)
+
 from machine import ADC, I2C, Pin, SPI, SDCard
 import lcd_bus
 import i2c
@@ -23,6 +33,15 @@ import drivers.display.st7789 as st7789
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager, IRManager, DeviceManager
+
+# === LED HARDWARE ===
+import mpos.lights as LightsManager
+# Initialize 5 NeoPixel LEDs (GPIO 12)
+LightsManager.init(neopixel_pin=12)
+LightsManager.set_led_num(5)
+# Set left LED red
+LightsManager.set_led(4, 21, 96, 67)
+LightsManager.write()
 
 spi_bus = SPI.Bus(
     host=2,
@@ -64,15 +83,6 @@ buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-# === LED HARDWARE ===
-import mpos.lights as LightsManager
-# Initialize 5 NeoPixel LEDs (GPIO 12)
-LightsManager.init(neopixel_pin=12)
-LightsManager.set_led_num(5)
-# Set left LED red
-LightsManager.set_led(4, 21, 96, 67)
-LightsManager.write()
-
 # Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
     #print(f"{msg}: {pct}%")
@@ -85,21 +95,19 @@ def progress(msg, pct):
     LightsManager.set_led(lednr, *color)
     LightsManager.write()
 
-def warning(msg):
-    LightsManager.set_led(3, 96, 58, 21)
+def warning(msg="", sleep_ms=0, r=96, g=58, b=21): # default rgb: orange warning
+    LightsManager.set_led(3, r, g, b)
     LightsManager.write()
-    time.sleep(2)
-    if msg:
-        print(msg)
+    time.sleep_ms(sleep_ms)
+    print(msg)
 
 def failure(e):
     LightsManager.set_led(2, 96, 21, 21)
     LightsManager.write()
     time.sleep(5)
-    if e:
-        print(f"CH32 firmware install failed because exception: {e}")
-        import sys
-        sys.print_exception(e)
+    print(f"CH32 firmware install failed because exception: {e}")
+    import sys
+    sys.print_exception(e)
 
 # CH32 coprocessor / IO expander
 from drivers.fri3d.expander import Expander
@@ -366,11 +374,6 @@ def startup_wow_effect():
                 LightsManager.set_led(j, *rainbow[j])
             LightsManager.write()
             time.sleep_ms(500)
-
-        # Hold white, then fade out over 4 seconds
-        LightsManager.set_all(255, 255, 255)
-        LightsManager.write()
-        time.sleep_ms(500)
 
         fade_steps = 80
         max_brightness = 128 # instead of 255 because that's too bright
