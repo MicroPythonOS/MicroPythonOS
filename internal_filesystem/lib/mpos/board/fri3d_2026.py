@@ -70,7 +70,7 @@ import mpos.lights as LightsManager
 LightsManager.init(neopixel_pin=12)
 LightsManager.set_led_num(5)
 # Set left LED red
-LightsManager.set_led(4, 255, 0, 0)
+LightsManager.set_led(4, 21, 96, 67)
 LightsManager.write()
 
 # Avoid excessive prints here because it slows down if the serial connects during printing?!
@@ -85,15 +85,32 @@ def progress(msg, pct):
     LightsManager.set_led(lednr, *color)
     LightsManager.write()
 
+def warning(msg):
+    LightsManager.set_led(3, 96, 58, 21)
+    LightsManager.write()
+    time.sleep(2)
+    if msg:
+        print(msg)
+
+def failure(e):
+    LightsManager.set_led(2, 96, 21, 21)
+    LightsManager.write()
+    time.sleep(5)
+    if e:
+        print(f"CH32 firmware install failed because exception: {e}")
+        import sys
+        sys.print_exception(e)
+
 # CH32 coprocessor / IO expander
 from drivers.fri3d.expander import Expander
 expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 expander = Expander(i2c_bus=expander_i2c)
-expander.wait_for_normal_mode(min_uptime_ms=1500) # 1000 should be enough but gets version (0, 255, 15) every so often...
+expander.wait_for_normal_mode(min_uptime_ms=1000)
 if expander.install_firmware_if_needed(
         "/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw", (1, 2, 1), progress_cb=progress,
-        success_cb=lambda: (LightsManager.set_all(0, 255, 0), LightsManager.write())):
-    print("Firmware was installed, re-initializing expander_i2c")
+        success_cb=lambda: (LightsManager.set_all(21, 96, 67), LightsManager.write()),
+        warning_cb=warning, failure_cb=failure):
+    print("Re-initializing expander_i2c")
     expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
     expander = Expander(i2c_bus=expander_i2c)
 
@@ -356,8 +373,9 @@ def startup_wow_effect():
         time.sleep_ms(500)
 
         fade_steps = 80
+        max_brightness = 128 # instead of 255 because that's too bright
         for step in range(fade_steps):
-            level = int(255 * (fade_steps - 1 - step) / (fade_steps - 1))
+            level = int(max_brightness * (fade_steps - 1 - step) / (fade_steps - 1))
             LightsManager.set_all(level, level, level)
             LightsManager.write()
             time.sleep_ms(20)
