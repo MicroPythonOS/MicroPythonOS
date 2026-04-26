@@ -20,6 +20,7 @@ Frameworks:
 - AppearanceManager: fix set_light_mode() and set_primary_color()
 - AppManager: support .mpk/.zip files with compression and a redundant top-level directory
 - AppManager: export 'mpos' global to apps for convenience
+- Camera activity: use QR symbol for QR decoding, tweak fonts
 - LightsManager: allow changing number of LEDs after initialization
 - SettingActivity: add `allow_deselect` option (default False) to radiobuttons
 - SharedPreferences: don't print potentially sensitive values on serial port
