@@ -149,9 +149,9 @@ BatteryManager.read_battery_voltage = get_voltage
 
 # LCD reset using the CH32 microcontroller
 time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
-expander.config= 0x01 # 3v3 aux on + LCD off
+expander.config = 0x01 # 3v3 aux on + LCD off
 time.sleep_ms(100)
-expander.config= 0x03 # 3v3 aux + LCD on
+expander.config = 0x03 # 3v3 aux + LCD on
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
@@ -166,10 +166,15 @@ mpos.ui.main_display = st7789.ST7789(
     # reset_pin is driven by the CH32 microcontroller
 ) # calls lv.init()
 
+def ch32_backlight(percent):
+    time.sleep_ms(10) # workaround Fri3dCamp/badge_2026_fw/issues/2
+    expander.lcd_brightness = percent
+
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 mpos.ui.main_display.set_color_inversion(True)
+mpos.ui.main_display.set_backlight = ch32_backlight
 
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13
