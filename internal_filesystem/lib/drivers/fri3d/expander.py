@@ -92,7 +92,10 @@ class Expander(Device):
     def install_firmware(self, filename: str, progress_cb):
         print("Installing latest CH32 firmware")
         time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
-        self.config = 0x0B # trigger SWD enable
+        try:
+            self.config = 0x0B # trigger SWD enable
+        except Exception as e:
+            print(f"Expander SWD enable got exception, ignoring it: {e}") # could be normal, if the expander is empty
         time.sleep(0.2)
         from rvswd import RVSWD
         prog = RVSWD(39, 42)

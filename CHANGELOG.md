@@ -3,8 +3,12 @@ Future release (next version)
 
 Add changes that have been made to the code but haven't made it into a release here.
 
+0.9.4
+=====
+
 Board Support:
 - Fri3d 2026: add CH32 LCD backlight setting
+- Fri3d 2026: fix virgin CH32 coprocessor firmware installation
 
 
 0.9.3
