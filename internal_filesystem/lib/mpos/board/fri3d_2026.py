@@ -288,7 +288,7 @@ from mpos import AudioManager
 headset_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
-    'sck': 10,      # SCLK aka BCLK (optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin) so set it to IO10 (badge link) for now
+    'sck': 10,      # SCLK aka BCLK was 17 but is optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin so set it to IO10 (badge link) for now
     'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator
 }
 
