@@ -6,8 +6,10 @@ from collections import deque
 
 import lvgl as lv
 import machine
+from channel_activity import ChannelActivity
+from message_input_activity import MessageInputActivity
 from micropython import const
-from mpos import Activity, MposKeyboard, TaskManager
+from mpos import Activity, Intent, TaskManager
 from mpos.time import localtime
 
 try:
@@ -32,29 +34,38 @@ def pformat_mac(mac):
 
 class EspNowChat(Activity):
     def onCreate(self):
-        main_content = lv.obj()
-        main_content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        main_content.set_style_pad_gap(10, 0)
+        screen = lv.obj()
+        screen.set_style_pad_all(0, lv.PART.MAIN)
+        screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
-        self.input_textarea = lv.textarea(main_content)
-        self.input_textarea.set_placeholder_text("Message input...")
-        self.input_textarea.set_one_line(True)
-        self.input_textarea.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-        self.input_textarea.set_width(lv.pct(100))
-        self.input_textarea.add_event_cb(self.show_keyboard, lv.EVENT.CLICKED, None)
+        messages_row = lv.obj(screen)
+        messages_row.set_width(lv.pct(100))
+        messages_row.set_height(lv.SIZE_CONTENT)
+        messages_row.set_style_pad_all(0, 1)
+        messages_row.set_flex_flow(lv.FLEX_FLOW.ROW)
 
-        self.keyboard = MposKeyboard(main_content)
-        self.keyboard.set_textarea(self.input_textarea)
-        self.keyboard.add_event_cb(self.keyboard_cb, lv.EVENT.READY, None)
-        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self.messages = lv.label(messages_row)
+        self.messages.set_style_text_font(lv.font_montserrat_12, 0)
 
-        self.messages = lv.label(main_content)
-        self.messages.set_style_text_font(lv.font_montserrat_14, 0)
+        self.button_row = lv.obj(screen)
+        self.button_row.set_width(lv.pct(100))
+        self.button_row.set_height(lv.SIZE_CONTENT)
+        self.button_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+
+        self.write_btn = lv.button(self.button_row)
+        write_label = lv.label(self.write_btn)
+        write_label.set_text("Send Message")
+        self.write_btn.add_event_cb(self.open_message_input, lv.EVENT.CLICKED, None)
+
+        self.channel_btn = lv.button(self.button_row)
+        channel_btn_label = lv.label(self.channel_btn)
+        channel_btn_label.set_text("Channel")
+        self.channel_btn.add_event_cb(self.open_channel_activity, lv.EVENT.CLICKED, None)
 
         # Buffer to store and display the latest 20 messages:
         self.messages_buffer = deque((), 20)
 
-        self.setContentView(main_content)
+        self.setContentView(screen)
 
         if aioespnow and network:
             print("Initialize WLAN interface...")
@@ -80,21 +91,28 @@ class EspNowChat(Activity):
         hour, minute, second = now[3], now[4], now[5]
         message = f"{hour:02}:{minute:02}:{second:02} {text}"
         print(message)
-        self.messages_buffer.appendleft(message)
+        self.messages_buffer.append(message)
         self.messages.set_text("\n".join(self.messages_buffer))
+        self.button_row.scroll_to_view_recursive(True)
 
-    def keyboard_cb(self, event):
-        message = self.input_textarea.get_text()
-        if not message:
-            print("Ignore empty input")
-        else:
-            self.input_textarea.set_text("")
-            print(f"Create task to send {message=}...")
+    def open_message_input(self, event):
+        intent = Intent(activity_class=MessageInputActivity)
+        self.startActivityForResult(intent, self.on_message_input_result)
+
+    def open_channel_activity(self, event):
+        intent = Intent(activity_class=ChannelActivity)
+        self.startActivityForResult(intent, self.on_channel_activity_result)
+
+    def on_message_input_result(self, result: dict):
+        print(f"on_message_input_result: {result=}")
+        if not result:
+            return
+        if message := result.get("data"):
+            print(f"Create task to send {message=}")
             TaskManager.create_task(self.send_messages(message))
 
-    def show_keyboard(self, event):
-        print("Show keyboard")
-        self.keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
+    def on_channel_activity_result(self, result: dict):
+        print(f"WIP - on_channel_activity_result: {result=}")
 
     async def send_messages(self, message):
         self.info(f"Sending: {message} ({self.own_id})")
