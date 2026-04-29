@@ -9,5 +9,5 @@ class BuildInfo:
     class version:
         """Version information."""
 
-        release = "0.9.3"
+        release = "0.9.4"
         api_level = 0  # subject to change until API Level 1
