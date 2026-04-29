@@ -91,6 +91,15 @@ if ! cp "$codebasedir"/lvgl_micropython/lib_lvgl_src_font/* "$codebasedir"/lvgl_
 	exit 1
 fi
 
+echo "Patching esp-idf for SPI SDCard fix"
+# Apply fix for https://github.com/espressif/esp-idf/issues/16909
+# for lack of https://github.com/espressif/esp-idf/commit/4a0db18ff1c8a488b6ed0346276f43028179da37#diff-8a9abab5cd683f427797b77a66be84832c0ec2ee0c5437e173e73778dce00637
+# In newer esp-idf versions, it should be possible to set this in rg_storage.c: slot_config.wait_for_miso = -1;
+filetopatch="$codebasedir"/lvgl_micropython/lib/esp-idf/components/esp_driver_sdspi/src/sdspi_host.c
+echo -n "Before: " ; grep "poll_busy(slot," "$filetopatch"
+sed -i.backup  "s/poll_busy(slot, 40/poll_busy(slot, 0/" "$filetopatch"
+echo -n "After: " ; grep "poll_busy(slot," "$filetopatch"
+
 # unix and macOS builds need these symlinks because make.py doesn't handle USER_C_MODULE arguments for them:
 echo "Symlinking secp256k1-embedded-ecdh for unix and macOS builds..."
 ln -sf ../../secp256k1-embedded-ecdh "$codebasedir"/lvgl_micropython/ext_mod/secp256k1-embedded-ecdh

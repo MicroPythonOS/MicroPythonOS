@@ -10,6 +10,9 @@ Board Support:
 - Fri3d 2026: add CH32 LCD backlight setting
 - Fri3d 2026: fix virgin CH32 coprocessor firmware installation
 
+OS:
+- Patch esp-idf for to workaround sporadic SD card slowness (espressif/esp-idf/issues/16909)
+
 
 0.9.3
 =====
