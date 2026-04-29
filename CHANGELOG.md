@@ -3,6 +3,10 @@ Future release (next version)
 
 Add changes that have been made to the code but haven't made it into a release here.
 
+Board Support:
+- Fri3d 2026: update CH32 firmware to 1.2.2 release
+- Fri3d 2026: remove workarounds for CH32 firmware 1.2.1
+
 0.9.4
 =====
 

@@ -115,7 +115,7 @@ expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 expander = Expander(i2c_bus=expander_i2c)
 expander.wait_for_normal_mode(min_uptime_ms=1000)
 if expander.install_firmware_if_needed(
-        "/builtin/firmware/fri3d_2026/coprocessor_1.2.1.fw", (1, 2, 1), progress_cb=progress,
+        "/builtin/firmware/fri3d_2026/coprocessor_1.2.2.fw", (1, 2, 2), progress_cb=progress,
         success_cb=lambda: (LightsManager.set_all(21, 96, 67), LightsManager.write()),
         warning_cb=warning, failure_cb=failure):
     print("Re-initializing expander_i2c")
@@ -126,29 +126,12 @@ if expander.install_firmware_if_needed(
 import mpos
 mpos.io_expander = expander
 
-# Patch of BatteryManager to use the CH32 battery level:
-def get_voltage(force_refresh=False, raw_adc_value=None):
-    # First workaround Fri3dCamp/badge_2026_fw/issues/2 by disabling input polling
-    from mpos import InputManager
-    e = InputManager.list_indevs()[2]
-    e.enable(False)
-    # Wait to ensure more than 5ms between input polls
-    time.sleep_ms(10)
-    # Do the read:
-    returnval = (0.001857993861607339 * mpos.io_expander.analog()[2] - 0.9965856090206169)
-    # Wait again to ensure more than 5ms between input polls
-    time.sleep_ms(10)
-    # Enable input polling again:
-    e.enable(True)
-    return returnval
-
 from mpos import BatteryManager
 BatteryManager.read_raw_adc = lambda *args: mpos.io_expander.analog()[2]
 BatteryManager.has_battery = lambda *args: True
-BatteryManager.read_battery_voltage = get_voltage
+BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (0.001857993861607339 * mpos.io_expander.analog()[2] - 0.9965856090206169)
 
 # LCD reset using the CH32 microcontroller
-time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
 expander.config = 0x01 # 3v3 aux on + LCD off
 time.sleep_ms(100)
 expander.config = 0x03 # 3v3 aux + LCD on
@@ -166,15 +149,11 @@ mpos.ui.main_display = st7789.ST7789(
     # reset_pin is driven by the CH32 microcontroller
 ) # calls lv.init()
 
-def ch32_backlight(percent):
-    time.sleep_ms(10) # workaround Fri3dCamp/badge_2026_fw/issues/2
-    expander.lcd_brightness = percent
-
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
 mpos.ui.main_display.set_color_inversion(True)
-mpos.ui.main_display.set_backlight = ch32_backlight
+mpos.ui.main_display.set_backlight = lambda percent: setattr(expander, "lcd_brightness", percent)
 
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13

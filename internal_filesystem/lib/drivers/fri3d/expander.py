@@ -91,7 +91,6 @@ class Expander(Device):
 
     def install_firmware(self, filename: str, progress_cb):
         print("Installing latest CH32 firmware")
-        time.sleep_ms(10) # make sure writes are spaced out to workaround Fri3dCamp/badge_2026_fw/issues/2
         try:
             self.config = 0x0B # trigger SWD enable
         except Exception as e:
