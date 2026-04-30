@@ -40,6 +40,7 @@ class Expander(Device):
     def int_callback(self, p):
         self.i2c.readfrom_mem_into(self.address, _EXPANDER_REG_INPUTS, self._rx_mv)
 
+    @property
     def analog(self) -> tuple[int, int, int, int, int, int]:
         """Read the analog inputs: ain1, ain0, battery_monitor, usb_monitor, joystick_y, joystick_x"""
         return self._read("<HHHHHH", _EXPANDER_REG_ANALOG, 12)
