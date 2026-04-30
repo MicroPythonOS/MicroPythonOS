@@ -121,6 +121,10 @@ if expander.install_firmware_if_needed(
     print("Re-initializing expander_i2c")
     expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
     expander = Expander(i2c_bus=expander_i2c)
+    try:
+        print(f"CH32 coprocessor firmware version is now: {expander.version}")
+    except Exception as e:
+        print("Could not re-check CH32 firmware version. Many things, including LCD RESET, might not work!")
 
 # Make expander accessible later
 import mpos

@@ -137,12 +137,6 @@ class Expander(Device):
         except Exception as e:
             print("Could not check CH32 firmware version, assuming 0.0.0")
             current_version = (0, 0, 0)
-        if current_version == (0, 255, 15):
-            warning_cb(msg="CH32 firmware version (0,255,15) bug, trying re-read...")
-            current_version = self.version # re-read seems to work (often?)
-            if current_version == (0, 255, 15):
-                warning_cb(msg="CH32 firmware version (0,255,15) bug after re-read, skipping firmware install/update", sleep_ms=4000, r=96, g=21, b=21)
-                return False
         if latest_version <= current_version:
             print(f"CH32 firmware {latest_version} <= {current_version} so not updating it")
             return False
@@ -152,11 +146,4 @@ class Expander(Device):
             success_cb()
         except Exception as e:
             failure_cb(e)
-            return True # re-initialize expander_i2c, even if the install failed, just in case
-        print("Firmware installed, checking new version")
-        try:
-            current_version = self.version
-            print(f"After install, new current_version of CH32 firmware: {current_version}")
-        except Exception as e:
-            print("Could not check CH32 firmware version after install, many things, including LCD RESET, won't work!")
-        return True
+        return True # re-initialize expander_i2c, even if the install failed, just in case
