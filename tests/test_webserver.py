@@ -7,6 +7,9 @@ import sys
 import time
 import unittest
 
+import deflate
+import io
+
 sys.path.insert(0, "../internal_filesystem/lib")
 
 from mpos import TaskManager
@@ -94,7 +97,8 @@ class TestWebServer(unittest.TestCase):
             error = response_state["error"]
             self.fail(f"WebServer response unavailable: {error}")
 
-        response_text = response_state["data"].decode("utf-8", "replace")
+        with deflate.DeflateIO(io.BytesIO(response_state["data"]), deflate.GZIP, 15) as gzip_stream:
+            response_text = gzip_stream.read().decode("utf-8", "replace")
         self.assertIn("<title>MicroPythonOS WebREPL</title>", response_text)
 
         WebServer.stop()
