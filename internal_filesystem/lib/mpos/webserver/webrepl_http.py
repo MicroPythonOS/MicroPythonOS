@@ -10,7 +10,7 @@ import lvgl as lv
 
 from mpos.ui.display_metrics import DisplayMetrics
 
-WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html" # built by MicroPythonOS/webrepl/inline_minify_webrepl.py
+WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html.gz" # built by MicroPythonOS/webrepl/inline_minify_webrepl.py
 
 WEBREPL_ASSETS = {
     b"/": (WEBREPL_HTML_PATH, b"text/html"),
@@ -63,10 +63,13 @@ def _is_websocket_request(headers):
     return b"upgrade" in connection and upgrade == b"websocket"
 
 
-def _send_response(cl, status, content_type, body):
+def _send_response(cl, status, content_type, body, extra_headers=None):
     cl.send(b"HTTP/1.0 " + status + b"\r\n")
     cl.send(b"Server: MicroPythonOS\r\n")
     cl.send(b"Content-Type: " + content_type + b"\r\n")
+    if extra_headers:
+        for header in extra_headers:
+            cl.send(header + b"\r\n")
     cl.send(b"Content-Length: %d\r\n\r\n" % len(body))
     cl.send(body)
     cl.close()
@@ -122,7 +125,7 @@ def _snapshot_to_bmp():
     return bmp
 
 
-def _send_file_response(cl, path, content_type):
+def _send_file_response(cl, path, content_type, extra_headers=None):
     try:
         with open(path, "rb") as handle:
             body = handle.read()
@@ -130,7 +133,7 @@ def _send_file_response(cl, path, content_type):
         _send_response(cl, b"404 Not Found", b"text/plain", b"Not Found")
         return False
 
-    _send_response(cl, b"200 OK", content_type, body)
+    _send_response(cl, b"200 OK", content_type, body, extra_headers=extra_headers)
     return False
 
 
@@ -165,7 +168,10 @@ def accept_handler(listen_sock):
 
         if path in WEBREPL_ASSETS:
             asset_path, content_type = WEBREPL_ASSETS[path]
-            return _send_file_response(cl, asset_path, content_type)
+            extra_headers = None
+            if asset_path.endswith(".gz"):
+                extra_headers = [b"Content-Encoding: gzip"]
+            return _send_file_response(cl, asset_path, content_type, extra_headers=extra_headers)
 
         if path == b"/screenshot.bmp":
             bmp = _snapshot_to_bmp()

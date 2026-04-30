@@ -116,7 +116,7 @@ result=$0
 if [ $? -ne 0 ]; then
 	echo "ERROR: webrepl/inline_minify_webrepl.py failed with exit code $result, webrepl won't work"
 else
-	mv webrepl_inlined_minified.html ../internal_filesystem/builtin/html/
+	mv webrepl_inlined_minified.html.gz ../internal_filesystem/builtin/html/
 fi
 popd
 

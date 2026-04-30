@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Minify and inline WebREPL assets into webrepl_inlined_minified.html."""
+"""Minify and inline WebREPL assets into webrepl_inlined_minified.html.gz."""
 from __future__ import annotations
 
+import gzip
 import re
 from pathlib import Path
 
@@ -122,7 +123,7 @@ def cssmin(css: str) -> str:
 def inline_assets() -> None:
     base_dir = Path(__file__).parent
     html_path = base_dir / "webrepl.html"
-    out_path = base_dir / "webrepl_inlined_minified.html"
+    out_path = base_dir / "webrepl_inlined_minified.html.gz"
 
     html = html_path.read_text(encoding="utf-8")
     css = cssmin((base_dir / "webrepl.css").read_text(encoding="utf-8"))
@@ -152,7 +153,8 @@ def inline_assets() -> None:
             )
         html = new_html
 
-    out_path.write_text(html, encoding="utf-8")
+    with gzip.open(out_path, "wt", encoding="utf-8") as gzip_file:
+        gzip_file.write(html)
 
 
 if __name__ == "__main__":
