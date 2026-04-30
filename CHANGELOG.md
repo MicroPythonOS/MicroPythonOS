@@ -7,7 +7,7 @@ Add changes that have been made to the code but haven't made it into a release h
 =====
 
 Frameworks:
-- WebServer: serve gzipped HTML to reduce total build size by 60KiB
+- WebServer: tweak webREPL UI and serve gzipped HTML to reduce total build size by 60KiB
 
 Board Support:
 - Fri3d 2026: update CH32 firmware to 1.2.2 release
