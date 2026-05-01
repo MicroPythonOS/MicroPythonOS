@@ -6,6 +6,9 @@ Add changes that have been made to the code but haven't made it into a release h
 0.9.5
 =====
 
+Builtin Apps:
+- Optimize PNGs to reduce build size by 8KiB
+
 Frameworks:
 - WebServer: tweak webREPL UI and serve gzipped HTML to reduce total build size by 60KiB
 
