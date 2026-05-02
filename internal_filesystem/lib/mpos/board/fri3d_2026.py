@@ -6,10 +6,12 @@
 # - I2S audio (communicator) is the same
 # - headphone jack microphone is on ESP.IO1
 # - buzzer
-# - CH32X035GxUx over I2C:
+# - Coprocessor CH32X035GxUx over I2C offers IO expansion:
 #   - battery voltage measurement
 #   - analog joystick
 #   - digital buttons (X,Y,A,B, MENU)
+#   - LCD reset
+#   - LCD backlight
 
 # Multicolor LEDs are used for feedback. Counting from left:
 #
