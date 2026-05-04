@@ -3,6 +3,9 @@ Future release (next version)
 
 Add changes that have been made to the code but haven't made it into a release here.
 
+Board Support:
+- Fri3d 2026: access expander.analog as property instead of function
+
 0.9.5
 =====
 
