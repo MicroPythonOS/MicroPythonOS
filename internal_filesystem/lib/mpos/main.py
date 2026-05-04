@@ -206,6 +206,12 @@ def detect_board():
                     return "waveshare_esp32_s3_touch_lcd_2"
                 restore_i2c(sda=48, scl=47) # fix pin 47 (data6) and 48 (data7) breaking lilygo_t_display_s3's display
                 
+            print("freenove_esp32s3_display ?")
+            if i2c0 := fail_save_i2c(sda=16, scl=15):
+                if single_address_i2c_scan(i2c0, 0x38): # FT6336G touch controller
+                    return "freenove_esp32s3_display"
+                restore_i2c(sda=16, scl=15)
+
             print("fri3d_2024 ?")
             if i2c0 := fail_save_i2c(sda=9, scl=18):
                 if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
