@@ -12,7 +12,7 @@ Builtin Apps:
 
 Frameworks:
 - Add mpos.partitions.get_next_update_partition() helper that alternates between ota_0 and ota_1 only
-- DownloadManager: add "redact" argument to replace sensitive info with REDACTED in log output
+- DownloadManager: add 'redact' argument to replace sensitive info with REDACTED in log output
 - SettingActivity: support slider UI for integer settings
 - SettingActivity: show human-readable value instead of internally used option
 
