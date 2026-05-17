@@ -1,5 +1,4 @@
 import os
-import time
 import lvgl as lv
 from mpos import Activity, InputManager, sdcard
 
@@ -13,6 +12,8 @@ class FileManager(Activity):
     _list = None
     _path_label = None
     _suppress_btn = None
+    _highlighted_btn = None
+    _highlighted_text = None
 
     def onCreate(self):
         sdcard.mount_with_optional_format("/sdcard")
@@ -34,6 +35,7 @@ class FileManager(Activity):
 
     def _populate_dir(self, path):
         self._dismiss_action_bar()
+        self._clear_highlight()
         self._list.clean()
         path = path.rstrip("/") + "/"
         self._current_path = path
@@ -76,15 +78,28 @@ class FileManager(Activity):
             btn.add_event_cb(lambda e, p=fullpath: self._on_item_clicked(e, p, False), lv.EVENT.CLICKED, None)
             btn.add_event_cb(lambda e, p=fullpath: self._on_any_long_press(e, p), lv.EVENT.LONG_PRESSED, None)
 
+    def _highlight_btn(self, btn):
+        self._clear_highlight()
+        self._highlighted_btn = btn
+        self._highlighted_text = self._list.get_button_text(btn)
+        self._list.set_button_text(btn, "> " + self._highlighted_text)
+
+    def _clear_highlight(self):
+        if self._highlighted_btn:
+            self._list.set_button_text(self._highlighted_btn, self._highlighted_text)
+            self._highlighted_btn = None
+            self._highlighted_text = None
+
     def _on_any_long_press(self, e, path):
-        btn = e.get_current_target()
+        btn = e.get_target_obj()
         self._suppress_btn = btn
         self._selected_path = path
+        self._highlight_btn(btn)
         self._show_action_bar()
-        print(f"FileManager: LONG_PRESSED on {path}, _suppress_btn set")
+        print(f"FileManager: LONG_PRESSED on {path}")
 
     def _on_item_clicked(self, e, path, is_dir):
-        target = e.get_current_target()
+        target = e.get_target_obj()
         if target == self._suppress_btn:
             self._suppress_btn = None
             print(f"FileManager: CLICKED (suppressed) on {path}, focusing action bar")
@@ -98,11 +113,9 @@ class FileManager(Activity):
 
     def _focus_action_bar(self):
         if not self._cancel_btn:
-            print("FileManager: _focus_action_bar: no cancel_btn")
             return
         group = lv.group_get_default()
         if group:
-            print(f"FileManager: focusing cancel button")
             InputManager.emulate_focus_obj(group, self._cancel_btn)
 
     def _show_action_bar(self):
@@ -139,12 +152,29 @@ class FileManager(Activity):
         self._action_bar = bar
 
     def _dismiss_action_bar(self):
+        self._clear_highlight()
         if self._action_bar:
             self._action_bar.delete()
             self._action_bar = None
             self._cancel_btn = None
 
     def _delete_selected(self):
+        self._dismiss_action_bar()
+        path = self._selected_path
+        name = path.rstrip("/").split("/")[-1]
+        mbox = lv.msgbox(lv.layer_top())
+        mbox.add_title("Delete")
+        mbox.add_text(f"Delete {name}?")
+        cancel = mbox.add_footer_button("Cancel")
+        cancel.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
+        delete = mbox.add_footer_button("Delete")
+        delete.add_event_cb(lambda e: self._do_delete(mbox), lv.EVENT.CLICKED, None)
+        close = mbox.add_close_button()
+        close.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
+        mbox.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CANCEL, None)
+
+    def _do_delete(self, mbox):
+        mbox.delete()
         path = self._selected_path
         try:
             os.remove(path)
@@ -154,7 +184,6 @@ class FileManager(Activity):
             except OSError as e:
                 print(f"FileManager: delete error {path}: {e}")
         print(f"FileManager: deleted {path}")
-        self._dismiss_action_bar()
         self._populate_dir(self._current_path)
 
     def _show_rename_ui(self):
