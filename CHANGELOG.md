@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+0.10.0
+======
+
 OS:
 - Synchronize with upstream https://github.com/lvgl-micropython/lvgl_micropython 14ad6ce to bring ESP-IDF: 5.4 to 5.5.1 and MicroPython: 1.25 to 1.27
 - Split lvgl_micropython customizations into topic branches for easier rebasing: topic/fonts, topic/lv-conf, topic/platform, topic/error-handling
