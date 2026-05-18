@@ -90,6 +90,10 @@ if ! cp "$codebasedir"/lvgl_micropython/lib_lvgl_src_font/* "$codebasedir"/lvgl_
 	echo "Could not install $codebasedir/lvgl_micropython/lib_lvgl_src_fonts/ so you probably need to update or re-clone the lvgl_micropython folder. See https://docs.micropythonos.com/os-development/"
 	exit 1
 fi
+# Remove deprecated simsun CJK fonts from the LVGL source (replaced by source-han-sans-sc).
+# They contain #warning directives that fail with -Werror on the unix port.
+rm -f "$codebasedir"/lvgl_micropython/lib/lvgl/src/font/lv_font_simsun_14_cjk.c
+rm -f "$codebasedir"/lvgl_micropython/lib/lvgl/src/font/lv_font_simsun_16_cjk.c
 
 echo "Patching esp-idf for SPI SDCard fix"
 # Apply fix for https://github.com/espressif/esp-idf/issues/16909

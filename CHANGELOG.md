@@ -1,7 +1,14 @@
 Future release (next version)
 =====
 
-Add changes that have been made to the code but haven't made it into a release here.
+Build:
+- Update lvgl_micropython fork to upstream commit 14ad6ce
+  (https://github.com/lvgl-micropython/lvgl_micropython)
+- ESP-IDF: v5.5-dev-4477-gfcae32885b
+- MicroPython: v1.27.0
+- LVGL: v9.3.0-556-gc016f72d
+- Custom changes split into topic branches for easier rebasing:
+  topic/fonts, topic/lv-conf, topic/platform, topic/error-handling
 
 0.9.6
 =====
