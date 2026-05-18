@@ -320,7 +320,7 @@ def wait_for_render(iterations=10):
         time.sleep(0.01)  # Small delay between iterations
 
 
-def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565):
+def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565):
     """
     Capture screenshot of current screen using LVGL snapshot.
 
@@ -350,7 +350,8 @@ def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FO
         from mpos.ui.testing import capture_screenshot
         capture_screenshot("tests/screenshots/home.raw")
     """
-    print(f"capture_screenshot writing to {filepath}")
+    if filepath:
+        print(f"capture_screenshot writing to {filepath}")
 
     # Calculate buffer size based on color format
     if color_format == lv.COLOR_FORMAT.RGB565:
@@ -370,9 +371,9 @@ def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FO
     # Composite visible top layer children onto the screenshot
     _composite_top_layer(buffer, width, height, bytes_per_pixel, color_format)
 
-    # Save to file
-    with open(filepath, "wb") as f:
-        f.write(buffer)
+    if filepath:
+        with open(filepath, "wb") as f:
+            f.write(buffer)
 
     return buffer
 
