@@ -37,10 +37,10 @@ static mp_obj_t adc_mic_read(size_t n_args, const mp_obj_t *args) {
     ADC_MIC_DEBUG_PRINT("CONFIG_ADC_MIC_TASK_CORE: %d\n", CONFIG_ADC_MIC_TASK_CORE);
 
     if (adc_channel_num > 10) {
-        mp_raise_ValueError("Too many channels (max 10)");
+        mp_raise_ValueError(MP_ERROR_TEXT("Too many channels (max 10)"));
     }
     if (channel_list_len < adc_channel_num) {
-        mp_raise_ValueError("adc_channel_list shorter than adc_channel_num");
+        mp_raise_ValueError(MP_ERROR_TEXT("adc_channel_list shorter than adc_channel_num"));
     }
 
     uint8_t channels[10];
