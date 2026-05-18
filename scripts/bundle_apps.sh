@@ -15,7 +15,7 @@ mkdir -p "$output"
 rm "$outputjson"
 
 # These apps are for testing, or aren't ready yet:
-# com.quasikili.quasidoodle doesn't work on touch screen devices
+# com.quasikili.quasidoodle doesn't work on touch screen devices AND has the wrong download URL
 # com.micropythonos.file_manager doesn't do anything other than let you browse the filesystem, so it's confusing
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.nostr isn't ready for release yet
