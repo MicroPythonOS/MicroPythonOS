@@ -21,8 +21,161 @@ import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import platform
+
+
+# ── Inline MicroPython module: widget tree dumper ────────────────────
+# Deployed to the device as /wtree.py on demand by get_widget_tree().
+
+_WTREE_SRC = """\
+import lvgl as lv
+
+ALL_FLAGS = (
+    "CLICKABLE", "CLICK_FOCUSABLE", "ADV_HITTEST", "PRESS_LOCK",
+    "SCROLLABLE", "SCROLL_CHAIN", "SCROLL_ELASTIC", "SCROLL_MOMENTUM",
+    "SCROLL_ONE", "SCROLL_WITH_ARROW", "SNAPPABLE", "FLOATING",
+    "EVENT_BUBBLE", "HIDDEN", "IGNORE_LAYOUT",
+)
+ALL_STATES = (
+    "CHECKED", "DISABLED", "FOCUSED", "FOCUS_KEY",
+    "EDITED", "PRESSED", "SCROLLED",
+    "USER_1", "USER_2", "USER_3", "USER_4", "USER_5", "USER_6",
+)
+
+def _get_text(obj):
+    try:
+        if hasattr(obj, "get_text"):
+            t = obj.get_text()
+            if t:
+                return t
+    except Exception:
+        pass
+    return None
+
+def _get_coords(obj):
+    try:
+        a = lv.area_t()
+        obj.get_coords(a)
+        return {"x1":a.x1,"y1":a.y1,"x2":a.x2,"y2":a.y2,
+                "w":a.x2-a.x1,"h":a.y2-a.y1,
+                "center_x":(a.x1+a.x2)//2,"center_y":(a.y1+a.y2)//2}
+    except Exception:
+        return {}
+
+def _get_flags(obj):
+    f = []
+    for n in ALL_FLAGS:
+        try:
+            fl = getattr(lv.obj.FLAG, n, None)
+            if fl is not None and obj.has_flag(fl):
+                f.append(n.lower())
+        except Exception:
+            pass
+    return f
+
+def _get_states(obj):
+    st = []
+    for n in ALL_STATES:
+        try:
+            fl = getattr(lv.STATE, n, None)
+            if fl is not None and obj.has_state(fl):
+                st.append(n.lower())
+        except Exception:
+            pass
+    return st
+
+def _get_scroll(obj):
+    try:
+        x = obj.get_scroll_x()
+        y = obj.get_scroll_y()
+        if x or y:
+            return {"scroll_x":x,"scroll_y":y}
+    except Exception:
+        pass
+    return None
+
+def _get_opa(obj):
+    try:
+        v = obj.get_style_opa(lv.PART.MAIN)
+        if v != lv.OPA.COVER:
+            return v
+    except Exception:
+        pass
+    return None
+
+def _get_extra(obj, t):
+    e = {}
+    try:
+        if t in ("slider","arc","bar","meter"):
+            e["value"] = obj.get_value()
+    except Exception:
+        pass
+    try:
+        if t == "dropdown":
+            e["selected"] = obj.get_selected()
+            e["options"] = obj.get_options()
+    except Exception:
+        pass
+    try:
+        if t == "textarea":
+            e["one_line"] = obj.get_one_line()
+            e["cursor_pos"] = obj.get_cursor_pos()
+    except Exception:
+        pass
+    try:
+        if t == "buttonmatrix":
+            e["selected_btn"] = obj.get_selected_button()
+    except Exception:
+        pass
+    return e
+
+def dump(obj, depth=0):
+    info = {"depth": depth}
+    try:
+        info["type"] = obj.__class__.__name__
+    except Exception:
+        info["type"] = "unknown"
+    txt = _get_text(obj)
+    if txt:
+        info["text"] = txt
+    info.update(_get_coords(obj))
+    rf = _get_flags(obj)
+    info["flags"] = rf
+    info["clickable"] = "clickable" in rf
+    info["hidden"] = "hidden" in rf
+    info["scrollable"] = "scrollable" in rf
+    info["floating"] = "floating" in rf
+    info["event_bubble"] = "event_bubble" in rf
+    rs = _get_states(obj)
+    info["state"] = rs
+    sc = _get_scroll(obj)
+    if sc:
+        info.update(sc)
+    opa = _get_opa(obj)
+    if opa is not None:
+        info["opa"] = opa
+    info.update(_get_extra(obj, info.get("type", "")))
+    try:
+        n = obj.get_child_count()
+        if n:
+            kids = []
+            for i in range(n):
+                kids.extend(dump(obj.get_child(i), depth+1))
+            info["children"] = kids
+    except Exception:
+        pass
+    return [info]
+
+def all_layers():
+    result = []
+    for ln, lo in (("active",lv.screen_active()),("top",lv.layer_top())):
+        for e in dump(lo, 0):
+            e["layer"] = ln
+            result.append(e)
+    return result
+"""
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -162,6 +315,10 @@ class AIOREPLClient:
                     time.sleep(0.3)
                     self._drain(0.5)
                     return
+        # Ctrl-C didn't yield a prompt; try Ctrl-B to enter friendly REPL
+        self.stream.write(b"\x02")
+        time.sleep(0.2)
+        self._drain(0.3)
         data = self.read_until(b">>> ", timeout=5)
         if not data.endswith(b">>> "):
             raise TimeoutError(
@@ -176,8 +333,12 @@ class AIOREPLClient:
         Execute *code* (single line, or semicolon-joined) and return stdout output.
 
         A sentinel ``print()`` is injected before *code* to delimit
-        echoed input from actual output.
+        echoed input from actual output.  Ctrl-B is sent first to
+        ensure the REPL is in a known friendly state.
         """
+        self._drain(0.2)
+        self.stream.write(b"\x02")
+        time.sleep(0.05)
         self._drain(0.2)
         wrapped = "print('{}'); ".format(SENTINEL) + code.rstrip()
         self.stream.write(wrapped.encode("utf-8") + b"\n")
@@ -221,6 +382,16 @@ class ProcessBackend:
         self._height = 240
 
     def start(self):
+        # Kill any leftover lvgl_micropy_unix processes from previous runs
+        proc_name = os.path.basename(self.binary)
+        try:
+            subprocess.run(
+                ["pkill", "-9", "-x", proc_name],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass
+        time.sleep(0.3)
         master_fd, slave_fd = pty.openpty()
         self.proc = subprocess.Popen(
             [
@@ -295,13 +466,9 @@ class ProcessBackend:
         tmp = "/tmp/_mpos_shot.raw"
         code = (
             "import lvgl as lv; "
-            "w = lv.screen_active().get_display().get_horizontal_resolution(); "
-            "h = lv.screen_active().get_display().get_vertical_resolution(); "
-            "img = lv.image_dsc_t(); "
-            "buf = bytearray(w * h * 3); "
-            "lv.snapshot_take_to_buf(lv.screen_active(), lv.COLOR_FORMAT.RGB888, img, buf, len(buf)); "
-            "f = open('{}', 'wb'); f.write(buf); f.close()"
-        ).format(tmp)
+            "from mpos.ui.testing import capture_screenshot; "
+            "capture_screenshot('{}', color_format=lv.COLOR_FORMAT.RGB888)".format(tmp)
+        )
         self.exec(code)
         try:
             raw = self._read_remote_file(tmp)
@@ -313,29 +480,8 @@ class ProcessBackend:
                 pass
 
     def _read_remote_file(self, path):
-        import base64
-        chunk_size = 768
-        size = self.eval(
-            "__import__('os').stat('{}')[6]".format(path)
-        )
-        data = bytearray()
-        self.exec("_rf = open('{}', 'rb')".format(path))
-        try:
-            while len(data) < size:
-                out = self.exec(
-                    "import ubinascii; "
-                    "d = _rf.read({}); "
-                    "print(ubinascii.b2a_base64(d).decode().strip())".format(
-                        chunk_size
-                    )
-                )
-                decoded = base64.b64decode(out.strip())
-                if not decoded:
-                    break
-                data.extend(decoded)
-        finally:
-            self.exec("_rf.close()")
-        return bytes(data)
+        with open(path, "rb") as f:
+            return f.read()
 
     def write_remote_file(self, path, data):
         import base64
@@ -370,6 +516,28 @@ class ProcessBackend:
         )
 
     # -- screen introspection -------------------------------------------
+
+    def get_widget_tree(self):
+        self.write_remote_file("/_wtree.py", _WTREE_SRC.encode("utf-8"))
+        self.exec_multiline("""
+import sys
+if "_wtree" in sys.modules:
+    del sys.modules["_wtree"]
+from _wtree import all_layers
+import json
+with open("/_mpos_tree.json", "w") as f:
+    json.dump(all_layers(), f)
+print("OK")
+""")
+        try:
+            raw = self._read_remote_file("/_mpos_tree.json")
+            import json as _json
+            return _json.loads(raw.decode("utf-8"))
+        finally:
+            try:
+                self.exec("import os; os.remove('/_mpos_tree.json'); os.remove('/_wtree.py')")
+            except Exception:
+                pass
 
     def get_visible_text(self):
         raw = self.exec_multiline("""
@@ -481,16 +649,12 @@ class SerialBackend:
         return self.repl.eval(expr)
 
     def screenshot(self):
-        tmp = "/tmp/_mpos_shot.raw"
+        tmp = "/_mpos_shot.raw"
         code = (
             "import lvgl as lv; "
-            "w = lv.screen_active().get_display().get_horizontal_resolution(); "
-            "h = lv.screen_active().get_display().get_vertical_resolution(); "
-            "img = lv.image_dsc_t(); "
-            "buf = bytearray(w * h * 3); "
-            "lv.snapshot_take_to_buf(lv.screen_active(), lv.COLOR_FORMAT.RGB888, img, buf, len(buf)); "
-            "f = open('{}', 'wb'); f.write(buf); f.close()"
-        ).format(tmp)
+            "from mpos.ui.testing import capture_screenshot; "
+            "capture_screenshot('{}', color_format=lv.COLOR_FORMAT.RGB888)".format(tmp)
+        )
         self.exec(code)
         try:
             raw = self._read_remote_file(tmp)
@@ -502,45 +666,35 @@ class SerialBackend:
                 pass
 
     def _read_remote_file(self, path):
-        import base64
-        chunk_size = 768
-        size = self.eval(
-            "__import__('os').stat('{}')[6]".format(path)
+        import subprocess, tempfile, os as _os
+        with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
+            tmppath = tmp.name
+        script_dir = _os.path.dirname(_os.path.abspath(__file__))
+        mpremote = _os.path.join(script_dir, "..",
+            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
+        subprocess.run(
+            ["python3", mpremote, "cp", ":{}".format(path), tmppath],
+            capture_output=True, timeout=30
         )
-        data = bytearray()
-        self.exec("_rf = open('{}', 'rb')".format(path))
-        try:
-            while len(data) < size:
-                out = self.exec(
-                    "import ubinascii; "
-                    "d = _rf.read({}); "
-                    "print(ubinascii.b2a_base64(d).decode().strip())".format(
-                        chunk_size
-                    )
-                )
-                decoded = base64.b64decode(out.strip())
-                if not decoded:
-                    break
-                data.extend(decoded)
-        finally:
-            self.exec("_rf.close()")
-        return bytes(data)
+        with open(tmppath, "rb") as f:
+            data = f.read()
+        _os.unlink(tmppath)
+        return data
 
     def write_remote_file(self, path, data):
-        import base64
-        chunk_size = 192
-        b64 = base64.b64encode(data).decode("ascii")
-        self.exec("_wf = open('{}', 'wb')".format(path))
-        try:
-            for i in range(0, len(b64), chunk_size):
-                part = b64[i:i + chunk_size]
-                self.exec(
-                    "import ubinascii; _wf.write(ubinascii.a2b_base64('{}'))".format(
-                        part
-                    )
-                )
-        finally:
-            self.exec("_wf.close()")
+        import subprocess, tempfile, os as _os
+        with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
+            tmppath = tmp.name
+        with open(tmppath, "wb") as f:
+            f.write(data)
+        script_dir = _os.path.dirname(_os.path.abspath(__file__))
+        mpremote = _os.path.join(script_dir, "..",
+            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
+        subprocess.run(
+            ["python3", mpremote, "cp", tmppath, ":{}".format(path)],
+            capture_output=True, timeout=30
+        )
+        _os.unlink(tmppath)
 
     def press(self, x, y):
         self.exec(
@@ -555,6 +709,41 @@ class SerialBackend:
             "click_button('{}'); "
             "wait_for_render()".format(key)
         )
+
+    def get_widget_tree(self):
+        self.write_remote_file("/_wtree.py", _WTREE_SRC.encode("utf-8"))
+        self.exec_multiline("""
+import sys
+if "_wtree" in sys.modules:
+    del sys.modules["_wtree"]
+from _wtree import all_layers
+import json
+with open("/_mpos_tree.json", "w") as f:
+    json.dump(all_layers(), f)
+print("OK")
+""")
+        try:
+            import subprocess, json as _json, tempfile
+            with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+                tmppath = tmp.name
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            mpremote = os.path.join(script_dir, "..",
+                "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
+            subprocess.run(
+                ["python3", mpremote, "cp", ":/_mpos_tree.json", tmppath],
+                capture_output=True, timeout=15
+            )
+            with open(tmppath) as f:
+                return _json.load(f)
+        finally:
+            try:
+                os.unlink(tmppath)
+            except Exception:
+                pass
+            try:
+                self.exec("import os; os.remove('/_mpos_tree.json'); os.remove('/_wtree.py')")
+            except Exception:
+                pass
 
     def get_visible_text(self):
         raw = self.exec_multiline("""
@@ -625,6 +814,9 @@ class MPOSController:
     def write_file(self, path, data):
         self._backend.write_remote_file(path, data)
 
+    def get_widget_tree(self):
+        return self._backend.get_widget_tree()
+
     def get_visible_text(self):
         return self._backend.get_visible_text()
 
@@ -655,8 +847,18 @@ def main():
     parser.add_argument("args", nargs="*", help="Arguments")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     parser.add_argument("--heapsize", default="32M")
+    parser.add_argument(
+        "--serial-port", help="Serial port for device (e.g. /dev/ttyACM0)"
+    )
+    parser.add_argument("--baudrate", type=int, default=115200)
     args = parser.parse_args()
-    ctrl = MPOSController(binary=args.binary, heapsize=args.heapsize)
+
+    if args.serial_port:
+        ctrl = MPOSController(
+            backend="serial", port=args.serial_port, baudrate=args.baudrate
+        )
+    else:
+        ctrl = MPOSController(binary=args.binary, heapsize=args.heapsize)
 
     if args.action == "exec":
         code = " ".join(args.args) if args.args else "print('ready')"

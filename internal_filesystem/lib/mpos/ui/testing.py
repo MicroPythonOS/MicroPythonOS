@@ -367,11 +367,93 @@ def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FO
     # Take snapshot of active screen
     lv.snapshot_take_to_buf(lv.screen_active(), color_format, image_dsc, buffer, size)
 
+    # Composite visible top layer children onto the screenshot
+    _composite_top_layer(buffer, width, height, bytes_per_pixel, color_format)
+
     # Save to file
     with open(filepath, "wb") as f:
         f.write(buffer)
 
     return buffer
+
+
+def _composite_top_layer(dst, w, h, bpp, fmt):
+    """Composite visible lv.layer_top() children onto dst buffer."""
+    top = lv.layer_top()
+    n = top.get_child_count()
+    for i in range(n):
+        c = top.get_child(i)
+        if c.has_flag(lv.obj.FLAG.HIDDEN):
+            continue
+        ox, oy = c.get_x(), c.get_y()
+        cw, ch = c.get_width(), c.get_height()
+        if ox + cw <= 0 or oy + ch <= 0 or ox >= w or oy >= h:
+            continue
+        tb = bytearray(w * h * 4)
+        td = lv.image_dsc_t()
+        lv.snapshot_take_to_buf(c, lv.COLOR_FORMAT.ARGB8888, td, tb, w * h * 4)
+        _blend_child(dst, tb, ox, oy, cw, ch, w, h, bpp, fmt)
+
+
+def _blend_child(dst, src_argb, ox, oy, cw, ch, w, h, bpp, fmt):
+    """Blend ARGB8888 child snapshot onto dst at offset (ox, oy). Byte order: B,G,R,A."""
+    px0 = max(0, -ox)
+    px1 = min(cw, w - ox)
+    py0 = max(0, -oy)
+    py1 = min(ch, h - oy)
+    for py in range(py0, py1):
+        sy = oy + py
+        for px in range(px0, px1):
+            sx = ox + px
+            si = (py * w + px) * 4
+            a = src_argb[si + 3]
+            if a == 0:
+                continue
+            di = (sy * w + sx) * bpp
+            if fmt == lv.COLOR_FORMAT.RGB888 and a >= 254:
+                dst[di] = src_argb[si]
+                dst[di + 1] = src_argb[si + 1]
+                dst[di + 2] = src_argb[si + 2]
+            elif fmt == lv.COLOR_FORMAT.RGB565 and a >= 254:
+                r = src_argb[si + 2]
+                g = src_argb[si + 1]
+                b = src_argb[si]
+                v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+                dst[di] = v & 0xFF
+                dst[di + 1] = (v >> 8) & 0xFF
+            elif fmt == lv.COLOR_FORMAT.ARGB8888 and a >= 254:
+                dst[di] = src_argb[si]
+                dst[di + 1] = src_argb[si + 1]
+                dst[di + 2] = src_argb[si + 2]
+                dst[di + 3] = 255
+            else:
+                ai = 255 - a
+                if fmt == lv.COLOR_FORMAT.RGB888:
+                    dst[di] = (src_argb[si] * a + dst[di] * ai) // 255
+                    dst[di + 1] = (src_argb[si + 1] * a + dst[di + 1] * ai) // 255
+                    dst[di + 2] = (src_argb[si + 2] * a + dst[di + 2] * ai) // 255
+                elif fmt == lv.COLOR_FORMAT.RGB565:
+                    cur = dst[di] | (dst[di + 1] << 8)
+                    rd = ((cur >> 11) & 0x1F) << 3
+                    gd = ((cur >> 5) & 0x3F) << 2
+                    bd = (cur & 0x1F) << 3
+                    r = (src_argb[si + 2] * a + rd * ai) // 255
+                    g = (src_argb[si + 1] * a + gd * ai) // 255
+                    b = (src_argb[si] * a + bd * ai) // 255
+                    v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+                    dst[di] = v & 0xFF
+                    dst[di + 1] = (v >> 8) & 0xFF
+                elif fmt == lv.COLOR_FORMAT.ARGB8888:
+                    ad = dst[di + 3]
+                    rd = dst[di + 2]
+                    gd = dst[di + 1]
+                    bd = dst[di]
+                    oa = a + ad * ai // 255
+                    if oa:
+                        dst[di] = (src_argb[si] * a + bd * ad * ai // 255) // oa
+                        dst[di + 1] = (src_argb[si + 1] * a + gd * ad * ai // 255) // oa
+                        dst[di + 2] = (src_argb[si + 2] * a + rd * ad * ai // 255) // oa
+                    dst[di + 3] = oa
 
 
 def get_all_widgets_with_text(obj, widgets=None):
