@@ -45,6 +45,7 @@ LVGL tips:
 - `lv.buttonmatrix` has no `set_button_text()` or `set_button_ctrl()` in this binding. To update text, rebuild and call `set_map()`. To mark buttons visually (e.g. solved state), change the text symbol itself (e.g. append "!").
 - `lv.buttonmatrix.set_map()` fires `LV_EVENT_VALUE_CHANGED` asynchronously (next LVGL tick), causing phantom second-selection events. Guard with a time-based debounce (`time.ticks_diff(now, last_ts) < 50`) rather than a simple flag.
 - LVGL object wrappers (e.g. `lv.button()`, `lv.obj()`) do NOT support arbitrary Python attribute assignment (`btn.idx = 5` raises `AttributeError`). To associate data with a widget, use closures/lambdas (`lambda e, i=idx: callback(e, i)`) or maintain parallel lists keyed by list index.
+- In event callbacks, use `event.get_target_obj()` instead of `event.get_current_target()`. The latter returns a generic `Blob` that can hang when passed to typed LVGL methods (e.g. `lv.list.get_button_text()`). `get_target_obj()` returns a properly typed `lv.obj`.
 
 MicroPythonOS tips:
 - `self.appFullName` is automatically set by the ActivityNavigator when launching an Activity. Use it instead of hard-coding the app's package name (e.g. for `SharedPreferences(self.appFullName)`).
