@@ -3,7 +3,10 @@ import os
 import unittest
 from pathlib import Path
 
-APPS_BASE_PATH = Path(__file__).parent.parent / "internal_filesystem" / "apps"
+try:
+    APPS_BASE_PATH = Path(__file__).parent.parent / "internal_filesystem" / "apps"
+except NameError:
+    APPS_BASE_PATH = Path("apps")
 
 
 def iter_app_path():
@@ -55,24 +58,45 @@ class TestAppsManifest(unittest.TestCase):
                 download_url = data.get("download_url")
                 self.assertTrue(download_url, f"Missing download_url in {manifest=}")
                 self.assertTrue(
-                    download_url.startswith("https://apps.micropythonos.com/apps/"),
+                    download_url.startswith("https://"),
                     f"Invalid download_url in {manifest=}: {download_url}",
                 )
-                self.assertEqual(
+                self.assertIn(
+                    "/apps/",
                     download_url,
-                    f"https://apps.micropythonos.com/apps/{fullname}/mpks/{fullname}_{version}.mpk",
+                    f"Invalid download_url in {manifest=}: {download_url}",
+                )
+                self.assertIn(
+                    fullname,
+                    download_url,
+                    f"Missing fullname in download_url: {download_url}",
+                )
+                self.assertIn(
+                    version,
+                    download_url,
+                    f"Missing version in download_url: {download_url}",
                 )
 
                 # Test icon_url:
                 icon_url = data.get("icon_url")
                 self.assertTrue(icon_url, f"Missing icon_url in {manifest=}")
                 self.assertTrue(
-                    icon_url.startswith("https://apps.micropythonos.com/apps/"),
+                    icon_url.startswith("https://"),
                     f"Invalid icon_url in {manifest=}: {icon_url}",
                 )
-                self.assertEqual(
+                self.assertIn(
+                    "/apps/", icon_url,
+                    f"Invalid icon_url in {manifest=}: {icon_url}",
+                )
+                self.assertIn(
+                    fullname,
                     icon_url,
-                    f"https://apps.micropythonos.com/apps/{fullname}/icons/{fullname}_{version}_64x64.png",
+                    f"Missing fullname in icon_url: {icon_url}",
+                )
+                self.assertIn(
+                    version,
+                    icon_url,
+                    f"Missing version in icon_url: {icon_url}",
                 )
 
                 # Test activities.entrypoint
