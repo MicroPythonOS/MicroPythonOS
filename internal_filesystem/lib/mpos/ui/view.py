@@ -44,7 +44,7 @@ def setContentView(new_activity, new_screen):
         except Exception as e:
             print(f"onStart caught exception:")
             sys.print_exception(e)
-    lv.screen_load_anim(new_screen, lv.SCR_LOAD_ANIM.OVER_LEFT, 500, 0, False)
+    lv.screen_load_anim(new_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, 500, 0, False)
     if new_activity:
         try:
             new_activity.onResume(new_screen)
@@ -91,7 +91,7 @@ def back_screen():
     # Load previous
     prev_activity, prev_screen, prev_focusgroup, prev_focused = screen_stack[-1]
     print(f"back_screen got {prev_activity}, {prev_screen}, {prev_focusgroup}, {prev_focused}")
-    lv.screen_load_anim(prev_screen, lv.SCR_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
+    lv.screen_load_anim(prev_screen, lv.SCREEN_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
 
     default_group = lv.group_get_default()
     if default_group:
