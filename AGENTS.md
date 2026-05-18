@@ -9,6 +9,8 @@ This file provides guidance to agents when working with code in this repository.
 - Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files.
 - To run a single test, pass a file path to `./tests/unittest.sh` (absolute path is resolved inside the script).
 - Testing workflow details and examples live in `tests/README.md`; check it before adding new tests.
+- To install an app on a physical device: `./scripts/install.sh com.micropythonos.appname`
+- After installing an app, call `AppManager.refresh_apps()` to reload the app registry before `start_app()` can find it.
 - Code formatting for Python in this repo is ruff with double quotes configured in `ruff.toml` (quote-style = "double").
 
 Guidelines:
@@ -51,5 +53,22 @@ MicroPythonOS tips:
 - `self.appFullName` is automatically set by the ActivityNavigator when launching an Activity. Use it instead of hard-coding the app's package name (e.g. for `SharedPreferences(self.appFullName)`).
 
 MicroPython compatibility:
+- Soft reset is broken on lvgl_micropython and therefore also on MicroPythonOS. Use `machine.reset()` to do a hard reset.
+
+MicroPython compatibility:
 - Some builds ship a minimal `random` module without `random.Random` or `random.shuffle`. For shuffling, implement Fisher-Yates manually with `random.randint`.
 - For deterministic jitter in apps, prefer a tiny local LCG (linear congruential generator) instead of `random.Random`.
+
+MPOS Controller (`scripts/mpos_controller.py`):
+- `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
+- Two backends: `MPOSController()` for local desktop process, `MPOSController(backend="serial", port="/dev/ttyACM0")` for physical device.
+- Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
+- `exec()` is for single-line/semicolon-joined code; `exec_multiline()` wraps in `exec('...')` with newline escaping.
+- `get_visible_text()` uses `exec_multiline()` iterating individual `repr()` prints — critical for serial where `print(repr(big_list))` corrupts for large lists with escape sequences.
+- `exec()` auto-drains input buffer before sending to avoid async TaskManager output contamination.
+- `SerialBackend.wait_for_boot()` uses Ctrl-C to break into aioREPL (device may be running apps).
+- The CLI supports `--serial-port` and `--baudrate` for serial connections.
+- `mpos.get_widget_tree()` dumps the full LVGL widget tree for both `lv.screen_active()` and `lv.layer_top()`. Returns JSON with type, text, coordinates, flags (clickable, hidden, scrollable, floating, event_bubble, etc.), states (checked, disabled, focused, pressed, etc.), scroll position, opacity, and widget-specific fields (slider value, dropdown options, textarea state, etc.). The widget dumper code is embedded as `_WTREE_SRC` in the controller and deployed to `/_wtree.py` on the device automatically — no separate upload needed.
+- `_read_remote_file` / `write_remote_file`: ProcessBackend uses base64 (works over PTY), SerialBackend uses `mpremote cp` (reliable over USB).
+- `mpos.screenshot()` captures via `capture_screenshot()` on device, then reads raw file and converts to BMP via `_build_bmp()`.
+- All tests pass covering exec, eval, screenshot, input simulation, screen introspection, file I/O, and physical device control.

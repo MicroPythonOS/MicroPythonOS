@@ -1290,6 +1290,125 @@ def find_text_on_screen(text):
     return find_label_with_text(lv.screen_active(), text) is not None
 
 
+def get_screen_widget_tree(obj=None, depth=0):
+    """
+    Dump the full widget tree with positions, text, types, and states.
+
+    Returns a JSON-serializable list of dicts describing every widget
+    in the tree. Useful for test assertions and screen understanding.
+    When called without arguments, dumps both lv.screen_active() and
+    lv.layer_top() with a \"layer\" key to distinguish them.
+
+    Args:
+        obj: Root LVGL object (default: None — dumps all layers)
+        depth: Current recursion depth (internal)
+
+    Returns:
+        list: List of widget dicts with keys:
+              - type: widget class name (str)
+              - text: text content (str or None)
+              - x1, y1, x2, y2: bounding box coordinates
+              - center_x, center_y: midpoint coordinates
+              - w, h: width and height
+              - clickable: bool (has FLAG.CLICKABLE)
+              - hidden: bool (has FLAG.HIDDEN)
+              - state: list of active state names
+              - children: list of child widget dicts
+              - depth: nesting depth
+              - layer: "active" or "top" (only when called without args)
+
+    Example:
+        from mpos.ui.testing import get_screen_widget_tree
+        import json
+        tree = get_screen_widget_tree()
+        print(json.dumps(tree))
+        # Find all clickable buttons with text:
+        buttons = [w for w in tree if w.get('clickable') and w.get('text')]
+    """
+    if obj is None:
+        result = []
+        for layer_name, layer_obj in (
+            ("active", lv.screen_active()),
+            ("top", lv.layer_top()),
+        ):
+            for entry in _dump_widget_tree(layer_obj, 0):
+                entry["layer"] = layer_name
+                result.append(entry)
+        return result
+    return _dump_widget_tree(obj, depth)
+
+
+def _dump_widget_tree(obj, depth):
+    """Recursive helper that dumps a single object tree branch."""
+    info = {"depth": depth}
+
+    # Widget type / class name
+    try:
+        info["type"] = obj.__class__.__name__
+    except Exception:
+        info["type"] = "unknown"
+
+    # Text content
+    try:
+        if hasattr(obj, "get_text"):
+            t = obj.get_text()
+            if t:
+                info["text"] = t
+    except Exception:
+        pass
+
+    # Coordinates
+    try:
+        area = lv.area_t()
+        obj.get_coords(area)
+        info["x1"] = area.x1
+        info["y1"] = area.y1
+        info["x2"] = area.x2
+        info["y2"] = area.y2
+        info["w"] = area.x2 - area.x1
+        info["h"] = area.y2 - area.y1
+        info["center_x"] = (area.x1 + area.x2) // 2
+        info["center_y"] = (area.y1 + area.y2) // 2
+    except Exception:
+        pass
+
+    # Flags
+    try:
+        info["clickable"] = obj.has_flag(lv.obj.FLAG.CLICKABLE)
+    except Exception:
+        pass
+    try:
+        info["hidden"] = obj.has_flag(lv.obj.FLAG.HIDDEN)
+    except Exception:
+        pass
+
+    # States
+    states = []
+    for name in ("CHECKED", "DISABLED", "FOCUSED", "PRESSED", "EDITED"):
+        try:
+            flag = getattr(lv.STATE, name, None)
+            if flag is not None and obj.has_state(flag):
+                states.append(name.lower())
+        except Exception:
+            pass
+    if states:
+        info["state"] = states
+
+    # Children
+    try:
+        n = obj.get_child_count()
+        if n:
+            children = []
+            for i in range(n):
+                child = obj.get_child(i)
+                children.extend(_dump_widget_tree(child, depth + 1))
+            info["children"] = children
+    except Exception:
+        pass
+
+    return [info]
+
+
 def click_keyboard_button(keyboard, button_text, use_direct=True):
     """
     Click a keyboard button reliably.
