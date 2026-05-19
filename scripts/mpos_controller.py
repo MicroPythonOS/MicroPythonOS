@@ -156,9 +156,30 @@ class AIOREPLClient:
             data += chunk
         return data
 
+    def _try_get_prompt(self, action, wait=0.5, drain_before=True):
+        """Send *action* bytes, then wait briefly for ``>>> ``."""
+        if drain_before:
+            self._drain(0.3)
+        self.stream.write(action)
+        time.sleep(wait)
+        data = self._drain(1.0)
+        if b">>> " in data:
+            return True
+        return False
+
     def wait_for_boot(self, timeout=30):
         t0 = time.monotonic()
         data = b""
+        # 1. Try ENTER first — device may already be at a prompt
+        if self._try_get_prompt(b"\r\n", wait=0.5):
+            return
+        # 2. Try Ctrl-B to exit raw REPL
+        if self._try_get_prompt(b"\x02", wait=0.5):
+            self.stream.write(b"\r\n")
+            time.sleep(0.2)
+            self._drain(0.3)
+            return
+        # 3. Main loop: poll for data, send Ctrl-C after 2s of silence
         ctrl_c_sent = False
         while time.monotonic() - t0 < timeout:
             if self._data_waiting(0.1):
@@ -166,26 +187,27 @@ class AIOREPLClient:
                 if chunk:
                     data += chunk
                     if b">>> " in data:
-                        self._drain(0.5)
-                        self.stream.write(b"\n")
-                        time.sleep(0.2)
                         self._drain(0.3)
                         return
             elif not ctrl_c_sent and time.monotonic() - t0 > 2:
                 self.stream.write(b"\x03")
                 time.sleep(0.3)
                 ctrl_c_sent = True
-        self.stream.write(b"\x02")
-        time.sleep(0.2)
-        self._drain(0.3)
-        data = self.read_until(b">>> ", timeout=5)
-        if not data.endswith(b">>> "):
-            raise TimeoutError(
-                "aioREPL prompt not found.\n" + data.decode("utf-8", "replace")[-2000:]
-            )
-        self.stream.write(b"\n")
-        time.sleep(0.3)
-        self._drain(0.5)
+        # 4. Fallback: drain, try Ctrl-B, then do one last read
+        tail = self._drain(1.0)
+        data += tail
+        if self._try_get_prompt(b"\x02", wait=0.5, drain_before=False):
+            return
+        data += self.read_until(b">>> ", timeout=5)
+        if b">>> " in data:
+            self._drain(0.3)
+            return
+        leftover = self._drain(2.0)
+        data += leftover
+        raise TimeoutError(
+            "aioREPL prompt not found.\n"
+            + data.decode("utf-8", "replace")[-3000:]
+        )
 
     def exec(self, code, timeout=30):
         """
@@ -340,9 +362,24 @@ class ProcessBackend:
     def eval(self, expr):
         return self.repl.eval(expr)
 
+    # -- disk space ----------------------------------------------------
+
+    def check_free_space(self):
+        raw = self.exec(
+            "import os; fs=os.statvfs('/'); print(fs[0]*fs[3])"
+        )
+        return int(raw.strip().decode("utf-8"))
+
     # -- screen capture ------------------------------------------------
 
     def screenshot(self):
+        free = self.check_free_space()
+        needed = self._width * self._height * 3
+        if free < needed:
+            raise RuntimeError(
+                "Insufficient free space for screenshot: "
+                "{} bytes free, need at least {} bytes".format(free, needed)
+            )
         tmp = "/tmp/_mpos_shot.raw"
         code = (
             "import lvgl as lv; "
@@ -518,7 +555,20 @@ class SerialBackend:
     def eval(self, expr):
         return self.repl.eval(expr)
 
+    def check_free_space(self):
+        raw = self.exec(
+            "import os; fs=os.statvfs('/'); print(fs[0]*fs[3])"
+        )
+        return int(raw.strip().decode("utf-8"))
+
     def screenshot(self):
+        free = self.check_free_space()
+        needed = self._width * self._height * 3
+        if free < needed:
+            raise RuntimeError(
+                "Insufficient free space for screenshot on device: "
+                "{} bytes free, need at least {} bytes".format(free, needed)
+            )
         tmp = "/_mpos_shot.raw"
         code = (
             "import lvgl as lv; "
@@ -675,6 +725,9 @@ class MPOSController:
     def screenshot(self):
         return self._backend.screenshot()
 
+    def check_free_space(self):
+        return self._backend.check_free_space()
+
     def press(self, x, y):
         self._backend.press(x, y)
 
@@ -715,7 +768,7 @@ def main():
     parser = argparse.ArgumentParser(description="MicroPythonOS Controller")
     parser.add_argument(
         "action", nargs="?", default="exec",
-        help="Action: exec, eval, screenshot (default: exec)",
+        help="Action: exec, eval, screenshot, startapp, checkfreespace (default: exec)",
     )
     parser.add_argument("args", nargs="*", help="Arguments")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
@@ -724,11 +777,16 @@ def main():
         "--serial-port", help="Serial port for device (e.g. /dev/ttyACM0)"
     )
     parser.add_argument("--baudrate", type=int, default=115200)
+    parser.add_argument(
+        "--no-reset", action="store_true",
+        help="Skip DTR/RTS reset on serial connect (device already running)"
+    )
     args = parser.parse_args()
 
     if args.serial_port:
         ctrl = MPOSController(
-            backend="serial", port=args.serial_port, baudrate=args.baudrate
+            backend="serial", port=args.serial_port,
+            baudrate=args.baudrate, reset=not args.no_reset
         )
     else:
         ctrl = MPOSController(binary=args.binary, heapsize=args.heapsize)
@@ -761,6 +819,24 @@ def main():
             with open(path, "wb") as f:
                 f.write(bmp)
             print("Wrote", path, "({} bytes)".format(len(bmp)))
+    elif args.action == "startapp":
+        if not args.args:
+            print("error: app name required", file=sys.stderr)
+            return 1
+        appname = args.args[0]
+        with ctrl:
+            out = ctrl.exec("from mpos import AppManager ; AppManager.start_app({!r})".format(appname))
+            sys.stdout.buffer.write(out)
+            sys.stdout.buffer.write(b"\n")
+    elif args.action == "checkfreespace":
+        with ctrl:
+            free = ctrl.check_free_space()
+            needed = ctrl.display_size[0] * ctrl.display_size[1] * 3
+            print("Free: {} bytes, need for screenshot: {} bytes".format(free, needed))
+            if free < needed:
+                print("WARNING: not enough space for a screenshot!")
+            else:
+                print("OK")
     else:
         parser.print_help()
         return 1
