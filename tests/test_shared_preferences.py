@@ -22,10 +22,18 @@ class TestSharedPreferences(unittest.TestCase):
     def _cleanup(self):
         """Remove test data directory if it exists."""
         try:
+            custom_file = f"{self.test_dir}/custom.json"
+
             # Use os.stat() instead of os.path.exists() for MicroPython compatibility
             try:
                 os.stat(self.test_file)
                 os.remove(self.test_file)
+            except OSError:
+                pass  # File doesn't exist, that's fine
+
+            try:
+                os.stat(custom_file)
+                os.remove(custom_file)
             except OSError:
                 pass  # File doesn't exist, that's fine
 
@@ -48,6 +56,13 @@ class TestSharedPreferences(unittest.TestCase):
         except Exception as e:
             # Cleanup failure is not critical for tests
             print(f"Cleanup warning: {e}")
+
+    def _exists(self, path):
+        try:
+            os.stat(path)
+            return True
+        except OSError:
+            return False
 
     # ============================================================
     # Basic String Operations
@@ -395,6 +410,42 @@ class TestSharedPreferences(unittest.TestCase):
         prefs2 = SharedPreferences(self.test_app_name, "custom.json")
         self.assertEqual(prefs2.get_string("custom"), "data")
 
+    def test_default_only_commit_does_not_create_file_or_dirs(self):
+        """Default-only writes should not create config files/directories."""
+        defaults = {"brightness": -1, "enabled": True, "name": "default"}
+        prefs = SharedPreferences(self.test_app_name, defaults=defaults)
+        prefs.edit().put_int("brightness", -1).put_bool("enabled", True).put_string("name", "default").commit()
+
+        self.assertFalse(self._exists(self.test_file))
+        self.assertFalse(self._exists(self.test_dir))
+
+    def test_remove_all_deletes_file_and_prunes_dirs(self):
+        """Removing all values should delete file and empty directories."""
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_string("key", "value").commit()
+        self.assertTrue(self._exists(self.test_file))
+        self.assertTrue(self._exists(self.test_dir))
+
+        prefs.edit().remove_all().commit()
+
+        self.assertFalse(self._exists(self.test_file))
+        self.assertFalse(self._exists(self.test_dir))
+
+    def test_noop_commit_cleans_legacy_empty_file(self):
+        """No-op commit should still clean up legacy empty JSON files."""
+        if not self._exists("data"):
+            os.mkdir("data")
+        if not self._exists(self.test_dir):
+            os.mkdir(self.test_dir)
+        with open(self.test_file, "w") as f:
+            f.write("{}")
+
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().commit()
+
+        self.assertFalse(self._exists(self.test_file))
+        self.assertFalse(self._exists(self.test_dir))
+
     def test_load_existing_file(self):
         """Test loading from an existing preferences file."""
         # Create initial prefs
@@ -692,5 +743,3 @@ class TestSharedPreferences(unittest.TestCase):
         self.assertIn("name", prefs2.data)
         self.assertEqual(prefs2.get_int("volume"), 50)
         self.assertEqual(prefs2.get_string("name"), "test")
-
-

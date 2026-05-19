@@ -1,8 +1,13 @@
 Future release (next version)
 =====
 
+Put unreleased changes here!
+
 Builtin Apps:
 - About: show system uptime
+
+Frameworks:
+- SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
 
 0.10.0
 ======
@@ -495,4 +500,3 @@ Known issues:
 0.0.1
 =====
 - Initial release
-

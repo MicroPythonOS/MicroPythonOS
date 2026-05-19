@@ -88,10 +88,16 @@ class HowTo(Activity):
 
     def onPause(self, screen):
         checked = self.dontshow_checkbox.get_state() & lv.STATE.CHECKED
+        if checked:
+            new_value = "" # None might result in the OS starting it, empty string means explictly don't start it
+        else:
+            new_value = self.appname
+
+        old_value = self.prefs.get_string("auto_start_app_early")
+        if old_value == new_value:
+            return
+
         print("Removing this app from autostart")
         editor = self.prefs.edit()
-        if checked:
-            editor.put_string("auto_start_app_early", "") # None might result in the OS starting it, empty string means explictly don't start it
-        else:
-            editor.put_string("auto_start_app_early", self.appname)
+        editor.put_string("auto_start_app_early", new_value)
         editor.commit()

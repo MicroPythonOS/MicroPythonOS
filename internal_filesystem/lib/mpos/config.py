@@ -8,21 +8,50 @@ class SharedPreferences:
         self.filename = filename
         self.defaults = defaults if defaults is not None else {}
         self.filepath = f"data/{self.appname}/{self.filename}"
+        self.appdir = f"data/{self.appname}"
         self.data = {}
         self.load()
 
+    @staticmethod
+    def _path_exists(path):
+        try:
+            os.stat(path)
+            return True
+        except OSError:
+            return False
+
+    def _file_exists(self):
+        return self._path_exists(self.filepath)
+
+    @staticmethod
+    def _remove_if_exists(path):
+        try:
+            os.remove(path)
+            return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def _remove_dir_if_empty(path):
+        try:
+            os.rmdir(path)
+            return True
+        except OSError:
+            return False
+
     def make_folder_structure(self):
         """Create directory structure if it doesn't exist."""
-        try:
-            os.stat('data')
-        except OSError:
+        if not self._path_exists("data"):
             print("Creating data/ directory")
-            os.mkdir('data')
-        try:
-            os.stat(f"data/{self.appname}")
-        except OSError:
-            print(f"Creating data/{self.appname} directory")
-            os.mkdir(f"data/{self.appname}")
+            os.mkdir("data")
+        if not self._path_exists(self.appdir):
+            print(f"Creating {self.appdir} directory")
+            os.mkdir(self.appdir)
+
+    def _remove_empty_preference_dirs(self):
+        """Remove app/data directories if they became empty."""
+        self._remove_dir_if_empty(self.appdir)
+        self._remove_dir_if_empty("data")
 
     def load(self):
         """Load preferences from the JSON file."""
@@ -124,7 +153,14 @@ class SharedPreferences:
         return Editor(self)
 
     def save_config(self):
-        """Save preferences to the JSON file."""
+        """Save preferences to the JSON file, pruning empty files/dirs."""
+        if not self.data:
+            removed_file = self._remove_if_exists(self.filepath)
+            if removed_file:
+                print(f"save_config: Removed empty preferences file {self.filepath}")
+            self._remove_empty_preference_dirs()
+            return
+
         self.make_folder_structure()
         print(f"save_config: Saving preferences to {self.filepath}")
         try:
@@ -175,7 +211,9 @@ class Editor:
     def __init__(self, preferences):
         """Initialize Editor with a reference to SharedPreferences."""
         self.preferences = preferences
-        self.temp_data = preferences.data.copy()
+        # Use a deep copy so nested edits do not mutate preferences.data before
+        # commit/apply no-op checks run.
+        self.temp_data = ujson.loads(ujson.dumps(preferences.data))
 
     def put_string(self, key, value):
         """Store a string value."""
@@ -272,12 +310,30 @@ class Editor:
     def apply(self):
         """Save changes to the file asynchronously (emulated)."""
         filtered_data = self._filter_defaults(self.temp_data)
+
+        # No-op write guard: if filtered data did not change and there is no
+        # legacy empty file to clean up, avoid touching the filesystem.
+        if filtered_data == self.preferences.data:
+            if filtered_data or not self.preferences._file_exists():
+                print("save_config: Skipping no-op apply")
+                self.preferences.data = filtered_data
+                return
+
         self.preferences.data = filtered_data
         self.preferences.save_config()
 
     def commit(self):
         """Save changes to the file synchronously."""
         filtered_data = self._filter_defaults(self.temp_data)
+
+        # No-op write guard: if filtered data did not change and there is no
+        # legacy empty file to clean up, avoid touching the filesystem.
+        if filtered_data == self.preferences.data:
+            if filtered_data or not self.preferences._file_exists():
+                print("save_config: Skipping no-op commit")
+                self.preferences.data = filtered_data
+                return True
+
         self.preferences.data = filtered_data
         self.preferences.save_config()
         return True
