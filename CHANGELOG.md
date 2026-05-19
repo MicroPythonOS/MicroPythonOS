@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- About: show system uptime
+
 0.10.0
 ======
 

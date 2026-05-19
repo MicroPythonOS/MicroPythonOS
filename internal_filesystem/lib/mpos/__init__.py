@@ -1,3 +1,8 @@
+import utime
+
+# Boot timestamp for uptime tracking (captured when mpos is first imported during boot)
+_boot_ticks_ms = utime.ticks_ms()
+
 # Core framework
 from .app.app import App
 from .app.activity import Activity

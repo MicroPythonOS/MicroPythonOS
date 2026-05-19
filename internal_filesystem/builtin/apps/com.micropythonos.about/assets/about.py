@@ -1,7 +1,9 @@
 import sys
 import logging
+import time
 
 from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
+import mpos
 
 class About(Activity):
 
@@ -9,6 +11,8 @@ class About(Activity):
     logger.setLevel(logging.INFO)
 
     def onCreate(self):
+        self._uptime_label = None
+        self._timer = None
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -63,7 +67,6 @@ class About(Activity):
         # These are always written to sys.stdout
         #self._add_label(screen, f"micropython.mem_info(): {micropython.mem_info()}")
         #self._add_label(screen, f"micropython.qstr_info(): {micropython.qstr_info()}")
-        import mpos
         self._add_label(screen, f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
 
         # ESP32 hardware info
@@ -158,7 +161,54 @@ class About(Activity):
         self._add_disk_info(screen, '/')
         self._add_disk_info(screen, '/sdcard')
 
+        # System uptime
+        self._add_label(screen, f"{lv.SYMBOL.REFRESH} System Uptime", is_header=True)
+        self._uptime_label = self._add_label(screen, f"Uptime: {self._get_uptime_str()}", margin_top=0)
+
         self.setContentView(screen)
+
+    def onResume(self, screen):
+        if self._timer is None:
+            self._timer = lv.timer_create(self._update_uptime, 1000, None)
+
+    def onPause(self, screen):
+        if self._timer is not None:
+            self._timer.delete()
+            self._timer = None
+
+    def _get_uptime_str(self):
+        ms = time.ticks_diff(time.ticks_ms(), mpos._boot_ticks_ms)
+        total_seconds = ms // 1000
+
+        years = total_seconds // (365 * 24 * 3600)
+        remaining = total_seconds % (365 * 24 * 3600)
+
+        months = remaining // (30 * 24 * 3600)
+        remaining %= (30 * 24 * 3600)
+
+        days = remaining // (24 * 3600)
+        remaining %= (24 * 3600)
+
+        hours = remaining // 3600
+        remaining %= 3600
+
+        minutes = remaining // 60
+        seconds = remaining % 60
+
+        parts = []
+        if years > 0:
+            parts.append(f"{years}y, {months}mo, {days}d")
+        elif months > 0:
+            parts.append(f"{months}mo, {days}d")
+        elif days > 0:
+            parts.append(f"{days}d")
+
+        parts.append(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        return " ".join(parts)
+
+    def _update_uptime(self, event=None):
+        if self._uptime_label is not None:
+            self._uptime_label.set_text(f"Uptime: {self._get_uptime_str()}")
 
     @staticmethod
     def _focus_obj(event):
