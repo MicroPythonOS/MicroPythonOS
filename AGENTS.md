@@ -63,12 +63,14 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
 - Two backends: `MPOSController()` for local desktop process, `MPOSController(backend="serial", port="/dev/ttyACM0")` for physical device.
 - Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
-- `exec()` is for single-line/semicolon-joined code; `exec_multiline()` wraps in `exec('...')` with newline escaping.
+- `exec()` and `exec_multiline()` both use **paste mode** (Ctrl-E / Ctrl-D) internally — multi-line code, quotes, and special chars need no escaping. They're equivalent; use whichever is convenient.
 - `get_visible_text()` uses `exec_multiline()` iterating individual `repr()` prints — critical for serial where `print(repr(big_list))` corrupts for large lists with escape sequences.
-- `exec()` auto-drains input buffer before sending to avoid async TaskManager output contamination.
+- `exec()` auto-drains input buffer before sending then enters paste mode (Ctrl-E).
 - `SerialBackend.wait_for_boot()` uses Ctrl-C to break into aioREPL (device may be running apps).
-- The CLI supports `--serial-port` and `--baudrate` for serial connections.
+- The CLI supports `--serial-port <port>` and `--baudrate <rate>` for serial connections. To pipe code without quoting: `cat <<'EOF' | python3 scripts/mpos_controller.py --serial-port /dev/ttyACM0 exec`
+- When no args are given and stdin is not a TTY, `exec` and `eval` read from stdin automatically — enabling heredoc/pipe usage.
 - `mpos.get_widget_tree()` dumps the full LVGL widget tree for both `lv.screen_active()` and `lv.layer_top()`. Returns JSON with type, text, coordinates, flags (clickable, hidden, scrollable, floating, event_bubble, etc.), states (checked, disabled, focused, pressed, etc.), scroll position, opacity, and widget-specific fields (slider value, dropdown options, textarea state, etc.). The widget dumper code is embedded as `_WTREE_SRC` in the controller and deployed to `/_wtree.py` on the device automatically — no separate upload needed.
+- IMPORTANT: `get_widget_tree()` and `get_visible_text()` include ALL children of scrollable parents, including off-screen items. y1/y2 coordinates are in content space, not screen space. To know what's actually visible, combine a screenshot (`mpos.screenshot()`) with the ppq-vision skill.
 - `_read_remote_file` / `write_remote_file`: ProcessBackend uses base64 (works over PTY), SerialBackend uses `mpremote cp` (reliable over USB).
 - `mpos.screenshot()` captures via `capture_screenshot()` on device, then reads raw file and converts to BMP via `_build_bmp()`.
 - All tests pass covering exec, eval, screenshot, input simulation, screen introspection, file I/O, and physical device control.

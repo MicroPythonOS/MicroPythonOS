@@ -330,18 +330,19 @@ class AIOREPLClient:
 
     def exec(self, code, timeout=30):
         """
-        Execute *code* (single line, or semicolon-joined) and return stdout output.
+        Execute *code* and return stdout output.
 
-        A sentinel ``print()`` is injected before *code* to delimit
-        echoed input from actual output.  Ctrl-B is sent first to
-        ensure the REPL is in a known friendly state.
+        Uses paste mode (Ctrl-E / Ctrl-D) so multi-line code
+        works without escaping.  A sentinel ``print()`` is prepended
+        to delimit output from REPL chatter.
         """
-        self._drain(0.2)
-        self.stream.write(b"\x02")
+        self._drain(0.1)
+        self.stream.write(b"\x05")
         time.sleep(0.05)
-        self._drain(0.2)
-        wrapped = "print('{}'); ".format(SENTINEL) + code.rstrip()
-        self.stream.write(wrapped.encode("utf-8") + b"\n")
+        self._drain(0.1)
+        payload = "print('{}')\n".format(SENTINEL) + code.rstrip()
+        self.stream.write(payload.encode("utf-8"))
+        self.stream.write(b"\x04")
         data = self.read_until(b">>> ", timeout=timeout)
         result = data[:-4]
         marker = SENTINEL.encode()
@@ -351,14 +352,8 @@ class AIOREPLClient:
         return result.strip()
 
     def exec_multiline(self, code, timeout=30):
-        """Execute multi-line *code* by wrapping in ``exec()``."""
-        escaped = (
-            code.rstrip()
-            .replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace("\n", "\\n")
-        )
-        return self.exec("exec('{}')".format(escaped))
+        """Execute multi-line *code* (paste mode handles it natively)."""
+        return self.exec(code, timeout=timeout)
 
     def eval(self, expression):
         raw = self.exec("print(repr({}))".format(expression))
@@ -861,13 +856,23 @@ def main():
         ctrl = MPOSController(binary=args.binary, heapsize=args.heapsize)
 
     if args.action == "exec":
-        code = " ".join(args.args) if args.args else "print('ready')"
+        if args.args:
+            code = " ".join(args.args)
+        elif not sys.stdin.isatty():
+            code = sys.stdin.read()
+        else:
+            code = "print('ready')"
         with ctrl:
             out = ctrl.exec(code)
             sys.stdout.buffer.write(out)
             sys.stdout.buffer.write(b"\n")
     elif args.action == "eval":
-        expr = " ".join(args.args) if args.args else "None"
+        if args.args:
+            expr = " ".join(args.args)
+        elif not sys.stdin.isatty():
+            expr = sys.stdin.read()
+        else:
+            expr = "None"
         with ctrl:
             val = ctrl.eval(expr)
             print(val)
