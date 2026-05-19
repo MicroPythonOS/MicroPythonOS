@@ -102,22 +102,10 @@ class TestNotificationBarVisibility(unittest.TestCase):
         return False
 
     def _ensure_bar_closed(self, bar_coords, bar):
-        if self._swipe_up_on_bar(bar_coords, bar):
-            return True
-        topmenu.close_bar()
-        wait_for_render(iterations=120)
-        if self._wait_for_bar_hidden(bar, timeout_ms=4500):
-            return True
-        topmenu.close_bar()
-        wait_for_render(iterations=120)
-        return self._wait_for_bar_hidden(bar, timeout_ms=4500)
+        return self._swipe_up_on_bar(bar_coords, bar)
 
     def _ensure_drawer_open(self, bar_coords):
-        if self._swipe_down_on_bar(bar_coords):
-            return True
-        topmenu.open_drawer()
-        wait_for_render(iterations=80)
-        return self._wait_for_drawer_open(timeout_ms=2500)
+        return self._swipe_down_on_bar(bar_coords)
 
     def _swipe_down_on_bar(self, bar_coords):
         start_x = DisplayMetrics.width() // 2
@@ -188,7 +176,7 @@ class TestNotificationBarVisibility(unittest.TestCase):
 
         self.assertTrue(
             self._ensure_drawer_open(bar_coords),
-            "Drawer did not open after swipe or fallback open",
+            "Drawer did not open after swipe",
         )
         self.assertTrue(topmenu.drawer_open, "Drawer state not open after swipe")
         self.assertIsNotNone(topmenu.drawer, "Drawer object not found after swipe")

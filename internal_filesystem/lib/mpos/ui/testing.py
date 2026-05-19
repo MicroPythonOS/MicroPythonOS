@@ -42,6 +42,7 @@ Usage in apps:
 """
 
 import lvgl as lv
+import sys
 import time
 
 try:
@@ -1141,6 +1142,11 @@ def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
     """
     Simulate a drag gesture from start to end coordinates.
 
+    On desktop (Linux/macOS/Windows), uses a stepped approach with
+    discrete click+render at each interpolated point, which is proven
+    reliable with the LVGL unix port.  On device (ESP32), uses a
+    continuous press-and-drag for real touch input.
+
     Args:
         start_x: Starting X coordinate.
         start_y: Starting Y coordinate.
@@ -1149,6 +1155,37 @@ def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
         steps: Number of intermediate steps to simulate (default: 5).
         step_delay_ms: Delay between steps in milliseconds (default: 20).
     """
+    if sys.platform in ("linux", "darwin", "win32"):
+        global _touch_x, _touch_y, _touch_pressed
+
+        _ensure_touch_indev()
+        n = max(steps, 1)
+
+        _touch_x = start_x
+        _touch_y = start_y
+        _touch_pressed = True
+
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        time.sleep(step_delay_ms / 1000.0)
+
+        for i in range(1, n + 1):
+            _touch_x = start_x + (end_x - start_x) * i // n
+            _touch_y = start_y + (end_y - start_y) * i // n
+            _touch_indev.read()
+            time.sleep(0.01)
+            _touch_indev.read()
+            time.sleep(step_delay_ms / 1000.0)
+
+        _touch_pressed = False
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        return
+
     global _touch_x, _touch_y, _touch_pressed
 
     _ensure_touch_indev()
