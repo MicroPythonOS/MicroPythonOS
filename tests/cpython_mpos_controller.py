@@ -63,6 +63,7 @@ def run_tests(mpos, only=None, is_serial=False):
         "ui": test_ui_introspection,
         "interaction": test_interaction,
         "sessions": test_multiple_sessions,
+        "navigation": test_app_navigation,
     }
     if only:
         names = [s.strip() for s in only.split(",")]
@@ -211,10 +212,42 @@ def test_multiple_sessions(mpos, is_serial=False):
     check(True, "all 3 sessions OK")
 
 
+def test_app_navigation(mpos, is_serial=False):
+    section("App navigation (startapp / backscreen / freespace)")
+
+    mpos.exec("""
+import lvgl as lv
+scr = lv.obj()
+lv.screen_load(scr)
+scr.set_style_bg_color(lv.color_hex(0xFFFFFF), 0)
+l = lv.label(scr)
+l.set_text("Navigation Test")
+l.align(lv.ALIGN.CENTER, 0, 0)
+""")
+    time.sleep(0.3)
+
+    tree_before = mpos.get_widget_tree()
+
+    out = mpos.startapp("com.micropythonos.about")
+    check(b"Warning" not in out, "startapp launched without warning")
+    time.sleep(0.5)
+    tree_app = mpos.get_widget_tree()
+    check(tree_app != tree_before, "widget tree changed after startapp")
+
+    out = mpos.backscreen()
+    check(b"Warning" not in out, "backscreen returned without warning")
+    time.sleep(0.6)
+    tree_back = mpos.get_widget_tree()
+    check(tree_back != tree_app, "widget tree changed after backscreen")
+
+    free = mpos.check_free_space()
+    check(isinstance(free, int) and free > 0, f"free space: {free} bytes")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,sessions")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,sessions,navigation")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 

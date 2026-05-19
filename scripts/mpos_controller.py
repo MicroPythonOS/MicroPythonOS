@@ -728,6 +728,14 @@ class MPOSController:
     def check_free_space(self):
         return self._backend.check_free_space()
 
+    def startapp(self, appname):
+        return self.exec(
+            "from mpos import AppManager ; AppManager.start_app({!r})".format(appname)
+        )
+
+    def backscreen(self):
+        return self.exec("import mpos.ui ; mpos.ui.back_screen()")
+
     def press(self, x, y):
         self._backend.press(x, y)
 
@@ -768,7 +776,7 @@ def main():
     parser = argparse.ArgumentParser(description="MicroPythonOS Controller")
     parser.add_argument(
         "action", nargs="?", default="exec",
-        help="Action: exec, eval, screenshot, startapp, checkfreespace (default: exec)",
+        help="Action: exec, eval, screenshot, startapp, freespace, backscreen (default: exec)",
     )
     parser.add_argument("args", nargs="*", help="Arguments")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
@@ -828,7 +836,7 @@ def main():
             out = ctrl.exec("from mpos import AppManager ; AppManager.start_app({!r})".format(appname))
             sys.stdout.buffer.write(out)
             sys.stdout.buffer.write(b"\n")
-    elif args.action == "checkfreespace":
+    elif args.action == "freespace":
         with ctrl:
             free = ctrl.check_free_space()
             needed = ctrl.display_size[0] * ctrl.display_size[1] * 3
@@ -837,6 +845,11 @@ def main():
                 print("WARNING: not enough space for a screenshot!")
             else:
                 print("OK")
+    elif args.action == "backscreen":
+        with ctrl:
+            out = ctrl.backscreen()
+            sys.stdout.buffer.write(out)
+            sys.stdout.buffer.write(b"\n")
     else:
         parser.print_help()
         return 1
