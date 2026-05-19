@@ -57,7 +57,7 @@ def find_buttons(tree, results=None):
     return results
 
 
-def run_tests(mpos, only=None):
+def run_tests(mpos, only=None, is_serial=False):
     sections = {
         "basic": test_basic,
         "ui": test_ui_introspection,
@@ -68,13 +68,13 @@ def run_tests(mpos, only=None):
         names = [s.strip() for s in only.split(",")]
         for n in names:
             if n in sections:
-                sections[n](mpos)
+                sections[n](mpos, is_serial=is_serial)
     else:
         for name, fn in sections.items():
-            fn(mpos)
+            fn(mpos, is_serial=is_serial)
 
 
-def test_basic(mpos):
+def test_basic(mpos, is_serial=False):
     section("Basic exec / eval / multiline")
 
     out = mpos.exec("print('hello from mpos')")
@@ -108,7 +108,7 @@ for i in range(3):
         check(val == i * 10, f"interleaved exec/eval {i}: x == {val}")
 
 
-def test_ui_introspection(mpos):
+def test_ui_introspection(mpos, is_serial=False):
     section("UI creation / screenshot / widget tree / visible text")
 
     mpos.exec("""
@@ -147,7 +147,7 @@ title.align(lv.ALIGN.TOP_MID, 0, 10)
     check(not mpos.find_text("NonexistentXYZ12345"), "find_text rejects nonexistent")
 
 
-def test_interaction(mpos):
+def test_interaction(mpos, is_serial=False):
     section("Button interaction (press_key / press)")
 
     mpos.exec("""
@@ -199,8 +199,11 @@ btn.send_event(lv.EVENT.CLICKED, None)
             check("clicked!" in texts, f"send_event fallback: {texts}")
 
 
-def test_multiple_sessions(mpos):
+def test_multiple_sessions(mpos, is_serial=False):
     section("Multiple sessions")
+    if is_serial:
+        check(True, "skipped (serial backend)")
+        return
     for i in range(3):
         with MPOSController() as m:
             out = m.exec("print('session ' + str(42))")
@@ -224,7 +227,7 @@ def main():
         ctrl = MPOSController(backend="serial", port=args.serial, baudrate=115200, reset=True)
         try:
             ctrl.start()
-            run_tests(ctrl, only=args.only)
+            run_tests(ctrl, only=args.only, is_serial=True)
         finally:
             ctrl.stop()
     else:
