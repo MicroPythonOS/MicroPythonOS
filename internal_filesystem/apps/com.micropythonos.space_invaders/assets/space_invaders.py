@@ -371,6 +371,7 @@ class SpaceInvaders(Activity):
         modal.set_style_border_width(0, 0)
         modal.set_style_radius(0, 0)
         modal.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        modal.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         label = lv.label(modal)
         label.set_text(text)
