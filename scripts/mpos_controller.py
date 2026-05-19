@@ -22,6 +22,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import termios
 import time
 import platform
 
@@ -304,18 +305,23 @@ class AIOREPLClient:
 
     def wait_for_boot(self, timeout=30):
         t0 = time.monotonic()
-        self._drain(0.3)
+        data = b""
+        ctrl_c_sent = False
         while time.monotonic() - t0 < timeout:
-            self.stream.write(b"\x03")
-            time.sleep(0.2)
-            if self._data_waiting(0.3):
-                data = self.stream.read(4096)
-                if b">>> " in data:
-                    self.stream.write(b"\n")
-                    time.sleep(0.3)
-                    self._drain(0.5)
-                    return
-        # Ctrl-C didn't yield a prompt; try Ctrl-B to enter friendly REPL
+            if self._data_waiting(0.1):
+                chunk = self.stream.read(4096)
+                if chunk:
+                    data += chunk
+                    if b">>> " in data:
+                        self._drain(0.5)
+                        self.stream.write(b"\n")
+                        time.sleep(0.2)
+                        self._drain(0.3)
+                        return
+            elif not ctrl_c_sent and time.monotonic() - t0 > 2:
+                self.stream.write(b"\x03")
+                time.sleep(0.3)
+                ctrl_c_sent = True
         self.stream.write(b"\x02")
         time.sleep(0.2)
         self._drain(0.3)
@@ -325,8 +331,8 @@ class AIOREPLClient:
                 "aioREPL prompt not found.\n" + data.decode("utf-8", "replace")[-2000:]
             )
         self.stream.write(b"\n")
-        time.sleep(0.5)
-        self._drain(1.0)
+        time.sleep(0.3)
+        self._drain(0.5)
 
     def exec(self, code, timeout=30):
         """
@@ -337,9 +343,12 @@ class AIOREPLClient:
         to delimit output from REPL chatter.
         """
         self._drain(0.1)
+
+        # Enter paste mode and wait for it to engage
         self.stream.write(b"\x05")
-        time.sleep(0.05)
-        self._drain(0.1)
+        time.sleep(0.2)
+        self._drain(0.5)
+
         payload = "print('{}')\n".format(SENTINEL) + code.rstrip()
         self.stream.write(payload.encode("utf-8"))
         self.stream.write(b"\x04")
@@ -388,6 +397,21 @@ class ProcessBackend:
             pass
         time.sleep(0.3)
         master_fd, slave_fd = pty.openpty()
+        # Set master side to raw mode so control chars (Ctrl-C, Ctrl-D, Ctrl-E)
+        # pass through unmodified instead of being intercepted by the line
+        # discipline (which would consume Ctrl-D as EOF, break paste mode, etc.)
+        try:
+            iflag, oflag, cflag, lflag, ispeed, ospeed, cc = termios.tcgetattr(master_fd)
+            iflag &= ~(termios.BRKINT | termios.IGNBRK | termios.ICRNL | termios.INLCR | termios.IGNCR | termios.IXON | termios.IXOFF | termios.PARMRK | termios.INPCK | termios.ISTRIP)
+            oflag &= ~(termios.OPOST)
+            cflag &= ~(termios.PARENB | termios.CSIZE)
+            cflag |= termios.CS8
+            lflag &= ~(termios.ECHO | termios.ECHONL | termios.ICANON | termios.ISIG | termios.IEXTEN)
+            cc[termios.VMIN] = 1
+            cc[termios.VTIME] = 0
+            termios.tcsetattr(master_fd, termios.TCSANOW, [iflag, oflag, cflag, lflag, ispeed, ospeed, cc])
+        except Exception:
+            pass
         self.proc = subprocess.Popen(
             [
                 self.binary,
@@ -419,10 +443,12 @@ class ProcessBackend:
         if self.proc:
             try:
                 os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
-                self.proc.wait(timeout=5)
+                self.proc.wait(timeout=3)
             except Exception:
+                pass
+            if self.proc and self.proc.poll() is None:
+                self.proc.kill()
                 try:
-                    self.proc.kill()
                     self.proc.wait(timeout=2)
                 except Exception:
                     pass
@@ -433,6 +459,12 @@ class ProcessBackend:
             except OSError:
                 pass
             self.master_fd = None
+
+    def restart(self):
+        """Stop and restart the backend."""
+        self.stop()
+        time.sleep(0.3)
+        self.start()
 
     def __del__(self):
         self.stop()
