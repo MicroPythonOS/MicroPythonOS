@@ -20,7 +20,7 @@ rm "$outputjson"
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.nostr isn't ready for release yet
 blacklist="com.micropythonos.file_manager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
-blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.nes_launcher com.micropythonos.gameboy_launcher" # not ready yet
+blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.retrocore_launcher" # not ready yet
 blacklist="$blacklist com.micropythonos.doom com.micropythonos.breakout" # not ready yet
 blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.weather" # not ready yet
 
