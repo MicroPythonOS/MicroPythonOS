@@ -188,15 +188,15 @@ class SpaceInvaders(Activity):
         now = time.ticks_ms()
         if key == lv.KEY.LEFT:
             if self.player_dir == -1:
-                self._player_dir_until = now + 60
+                self._player_dir_until = now + 100
             else:
-                self._player_dir_until = now + 300
+                self._player_dir_until = now + 600
                 self.player_dir = -1
         elif key == lv.KEY.RIGHT:
             if self.player_dir == 1:
-                self._player_dir_until = now + 60
+                self._player_dir_until = now + 100
             else:
-                self._player_dir_until = now + 300
+                self._player_dir_until = now + 600
                 self.player_dir = 1
         elif key in (lv.KEY.UP, lv.KEY.ENTER, 0x20):
             self._fire_player_bullet()
