@@ -64,6 +64,7 @@ def run_tests(mpos, only=None, is_serial=False):
         "interaction": test_interaction,
         "sessions": test_multiple_sessions,
         "navigation": test_app_navigation,
+        "appmanagement": test_app_management,
     }
     if only:
         names = [s.strip() for s in only.split(",")]
@@ -244,10 +245,57 @@ l.align(lv.ALIGN.CENTER, 0, 0)
     check(isinstance(free, int) and free > 0, f"free space: {free} bytes")
 
 
+def test_app_management(mpos, is_serial=False):
+    section("App management (install / list / remove)")
+    if not is_serial:
+        check(True, "skipped (desktop backend)")
+        return
+
+    import subprocess, os
+
+    appname = "com.micropythonos.helloworld"
+    apppath = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..",
+                     "internal_filesystem/apps", appname)
+    )
+
+    script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    mpremote = os.path.join(script_dir,
+        "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
+
+    subprocess.run(["python3", mpremote, "mkdir", ":/apps"], capture_output=True)
+    result = subprocess.run(
+        ["python3", mpremote, "fs", "cp", "-r", apppath, ":/apps/"],
+        capture_output=True, timeout=60
+    )
+    check(result.returncode == 0, f"installapp: cp exit code {result.returncode}")
+
+    mpos.exec("from mpos import AppManager ; AppManager.refresh_apps()")
+    out = mpos.exec("""
+from mpos import AppManager
+for a in AppManager.get_app_list():
+    print(a.fullname)
+""")
+    check(appname.encode() in out, f"listapps shows {appname}")
+
+    out = mpos.exec(
+        "from mpos import AppManager; "
+        "AppManager.uninstall_app({!r})".format(appname)
+    )
+    check(b"Error" not in out, f"deleteapp succeeded: {out.decode().strip()}")
+
+    out = mpos.exec("""
+from mpos import AppManager
+for a in AppManager.get_app_list():
+    print(a.fullname)
+""")
+    check(appname.encode() not in out, f"listapps confirms {appname} removed")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,sessions,navigation")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,sessions,navigation,appmanagement")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 

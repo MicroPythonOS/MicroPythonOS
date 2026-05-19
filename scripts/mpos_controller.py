@@ -776,7 +776,7 @@ def main():
     parser = argparse.ArgumentParser(description="MicroPythonOS Controller")
     parser.add_argument(
         "action", nargs="?", default="exec",
-        help="Action: exec, eval, screenshot, startapp, freespace, backscreen (default: exec)",
+        help="Action: exec, eval, screenshot, startapp, freespace, backscreen, installapp, listapps, deleteapp (default: exec)",
     )
     parser.add_argument("args", nargs="*", help="Arguments")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
@@ -848,6 +848,46 @@ def main():
     elif args.action == "backscreen":
         with ctrl:
             out = ctrl.backscreen()
+            sys.stdout.buffer.write(out)
+            sys.stdout.buffer.write(b"\n")
+    elif args.action == "installapp":
+        if not args.args:
+            print("error: app path required", file=sys.stderr)
+            return 1
+        apppath = args.args[0]
+        import subprocess, os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        mpremote = os.path.join(script_dir, "..",
+            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
+        subprocess.run(["python3", mpremote, "mkdir", ":/apps"], capture_output=True)
+        result = subprocess.run(
+            ["python3", mpremote, "fs", "cp", "-r", apppath, ":/apps/"],
+            capture_output=True, timeout=60
+        )
+        if result.returncode != 0:
+            print("error:", result.stderr.decode().strip(), file=sys.stderr)
+            return 1
+        print(f"Installed {os.path.basename(apppath)}")
+        with ctrl:
+            ctrl.exec("from mpos import AppManager ; AppManager.refresh_apps()")
+    elif args.action == "listapps":
+        with ctrl:
+            out = ctrl.exec("""
+from mpos import AppManager
+for a in AppManager.get_app_list():
+    print(a.fullname)
+""")
+            sys.stdout.buffer.write(out)
+    elif args.action == "deleteapp":
+        if not args.args:
+            print("error: app name required", file=sys.stderr)
+            return 1
+        appname = args.args[0]
+        with ctrl:
+            out = ctrl.exec(
+                "from mpos import AppManager; "
+                "AppManager.uninstall_app({!r})".format(appname)
+            )
             sys.stdout.buffer.write(out)
             sys.stdout.buffer.write(b"\n")
     else:
