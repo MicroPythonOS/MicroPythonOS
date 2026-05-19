@@ -430,7 +430,7 @@ class SpaceInvaders(Activity):
 
         self.invader_direction = 1
         self.invader_speed = 30 + self.level * 8
-        self.invader_drop_dist = SPRITE_H + 2
+        self.invader_drop_dist = SPRITE_H // 4 + 2
         self.invader_move_accum = 0.0
         self.invader_shoot_timer = 0.0
         self.shoot_cooldown = 0.0
