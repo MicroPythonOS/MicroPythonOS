@@ -153,7 +153,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
         # There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
         extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
         # --py-freertos: add MicroPython FreeRTOS module to expose internals
-        extra_configs="$extra_configs --py-freertos"
+        #extra_configs="$extra_configs --py-freertos"
 		# --enable-uart-repl={y/n}: This allows you to turn on and off the UART based REPL. You will wany to set this of you use USB-CDC or JTAG for the REPL output
 		extra_configs="$extra_configs --enable-uart-repl=n"
 	fi
@@ -188,9 +188,6 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	python3 make.py $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
-		CONFIG_FREERTOS_USE_TRACE_FACILITY=y \
-		CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
-		CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
 		CONFIG_ADC_MIC_TASK_CORE=1 \
 		$extra_configs \
 		"$frozenmanifest"
