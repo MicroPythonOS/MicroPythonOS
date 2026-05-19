@@ -253,7 +253,7 @@ class SpaceInvaders(Activity):
 
         self.highscore_label = lv.label(top)
         self.highscore_label.set_text("")
-        self.highscore_label.align(lv.ALIGN.RIGHT_MID, -4, 0)
+        self.highscore_label.align(lv.ALIGN.RIGHT_MID, 0, 0)
         self.highscore_label.set_style_text_color(_W, 0)
         self.highscore_label.add_flag(lv.obj.FLAG.CLICKABLE)
         self.highscore_label.add_event_cb(
@@ -262,7 +262,7 @@ class SpaceInvaders(Activity):
 
         self.lives_label = lv.label(top)
         self.lives_label.set_text("")
-        self.lives_label.align_to(self.score_label, lv.ALIGN.OUT_RIGHT_MID, 8, 0)
+        self.lives_label.align_to(self.score_label, lv.ALIGN.OUT_RIGHT_MID, 15, 0)
         self.lives_label.set_style_text_color(_R, 0)
 
     def _create_game_area(self):
