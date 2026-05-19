@@ -1,0 +1,23 @@
+{
+  "name": "Retro Core Launcher",
+  "publisher": "MicroPythonOS",
+  "short_description": "Classic 8-bit and handheld games",
+  "long_description": "Plays NES ROMs (.nes, .fc, .fds, .nsf) and Gameboy ROMs (.gb, .gbc) from internal storage or SD card. Place them in /roms/nes/ or /roms/gb/. Uses ducalex's retro-go port. Supports zipped ROMs too.",
+  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.retrocore_launcher/icons/com.micropythonos.retrocore_launcher_0.1.0_64x64.png",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.retrocore_launcher/mpks/com.micropythonos.retrocore_launcher_0.1.0.mpk",
+  "fullname": "com.micropythonos.retrocore_launcher",
+  "version": "0.1.0",
+  "category": "games",
+  "activities": [
+    {
+      "entrypoint": "assets/retrocore_launcher.py",
+      "classname": "RetroCoreLauncher",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ]
+}
