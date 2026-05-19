@@ -18,6 +18,7 @@ Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
 - Always add a timeout -s 9 30 to ./scripts/run_desktop.sh so run: timeout -s 9 30 ./scripts/run_desktop.sh
 - Write temporary files to a `tmp/` folder in the CWD, not `/` or `/tmp`, due to permissions constraints.
+- To kill processes, use `killall <name>` instead of `pkill -f <pattern>` — `pkill -f` matches the pkill command's own argv and can kill itself.
 
 Guidelines for writing or updating tests:
 - Use the testing facilities in ./internal_filesystem/lib/mpos/ui/testing.py and feel free to add new ones there, NOT ad hoc in the test itself.
@@ -75,7 +76,8 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - `mpos.get_widget_tree()` dumps the full LVGL widget tree for both `lv.screen_active()` and `lv.layer_top()`. Returns JSON with type, text, coordinates, flags (clickable, hidden, scrollable, floating, event_bubble, etc.), states (checked, disabled, focused, pressed, etc.), scroll position, opacity, and widget-specific fields (slider value, dropdown options, textarea state, etc.). Uses `mpos.ui.testing.get_screen_widget_tree()` directly — no file I/O on desktop; on serial the JSON is written to a temp file then read via `mpremote cp` to avoid serial corruption of large outputs.
 - IMPORTANT: `get_widget_tree()` and `get_visible_text()` include ALL children of scrollable parents, including off-screen items. y1/y2 coordinates are in content space, not screen space. To know what's actually visible, combine a screenshot (`mpos.screenshot()`) with the ppq-vision skill.
 - `_read_remote_file` / `write_remote_file`: ProcessBackend uses base64 (works over PTY), SerialBackend uses `mpremote cp` (reliable over USB).
-- `mpos.screenshot()` captures via `capture_screenshot()` on device, then reads raw file and converts to BMP via `_build_bmp()`.
+- `mpos.screenshot()` captures via `capture_screenshot()` on device, then reads raw file and converts to BMP via `_build_bmp()`. Over serial (`/dev/ttyACM0`) this takes ~40s total (~6s connect, ~34s transfer).
 - The notification bar (top status bar) is NOT always present. It's controlled by the `bar_open` global in `internal_filesystem/lib/mpos/ui/topmenu.py`. Check it with `mpos.eval("mpos.ui.topmenu.bar_open")` (the module is already imported by `main.py`). When open, its height is `AppearanceManager.NOTIFICATION_BAR_HEIGHT` (24px).
+- The CLI also supports `startapp <appname>` (launches an app) and `checkfreespace` (reports free disk space and whether a screenshot fits).
 - All tests pass covering exec, eval, screenshot, input simulation, screen introspection, file I/O, and physical device control.
 - Host-side controller tests in `tests/cpython_mpos_controller.py` run via `python3 tests/cpython_mpos_controller.py` (desktop) or `python3 tests/cpython_mpos_controller.py --serial /dev/ttyACM0` (device); they are NOT run by `unittest.sh` (which targets MicroPython-side tests).

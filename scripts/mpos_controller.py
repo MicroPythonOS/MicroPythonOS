@@ -594,7 +594,7 @@ class SerialBackend:
             "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
         subprocess.run(
             ["python3", mpremote, "cp", ":{}".format(path), tmppath],
-            capture_output=True, timeout=30
+            capture_output=True, timeout=60
         )
         with open(tmppath, "rb") as f:
             data = f.read()
@@ -612,7 +612,7 @@ class SerialBackend:
             "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
         subprocess.run(
             ["python3", mpremote, "cp", tmppath, ":{}".format(path)],
-            capture_output=True, timeout=30
+            capture_output=True, timeout=60
         )
         _os.unlink(tmppath)
 
