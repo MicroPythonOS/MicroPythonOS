@@ -137,6 +137,7 @@ class SpaceInvaders(Activity):
         self.game_state = "start"
         self.player_x = 0
         self.player_dir = 0
+        self._player_dir_until = 0
         self.player_canvas = None
 
         self.invaders = []
@@ -184,10 +185,19 @@ class SpaceInvaders(Activity):
             if key in (lv.KEY.ENTER, lv.KEY.UP, 0x20):
                 self._start_game()
             return
+        now = time.ticks_ms()
         if key == lv.KEY.LEFT:
-            self.player_dir = -1
+            if self.player_dir == -1:
+                self._player_dir_until = now + 60
+            else:
+                self._player_dir_until = now + 300
+                self.player_dir = -1
         elif key == lv.KEY.RIGHT:
-            self.player_dir = 1
+            if self.player_dir == 1:
+                self._player_dir_until = now + 60
+            else:
+                self._player_dir_until = now + 300
+                self.player_dir = 1
         elif key in (lv.KEY.UP, lv.KEY.ENTER, 0x20):
             self._fire_player_bullet()
 
@@ -556,8 +566,11 @@ class SpaceInvaders(Activity):
 
     def _move_player(self, dt):
         if self.player_dir != 0:
-            self.player_x += self.player_dir * self._player_speed * dt
-            self.player_x = max(PLAYER_W // 2, min(self.player_x, self.ga_w - PLAYER_W // 2))
+            if time.ticks_diff(time.ticks_ms(), self._player_dir_until) > 0:
+                self.player_dir = 0
+            else:
+                self.player_x += self.player_dir * self._player_speed * dt
+                self.player_x = max(PLAYER_W // 2, min(self.player_x, self.ga_w - PLAYER_W // 2))
 
         self.shoot_cooldown = max(0, self.shoot_cooldown - dt)
 
