@@ -1421,6 +1421,19 @@ def get_screen_widget_tree(obj=None, depth=0):
     return _dump_widget_tree(obj, depth)
 
 
+ALL_FLAGS = (
+    "CLICKABLE", "CLICK_FOCUSABLE", "ADV_HITTEST", "PRESS_LOCK",
+    "SCROLLABLE", "SCROLL_CHAIN", "SCROLL_ELASTIC", "SCROLL_MOMENTUM",
+    "SCROLL_ONE", "SCROLL_WITH_ARROW", "SNAPPABLE", "FLOATING",
+    "EVENT_BUBBLE", "HIDDEN", "IGNORE_LAYOUT",
+)
+ALL_STATES = (
+    "CHECKED", "DISABLED", "FOCUSED", "FOCUS_KEY",
+    "EDITED", "PRESSED", "SCROLLED",
+    "USER_1", "USER_2", "USER_3", "USER_4", "USER_5", "USER_6",
+)
+
+
 def _dump_widget_tree(obj, depth):
     """Recursive helper that dumps a single object tree branch."""
     info = {"depth": depth}
@@ -1455,27 +1468,77 @@ def _dump_widget_tree(obj, depth):
     except Exception:
         pass
 
-    # Flags
+    # All flags
+    flag_names = []
+    for n in ALL_FLAGS:
+        try:
+            fl = getattr(lv.obj.FLAG, n, None)
+            if fl is not None and obj.has_flag(fl):
+                flag_names.append(n.lower())
+        except Exception:
+            pass
+    if flag_names:
+        info["flags"] = flag_names
+    info["clickable"] = "clickable" in flag_names
+    info["hidden"] = "hidden" in flag_names
+    info["scrollable"] = "scrollable" in flag_names
+    info["floating"] = "floating" in flag_names
+    info["event_bubble"] = "event_bubble" in flag_names
+
+    # All states
+    state_names = []
+    for n in ALL_STATES:
+        try:
+            fl = getattr(lv.STATE, n, None)
+            if fl is not None and obj.has_state(fl):
+                state_names.append(n.lower())
+        except Exception:
+            pass
+    if state_names:
+        info["state"] = state_names
+
+    # Scroll position
     try:
-        info["clickable"] = obj.has_flag(lv.obj.FLAG.CLICKABLE)
-    except Exception:
-        pass
-    try:
-        info["hidden"] = obj.has_flag(lv.obj.FLAG.HIDDEN)
+        sx = obj.get_scroll_x()
+        sy = obj.get_scroll_y()
+        if sx or sy:
+            info["scroll_x"] = sx
+            info["scroll_y"] = sy
     except Exception:
         pass
 
-    # States
-    states = []
-    for name in ("CHECKED", "DISABLED", "FOCUSED", "PRESSED", "EDITED"):
-        try:
-            flag = getattr(lv.STATE, name, None)
-            if flag is not None and obj.has_state(flag):
-                states.append(name.lower())
-        except Exception:
-            pass
-    if states:
-        info["state"] = states
+    # Opacity
+    try:
+        opa = obj.get_style_opa(lv.PART.MAIN)
+        if opa != lv.OPA.COVER:
+            info["opa"] = opa
+    except Exception:
+        pass
+
+    # Widget-specific fields
+    t = info.get("type", "")
+    try:
+        if t in ("slider", "arc", "bar", "meter"):
+            info["value"] = obj.get_value()
+    except Exception:
+        pass
+    try:
+        if t == "dropdown":
+            info["selected"] = obj.get_selected()
+            info["options"] = obj.get_options()
+    except Exception:
+        pass
+    try:
+        if t == "textarea":
+            info["one_line"] = obj.get_one_line()
+            info["cursor_pos"] = obj.get_cursor_pos()
+    except Exception:
+        pass
+    try:
+        if t == "buttonmatrix":
+            info["selected_btn"] = obj.get_selected_button()
+    except Exception:
+        pass
 
     # Children
     try:
