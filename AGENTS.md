@@ -46,6 +46,7 @@ LVGL tips:
 - instead of `label.set_long_mode(lv.label.LONG.WRAP)` use `label.set_long_mode(lv.label.LONG_MODE.WRAP)`
 - use `style_obj = lv.style_t()` then `style_obj.init()` instead of `lv.style()`
 - always call `style.init()` after `lv.style_t()` before calling setters like `set_bg_color()` — without it the device may hang
+- don't leave label text uninitialized; it defaults to `"Text"` instead of being empty. Always set text explicitly with `label.set_text("")` if you want an empty label
 - In LVGL 9.x style setters take only the value (no selector). The selector goes in `add_style()`. E.g. `style.set_bg_color(lv.color_hex(0x...))` then `obj.add_style(style, lv.PART.ITEMS | lv.STATE.CHECKED)`.
 - `lv.buttonmatrix` has no `set_button_text()` or `set_button_ctrl()` in this binding. To update text, rebuild and call `set_map()`. To mark buttons visually (e.g. solved state), change the text symbol itself (e.g. append "!").
 - `lv.buttonmatrix.set_map()` fires `LV_EVENT_VALUE_CHANGED` asynchronously (next LVGL tick), causing phantom second-selection events. Guard with a time-based debounce (`time.ticks_diff(now, last_ts) < 50`) rather than a simple flag.
