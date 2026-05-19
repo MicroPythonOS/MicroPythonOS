@@ -495,7 +495,7 @@ class SpaceInvaders(Activity):
         self.score_label.set_text("SCORE: " + str(self.score))
         self.level_label.set_text("LEVEL " + str(self.level))
         self.level_label.set_style_text_color(_Y, 0)
-        lives_str = "♥" * max(0, self.lives)
+        lives_str = "\uf004" * max(0, self.lives)
         self.lives_label.set_text(lives_str)
         best = max(self.score, self.highscore)
         self.highscore_label.set_text("HI: " + str(best))
