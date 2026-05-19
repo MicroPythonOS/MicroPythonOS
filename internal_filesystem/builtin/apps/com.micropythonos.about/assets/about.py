@@ -177,7 +177,7 @@ class About(Activity):
             self._timer = None
 
     def _get_uptime_str(self):
-        ms = time.ticks_diff(time.ticks_ms(), mpos._boot_ticks_ms)
+        ms = time.ticks_ms()
         total_seconds = ms // 1000
 
         years = total_seconds // (365 * 24 * 3600)
