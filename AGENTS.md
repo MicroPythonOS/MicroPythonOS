@@ -11,6 +11,7 @@ This file provides guidance to agents when working with code in this repository.
 - Testing workflow details and examples live in `tests/README.md`; check it before adding new tests.
 - To install an app on a physical device: `./scripts/install.sh com.micropythonos.appname`
 - After installing an app, call `AppManager.refresh_apps()` to reload the app registry before `start_app()` can find it.
+- To deploy updated files to a physical device (e.g. updated `testing.py`): `python3 lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py cp internal_filesystem/lib/mpos/ui/testing.py :/lib/mpos/ui/testing.py` then `import machine; machine.reset()` and wait 30 seconds for the device to boot.
 - Code formatting for Python in this repo is ruff with double quotes configured in `ruff.toml` (quote-style = "double").
 
 Guidelines:
@@ -71,7 +72,7 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - The CLI supports `--serial-port <port>` and `--baudrate <rate>` for serial connections. To pipe code without quoting: `cat <<'EOF' | python3 scripts/mpos_controller.py --serial-port /dev/ttyACM0 exec`
 - When no args are given and stdin is not a TTY, `exec` and `eval` read from stdin automatically — enabling heredoc/pipe usage.
 - **Rotation handling**: SerialBackend caches `_rotation` from the display on connect. If rotation is 270° (value 3, common for landscape badges), `press(x, y)` auto-transforms coordinates: `simulate_click(height - 1 - y, x)` so caller always uses LVGL logical coordinates.
-- `mpos.get_widget_tree()` dumps the full LVGL widget tree for both `lv.screen_active()` and `lv.layer_top()`. Returns JSON with type, text, coordinates, flags (clickable, hidden, scrollable, floating, event_bubble, etc.), states (checked, disabled, focused, pressed, etc.), scroll position, opacity, and widget-specific fields (slider value, dropdown options, textarea state, etc.). The widget dumper code is embedded as `_WTREE_SRC` in the controller and deployed to `/_wtree.py` on the device automatically — no separate upload needed.
+- `mpos.get_widget_tree()` dumps the full LVGL widget tree for both `lv.screen_active()` and `lv.layer_top()`. Returns JSON with type, text, coordinates, flags (clickable, hidden, scrollable, floating, event_bubble, etc.), states (checked, disabled, focused, pressed, etc.), scroll position, opacity, and widget-specific fields (slider value, dropdown options, textarea state, etc.). Uses `mpos.ui.testing.get_screen_widget_tree()` directly — no file I/O on desktop; on serial the JSON is written to a temp file then read via `mpremote cp` to avoid serial corruption of large outputs.
 - IMPORTANT: `get_widget_tree()` and `get_visible_text()` include ALL children of scrollable parents, including off-screen items. y1/y2 coordinates are in content space, not screen space. To know what's actually visible, combine a screenshot (`mpos.screenshot()`) with the ppq-vision skill.
 - `_read_remote_file` / `write_remote_file`: ProcessBackend uses base64 (works over PTY), SerialBackend uses `mpremote cp` (reliable over USB).
 - `mpos.screenshot()` captures via `capture_screenshot()` on device, then reads raw file and converts to BMP via `_build_bmp()`.

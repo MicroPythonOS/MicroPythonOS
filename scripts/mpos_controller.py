@@ -27,156 +27,9 @@ import time
 import platform
 
 
-# ── Inline MicroPython module: widget tree dumper ────────────────────
-# Deployed to the device as /wtree.py on demand by get_widget_tree().
-
-_WTREE_SRC = """\
-import lvgl as lv
-
-ALL_FLAGS = (
-    "CLICKABLE", "CLICK_FOCUSABLE", "ADV_HITTEST", "PRESS_LOCK",
-    "SCROLLABLE", "SCROLL_CHAIN", "SCROLL_ELASTIC", "SCROLL_MOMENTUM",
-    "SCROLL_ONE", "SCROLL_WITH_ARROW", "SNAPPABLE", "FLOATING",
-    "EVENT_BUBBLE", "HIDDEN", "IGNORE_LAYOUT",
-)
-ALL_STATES = (
-    "CHECKED", "DISABLED", "FOCUSED", "FOCUS_KEY",
-    "EDITED", "PRESSED", "SCROLLED",
-    "USER_1", "USER_2", "USER_3", "USER_4", "USER_5", "USER_6",
-)
-
-def _get_text(obj):
-    try:
-        if hasattr(obj, "get_text"):
-            t = obj.get_text()
-            if t:
-                return t
-    except Exception:
-        pass
-    return None
-
-def _get_coords(obj):
-    try:
-        a = lv.area_t()
-        obj.get_coords(a)
-        return {"x1":a.x1,"y1":a.y1,"x2":a.x2,"y2":a.y2,
-                "w":a.x2-a.x1,"h":a.y2-a.y1,
-                "center_x":(a.x1+a.x2)//2,"center_y":(a.y1+a.y2)//2}
-    except Exception:
-        return {}
-
-def _get_flags(obj):
-    f = []
-    for n in ALL_FLAGS:
-        try:
-            fl = getattr(lv.obj.FLAG, n, None)
-            if fl is not None and obj.has_flag(fl):
-                f.append(n.lower())
-        except Exception:
-            pass
-    return f
-
-def _get_states(obj):
-    st = []
-    for n in ALL_STATES:
-        try:
-            fl = getattr(lv.STATE, n, None)
-            if fl is not None and obj.has_state(fl):
-                st.append(n.lower())
-        except Exception:
-            pass
-    return st
-
-def _get_scroll(obj):
-    try:
-        x = obj.get_scroll_x()
-        y = obj.get_scroll_y()
-        if x or y:
-            return {"scroll_x":x,"scroll_y":y}
-    except Exception:
-        pass
-    return None
-
-def _get_opa(obj):
-    try:
-        v = obj.get_style_opa(lv.PART.MAIN)
-        if v != lv.OPA.COVER:
-            return v
-    except Exception:
-        pass
-    return None
-
-def _get_extra(obj, t):
-    e = {}
-    try:
-        if t in ("slider","arc","bar","meter"):
-            e["value"] = obj.get_value()
-    except Exception:
-        pass
-    try:
-        if t == "dropdown":
-            e["selected"] = obj.get_selected()
-            e["options"] = obj.get_options()
-    except Exception:
-        pass
-    try:
-        if t == "textarea":
-            e["one_line"] = obj.get_one_line()
-            e["cursor_pos"] = obj.get_cursor_pos()
-    except Exception:
-        pass
-    try:
-        if t == "buttonmatrix":
-            e["selected_btn"] = obj.get_selected_button()
-    except Exception:
-        pass
-    return e
-
-def dump(obj, depth=0):
-    info = {"depth": depth}
-    try:
-        info["type"] = obj.__class__.__name__
-    except Exception:
-        info["type"] = "unknown"
-    txt = _get_text(obj)
-    if txt:
-        info["text"] = txt
-    info.update(_get_coords(obj))
-    rf = _get_flags(obj)
-    info["flags"] = rf
-    info["clickable"] = "clickable" in rf
-    info["hidden"] = "hidden" in rf
-    info["scrollable"] = "scrollable" in rf
-    info["floating"] = "floating" in rf
-    info["event_bubble"] = "event_bubble" in rf
-    rs = _get_states(obj)
-    info["state"] = rs
-    sc = _get_scroll(obj)
-    if sc:
-        info.update(sc)
-    opa = _get_opa(obj)
-    if opa is not None:
-        info["opa"] = opa
-    info.update(_get_extra(obj, info.get("type", "")))
-    try:
-        n = obj.get_child_count()
-        if n:
-            kids = []
-            for i in range(n):
-                kids.extend(dump(obj.get_child(i), depth+1))
-            info["children"] = kids
-    except Exception:
-        pass
-    return [info]
-
-def all_layers():
-    result = []
-    for ln, lo in (("active",lv.screen_active()),("top",lv.layer_top())):
-        for e in dump(lo, 0):
-            e["layer"] = ln
-            result.append(e)
-    return result
-"""
+# ── Widget tree introspection ──────────────────────────────────────
+# Uses mpos.ui.testing.get_screen_widget_tree() which is always
+# available on the device (imported by main.py at startup).
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -545,27 +398,13 @@ class ProcessBackend:
     # -- screen introspection -------------------------------------------
 
     def get_widget_tree(self):
-        self.write_remote_file("/tmp/_wtree.py", _WTREE_SRC.encode("utf-8"))
-        self.exec_multiline("""
-import sys
-if "_wtree" in sys.modules:
-    del sys.modules["_wtree"]
-sys.path.insert(0, "/tmp")
-from _wtree import all_layers
+        raw = self.exec_multiline("""
+from mpos.ui.testing import get_screen_widget_tree
 import json
-with open("/tmp/_mpos_tree.json", "w") as f:
-    json.dump(all_layers(), f)
-print("OK")
+print(json.dumps(get_screen_widget_tree()))
 """)
-        try:
-            raw = self._read_remote_file("/tmp/_mpos_tree.json")
-            import json as _json
-            return _json.loads(raw.decode("utf-8"))
-        finally:
-            try:
-                self.exec("import os; os.remove('/tmp/_wtree.py'); os.remove('/tmp/_mpos_tree.json')")
-            except Exception:
-                pass
+        import json as _json
+        return _json.loads(raw.strip().decode("utf-8"))
 
     def get_visible_text(self):
         raw = self.exec_multiline("""
@@ -748,23 +587,20 @@ class SerialBackend:
         )
 
     def get_widget_tree(self):
-        self.write_remote_file("/_wtree.py", _WTREE_SRC.encode("utf-8"))
+        # Write JSON to device file (more reliable than printing large JSON over serial)
         self.exec_multiline("""
-import sys
-if "_wtree" in sys.modules:
-    del sys.modules["_wtree"]
-from _wtree import all_layers
+from mpos.ui.testing import get_screen_widget_tree
 import json
 with open("/_mpos_tree.json", "w") as f:
-    json.dump(all_layers(), f)
+    json.dump(get_screen_widget_tree(), f)
 print("OK")
 """)
         try:
-            import subprocess, json as _json, tempfile
+            import subprocess, json as _json, tempfile, os as _os
             with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
                 tmppath = tmp.name
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            mpremote = os.path.join(script_dir, "..",
+            script_dir = _os.path.dirname(_os.path.abspath(__file__))
+            mpremote = _os.path.join(script_dir, "..",
                 "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
             subprocess.run(
                 ["python3", mpremote, "cp", ":/_mpos_tree.json", tmppath],
@@ -774,11 +610,11 @@ print("OK")
                 return _json.load(f)
         finally:
             try:
-                os.unlink(tmppath)
+                _os.unlink(tmppath)
             except Exception:
                 pass
             try:
-                self.exec("import os; os.remove('/_mpos_tree.json'); os.remove('/_wtree.py')")
+                self.exec("import os; os.remove('/_mpos_tree.json')")
             except Exception:
                 pass
 
