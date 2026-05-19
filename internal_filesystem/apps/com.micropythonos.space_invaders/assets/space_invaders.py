@@ -252,16 +252,6 @@ class SpaceInvaders(Activity):
         self.lives_label.align(lv.ALIGN.BOTTOM_MID, 0, -2)
         self.lives_label.set_style_text_color(_R, 0)
 
-        bottom = lv.obj(self.screen)
-        bottom.set_size(lv.pct(100), DisplayMetrics.pct_of_height(6))
-        bottom.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-        bottom.set_style_bg_color(lv.color_hex(0x000022), 0)
-        bottom.set_style_border_width(0, 0)
-
-        self.bottom_label = lv.label(bottom)
-        self.bottom_label.center()
-        self.bottom_label.set_style_text_color(_W, 0)
-
     def _create_game_area(self):
         self.game_area = lv.obj(self.screen)
         self.game_area.set_size(DisplayMetrics.width(), DisplayMetrics.pct_of_height(82))
@@ -365,11 +355,11 @@ class SpaceInvaders(Activity):
 
     def _show_start_screen(self):
         self.game_state = "start"
-        self.bottom_label.set_text("Tap or press A/ENTER to start")
         if self.highscore > 0:
             txt = "SPACE INVADERS\n\nHigh Score: " + str(self.highscore)
         else:
             txt = "SPACE INVADERS\n\nNo high score yet"
+        txt += "\n\nTap or press A/ENTER to start"
         self._create_cover_overlay(txt, "start")
 
     def _create_cover_overlay(self, text, state):
@@ -725,7 +715,6 @@ class SpaceInvaders(Activity):
             + "\n\nTap or press A/ENTER to restart",
             "game_over",
         )
-        self.bottom_label.set_text("Tap or press A/ENTER to restart")
 
     def _on_highscore_tap(self, event):
         self._close_popup()
