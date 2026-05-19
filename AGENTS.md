@@ -16,6 +16,7 @@ This file provides guidance to agents when working with code in this repository.
 Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
 - Always add a timeout -s 9 30 to ./scripts/run_desktop.sh so run: timeout -s 9 30 ./scripts/run_desktop.sh
+- Write temporary files to a `tmp/` folder in the CWD, not `/` or `/tmp`, due to permissions constraints.
 
 Guidelines for writing or updating tests:
 - Use the testing facilities in ./internal_filesystem/lib/mpos/ui/testing.py and feel free to add new ones there, NOT ad hoc in the test itself.
@@ -69,6 +70,7 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - `SerialBackend.wait_for_boot()` uses Ctrl-C to break into aioREPL (device may be running apps).
 - The CLI supports `--serial-port <port>` and `--baudrate <rate>` for serial connections. To pipe code without quoting: `cat <<'EOF' | python3 scripts/mpos_controller.py --serial-port /dev/ttyACM0 exec`
 - When no args are given and stdin is not a TTY, `exec` and `eval` read from stdin automatically — enabling heredoc/pipe usage.
+- **Rotation handling**: SerialBackend caches `_rotation` from the display on connect. If rotation is 270° (value 3, common for landscape badges), `press(x, y)` auto-transforms coordinates: `simulate_click(height - 1 - y, x)` so caller always uses LVGL logical coordinates.
 - `mpos.get_widget_tree()` dumps the full LVGL widget tree for both `lv.screen_active()` and `lv.layer_top()`. Returns JSON with type, text, coordinates, flags (clickable, hidden, scrollable, floating, event_bubble, etc.), states (checked, disabled, focused, pressed, etc.), scroll position, opacity, and widget-specific fields (slider value, dropdown options, textarea state, etc.). The widget dumper code is embedded as `_WTREE_SRC` in the controller and deployed to `/_wtree.py` on the device automatically — no separate upload needed.
 - IMPORTANT: `get_widget_tree()` and `get_visible_text()` include ALL children of scrollable parents, including off-screen items. y1/y2 coordinates are in content space, not screen space. To know what's actually visible, combine a screenshot (`mpos.screenshot()`) with the ppq-vision skill.
 - `_read_remote_file` / `write_remote_file`: ProcessBackend uses base64 (works over PTY), SerialBackend uses `mpremote cp` (reliable over USB).

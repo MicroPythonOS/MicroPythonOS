@@ -612,8 +612,11 @@ class SerialBackend:
             self._height = self.eval(
                 "lv.screen_active().get_display().get_vertical_resolution()"
             )
+            self._rotation = self.eval(
+                "lv.display_get_default().get_rotation()"
+            )
         except Exception:
-            pass
+            self._rotation = 0
 
     def stop(self):
         if self.ser:
@@ -692,10 +695,16 @@ class SerialBackend:
         _os.unlink(tmppath)
 
     def press(self, x, y):
+        rot = getattr(self, "_rotation", 0)
+        if rot == 3:  # DISPLAY_ROTATION._270
+            tx = self._height - 1 - y
+            ty = x
+        else:
+            tx, ty = x, y
         self.exec(
             "from mpos.ui.testing import simulate_click, wait_for_render; "
             "simulate_click({}, {}); "
-            "wait_for_render()".format(x, y)
+            "wait_for_render()".format(tx, ty)
         )
 
     def press_key(self, key):
