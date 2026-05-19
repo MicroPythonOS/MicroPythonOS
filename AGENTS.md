@@ -52,6 +52,10 @@ LVGL tips:
 - `lv.buttonmatrix.set_map()` fires `LV_EVENT_VALUE_CHANGED` asynchronously (next LVGL tick), causing phantom second-selection events. Guard with a time-based debounce (`time.ticks_diff(now, last_ts) < 50`) rather than a simple flag.
 - LVGL object wrappers (e.g. `lv.button()`, `lv.obj()`) do NOT support arbitrary Python attribute assignment (`btn.idx = 5` raises `AttributeError`). To associate data with a widget, use closures/lambdas (`lambda e, i=idx: callback(e, i)`) or maintain parallel lists keyed by list index.
 - In event callbacks, use `event.get_target_obj()` instead of `event.get_current_target()`. The latter returns a generic `Blob` that can hang when passed to typed LVGL methods (e.g. `lv.list.get_button_text()`). `get_target_obj()` returns a properly typed `lv.obj`.
+- `lv.obj.set_style_scrollbar_mode()` does NOT exist in this binding. Use `obj.remove_flag(lv.obj.FLAG.SCROLLABLE)` to hide scrollbars.
+- Always call `label.set_text("")` on newly created labels — they default to displaying the literal text `"Text"` otherwise.
+- Use `align_to(existing_widget, lv.ALIGN.OUT_RIGHT_MID, offset, 0)` to position a widget relative to another.
+- The lvgl_micropython SDL keyboard driver processes each key event as an instantaneous press+release pair via `LV_INDEV_MODE_EVENT`. It calls `lv_indev_read()` twice per SDL_KEYDOWN (once returning PRESSED, once RELEASED). **SDL_KEYUP is completely ignored** — no `LV_EVENT_KEY` fires on key release. To detect key release in games, use a timeout-based approach: on first press set a long deadline (~600ms to cover SDL's initial repeat delay), on repeat events set a short extension (~100ms to cover the steady-state repeat interval), and reset movement direction when the deadline expires. Track the deadline with `_player_dir_until` and check `time.ticks_diff(now, _player_dir_until) > 0` in the game loop.
 
 MicroPythonOS tips:
 - `self.appFullName` is automatically set by the ActivityNavigator when launching an Activity. Use it instead of hard-coding the app's package name (e.g. for `SharedPreferences(self.appFullName)`).

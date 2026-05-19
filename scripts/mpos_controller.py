@@ -426,11 +426,15 @@ class ProcessBackend:
         )
 
     def drag(self, x1, y1, x2, y2):
-        self.exec(
-            "from mpos.ui.testing import simulate_drag, wait_for_render; "
-            "simulate_drag({}, {}, {}, {}); "
-            "wait_for_render()".format(x1, y1, x2, y2)
-        )
+        self.exec_multiline("""
+from mpos.ui.testing import simulate_click, wait_for_render
+steps = 5
+for i in range(steps + 1):
+    x = {} + ({} - {}) * i // steps
+    y = {} + ({} - {}) * i // steps
+    simulate_click(x, y)
+    wait_for_render()
+""".format(x1, x2, x1, y1, y2, y1))
 
     def press_key(self, key):
         self.exec(

@@ -204,9 +204,6 @@ btn.send_event(lv.EVENT.CLICKED, None)
 
 def test_drag(mpos, is_serial=False):
     section("Drag (slider interaction)")
-    if not is_serial:
-        check(True, "skipped (desktop backend)")
-        return
 
     mpos.exec("""
 import lvgl as lv
