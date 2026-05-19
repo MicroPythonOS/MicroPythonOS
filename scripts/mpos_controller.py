@@ -545,24 +545,25 @@ class ProcessBackend:
     # -- screen introspection -------------------------------------------
 
     def get_widget_tree(self):
-        self.write_remote_file("/_wtree.py", _WTREE_SRC.encode("utf-8"))
+        self.write_remote_file("/tmp/_wtree.py", _WTREE_SRC.encode("utf-8"))
         self.exec_multiline("""
 import sys
 if "_wtree" in sys.modules:
     del sys.modules["_wtree"]
+sys.path.insert(0, "/tmp")
 from _wtree import all_layers
 import json
-with open("/_mpos_tree.json", "w") as f:
+with open("/tmp/_mpos_tree.json", "w") as f:
     json.dump(all_layers(), f)
 print("OK")
 """)
         try:
-            raw = self._read_remote_file("/_mpos_tree.json")
+            raw = self._read_remote_file("/tmp/_mpos_tree.json")
             import json as _json
             return _json.loads(raw.decode("utf-8"))
         finally:
             try:
-                self.exec("import os; os.remove('/_mpos_tree.json'); os.remove('/_wtree.py')")
+                self.exec("import os; os.remove('/tmp/_wtree.py'); os.remove('/tmp/_mpos_tree.json')")
             except Exception:
                 pass
 
