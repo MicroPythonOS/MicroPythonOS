@@ -62,6 +62,7 @@ def run_tests(mpos, only=None, is_serial=False):
         "basic": test_basic,
         "ui": test_ui_introspection,
         "interaction": test_interaction,
+        "drag": test_drag,
         "sessions": test_multiple_sessions,
         "navigation": test_app_navigation,
         "appmanagement": test_app_management,
@@ -201,6 +202,29 @@ btn.send_event(lv.EVENT.CLICKED, None)
             check("clicked!" in texts, f"send_event fallback: {texts}")
 
 
+def test_drag(mpos, is_serial=False):
+    section("Drag (slider interaction)")
+
+    mpos.exec("""
+import lvgl as lv
+scr = lv.obj()
+lv.screen_load(scr)
+scr.set_style_bg_color(lv.color_hex(0xFFFFFF), 0)
+slider = lv.slider(scr)
+slider.set_size(200, 20)
+slider.align(lv.ALIGN.CENTER, 0, 0)
+slider.set_range(0, 100)
+slider.set_value(0, lv.ANIM.OFF)
+""")
+    time.sleep(0.3)
+
+    mpos.drag(70, 120, 200, 120)
+    time.sleep(0.3)
+
+    val = mpos.eval("lv.screen_active().get_child(0).get_value()")
+    check(val > 20, f"drag moved slider from 0 to {val}")
+
+
 def test_multiple_sessions(mpos, is_serial=False):
     section("Multiple sessions")
     if is_serial:
@@ -295,7 +319,7 @@ for a in AppManager.get_app_list():
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,sessions,navigation,appmanagement")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,sessions,navigation,appmanagement")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 

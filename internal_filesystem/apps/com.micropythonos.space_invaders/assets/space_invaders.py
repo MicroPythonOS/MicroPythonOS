@@ -120,6 +120,8 @@ EXPLOSION_TEMPLATE = (
 class SpaceInvaders(Activity):
     def onCreate(self):
         self.screen = lv.obj()
+        self.screen.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
         self.screen.set_style_bg_color(_BG, 0)
 
         self.update_timer = None
@@ -153,6 +155,7 @@ class SpaceInvaders(Activity):
         self.invader_shoot_timer = 0.0
 
         self.shoot_cooldown = 0.0
+        self.touch_last_x = None
 
         self._create_ui()
         self._create_game_area()
@@ -190,7 +193,7 @@ class SpaceInvaders(Activity):
 
     def on_tap(self, event):
         code = event.get_code()
-        if code == lv.EVENT.CLICKED:
+        if code == lv.EVENT.PRESSED:
             if self.game_state != "playing":
                 self._start_game()
                 return
@@ -199,6 +202,8 @@ class SpaceInvaders(Activity):
             if ty < ga_y or ty > ga_y + self.ga_h:
                 return
             self._fire_player_bullet()
+            self.touch_last_x = tx
+            self.player_dir = 0
             return
         if code == lv.EVENT.PRESSING:
             if self.game_state == "playing":
@@ -206,12 +211,17 @@ class SpaceInvaders(Activity):
                 ga_y = self.game_area.get_y()
                 if ty < ga_y or ty > ga_y + self.ga_h:
                     return
-                if tx < DisplayMetrics.width() // 2:
-                    self.player_dir = -1
-                else:
-                    self.player_dir = 1
+                if self.touch_last_x is not None:
+                    delta = tx - self.touch_last_x
+                    self.player_x += delta
+                    self.player_x = max(
+                        PLAYER_W // 2,
+                        min(self.player_x, self.ga_w - PLAYER_W // 2),
+                    )
+                self.touch_last_x = tx
             return
         if code == lv.EVENT.RELEASED:
+            self.touch_last_x = None
             self.player_dir = 0
 
     def _create_ui(self):
@@ -261,6 +271,8 @@ class SpaceInvaders(Activity):
         self.game_area.set_style_pad_all(0, 0)
         self.game_area.set_style_radius(0, 0)
         self.game_area.set_style_clip_corner(True, 0)
+        self.game_area.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        self.game_area.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         self.ga_w = DisplayMetrics.width()
         self.ga_h = DisplayMetrics.pct_of_height(82)
@@ -368,6 +380,7 @@ class SpaceInvaders(Activity):
         modal.set_style_bg_color(lv.color_hex(0x000011), 0)
         modal.set_style_border_width(0, 0)
         modal.set_style_radius(0, 0)
+        modal.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
         label = lv.label(modal)
         label.set_text(text)

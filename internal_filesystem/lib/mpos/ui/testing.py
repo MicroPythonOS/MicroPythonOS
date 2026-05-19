@@ -1117,10 +1117,11 @@ def simulate_click(x, y, press_duration_ms=100):
     _touch_y = y
     _touch_pressed = True
 
-    # Process the press event
-    lv.task_handler()
+    # Process the press event via direct indev read (reliable, doesn't depend
+    # on indev read timer period alignment with lv.task_handler)
+    _touch_indev.read()
     time.sleep(0.02)
-    lv.task_handler()
+    _touch_indev.read()
 
     # Wait for press duration
     time.sleep(press_duration_ms / 1000.0)
@@ -1128,12 +1129,12 @@ def simulate_click(x, y, press_duration_ms=100):
     # Release the touch
     _touch_pressed = False
 
-    # Process the release event - this triggers the CLICKED event
-    lv.task_handler()
+    # Process the release event via direct indev read
+    _touch_indev.read()
     time.sleep(0.02)
-    lv.task_handler()
+    _touch_indev.read()
     time.sleep(0.02)
-    lv.task_handler()
+    _touch_indev.read()
 
 
 def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
