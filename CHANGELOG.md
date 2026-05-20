@@ -4,6 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Builtin Apps:
+- Bundle these as compiled bytecode .mpy files to reduce build size by 60KiB
 - About: show system uptime
 - HowTo app: make import lvgl as lv explicit
 
