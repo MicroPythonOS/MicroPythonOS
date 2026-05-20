@@ -20,6 +20,8 @@ class AppStore(Activity):
     _BACKEND_API_BADGEHUB = "badgehub"
 
     _ICON_SIZE = 64
+    _TOP_BAR_HEIGHT = 44
+    _TOP_BAR_BUTTON_SIZE = 34
 
     # Hardcoded list for now:
     backends = [
@@ -40,25 +42,40 @@ class AppStore(Activity):
     please_wait_label = None
     progress_bar = None
     settings_button = None
+    top_bar = None
+    title_label = None
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
         self._migrate_backend_pref()
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self.main_screen = lv.obj()
-        self.please_wait_label = lv.label(self.main_screen)
-        self.please_wait_label.set_text("Downloading app index...")
-        self.please_wait_label.center()
-        self.settings_button = lv.button(self.main_screen)
-        settings_margin = 15
-        settings_size = self._ICON_SIZE - settings_margin
-        self.settings_button.set_size(settings_size, settings_size)
-        self.settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
-        self.settings_button.add_event_cb(self.settings_button_tap,lv.EVENT.CLICKED,None)
+
+        self.top_bar = lv.obj(self.main_screen)
+        self._apply_default_styles(self.top_bar)
+        self.top_bar.set_size(lv.pct(100), self._TOP_BAR_HEIGHT)
+        self.top_bar.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.top_bar.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
+        self.top_bar.set_style_border_width(1, lv.PART.MAIN)
+        self.top_bar.set_style_border_side(lv.BORDER_SIDE.BOTTOM, lv.PART.MAIN)
+
+        self.settings_button = lv.button(self.top_bar)
+        self.settings_button.set_size(self._TOP_BAR_BUTTON_SIZE, self._TOP_BAR_BUTTON_SIZE)
+        self.settings_button.align(lv.ALIGN.LEFT_MID, 5, 0)
+        self.settings_button.add_event_cb(self.settings_button_tap, lv.EVENT.CLICKED, None)
         settings_label = lv.label(self.settings_button)
-        settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_label.set_text(lv.SYMBOL.LIST)
         settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
+
+        self.title_label = lv.label(self.top_bar)
+        self.title_label.set_text("App Store")
+        self.title_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        self.title_label.center()
+
+        self.please_wait_label = lv.label(self.main_screen)
+        self.please_wait_label.set_text("Downloading app index...")
+        self.please_wait_label.align(lv.ALIGN.CENTER, 0, self._TOP_BAR_HEIGHT // 2)
         self.setContentView(self.main_screen)
 
     def onResume(self, screen):
@@ -155,6 +172,7 @@ class AppStore(Activity):
         self.apps_list = lv.list(self.main_screen)
         self._apply_default_styles(self.apps_list)
         self.apps_list.set_size(lv.pct(100), lv.pct(100))
+        self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, self._TOP_BAR_HEIGHT)
         self._icon_widgets = {} # Clear old icons
         print("create_apps_list iterating")
         for app in self.apps:
@@ -190,8 +208,6 @@ class AppStore(Activity):
             desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
             self._add_click_handler(desc_label, self.show_app_detail, app)
         print("create_apps_list done")
-        # Settings button needs to float in foreground:
-        self.settings_button.move_to_index(-1)
 
     async def download_icons(self):
         print("Downloading icons...")
