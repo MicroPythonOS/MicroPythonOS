@@ -409,10 +409,14 @@ class AppManager:
         else:
             entrypoint = app.main_launcher_activity.get('entrypoint')
             classname = app.main_launcher_activity.get("classname")
+        entrypoint_path = app.installed_path + "/" + entrypoint
+        entrypoint_dir = app.installed_path
+        if "/" in entrypoint:
+            entrypoint_dir = entrypoint_path.rsplit("/", 1)[0]
         result = AppManager.execute_script(
-            app.installed_path + "/" + entrypoint,
+            entrypoint_path,
             classname,
-            app.installed_path + "/assets/",
+            entrypoint_dir + "/",
             app_fullname=fullname,
         )
         # Launchers have the bar, other apps don't have it

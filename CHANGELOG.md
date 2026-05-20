@@ -5,8 +5,10 @@ Put unreleased changes here!
 
 Builtin Apps:
 - About: show system uptime
+- HowTo app: make import lvgl as lv explicit
 
 Frameworks:
+- AppManager: try .mpy after .py and use import instead of explicit compile
 - SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
 
 0.10.0
