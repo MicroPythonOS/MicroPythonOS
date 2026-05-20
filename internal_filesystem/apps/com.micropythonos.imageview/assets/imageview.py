@@ -1,5 +1,6 @@
 import gc
 import os
+import lvgl as lv
 
 from mpos import Activity, WidgetAnimator, DisplayMetrics
 

@@ -1,3 +1,4 @@
+import lvgl as lv
 from mpos import ActivityDoesntExist # should fail here
 
 class Error(Activity):

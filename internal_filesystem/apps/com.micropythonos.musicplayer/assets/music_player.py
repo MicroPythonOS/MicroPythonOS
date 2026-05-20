@@ -1,6 +1,7 @@
 import machine
 import os
 import time
+import lvgl as lv
 
 from mpos import Activity, AppManager, Intent, sdcard, get_event_name, AudioManager
 

@@ -1,3 +1,4 @@
+import lvgl as lv
 from mpos import Activity, SensorManager
 
 class IMU(Activity):
@@ -118,4 +119,3 @@ class IMU(Activity):
         self.slidergx.set_value(gx, False)
         self.slidergy.set_value(gy, False)
         self.slidergz.set_value(gz, False)
-

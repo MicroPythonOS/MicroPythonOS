@@ -1,4 +1,5 @@
 from mpos import Activity, AppearanceManager, DisplayMetrics, SharedPreferences
+import lvgl as lv
 import random
 import time
 

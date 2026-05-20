@@ -6,6 +6,7 @@ except Exception as e:
     simulation_mode = True
 
 from drivers.lora.sx1262 import SX1262
+import lvgl as lv
 
 from mpos import Activity, MposKeyboard, TaskManager, LoRaManager
 
@@ -180,4 +181,3 @@ class LoRaChat(Activity):
             rf_sw.value(1) ; print("RF_SW set to HIGH")
 
         print("lora started")
-

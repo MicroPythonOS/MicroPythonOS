@@ -3,10 +3,10 @@
     "publisher": "MicroPythonOS",
     "short_description": "Classic card memory game",
     "long_description": "Find all matching pairs of symbols by remembering their positions.",
-    "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.memory/icons/com.micropythonos.memory_1.2.6_64x64.png",
-    "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.memory/mpks/com.micropythonos.memory_1.2.6.mpk",
+    "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.memory/icons/com.micropythonos.memory_1.2.7_64x64.png",
+    "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.memory/mpks/com.micropythonos.memory_1.2.7.mpk",
     "fullname": "com.micropythonos.memory",
-    "version": "1.2.6",
+    "version": "1.2.7",
     "category": "games",
     "activities": [
         {
