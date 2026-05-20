@@ -312,95 +312,70 @@ class AppManager:
         return AppManager.is_installed_by_path(f"apps/{app_fullname}") or AppManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
-    def execute_script(script_source, is_file, classname, cwd=None, app_fullname=None):
-        """Run the script in the current thread. Returns True if successful."""
+    def execute_script(script_source, classname, cwd=None, app_fullname=None):
+        """Run an app entrypoint file by importing its module. Returns True if successful."""
         import utime # for timing read and compile
         import mpos.ui
         import _thread
         import sys
+
+        def _start_activity(main_activity, source_name):
+            if main_activity:
+                from mpos.activity_navigator import ActivityNavigator
+                from .intent import Intent
+
+                start_time = utime.ticks_ms()
+                ActivityNavigator.startActivity(
+                    Intent(activity_class=main_activity, app_fullname=app_fullname)
+                )
+                end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
+                print(
+                    f"execute_script: ActivityNavigator.startActivity took {end_time}ms ({source_name})"
+                )
+                return True
+            print(f"Warning: could not find app's main_activity {classname}")
+            return False
+
         thread_id = _thread.get_ident()
-        compile_name = 'script' if not is_file else script_source
+        compile_name = script_source
         executed_name = compile_name
         print(f"Thread {thread_id}: executing script with cwd: {cwd}")
         try:
-            script_globals = {
-                '__name__': "__main__", # in case the script wants this
-                '__file__': compile_name # useful for logger
-            }
             print(f"Thread {thread_id}: starting script")
             path_before = sys.path[:]  # Make a copy, not a reference
             if cwd:
-                sys.path.append(cwd)
+                if cwd in sys.path:
+                    sys.path.remove(cwd)
+                sys.path.insert(0, cwd)
             try:
-                if is_file and script_source.endswith(".py"):
-                    mpy_source = script_source[:-3] + ".mpy"
-                    try:
-                        if os.stat(mpy_source)[0] & 0x8000:
-                            print(f"Thread {thread_id}: found precompiled script {mpy_source}")
-                            executed_name = mpy_source
-                            module_name = mpy_source.rsplit("/", 1)[-1][:-4]
-                            import builtins
-                            if module_name in sys.modules:
-                                del sys.modules[module_name]
-                            try:
-                                print(f"app_manager.py trying to __import__({module_name})")
-                                module = __import__(module_name)
-                            except Exception as e:
-                                print(f"app_manager.py failed to __import__({module_name}")
-                            module.__file__ = mpy_source
-                            module.__name__ = "__main__"
-                            main_activity = getattr(module, classname, None)
-                            if main_activity:
-                                from mpos.activity_navigator import ActivityNavigator
-                                from .intent import Intent
-                                start_time = utime.ticks_ms()
-                                ActivityNavigator.startActivity(Intent(activity_class=main_activity, app_fullname=app_fullname))
-                                end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                                print(f"execute_script: ActivityNavigator.startActivity took {end_time}ms")
-                                return True
-                            raise Exception("could not find app's main_activity {} in {}".format(classname, mpy_source))
-                    except OSError:
-                        pass
-                    except Exception as e:
-                        print(f"WARNING: failed running precompiled script {mpy_source}: {e}")
-                        sys.print_exception(e)
-
-                if is_file:
-                    print(f"Thread {thread_id}: reading script from file {script_source}")
-                    with open(script_source, 'r') as f: # No need to check if it exists as exceptions are caught
-                        start_time = utime.ticks_ms()
-                        script_source = f.read()
-                        read_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                        print(f"execute_script: reading script_source took {read_time}ms")
-
-                start_time = utime.ticks_ms()
-                compiled_script = compile(script_source, compile_name, 'exec')
-                compile_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                print(f"execute_script: compiling script_source took {compile_time}ms")
-                start_time = utime.ticks_ms()
-                exec(compiled_script, script_globals)
-                end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                print(f"apps.py execute_script: exec took {end_time}ms")
-                # Introspect globals
-                classes = {k: v for k, v in script_globals.items() if isinstance(v, type)}
-                functions = {k: v for k, v in script_globals.items() if callable(v) and not isinstance(v, type)}
-                variables = {k: v for k, v in script_globals.items() if not callable(v)}
-                print("Classes:", classes.keys()) # This lists a whole bunch of classes, including lib/mpos/ stuff
-                print("Functions:", functions.keys())
-                print("Variables:", variables.keys())
-                main_activity = script_globals.get(classname)
-                if main_activity:
-                    from mpos.activity_navigator import ActivityNavigator
-                    from .intent import Intent
+                module_name = script_source.rsplit("/", 1)[-1]
+                if "." in module_name:
+                    module_name = module_name.rsplit(".", 1)[0]
+                previous_module = sys.modules.get(module_name, None)
+                had_previous_module = module_name in sys.modules
+                try:
+                    if had_previous_module:
+                        del sys.modules[module_name]
                     start_time = utime.ticks_ms()
-                    ActivityNavigator.startActivity(
-                        Intent(activity_class=main_activity, app_fullname=app_fullname)
+                    module = __import__(module_name)
+                    import_time = utime.ticks_diff(utime.ticks_ms(), start_time)
+                    executed_name = getattr(module, "__file__", script_source)
+                    print(
+                        f"execute_script: importing module {module_name} took {import_time}ms"
                     )
-                    end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                    print(f"execute_script: ActivityNavigator.startActivity took {end_time}ms")
-                else:
-                    print(f"Warning: could not find app's main_activity {classname}")
+                    return _start_activity(getattr(module, classname, None), executed_name)
+                except Exception as import_error:
+                    print(
+                        f"WARNING: failed importing app module {module_name} "
+                        f"from {compile_name}: {import_error}"
+                    )
+                    sys.print_exception(import_error)
                     return False
+                finally:
+                    if had_previous_module:
+                        sys.modules[module_name] = previous_module
+                    elif module_name in sys.modules:
+                        del sys.modules[module_name]
             except Exception as e:
                 print(f"Thread {thread_id}: exception during execution:")
                 sys.print_exception(e)
@@ -409,7 +384,6 @@ class AppManager:
                 # Always restore sys.path, even if we return early or raise an exception
                 print(f"Thread {thread_id}: script {executed_name} finished, restoring sys.path from {sys.path} to {path_before}")
                 sys.path = path_before
-            return True
         except Exception as e:
             print(f"Thread {thread_id}: error:")
             import sys
@@ -437,7 +411,6 @@ class AppManager:
             classname = app.main_launcher_activity.get("classname")
         result = AppManager.execute_script(
             app.installed_path + "/" + entrypoint,
-            True,
             classname,
             app.installed_path + "/assets/",
             app_fullname=fullname,

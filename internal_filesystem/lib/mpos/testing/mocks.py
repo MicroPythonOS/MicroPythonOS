@@ -888,7 +888,7 @@ class MockApps:
         return True
     
     @staticmethod
-    def execute_script(script_source, is_file, classname, cwd=None, app_fullname=None):
+    def execute_script(script_source, classname, cwd=None, app_fullname=None):
         """Mock execute_script function."""
         return True
 
@@ -912,7 +912,7 @@ class MockAppManager:
         return True
     
     @staticmethod
-    def execute_script(script_source, is_file, classname, cwd=None, app_fullname=None):
+    def execute_script(script_source, classname, cwd=None, app_fullname=None):
         """Mock execute_script function."""
         return True
 

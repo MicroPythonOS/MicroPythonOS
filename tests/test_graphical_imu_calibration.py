@@ -34,7 +34,7 @@ class TestIMUCalibration(unittest.TestCase):
         app_fullname = "com.micropythonos.settings"
         entrypoint = f"builtin/apps/{app_fullname}/assets/{filename}"
         cwd = f"builtin/apps/{app_fullname}/assets/"
-        result = AppManager.execute_script(entrypoint, True, classname, cwd, app_fullname=app_fullname)
+        result = AppManager.execute_script(entrypoint, classname, cwd, app_fullname=app_fullname)
         self.assertTrue(result, f"Failed to start {classname} from {entrypoint}")
         wait_for_render(iterations=60)
 

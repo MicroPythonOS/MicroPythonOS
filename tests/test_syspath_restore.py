@@ -6,7 +6,7 @@ class TestSysPathRestore(unittest.TestCase):
     """Test that sys.path is properly restored after execute_script"""
 
     def test_syspath_restored_after_execute_script(self):
-        """Test that sys.path is restored to original state after script execution"""
+        """Test that sys.path is restored to original state after file execution"""
         # Import here to ensure we're in the right context
         from mpos import AppManager
 
@@ -15,28 +15,22 @@ class TestSysPathRestore(unittest.TestCase):
         original_length = len(sys.path)
 
         # Create a test directory path that would be added
-        test_cwd = "apps/com.test.app/assets/"
+        test_cwd = "builtin/apps/com.micropythonos.launcher/assets/"
 
         # Verify the test path is not already in sys.path
         self.assertFalse(test_cwd in original_path,
                         f"Test path {test_cwd} should not be in sys.path initially")
 
-        # Create a simple test script
-        test_script = '''
-import sys
-# Just a simple script that does nothing
-x = 42
-'''
+        test_script = "builtin/apps/com.micropythonos.launcher/assets/launcher.py"
 
         # Call execute_script with cwd parameter
-        # Note: This will fail because there's no Activity to start,
-        # but that's fine - we're testing the sys.path restoration
         result = AppManager.execute_script(
             test_script,
-            is_file=False,
-            classname="NonExistentClass",
+            classname="Launcher",
             cwd=test_cwd
         )
+
+        self.assertTrue(result)
 
         # After execution, sys.path should be restored
         current_path = sys.path
@@ -61,17 +55,16 @@ x = 42
         # Capture original sys.path
         original_path = sys.path[:]
 
-        test_script = '''
-x = 42
-'''
+        test_script = "builtin/apps/com.micropythonos.launcher/assets/launcher.py"
 
         # Call without cwd parameter
         result = AppManager.execute_script(
             test_script,
-            is_file=False,
-            classname="NonExistentClass",
+            classname="Launcher",
             cwd=None
         )
+
+        self.assertFalse(result)
 
         # sys.path should be unchanged
         self.assertEqual(sys.path, original_path,
