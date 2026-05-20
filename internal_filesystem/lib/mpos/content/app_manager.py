@@ -339,6 +339,8 @@ class AppManager:
         thread_id = _thread.get_ident()
         compile_name = script_source
         executed_name = compile_name
+        if cwd and cwd != "/":
+            cwd = cwd.rstrip("/")
         print(f"Thread {thread_id}: executing script with cwd: {cwd}")
         try:
             print(f"Thread {thread_id}: starting script")
@@ -416,7 +418,7 @@ class AppManager:
         result = AppManager.execute_script(
             entrypoint_path,
             classname,
-            entrypoint_dir + "/",
+            entrypoint_dir,
             app_fullname=fullname,
         )
         # Launchers have the bar, other apps don't have it
