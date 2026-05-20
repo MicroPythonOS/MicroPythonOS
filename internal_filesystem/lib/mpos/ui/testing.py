@@ -1688,3 +1688,17 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
             return False
     
     return True
+
+
+def get_all_children(parent):
+    result = []
+    count = parent.get_child_count()
+    for i in range(count):
+        child = parent.get_child(i)
+        result.append(child)
+        result.extend(get_all_children(child))
+    return result
+
+
+def simulate_long_press(x, y, duration_ms=1000):
+    simulate_click(x, y, press_duration_ms=duration_ms)

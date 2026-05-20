@@ -425,6 +425,13 @@ class ProcessBackend:
             "wait_for_render()".format(x, y)
         )
 
+    def long_press(self, x, y, duration_ms=1000):
+        self.exec(
+            "from mpos.ui.testing import simulate_click, wait_for_render; "
+            "simulate_click({}, {}, press_duration_ms={}); "
+            "wait_for_render()".format(x, y, duration_ms)
+        )
+
     def drag(self, x1, y1, x2, y2):
         self.exec_multiline("""
 from mpos.ui.testing import simulate_click, wait_for_render
@@ -640,6 +647,19 @@ class SerialBackend:
             "wait_for_render()".format(tx, ty)
         )
 
+    def long_press(self, x, y, duration_ms=1000):
+        rot = getattr(self, "_rotation", 0)
+        if rot == 3:  # DISPLAY_ROTATION._270
+            tx = self._height - 1 - y
+            ty = x
+        else:
+            tx, ty = x, y
+        self.exec(
+            "from mpos.ui.testing import simulate_click, wait_for_render; "
+            "simulate_click({}, {}, press_duration_ms={}); "
+            "wait_for_render()".format(tx, ty, duration_ms)
+        )
+
     def drag(self, x1, y1, x2, y2):
         rot = getattr(self, "_rotation", 0)
         if rot == 3:
@@ -765,6 +785,9 @@ class MPOSController:
     def press(self, x, y):
         self._backend.press(x, y)
 
+    def long_press(self, x, y, duration_ms=1000):
+        self._backend.long_press(x, y, duration_ms)
+
     def drag(self, x1, y1, x2, y2):
         self._backend.drag(x1, y1, x2, y2)
 
@@ -805,7 +828,7 @@ def main():
     parser = argparse.ArgumentParser(description="MicroPythonOS Controller")
     parser.add_argument(
         "action", nargs="?", default="exec",
-        help="Action: exec, eval, screenshot, startapp, freespace, backscreen, installapp, listapps, deleteapp, click, drag (default: exec)",
+        help="Action: exec, eval, screenshot, startapp, freespace, backscreen, installapp, listapps, deleteapp, click, longpress, drag (default: exec)",
     )
     parser.add_argument("args", nargs="*", help="Arguments")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
@@ -927,6 +950,14 @@ for a in AppManager.get_app_list():
         with ctrl:
             ctrl.press(x, y)
             print("Clicked ({}, {})".format(x, y))
+    elif args.action == "longpress":
+        if len(args.args) < 2:
+            print("error: X Y required", file=sys.stderr)
+            return 1
+        x, y = int(args.args[0]), int(args.args[1])
+        with ctrl:
+            ctrl.long_press(x, y)
+            print("Long-pressed ({}, {})".format(x, y))
     elif args.action == "drag":
         if len(args.args) < 4:
             print("error: X1 Y1 X2 Y2 required", file=sys.stderr)
