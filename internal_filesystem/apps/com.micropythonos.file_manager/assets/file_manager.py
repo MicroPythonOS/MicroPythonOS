@@ -1,6 +1,7 @@
 import os
 import lvgl as lv
-from mpos import Activity, InputManager, sdcard
+from mpos import Activity, InputManager, Intent, sdcard
+from rename_activity import RenameActivity
 
 
 class FileManager(Activity):
@@ -136,7 +137,7 @@ class FileManager(Activity):
 
         rename_btn = lv.button(bar)
         lv.label(rename_btn).set_text("Rename")
-        rename_btn.add_event_cb(lambda e: self._show_rename_ui(), lv.EVENT.CLICKED, None)
+        rename_btn.add_event_cb(lambda e: self._show_rename_screen(), lv.EVENT.CLICKED, None)
 
         cancel_btn = lv.button(bar)
         lv.label(cancel_btn).set_text("Cancel")
@@ -186,31 +187,14 @@ class FileManager(Activity):
         print(f"FileManager: deleted {path}")
         self._populate_dir(self._current_path)
 
-    def _show_rename_ui(self):
-        bar = self._action_bar
-        if not bar:
-            return
-        bar.clean()
-        self._cancel_btn = None
-        old_name = self._selected_path.rstrip("/").split("/")[-1]
-        ta = lv.textarea(bar)
-        ta.set_text(old_name)
-        ta.set_width(130)
-        confirm_btn = lv.button(bar)
-        lv.label(confirm_btn).set_text("Confirm")
-        confirm_btn.add_event_cb(lambda e: self._confirm_rename(ta.get_text()), lv.EVENT.CLICKED, None)
-        cancel_btn = lv.button(bar)
-        lv.label(cancel_btn).set_text("Back")
-        cancel_btn.add_event_cb(lambda e: self._show_action_bar(), lv.EVENT.CLICKED, None)
-
-    def _confirm_rename(self, new_name):
-        path = self._selected_path
-        dir_part = "/".join(path.rstrip("/").split("/")[:-1])
-        new_path = f"{dir_part}/{new_name}"
-        try:
-            os.rename(path, new_path)
-            print(f"FileManager: renamed {path} -> {new_path}")
-        except OSError as e:
-            print(f"FileManager: rename error {path} -> {new_path}: {e}")
+    def _show_rename_screen(self):
         self._dismiss_action_bar()
+        intent = Intent(RenameActivity, extras={"path": self._selected_path})
+        self.startActivityForResult(intent, self._on_rename_result)
+
+    def _on_rename_result(self, result):
+        if result and result.get("result_code"):
+            print(f"FileManager: rename succeeded: {result.get('data', {})}")
+        else:
+            print(f"FileManager: rename cancelled or failed")
         self._populate_dir(self._current_path)

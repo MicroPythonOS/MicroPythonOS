@@ -3,10 +3,10 @@
 "publisher": "MicroPythonOS",
 "short_description": "Manage files",
 "long_description": "Traverse around the filesystem and manage files and folders you find..",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.file_manager/icons/com.micropythonos.file_manager_0.0.6_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.file_manager/mpks/com.micropythonos.file_manager_0.0.6.mpk",
+"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.file_manager/icons/com.micropythonos.file_manager_0.0.7_64x64.png",
+"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.file_manager/mpks/com.micropythonos.file_manager_0.0.7.mpk",
 "fullname": "com.micropythonos.file_manager",
-"version": "0.0.6",
+"version": "0.0.7",
 "category": "development",
 "activities": [
     {
