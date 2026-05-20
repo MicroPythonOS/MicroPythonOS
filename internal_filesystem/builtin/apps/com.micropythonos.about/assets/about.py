@@ -2,6 +2,8 @@ import sys
 import logging
 import time
 
+import lvgl as lv
+
 from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
 import mpos
 
