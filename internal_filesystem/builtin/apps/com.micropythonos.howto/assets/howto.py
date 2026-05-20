@@ -1,4 +1,5 @@
 from mpos import Activity, SharedPreferences, DisplayMetrics
+import lvgl as lv
 
 class HowTo(Activity):
 
