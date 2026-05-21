@@ -24,6 +24,8 @@ find "$outdir" -iname "*.py" | while read pyfile; do
 	else
 		echo "Compiling $pyfile"
 		#"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" "$pyfile"
+		# -march= is needed to fix @viper stuff, but host is probably wrong because the host is x64 while it's running on esp32 (xtensawin)
+		# this is fine for builtin/apps because they don't use viper, but lib/mpos/ does (audio) so that might not work
 		"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -march=host "$pyfile"
 		#"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -march=xtensawin "$pyfile"
 		#"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -march=x64 "$pyfile"

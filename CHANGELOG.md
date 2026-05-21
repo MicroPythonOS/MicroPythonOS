@@ -4,13 +4,17 @@ Future release (next version)
 Put unreleased changes here!
 
 Builtin Apps:
-- Bundle these as compiled bytecode .mpy files to reduce build size by 60KiB
+- Bundle these as compiled bytecode .mpy files to reduce build size by 60KiB and improve performance
 - About: show system uptime
 - HowTo app: make import lvgl as lv explicit
 
 Frameworks:
 - AppManager: try .mpy after .py and use import instead of explicit compile
+- AppManager: require explicit import lvgl for clarity
 - SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
+
+OS:
+- Disable unused OS facilities (FreeRTOS internals, tracing, INFO logging, broken GIF, Pinyin IME, LVGL window, BMP) to reduce build size by 109KiB
 
 0.10.0
 ======
