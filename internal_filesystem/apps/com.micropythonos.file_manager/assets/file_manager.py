@@ -1,6 +1,6 @@
 import os
 import lvgl as lv
-from mpos import Activity, InputManager, Intent, sdcard
+from mpos import Activity, Intent, sdcard
 from rename_activity import RenameActivity
 
 
@@ -117,7 +117,7 @@ class FileManager(Activity):
             return
         group = lv.group_get_default()
         if group:
-            InputManager.emulate_focus_obj(group, self._cancel_btn)
+            lv.group_focus_obj(self._cancel_btn)
 
     def _show_action_bar(self):
         self._dismiss_action_bar()

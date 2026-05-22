@@ -248,9 +248,7 @@ class MposKeyboard:
     def focus_on_keyboard(self, timer=None):
         default_group = lv.group_get_default()
         if default_group:
-            from .input_manager import InputManager
-            from .focus_direction import move_focus_direction
-            InputManager.emulate_focus_obj(default_group, self._keyboard)
+            lv.group_focus_obj(self._keyboard)
 
     def scroll_back_after_hide(self, timer):
         self._parent.scroll_to_y(self._saved_scroll_y, True)

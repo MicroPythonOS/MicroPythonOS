@@ -3,14 +3,16 @@ Future release (next version)
 
 Put unreleased changes here!
 
+
 Builtin Apps:
-- Bundle these as compiled bytecode .mpy files to reduce build size by 60KiB and improve performance
+- Bundle as compiled bytecode .mpy files to reduce build size by 60KiB and improve performance
 - About: show system uptime
 - HowTo app: make import lvgl as lv explicit
 
 Frameworks:
 - AppManager: try .mpy after .py and use import instead of explicit compile
 - AppManager: require explicit import lvgl for clarity
+- InputManager: mark emulate_focus_obj(group,o) as deprecated in favor of lv.group_focus_obj(o)
 - SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
 
 OS:
