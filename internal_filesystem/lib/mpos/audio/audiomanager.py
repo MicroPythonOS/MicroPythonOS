@@ -42,6 +42,8 @@ class AudioManager:
             i2s_pins=None,
             buzzer_pin=None,
             preferred_sample_rate=None,
+            on_open=None,
+            on_close=None,
         ):
             if kind not in ("i2s", "buzzer"):
                 raise ValueError("Output.kind must be 'i2s' or 'buzzer'")
@@ -52,6 +54,8 @@ class AudioManager:
             self.kind = kind
             self.channels = channels
             self.preferred_sample_rate = preferred_sample_rate
+            self.on_open = on_open
+            self.on_close = on_close
 
             if kind == "i2s":
                 if not i2s_pins:
@@ -88,6 +92,8 @@ class AudioManager:
             adc_mic_pin=None,
             pdm_pins=None,
             preferred_sample_rate=None,
+            on_open=None,
+            on_close=None,
         ):
             if kind not in ("i2s", "adc", "pdm"):
                 raise ValueError("Input.kind must be 'i2s', 'adc', or 'pdm'")
@@ -98,6 +104,8 @@ class AudioManager:
             self.kind = kind
             self.channels = channels
             self.preferred_sample_rate = preferred_sample_rate
+            self.on_open = on_open
+            self.on_close = on_close
 
             if kind == "i2s":
                 if not i2s_pins:
@@ -122,7 +130,7 @@ class AudioManager:
 
         @staticmethod
         def _validate_i2s_pins(i2s_pins):
-            allowed = {"sck_in", "sck", "ws", "sd_in"}
+            allowed = {"sck_in", "sck", "ws", "sd_in", "mck"}
             for key in i2s_pins:
                 if key not in allowed:
                     raise ValueError("Invalid i2s_pins key for input: %s" % key)
@@ -726,6 +734,8 @@ class Player:
             i2s_pins=self.output.i2s_pins,
             on_complete=self.on_complete,
             requested_sample_rate=self.sample_rate,
+            on_open=getattr(self.output, "on_open", None),
+            on_close=getattr(self.output, "on_close", None),
         )
         self._stream.play()
 
@@ -810,6 +820,8 @@ class Recorder:
             sample_rate=self.sample_rate,
             i2s_pins=self.input_device.i2s_pins,
             on_complete=self.on_complete,
+            on_open=getattr(self.input_device, "on_open", None),
+            on_close=getattr(self.input_device, "on_close", None),
         )
         self._stream.record()
 
