@@ -273,8 +273,8 @@ from mpos import AudioManager
 headset_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
-    'sck': 10,      # SCLK aka BCLK was 17 but is optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin so set it to IO10 (badge link) for now
-    'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator
+    'sck': 10,      # SCLK aka BCLK is optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin so set it to IO10 (badge link) for now. It's 17 on the prototype and 2 in final device.
+    'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator. Not driving it will disable the chip. Will change to 17 in final device.
 }
 
 AudioManager.add(
@@ -306,7 +306,7 @@ buzzer_output = AudioManager.add(
 communicator_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
-    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory)
+    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory). Not driving it will disable the chip.
 }
 
 communicator_i2s_input_pins = {
