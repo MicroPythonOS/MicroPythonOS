@@ -39,7 +39,10 @@ class ShowFonts(Activity):
             bitcoin_symbol = "\uf15a"
             bitcoin_symbol_in_circle = "\uf379"
             thumbs_up_symbol = "\uf164"
-            title.set_text(f"{name}: 2357 !@#$%^&*( {lv.SYMBOL.OK} {lv.SYMBOL.BACKSPACE} ₿ {bitcoin_symbol} {bitcoin_symbol_in_circle} {thumbs_up_symbol} 丯 丰")
+            diacritics = "æ ø å Æ Ø Å"
+            #latin = "Æ æ 	Ɑ ɑ 	Ʌ ʌ 	Ꞵ ꞵ 	Ð ð 	Ɛ ɛ 	Ə ə 	Ǝ ə 	Ɣ ɣ 	Ƣ ƣ 	Ɩ ɩ 	Ɥ ɥ 	Ꟛ ꟛ 	Ŋ ŋ 	Œ œ 	Ɔ ɔ 	Ɤ ɤ 	Kʼ ĸ 	Ʀ ʀ 	ẞ ß 	Ʃ ʃ 	Ɯ ɯ 	Ʊ ʊ 	Ꞷ ꞷ 	Ʋ ʋ 	Ƿ ƿ Ȝ ȝ 	ϴ θ 	Ʒ ʒ 	Ƹ ƹ 	Þ þ 	Ȣ ȣ 	Ꭓ ꭓ 	Ɂ ʔ ɂ 	꟎ ʕ ꟏ 	ǀ 	ǁ 	ǂ 	ǃ 	ʘ 	ʻ 	ʼ 	Ꞌ ꞌ 	Ƨ ƨ 	Ꜫ ꜫ 	Ꜭ ꜭ 	Ƽ ƽ 	Ƅ ƅ 	7 	"
+            supported_latin = "Æ æ Ð ð ß Þ þ 7"
+            title.set_text(f"{name}: 2357 !@#$%^&*( {lv.SYMBOL.OK} {lv.SYMBOL.BACKSPACE} ₿ {bitcoin_symbol} {bitcoin_symbol_in_circle} {thumbs_up_symbol} 丯 丰 {diacritics} {supported_latin}")
             title.set_pos(0, y)
             y += font.get_line_height() + 4
 
