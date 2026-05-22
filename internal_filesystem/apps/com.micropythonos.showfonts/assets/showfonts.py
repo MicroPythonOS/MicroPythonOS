@@ -6,9 +6,7 @@ class ShowFonts(Activity):
         screen = lv.obj()
 
         # Make the screen focusable so it can be scrolled with the arrow keys
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(screen)
+        lv.group_get_default().add_obj(screen)
 
         y=0
         y = self.addAllFontsTitles(screen)

@@ -259,6 +259,12 @@ except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
+lv.init()
+focusgroup = lv.group_get_default()
+if not focusgroup:
+    focusgroup = lv.group_create()
+    focusgroup.set_default()
+
 board = detect_board()
 if board:
     print(f"Detected {board} system, importing mpos.board.{board}")
@@ -285,8 +291,7 @@ mpos.ui.handle_top_swipe()
 # Clear top menu, notification bar, swipe back and swipe down buttons
 # Ideally, these would be stored in a different focusgroup that is used when the user opens the drawer
 focusgroup = lv.group_get_default()
-if focusgroup: # on esp32 this may not be set
-    focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
+focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
 
 # Custom exception handler that does not deinit() the TaskHandler because then the UI hangs:
 def custom_exception_handler(e):
@@ -296,7 +301,6 @@ def custom_exception_handler(e):
     # No need to deinit() and re-init LVGL:
     #mpos.ui.task_handler.deinit() # default task handler does this, but then things hang
     #focusgroup = lv.group_get_default()
-    #if focusgroup: # on esp32 this may not be set
         # otherwise it does focus_next and then crashes while doing lv.deinit()
         #focusgroup.remove_all_objs()
         #focusgroup.delete()

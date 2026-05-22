@@ -72,8 +72,6 @@ class Launcher(Activity):
         screen.clean()
 
         focusgroup = lv.group_get_default()
-        if not focusgroup:
-            print("WARNING: could not get default focusgroup")
 
         # Grid parameters
         icon_size = 64
@@ -127,8 +125,7 @@ class Launcher(Activity):
             app_cont.add_event_cb(lambda e, cont=app_cont: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
             app_cont.add_event_cb(lambda e, cont=app_cont: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
 
-            if focusgroup:
-                focusgroup.add_obj(app_cont)
+            focusgroup.add_obj(app_cont)
 
         # ------------------------------------------------------------------
         # 4. Store the new representation for the next resume

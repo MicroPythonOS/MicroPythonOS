@@ -165,9 +165,8 @@ class AppStore(Activity):
         print("Emptying focus group")
         # removing objects or even cleaning the screen doesn't seem to empty the focus group
         focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.remove_all_objs()
-            focusgroup.add_obj(self.settings_button)
+        focusgroup.remove_all_objs()
+        focusgroup.add_obj(self.settings_button)
 
         self.apps_list = lv.list(self.main_screen)
         self._apply_default_styles(self.apps_list)

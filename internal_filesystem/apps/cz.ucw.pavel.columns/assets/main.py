@@ -136,9 +136,7 @@ class Main(Activity):
             self.cells.append(row)
 
         # Make screen focusable for keyboard input
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(self.screen)
+        lv.group_get_default().add_obj(self.screen)
 
         #self.screen.add_event_cb(self.on_touch, lv.EVENT.CLICKED, None)
         self.screen.add_event_cb(self.on_key, lv.EVENT.KEY, None)
@@ -334,4 +332,3 @@ class Main(Activity):
     def rotate(self):
         self.active_colors = self.active_colors[-1:] + self.active_colors[:-1]
         self.redraw()
-

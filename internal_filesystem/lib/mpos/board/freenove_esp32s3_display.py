@@ -174,8 +174,7 @@ def keypad_read_cb(indev, data):
     if last_state == lv.INDEV_STATE.PRESSED and current_key == lv.KEY.ESC:
         mpos.ui.back_screen()
 
-group = lv.group_create()
-group.set_default()
+group = lv.group_get_default()
 
 btn_indev = lv.indev_create()
 btn_indev.set_type(lv.INDEV_TYPE.KEYPAD)

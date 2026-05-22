@@ -153,7 +153,7 @@ mpos.ui.main_display = st7789.ST7789(
     color_byte_order=st7789.BYTE_ORDER_BGR,
     rgb565_byte_swap=True,
     # reset_pin is driven by the CH32 microcontroller
-) # calls lv.init()
+) # calls lv.init() if necessary
 
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
@@ -236,8 +236,7 @@ def keypad_read_cb(indev, data):
         key_press_start = 0
         last_repeat_time = 0
 
-group = lv.group_create()
-group.set_default()
+group = lv.group_get_default()
 
 # Create and set up the input device
 indev = lv.indev_create()

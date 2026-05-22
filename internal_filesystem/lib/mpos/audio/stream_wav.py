@@ -10,7 +10,7 @@ import time
 
 # Toggle to enable I2S.shift-based volume scaling when available.
 # Set to False to use legacy software scaling only.
-USE_I2S_SHIFT_VOLUME = False # I2S shift isn't supported on MicroPython 1.25.0
+USE_I2S_SHIFT_VOLUME = True
 
 # Volume scaling function - Viper-optimized for ESP32 performance
 # NOTE: The line below is automatically commented out by build_mpos.sh during
@@ -594,7 +594,7 @@ class WAVStream:
                                     raw[i] = 0
                             elif shift > 0:
                                 try:
-                                    self._i2s.shift(raw, 16, shift) # triggers exception
+                                    self._i2s.shift(buf=raw, bits=16, shift=shift)
                                 except Exception as e:
                                     #print(f"_i2s.shift got exception, falling back to software scaling: {e}")
                                     _scale_audio_optimized(raw, len(raw), scale_fixed)

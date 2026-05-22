@@ -118,9 +118,8 @@ class FullscreenPlayer(Activity):
         self._stop_button_label.set_text("Stop")
 
         focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(qr_screen)
-            focusgroup.add_obj(self._filename_label)
+        focusgroup.add_obj(qr_screen)
+        focusgroup.add_obj(self._filename_label)
         self.setContentView(qr_screen)
 
     def onResume(self, screen):

@@ -111,9 +111,7 @@ class Main(Activity):
                 None
             )
 
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(self.screen)
+        lv.group_get_default().add_obj(self.screen)
 
         self.setContentView(self.screen)
 

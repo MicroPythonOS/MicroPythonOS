@@ -20,9 +20,7 @@ class About(Activity):
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
         # Make the screen focusable so it can be scrolled with the arrow keys
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(screen)
+        lv.group_get_default().add_obj(screen)
 
         # Logo
         img = lv.image(screen)
@@ -231,9 +229,7 @@ class About(Activity):
         # Make labels focusable to allow scroll on devices without touch screen
         label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
         label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(label)
+        lv.group_get_default().add_obj(label)
         if is_header:
             primary_color = lv.theme_get_color_primary(None)
             label.set_style_text_color(primary_color, lv.PART.MAIN)

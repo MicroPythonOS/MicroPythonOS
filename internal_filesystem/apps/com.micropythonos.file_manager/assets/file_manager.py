@@ -115,9 +115,7 @@ class FileManager(Activity):
     def _focus_action_bar(self):
         if not self._cancel_btn:
             return
-        group = lv.group_get_default()
-        if group:
-            lv.group_focus_obj(self._cancel_btn)
+        lv.group_focus_obj(self._cancel_btn)
 
     def _show_action_bar(self):
         self._dismiss_action_bar()
@@ -145,10 +143,9 @@ class FileManager(Activity):
 
         self._cancel_btn = cancel_btn
         group = lv.group_get_default()
-        if group:
-            group.add_obj(delete_btn)
-            group.add_obj(rename_btn)
-            group.add_obj(cancel_btn)
+        group.add_obj(delete_btn)
+        group.add_obj(rename_btn)
+        group.add_obj(cancel_btn)
 
         self._action_bar = bar
 

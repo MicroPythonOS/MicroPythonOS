@@ -162,9 +162,7 @@ class SpaceInvaders(Activity):
         self._create_game_area()
         self._create_entity_pools()
 
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(self.screen)
+        lv.group_get_default().add_obj(self.screen)
 
         self.screen.add_event_cb(self.on_tap, lv.EVENT.ALL, None)
         self.screen.add_event_cb(self.on_key, lv.EVENT.KEY, None)

@@ -226,8 +226,7 @@ def keypad_read_cb(indev, data):
         elif current_key == lv.KEY.DOWN:
             mpos.ui.focus_direction.move_focus_direction(180)
 
-group = lv.group_create()
-group.set_default()
+group = lv.group_get_default()
 
 # Create and set up the input device
 indev = lv.indev_create()
