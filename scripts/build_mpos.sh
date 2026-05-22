@@ -109,9 +109,11 @@ echo "Symlinking secp256k1-embedded-ecdh for unix and macOS builds..."
 ln -sf ../../secp256k1-embedded-ecdh "$codebasedir"/lvgl_micropython/ext_mod/secp256k1-embedded-ecdh
 echo "Symlinking c_mpos for unix and macOS builds..."
 ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
-# Only for MicroPython 1.26.1 workaround:
-#echo "Applying lvgl_micropython i2c patch..."
-#patch -p0 --forward < "$codebasedir"/patches/i2c_ng.patch
+
+echo "Applying lvgl_micropython esp32 uart repl enable/disable at runtime patch..."
+pushd "$codebasedir"/lvgl_micropython/lib/micropython
+patch -p1 --forward < ../../esp32_uart_repl_runtime.patch || true
+popd
 
 echo "Minifying and inlining HTML..."
 pushd "$codebasedir"/webrepl/
@@ -154,8 +156,8 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
         extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
         # --py-freertos: add MicroPython FreeRTOS module to expose internals
         #extra_configs="$extra_configs --py-freertos"
-		# --enable-uart-repl={y/n}: This allows you to turn on and off the UART based REPL. You will wany to set this of you use USB-CDC or JTAG for the REPL output
-		extra_configs="$extra_configs --enable-uart-repl=n"
+        # Enable UART based REPL, in addition to the USB-CDC or JTAG REPL. Can be disabled with esp.uart_repl(False)
+        extra_configs="$extra_configs --enable-uart-repl=y"
 	fi
 
 	if [ "$BOARD_VARIANT" == "SPIRAM" -o "$BOARD_VARIANT" == "SPIRAM_OCT" ]; then
@@ -267,4 +269,3 @@ PY
 else
 	echo "invalid target $target"
 fi
-

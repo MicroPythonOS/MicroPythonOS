@@ -18,6 +18,7 @@ Frameworks:
 OS:
 - Simplify focusgroup handling
 - Disable unused OS facilities (FreeRTOS internals, tracing, INFO logging, broken GIF, Pinyin IME, LVGL window, BMP) to reduce build size by 109KiB
+- Re-enable UART REPL again BUT add esp.uart_repl(False) functionality to disable/enable it at runtime
 
 0.10.0
 ======
