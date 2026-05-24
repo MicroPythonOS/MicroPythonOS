@@ -1,23 +1,21 @@
 {
-  "name": "IR Remote",
-  "publisher": "MicroPythonOS",
-  "short_description": "Send IR commands",
-  "long_description": "Simple IR remote with power and volume controls.",
-  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.ir_remote/icons/com.micropythonos.ir_remote_0.1.3_64x64.png",
-  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.ir_remote/mpks/com.micropythonos.ir_remote_0.1.3.mpk",
-  "fullname": "com.micropythonos.ir_remote",
-  "version": "0.1.3",
-  "category": "tools",
-  "activities": [
-    {
-      "entrypoint": "assets/ir_remote.py",
-      "classname": "IRRemote",
-      "intent_filters": [
+    "name": "IR Remote",
+    "publisher": "MicroPythonOS",
+    "short_description": "Send IR commands",
+    "long_description": "Simple IR remote with power and volume controls.",
+    "fullname": "com.micropythonos.ir_remote",
+    "version": "0.1.3",
+    "category": "tools",
+    "activities": [
         {
-          "action": "main",
-          "category": "launcher"
+            "entrypoint": "assets/ir_remote.py",
+            "classname": "IRRemote",
+            "intent_filters": [
+                {
+                    "action": "main",
+                    "category": "launcher"
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }
