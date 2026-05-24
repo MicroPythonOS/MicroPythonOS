@@ -101,7 +101,7 @@ int quirc_resize(struct quirc *q, int w, int h)
 	 * - the maximum height of rings would be about 1/3 of the image height.
 	 */
 
-	if ((size_t)h * 2 / 2 != h) {
+	if ((size_t)h * 2 / 2 != (size_t)h) {
 		goto fail; /* size_t overflow */
 	}
 	num_vars = (size_t)h * 2 / 3;

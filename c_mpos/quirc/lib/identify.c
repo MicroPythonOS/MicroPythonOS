@@ -534,7 +534,7 @@ static void test_capstone(struct quirc *q, unsigned int x, unsigned int y,
 static void finder_scan(struct quirc *q, unsigned int y)
 {
 	quirc_pixel_t *row = q->pixels + y * q->w;
-	unsigned int x;
+	int x;
 	int last_color = 0;
 	unsigned int run_length = 0;
 	unsigned int run_count = 0;
@@ -1026,7 +1026,7 @@ static void test_neighbours(struct quirc *q, int i,
 	}
 }
 
-static void test_grouping(struct quirc *q, unsigned int i)
+static void test_grouping(struct quirc *q, int i)
 {
 	struct quirc_capstone *c1 = &q->capstones[i];
 	int j;
