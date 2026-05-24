@@ -124,9 +124,9 @@ class ShowFonts(Activity):
     def _init_imagefont(self):
         emoji_path = self._pick_emoji_png_path()
         self._emoji_map = {ord("😀"): emoji_path} if emoji_path else {}
-        self._emoji_font = lv.imgfont_create(48, self._imgfont_path_cb, None)
+        self._emoji_font = lv.imgfont_create(74, self._imgfont_path_cb, None)
         self._emoji_font.fallback = lv.font_montserrat_28
-        self._emoji_font_small = lv.imgfont_create(29, self._imgfont_path_cb, None) # smaller than this results in a blank image?!
+        self._emoji_font_small = lv.imgfont_create(28, self._imgfont_path_cb, None) # smaller than this results in a blank image?!
         self._emoji_font_small.fallback = lv.font_montserrat_16
 
     def _pick_emoji_png_path(self):
@@ -177,8 +177,8 @@ class ShowFonts(Activity):
                 return src
 
             scale = max(1, round(target_height * 256 / src_h))
-            target_width = max(1, round(src_w * scale / 256))
-            scaled_src = self._render_scaled_image_src(src, target_width, target_height, scale)
+            target_width = max(1, round(src_w * target_height / src_h))
+            scaled_src = self._render_scaled_image_src(src, src_w, src_h, target_width, target_height, scale)
             if scaled_src is not None:
                 self._imgfont_scaled_src_cache[key] = scaled_src
                 return scaled_src
@@ -202,18 +202,54 @@ class ShowFonts(Activity):
         self._imgfont_source_size_cache[src] = size
         return size
 
-    def _render_scaled_image_src(self, src, target_width, target_height, scale):
+    def _render_scaled_image_src(self, src, src_w, src_h, target_width, target_height, scale):
         renderer = lv.image(lv.layer_top())
         try:
             renderer.add_flag(lv.obj.FLAG.HIDDEN)
             renderer.set_src(src)
-            renderer.set_size(target_width, target_height)
+            renderer.set_size(src_w, src_h)
             renderer.set_scale(scale)
 
-            buffer_size = target_width * target_height * 4
+            scaled_w = max(1, round(src_w * scale / 256))
+            scaled_h = max(1, round(src_h * scale / 256))
+            budget_w = max(src_w, target_width, scaled_w) + 8
+            budget_h = max(src_h, target_height, scaled_h) + 8
+            buffer_size = budget_w * budget_h * 4
             buffer = bytearray(buffer_size)
             tmp_dsc = lv.image_dsc_t()
-            lv.snapshot_take_to_buf(renderer, lv.COLOR_FORMAT.ARGB8888, tmp_dsc, buffer, buffer_size)
+            result = lv.snapshot_take_to_buf(renderer, lv.COLOR_FORMAT.ARGB8888, tmp_dsc, buffer, buffer_size)
+            if result != lv.RESULT.OK:
+                return None
+
+            snapshot_width = int(tmp_dsc.header.w)
+            snapshot_height = int(tmp_dsc.header.h)
+            snapshot_stride = int(tmp_dsc.header.stride)
+            if snapshot_width <= 0 or snapshot_height <= 0 or snapshot_stride < snapshot_width * 4:
+                return None
+
+            required_size = snapshot_stride * snapshot_height
+            if required_size > len(buffer):
+                return None
+
+            if snapshot_width == target_width and snapshot_height == target_height and snapshot_stride == target_width * 4:
+                data = buffer
+            else:
+                bounds = self._find_nontransparent_bounds_argb8888(
+                    buffer,
+                    snapshot_width,
+                    snapshot_height,
+                    snapshot_stride,
+                )
+                data = self._crop_argb8888_center(
+                    buffer,
+                    bounds[0],
+                    bounds[1],
+                    bounds[2],
+                    bounds[3],
+                    snapshot_stride,
+                    target_width,
+                    target_height,
+                )
 
             return lv.image_dsc_t({
                 "header": {
@@ -223,8 +259,69 @@ class ShowFonts(Activity):
                     "stride": target_width * 4,
                     "cf": lv.COLOR_FORMAT.ARGB8888,
                 },
-                "data_size": len(buffer),
-                "data": buffer,
+                "data_size": len(data),
+                "data": data,
             })
         finally:
             renderer.delete()
+
+    def _find_nontransparent_bounds_argb8888(
+        self,
+        src,
+        src_width,
+        src_height,
+        src_stride,
+    ):
+        min_x = src_width
+        min_y = src_height
+        max_x = -1
+        max_y = -1
+
+        for y in range(src_height):
+            row_start = y * src_stride
+            for x in range(src_width):
+                alpha_index = row_start + x * 4 + 3
+                if src[alpha_index] == 0:
+                    continue
+                if x < min_x:
+                    min_x = x
+                if y < min_y:
+                    min_y = y
+                if x > max_x:
+                    max_x = x
+                if y > max_y:
+                    max_y = y
+
+        if max_x < min_x or max_y < min_y:
+            return (0, 0, src_width, src_height)
+
+        return (min_x, min_y, max_x - min_x + 1, max_y - min_y + 1)
+
+    def _crop_argb8888_center(
+        self,
+        src,
+        src_x,
+        src_y,
+        src_width,
+        src_height,
+        src_stride,
+        dst_width,
+        dst_height,
+    ):
+        dst = bytearray(dst_width * dst_height * 4)
+
+        copy_width = min(src_width, dst_width)
+        copy_height = min(src_height, dst_height)
+
+        crop_src_x = src_x + max(0, (src_width - copy_width) // 2)
+        crop_src_y = src_y + max(0, (src_height - copy_height) // 2)
+        dst_x = max(0, (dst_width - copy_width) // 2)
+        dst_y = max(0, (dst_height - copy_height) // 2)
+
+        row_bytes = copy_width * 4
+        for row in range(copy_height):
+            src_index = (crop_src_y + row) * src_stride + crop_src_x * 4
+            dst_index = ((dst_y + row) * dst_width + dst_x) * 4
+            dst[dst_index:dst_index + row_bytes] = src[src_index:src_index + row_bytes]
+
+        return dst
