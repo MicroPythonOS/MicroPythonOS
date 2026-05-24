@@ -71,13 +71,13 @@ class ShowFonts(Activity):
 
         demo_small = lv.label(screen)
         demo_small.set_style_text_font(self._emoji_font_small, lv.PART.MAIN)
-        demo_small.set_text("16px: A ☺️/😀 A")
+        demo_small.set_text("16px: A 🙂/😀 A")
         demo_small.set_pos(0, y)
         y += self._emoji_font_small.get_line_height() + 12
 
         demo = lv.label(screen)
         demo.set_style_text_font(self._emoji_font, lv.PART.MAIN)
-        demo.set_text("32px: A ☺️/😀 A")
+        demo.set_text("32px: A 🙂/😀 A")
         demo.set_pos(0, y)
         y += self._emoji_font.get_line_height() + 12
         print("height: " + str(self._emoji_font.get_line_height()))
@@ -128,6 +128,7 @@ class ShowFonts(Activity):
     def _init_imagefont(self):
         self._emoji_map = {
             ord("☺"): "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/263A.png",
+            ord("🙂"): "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/263A.png",
             ord("😀"): "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/1F600.png",
         }
         self._emoji_font = lv.imgfont_create(48, self._imgfont_path_cb, None)
