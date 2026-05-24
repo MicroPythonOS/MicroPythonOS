@@ -12,9 +12,11 @@ class ShowFonts(Activity):
         self._emoji_map = {}
         self._emoji_font = None
         self._emoji_font_small = None
+        self._ttf_font = None
         self._imgfont_scaled_src_cache = {}
         self._imgfont_source_size_cache = {}
         self._init_imagefont()
+        self._init_ttf_font()
 
         y = 0
         y = self.addImageFontDemo(screen, y)
@@ -38,6 +40,8 @@ class ShowFonts(Activity):
             (lv.font_unscii_16, "Unscii 16"),
             (lv.font_montserrat_28, "Montserrat 28"),  # +4
         ]
+        if self._ttf_font is not None:
+            fonts.append((self._ttf_font, "TTF PrincessSofia 24"))
 
         y = start_y
         for font, name in fonts:
@@ -128,6 +132,12 @@ class ShowFonts(Activity):
         self._emoji_font.fallback = lv.font_montserrat_28
         self._emoji_font_small = lv.imgfont_create(16, self._imgfont_path_cb, None)
         self._emoji_font_small.fallback = lv.font_montserrat_16
+
+    def _init_ttf_font(self):
+        try:
+            self._ttf_font = lv.tiny_ttf_create_file("M:PrincessSofia-Regular.ttf", 24)
+        except Exception:
+            self._ttf_font = None
 
     def _pick_emoji_png_path(self):
         candidates = [
