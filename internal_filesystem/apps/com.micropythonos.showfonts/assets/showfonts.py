@@ -34,7 +34,7 @@ class ShowFonts(Activity):
         self._imgfont_empty_src_cache = {}
         self._unknown_emoji_codepoints_logged = {}
         self._init_imagefont()
-        self._init_ttf_font()
+        #self._init_ttf_font()
 
         y = 0
         y = self.addImageFontDemo(screen, y)
