@@ -594,9 +594,9 @@ class WAVStream:
                                     raw[i] = 0
                             elif shift > 0:
                                 try:
-                                    self._i2s.shift(buf=raw, bits=16, shift=shift)
+                                    self._i2s.shift(buf=raw, bits=16, shift=-shift)
                                 except Exception as e:
-                                    #print(f"_i2s.shift got exception, falling back to software scaling: {e}")
+                                    print(f"_i2s.shift got exception, falling back to software scaling: {e}")
                                     _scale_audio_optimized(raw, len(raw), scale_fixed)
                         else:
                             #print("_i2s has no shift attribute, falling back to software scaling")
