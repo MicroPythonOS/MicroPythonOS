@@ -1,37 +1,12 @@
 # WAVStream - WAV File Playback Stream for AudioManager
-# Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling, volume control
-# Uses synchronous playback in a separate thread for non-blocking operation
+# Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling.
+# Uses synchronous playback in a separate thread for non-blocking operation.
 
 import machine
-import micropython
 import os
-import sys
 import time
 
-# Toggle to enable I2S.shift-based volume scaling when available.
-# Set to False to use legacy software scaling only.
-USE_I2S_SHIFT_VOLUME = True
-
-# Volume scaling function - Viper-optimized for ESP32 performance
-# NOTE: The line below is automatically commented out by build_mpos.sh during
-# Unix/macOS builds (cross-compiler doesn't support Viper), then uncommented after build.
-@micropython.viper
-def _scale_audio(buf: ptr8, num_bytes: int, scale_fixed: int):
-    """Fast volume scaling for 16-bit audio samples using Viper (ESP32 native code emitter)."""
-    for i in range(0, num_bytes, 2):
-        lo = int(buf[i])
-        hi = int(buf[i + 1])
-        sample = (hi << 8) | lo
-        if hi & 128:
-            sample -= 65536
-        sample = (sample * scale_fixed) // 32768
-        if sample > 32767:
-            sample = 32767
-        elif sample < -32768:
-            sample = -32768
-        buf[i] = sample & 255
-        buf[i + 1] = (sample >> 8) & 255
-
+'''
 @micropython.viper
 def _scale_audio_optimized(buf: ptr8, num_bytes: int, scale_fixed: int):
     if scale_fixed >= 32768:
@@ -71,94 +46,7 @@ def _scale_audio_optimized(buf: ptr8, num_bytes: int, scale_fixed: int):
 
         buf[i]   = r & 0xFF
         buf[i+1] = (r >> 8) & 0xFF
-
-@micropython.viper
-def _scale_audio_rough(buf: ptr8, num_bytes: int, scale_fixed: int):
-    """Rough volume scaling for 16-bit audio samples using right shifts for performance."""
-    if scale_fixed >= 32768:
-        return
-
-    # Determine the shift amount
-    shift: int = 0
-    threshold: int = 32768
-    while shift < 16 and scale_fixed < threshold:
-        shift += 1
-        threshold >>= 1
-
-    # If shift is 16 or more, set buffer to zero (volume too low)
-    if shift >= 16:
-        for i in range(num_bytes):
-            buf[i] = 0
-        return
-
-    # Apply right shift to each 16-bit sample
-    for i in range(0, num_bytes, 2):
-        lo: int = int(buf[i])
-        hi: int = int(buf[i + 1])
-        sample: int = (hi << 8) | lo
-        if hi & 128:
-            sample -= 65536
-        sample >>= shift
-        buf[i] = sample & 255
-        buf[i + 1] = (sample >> 8) & 255
-
-@micropython.viper
-def _scale_audio_shift(buf: ptr8, num_bytes: int, shift: int):
-    """Rough volume scaling for 16-bit audio samples using right shifts for performance."""
-    if shift <= 0:
-        return
-
-    # If shift is 16 or more, set buffer to zero (volume too low)
-    if shift >= 16:
-        for i in range(num_bytes):
-            buf[i] = 0
-        return
-
-    # Apply right shift to each 16-bit sample
-    for i in range(0, num_bytes, 2):
-        lo: int = int(buf[i])
-        hi: int = int(buf[i + 1])
-        sample: int = (hi << 8) | lo
-        if hi & 128:
-            sample -= 65536
-        sample >>= shift
-        buf[i] = sample & 255
-        buf[i + 1] = (sample >> 8) & 255
-
-@micropython.viper
-def _scale_audio_powers_of_2(buf: ptr8, num_bytes: int, shift: int):
-    if shift <= 0:
-        return
-    if shift >= 16:
-        for i in range(num_bytes):
-            buf[i] = 0
-        return
-
-    # Unroll the sign-extend + shift into one tight loop with no inner branch
-    inv_shift: int = 16 - shift
-    for i in range(0, num_bytes, 2):
-        s: int = int(buf[i]) | (int(buf[i+1]) << 8)
-        if s & 0x8000:              # only one branch, highly predictable when shift fixed shift
-            s |= -65536             # sign extend using OR (faster than subtract!)
-        s <<= inv_shift             # bring the bits we want into lower 16
-        s >>= 16                    # arithmetic shift right by 'shift' amount
-        buf[i]   = s & 0xFF
-        buf[i+1] = (s >> 8) & 0xFF
-
-
-# Would be faster to use a lookup table here
-def _volume_to_shift(scale_fixed):
-    """Convert fixed-point volume (0..32768) to a right-shift amount (0..16)."""
-    if scale_fixed >= 32768:
-        return 0
-    if scale_fixed <= 0:
-        return 16
-    shift = 0
-    threshold = 32768
-    while shift < 16 and scale_fixed < threshold:
-        shift += 1
-        threshold >>= 1
-    return shift
+'''
 
 class WAVStream:
     """
@@ -168,6 +56,19 @@ class WAVStream:
 
     WAVE_FORMAT_PCM = 0x1
     WAVE_FORMAT_EXTENSIBLE = 0xFFFE # often used for 24 and 32 bits per sample
+    _VOLUME_TO_SHIFT = (
+        16, 7, 6, 6, 5, 5, 5, 4, 4, 4,
+        4, 4, 4, 3, 3, 3, 3, 3, 3, 3,
+        3, 3, 3, 3, 3, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        0,
+    )
 
     def __init__(
         self,
@@ -426,6 +327,15 @@ class WAVStream:
                 out_idx += 2
         return upsampled
 
+    @staticmethod
+    def _volume_percent_to_shift(volume):
+        """Convert 0-100 volume percent to a 0-16 right-shift amount."""
+        if volume <= 0:
+            return 16
+        if volume >= 100:
+            return 0
+        return WAVStream._VOLUME_TO_SHIFT[volume]
+
     # ----------------------------------------------------------------------
     #  Main playback routine
     # ----------------------------------------------------------------------
@@ -456,6 +366,7 @@ class WAVStream:
                 self._playback_rate = playback_rate
                 # ibuf = playback_rate # doesnt account for stereo vs mono...
                 ibuf = 8192
+                #ibuf = 32000 # old setting
 
                 print(f"WAVStream: {original_rate} Hz, {bits_per_sample}-bit, {channels}-ch")
                 print(f"WAVStream: Playback at {playback_rate} Hz (factor {upsample_factor})")
@@ -487,10 +398,10 @@ class WAVStream:
 
                     # Configure MCLK pin if provided (must be done before I2S init)
                     # On some MicroPython versions, machine.I2S() supports a mck argument
-                    # but not on ESP32S3 1.25.0 version, apparently.
+                    # but not on ESP32S3 1.27.0 version, apparently.
                     if 'mck' in self.i2s_pins:
                         mck_pin = machine.Pin(self.i2s_pins['mck'], machine.Pin.OUT)
-                        from machine import Pin, PWM
+                        from machine import PWM
                         try:
                             self._mck_pwm = PWM(mck_pin)
                             freq, duty = WAVStream._get_freq_duty(playback_rate)
@@ -579,28 +490,15 @@ class WAVStream:
                     if upsample_factor > 1:
                         raw = self._upsample_buffer(raw, upsample_factor)
 
-                    # 3. Volume scaling
-                    scale = self.volume / 100.0
-                    if scale < 1.0:
-                        scale_fixed = int(scale * 32768)
-                        if (
-                            USE_I2S_SHIFT_VOLUME
-                            and self._i2s
-                            and hasattr(self._i2s, "shift")
-                        ):
-                            shift = _volume_to_shift(scale_fixed)
-                            if shift >= 16:
-                                for i in range(len(raw)):
-                                    raw[i] = 0
-                            elif shift > 0:
-                                try:
-                                    self._i2s.shift(buf=raw, bits=16, shift=-shift)
-                                except Exception as e:
-                                    print(f"_i2s.shift got exception, falling back to software scaling: {e}")
-                                    _scale_audio_optimized(raw, len(raw), scale_fixed)
-                        else:
-                            #print("_i2s has no shift attribute, falling back to software scaling")
-                            _scale_audio_optimized(raw, len(raw), scale_fixed)
+                    # 3. Volume scaling via I2S native right-shift.
+                    volume_shift = self._volume_percent_to_shift(self.volume)
+                    if self._i2s and volume_shift > 0:
+                        self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
+
+                    # The old volume scaling method, left here for comparison purposes:
+                    #scale = self.volume / 100.0
+                    #scale_fixed = int(scale * 32768)
+                    #_scale_audio_optimized(raw, len(raw), scale_fixed)
 
                     # 4. Output to I2S (blocking write is OK - we're in a separate thread)
                     if self._i2s:
