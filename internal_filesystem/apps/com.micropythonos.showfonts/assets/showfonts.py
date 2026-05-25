@@ -1,21 +1,21 @@
 from mpos import Activity
 import lvgl as lv
+import os
 
-CP_FROWNING_FACE = 0x2639 # ☹
-CP_HEAVY_BLACK_HEART = 0x2764 # ❤️
-CP_WHITE_SMILING_FACE = 0x263A # ☺
-CP_SLIGHTLY_SMILING_FACE = 0x1F642 # 🙂
-CP_GRINNING_FACE = 0x1F600 # 😀
-CP_STAR_EYES = 0x1F929 # 🤩
 CP_VARIATION_SELECTOR_TEXT = 0xFE0E
 CP_VARIATION_SELECTOR_EMOJI = 0xFE0F
 
-# Ideally, just list the files in EMOJI_PNG_PATH to know which emojis that are supported
-EMOJI_PNG_PATH = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/"
-EMOJI_PNG_2639 = "2639.png"
-EMOJI_PNG_263A = "263A.png"
-EMOJI_PNG_1F600 = "1F600.png"
-EMOJI_PNG_1F929 = "1F929.png"
+EMOJI_PNG_DIR = "openmoji-72x72-color"
+EMOJI_PNG_SRC_PREFIX = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/"
+EMOJI_PNG_DIR_CANDIDATES = (
+    EMOJI_PNG_DIR,
+    "./" + EMOJI_PNG_DIR,
+    "assets/" + EMOJI_PNG_DIR,
+    "apps/com.micropythonos.showfonts/assets/" + EMOJI_PNG_DIR,
+    "/apps/com.micropythonos.showfonts/assets/" + EMOJI_PNG_DIR,
+    "M:apps/com.micropythonos.showfonts/assets/" + EMOJI_PNG_DIR,
+)
+UNKNOWN_EMOJI_LOG_THRESHOLD = 0x2300
 
 
 class ShowFonts(Activity):
@@ -32,6 +32,7 @@ class ShowFonts(Activity):
         self._imgfont_scaled_src_cache = {}
         self._imgfont_source_size_cache = {}
         self._imgfont_empty_src_cache = {}
+        self._unknown_emoji_codepoints_logged = {}
         self._init_imagefont()
         self._init_ttf_font()
 
@@ -149,20 +150,66 @@ class ShowFonts(Activity):
         screen.set_height(y + 20)
 
     def _init_imagefont(self):
-        self._emoji_map = {
-            CP_FROWNING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_2639,
-            CP_WHITE_SMILING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_263A,
-            CP_HEAVY_BLACK_HEART : EMOJI_PNG_PATH + "2764.png", # ❤️
-            CP_STAR_EYES : EMOJI_PNG_PATH + EMOJI_PNG_1F929,
-            CP_SLIGHTLY_SMILING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_263A,
-            CP_GRINNING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_1F600,
-        }
+        self._emoji_map = self._build_emoji_map_from_png_dir()
         self._emoji_font_big = lv.imgfont_create(72, self._imgfont_path_cb, None)
         self._emoji_font_big.fallback = lv.font_montserrat_28
         self._emoji_font = lv.imgfont_create(36, self._imgfont_path_cb, None)
         self._emoji_font.fallback = lv.font_montserrat_28
         self._emoji_font_small = lv.imgfont_create(18, self._imgfont_path_cb, None)
         self._emoji_font_small.fallback = lv.font_montserrat_16
+
+    def _build_emoji_map_from_png_dir(self):
+        emoji_map = {}
+        dir_path = None
+        entries = None
+        for candidate in EMOJI_PNG_DIR_CANDIDATES:
+            entries = self._list_dir_names(candidate)
+            if entries is not None:
+                dir_path = candidate
+                break
+
+        if entries is None:
+            print("showfonts: could not list emoji dir candidates (cwd=" + self._safe_getcwd() + ")")
+            return emoji_map
+
+        for name in entries:
+            if not name.lower().endswith(".png"):
+                continue
+
+            codepoint_hex = name[:-4]
+            try:
+                codepoint = int(codepoint_hex, 16)
+            except Exception:
+                print("showfonts: skip non-hex emoji file: " + name)
+                continue
+
+            emoji_map[codepoint] = EMOJI_PNG_SRC_PREFIX + name
+
+        print("showfonts: loaded " + str(len(emoji_map)) + " emoji png mappings from " + dir_path)
+        return emoji_map
+
+    def _list_dir_names(self, path):
+        try:
+            names = []
+            for entry in os.ilistdir(path):
+                if isinstance(entry, tuple):
+                    names.append(entry[0])
+                else:
+                    names.append(entry)
+            return names
+        except Exception:
+            pass
+
+        try:
+            return os.listdir(path)
+        except Exception:
+            return None
+
+    def _safe_getcwd(self):
+        try:
+            return os.getcwd()
+        except Exception:
+            return "?"
 
     def _normalize_emoji_text(self, text):
         text = text.replace(chr(CP_VARIATION_SELECTOR_TEXT), "")
@@ -186,7 +233,18 @@ class ShowFonts(Activity):
             src = self._emoji_map[unicode_cp]
             target_height = self._font_pixel_height(font)
             return self._get_scaled_imgfont_src(src, target_height)
+
+        self._log_unknown_emoji_codepoint(unicode_cp)
         return None
+
+    def _log_unknown_emoji_codepoint(self, unicode_cp):
+        if unicode_cp < UNKNOWN_EMOJI_LOG_THRESHOLD:
+            return
+        if unicode_cp in self._unknown_emoji_codepoints_logged:
+            return
+
+        self._unknown_emoji_codepoints_logged[unicode_cp] = True
+        print("showfonts: unknown emoji codepoint 0x{:X}".format(unicode_cp))
 
     def _get_empty_imgfont_src(self, target_height):
         target_height = max(1, int(target_height))

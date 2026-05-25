@@ -334,6 +334,10 @@ mic_input = AudioManager.add(
 from mpos import SensorManager
 SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH) # IMU (LSM6DSOTR-C / LSM6DSO)
 
+print("Disabling UART REPL because it receives data from the Communicator Add-On. Use esp.uart_repl(True) to re-enable.")
+import esp
+esp.uart_repl(False)
+
 # === STARTUP "WOW" EFFECT ===
 import _thread
 
