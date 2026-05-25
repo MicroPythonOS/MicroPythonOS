@@ -16,6 +16,7 @@ Frameworks:
 - SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
 
 OS:
+- Add path library
 - c_mpos/quirc: fix compilation warnings
 - Simplify focusgroup handling
 - Disable unused OS facilities (FreeRTOS internals, tracing, INFO logging, broken GIF, Pinyin IME, LVGL window, BMP) to reduce build size by 109KiB

@@ -9,12 +9,13 @@ class ShowFonts(Activity):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
-        self._emoji_font_small = FontManager.getFont(size=18)
-        self._emoji_font = FontManager.getFont(size=36)
-        self._emoji_font_big = FontManager.getFont(size=72)
-        self._ttf_font = FontManager.getFont(size=24, ttf="M:PrincessSofia-Regular.ttf")
+        import path
+        print(f"{__file__}") # apps/com.micropythonos.showfonts/assets/showfonts.py
+        print(f"{path.abspath(__file__)}")
+        print(f"{path.dirname(path.abspath(__file__))}")
+        d = path.dirname(path.abspath(__file__))
+        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{d}/Rancourt-SmallCaps.ttf")
 
-        self.addImageFontDemo(screen)
         self.addAllFontsTitles(screen)
         self.addAllGlyphs(screen)
 
@@ -22,7 +23,7 @@ class ShowFonts(Activity):
 
     def addAllFontsTitles(self, screen):
         fonts = FontManager.listFonts()
-        fonts.append((self._ttf_font, "TTF PrincessSofia 24"))
+        fonts.append((self._ttf_font, "TTF Rancourt 42"))
 
         for font_info in fonts:
             if isinstance(font_info, tuple):
@@ -32,7 +33,7 @@ class ShowFonts(Activity):
                 font = font_info["font"]
                 name = font_info["name"]
             title = lv.label(screen)
-            lv.group_get_default().add_obj(title)
+            self.labelSelectable(title)
             title.set_width(lv.pct(99))
             title.set_style_text_font(font, lv.PART.MAIN)
             bitcoin_symbol = "\uf15a"
@@ -41,7 +42,7 @@ class ShowFonts(Activity):
             diacritics = "æ ø å Æ Ø Å"
             supported_latin = "Æ æ Ð ð ß Þ þ 7"
             title.set_text(
-                "{}: 2 pgj ❤️ !@#$%^&*( {} {} ₿ {} {} {} 丯 丰 {} {}".format(
+                "{}: ABC 123 xyz ❤️ ☺️ !@#$%^&*( {} {} ₿ {} {} {} 丯 丰 {} {}".format(
                     name,
                     lv.SYMBOL.OK,
                     lv.SYMBOL.BACKSPACE,
@@ -52,26 +53,6 @@ class ShowFonts(Activity):
                     supported_latin,
                 )
             )
-
-    def addImageFontDemo(self, screen):
-
-        title = lv.label(screen)
-        title_font = FontManager.getFont(size=14)
-        title.set_style_text_font(title_font, lv.PART.MAIN)
-        title.set_text("Imagefont demo")
-
-        demo_small = lv.label(screen)
-        demo_small.set_style_text_font(self._emoji_font_small, lv.PART.MAIN)
-        demo_small.set_text(FontManager.normalizeEmojiText("18px: A \u2639 \u263A == \U0001F642/\U0001F600 A"))
-
-        demo = lv.label(screen)
-        demo.set_style_text_font(self._emoji_font, lv.PART.MAIN)
-        demo.set_text(FontManager.normalizeEmojiText("36px: ❤️ \U0001F929 \u2639/\u263A == \U0001F642/\U0001F600 A"))
-
-        demo_big = lv.label(screen)
-        demo_big.set_style_text_font(self._emoji_font_big, lv.PART.MAIN)
-        demo_big.set_text(FontManager.normalizeEmojiText("72px: A \u2639/\u263A == \U0001F642/\U0001F600 A"))
-
 
     def addAllGlyphs(self, screen):
         dsc = lv.font_glyph_dsc_t()
@@ -99,5 +80,21 @@ class ShowFonts(Activity):
                     x = 4
 
         lbl.set_text(alltext)
-        lv.group_get_default().add_obj(lbl)
+        self.labelSelectable(lbl)
 
+    def labelSelectable(self, label):
+        label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
+        label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
+        lv.group_get_default().add_obj(label)
+
+    @staticmethod
+    def _focus_obj(event):
+        target = event.get_target_obj()
+        target.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
+        target.set_style_border_width(1, lv.PART.MAIN)
+        target.scroll_to_view(True)
+
+    @staticmethod
+    def _defocus_obj(event):
+        target = event.get_target_obj()
+        target.set_style_border_width(0, lv.PART.MAIN)
