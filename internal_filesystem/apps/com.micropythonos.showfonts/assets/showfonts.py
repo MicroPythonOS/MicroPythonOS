@@ -1,6 +1,17 @@
 from mpos import Activity
 import lvgl as lv
 
+CP_FROWNING_FACE = 0x2639 # ☹
+CP_WHITE_SMILING_FACE = 0x263A # ☺
+CP_SLIGHTLY_SMILING_FACE = 0x1F642 # 🙂
+CP_GRINNING_FACE = 0x1F600 # 😀
+CP_VARIATION_SELECTOR_TEXT = 0xFE0E
+CP_VARIATION_SELECTOR_EMOJI = 0xFE0F
+
+EMOJI_PNG_2639 = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/2639.png"
+EMOJI_PNG_263A = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/263A.png"
+EMOJI_PNG_1F600 = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/1F600.png"
+
 
 class ShowFonts(Activity):
     def onCreate(self):
@@ -15,6 +26,7 @@ class ShowFonts(Activity):
         self._ttf_font = None
         self._imgfont_scaled_src_cache = {}
         self._imgfont_source_size_cache = {}
+        self._imgfont_empty_src_cache = {}
         self._init_imagefont()
         self._init_ttf_font()
 
@@ -71,13 +83,13 @@ class ShowFonts(Activity):
 
         demo_small = lv.label(screen)
         demo_small.set_style_text_font(self._emoji_font_small, lv.PART.MAIN)
-        demo_small.set_text("16px: A ☹/☺ == 🙂/😀 A")
+        demo_small.set_text(self._normalize_emoji_text("16px: A \u2639/\u263A == \U0001F642/\U0001F600 A"))
         demo_small.set_pos(0, y)
         y += self._emoji_font_small.get_line_height() + 12
 
         demo = lv.label(screen)
         demo.set_style_text_font(self._emoji_font, lv.PART.MAIN)
-        demo.set_text("32px: A ☹/☺ == 🙂/😀 A")
+        demo.set_text(self._normalize_emoji_text("32px: A \u2639/\u263A == \U0001F642/\U0001F600 A"))
         demo.set_pos(0, y)
         y += self._emoji_font.get_line_height() + 12
         print("height: " + str(self._emoji_font.get_line_height()))
@@ -127,15 +139,20 @@ class ShowFonts(Activity):
 
     def _init_imagefont(self):
         self._emoji_map = {
-            ord("☹"): "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/2639.png",
-            ord("☺"): "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/263A.png",
-            ord("🙂"): "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/263A.png",
-            ord("😀"): "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/1F600.png",
+            CP_FROWNING_FACE: EMOJI_PNG_2639,
+            CP_WHITE_SMILING_FACE: EMOJI_PNG_263A,
+            CP_SLIGHTLY_SMILING_FACE: EMOJI_PNG_263A,
+            CP_GRINNING_FACE: EMOJI_PNG_1F600,
         }
         self._emoji_font = lv.imgfont_create(48, self._imgfont_path_cb, None)
         self._emoji_font.fallback = lv.font_montserrat_28
         self._emoji_font_small = lv.imgfont_create(16, self._imgfont_path_cb, None)
         self._emoji_font_small.fallback = lv.font_montserrat_16
+
+    def _normalize_emoji_text(self, text):
+        text = text.replace(chr(CP_VARIATION_SELECTOR_TEXT), "")
+        text = text.replace(chr(CP_VARIATION_SELECTOR_EMOJI), "")
+        return text
 
     def _init_ttf_font(self):
         try:
@@ -143,32 +160,34 @@ class ShowFonts(Activity):
         except Exception:
             self._ttf_font = None
 
-    def _pick_emoji_png_path(self):
-        candidates = [
-            "M:apps/com.micropythonos.showfonts/res/mipmap-mdpi/icon_64x64.png",
-            "M:/apps/com.micropythonos.showfonts/res/mipmap-mdpi/icon_64x64.png",
-            "/apps/com.micropythonos.showfonts/res/mipmap-mdpi/icon_64x64.png",
-            "M:apps/com.micropythonos.file_manager/res/mipmap-mdpi/icon_64x64.png",
-            "M:/apps/com.micropythonos.file_manager/res/mipmap-mdpi/icon_64x64.png",
-            "/home/user/projects/MicroPythonOS/claude/MicroPythonOS/internal_filesystem/apps/com.micropythonos.showfonts/res/mipmap-mdpi/icon_64x64.png",
-        ]
-        for path in candidates:
-            try:
-                probe = lv.image(lv.layer_top())
-                probe.set_src(path)
-                probe.delete()
-                return path
-            except Exception:
-                pass
-        return None
-
     def _imgfont_path_cb(self, font, unicode_cp, unicode_next, offset_y, user_data):
+        if unicode_cp == CP_VARIATION_SELECTOR_TEXT or unicode_cp == CP_VARIATION_SELECTOR_EMOJI:
+            offset_y.__dereference__(0)
+            target_height = self._font_pixel_height(font)
+            return self._get_empty_imgfont_src(target_height)
+
         if unicode_cp in self._emoji_map:
             offset_y.__dereference__(0)
             src = self._emoji_map[unicode_cp]
             target_height = self._font_pixel_height(font)
             return self._get_scaled_imgfont_src(src, target_height)
         return None
+
+    def _get_empty_imgfont_src(self, target_height):
+        target_height = max(1, int(target_height))
+        if target_height in self._imgfont_empty_src_cache:
+            return self._imgfont_empty_src_cache[target_height]
+
+        empty = lv.obj(lv.layer_top())
+        try:
+            empty.add_flag(lv.obj.FLAG.HIDDEN)
+            empty.set_size(1, target_height)
+            src = lv.snapshot_take(empty, lv.COLOR_FORMAT.ARGB8888)
+        finally:
+            empty.delete()
+
+        self._imgfont_empty_src_cache[target_height] = src
+        return src
 
     def _font_pixel_height(self, font):
         try:
