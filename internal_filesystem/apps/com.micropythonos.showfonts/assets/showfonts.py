@@ -41,7 +41,7 @@ class ShowFonts(Activity):
             diacritics = "æ ø å Æ Ø Å"
             supported_latin = "Æ æ Ð ð ß Þ þ 7"
             title.set_text(
-                "{}: 2 p 3 g 5 j 7 !@#$%^&*( {} {} ₿ {} {} {} 丯 丰 {} {}".format(
+                "{}: 2 pgj ❤️ !@#$%^&*( {} {} ₿ {} {} {} 丯 丰 {} {}".format(
                     name,
                     lv.SYMBOL.OK,
                     lv.SYMBOL.BACKSPACE,
