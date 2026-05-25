@@ -2,15 +2,20 @@ from mpos import Activity
 import lvgl as lv
 
 CP_FROWNING_FACE = 0x2639 # ☹
+CP_HEAVY_BLACK_HEART = 0x2764 # ❤️
 CP_WHITE_SMILING_FACE = 0x263A # ☺
 CP_SLIGHTLY_SMILING_FACE = 0x1F642 # 🙂
 CP_GRINNING_FACE = 0x1F600 # 😀
+CP_STAR_EYES = 0x1F929 # 🤩
 CP_VARIATION_SELECTOR_TEXT = 0xFE0E
 CP_VARIATION_SELECTOR_EMOJI = 0xFE0F
 
-EMOJI_PNG_2639 = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/2639.png"
-EMOJI_PNG_263A = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/263A.png"
-EMOJI_PNG_1F600 = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/1F600.png"
+# Ideally, just list the files in EMOJI_PNG_PATH to know which emojis that are supported
+EMOJI_PNG_PATH = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/"
+EMOJI_PNG_2639 = "2639.png"
+EMOJI_PNG_263A = "263A.png"
+EMOJI_PNG_1F600 = "1F600.png"
+EMOJI_PNG_1F929 = "1F929.png"
 
 
 class ShowFonts(Activity):
@@ -83,16 +88,22 @@ class ShowFonts(Activity):
 
         demo_small = lv.label(screen)
         demo_small.set_style_text_font(self._emoji_font_small, lv.PART.MAIN)
-        demo_small.set_text(self._normalize_emoji_text("16px: A \u2639/\u263A == \U0001F642/\U0001F600 A"))
+        demo_small.set_text(self._normalize_emoji_text("18px: A \u2639 \u263A == \U0001F642/\U0001F600 A"))
         demo_small.set_pos(0, y)
         y += self._emoji_font_small.get_line_height() + 12
 
         demo = lv.label(screen)
         demo.set_style_text_font(self._emoji_font, lv.PART.MAIN)
-        demo.set_text(self._normalize_emoji_text("32px: A \u2639/\u263A == \U0001F642/\U0001F600 A"))
+        demo.set_text(self._normalize_emoji_text("36px: ❤️ \U0001F929 \u2639/\u263A == \U0001F642/\U0001F600 A"))
         demo.set_pos(0, y)
         y += self._emoji_font.get_line_height() + 12
         print("height: " + str(self._emoji_font.get_line_height()))
+
+        demo_big = lv.label(screen)
+        demo_big.set_style_text_font(self._emoji_font_big, lv.PART.MAIN)
+        demo_big.set_text(self._normalize_emoji_text("72px: A \u2639/\u263A == \U0001F642/\U0001F600 A"))
+        demo_big.set_pos(0, y)
+        y += self._emoji_font_big.get_line_height() + 12
 
         return y
 
@@ -139,14 +150,18 @@ class ShowFonts(Activity):
 
     def _init_imagefont(self):
         self._emoji_map = {
-            CP_FROWNING_FACE: EMOJI_PNG_2639,
-            CP_WHITE_SMILING_FACE: EMOJI_PNG_263A,
-            CP_SLIGHTLY_SMILING_FACE: EMOJI_PNG_263A,
-            CP_GRINNING_FACE: EMOJI_PNG_1F600,
+            CP_FROWNING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_2639,
+            CP_WHITE_SMILING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_263A,
+            CP_HEAVY_BLACK_HEART : EMOJI_PNG_PATH + "2764.png", # ❤️
+            CP_STAR_EYES : EMOJI_PNG_PATH + EMOJI_PNG_1F929,
+            CP_SLIGHTLY_SMILING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_263A,
+            CP_GRINNING_FACE: EMOJI_PNG_PATH + EMOJI_PNG_1F600,
         }
-        self._emoji_font = lv.imgfont_create(48, self._imgfont_path_cb, None)
+        self._emoji_font_big = lv.imgfont_create(72, self._imgfont_path_cb, None)
+        self._emoji_font_big.fallback = lv.font_montserrat_28
+        self._emoji_font = lv.imgfont_create(36, self._imgfont_path_cb, None)
         self._emoji_font.fallback = lv.font_montserrat_28
-        self._emoji_font_small = lv.imgfont_create(16, self._imgfont_path_cb, None)
+        self._emoji_font_small = lv.imgfont_create(18, self._imgfont_path_cb, None)
         self._emoji_font_small.fallback = lv.font_montserrat_16
 
     def _normalize_emoji_text(self, text):
@@ -156,7 +171,7 @@ class ShowFonts(Activity):
 
     def _init_ttf_font(self):
         try:
-            self._ttf_font = lv.tiny_ttf_create_file("M:PrincessSofia-Regular.ttf", 24)
+            self._ttf_font = lv.tiny_ttf_create_file("M:PrincessSofia-Regular.ttf", 72*2)
         except Exception:
             self._ttf_font = None
 
