@@ -42,7 +42,7 @@ from .ui.testing import (
     get_all_widgets_with_text, find_setting_value_label, get_setting_value_text,
     verify_setting_value_text, find_dropdown_widget, get_dropdown_options,
     find_dropdown_option_index, select_dropdown_option_by_text,
-    get_all_children, simulate_long_press
+    get_all_children, simulate_long_press, wait_for_text, wait_for_widget
 )
 
 # UI utility functions
@@ -103,7 +103,7 @@ __all__ = [
     "get_all_widgets_with_text", "find_setting_value_label", "get_setting_value_text",
     "verify_setting_value_text", "find_dropdown_widget", "get_dropdown_options",
     "find_dropdown_option_index", "select_dropdown_option_by_text",
-    "get_all_children", "simulate_long_press",
+    "get_all_children", "simulate_long_press", "wait_for_text", "wait_for_widget",
     # Submodules
     "ui", "config", "net", "content", "time", "sensor_manager",
     "camera_manager", "sdcard", "audio", "hardware",

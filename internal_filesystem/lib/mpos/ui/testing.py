@@ -1702,3 +1702,60 @@ def get_all_children(parent):
 
 def simulate_long_press(x, y, duration_ms=1000):
     simulate_click(x, y, press_duration_ms=duration_ms)
+
+
+def wait_for_text(text, timeout=10, interval=0.1):
+    """
+    Wait for text to appear on screen, polling periodically.
+
+    More robust than wait_for_render(N) because it actually checks
+    for the desired condition instead of waiting a fixed amount of time.
+    Handles slow CI machines gracefully — returns as soon as text appears.
+
+    Args:
+        text: Text to search for (substring match via verify_text_present)
+        timeout: Maximum time to wait in seconds (default: 10)
+        interval: Time between checks in seconds (default: 0.1)
+
+    Returns:
+        True if text found within timeout, False otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        if verify_text_present(lv.screen_active(), text):
+            return True
+        wait_for_render(5)
+        time.sleep(interval)
+    print(f"wait_for_text: '{text}' not found after {timeout}s")
+    return False
+
+
+def wait_for_widget(find_func, timeout=10, interval=0.1):
+    """
+    Wait for a widget condition, polling periodically.
+
+    find_func should be a callable that returns a widget or truthy value
+    when the condition is met, and None/falsy otherwise.  For example::
+
+        btn = wait_for_widget(
+            lambda: find_button_with_text(lv.screen_active(), "Submit"),
+            timeout=5
+        )
+
+    Args:
+        find_func: Callable that returns a widget or truthy value
+        timeout: Maximum time to wait in seconds (default: 10)
+        interval: Time between checks in seconds (default: 0.1)
+
+    Returns:
+        The result of find_func if found within timeout, None otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        result = find_func()
+        if result:
+            return result
+        wait_for_render(5)
+        time.sleep(interval)
+    print(f"wait_for_widget: condition not met after {timeout}s")
+    return None

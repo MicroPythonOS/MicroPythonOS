@@ -12,17 +12,12 @@ Usage:
 import unittest
 import lvgl as lv
 import mpos.ui
-import time
 import sys
 from mpos import (
-    wait_for_render,
-    find_label_with_text,
+    wait_for_text,
     verify_text_present,
     print_screen_labels,
-    simulate_click,
-    get_widget_coords,
     find_button_with_text,
-    find_text_on_screen,
     AppManager
 )
 
@@ -36,17 +31,10 @@ class TestIMUCalibration(unittest.TestCase):
         cwd = f"builtin/apps/{app_fullname}/assets/"
         result = AppManager.execute_script(entrypoint, classname, cwd, app_fullname=app_fullname)
         self.assertTrue(result, f"Failed to start {classname} from {entrypoint}")
-        wait_for_render(iterations=60)
 
     def tearDown(self):
         """Clean up after test."""
-        # Navigate back to launcher
-        try:
-            for _ in range(3):  # May need multiple backs
-                mpos.ui.back_screen()
-                wait_for_render(10)
-        except:
-            pass
+        mpos.ui.back_screen()
 
     def test_check_calibration_activity_loads(self):
         """Test that CheckIMUCalibrationActivity loads and displays."""
@@ -55,10 +43,13 @@ class TestIMUCalibration(unittest.TestCase):
         # Navigate directly to activity to avoid flaky settings clicks
         self._start_activity_from_settings_assets("check_imu_calibration.py", "CheckIMUCalibrationActivity")
 
+        # Wait for activity UI to render (polling, not fixed — handles slow CI)
+        self.assertTrue(wait_for_text("Quality", timeout=10),
+                        "CheckIMUCalibrationActivity: 'Quality' label not found within timeout")
+
         # Verify key elements are present
         screen = lv.screen_active()
         print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "Quality"), "Quality label not found")
         self.assertTrue(verify_text_present(screen, "Accel."), "Accel. label not found")
         self.assertTrue(verify_text_present(screen, "Gyro"), "Gyro label not found")
 
@@ -71,11 +62,11 @@ class TestIMUCalibration(unittest.TestCase):
         # Navigate directly to activity to avoid flaky settings clicks
         self._start_activity_from_settings_assets("calibrate_imu.py", "CalibrateIMUActivity")
 
-        # Verify activity loaded and shows instructions
+        # Wait for activity UI to render (polling, not fixed)
+        self.assertTrue(wait_for_text("IMU Calibration", timeout=10),
+                        "CalibrateIMUActivity title not found within timeout")
         screen = lv.screen_active()
         print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "IMU Calibration"),
-                       "CalibrateIMUActivity title not found")
         self.assertTrue(verify_text_present(screen, "Place device on flat"),
                        "Instructions not shown")
 
@@ -83,19 +74,17 @@ class TestIMUCalibration(unittest.TestCase):
         calibrate_btn = find_button_with_text(screen, "Calibrate Now")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate Now' button")
         calibrate_btn.send_event(lv.EVENT.CLICKED, None)
-        wait_for_render(25)
 
-        # Wait for calibration to complete (mock takes ~3 seconds)
-        time.sleep(4)
-        wait_for_render(50)
-
-        # Verify calibration completed
-        screen = lv.screen_active()
-        print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "Calibration successful!"),
-                       "Calibration completion message not found")
+        # Wait for calibration to complete — poll for the success message
+        # instead of fixed sleep (handles slow/fast CI equally well)
+        self.assertTrue(
+            wait_for_text("Calibration successful!", timeout=15),
+            "Calibration completion message not found within timeout"
+        )
 
         # Verify offsets are shown
+        screen = lv.screen_active()
+        print_screen_labels(screen)
         self.assertTrue(verify_text_present(screen, "Accel offsets") or
                        verify_text_present(screen, "offsets"),
                        "Calibration offsets not shown")
@@ -109,6 +98,10 @@ class TestIMUCalibration(unittest.TestCase):
         # Navigate directly to Check activity
         self._start_activity_from_settings_assets("check_imu_calibration.py", "CheckIMUCalibrationActivity")
 
+        # Wait for Check activity to render
+        self.assertTrue(wait_for_text("Quality", timeout=10),
+                        "CheckIMUCalibrationActivity: 'Quality' label not found")
+
         # Click "Calibrate" button to navigate to Calibrate activity
         screen = lv.screen_active()
         calibrate_btn = find_button_with_text(screen, "Calibrate")
@@ -121,7 +114,6 @@ class TestIMUCalibration(unittest.TestCase):
             added_path = True
         try:
             calibrate_btn.send_event(lv.EVENT.CLICKED, None)
-            wait_for_render(60)
         finally:
             if added_path:
                 try:
@@ -129,11 +121,13 @@ class TestIMUCalibration(unittest.TestCase):
                 except ValueError:
                     pass
 
-        # Verify CalibrateIMUActivity loaded
+        # Wait for CalibrateIMUActivity to load (polling, not fixed)
+        self.assertTrue(
+            wait_for_text("Calibrate Now", timeout=10),
+            "Did not navigate to CalibrateIMUActivity within timeout"
+        )
         screen = lv.screen_active()
         print_screen_labels(screen)
-        self.assertTrue(verify_text_present(screen, "Calibrate Now"),
-                       "Did not navigate to CalibrateIMUActivity")
         self.assertTrue(verify_text_present(screen, "Place device on flat"),
                        "CalibrateIMUActivity instructions not shown")
 
