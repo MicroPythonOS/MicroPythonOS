@@ -64,7 +64,8 @@ class AppStore(Activity):
         self.settings_button.align(lv.ALIGN.LEFT_MID, 5, 0)
         self.settings_button.add_event_cb(self.settings_button_tap, lv.EVENT.CLICKED, None)
         settings_label = lv.label(self.settings_button)
-        settings_label.set_text(lv.SYMBOL.LIST)
+        #settings_label.set_text(lv.SYMBOL.LIST)
+        settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
 
