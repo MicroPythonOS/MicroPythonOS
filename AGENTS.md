@@ -19,6 +19,7 @@ Guidelines:
 - Always add a timeout -s 9 30 to ./scripts/run_desktop.sh so run: timeout -s 9 30 ./scripts/run_desktop.sh
 - Write temporary files to a `tmp/` folder in the CWD, not `/` or `/tmp`, due to permissions constraints.
 - To kill processes, use `killall <name>` instead of `pkill -f <pattern>` — `pkill -f` matches the pkill command's own argv and can kill itself.
+- When using mpos-controller for debugging, write all scripts to `tmp/` in the project root (not `/tmp`). Run them with `python3 tmp/script.py`.
 
 Guidelines for writing or updating tests:
 - Use the testing facilities in ./internal_filesystem/lib/mpos/ui/testing.py and feel free to add new ones there, NOT ad hoc in the test itself.
@@ -69,6 +70,7 @@ MicroPython compatibility:
 
 MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
+- **`MPOSController()` does NOT auto-start a subprocess.** Call `mpos.start()` to launch `run_desktop.sh`, then wait at least `~8s` for boot before calling `startapp()` or any other method. Without `.start()` the internal `repl` is `None` and you get `AttributeError: 'NoneType' object has no attribute 'exec'`.
 - Two backends: `MPOSController()` for local desktop process, `MPOSController(backend="serial", port="/dev/ttyACM0")` for physical device.
 - Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
 - `exec()` and `exec_multiline()` both use **paste mode** (Ctrl-E / Ctrl-D) internally — multi-line code, quotes, and special chars need no escaping. They're equivalent; use whichever is convenient.
@@ -86,3 +88,57 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - The CLI also supports `startapp <appname>` (launches an app) and `checkfreespace` (reports free disk space and whether a screenshot fits).
 - All tests pass covering exec, eval, screenshot, input simulation, screen introspection, file I/O, and physical device control.
 - Host-side controller tests in `tests/cpython_mpos_controller.py` run via `python3 tests/cpython_mpos_controller.py` (desktop) or `python3 tests/cpython_mpos_controller.py --serial /dev/ttyACM0` (device); they are NOT run by `unittest.sh` (which targets MicroPython-side tests).
+
+## Debugging with MPOS Controller
+
+### Creating debug scripts
+Write all scripts to `tmp/` in the project root:
+```
+python3 tmp/my_debug_script.py
+```
+Template:
+```python
+import sys, time
+sys.path.insert(0, '.')
+from scripts.mpos_controller import MPOSController
+import os
+
+os.system('killall -9 lvgl_micropy_unix run_desktop.sh 2>/dev/null')
+time.sleep(1)
+
+with MPOSController(backend='process') as mpos:
+    mpos.start()
+    time.sleep(10)  # wait for boot
+    mpos.startapp('com.micropythonos.showfonts')
+    time.sleep(4)
+    ss = mpos.screenshot()
+    with open('tmp/screenshot.bmp', 'wb') as f:
+        f.write(ss)
+```
+
+### Analyzing screenshots (preferred techniques)
+- **PIL + numpy** is the most reliable technique. Load the BMP, convert to numpy array, then check specific pixel coordinates for exact RGB values.
+- **Widget tree** (`mpos.get_widget_tree()`): gives layout, types, text, coordinates, states, flags for every widget. Use this FIRST to understand screen structure.
+- **Visible text** (`mpos.get_visible_text()`): extracts all text from all labels on screen. Use for text-content verification.
+- **PPQ vision skill** (`ppq-vision`): use for reading text content from screenshots or understanding visual layout when coordinates alone are insufficient.
+- **ASCII art conversion**: NOT reliable for precise color analysis. Only use for quick visual structure checks when other methods aren't available.
+
+### Effective debugging workflow
+1. When a code path should produce output but doesn't, add a temporary `print()` diagnostic to see if the code even executes — generic `except Exception: pass` blocks often hide bugs.
+2. When a function should return a specific type (e.g., `lv.image_dsc_t`), check what it actually returns with `print(type(result))`.
+3. For color/image issues, inspect raw pixel buffer data (bytearray at known offsets) rather than relying on visual appearance.
+4. Temporarily add detailed diagnostics (buffer dumps, type checks, hex printing) to `tmp/` files on-device, then retrieve via `mpos.read_file()`.
+
+### LVGL debugging pitfalls
+- `lv_color_t` in this MicroPython LVGL binding has ONLY `.red`, `.green`, `.blue` attributes — there is NO `.full` attribute.
+- `lv.snapshot_take()` on a hidden `lv.obj()` still captures non-transparent pixel data because inherited theme styles (borders, shadows, background from parent theme) leak through the hidden object into the snapshot. For truly empty images, construct an `lv.image_dsc_t()` manually with a zeroed `bytearray()`.
+- `except Exception: pass` is especially dangerous in image rendering paths — it silently falls back to unscaled/unprocessed source data, making it appear that transformations run when they don't.
+- To create a manual empty image descriptor:
+  ```python
+  buf = bytearray(4)
+  dsc = lv.image_dsc_t()
+  dsc.data = buf
+  dsc.header.w = 1
+  dsc.header.h = target_height
+  dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
+  ```
