@@ -265,14 +265,11 @@ class FontManager:
     def _imgfont_path_cb(cls, font, unicode_cp, unicode_next, offset_y, user_data):
         if unicode_cp == CP_VARIATION_SELECTOR_TEXT or unicode_cp == CP_VARIATION_SELECTOR_EMOJI:
             offset_y.__dereference__(0)
-            target_height = cls._font_pixel_height(font)
-            return cls._get_empty_imgfont_src(target_height)
+            return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
 
         if unicode_cp in cls._emoji_map:
             offset_y.__dereference__(0)
-            src = cls._emoji_map[unicode_cp]
-            target_height = cls._font_pixel_height(font)
-            return cls._get_scaled_imgfont_src(src, target_height)
+            return cls._get_scaled_imgfont_src(cls._emoji_map[unicode_cp], cls._font_pixel_height(font))
 
         cls._log_unknown_emoji_codepoint(unicode_cp)
         return None
@@ -293,16 +290,15 @@ class FontManager:
         if target_height in cls._imgfont_empty_src_cache:
             return cls._imgfont_empty_src_cache[target_height]
 
-        empty = lv.obj(lv.layer_top())
-        try:
-            empty.add_flag(lv.obj.FLAG.HIDDEN)
-            empty.set_size(1, target_height)
-            src = lv.snapshot_take(empty, lv.COLOR_FORMAT.ARGB8888)
-        finally:
-            empty.delete()
+        buf = bytearray(4)
+        dsc = lv.image_dsc_t()
+        dsc.data = buf
+        dsc.header.w = 1
+        dsc.header.h = target_height
+        dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
 
-        cls._imgfont_empty_src_cache[target_height] = src
-        return src
+        cls._imgfont_empty_src_cache[target_height] = dsc
+        return dsc
 
     @classmethod
     def _font_pixel_height(cls, font):
@@ -318,19 +314,24 @@ class FontManager:
     @classmethod
     def _get_scaled_imgfont_src(cls, src, target_height):
         key = (src, target_height)
-        if key in cls._imgfont_scaled_src_cache:
-            return cls._imgfont_scaled_src_cache[key]
+        cached = cls._imgfont_scaled_src_cache.get(key)
+        if cached is not None:
+            return cached[0]
 
         try:
             src_w, src_h = cls._get_image_size(src)
             if src_h <= 0:
                 return src
 
+            if target_height == src_h and target_height == src_w:
+                cls._imgfont_scaled_src_cache[key] = (src, None)
+                return src
+
             target_width = max(1, round(src_w * target_height / src_h))
-            scaled_src = cls._render_scaled_image_src(src, target_width, target_height)
-            if scaled_src is not None:
-                cls._imgfont_scaled_src_cache[key] = scaled_src
-                return scaled_src
+            dsc, buf = cls._render_scaled_image_src(src, target_width, target_height)
+            if dsc is not None:
+                cls._imgfont_scaled_src_cache[key] = (dsc, buf)
+                return dsc
         except Exception:
             pass
 
@@ -361,6 +362,13 @@ class FontManager:
             renderer.set_inner_align(lv.image.ALIGN.CONTAIN)
             renderer.set_src(src)
 
-            return lv.snapshot_take(renderer, lv.COLOR_FORMAT.ARGB8888)
+            bpp = 4
+            buf = bytearray(target_width * target_height * bpp)
+            dsc = lv.image_dsc_t()
+            lv.snapshot_take_to_buf(
+                renderer, lv.COLOR_FORMAT.ARGB8888, dsc, buf, len(buf)
+            )
+
+            return dsc, buf
         finally:
             renderer.delete()
