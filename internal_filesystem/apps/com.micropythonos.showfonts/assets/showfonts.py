@@ -12,6 +12,7 @@ class ShowFonts(Activity):
         import os
         mydir = os.path.dirname(os.path.abspath(__file__))
         self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
+        self._ttf_font56 = FontManager.getFont(size=56, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
 
         self.addAllFontsTitles(screen)
         self.addAllGlyphs(screen)
@@ -21,6 +22,7 @@ class ShowFonts(Activity):
     def addAllFontsTitles(self, screen):
         fonts = FontManager.listFonts()
         fonts.append((self._ttf_font, "TTF Rancourt 42"))
+        fonts.append((self._ttf_font56, "TTF Rancourt 56"))
 
         for font_info in fonts:
             if isinstance(font_info, tuple):
@@ -79,8 +81,7 @@ class ShowFonts(Activity):
                     x = 4
 
         if emoji:
-            FontManager._ensure_emoji_map()
-            emoji_cps = sorted(FontManager._emoji_map.keys())
+            emoji_cps = FontManager.getEmojiCodepoints()
             for cp in emoji_cps:
                 alltext = alltext + chr(cp) + " "
 

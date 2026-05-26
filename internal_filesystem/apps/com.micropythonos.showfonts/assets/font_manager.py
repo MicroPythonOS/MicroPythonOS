@@ -10,18 +10,21 @@ class FontManager:
     _DEFAULT_SIZE = 12
     _DEBUG = False
     _UNKNOWN_EMOJI_LOG_THRESHOLD = 0x2300
-    _EMOJI_PNG_DIR = "openmoji-72x72-color"
-    _EMOJI_PNG_SRC_PREFIX = "M:apps/com.micropythonos.showfonts/assets/openmoji-72x72-color/"
-    _EMOJI_PNG_DIR_CANDIDATES = (
-        _EMOJI_PNG_DIR,
-        "./" + _EMOJI_PNG_DIR,
-        "assets/" + _EMOJI_PNG_DIR,
-        "apps/com.micropythonos.showfonts/assets/" + _EMOJI_PNG_DIR,
-        "/apps/com.micropythonos.showfonts/assets/" + _EMOJI_PNG_DIR,
-        "M:apps/com.micropythonos.showfonts/assets/" + _EMOJI_PNG_DIR,
+    _EMOJI_TIERS = (
+        {"max_height": 20, "dir": "20x20"},
+        {"max_height": 9999, "dir": "56x56"},
     )
 
-    _emoji_map = None
+    _EMOJI_DIR_CANDIDATE_FORMATS = (
+        "{dir}",
+        "./{dir}",
+        "assets/{dir}",
+        "apps/com.micropythonos.showfonts/assets/{dir}",
+        "/apps/com.micropythonos.showfonts/assets/{dir}",
+        "M:apps/com.micropythonos.showfonts/assets/{dir}",
+    )
+
+    _emoji_maps = {}
     _builtin_font_records = None
     _composed_font_cache = {}
     _ttf_font_cache = {}
@@ -94,7 +97,7 @@ class FontManager:
     def listFonts(cls):
         fonts = []
         for record in cls._get_builtin_font_records():
-            composed_font = cls._get_composed_font(record["font"], record["size"])
+            composed_font = cls._get_composed_font(record["font"])
             fonts.append(
                 {
                     "name": "{} {}".format(record["family"], record["size"]),
@@ -190,9 +193,17 @@ class FontManager:
             return cls._get_builtin_font(size)
 
     @classmethod
+    def getEmojiCodepoints(cls):
+        cls._ensure_emoji_maps()
+        all_cps = set()
+        for m in cls._emoji_maps.values():
+            all_cps.update(m.keys())
+        return sorted(all_cps)
+
+    @classmethod
     def _create_emoji_font(cls, size):
         size = max(1, int(size))
-        cls._ensure_emoji_map()
+        cls._ensure_emoji_maps()
 
         try:
             return lv.imgfont_create(size, cls._imgfont_path_cb, None)
@@ -200,26 +211,34 @@ class FontManager:
             return None
 
     @classmethod
-    def _ensure_emoji_map(cls):
-        if cls._emoji_map is None:
-            cls._emoji_map = cls._build_emoji_map_from_png_dir()
+    def _ensure_emoji_maps(cls):
+        for tier in cls._EMOJI_TIERS:
+            dir_name = tier["dir"]
+            if dir_name not in cls._emoji_maps:
+                cls._emoji_maps[dir_name] = cls._build_emoji_map_from_png_dir(dir_name)
 
     @classmethod
-    def _build_emoji_map_from_png_dir(cls):
+    def _emoji_src_prefix(cls, dir_name):
+        return "M:apps/com.micropythonos.showfonts/assets/" + dir_name + "/"
+
+    @classmethod
+    def _build_emoji_map_from_png_dir(cls, dir_name):
         emoji_map = {}
         dir_path = None
         entries = None
 
-        for candidate in cls._EMOJI_PNG_DIR_CANDIDATES:
+        for fmt in cls._EMOJI_DIR_CANDIDATE_FORMATS:
+            candidate = fmt.format(dir=dir_name)
             entries = cls._list_dir_names(candidate)
             if entries is not None:
                 dir_path = candidate
                 break
 
         if entries is None:
-            print("font_manager: could not list emoji dir candidates (cwd=" + cls._safe_getcwd() + ")")
+            print("font_manager: could not list emoji dir '{}' (cwd={})".format(dir_name, cls._safe_getcwd()))
             return emoji_map
 
+        prefix = cls._emoji_src_prefix(dir_name)
         for name in entries:
             if not name.lower().endswith(".png"):
                 continue
@@ -231,10 +250,24 @@ class FontManager:
                 print("font_manager: skip non-hex emoji file: " + name)
                 continue
 
-            emoji_map[codepoint] = cls._EMOJI_PNG_SRC_PREFIX + name
+            emoji_map[codepoint] = prefix + name
 
-        print("font_manager: loaded " + str(len(emoji_map)) + " emoji png mappings from " + str(dir_path))
+        print("font_manager: loaded {} emoji png mappings from {}".format(len(emoji_map), dir_path))
         return emoji_map
+
+    @classmethod
+    def _get_emoji_src(cls, codepoint, target_height):
+        cls._ensure_emoji_maps()
+        for tier in cls._EMOJI_TIERS:
+            if target_height <= tier["max_height"]:
+                dir_name = tier["dir"]
+                if codepoint in cls._emoji_maps.get(dir_name, {}):
+                    return cls._emoji_maps[dir_name][codepoint]
+        for tier in cls._EMOJI_TIERS:
+            dir_name = tier["dir"]
+            if codepoint in cls._emoji_maps.get(dir_name, {}):
+                return cls._emoji_maps[dir_name][codepoint]
+        return None
 
     @classmethod
     def _list_dir_names(cls, path):
@@ -267,9 +300,10 @@ class FontManager:
             offset_y.__dereference__(0)
             return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
 
-        if unicode_cp in cls._emoji_map:
+        src = cls._get_emoji_src(unicode_cp, cls._font_pixel_height(font))
+        if src is not None:
             offset_y.__dereference__(0)
-            return cls._get_scaled_imgfont_src(cls._emoji_map[unicode_cp], cls._font_pixel_height(font))
+            return cls._get_scaled_imgfont_src(src, cls._font_pixel_height(font))
 
         cls._log_unknown_emoji_codepoint(unicode_cp)
         return None
