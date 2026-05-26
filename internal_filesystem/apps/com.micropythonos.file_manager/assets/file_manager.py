@@ -44,7 +44,7 @@ class FileManager(Activity):
 
         if path != "/":
             parent = "/".join(path.rstrip("/").split("/")[:-1]) + "/"
-            btn = self._list.add_button(None, lv.SYMBOL.LEFT + "  ..")
+            btn = self._list.add_button(None, "< Back")
             btn.add_event_cb(lambda e, p=parent: self._populate_dir(p), lv.EVENT.CLICKED, None)
 
         try:
