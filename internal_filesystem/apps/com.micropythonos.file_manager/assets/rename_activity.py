@@ -10,7 +10,7 @@ class RenameActivity(Activity):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(0, 0)
-        screen.set_style_pad_gap(8, lv.PART.MAIN)
+        screen.set_style_pad_gap(0, 0)
 
         old_name = self._path.rstrip("/").split("/")[-1]
         self._ta = lv.textarea(screen)
@@ -20,22 +20,26 @@ class RenameActivity(Activity):
         self._ta.set_one_line(True)
 
         self._keyboard = MposKeyboard(screen)
+        self._keyboard.set_style_pad_all(0, 0)
+        #self._keyboard.set_style_pad_gap(0, 0)
         self._keyboard.set_textarea(self._ta)
         self._keyboard.add_event_cb(lambda e: self._do_rename(), lv.EVENT.READY, None)
 
         btn_row = lv.obj(screen)
         btn_row.set_width(lv.pct(100))
         btn_row.set_height(lv.SIZE_CONTENT)
+        btn_row.set_style_pad_all(0, 0)
+        btn_row.set_style_pad_gap(0, 0)
         btn_row.set_flex_flow(lv.FLEX_FLOW.ROW)
         btn_row.set_flex_align(lv.FLEX_ALIGN.SPACE_EVENLY, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
-
-        confirm_btn = lv.button(btn_row)
-        lv.label(confirm_btn).set_text("Confirm")
-        confirm_btn.add_event_cb(lambda e: self._do_rename(), lv.EVENT.CLICKED, None)
 
         cancel_btn = lv.button(btn_row)
         lv.label(cancel_btn).set_text("Cancel")
         cancel_btn.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
+
+        confirm_btn = lv.button(btn_row)
+        lv.label(confirm_btn).set_text("Confirm")
+        confirm_btn.add_event_cb(lambda e: self._do_rename(), lv.EVENT.CLICKED, None)
 
         self.setContentView(screen)
 
