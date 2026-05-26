@@ -13,7 +13,7 @@ from mpos.ui.testing import wait_for_render
 class TestForegroundApp(unittest.TestCase):
     """Ensure get_foreground_app tracks the top activity in the UI stack."""
 
-    def _wait_for_foreground(self, expected, timeout_ms=2500):
+    def _wait_for_foreground(self, expected, timeout_ms=5000):
         start = time.ticks_ms()
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
             fg = get_foreground_app()
@@ -27,14 +27,12 @@ class TestForegroundApp(unittest.TestCase):
         about_fullname = "com.micropythonos.about"
 
         AppManager.start_app(launcher_fullname)
-        wait_for_render(iterations=30)
         self.assertTrue(
             self._wait_for_foreground(launcher_fullname),
             f"Expected foreground app to be {launcher_fullname}, got {get_foreground_app()}",
         )
 
         AppManager.start_app(about_fullname)
-        wait_for_render(iterations=30)
         self.assertTrue(
             self._wait_for_foreground(about_fullname),
             f"Expected foreground app to be {about_fullname}, got {get_foreground_app()}",
@@ -53,21 +51,18 @@ class TestForegroundApp(unittest.TestCase):
         about_fullname = "com.micropythonos.about"
 
         AppManager.start_app(launcher_fullname)
-        wait_for_render(iterations=30)
         self.assertTrue(
             self._wait_for_foreground(launcher_fullname),
             f"Expected foreground app to be {launcher_fullname}, got {get_foreground_app()}",
         )
 
         AppManager.start_app(about_fullname)
-        wait_for_render(iterations=30)
         self.assertTrue(
             self._wait_for_foreground(about_fullname),
             f"Expected foreground app to be {about_fullname}, got {get_foreground_app()}",
         )
 
         back_screen()
-        wait_for_render(iterations=30)
         self.assertTrue(
             self._wait_for_foreground(launcher_fullname),
             f"Expected foreground app to be {launcher_fullname} after back_screen, got {get_foreground_app()}",

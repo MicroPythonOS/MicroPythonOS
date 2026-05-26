@@ -5,7 +5,6 @@
 
 # Copy this file to / on the device's internal storage to have it run automatically instead of relying on the frozen-in files.
 import gc
-import os
 import sys
 
 sys.path.insert(0, "lib")
@@ -13,8 +12,15 @@ sys.path.insert(0, "lib")
 print(f"{sys.version=}")
 print(f"{sys.implementation=}")
 
+# Patch (u)os module so os.path works like in CPython - do this before starting apps
+#import os as _os
+#import path as _path
+#_os.path = _path
+#sys.modules["os"] = _os
+#sys.modules["uos"] = _os
 
 print("Free space on root filesystem:")
+import os
 stat = os.statvfs("/")
 total_space = stat[0] * stat[2]
 free_space = stat[0] * stat[3]

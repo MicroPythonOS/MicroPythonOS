@@ -17,7 +17,7 @@ from mpos import (
     AppManager,
     WifiService,
     SharedPreferences,
-    wait_for_render,
+    wait_for_text,
     click_button,
     print_screen_labels,
     verify_text_present,
@@ -47,7 +47,10 @@ class TestGraphicalHotspotSecurityNone(unittest.TestCase):
     def _open_hotspot_screen(self):
         result = AppManager.start_app("com.micropythonos.settings.hotspot")
         self.assertTrue(result, "Failed to start hotspot settings app")
-        wait_for_render(iterations=20)
+        self.assertTrue(
+            wait_for_text("Start", timeout=10),
+            "Hotspot screen did not load within timeout",
+        )
         screen = lv.screen_active()
         print("\nHotspot screen labels:")
         print_screen_labels(screen)
@@ -61,7 +64,6 @@ class TestGraphicalHotspotSecurityNone(unittest.TestCase):
 
         try:
             mpos.ui.back_screen()
-            wait_for_render(5)
         except Exception:
             pass
 
@@ -83,7 +85,10 @@ class TestGraphicalHotspotSecurityNone(unittest.TestCase):
             click_button("Start"),
             "Could not find Start button in hotspot app",
         )
-        wait_for_render(iterations=40)
+        self.assertTrue(
+            wait_for_text("Status: Running", timeout=10),
+            "Hotspot did not reach Running state within timeout",
+        )
 
         self.assertTrue(
             WifiService.is_hotspot_enabled(),
@@ -128,7 +133,10 @@ class TestGraphicalHotspotSecurityNone(unittest.TestCase):
             click_button("Start"),
             "Could not find Start button in hotspot app",
         )
-        wait_for_render(iterations=40)
+        self.assertTrue(
+            wait_for_text("Status: Stopped", timeout=10),
+            "Hotspot did not return to Stopped state within timeout",
+        )
 
         self.assertFalse(
             WifiService.is_hotspot_enabled(),

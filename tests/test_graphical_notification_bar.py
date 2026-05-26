@@ -2,7 +2,6 @@
 Graphical test to verify notification bar visibility in the launcher.
 """
 
-import time
 import unittest
 
 import lvgl as lv
@@ -13,7 +12,7 @@ from mpos import (
     DisplayMetrics,
     get_widget_coords,
     simulate_drag,
-    wait_for_render,
+    wait_for_widget,
 )
 from mpos.battery_manager import BatteryManager
 from mpos.ui import topmenu
@@ -25,19 +24,20 @@ class TestNotificationBarVisibility(unittest.TestCase):
     def setUp(self):
         AppManager.start_app("com.micropythonos.launcher")
         topmenu.open_bar()
-        wait_for_render(iterations=20)
-        self._wait_for_bar_visible()
 
-    def _wait_for_bar_visible(self, timeout_ms=4000):
-        start = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
+        def _bar_visible():
             bar = topmenu.notification_bar
-            if bar is not None:
-                bar_coords = get_widget_coords(bar)
-                if bar_coords and bar_coords["y1"] >= -1:
-                    return True
-            wait_for_render(iterations=10)
-        return False
+            if bar is None or not topmenu.bar_open:
+                return None
+            coords = get_widget_coords(bar)
+            if coords and coords["y1"] >= -1:
+                return bar
+            return None
+
+        self.assertIsNotNone(
+            wait_for_widget(_bar_visible, timeout=5),
+            "Notification bar did not become visible within timeout"
+        )
 
     def _get_bar_labels(self, bar):
         labels = []
@@ -82,75 +82,84 @@ class TestNotificationBarVisibility(unittest.TestCase):
                 break
         self.fail(f"{label} is not within the notification bar hierarchy")
 
-    def _wait_for_drawer_open(self, timeout_ms=2000):
-        start = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            if topmenu.drawer_open:
-                return True
-            wait_for_render(iterations=10)
-        return False
-
-    def _wait_for_bar_hidden(self, bar, timeout_ms=4500):
-        start = time.ticks_ms()
-        while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            if not topmenu.bar_open:
-                return True
-            coords = get_widget_coords(bar)
-            if coords and coords["y2"] < 0:
-                return True
-            wait_for_render(iterations=20)
-        return False
+    def _ensure_drawer_open(self, bar_coords):
+        return self._swipe_down_on_bar(bar_coords)
 
     def _ensure_bar_closed(self, bar_coords, bar):
         return self._swipe_up_on_bar(bar_coords, bar)
-
-    def _ensure_drawer_open(self, bar_coords):
-        return self._swipe_down_on_bar(bar_coords)
 
     def _swipe_down_on_bar(self, bar_coords):
         start_x = DisplayMetrics.width() // 2
         start_y = max(1, (bar_coords["y1"] + bar_coords["y2"]) // 2)
         end_y = int(DisplayMetrics.height() * 0.9)
+
+        def _check():
+            if not topmenu.drawer_open or topmenu.drawer is None:
+                return None
+            if topmenu.drawer.has_flag(lv.obj.FLAG.HIDDEN):
+                return None
+            return topmenu.drawer
+
         simulate_drag(start_x, start_y, start_x, end_y, steps=30, step_delay_ms=45)
-        wait_for_render(iterations=40)
-        if self._wait_for_drawer_open():
+        result = wait_for_widget(_check, timeout=5)
+        if result:
             return True
 
         start_y = max(1, AppearanceManager.NOTIFICATION_BAR_HEIGHT - 2)
         end_y = int(DisplayMetrics.height() * 0.95)
         simulate_drag(start_x, start_y, start_x, end_y, steps=36, step_delay_ms=45)
-        wait_for_render(iterations=50)
-        return self._wait_for_drawer_open()
+        return wait_for_widget(_check, timeout=5) is not None
 
     def _swipe_up_on_bar(self, bar_coords, bar):
         start_x = DisplayMetrics.width() // 2
         start_y = max(1, (bar_coords["y1"] + bar_coords["y2"]) // 2)
-        end_y = -AppearanceManager.NOTIFICATION_BAR_HEIGHT
+        end_y = -AppearanceManager.NOTIFICATION_BAR_HEIGHT * 2
+
+        def _check():
+            if not topmenu.bar_open:
+                return True
+            coords = get_widget_coords(bar)
+            if coords and coords["y2"] < 0:
+                return True
+            return None
+
         simulate_drag(start_x, start_y, start_x, end_y, steps=30, step_delay_ms=45)
-        wait_for_render(iterations=80)
-        if self._wait_for_bar_hidden(bar):
+        result = wait_for_widget(_check, timeout=5)
+        if result:
             return True
 
         end_y = -AppearanceManager.NOTIFICATION_BAR_HEIGHT * 2
         simulate_drag(start_x, start_y, start_x, end_y, steps=36, step_delay_ms=45)
-        wait_for_render(iterations=100)
-        return self._wait_for_bar_hidden(bar)
+        return wait_for_widget(_check, timeout=5) is not None
+
+    def _ensure_bar_visible(self):
+        def _check():
+            bar = topmenu.notification_bar
+            if bar is None or not topmenu.bar_open:
+                return None
+            coords = get_widget_coords(bar)
+            if coords and coords["y1"] >= -1:
+                return bar
+            return None
+        return wait_for_widget(_check, timeout=5)
 
     def test_notification_bar_widgets_visible(self):
         bar = topmenu.notification_bar
         self.assertIsNotNone(bar, "Notification bar was not created")
 
-        wait_for_render(iterations=20)
-        if not self._wait_for_bar_visible():
+        if not self._ensure_bar_visible():
             topmenu.open_bar()
-            wait_for_render(iterations=40)
+            self.assertIsNotNone(
+                self._ensure_bar_visible(),
+                "Notification bar did not become visible after open_bar()"
+            )
         bar_coords = get_widget_coords(bar)
         self.assertIsNotNone(bar_coords, "Notification bar coords not available")
         self.assertTrue(topmenu.bar_open, "Notification bar was not marked open")
 
         labels = self._get_bar_labels(bar)
         time_label = next((child for child, text in labels if ":" in text), None)
-        temp_label = next((child for child, text in labels if "°C" in text), None)
+        temp_label = next((child for child, text in labels if chr(176) + "C" in text or "C" in text), None)
         wifi_label = next((child for child, text in labels if text == lv.SYMBOL.WIFI), None)
 
         battery_symbols = {
@@ -196,7 +205,6 @@ class TestNotificationBarVisibility(unittest.TestCase):
         )
 
         topmenu.close_drawer()
-        wait_for_render(iterations=60)
         bar_coords = get_widget_coords(bar)
         self.assertIsNotNone(bar_coords, "Notification bar coords not available")
         self.assertTrue(

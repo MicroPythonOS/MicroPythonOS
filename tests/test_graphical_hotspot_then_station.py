@@ -16,7 +16,8 @@ import mpos.ui
 from mpos import (
     AppManager,
     WifiService,
-    wait_for_render,
+    wait_for_text,
+    wait_for_widget,
     click_button,
     print_screen_labels,
     get_widget_coords,
@@ -69,7 +70,6 @@ class TestGraphicalHotspotThenStation(unittest.TestCase):
 
         try:
             mpos.ui.back_screen()
-            wait_for_render(25)
         except Exception:
             pass
 
@@ -78,11 +78,13 @@ class TestGraphicalHotspotThenStation(unittest.TestCase):
         print("\n=== Starting hotspot start-flow test ===")
 
         WifiService.disable_hotspot()
-        wait_for_render(25)
 
         result = AppManager.start_app("com.micropythonos.settings.hotspot")
         self.assertTrue(result, "Failed to start hotspot settings app")
-        wait_for_render(iterations=25)
+        self.assertTrue(
+            wait_for_text("Start", timeout=10),
+            "Hotspot app did not load within timeout",
+        )
 
         screen = lv.screen_active()
         print("\nHotspot screen labels:")
@@ -99,7 +101,6 @@ class TestGraphicalHotspotThenStation(unittest.TestCase):
             click_button("Start"),
             "Could not find Start button in hotspot app",
         )
-        wait_for_render(iterations=25)
 
         self.assertTrue(
             WifiService.is_hotspot_enabled(),
@@ -108,7 +109,10 @@ class TestGraphicalHotspotThenStation(unittest.TestCase):
 
         result = AppManager.start_app("com.micropythonos.settings.wifi")
         self.assertTrue(result, "Failed to start WiFi settings app")
-        wait_for_render(iterations=25)
+        self.assertTrue(
+            wait_for_text("Scanning", timeout=10) or wait_for_text("WiFi", timeout=10),
+            "WiFi settings app did not load within timeout",
+        )
 
         screen = lv.screen_active()
         print("\nWiFi screen labels (before scan wait):")
@@ -116,7 +120,6 @@ class TestGraphicalHotspotThenStation(unittest.TestCase):
 
         print("\nWaiting 10 seconds for WiFi scan to finish...")
         time.sleep(10)
-        wait_for_render(iterations=25)
 
         screen = lv.screen_active()
         print("\nWiFi screen labels (after scan wait):")
@@ -131,13 +134,16 @@ class TestGraphicalHotspotThenStation(unittest.TestCase):
             first_item.send_event(lv.EVENT.CLICKED, None)
         else:
             first_item.send_event(lv.EVENT.CLICKED, None)
-        wait_for_render(iterations=50)
+
+        self.assertTrue(
+            wait_for_text("Connect", timeout=10),
+            "Connect button did not appear after selecting access point",
+        )
 
         self.assertTrue(
             click_button("Connect"),
             "Could not find Connect button in WiFi edit screen",
         )
-        wait_for_render(iterations=50)
 
         self.assertFalse(
             WifiService.is_hotspot_enabled(),

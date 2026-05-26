@@ -322,14 +322,6 @@ def change_task_handler(period_ms=1):
 mpos.ui.change_task_handler = change_task_handler # make it accessible
 mpos.ui.change_task_handler()
 
-# Patch (u)os module so os.path works like in CPython - do this before starting apps
-import sys
-import os as _os
-import path as _path
-_os.path = _path
-sys.modules["os"] = _os
-sys.modules["uos"] = _os
-
 try:
     from mpos.net.wifi_service import WifiService
     _thread.stack_size(TaskManager.good_stack_size())
