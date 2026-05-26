@@ -20,11 +20,11 @@ class RetroGoLauncher(Activity):
         self.file_extensions = extras.get("file_extensions", (".wad", ".zip"))
 
         self.romdir = "/roms"
-        self.gamedir = self.romdir + "/" + self.roms_subdir
         self.retrogodir = "/retro-go"
         self.configdir = self.retrogodir + "/config"
         self.bootfile = self.configdir + "/boot.json"
         self.current_subdir = ""
+        self._at_root_level = False
 
         screen = lv.obj()
         screen.set_style_pad_all(15, lv.PART.MAIN)
@@ -104,7 +104,44 @@ class RetroGoLauncher(Activity):
         return subdirs, matching_files
 
     def refresh_file_list(self):
-        current_full_dir = self.bootfile_prefix + self.gamedir
+        if self._at_root_level:
+            current_full_dir = self.bootfile_prefix + self.romdir
+            self.status_label.set_text(f"Listing: {current_full_dir}")
+            self.wadlist.clean()
+
+            subdirs = []
+            try:
+                for entry in os.ilistdir(current_full_dir):
+                    name = entry[0]
+                    if name.startswith("."):
+                        continue
+                    mode = entry[1] if len(entry) > 1 else 0
+                    if mode & 0x4000:
+                        subdirs.append(name)
+            except OSError:
+                pass
+            except AttributeError:
+                try:
+                    for filename in os.listdir(current_full_dir):
+                        if filename.startswith("."):
+                            continue
+                        fullpath = current_full_dir + "/" + filename
+                        if os.stat(fullpath)[0] & 0x4000:
+                            subdirs.append(filename)
+                except OSError:
+                    pass
+            subdirs.sort()
+
+            if not subdirs:
+                self.status_label.set_text("No ROM directories found")
+                return
+
+            for d in subdirs:
+                button = self.wadlist.add_button(None, lv.SYMBOL.DIRECTORY + "  " + d)
+                button.add_event_cb(lambda e, dirname=d: self.select_rom_subdir(dirname), lv.EVENT.CLICKED, None)
+            return
+
+        current_full_dir = self.bootfile_prefix + self.romdir + "/" + self.roms_subdir
         if self.current_subdir:
             current_full_dir += "/" + self.current_subdir
 
@@ -121,16 +158,16 @@ class RetroGoLauncher(Activity):
 
         print(f"refresh_file_list: {len(subdirs)} dirs, {len(all_files)} files")
 
-        if self.current_subdir:
-            button = self.wadlist.add_button(None, "..")
-            button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
+        button = self.wadlist.add_button(None, "< Back")
+        button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
 
         for d in subdirs:
             button = self.wadlist.add_button(None, d + "/")
             button.add_event_cb(lambda e, dirname=d: self.navigate_into(dirname), lv.EVENT.CLICKED, None)
 
         for f in all_files:
-            fullpath = self.gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else self.gamedir + "/" + f
+            gamedir = self.romdir + "/" + self.roms_subdir
+            fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
             button = self.wadlist.add_button(None, f)
             button.add_event_cb(
                 lambda e, p=fullpath: TaskManager.create_task(self.start_game(self.bootfile_prefix, self.bootfile_to_write, p)),
@@ -145,11 +182,19 @@ class RetroGoLauncher(Activity):
         self.refresh_file_list()
 
     def navigate_up(self):
-        if not self.current_subdir:
-            return
-        parts = self.current_subdir.split("/")
-        parts.pop()
-        self.current_subdir = "/".join(parts)
+        if self.current_subdir:
+            parts = self.current_subdir.split("/")
+            parts.pop()
+            self.current_subdir = "/".join(parts)
+            self.refresh_file_list()
+        elif not self._at_root_level:
+            self._at_root_level = True
+            self.refresh_file_list()
+
+    def select_rom_subdir(self, dirname):
+        self._at_root_level = False
+        self.roms_subdir = dirname
+        self.current_subdir = ""
         self.refresh_file_list()
 
     def settings_button_tap(self, event):
@@ -196,7 +241,7 @@ class RetroGoLauncher(Activity):
         await TaskManager.sleep(1)
 
         self.mkdir(bootfile_prefix + self.romdir)
-        self.mkdir(bootfile_prefix + self.gamedir)
+        self.mkdir(bootfile_prefix + self.romdir + "/" + self.roms_subdir)
         self.mkdir(bootfile_prefix + self.retrogodir)
         self.mkdir(bootfile_prefix + self.configdir)
 
