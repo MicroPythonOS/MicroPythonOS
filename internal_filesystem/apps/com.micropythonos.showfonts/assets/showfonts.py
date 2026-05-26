@@ -9,12 +9,9 @@ class ShowFonts(Activity):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
-        import path
-        print(f"{__file__}") # apps/com.micropythonos.showfonts/assets/showfonts.py
-        print(f"{path.abspath(__file__)}")
-        print(f"{path.dirname(path.abspath(__file__))}")
-        d = path.dirname(path.abspath(__file__))
-        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{d}/Rancourt-SmallCaps.ttf")
+        import os
+        mydir = os.path.dirname(os.path.abspath(__file__))
+        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
 
         self.addAllFontsTitles(screen)
         self.addAllGlyphs(screen)
@@ -40,7 +37,7 @@ class ShowFonts(Activity):
             bitcoin_symbol_in_circle = "\uf379"
             thumbs_up_symbol = "\uf164"
             diacritics = "æ ø å Æ Ø Å"
-            supported_latin = "Æ æ Ð ð ß Þ þ 7"
+            supported_latin = "Æ æ Ð ð ß Þ þ"
             title.set_text(
                 "{}: ABC 123 xyz ❤️ ☺️ !@#$%^&*( {} {} ₿ {} {} {} 丯 丰 {} {}".format(
                     name,
