@@ -51,7 +51,7 @@ class ShowFonts(Activity):
                 )
             )
 
-    def addAllGlyphs(self, screen):
+    def addAllGlyphs(self, screen, emoji=True):
         dsc = lv.font_glyph_dsc_t()
 
         display_font = FontManager.getFont(size=16, family="Montserrat")
@@ -62,7 +62,9 @@ class ShowFonts(Activity):
         title.set_text(name)
         title.set_style_text_font(display_font, lv.PART.MAIN)
 
-        line_height = display_font.get_line_height() + 4
+        font_height = display_font.get_line_height()
+        print("font_height: ", font_height)
+        line_height = font_height + 4
         x = 4
         lbl = lv.label(screen)
         lbl.set_width(lv.pct(99))
@@ -75,6 +77,12 @@ class ShowFonts(Activity):
                 x += 20
                 if x + 20 > screen.get_width():
                     x = 4
+
+        if emoji:
+            FontManager._ensure_emoji_map()
+            emoji_cps = sorted(FontManager._emoji_map.keys())
+            for cp in emoji_cps:
+                alltext = alltext + chr(cp) + " "
 
         lbl.set_text(alltext)
         self.labelSelectable(lbl)
