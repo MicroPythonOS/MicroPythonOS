@@ -9,17 +9,8 @@ class RenameActivity(Activity):
         self._path = self.getIntent().extras.get("path")
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        screen.set_style_pad_all(10, lv.PART.MAIN)
+        screen.set_style_pad_all(0, 0)
         screen.set_style_pad_gap(8, lv.PART.MAIN)
-
-        title = lv.label(screen)
-        title.set_text("Rename")
-        title.set_width(lv.pct(100))
-
-        path_label = lv.label(screen)
-        path_label.set_text(self._path)
-        path_label.set_width(lv.pct(100))
-        path_label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
 
         old_name = self._path.rstrip("/").split("/")[-1]
         self._ta = lv.textarea(screen)
