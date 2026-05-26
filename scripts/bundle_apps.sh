@@ -17,10 +17,9 @@ rm -f "$outputjson"
 
 # These apps are for testing, or aren't ready yet:
 # com.quasikili.quasidoodle doesn't work on touch screen devices AND has the wrong download URL
-# com.micropythonos.file_manager doesn't do anything other than let you browse the filesystem, so it's confusing
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.nostr isn't ready for release yet
-blacklist="com.micropythonos.file_manager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
+blacklist="com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
 blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.retrocore_launcher" # not ready yet
 blacklist="$blacklist com.micropythonos.doom com.micropythonos.breakout" # not ready yet
 blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.weather" # not ready yet
