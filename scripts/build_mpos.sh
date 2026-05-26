@@ -130,6 +130,11 @@ echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" ]; then
+	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
+	pushd "$codebasedir"/lvgl_micropython/lib/micropython
+	patch -p1 --forward < ../../esp32_inisetup_warn_and_format.patch || true
+	popd
+
 	partition_size="4194304"
 	flash_size="16"
 	otasupport="--ota"
