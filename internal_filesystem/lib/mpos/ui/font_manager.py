@@ -16,12 +16,9 @@ class FontManager:
     )
 
     _EMOJI_DIR_CANDIDATE_FORMATS = (
-        "{dir}",
-        "./{dir}",
-        "assets/{dir}",
-        "apps/com.micropythonos.showfonts/assets/{dir}",
-        "/apps/com.micropythonos.showfonts/assets/{dir}",
-        "M:apps/com.micropythonos.showfonts/assets/{dir}",
+        "builtin/res/emojis/{dir}",
+        "./builtin/res/emojis/{dir}",
+        "M:builtin/res/emojis/{dir}",
     )
 
     _emoji_maps = {}
@@ -219,7 +216,7 @@ class FontManager:
 
     @classmethod
     def _emoji_src_prefix(cls, dir_name):
-        return "M:apps/com.micropythonos.showfonts/assets/" + dir_name + "/"
+        return "M:builtin/res/emojis/" + dir_name + "/"
 
     @classmethod
     def _build_emoji_map_from_png_dir(cls, dir_name):

@@ -1,7 +1,7 @@
 from mpos import Activity
 import lvgl as lv
 
-from font_manager import FontManager
+from mpos import FontManager
 
 
 class ShowFonts(Activity):

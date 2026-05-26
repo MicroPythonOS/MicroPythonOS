@@ -55,6 +55,7 @@ from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .ui.focus import save_and_clear_current_focusgroup
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.widget_animator import WidgetAnimator
+from .ui.font_manager import FontManager
 from .ui import focus_direction
 
 # Utility modules
@@ -95,6 +96,7 @@ __all__ = [
     "handle_back_swipe", "handle_top_swipe",
     "get_foreground_app",
     "WidgetAnimator",
+    "FontManager",
     "focus_direction",
     # Testing utilities
     "wait_for_render", "capture_screenshot", "simulate_click", "simulate_drag", "get_widget_coords",
