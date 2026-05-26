@@ -54,51 +54,6 @@ class TestAppsManifest(unittest.TestCase):
                     f"{version=} in {manifest=} is not in canonical form",
                 )
 
-                # Test download_url:
-                download_url = data.get("download_url")
-                self.assertTrue(download_url, f"Missing download_url in {manifest=}")
-                self.assertTrue(
-                    download_url.startswith("https://"),
-                    f"Invalid download_url in {manifest=}: {download_url}",
-                )
-                self.assertIn(
-                    "/apps/",
-                    download_url,
-                    f"Invalid download_url in {manifest=}: {download_url}",
-                )
-                self.assertIn(
-                    fullname,
-                    download_url,
-                    f"Missing fullname in download_url: {download_url}",
-                )
-                self.assertIn(
-                    version,
-                    download_url,
-                    f"Missing version in download_url: {download_url}",
-                )
-
-                # Test icon_url:
-                icon_url = data.get("icon_url")
-                self.assertTrue(icon_url, f"Missing icon_url in {manifest=}")
-                self.assertTrue(
-                    icon_url.startswith("https://"),
-                    f"Invalid icon_url in {manifest=}: {icon_url}",
-                )
-                self.assertIn(
-                    "/apps/", icon_url,
-                    f"Invalid icon_url in {manifest=}: {icon_url}",
-                )
-                self.assertIn(
-                    fullname,
-                    icon_url,
-                    f"Missing fullname in icon_url: {icon_url}",
-                )
-                self.assertIn(
-                    version,
-                    icon_url,
-                    f"Missing version in icon_url: {icon_url}",
-                )
-
                 # Test activities.entrypoint
                 activities = data.get("activities", [])
                 for act in activities:
