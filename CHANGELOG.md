@@ -12,6 +12,7 @@ Builtin Apps:
 Frameworks:
 - AppManager: try .mpy after .py and use import instead of explicit compile
 - AppManager: require explicit import lvgl for clarity
+- FontManager: new framework that provides font listing, TTF support, emoji support
 - InputManager: mark emulate_focus_obj(group,o) as deprecated in favor of lv.group_focus_obj(o)
 - SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
 

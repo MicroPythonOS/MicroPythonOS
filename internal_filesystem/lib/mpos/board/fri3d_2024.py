@@ -332,6 +332,10 @@ import mpos.lights as LightsManager
 LightsManager.init(neopixel_pin=12)
 LightsManager.set_led_num(5)
 
+print("Disabling UART REPL because it receives data from the Communicator Add-On. Use esp.uart_repl(True) to re-enable.")
+import esp
+esp.uart_repl(False)
+
 # === STARTUP "WOW" EFFECT ===
 import time
 import _thread
