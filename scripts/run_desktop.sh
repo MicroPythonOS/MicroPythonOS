@@ -36,15 +36,17 @@ if [ -f "$script" ]; then
 else
     CONFIG_FILE="data/com.micropythonos.settings/config.json"
     set_autostart_config() {
-        local early_value="$1"
+        local mode="$1"
+        local early_value="$2"
         mkdir -p "$(dirname "$CONFIG_FILE")"
-        python3 - "$CONFIG_FILE" "$early_value" <<'PY'
+        python3 - "$CONFIG_FILE" "$mode" "$early_value" <<'PY'
 import json
 import os
 import sys
 
 path = sys.argv[1]
-early_value = sys.argv[2]
+mode = sys.argv[2]
+early_value = sys.argv[3]
 
 config = {}
 if os.path.exists(path):
@@ -56,7 +58,11 @@ if os.path.exists(path):
     except Exception:
         config = {}
 
-config["auto_start_app_early"] = early_value
+if mode == "set":
+    config["auto_start_app_early"] = early_value
+elif mode == "clear":
+    config.pop("auto_start_app_early", None)
+
 config.pop("auto_start_app", None)
 
 with open(path, "w", encoding="utf-8") as f:
@@ -66,10 +72,10 @@ PY
 
     if [ -n "$script" ]; then
         echo "run_desktop.sh: running app $script"
-        set_autostart_config "$script"
+        set_autostart_config "set" "$script"
     else
         echo "Clearing auto_start_app_early and auto_start_app in config file"
-        set_autostart_config ""
+        set_autostart_config "clear" ""
     fi
     "$binary" -X heapsize=$HEAPSIZE -v -i -m main # internal_filesystem/main.py is frozen in and can't be changed at runtime
 fi
