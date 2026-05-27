@@ -4,7 +4,7 @@
     "short_description": "DJ Addon demo",
     "long_description": "Shows off the capabilities of the Fri3d DJ Addon 2026.",
     "fullname": "com.micropythonos.dj_addon",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "category": "development",
     "activities": [
         {

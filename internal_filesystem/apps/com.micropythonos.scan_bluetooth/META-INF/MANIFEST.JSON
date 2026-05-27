@@ -4,7 +4,7 @@
     "short_description": "Scan Bluetooth",
     "long_description": "Lists all nearby Bluetooth devices with some information",
     "fullname": "com.micropythonos.scan_bluetooth",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "category": "development",
     "activities": [
         {

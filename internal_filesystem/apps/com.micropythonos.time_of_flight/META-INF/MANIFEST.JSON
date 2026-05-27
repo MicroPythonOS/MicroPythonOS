@@ -4,7 +4,7 @@
     "short_description": "Time-of-flight sensor demo",
     "long_description": "Shows off time-of-flight range imaging camera sensors by describing distance measurements per pixel based on round-trip light time.",
     "fullname": "com.micropythonos.time_of_flight",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "category": "development",
     "activities": [
         {

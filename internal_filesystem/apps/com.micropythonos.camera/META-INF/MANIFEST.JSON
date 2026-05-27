@@ -4,7 +4,7 @@
     "short_description": "Camera with QR decoding",
     "long_description": "Camera for both internal camera's and webcams, that includes QR decoding.",
     "fullname": "com.micropythonos.camera",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "category": "camera",
     "activities": [
         {

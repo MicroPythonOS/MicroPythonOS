@@ -4,7 +4,7 @@
     "short_description": "Simple navigation app.",
     "long_description": "Simple navigation app using data from NAVSTAR GPS and other GNSS systems.",
     "fullname": "cz.ucw.pavel.navstar",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "category": "utilities",
     "activities": [
         {
