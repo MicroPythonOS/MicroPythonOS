@@ -255,15 +255,30 @@ class FontManager:
     @classmethod
     def _get_emoji_src(cls, codepoint, target_height):
         cls._ensure_emoji_maps()
+
+        preferred_dir = None
         for tier in cls._EMOJI_TIERS:
             if target_height <= tier["max_height"]:
-                dir_name = tier["dir"]
-                if codepoint in cls._emoji_maps.get(dir_name, {}):
-                    return cls._emoji_maps[dir_name][codepoint]
+                preferred_dir = tier["dir"]
+                break
+
+        if preferred_dir is not None:
+            preferred_map = cls._emoji_maps.get(preferred_dir, {})
+            if codepoint in preferred_map:
+                return preferred_map[codepoint]
+
+            # For large emoji requests, explicitly fall back to 20x20.
+            # The renderer will upscale it to target_height.
+            if preferred_dir == "56x56":
+                fallback_map = cls._emoji_maps.get("20x20", {})
+                if codepoint in fallback_map:
+                    return fallback_map[codepoint]
+
         for tier in cls._EMOJI_TIERS:
             dir_name = tier["dir"]
-            if codepoint in cls._emoji_maps.get(dir_name, {}):
-                return cls._emoji_maps[dir_name][codepoint]
+            emoji_map = cls._emoji_maps.get(dir_name, {})
+            if codepoint in emoji_map:
+                return emoji_map[codepoint]
         return None
 
     @classmethod
@@ -322,14 +337,37 @@ class FontManager:
             return cls._imgfont_empty_src_cache[target_height]
 
         buf = bytearray(4)
-        dsc = lv.image_dsc_t()
-        dsc.data = buf
-        dsc.header.w = 1
-        dsc.header.h = target_height
-        dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
+        dsc = cls._build_argb8888_dsc(buf, 1, target_height)
 
         cls._imgfont_empty_src_cache[target_height] = dsc
         return dsc
+
+    @classmethod
+    def _build_argb8888_dsc(cls, buf, width, height):
+        width = int(width)
+        height = int(height)
+        stride = width * 4
+        try:
+            return lv.image_dsc_t(
+                {
+                    "header": {
+                        "magic": lv.IMAGE_HEADER_MAGIC,
+                        "w": width,
+                        "h": height,
+                        "stride": stride,
+                        "cf": lv.COLOR_FORMAT.ARGB8888,
+                    },
+                    "data_size": len(buf),
+                    "data": buf,
+                }
+            )
+        except Exception:
+            dsc = lv.image_dsc_t()
+            dsc.data = buf
+            dsc.header.w = width
+            dsc.header.h = height
+            dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
+            return dsc
 
     @classmethod
     def _font_pixel_height(cls, font):
@@ -359,7 +397,9 @@ class FontManager:
                 return src
 
             target_width = max(1, round(src_w * target_height / src_h))
-            dsc, buf = cls._render_scaled_image_src(src, target_width, target_height)
+            dsc, buf = cls._render_scaled_image_src(
+                src, src_w, src_h, target_width, target_height
+            )
             if dsc is not None:
                 cls._imgfont_scaled_src_cache[key] = (dsc, buf)
                 return dsc
@@ -385,20 +425,42 @@ class FontManager:
         return size
 
     @classmethod
-    def _render_scaled_image_src(cls, src, target_width, target_height):
+    def _render_scaled_image_src(cls, src, src_w, src_h, target_width, target_height):
         renderer = lv.image(lv.layer_top())
         try:
             renderer.add_flag(lv.obj.FLAG.HIDDEN)
-            renderer.set_size(target_width, target_height)
-            renderer.set_inner_align(lv.image.ALIGN.CONTAIN)
+            renderer.set_size(src_w, src_h)
+            renderer.set_inner_align(lv.image.ALIGN.CENTER)
             renderer.set_src(src)
 
             bpp = 4
-            buf = bytearray(target_width * target_height * bpp)
-            dsc = lv.image_dsc_t()
+            src_buf = bytearray(src_w * src_h * bpp)
+            src_dsc = lv.image_dsc_t()
             lv.snapshot_take_to_buf(
-                renderer, lv.COLOR_FORMAT.ARGB8888, dsc, buf, len(buf)
+                renderer, lv.COLOR_FORMAT.ARGB8888, src_dsc, src_buf, len(src_buf)
             )
+
+            if int(src_dsc.header.w) <= 0 or int(src_dsc.header.h) <= 0:
+                return None, None
+
+            if target_width == src_w and target_height == src_h:
+                return src_dsc, src_buf
+
+            buf = bytearray(target_width * target_height * bpp)
+            for y in range(target_height):
+                src_y = (y * src_h) // target_height
+                src_row = src_y * src_w
+                dst_row = y * target_width
+                for x in range(target_width):
+                    src_x = (x * src_w) // target_width
+                    src_idx = (src_row + src_x) * bpp
+                    dst_idx = (dst_row + x) * bpp
+                    buf[dst_idx] = src_buf[src_idx]
+                    buf[dst_idx + 1] = src_buf[src_idx + 1]
+                    buf[dst_idx + 2] = src_buf[src_idx + 2]
+                    buf[dst_idx + 3] = src_buf[src_idx + 3]
+
+            dsc = cls._build_argb8888_dsc(buf, target_width, target_height)
 
             return dsc, buf
         finally:

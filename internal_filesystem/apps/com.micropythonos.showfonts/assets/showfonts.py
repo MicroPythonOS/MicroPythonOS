@@ -13,6 +13,7 @@ class ShowFonts(Activity):
         mydir = os.path.dirname(os.path.abspath(__file__))
         self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
         self._ttf_font56 = FontManager.getFont(size=56, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
+        self._ttf_font72 = FontManager.getFont(size=72, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
 
         self.addAllFontsTitles(screen)
         self.addAllGlyphs(screen)
@@ -23,6 +24,7 @@ class ShowFonts(Activity):
         fonts = FontManager.listFonts()
         fonts.append((self._ttf_font, "TTF Rancourt 42"))
         fonts.append((self._ttf_font56, "TTF Rancourt 56"))
+        fonts.append((self._ttf_font72, "TTF Rancourt 72"))
 
         for font_info in fonts:
             if isinstance(font_info, tuple):
