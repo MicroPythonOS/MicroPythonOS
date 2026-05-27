@@ -807,6 +807,9 @@ class MockDownloadManager:
                 bytes_since_speed_update = 0
         
         if outfile or chunk_callback:
+            if outfile:
+                with open(outfile, "wb") as f:
+                    f.write(self.download_data)
             return True
         else:
             return b''.join(chunks)
