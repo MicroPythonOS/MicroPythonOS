@@ -4,6 +4,9 @@ Future release (next version)
 Put unreleased changes here!
 
 
+0.11.0
+======
+
 Builtin Apps:
 - Bundle as compiled bytecode .mpy files to reduce build size by 60KiB and improve performance
 - About: show system uptime
@@ -14,13 +17,14 @@ Frameworks:
 - AppManager: require explicit import lvgl for clarity
 - FontManager: new framework that provides font listing, TTF support, emoji support
 - InputManager: mark emulate_focus_obj(group,o) as deprecated in favor of lv.group_focus_obj(o)
+- MposKeyboard: add support for typing a few basic emojis
 - SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
 
 OS:
 - Add os.path functionality like in CPython
 - c_mpos/quirc: fix compilation warnings
-- Simplify focusgroup handling
 - Disable unused OS facilities (FreeRTOS internals, tracing, INFO logging, broken GIF, Pinyin IME, LVGL window, BMP) to reduce build size by 109KiB
+- Simplify focusgroup handling
 - Re-enable UART REPL again BUT add esp.uart_repl(False) functionality to disable/enable it at runtime
 
 0.10.0

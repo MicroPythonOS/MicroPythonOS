@@ -1648,34 +1648,36 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
         return False
     
     if use_direct and is_mpos_keyboard:
-        # For MposKeyboard, directly manipulate the textarea
-        # This is the most reliable approach for testing
-        textarea = keyboard._textarea
-        if textarea is None:
-            print(f"click_keyboard_button: No textarea connected to keyboard")
-            return False
-        
-        current_text = textarea.get_text()
-        
-        # Handle special keys (matching keyboard.py logic)
-        if button_text == lv.SYMBOL.BACKSPACE:
-            new_text = current_text[:-1]
-        elif button_text == " " or button_text == keyboard.LABEL_SPACE:
-            new_text = current_text + " "
-        elif button_text in [lv.SYMBOL.UP, lv.SYMBOL.DOWN, keyboard.LABEL_LETTERS,
-                            keyboard.LABEL_NUMBERS_SPECIALS, keyboard.LABEL_SPECIALS,
-                            lv.SYMBOL.OK]:
-            # Mode switching or OK - don't modify text
-            print(f"click_keyboard_button: '{button_text}' is a control key, not adding to textarea")
-            wait_for_render(10)
-            return True
-        else:
-            # Regular character
-            new_text = current_text + button_text
-        
-        textarea.set_text(new_text)
+        # For MposKeyboard, run through its event handler logic so behavior
+        # matches real typing (including mode switching and emoji font updates).
+        class _SyntheticKeyboardTarget:
+            def __init__(self, idx, text):
+                self._idx = idx
+                self._text = text
+
+            def get_selected_button(self):
+                return self._idx
+
+            def get_button_text(self, idx):
+                if idx == self._idx:
+                    return self._text
+                return None
+
+        class _SyntheticKeyboardEvent:
+            def __init__(self, target):
+                self._target = target
+
+            def get_code(self):
+                return lv.EVENT.VALUE_CHANGED
+
+            def get_target_obj(self):
+                return self._target
+
+        target = _SyntheticKeyboardTarget(button_idx, button_text)
+        event = _SyntheticKeyboardEvent(target)
+        keyboard._handle_events(event)
         wait_for_render(10)
-        print(f"click_keyboard_button: Clicked '{button_text}' at index {button_idx} using direct textarea manipulation")
+        print(f"click_keyboard_button: Clicked '{button_text}' at index {button_idx} using direct handler simulation")
     else:
         # Use coordinate-based clicking
         coords = get_keyboard_button_coords(keyboard, button_text)
