@@ -4,7 +4,7 @@ import time
 
 import lvgl as lv
 
-from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
+from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo, FontManager
 import mpos
 
 class About(Activity):
@@ -15,6 +15,8 @@ class About(Activity):
     def onCreate(self):
         self._uptime_label = None
         self._timer = None
+        self._header_font = FontManager.getFont(size=14, family="Montserrat", emoji=False)
+        self._body_font = FontManager.getFont(size=12, family="Montserrat", emoji=False)
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -233,11 +235,11 @@ class About(Activity):
         if is_header:
             primary_color = lv.theme_get_color_primary(None)
             label.set_style_text_color(primary_color, lv.PART.MAIN)
-            label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
+            label.set_style_text_font(self._header_font, lv.PART.MAIN)
             label.set_style_margin_top(margin_top, lv.PART.MAIN)
             label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
         else:
-            label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            label.set_style_text_font(self._body_font, lv.PART.MAIN)
             label.set_style_margin_bottom(2, lv.PART.MAIN)
         return label
 

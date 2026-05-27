@@ -157,6 +157,9 @@ class FontManager:
         try:
             # Do not mutate builtin font fallback: builtins may live in readonly memory.
             emoji_font.fallback = base_font
+            emoji_font.base_line = cls._font_base_line(base_font)
+            emoji_font.underline_position = cls._font_underline_position(base_font)
+            emoji_font.underline_thickness = cls._font_underline_thickness(base_font)
         except Exception as err:
             cls._debug("compose fallback set failed: " + repr(err))
             return base_font
@@ -308,13 +311,14 @@ class FontManager:
 
     @classmethod
     def _imgfont_path_cb(cls, font, unicode_cp, unicode_next, offset_y, user_data):
+        baseline = cls._font_base_line(font)
         if unicode_cp == CP_VARIATION_SELECTOR_TEXT or unicode_cp == CP_VARIATION_SELECTOR_EMOJI:
-            offset_y.__dereference__(0)
+            offset_y.__dereference__(-baseline)
             return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
 
         src = cls._get_emoji_src(unicode_cp, cls._font_pixel_height(font))
         if src is not None:
-            offset_y.__dereference__(0)
+            offset_y.__dereference__(-baseline)
             return cls._get_scaled_imgfont_src(src, cls._font_pixel_height(font))
 
         cls._log_unknown_emoji_codepoint(unicode_cp)
@@ -379,6 +383,27 @@ class FontManager:
             return max(1, int(font.line_height))
         except Exception:
             return 1
+
+    @classmethod
+    def _font_base_line(cls, font):
+        try:
+            return int(font.base_line)
+        except Exception:
+            return 0
+
+    @classmethod
+    def _font_underline_position(cls, font):
+        try:
+            return int(font.underline_position)
+        except Exception:
+            return 0
+
+    @classmethod
+    def _font_underline_thickness(cls, font):
+        try:
+            return int(font.underline_thickness)
+        except Exception:
+            return 0
 
     @classmethod
     def _get_scaled_imgfont_src(cls, src, target_height):
