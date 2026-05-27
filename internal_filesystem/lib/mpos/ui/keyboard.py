@@ -108,6 +108,7 @@ class MposKeyboard:
     _saved_scroll_y = 0
     # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
     _textarea = None
+    _textarea_emoji_font_applied = False
 
     def __init__(self, parent):
         # Create underlying LVGL keyboard widget
@@ -207,6 +208,7 @@ class MposKeyboard:
         else:
             # Regular character
             new_text = current_text + text
+            self._ensure_textarea_emoji_font(ta, text)
 
         # Update textarea
         ta.set_text(new_text)
@@ -224,9 +226,62 @@ class MposKeyboard:
             textarea: The lv.textarea widget to type into, or None to disconnect
         """
         self._textarea = textarea
+        self._textarea_emoji_font_applied = False
         # NOTE: We deliberately DO NOT call self._keyboard.set_textarea()
         # to avoid LVGL's automatic character insertion
         self._textarea.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
+
+    def _ensure_textarea_emoji_font(self, textarea, text):
+        if self._textarea_emoji_font_applied:
+            return
+        if not self._contains_emoji(text):
+            return
+
+        current_font = None
+        try:
+            current_font = textarea.get_style_text_font(lv.PART.MAIN)
+        except Exception:
+            pass
+
+        family = None
+        size = 12
+        if current_font is not None:
+            base_font = current_font
+            try:
+                fallback_font = current_font.fallback
+                if fallback_font is not None:
+                    base_font = fallback_font
+            except Exception:
+                pass
+
+            for record in FontManager._get_builtin_font_records():
+                if record["font"] is base_font:
+                    family = record["family"]
+                    size = record["size"]
+                    break
+
+            if family is None:
+                try:
+                    size = max(1, int(base_font.get_line_height()))
+                except Exception:
+                    pass
+
+        emoji_font = FontManager.getFont(size=size, family=family, emoji=True)
+        textarea.set_style_text_font(emoji_font, lv.PART.MAIN)
+        self._textarea_emoji_font_applied = True
+
+    def _contains_emoji(self, text):
+        if not text:
+            return False
+
+        emoji_codepoints = FontManager.getEmojiCodepoints()
+        if not emoji_codepoints:
+            return False
+
+        for char in text:
+            if ord(char) in emoji_codepoints:
+                return True
+        return False
 
     def get_textarea(self):
         """
