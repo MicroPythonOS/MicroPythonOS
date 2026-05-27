@@ -8,8 +8,8 @@ Put unreleased changes here!
 ======
 
 Builtin Apps:
-- Bundle as compiled bytecode .mpy files to reduce build size by 60KiB and improve performance
-- About: show system uptime
+- About: show system uptime, use FontManager
+- Compile builtin apps to bytecode .mpy files to reduce build size by 60KiB and improve startup performance
 - HowTo app: make import lvgl as lv explicit
 
 Frameworks:
