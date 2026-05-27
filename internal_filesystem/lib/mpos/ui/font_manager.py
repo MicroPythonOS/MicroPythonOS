@@ -29,6 +29,65 @@ class FontManager:
     _imgfont_source_size_cache = {}
     _imgfont_empty_src_cache = {}
     _unknown_emoji_codepoints_logged = {}
+    _emoji_similarity_group_members_by_cp = None
+
+    # Paste/update emoji similarity groups here as CSV with header: group_id,emoji
+    _EMOJI_SIMILARITY_GROUPS_CSV = """group_id,emoji
+hearts,❤️
+hearts,♥️
+hearts,❣️
+hearts,💞
+hearts,💖
+hearts,💗
+hearts,💓
+hearts,💘
+hearts,💝
+hearts,💕
+hearts,💔
+hearts,💙
+hearts,💜
+hearts,💚
+hearts,💛
+hearts,🖤
+tears_laughing,😂
+tears_laughing,🤣
+good_hand,👍
+good_hand,👏
+good_hand,👌
+good_hand,🙌
+smile_grin,😀
+smile_grin,😃
+smile_beam,😁
+smile_beam,😄
+smile_love,😍
+smile_love,😻
+smile_love,😹
+smile_love,😈
+tongue_group,😋
+tongue_group,😛
+sad_cry,😢
+sad_cry,😥
+sad_cry,😪
+sad_cry,😓
+music_group,🎶
+music_group,🎵
+checkmarks,✅
+checkmarks,✔️
+exclamation,‼️
+exclamation,❗
+angry,🔴
+angry,😡
+angry,😤
+flower_group,🌹
+flower_group,🌸
+flower_group,🌷
+flower_group,🎊
+flower_group,🌺
+flower_group,🌼
+flower_group,🌻
+birthday_cakes,🎂
+birthday_cakes,👑
+"""
 
     @classmethod
     def getFont(cls, size=None, ttf=None, family=None, emoji=True):
@@ -265,6 +324,29 @@ class FontManager:
                 preferred_dir = tier["dir"]
                 break
 
+        src = cls._lookup_emoji_src_for_codepoint(codepoint, preferred_dir)
+        if src is not None:
+            return src
+
+        cls._ensure_emoji_similarity_groups()
+        similar_codepoints = cls._emoji_similarity_group_members_by_cp.get(codepoint)
+        if similar_codepoints is None:
+            return None
+
+        for fallback_cp in similar_codepoints:
+            if fallback_cp == codepoint:
+                continue
+            src = cls._lookup_emoji_src_for_codepoint(fallback_cp, preferred_dir)
+            if src is not None:
+                cls._debug(
+                    "emoji fallback 0x{:X} -> 0x{:X}".format(codepoint, fallback_cp)
+                )
+                return src
+
+        return None
+
+    @classmethod
+    def _lookup_emoji_src_for_codepoint(cls, codepoint, preferred_dir=None):
         if preferred_dir is not None:
             preferred_map = cls._emoji_maps.get(preferred_dir, {})
             if codepoint in preferred_map:
@@ -283,6 +365,47 @@ class FontManager:
             if codepoint in emoji_map:
                 return emoji_map[codepoint]
         return None
+
+    @classmethod
+    def _ensure_emoji_similarity_groups(cls):
+        if cls._emoji_similarity_group_members_by_cp is not None:
+            return
+
+        groups = {}
+        for raw_line in cls._EMOJI_SIMILARITY_GROUPS_CSV.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            parts = line.split(",", 1)
+            if len(parts) != 2:
+                continue
+
+            group_id = parts[0].strip()
+            emoji_text = parts[1].strip()
+            if group_id == "group_id" and emoji_text == "emoji":
+                continue
+
+            emoji_text = cls.normalizeEmojiText(emoji_text)
+            if len(emoji_text) != 1:
+                continue
+
+            codepoint = ord(emoji_text)
+            group = groups.get(group_id)
+            if group is None:
+                group = []
+                groups[group_id] = group
+
+            if codepoint not in group:
+                group.append(codepoint)
+
+        members_by_cp = {}
+        for group_members in groups.values():
+            members_tuple = tuple(group_members)
+            for codepoint in group_members:
+                members_by_cp[codepoint] = members_tuple
+
+        cls._emoji_similarity_group_members_by_cp = members_by_cp
 
     @classmethod
     def _list_dir_names(cls, path):
