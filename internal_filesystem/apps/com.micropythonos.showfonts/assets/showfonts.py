@@ -20,6 +20,12 @@ class ShowFonts(Activity):
 
         self.setContentView(screen)
 
+    def onResume(self, screen):
+        lv.log_register_print_cb(ShowFonts.log_callback)
+
+    def onPause(self, screen): # Activity goes background
+        lv.log_register_print_cb(None)
+
     def addAllFontsTitles(self, screen):
         fonts = FontManager.listFonts()
         fonts.append((self._ttf_font, "TTF Rancourt 42"))
@@ -106,3 +112,19 @@ class ShowFonts(Activity):
     def _defocus_obj(event):
         target = event.get_target_obj()
         target.set_style_border_width(0, lv.PART.MAIN)
+
+    @staticmethod
+    # Custom log callback to capture FPS
+    def log_callback(level, log_str):
+        # Convert log_str to string if it's a bytes object
+        log_str = log_str.decode() if isinstance(log_str, bytes) else log_str
+        # Optional: Print for debugging
+        # print(f"Level: {level}, Log: {log_str}")
+        # Log message format: "sysmon: 25 FPS (refr_cnt: 8 | redraw_cnt: 1), ..."
+        if "sysmon:" in log_str and "FPS" in log_str:
+            try:
+                # Extract FPS value (e.g., "25" from "sysmon: 25 FPS ...")
+                fps_part = log_str.split("FPS")[0].split("sysmon:")[1].strip()
+                print(f"Current FPS: {fps_part}")
+            except (IndexError, ValueError):
+                pass
