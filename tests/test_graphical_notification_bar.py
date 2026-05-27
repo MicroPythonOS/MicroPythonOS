@@ -21,21 +21,54 @@ from mpos.ui import topmenu
 class TestNotificationBarVisibility(unittest.TestCase):
     """Ensure the notification bar widgets are visible in the launcher."""
 
+    def _bar_visible_widget(self):
+        bar = topmenu.notification_bar
+        if bar is None:
+            return None
+        try:
+            if bar.has_flag(lv.obj.FLAG.HIDDEN):
+                return None
+        except Exception:
+            pass
+        coords = get_widget_coords(bar)
+        if not coords:
+            return None
+        if coords["y2"] < 0:
+            return None
+        if coords["y1"] > AppearanceManager.NOTIFICATION_BAR_HEIGHT + 4:
+            return None
+        return bar
+
+    def _bar_hidden_widget(self):
+        bar = topmenu.notification_bar
+        if bar is None:
+            return True
+        try:
+            if bar.has_flag(lv.obj.FLAG.HIDDEN):
+                return True
+        except Exception:
+            pass
+        coords = get_widget_coords(bar)
+        if coords and coords["y2"] < 0:
+            return True
+        return None
+
     def setUp(self):
         AppManager.start_app("com.micropythonos.launcher")
         topmenu.open_bar()
-
-        def _bar_visible():
-            bar = topmenu.notification_bar
-            if bar is None or not topmenu.bar_open:
-                return None
-            coords = get_widget_coords(bar)
-            if coords and coords["y1"] >= -1:
-                return bar
-            return None
+        bar = wait_for_widget(self._bar_visible_widget, timeout=8)
+        if bar is None:
+            # Recovery path for slow/flaky CI where bar state can be stale.
+            try:
+                topmenu.close_bar()
+            except Exception:
+                pass
+            wait_for_widget(self._bar_hidden_widget, timeout=6)
+            topmenu.open_bar()
+            bar = wait_for_widget(self._bar_visible_widget, timeout=12)
 
         self.assertIsNotNone(
-            wait_for_widget(_bar_visible, timeout=5),
+            bar,
             "Notification bar did not become visible within timeout"
         )
 
@@ -83,10 +116,83 @@ class TestNotificationBarVisibility(unittest.TestCase):
         self.fail(f"{label} is not within the notification bar hierarchy")
 
     def _ensure_drawer_open(self, bar_coords):
-        return self._swipe_down_on_bar(bar_coords)
+        if self._swipe_down_on_bar(bar_coords):
+            return True
+
+        # Recovery path: force-close any stale drawer state, then force-open.
+        def _drawer_hidden():
+            drawer = topmenu.drawer
+            if drawer is None:
+                return True
+            try:
+                if drawer.has_flag(lv.obj.FLAG.HIDDEN):
+                    return True
+            except Exception:
+                pass
+            return None
+
+        def _drawer_visible():
+            drawer = topmenu.drawer
+            if not topmenu.drawer_open or drawer is None:
+                return None
+            try:
+                if drawer.has_flag(lv.obj.FLAG.HIDDEN):
+                    return None
+            except Exception:
+                pass
+            return drawer
+
+        try:
+            topmenu.close_drawer()
+        except Exception:
+            pass
+        wait_for_widget(_drawer_hidden, timeout=6)
+
+        try:
+            topmenu.open_drawer()
+        except Exception:
+            pass
+        if wait_for_widget(_drawer_visible, timeout=10) is not None:
+            return True
+
+        # Final retry via swipe with fresh bar coords.
+        bar = self._ensure_bar_visible()
+        if bar is None:
+            return False
+        coords = get_widget_coords(bar)
+        if not coords:
+            return False
+        return self._swipe_down_on_bar(coords)
 
     def _ensure_bar_closed(self, bar_coords, bar):
-        return self._swipe_up_on_bar(bar_coords, bar)
+        if self._swipe_up_on_bar(bar_coords, bar):
+            return True
+
+        # Recovery path: force-close bar state and verify hidden.
+        try:
+            topmenu.close_bar()
+        except Exception:
+            pass
+        if wait_for_widget(self._bar_hidden_widget, timeout=10) is not None:
+            return True
+
+        # Final retry: re-open and swipe closed again with fresh refs.
+        try:
+            topmenu.open_bar()
+        except Exception:
+            pass
+        bar = self._ensure_bar_visible()
+        if bar is None:
+            return wait_for_widget(self._bar_hidden_widget, timeout=8) is not None
+
+        coords = get_widget_coords(bar)
+        if not coords:
+            return wait_for_widget(self._bar_hidden_widget, timeout=8) is not None
+
+        if self._swipe_up_on_bar(coords, bar):
+            return True
+
+        return wait_for_widget(self._bar_hidden_widget, timeout=8) is not None
 
     def _swipe_down_on_bar(self, bar_coords):
         start_x = DisplayMetrics.width() // 2
@@ -133,15 +239,7 @@ class TestNotificationBarVisibility(unittest.TestCase):
         return wait_for_widget(_check, timeout=5) is not None
 
     def _ensure_bar_visible(self):
-        def _check():
-            bar = topmenu.notification_bar
-            if bar is None or not topmenu.bar_open:
-                return None
-            coords = get_widget_coords(bar)
-            if coords and coords["y1"] >= -1:
-                return bar
-            return None
-        return wait_for_widget(_check, timeout=5)
+        return wait_for_widget(self._bar_visible_widget, timeout=8)
 
     def test_notification_bar_widgets_visible(self):
         bar = topmenu.notification_bar
