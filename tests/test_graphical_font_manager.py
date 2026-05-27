@@ -114,6 +114,11 @@ class TestFontManagerGetFont(GraphicalTestCase):
         self.assertIsNotNone(composed)
         self.assertIsNot(composed, base)
 
+    def test_getfont_missing_ttf_raises(self):
+        """A missing TTF path should raise instead of silently falling back."""
+        with self.assertRaises(Exception):
+            FontManager.getFont(size=24, ttf="M:../tests/DOES_NOT_EXIST.ttf", emoji=False)
+
     def test_getfont_unscii_family(self):
         """Unscii family is available and returns a usable font."""
         font = FontManager.getFont(size=16, family="Unscii", emoji=False)

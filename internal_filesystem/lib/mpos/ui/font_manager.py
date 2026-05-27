@@ -244,12 +244,20 @@ birthday_cakes,👑
         if key in cls._ttf_font_cache:
             return cls._ttf_font_cache[key]
 
+        cls._assert_ttf_exists(ttf_path)
+        font = lv.tiny_ttf_create_file(ttf_path, size)
+        cls._ttf_font_cache[key] = font
+        return font
+
+    @classmethod
+    def _assert_ttf_exists(cls, ttf_path):
+        path = ttf_path
+        if isinstance(path, str) and path.startswith("M:"):
+            path = path[2:]
         try:
-            font = lv.tiny_ttf_create_file(ttf_path, size)
-            cls._ttf_font_cache[key] = font
-            return font
-        except Exception:
-            return cls._get_builtin_font(size)
+            os.stat(path)
+        except OSError:
+            raise OSError("TTF file not found: {}".format(ttf_path))
 
     @classmethod
     def getEmojiCodepoints(cls):
