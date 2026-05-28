@@ -19,10 +19,8 @@ class MusicPlayer(Activity):
 
         # Settings button (top-right)
         self._settings_button = lv.button(screen)
-        settings_margin = 15
-        settings_size = 44
-        self._settings_button.set_size(settings_size, settings_size)
-        self._settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
+        self._settings_button.set_size(60, 42)
+        self._settings_button.align(lv.ALIGN.TOP_LEFT, 4, 20)
         self._settings_button.add_event_cb(lambda *args: AppManager.start_app("com.micropythonos.settings.audio"), lv.EVENT.CLICKED, None)
         settings_label = lv.label(self._settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
