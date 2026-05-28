@@ -42,25 +42,19 @@ class TestManualFontBenchmark(GraphicalTestCase):
 
     def test_manual_benchmark(self):
         base = FontManager.getFont(size=14, family="Montserrat", emoji=False)
-        composed = FontManager.getFont(size=14, family="Montserrat", emoji="on")
-        auto_plain = FontManager.getFont(size=14, family="Montserrat", emoji="auto")
+        composed = FontManager.getFont(size=14, family="Montserrat", emoji=True)
 
         # Warm-up for caches and decoder setup.
         self._measure_scroll_ms(base, steps=20)
         self._measure_scroll_ms(composed, steps=20)
-        self._measure_scroll_ms(auto_plain, steps=20)
 
         t_base = self._measure_scroll_ms(base)
         t_composed = self._measure_scroll_ms(composed)
-        t_auto_plain = self._measure_scroll_ms(auto_plain)
 
         ratio = (t_composed / t_base) if t_base > 0 else 0
-        ratio_auto = (t_auto_plain / t_base) if t_base > 0 else 0
         print("BENCH font emoji=False: {} ms".format(int(t_base)))
         print("BENCH font emoji=True:  {} ms".format(int(t_composed)))
-        print("BENCH font emoji=auto/plain-text: {} ms".format(int(t_auto_plain)))
         print("BENCH ratio emoji_true/false: {:.2f}x".format(ratio))
-        print("BENCH ratio auto_plain/false: {:.2f}x".format(ratio_auto))
 
         self.assertTrue(t_base >= 0)
 
