@@ -3,6 +3,12 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.11.1
+======
+
+Builtin Apps:
+- About: cleanup unnecessary code
+
 Frameworks:
 - AudioManager: tweak WAV input buffer to reduce glitches
 - FontManager: default to non-emoji font unless emoji=True to improve performance
