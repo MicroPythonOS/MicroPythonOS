@@ -95,22 +95,15 @@ birthday_cakes,👑
 """
 
     @classmethod
-    def getFont(cls, size=None, ttf=None, family=None, emoji="auto"):
+    def getFont(cls, size=None, ttf=None, family=None, emoji=False):
         target_size = cls._normalize_size(size)
-        emoji_mode = cls._normalize_emoji_mode(emoji)
 
         if ttf is None:
             base_font = cls._get_builtin_font(target_size, family)
         else:
             base_font = cls._get_ttf_font(ttf, target_size)
 
-        if emoji_mode == "off":
-            return base_font
-
-        # "auto" is a fast-path policy: keep plain text on builtin/TTF fonts
-        # and skip imgfont composition unless a caller explicitly opts into
-        # emoji rendering with emoji="on".
-        if emoji_mode == "auto":
+        if not emoji:
             return base_font
 
         return cls._get_composed_font(base_font)
@@ -120,20 +113,6 @@ birthday_cakes,👑
         text = text.replace(chr(CP_VARIATION_SELECTOR_TEXT), "")
         text = text.replace(chr(CP_VARIATION_SELECTOR_EMOJI), "")
         return text
-
-    @classmethod
-    def _normalize_emoji_mode(cls, emoji):
-        if isinstance(emoji, bool):
-            return "on" if emoji else "off"
-        if emoji is None:
-            return "auto"
-        try:
-            mode = str(emoji).lower()
-        except Exception:
-            mode = "auto"
-        if mode in ("off", "on", "auto"):
-            return mode
-        return "auto"
 
     @classmethod
     def _normalize_size(cls, size):
