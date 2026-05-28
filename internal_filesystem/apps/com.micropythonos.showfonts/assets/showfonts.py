@@ -6,6 +6,22 @@ from mpos import FontManager
 
 
 class ShowFonts(Activity):
+    _BASE_GLYPH_SCAN_RANGES = (
+        (0x20, 0x7F),
+        (0xA0, 0x180),
+        (0x2000, 0x2070),
+        (0x20A0, 0x20D0),
+        (0x2100, 0x2150),
+        (0x2190, 0x2200),
+        (0x2200, 0x2300),
+        (0x2300, 0x2400),
+        (0x2460, 0x2500),
+        (0x25A0, 0x2600),
+        (0x2600, 0x2700),
+        (0x2B00, 0x2C00),
+        (0xF000, 0xF800),
+    )
+
     def _now_ms(self):
         if hasattr(time, "ticks_ms"):
             return time.ticks_ms()
@@ -18,6 +34,40 @@ class ShowFonts(Activity):
 
     def _log_timing(self, label, start_ms):
         print("[showfonts][timing] {}: {} ms".format(label, self._elapsed_ms(start_ms)))
+
+    def _build_glyph_text(self, lookup_font, emoji):
+        cache_key = (id(lookup_font), bool(emoji))
+        cache = getattr(self, "_glyph_text_cache", None)
+        if cache is not None and cache_key in cache:
+            return cache[cache_key]
+
+        dsc = lv.font_glyph_dsc_t()
+        parts = []
+
+        scan_start = self._now_ms()
+        for start_cp, end_cp in self._BASE_GLYPH_SCAN_RANGES:
+            for cp in range(start_cp, end_cp):
+                if lookup_font.get_glyph_dsc(lookup_font, dsc, cp, cp):
+                    parts.append(chr(cp))
+        self._log_timing("addAllGlyphs/base glyph scan", scan_start)
+
+        if emoji:
+            emoji_start = self._now_ms()
+            emoji_cps = FontManager.getEmojiCodepoints()
+            for cp in emoji_cps:
+                parts.append(chr(cp))
+            self._log_timing("addAllGlyphs/emoji append", emoji_start)
+
+        join_start = self._now_ms()
+        alltext = " ".join(parts)
+        self._log_timing("addAllGlyphs/join", join_start)
+        print("[showfonts][timing] addAllGlyphs/glyph count: {}".format(len(parts)))
+
+        if cache is None:
+            self._glyph_text_cache = {}
+            cache = self._glyph_text_cache
+        cache[cache_key] = alltext
+        return alltext
 
     def onCreate(self):
         screen = lv.obj()
@@ -96,7 +146,6 @@ class ShowFonts(Activity):
 
     def addAllGlyphs(self, screen, emoji=True):
         section_start = self._now_ms()
-        dsc = lv.font_glyph_dsc_t()
 
         getfont_start = self._now_ms()
         display_font = FontManager.getFont(size=16, family="Montserrat", emoji=emoji)
@@ -110,28 +159,10 @@ class ShowFonts(Activity):
 
         font_height = display_font.get_line_height()
         print("font_height: ", font_height)
-        line_height = font_height + 4
-        x = 4
         lbl = lv.label(screen)
         lbl.set_width(lv.pct(99))
         lbl.set_style_text_font(display_font, lv.PART.MAIN)
-        alltext = ""
-        scan_start = self._now_ms()
-        for cp in range(0x20, 0xF800):
-            if lookup_font.get_glyph_dsc(lookup_font, dsc, cp, cp):
-                alltext = alltext + chr(cp) + " "
-
-                x += 20
-                if x + 20 > screen.get_width():
-                    x = 4
-        self._log_timing("addAllGlyphs/base glyph scan", scan_start)
-
-        if emoji:
-            emoji_start = self._now_ms()
-            emoji_cps = FontManager.getEmojiCodepoints()
-            for cp in emoji_cps:
-                alltext = alltext + chr(cp) + " "
-            self._log_timing("addAllGlyphs/emoji append", emoji_start)
+        alltext = self._build_glyph_text(lookup_font, emoji)
 
         set_text_start = self._now_ms()
         lbl.set_text(alltext)
