@@ -1,6 +1,9 @@
 import lvgl as lv
 import keypad_framework
 
+import mpos.ui
+import mpos.ui.focus_direction
+
 
 _MOD_LSHIFT = 0x02
 _MOD_RSHIFT = 0x20
@@ -121,5 +124,17 @@ class Fri3dCommunicatorKeyboard(keypad_framework.KeypadDriver):
     def _get_key(self):
         self._poll()
         if self._queue:
-            return self._queue.pop(0)
+            state, key = self._queue.pop(0)
+            if state == self.PRESSED:
+                if key == lv.KEY.ESC:
+                    mpos.ui.back_screen()
+                elif key == lv.KEY.RIGHT:
+                    mpos.ui.focus_direction.move_focus_direction(90)
+                elif key == lv.KEY.LEFT:
+                    mpos.ui.focus_direction.move_focus_direction(270)
+                elif key == lv.KEY.UP:
+                    mpos.ui.focus_direction.move_focus_direction(0)
+                elif key == lv.KEY.DOWN:
+                    mpos.ui.focus_direction.move_focus_direction(180)
+            return state, key
         return None
