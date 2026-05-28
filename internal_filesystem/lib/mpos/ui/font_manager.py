@@ -21,6 +21,9 @@ class FontManager:
         "M:builtin/res/emojis/{dir}",
     )
 
+    # Multiple caches are intentional here: emoji rendering on ESP32 is very
+    # expensive, so we avoid repeated filesystem scans, repeated image decode
+    # probes, and repeated per-codepoint fallback walks.
     _emoji_maps = {}
     _builtin_font_records = None
     _composed_font_cache = {}
@@ -28,8 +31,10 @@ class FontManager:
     _imgfont_scaled_src_cache = {}
     _imgfont_source_size_cache = {}
     _imgfont_empty_src_cache = {}
+    _emoji_src_lookup_cache = {}
     _unknown_emoji_codepoints_logged = {}
     _emoji_similarity_group_members_by_cp = None
+    _font_clone_keepalive = {}
 
     # Paste/update emoji similarity groups here as CSV with header: group_id,emoji
     _EMOJI_SIMILARITY_GROUPS_CSV = """group_id,emoji
@@ -90,15 +95,22 @@ birthday_cakes,👑
 """
 
     @classmethod
-    def getFont(cls, size=None, ttf=None, family=None, emoji=True):
+    def getFont(cls, size=None, ttf=None, family=None, emoji="auto"):
         target_size = cls._normalize_size(size)
+        emoji_mode = cls._normalize_emoji_mode(emoji)
 
         if ttf is None:
             base_font = cls._get_builtin_font(target_size, family)
         else:
             base_font = cls._get_ttf_font(ttf, target_size)
 
-        if not emoji:
+        if emoji_mode == "off":
+            return base_font
+
+        # "auto" is a fast-path policy: keep plain text on builtin/TTF fonts
+        # and skip imgfont composition unless a caller explicitly opts into
+        # emoji rendering with emoji="on".
+        if emoji_mode == "auto":
             return base_font
 
         return cls._get_composed_font(base_font)
@@ -108,6 +120,20 @@ birthday_cakes,👑
         text = text.replace(chr(CP_VARIATION_SELECTOR_TEXT), "")
         text = text.replace(chr(CP_VARIATION_SELECTOR_EMOJI), "")
         return text
+
+    @classmethod
+    def _normalize_emoji_mode(cls, emoji):
+        if isinstance(emoji, bool):
+            return "on" if emoji else "off"
+        if emoji is None:
+            return "auto"
+        try:
+            mode = str(emoji).lower()
+        except Exception:
+            mode = "auto"
+        if mode in ("off", "on", "auto"):
+            return mode
+        return "auto"
 
     @classmethod
     def _normalize_size(cls, size):
@@ -214,8 +240,20 @@ birthday_cakes,👑
             return base_font
 
         try:
-            # Do not mutate builtin font fallback: builtins may live in readonly memory.
-            emoji_font.fallback = base_font
+            # Builtin LVGL fonts are commonly compiled as const objects.
+            # Mutating base_font.fallback directly can crash on some targets.
+            # Clone the base font first, then attach emoji fallback to the
+            # mutable clone.
+            primary_font = cls._clone_font_for_fallback(base_font)
+
+            # Prefer base glyph renderer first for speed; emoji only as fallback.
+            try:
+                original_fallback = base_font.fallback
+            except Exception:
+                original_fallback = None
+
+            emoji_font.fallback = original_fallback
+            primary_font.fallback = emoji_font
             emoji_font.base_line = cls._font_base_line(base_font)
             emoji_font.underline_position = cls._font_underline_position(base_font)
             emoji_font.underline_thickness = cls._font_underline_thickness(base_font)
@@ -223,8 +261,36 @@ birthday_cakes,👑
             cls._debug("compose fallback set failed: " + repr(err))
             return base_font
 
-        cls._composed_font_cache[cache_key] = emoji_font
-        return emoji_font
+        cls._composed_font_cache[cache_key] = primary_font
+        return primary_font
+
+    @classmethod
+    def _clone_font_for_fallback(cls, font):
+        clone = lv.font_t()
+
+        attrs = (
+            "get_glyph_dsc",
+            "get_glyph_bitmap",
+            "release_glyph",
+            "line_height",
+            "base_line",
+            "subpx",
+            "kerning",
+            "static_bitmap",
+            "underline_position",
+            "underline_thickness",
+            "dsc",
+            "fallback",
+            "user_data",
+        )
+
+        for attr in attrs:
+            setattr(clone, attr, getattr(font, attr))
+
+        # Keep clone strongly referenced: style objects can outlive local Python
+        # references, so GC must not reclaim the cloned font struct.
+        cls._font_clone_keepalive[id(clone)] = clone
+        return clone
 
     @classmethod
     def _font_identity(cls, font):
@@ -324,21 +390,29 @@ birthday_cakes,👑
 
     @classmethod
     def _get_emoji_src(cls, codepoint, target_height):
+        # Most rendered glyphs are plain text. Quickly reject obvious non-emoji
+        # ranges before touching maps/similarity logic.
+        if codepoint < cls._UNKNOWN_EMOJI_LOG_THRESHOLD:
+            return None
+        if 0xE000 <= codepoint <= 0xF8FF:
+            return None
+
         cls._ensure_emoji_maps()
 
-        preferred_dir = None
-        for tier in cls._EMOJI_TIERS:
-            if target_height <= tier["max_height"]:
-                preferred_dir = tier["dir"]
-                break
+        preferred_dir = cls._get_preferred_emoji_dir(target_height)
+        cache_key = (int(codepoint), preferred_dir)
+        if cache_key in cls._emoji_src_lookup_cache:
+            return cls._emoji_src_lookup_cache[cache_key]
 
         src = cls._lookup_emoji_src_for_codepoint(codepoint, preferred_dir)
         if src is not None:
+            cls._emoji_src_lookup_cache[cache_key] = src
             return src
 
         cls._ensure_emoji_similarity_groups()
         similar_codepoints = cls._emoji_similarity_group_members_by_cp.get(codepoint)
         if similar_codepoints is None:
+            cls._emoji_src_lookup_cache[cache_key] = None
             return None
 
         for fallback_cp in similar_codepoints:
@@ -349,8 +423,17 @@ birthday_cakes,👑
                 cls._debug(
                     "emoji fallback 0x{:X} -> 0x{:X}".format(codepoint, fallback_cp)
                 )
+                cls._emoji_src_lookup_cache[cache_key] = src
                 return src
 
+        cls._emoji_src_lookup_cache[cache_key] = None
+        return None
+
+    @classmethod
+    def _get_preferred_emoji_dir(cls, target_height):
+        for tier in cls._EMOJI_TIERS:
+            if target_height <= tier["max_height"]:
+                return tier["dir"]
         return None
 
     @classmethod

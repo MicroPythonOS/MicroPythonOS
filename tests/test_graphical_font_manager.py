@@ -27,12 +27,14 @@ def _reset_font_manager():
     FontManager._composed_font_cache.clear()
     FontManager._ttf_font_cache.clear()
     FontManager._emoji_maps.clear()
+    FontManager._emoji_src_lookup_cache.clear()
     FontManager._imgfont_scaled_src_cache.clear()
     FontManager._imgfont_source_size_cache.clear()
     FontManager._imgfont_empty_src_cache.clear()
     FontManager._unknown_emoji_codepoints_logged.clear()
     FontManager._builtin_font_records = None
     FontManager._emoji_similarity_group_members_by_cp = None
+    FontManager._font_clone_keepalive.clear()
 
 
 class TestFontManagerGetFont(GraphicalTestCase):
@@ -298,6 +300,18 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         src = FontManager._get_emoji_src(ord("♥"), 16)
         self.assertIsNone(src)
 
+    def test_low_codepoint_short_circuits_without_cache_entry(self):
+        """Low codepoints skip emoji lookup work and are not cached."""
+        src = FontManager._get_emoji_src(ord("A"), 16)
+        self.assertIsNone(src)
+        self.assertEqual(FontManager._emoji_src_lookup_cache, {})
+
+    def test_private_use_codepoint_short_circuits_without_cache_entry(self):
+        """Private Use Area codepoints skip emoji lookup work and are not cached."""
+        src = FontManager._get_emoji_src(0xF004, 16)
+        self.assertIsNone(src)
+        self.assertEqual(FontManager._emoji_src_lookup_cache, {})
+
 
 class TestFontManagerNormalizeEmojiText(unittest.TestCase):
     """Tests for FontManager.normalizeEmojiText()."""
@@ -328,6 +342,29 @@ class TestFontManagerNormalizeEmojiText(unittest.TestCase):
     def test_empty_string(self):
         """Empty string is handled without error."""
         self.assertEqual(FontManager.normalizeEmojiText(""), "")
+
+
+class TestFontManagerEmojiNeedDetection(unittest.TestCase):
+    """Tests for getFont() emoji mode normalization."""
+
+    def setUp(self):
+        _reset_font_manager()
+
+    def test_getfont_emoji_off_returns_base(self):
+        base = FontManager.getFont(size=16, family="Montserrat", emoji=False)
+        font = FontManager.getFont(size=16, family="Montserrat", emoji="off")
+        self.assertIs(font, base)
+
+    def test_getfont_emoji_on_uses_composed(self):
+        base = FontManager.getFont(size=16, family="Montserrat", emoji=False)
+        font = FontManager.getFont(size=16, family="Montserrat", emoji="on")
+        self.assertIsNotNone(font)
+        self.assertIsNot(font, base)
+
+    def test_getfont_emoji_auto_returns_base(self):
+        base = FontManager.getFont(size=16, family="Montserrat", emoji=False)
+        font = FontManager.getFont(size=16, family="Montserrat", emoji="auto")
+        self.assertIs(font, base)
 
 
 class TestFontManagerRendering(GraphicalTestCase):
