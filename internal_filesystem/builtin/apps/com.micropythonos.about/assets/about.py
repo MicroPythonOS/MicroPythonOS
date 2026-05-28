@@ -15,14 +15,12 @@ class About(Activity):
     def onCreate(self):
         self._uptime_label = None
         self._timer = None
-        self._header_font = FontManager.getFont(size=14, family="Montserrat", emoji=False)
-        self._body_font = FontManager.getFont(size=12, family="Montserrat", emoji=False)
+        self._header_font = FontManager.getFont(size=14, family="Montserrat")
+        self._body_font = FontManager.getFont(size=12, family="Montserrat")
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
-        # Make the screen focusable so it can be scrolled with the arrow keys
-        lv.group_get_default().add_obj(screen)
 
         # Logo
         img = lv.image(screen)
