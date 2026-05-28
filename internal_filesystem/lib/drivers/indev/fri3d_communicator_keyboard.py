@@ -74,6 +74,20 @@ class Fri3dCommunicatorKeyboard(keypad_framework.KeypadDriver):
         self._active_lv_by_hid = {}
         self._queue = []
 
+    def _fire_mpos_nav_hook(self, state, key):
+        if state != self.PRESSED:
+            return
+        if key == lv.KEY.ESC:
+            mpos.ui.back_screen()
+        elif key == lv.KEY.RIGHT:
+            mpos.ui.focus_direction.move_focus_direction(90)
+        elif key == lv.KEY.LEFT:
+            mpos.ui.focus_direction.move_focus_direction(270)
+        elif key == lv.KEY.UP:
+            mpos.ui.focus_direction.move_focus_direction(0)
+        elif key == lv.KEY.DOWN:
+            mpos.ui.focus_direction.move_focus_direction(180)
+
     def _hid_to_lv(self, hid_usage, modifiers):
         shifted = (modifiers & _MOD_SHIFT) != 0
 
@@ -125,16 +139,7 @@ class Fri3dCommunicatorKeyboard(keypad_framework.KeypadDriver):
         self._poll()
         if self._queue:
             state, key = self._queue.pop(0)
-            if state == self.PRESSED:
-                if key == lv.KEY.ESC:
-                    mpos.ui.back_screen()
-                elif key == lv.KEY.RIGHT:
-                    mpos.ui.focus_direction.move_focus_direction(90)
-                elif key == lv.KEY.LEFT:
-                    mpos.ui.focus_direction.move_focus_direction(270)
-                elif key == lv.KEY.UP:
-                    mpos.ui.focus_direction.move_focus_direction(0)
-                elif key == lv.KEY.DOWN:
-                    mpos.ui.focus_direction.move_focus_direction(180)
+            self._fire_mpos_nav_hook(state, key)
             return state, key
+
         return None
