@@ -345,26 +345,21 @@ class TestFontManagerNormalizeEmojiText(unittest.TestCase):
 
 
 class TestFontManagerEmojiNeedDetection(unittest.TestCase):
-    """Tests for getFont() emoji mode normalization."""
+    """Tests for simple emoji bool mode."""
 
     def setUp(self):
         _reset_font_manager()
 
-    def test_getfont_emoji_off_returns_base(self):
+    def test_getfont_emoji_false_returns_base(self):
         base = FontManager.getFont(size=16, family="Montserrat", emoji=False)
-        font = FontManager.getFont(size=16, family="Montserrat", emoji="off")
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=False)
         self.assertIs(font, base)
 
-    def test_getfont_emoji_on_uses_composed(self):
+    def test_getfont_emoji_true_uses_composed(self):
         base = FontManager.getFont(size=16, family="Montserrat", emoji=False)
-        font = FontManager.getFont(size=16, family="Montserrat", emoji="on")
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
         self.assertIsNotNone(font)
         self.assertIsNot(font, base)
-
-    def test_getfont_emoji_auto_returns_base(self):
-        base = FontManager.getFont(size=16, family="Montserrat", emoji=False)
-        font = FontManager.getFont(size=16, family="Montserrat", emoji="auto")
-        self.assertIs(font, base)
 
 
 class TestFontManagerRendering(GraphicalTestCase):
