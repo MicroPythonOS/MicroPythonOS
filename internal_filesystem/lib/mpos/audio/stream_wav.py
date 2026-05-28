@@ -6,47 +6,6 @@ import machine
 import os
 import time
 
-'''
-@micropython.viper
-def _scale_audio_optimized(buf: ptr8, num_bytes: int, scale_fixed: int):
-    if scale_fixed >= 32768:
-        return
-    if scale_fixed <= 0:
-        for i in range(num_bytes):
-            buf[i] = 0
-        return
-
-    mask: int = scale_fixed
-
-    for i in range(0, num_bytes, 2):
-        s: int = int(buf[i]) | (int(buf[i+1]) << 8)
-        if s >= 0x8000:
-            s -= 0x10000
-
-        r: int = 0
-        if mask & 0x8000: r += s
-        if mask & 0x4000: r += s>>1
-        if mask & 0x2000: r += s>>2
-        if mask & 0x1000: r += s>>3
-        if mask & 0x0800: r += s>>4
-        if mask & 0x0400: r += s>>5
-        if mask & 0x0200: r += s>>6
-        if mask & 0x0100: r += s>>7
-        if mask & 0x0080: r += s>>8
-        if mask & 0x0040: r += s>>9
-        if mask & 0x0020: r += s>>10
-        if mask & 0x0010: r += s>>11
-        if mask & 0x0008: r += s>>12
-        if mask & 0x0004: r += s>>13
-        if mask & 0x0002: r += s>>14
-        if mask & 0x0001: r += s>>15
-
-        if r > 32767:  r = 32767
-        if r < -32768: r = -32768
-
-        buf[i]   = r & 0xFF
-        buf[i+1] = (r >> 8) & 0xFF
-'''
 
 class WAVStream:
     """
@@ -364,12 +323,15 @@ class WAVStream:
                 )
 
                 self._playback_rate = playback_rate
+
+                # This influences how long it takes for the audio to start; low values: more responsive, high values: slow start but smoother
                 # ibuf = playback_rate # doesnt account for stereo vs mono...
-                ibuf = 8192
-                #ibuf = 32000 # old setting
+                #ibuf = 8192 * 1 # more jitters when playing audio and doing other things like updating the UI
+                ibuf =  8192 * 4 # good balance between smooth audio and still responsive to volume changes
+                #ibuf = 8192 * 8 # 64KiB seems to help for reducing stutter while playing music + QuasiBird
 
                 print(f"WAVStream: {original_rate} Hz, {bits_per_sample}-bit, {channels}-ch")
-                print(f"WAVStream: Playback at {playback_rate} Hz (factor {upsample_factor})")
+                print(f"WAVStream: Playback at {playback_rate} Hz (upsample factor {upsample_factor})")
 
                 if data_size > file_size - data_start:
                     data_size = file_size - data_start
@@ -491,14 +453,10 @@ class WAVStream:
                         raw = self._upsample_buffer(raw, upsample_factor)
 
                     # 3. Volume scaling via I2S native right-shift.
-                    volume_shift = self._volume_percent_to_shift(self.volume)
-                    if self._i2s and volume_shift > 0:
-                        self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
-
-                    # The old volume scaling method, left here for comparison purposes:
-                    #scale = self.volume / 100.0
-                    #scale_fixed = int(scale * 32768)
-                    #_scale_audio_optimized(raw, len(raw), scale_fixed)
+                    if self.volume < 100:
+                        volume_shift = self._volume_percent_to_shift(self.volume)
+                        if self._i2s and volume_shift > 0:
+                            self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
 
                     # 4. Output to I2S (blocking write is OK - we're in a separate thread)
                     if self._i2s:
