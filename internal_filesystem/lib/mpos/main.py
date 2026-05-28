@@ -42,7 +42,7 @@ def single_address_i2c_scan(i2c_bus, address):
     Returns:
         True if a device responds at the specified address, False otherwise
     """
-    print(f"Attempt to write a single byte to I2C bus address 0x{address:02x}...")
+    print(f"Attempting to write a single byte to I2C bus address 0x{address:02x}...")
     try:
         # Attempt to write a single byte to the address
         # This will raise an exception if no device responds
