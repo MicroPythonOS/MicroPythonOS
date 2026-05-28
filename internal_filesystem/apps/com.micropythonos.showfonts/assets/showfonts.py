@@ -68,8 +68,8 @@ class ShowFonts(Activity):
     def addAllGlyphs(self, screen, emoji=True):
         dsc = lv.font_glyph_dsc_t()
 
-        display_font = FontManager.getFont(size=16, family="Montserrat")
-        lookup_font = FontManager.getFont(size=16, family="Montserrat", emoji=emoji)
+        display_font = FontManager.getFont(size=16, family="Montserrat", emoji=emoji)
+        lookup_font = display_font
         name = "Montserrat 16"
 
         title = lv.label(screen)
