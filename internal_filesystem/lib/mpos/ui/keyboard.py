@@ -266,7 +266,7 @@ class MposKeyboard:
                 except Exception:
                     pass
 
-        emoji_font = FontManager.getFont(size=size, family=family, emoji="on")
+        emoji_font = FontManager.getFont(size=size, family=family, emoji=True)
         textarea.set_style_text_font(emoji_font, lv.PART.MAIN)
         self._textarea_emoji_font_applied = True
 
