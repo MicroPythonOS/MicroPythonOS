@@ -9,9 +9,9 @@ Frameworks:
 
 OS:
 - Fri3d Communicator: improve UART handling
-- Fri3d Communicator Keyboard: new input device (indev)
+- Fri3d Communicator Keyboard: new input device (indev) for LVGL with IRQ mode, polling mode, key repeat, escape and arrows for navigation
 - Fri3d 2024: register i2c with DeviceManager for add-ons
-- Fri3d 2024: register Fri3d Communicator 2024 Keyboard
+- Fri3d 2024 and 2026: detect and initialize Fri3d Communicator 2024 or 2026 Keyboard
 
 
 0.11.0

@@ -336,9 +336,8 @@ LightsManager.set_led_num(5)
 
 # Communicator add-on keyboard input (UART HID reports -> LVGL keypad indev)
 try:
+    print("Checking for 2024 or 2026 Communicator Add-On over I2C")
     from machine import UART
-    from drivers.fri3d.communicator import Communicator2024, Communicator2026
-    from drivers.indev.fri3d_communicator_keyboard import Fri3dCommunicatorKeyboard
 
     COMMUNICATOR_2024_ADDR = const(0x38)
     COMMUNICATOR_2026_ADDR = const(0x39)
@@ -350,8 +349,10 @@ try:
     i2c_devices = comm_i2c_bus.scan()
 
     if COMMUNICATOR_2026_ADDR in i2c_devices:
+        from drivers.fri3d.communicator import Communicator2026
         communicator = Communicator2026(i2c_bus=comm_i2c_bus, uart_bus=comm_uart)
     elif COMMUNICATOR_2024_ADDR in i2c_devices:
+        from drivers.fri3d.communicator import Communicator2024
         communicator = Communicator2024(
             i2c_bus=comm_i2c_bus,
             uart_bus=comm_uart,
@@ -363,6 +364,7 @@ try:
         import esp
         esp.uart_repl(False)
         print("Initializing Fri3dCommunicatorKeyboard and registering as indev")
+        from drivers.indev.fri3d_communicator_keyboard import Fri3dCommunicatorKeyboard
         communicator_indev = Fri3dCommunicatorKeyboard(communicator)
         communicator_indev.set_group(group)
         communicator_indev.enable(True)
