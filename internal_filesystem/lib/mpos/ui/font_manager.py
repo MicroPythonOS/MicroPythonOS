@@ -154,16 +154,18 @@ birthday_cakes,👑
         return lv.font_montserrat_12
 
     @classmethod
-    def listFonts(cls):
+    def listFonts(cls, emojis=False):
         fonts = []
         for record in cls._get_builtin_font_records():
-            composed_font = cls._get_composed_font(record["font"])
+            font = record["font"]
+            if emojis:
+                font = cls._get_composed_font(font)
             fonts.append(
                 {
                     "name": "{} {}".format(record["family"], record["size"]),
                     "family": record["family"],
                     "size": record["size"],
-                    "font": composed_font,
+                    "font": font,
                     "base_font": record["font"],
                 }
             )

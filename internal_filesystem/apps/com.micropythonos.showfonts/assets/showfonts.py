@@ -9,29 +9,32 @@ class ShowFonts(Activity):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
-        import os
-        mydir = os.path.dirname(os.path.abspath(__file__))
-        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
-        self._ttf_font56 = FontManager.getFont(size=56, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
-        self._ttf_font72 = FontManager.getFont(size=72, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
-
-        self.addAllFontsTitles(screen)
-        self.addAllGlyphs(screen)
-
         self.setContentView(screen)
 
     def onResume(self, screen):
-        lv.log_register_print_cb(ShowFonts.log_callback)
+        self.addAllFontsTitles(screen)
+        self.addAllGlyphs(screen)
+        #lv.log_register_print_cb(ShowFonts.log_callback) # Show FPS to demonstrate that emoji fonts are 3-4x slower
 
     def onPause(self, screen): # Activity goes background
-        lv.log_register_print_cb(None)
+        #lv.log_register_print_cb(None)
+        pass
 
     def addAllFontsTitles(self, screen):
-        fonts = FontManager.listFonts()
-        fonts.append((self._ttf_font, "TTF Rancourt 42"))
-        fonts.append((self._ttf_font56, "TTF Rancourt 56"))
-        fonts.append((self._ttf_font72, "TTF Rancourt 72"))
+        import os
+        mydir = os.path.dirname(os.path.abspath(__file__))
+        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
+        #self._ttf_font56 = FontManager.getFont(size=56, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
+        #self._ttf_font72 = FontManager.getFont(size=72, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
+        #fonts.append((self._ttf_font56, "TTF Rancourt 56"))
+        #fonts.append((self._ttf_font72, "TTF Rancourt 72"))
+        title = lv.label(screen)
+        self.labelSelectable(title)
+        title.set_width(lv.pct(99))
+        title.set_style_text_font(self._ttf_font, lv.PART.MAIN)
+        title.set_text("Rancourt 42 TTF test with minimal glyphs")
 
+        fonts = FontManager.listFonts()
         for font_info in fonts:
             if isinstance(font_info, tuple):
                 font = font_info[0]
@@ -49,7 +52,7 @@ class ShowFonts(Activity):
             diacritics = "æ ø å Æ Ø Å"
             supported_latin = "Æ æ Ð ð ß Þ þ"
             title.set_text(
-                "{}: ABC 123 xyz ❤️ ☺️ !@#$%^&*( {} {} ₿ {} {} {} 丯 丰 {} {}".format(
+                "{}: ABC 123 xyz !@#$%^&*( {} {} ₿ {} {} {} 丯 丰 {} {}".format(
                     name,
                     lv.SYMBOL.OK,
                     lv.SYMBOL.BACKSPACE,
@@ -61,11 +64,12 @@ class ShowFonts(Activity):
                 )
             )
 
+
     def addAllGlyphs(self, screen, emoji=True):
         dsc = lv.font_glyph_dsc_t()
 
         display_font = FontManager.getFont(size=16, family="Montserrat")
-        lookup_font = FontManager.getFont(size=16, family="Montserrat", emoji=False)
+        lookup_font = FontManager.getFont(size=16, family="Montserrat", emoji=emoji)
         name = "Montserrat 16"
 
         title = lv.label(screen)
