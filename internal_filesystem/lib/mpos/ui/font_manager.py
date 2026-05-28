@@ -9,7 +9,7 @@ CP_VARIATION_SELECTOR_EMOJI = 0xFE0F
 class FontManager:
     _DEFAULT_SIZE = 12
     _DEBUG = False
-    _UNKNOWN_EMOJI_LOG_THRESHOLD = 0x2300
+    _UNKNOWN_EMOJI_LOG_THRESHOLD = 0x203C
     _EMOJI_TIERS = (
         {"max_height": 20, "dir": "20x20"},
         {"max_height": 9999, "dir": "56x56"},
@@ -331,8 +331,6 @@ birthday_cakes,👑
 
     @classmethod
     def _get_emoji_src(cls, codepoint, target_height):
-        # Most rendered glyphs are plain text. Quickly reject obvious non-emoji
-        # ranges before touching maps/similarity logic.
         if codepoint < cls._UNKNOWN_EMOJI_LOG_THRESHOLD:
             return None
         if 0xE000 <= codepoint <= 0xF8FF:

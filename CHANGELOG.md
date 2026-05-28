@@ -6,6 +6,7 @@ Put unreleased changes here!
 Frameworks:
 - AudioManager: tweak WAV input buffer to reduce glitches
 - FontManager: default to non-emoji font unless emoji=True to improve performance
+- FontManager: add a few more emojis
 
 OS:
 - Fri3d Communicator: improve UART handling

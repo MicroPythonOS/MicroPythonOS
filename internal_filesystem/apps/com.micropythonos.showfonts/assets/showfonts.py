@@ -149,7 +149,7 @@ class ShowFonts(Activity):
 
         getfont_start = self._now_ms()
         display_font = FontManager.getFont(size=16, family="Montserrat", emoji=emoji)
-        lookup_font = display_font
+        lookup_font = FontManager.getFont(size=16, family="Montserrat", emoji=False)
         self._log_timing("addAllGlyphs/getFont", getfont_start)
         name = "Montserrat 16"
 

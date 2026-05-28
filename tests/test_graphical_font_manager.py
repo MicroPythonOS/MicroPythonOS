@@ -300,10 +300,22 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         self.assertIsNone(src)
 
     def test_low_codepoint_short_circuits_without_cache_entry(self):
-        """Low codepoints skip emoji lookup work and are not cached."""
+        """Codepoints below threshold skip emoji lookup and are not cached."""
         src = FontManager._get_emoji_src(ord("A"), 16)
         self.assertIsNone(src)
         self.assertEqual(FontManager._emoji_src_lookup_cache, {})
+
+    def test_codepoint_right_below_threshold_short_circuits(self):
+        """U+203B (just below the threshold) short-circuits without caching."""
+        src = FontManager._get_emoji_src(0x203B, 16)
+        self.assertIsNone(src)
+        self.assertEqual(FontManager._emoji_src_lookup_cache, {})
+
+    def test_emoji_203C_is_found(self):
+        """U+203C (‼ double exclamation mark, the threshold) is found in the 20x20 tier."""
+        src = FontManager._get_emoji_src(0x203C, 16)
+        self.assertIsNotNone(src)
+        self.assertIn("20x20", src)
 
     def test_private_use_codepoint_short_circuits_without_cache_entry(self):
         """Private Use Area codepoints skip emoji lookup work and are not cached."""
