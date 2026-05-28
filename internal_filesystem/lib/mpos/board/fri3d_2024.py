@@ -352,7 +352,11 @@ try:
     if COMMUNICATOR_2026_ADDR in i2c_devices:
         communicator = Communicator2026(i2c_bus=comm_i2c_bus, uart_bus=comm_uart)
     elif COMMUNICATOR_2024_ADDR in i2c_devices:
-        communicator = Communicator2024(i2c_bus=comm_i2c_bus, uart_bus=comm_uart)
+        communicator = Communicator2024(
+            i2c_bus=comm_i2c_bus,
+            uart_bus=comm_uart,
+            use_irq=False,
+        )
 
     if communicator is not None:
         print("Disabling UART REPL because it receives data from the Communicator Add-On. Use esp.uart_repl(True) to re-enable.")

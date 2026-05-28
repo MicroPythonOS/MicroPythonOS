@@ -24,10 +24,12 @@ class Communicator2026(Device):
         i2c_bus: I2C,
         uart_bus: UART = None,
         address: int = _COMM2026_I2CADDR_DEFAULT,
+        use_irq: bool = True,
     ):
         """Read from a 2026 communicator"""
         Device.__init__(self, i2c_bus, address)
         self.use_uart = False
+        self.use_irq = use_irq
         self.write_idx = 0
         self.data_ready = False
         if uart_bus:
@@ -36,7 +38,9 @@ class Communicator2026(Device):
             self.uart.init(115200, bits=8, parity=None, stop=1)
             self._rx_buf = bytearray(8)
             self._rx_mv = memoryview(self._rx_buf)
-            self.uart.irq(handler=self.uart_handler, trigger=UART.IRQ_RX)
+            self._poll_buf = bytearray()
+            if self.use_irq:
+                self.uart.irq(handler=self.uart_handler, trigger=UART.IRQ_RX)
 
     def uart_handler(self, uart):
         """Interrupt handler for incoming UART data"""
@@ -54,19 +58,43 @@ class Communicator2026(Device):
             if self.write_idx >= 8:
                 self.data_ready = True
 
+    def _read_latest_uart_report(self):
+        """Drain UART and return latest complete 8-byte report (or None)."""
+        while self.uart.any():
+            chunk = self.uart.read()
+            if chunk:
+                self._poll_buf.extend(chunk)
+
+        total = len(self._poll_buf)
+        if total < 8:
+            return None
+
+        frame_end = total - (total % 8)
+        frame_start = frame_end - 8
+        latest = tuple(self._poll_buf[frame_start:frame_end])
+
+        if frame_end < total:
+            self._poll_buf[:] = self._poll_buf[frame_end:]
+        else:
+            self._poll_buf[:] = b""
+
+        return latest
+
     @property
-    def key_report(self) -> tuple[int, int, int, int, int, int, int, int, int]:
+    def key_report(self) -> tuple[int, int, int, int, int, int, int, int]:
         """return the key report read using I2C or UART"""
-        ret = None
-        if self.use_uart:
+        if not self.use_uart:
+            return self._read("BBBBBBBB", _COMM_REG_KEY_REPORT, 8)
+
+        if self.use_irq:
             if self.data_ready:
-                # Process the data (raw_buffer now contains the 8 bytes)
                 ret = tuple(self._rx_buf)
                 self.write_idx = 0
                 self.data_ready = False
-        else:
-            ret = self._read("BBBBBBBB", _COMM_REG_KEY_REPORT, 8)
-        return ret
+                return ret
+            return None
+
+        return self._read_latest_uart_report()
 
     @property
     def configuration(self) -> int:
@@ -105,9 +133,10 @@ class Communicator2024(Communicator2026):
         i2c_bus: I2C,
         uart_bus: UART = None,
         address: int = _COMM2024_I2CADDR_DEFAULT,
+        use_irq: bool = True,
     ):
         """Read from a 2024 communicator"""
-        Communicator2026.__init__(self, i2c_bus, uart_bus, address)
+        Communicator2026.__init__(self, i2c_bus, uart_bus, address, use_irq)
 
     @property
     def rgb_led(self) -> tuple[int, int, int]:

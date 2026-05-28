@@ -1,5 +1,6 @@
 import lvgl as lv
 import keypad_framework
+import time
 
 import mpos.ui
 import mpos.ui.focus_direction
@@ -67,12 +68,29 @@ class Fri3dCommunicatorKeyboard(keypad_framework.KeypadDriver):
       (modifier, reserved, key1, key2, key3, key4, key5, key6)
     """
 
-    def __init__(self, communicator):
+    def __init__(
+        self,
+        communicator,
+        repeat_initial_delay_ms=300,
+        repeat_rate_ms=100,
+    ):
         super().__init__()
         self._communicator = communicator
         self._prev_keys = []
         self._active_lv_by_hid = {}
         self._queue = []
+        self._repeat_initial_delay_ms = repeat_initial_delay_ms
+        self._repeat_rate_ms = repeat_rate_ms
+        self._repeat_hid = None
+        self._repeat_lv_key = None
+        self._repeat_press_start_ms = 0
+        self._repeat_last_emit_ms = 0
+
+    def _reset_repeat(self):
+        self._repeat_hid = None
+        self._repeat_lv_key = None
+        self._repeat_press_start_ms = 0
+        self._repeat_last_emit_ms = 0
 
     def _fire_mpos_nav_hook(self, state, key):
         if state != self.PRESSED:
@@ -132,14 +150,64 @@ class Fri3dCommunicatorKeyboard(keypad_framework.KeypadDriver):
             if lv_key is None:
                 continue
             self._queue.append((self.RELEASED, lv_key))
+            if hid_usage == self._repeat_hid:
+                self._reset_repeat()
 
         self._prev_keys = curr_keys
 
+        if curr_keys:
+            repeat_hid = curr_keys[0]
+            if repeat_hid != self._repeat_hid:
+                self._repeat_hid = repeat_hid
+                self._repeat_lv_key = self._active_lv_by_hid.get(repeat_hid)
+                now = time.ticks_ms()
+                self._repeat_press_start_ms = now
+                self._repeat_last_emit_ms = now
+            elif self._repeat_lv_key is None:
+                self._repeat_lv_key = self._active_lv_by_hid.get(repeat_hid)
+        else:
+            self._reset_repeat()
+
+    def _maybe_enqueue_repeat(self):
+        if self._repeat_lv_key is None:
+            return
+        if self._repeat_hid not in self._prev_keys:
+            return
+
+        now = time.ticks_ms()
+        elapsed = time.ticks_diff(now, self._repeat_press_start_ms)
+        since_last = time.ticks_diff(now, self._repeat_last_emit_ms)
+
+        if elapsed < self._repeat_initial_delay_ms:
+            return
+        if since_last < self._repeat_rate_ms:
+            return
+
+        self._repeat_last_emit_ms = now
+        self._queue.append((self.PRESSED, self._repeat_lv_key))
+        self._queue.append((self.RELEASED, self._repeat_lv_key))
+
     def _get_key(self):
         self._poll()
+        if not self._queue:
+            self._maybe_enqueue_repeat()
+
         if self._queue:
             state, key = self._queue.pop(0)
             self._fire_mpos_nav_hook(state, key)
             return state, key
 
         return None
+
+    def _read(self, drv, data):  # NOQA
+        key = self._get_key()
+
+        if key is None:
+            state = self.RELEASED
+            key = self._last_key
+        else:
+            state, key = key
+
+        data.key = self._last_key = key
+        data.state = self._current_state = state
+        data.continue_reading = bool(self._queue)
