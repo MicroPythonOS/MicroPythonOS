@@ -32,7 +32,8 @@ class Communicator2026(Device):
         self.data_ready = False
         if uart_bus:
             self.use_uart = True
-            self.uart = uart_bus.init(115200, bits=8, parity=None, stop=1)
+            self.uart = uart_bus
+            self.uart.init(115200, bits=8, parity=None, stop=1)
             self._rx_buf = bytearray(8)
             self._rx_mv = memoryview(self._rx_buf)
             self.uart.irq(handler=self.uart_handler, trigger=UART.IRQ_RX)
@@ -57,11 +58,12 @@ class Communicator2026(Device):
     def key_report(self) -> tuple[int, int, int, int, int, int, int, int, int]:
         """return the key report read using I2C or UART"""
         ret = None
-        if self.use_uart and self.data_ready:
-            # Process the data (raw_buffer now contains the 8 bytes)
-            ret = tuple(self._rx_buf)
-            self.write_idx = 0
-            self.data_ready = False
+        if self.use_uart:
+            if self.data_ready:
+                # Process the data (raw_buffer now contains the 8 bytes)
+                ret = tuple(self._rx_buf)
+                self.write_idx = 0
+                self.data_ready = False
         else:
             ret = self._read("BBBBBBBB", _COMM_REG_KEY_REPORT, 8)
         return ret
@@ -90,6 +92,13 @@ class Communicator2026(Device):
             )
 
 
+'''
+The original 2024 Communicator firmware of the LANA microcontroller
+doesn't have I2C enabled so these I2C settings will fail with a timeout:
+comm.backlight = 80
+comm.red_led = 32
+comm.rgb_led = (0, 64, 16)
+'''
 class Communicator2024(Communicator2026):
     def __init__(
         self,
