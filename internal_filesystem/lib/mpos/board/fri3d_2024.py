@@ -329,6 +329,8 @@ DeviceManager.registerBus(i2c_bus=imu_i2c) # register because Communicator needs
 SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 # Communicator add-on keyboard input (UART HID reports -> LVGL keypad indev)
+# Would be nice to do a i2c.scan() to figure out which one it is (2024 at 0x38, 2026 at 0x39) and then initialize the right one
+# If none is found, then initialize none.
 try:
     from machine import UART
     from drivers.fri3d.communicator import Communicator2024

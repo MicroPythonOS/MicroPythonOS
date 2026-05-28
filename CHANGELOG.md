@@ -3,6 +3,16 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Frameworks:
+- AudioManager: tweak WAV input buffer to reduce glitches
+- FontManager: default to non-emoji font unless emoji=True to improve performance
+
+OS:
+- Fri3d Communicator: improve UART handling
+- Fri3d Communicator Keyboard: new input device (indev)
+- Fri3d 2024: register i2c with DeviceManager for add-ons
+- Fri3d 2024: register Fri3d Communicator 2024 Keyboard
+
 
 0.11.0
 ======
