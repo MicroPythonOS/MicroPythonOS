@@ -1,10 +1,24 @@
 from mpos import Activity
 import lvgl as lv
+import time
 
 from mpos import FontManager
 
 
 class ShowFonts(Activity):
+    def _now_ms(self):
+        if hasattr(time, "ticks_ms"):
+            return time.ticks_ms()
+        return int(time.time() * 1000)
+
+    def _elapsed_ms(self, start_ms):
+        if hasattr(time, "ticks_diff"):
+            return time.ticks_diff(self._now_ms(), start_ms)
+        return self._now_ms() - start_ms
+
+    def _log_timing(self, label, start_ms):
+        print("[showfonts][timing] {}: {} ms".format(label, self._elapsed_ms(start_ms)))
+
     def onCreate(self):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -12,8 +26,14 @@ class ShowFonts(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
+        resume_start = self._now_ms()
         self.addAllFontsTitles(screen)
+        self._log_timing("addAllFontsTitles", resume_start)
+
+        glyphs_start = self._now_ms()
         self.addAllGlyphs(screen)
+        self._log_timing("addAllGlyphs", glyphs_start)
+        self._log_timing("onResume total", resume_start)
         #lv.log_register_print_cb(ShowFonts.log_callback) # Show FPS to demonstrate that emoji fonts are 3-4x slower
 
     def onPause(self, screen): # Activity goes background
@@ -21,9 +41,12 @@ class ShowFonts(Activity):
         pass
 
     def addAllFontsTitles(self, screen):
+        section_start = self._now_ms()
         import os
+        ttf_start = self._now_ms()
         mydir = os.path.dirname(os.path.abspath(__file__))
         self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
+        self._log_timing("addAllFontsTitles/getFont TTF", ttf_start)
         #self._ttf_font56 = FontManager.getFont(size=56, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
         #self._ttf_font72 = FontManager.getFont(size=72, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
         #fonts.append((self._ttf_font56, "TTF Rancourt 56"))
@@ -34,7 +57,11 @@ class ShowFonts(Activity):
         title.set_style_text_font(self._ttf_font, lv.PART.MAIN)
         title.set_text("Rancourt 42 TTF test with minimal glyphs")
 
+        listfonts_start = self._now_ms()
         fonts = FontManager.listFonts()
+        self._log_timing("addAllFontsTitles/listFonts", listfonts_start)
+
+        render_start = self._now_ms()
         for font_info in fonts:
             if isinstance(font_info, tuple):
                 font = font_info[0]
@@ -63,13 +90,18 @@ class ShowFonts(Activity):
                     supported_latin,
                 )
             )
+        self._log_timing("addAllFontsTitles/render labels", render_start)
+        self._log_timing("addAllFontsTitles total", section_start)
 
 
     def addAllGlyphs(self, screen, emoji=True):
+        section_start = self._now_ms()
         dsc = lv.font_glyph_dsc_t()
 
+        getfont_start = self._now_ms()
         display_font = FontManager.getFont(size=16, family="Montserrat", emoji=emoji)
         lookup_font = display_font
+        self._log_timing("addAllGlyphs/getFont", getfont_start)
         name = "Montserrat 16"
 
         title = lv.label(screen)
@@ -84,6 +116,7 @@ class ShowFonts(Activity):
         lbl.set_width(lv.pct(99))
         lbl.set_style_text_font(display_font, lv.PART.MAIN)
         alltext = ""
+        scan_start = self._now_ms()
         for cp in range(0x20, 0xF800):
             if lookup_font.get_glyph_dsc(lookup_font, dsc, cp, cp):
                 alltext = alltext + chr(cp) + " "
@@ -91,14 +124,20 @@ class ShowFonts(Activity):
                 x += 20
                 if x + 20 > screen.get_width():
                     x = 4
+        self._log_timing("addAllGlyphs/base glyph scan", scan_start)
 
         if emoji:
+            emoji_start = self._now_ms()
             emoji_cps = FontManager.getEmojiCodepoints()
             for cp in emoji_cps:
                 alltext = alltext + chr(cp) + " "
+            self._log_timing("addAllGlyphs/emoji append", emoji_start)
 
+        set_text_start = self._now_ms()
         lbl.set_text(alltext)
+        self._log_timing("addAllGlyphs/set_text", set_text_start)
         self.labelSelectable(lbl)
+        self._log_timing("addAllGlyphs total", section_start)
 
     def labelSelectable(self, label):
         label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
