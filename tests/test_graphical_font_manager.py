@@ -34,7 +34,6 @@ def _reset_font_manager():
     FontManager._unknown_emoji_codepoints_logged.clear()
     FontManager._builtin_font_records = None
     FontManager._emoji_similarity_group_members_by_cp = None
-    FontManager._font_clone_keepalive.clear()
 
 
 class TestFontManagerGetFont(GraphicalTestCase):

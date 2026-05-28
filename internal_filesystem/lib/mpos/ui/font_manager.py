@@ -34,7 +34,6 @@ class FontManager:
     _emoji_src_lookup_cache = {}
     _unknown_emoji_codepoints_logged = {}
     _emoji_similarity_group_members_by_cp = None
-    _font_clone_keepalive = {}
 
     # Paste/update emoji similarity groups here as CSV with header: group_id,emoji
     _EMOJI_SIMILARITY_GROUPS_CSV = """group_id,emoji
@@ -219,20 +218,9 @@ birthday_cakes,👑
             return base_font
 
         try:
-            # Builtin LVGL fonts are commonly compiled as const objects.
-            # Mutating base_font.fallback directly can crash on some targets.
-            # Clone the base font first, then attach emoji fallback to the
-            # mutable clone.
-            primary_font = cls._clone_font_for_fallback(base_font)
-
-            # Prefer base glyph renderer first for speed; emoji only as fallback.
-            try:
-                original_fallback = base_font.fallback
-            except Exception:
-                original_fallback = None
-
-            emoji_font.fallback = original_fallback
-            primary_font.fallback = emoji_font
+            # Keep imgfont as primary and route unknown glyphs to the base font.
+            # This avoids mutating builtin fonts, which may be readonly.
+            emoji_font.fallback = base_font
             emoji_font.base_line = cls._font_base_line(base_font)
             emoji_font.underline_position = cls._font_underline_position(base_font)
             emoji_font.underline_thickness = cls._font_underline_thickness(base_font)
@@ -240,36 +228,8 @@ birthday_cakes,👑
             cls._debug("compose fallback set failed: " + repr(err))
             return base_font
 
-        cls._composed_font_cache[cache_key] = primary_font
-        return primary_font
-
-    @classmethod
-    def _clone_font_for_fallback(cls, font):
-        clone = lv.font_t()
-
-        attrs = (
-            "get_glyph_dsc",
-            "get_glyph_bitmap",
-            "release_glyph",
-            "line_height",
-            "base_line",
-            "subpx",
-            "kerning",
-            "static_bitmap",
-            "underline_position",
-            "underline_thickness",
-            "dsc",
-            "fallback",
-            "user_data",
-        )
-
-        for attr in attrs:
-            setattr(clone, attr, getattr(font, attr))
-
-        # Keep clone strongly referenced: style objects can outlive local Python
-        # references, so GC must not reclaim the cloned font struct.
-        cls._font_clone_keepalive[id(clone)] = clone
-        return clone
+        cls._composed_font_cache[cache_key] = emoji_font
+        return emoji_font
 
     @classmethod
     def _font_identity(cls, font):
