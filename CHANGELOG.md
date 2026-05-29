@@ -3,6 +3,13 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.11.2
+======
+
+Frameworks:
+- Fix SharedPreferences no-op guard silently discarding writes (affects all settings, not just WiFi)
+
+
 0.11.1
 ======
 

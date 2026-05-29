@@ -730,21 +730,20 @@ class WifiService:
         """
         # Load current saved networks
         prefs = mpos.config.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
-        access_points = prefs.get_dict("access_points")
 
-        # Add or update the network
+        # Build the network config
         network_config = {"password": password}
         if hidden:
             network_config["hidden"] = True
-        access_points[ssid] = network_config
 
-        # Save back to config
+        # Modify the deep copy inside the editor, not prefs.data directly,
+        # otherwise the no-op guard in commit() sees no change and skips writing.
         editor = prefs.edit()
-        editor.put_dict("access_points", access_points)
+        editor.put_dict_item("access_points", ssid, network_config)
         editor.commit()
 
         # Update class-level cache
-        WifiService.access_points = access_points
+        WifiService.access_points = prefs.get_dict("access_points")
 
         print(f"WifiService: Saved network '{ssid}' (hidden={hidden})")
 
@@ -761,23 +760,20 @@ class WifiService:
         """
         # Load current saved networks
         prefs = mpos.config.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
-        access_points = prefs.get_dict("access_points")
 
-        # Remove the network if it exists
-        if ssid in access_points:
-            del access_points[ssid]
-
-            # Save back to config
-            editor = prefs.edit()
-            editor.put_dict("access_points", access_points)
-            editor.commit()
-
-            # Update class-level cache
-            WifiService.access_points = access_points
-
-            print(f"WifiService: Forgot network '{ssid}'")
-            return True
-        else:
-            print(f"WifiService: Network '{ssid}' not found in saved networks")
+        # Check if the network exists without mutating prefs.data
+        if ssid not in prefs.get_dict("access_points"):
             return False
+
+        # Modify the deep copy inside the editor, not prefs.data directly,
+        # otherwise the no-op guard in commit() sees no change and skips writing.
+        editor = prefs.edit()
+        editor.remove_dict_item("access_points", ssid)
+        editor.commit()
+
+        # Update class-level cache
+        WifiService.access_points = prefs.get_dict("access_points")
+
+        print(f"WifiService: Forgot network '{ssid}'")
+        return True
 

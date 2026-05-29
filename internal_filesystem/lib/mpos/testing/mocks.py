@@ -973,6 +973,19 @@ class MockEditor:
     def put_dict(self, key, value):
         self.pending[key] = value
 
+    def put_dict_item(self, dict_key, item_key, config):
+        if dict_key not in self.pending:
+            existing = self.prefs._get_value(dict_key, {})
+            self.pending[dict_key] = dict(existing)
+        if isinstance(config, dict):
+            self.pending[dict_key][item_key] = config
+
+    def remove_dict_item(self, dict_key, item_key):
+        if dict_key not in self.pending:
+            existing = self.prefs._get_value(dict_key, {})
+            self.pending[dict_key] = dict(existing)
+        self.pending[dict_key].pop(item_key, None)
+
     def put_list(self, key, value):
         self.pending[key] = value
 

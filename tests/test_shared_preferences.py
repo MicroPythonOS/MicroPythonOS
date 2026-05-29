@@ -308,6 +308,58 @@ class TestSharedPreferences(unittest.TestCase):
         prefs = SharedPreferences(self.test_app_name)
         self.assertEqual(prefs.get_dict_keys("nonexistent"), [])
 
+    def test_get_dict_mutate_then_edit_persists(self):
+        """
+        Test that mutating a dict returned by get_dict() before creating an
+        editor does NOT prevent commit() from writing to disk.
+
+        Regression guard: get_dict() returns a direct reference to prefs.data.
+        Mutating that reference modifies prefs.data in-place.  If edit()
+        then deep-copies the already-mutated data, commit()'s no-op guard
+        sees filtered_data == preferences.data and skips the write.
+        Editors must operate on their own deep copy.
+        """
+        prefs = SharedPreferences(self.test_app_name)
+
+        # 1. Save initial data
+        prefs.edit().put_dict("access_points", {"ExistingNet": {"password": "old"}}).commit()
+
+        # 2. Simulate the WifiService bug pattern: get_dict, mutate, edit, commit
+        prefs2 = SharedPreferences(self.test_app_name)
+        aps = prefs2.get_dict("access_points")          # direct reference
+        aps["NewNet"] = {"password": "secret"}           # mutates prefs2.data in-place
+        editor = prefs2.edit()                            # deep-copies already-mutated data
+        editor.put_dict("access_points", aps)
+        editor.commit()
+
+        # 3. Verify the change was persisted
+        prefs3 = SharedPreferences(self.test_app_name)
+        saved = prefs3.get_dict("access_points")
+        self.assertIn("NewNet", saved)
+
+    def test_get_dict_mutate_remove_then_edit_persists(self):
+        """
+        Same as test_get_dict_mutate_then_edit_persists but for deletion.
+        """
+        prefs = SharedPreferences(self.test_app_name)
+
+        # 1. Save initial data
+        prefs.edit().put_dict("access_points", {"NetA": {"password": "a"}, "NetB": {"password": "b"}}).commit()
+
+        # 2. Bug pattern: get_dict, delete from it, then edit + commit
+        prefs2 = SharedPreferences(self.test_app_name)
+        aps = prefs2.get_dict("access_points")
+        del aps["NetA"]
+        editor = prefs2.edit()
+        editor.put_dict("access_points", aps)
+        editor.commit()
+
+        # 3. Verify the change was persisted
+        prefs3 = SharedPreferences(self.test_app_name)
+        saved = prefs3.get_dict("access_points")
+        self.assertFalse("NetA" in saved)
+        self.assertTrue("NetB" in saved)
+
     # ============================================================
     # Editor Operations
     # ============================================================

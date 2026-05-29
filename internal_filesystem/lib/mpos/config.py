@@ -123,7 +123,7 @@ class SharedPreferences:
     def get_list(self, key, default=None):
         """Retrieve a list for the given key, with a default if not found."""
         if key in self.data:
-            return self.data[key]
+            return list(self.data[key])  # return a copy — callers must not mutate prefs.data directly
         # Key not in stored data, check defaults
         # Method default takes precedence if provided
         if default is not None:
@@ -137,7 +137,7 @@ class SharedPreferences:
     def get_dict(self, key, default=None):
         """Retrieve a dictionary for the given key, with a default if not found."""
         if key in self.data:
-            return self.data[key]
+            return dict(self.data[key])  # return a copy — callers must not mutate prefs.data directly
         # Key not in stored data, check defaults
         # Method default takes precedence if provided
         if default is not None:
