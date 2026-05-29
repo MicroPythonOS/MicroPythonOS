@@ -9,16 +9,16 @@ Put unreleased changes here!
 Builtin Apps:
 - About: cleanup unnecessary code
 
+Board Support:
+- Fri3d 2024: register i2c with DeviceManager for add-ons
+- Fri3d 2024 and 2026: detect and initialize Fri3d Communicator 2024 or 2026 Keyboard
+- Fri3d Communicator Add-On: improve UART handling
+- Fri3d Communicator Add-On Keyboard: new input device (indev) for LVGL with IRQ mode, polling mode, key repeat, escape and arrows for navigation
+
 Frameworks:
 - AudioManager: tweak WAV input buffer to reduce glitches
 - FontManager: default to non-emoji font unless emoji=True to improve performance
 - FontManager: add a few more emojis
-
-OS:
-- Fri3d Communicator: improve UART handling
-- Fri3d Communicator Keyboard: new input device (indev) for LVGL with IRQ mode, polling mode, key repeat, escape and arrows for navigation
-- Fri3d 2024: register i2c with DeviceManager for add-ons
-- Fri3d 2024 and 2026: detect and initialize Fri3d Communicator 2024 or 2026 Keyboard
 
 
 0.11.0
@@ -44,6 +44,9 @@ OS:
 - Simplify focusgroup handling
 - Re-enable UART REPL again BUT add esp.uart_repl(False) functionality to disable/enable it at runtime
 - Format internal storage if mounting fails instead of hanging (even if not empty)
+
+Board Support:
+- Freenove's ESP32-S3 display board by @Rohansi
 
 0.10.0
 ======
