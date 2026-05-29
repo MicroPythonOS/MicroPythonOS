@@ -15,7 +15,6 @@ class ImageView(Activity):
 
     # Widgets
     image = None
-    gif = None
     current_image_dsc = None  # Track current image descriptor
 
     def onCreate(self):
@@ -25,11 +24,6 @@ class ImageView(Activity):
         self.image.center()
         self.image.add_flag(lv.obj.FLAG.CLICKABLE)
         self.image.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
-        self.gif = lv.gif(screen)
-        self.gif.center()
-        self.gif.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.gif.add_flag(lv.obj.FLAG.HIDDEN)
-        self.gif.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
         self.label = lv.label(screen)
         self.label.set_text(f"Loading images from\n{self.imagedir}")
         self.label.align(lv.ALIGN.TOP_MID,0,0)
@@ -76,7 +70,7 @@ class ImageView(Activity):
             for item in os.listdir(self.imagedir):
                 print(item)
                 lowercase = item.lower()
-                if not (lowercase.endswith(".jpg") or lowercase.endswith(".jpeg") or lowercase.endswith(".png") or lowercase.endswith(".raw") or lowercase.endswith(".gif")):
+                if not (lowercase.endswith(".jpg") or lowercase.endswith(".jpeg") or lowercase.endswith(".png") or lowercase.endswith(".raw")):
                     continue
                 fullname = f"{self.imagedir}/{item}"
                 size = os.stat(fullname)[6]
@@ -223,15 +217,7 @@ class ImageView(Activity):
         try:
             self.label.set_text(name)
             self.clear_image()
-            if name.lower().endswith(".gif"):
-                print("switching to gif mode...")
-                self.image.add_flag(lv.obj.FLAG.HIDDEN)
-                self.gif.remove_flag(lv.obj.FLAG.HIDDEN)
-                self.gif.set_src(f"M:{name}")
-            else:
-                self.gif.add_flag(lv.obj.FLAG.HIDDEN)
-                self.image.remove_flag(lv.obj.FLAG.HIDDEN)
-                self.image.set_src(f"M:{name}")
+            self.image.set_src(f"M:{name}")
 
             if name.lower().endswith(".raw"):
                 f = open(name, 'rb')
@@ -286,22 +272,10 @@ class ImageView(Activity):
         scale_factor_h = round(lvgl_h * 256 / image_h)
         print(f"scale_factors: {scale_factor_w},{scale_factor_h}")
         self.image.set_size(lvgl_w, lvgl_h)
-        #self.gif.set_size(lvgl_w, lvgl_h) doesn't seem to do anything. get_style_transform_scale_x/y works but then it needs get_style_translate_x/y
-        #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
         self.image.set_scale(min(scale_factor_w,scale_factor_h))
         print(f"after set_scale, the LVGL image has size: {self.image.get_width()}x{self.image.get_height()}")
 
 
     def clear_image(self):
-        """Clear current image or GIF source to free memory."""
         self.image.set_src(None)
-        #if self.current_image_dsc:
-        #    self.current_image_dsc = None  # Release reference to descriptor
-        #self.image.set_src(None)  # Clear image source
-        #self.gif.set_src(None)  # Clear GIF source causes crash!
-        #self.gif.add_flag(lv.obj.FLAG.HIDDEN)
-        #self.image.remove_flag(lv.obj.FLAG.HIDDEN)
-        #lv.image_cache_invalidate_src(None)  # Invalidate LVGL image cache
-        # These 2 are needed to enable infinite slides with just 10MB RAM:
-        lv.image.cache_drop(None) # This helps a lot!
-        gc.collect() # Force garbage collection seems to fix memory alloc issues!
+        gc.collect()
