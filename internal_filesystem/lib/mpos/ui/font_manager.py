@@ -280,9 +280,55 @@ birthday_cakes,👑
         cls._ensure_emoji_maps()
 
         try:
-            return lv.imgfont_create(size, cls._imgfont_path_cb, None)
+            font = lv.imgfont_create(size, cls._imgfont_path_cb, None)
         except Exception:
             return None
+        if font is None:
+            return None
+
+        # Push the same codepoint accept/exclude ranges that _get_emoji_src
+        # checks down into the C-level imgfont. Once set, LVGL stops calling
+        # our Python _imgfont_path_cb for codepoints that are guaranteed to
+        # have no emoji glyph (ASCII, CJK, PUA, etc.) — turning the per-glyph
+        # cost from "Python call + return" into a pair of int compares in C.
+        # This is the actual fix for the scrolling slowdown: composed-font
+        # text where most glyphs are non-emoji now stays in C end-to-end.
+        try:
+            cp_min, cp_max = cls._emoji_codepoint_bounds()
+            lv.imgfont_set_range(font, cp_min, cp_max, 0xE000, 0xF8FF)
+        except AttributeError:
+            # Older LVGL build without lv_imgfont_set_range — that's OK, the
+            # fast path is just a nice-to-have. Behaviour falls back to the
+            # pre-patch composed-font path (correct, just slower).
+            cls._debug("imgfont_set_range unavailable — emoji filter not applied")
+        except Exception as err:
+            cls._debug("imgfont_set_range failed: " + repr(err))
+
+        return font
+
+    @classmethod
+    def _emoji_codepoint_bounds(cls):
+        """Smallest / largest codepoint present across all loaded emoji maps.
+        Recomputed on demand and cached — the maps are immutable after init.
+        Falls back to a safe wide range if no emojis are loaded yet, so we
+        never narrow the filter in a way that would hide future glyphs."""
+        bounds = cls.__dict__.get("_emoji_cp_bounds")
+        if bounds is not None:
+            return bounds
+        lo = None
+        hi = None
+        for emap in cls._emoji_maps.values():
+            for cp in emap:
+                if lo is None or cp < lo: lo = cp
+                if hi is None or cp > hi: hi = cp
+        if lo is None:
+            # No emojis loaded — accept everything so behaviour matches the
+            # unpatched code path. Caller should re-create the font once
+            # maps are populated.
+            return (0, 0xFFFFFFFF)
+        bounds = (lo, hi)
+        cls._emoji_cp_bounds = bounds
+        return bounds
 
     @classmethod
     def _ensure_emoji_maps(cls):

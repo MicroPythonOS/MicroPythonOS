@@ -106,6 +106,20 @@ pushd "$codebasedir"/lvgl_micropython/lib/micropython
 patch -p1 --forward < ../../esp32_uart_repl_runtime.patch || true
 popd
 
+# Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
+# non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
+# Pre-existence check so MPOS still builds against older pinned
+# lvgl_micropython SHAs that don't ship this patch yet (FontManager.py
+# degrades gracefully via try/except AttributeError when the setter is
+# absent — see internal_filesystem/lib/mpos/ui/font_manager.py).
+imgfont_patch="$codebasedir"/lvgl_micropython/imgfont_set_range.patch
+if [ -f "$imgfont_patch" ]; then
+	echo "Applying lvgl_micropython imgfont_set_range patch..."
+	pushd "$codebasedir"/lvgl_micropython/lib/lvgl
+	patch -p1 --forward < "$imgfont_patch" || true
+	popd
+fi
+
 echo "Minifying and inlining HTML..."
 pushd "$codebasedir"/webrepl/
 python3 inline_minify_webrepl.py
