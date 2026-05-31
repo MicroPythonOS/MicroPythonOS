@@ -245,7 +245,7 @@ PY
 	unix_makefile="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/Makefile
 	if [ "$(uname -s)" = "Darwin" ]; then
 		echo "Temporarily suppressing Clang warnings for macOS build..."
-		sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers/' "$unix_makefile"
+		sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers -Wno-error=unterminated-string-initialization/' "$unix_makefile"
 	fi
 
 	# If it's still running, kill it, otherwise "text file busy"
