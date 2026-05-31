@@ -349,13 +349,6 @@ try:
 except Exception as e:
     print(f"Couldn't start boot services: {e}")
 
-# Create limited aiorepl because it's better than nothing:
-import aiorepl
-async def asyncio_repl():
-    print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
-    await aiorepl.task(g={'lv': lv, 'mpos': mpos}, prompt=">>> ") # same prompt as normal REPL, not to confuse ViperIDE
-TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
-
 async def ota_rollback_cancel():
     try:
         from esp32 import Partition

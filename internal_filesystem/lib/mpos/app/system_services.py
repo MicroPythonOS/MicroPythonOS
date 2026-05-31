@@ -19,5 +19,20 @@ class WebServerBootService(Service):
         WebServer.auto_start()
 
 
+class AIOReplService(Service):
+
+    def onStart(self, intent):
+        import aiorepl
+        import lvgl as lv
+        import mpos
+        from ..task_manager import TaskManager
+
+        async def asyncio_repl():
+            print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
+            await aiorepl.task(g={"lv": lv, "mpos": mpos}, prompt=">>> ")
+        TaskManager.create_task(asyncio_repl())
+
+
 AppManager.register_service("boot_completed", WifiBootService, fullname="com.micropythonos.system")
 AppManager.register_service("boot_completed", WebServerBootService, fullname="com.micropythonos.system")
+AppManager.register_service("boot_completed", AIOReplService, fullname="com.micropythonos.system")
