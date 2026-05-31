@@ -1,6 +1,7 @@
 # Core framework
 from .app.app import App
 from .app.activity import Activity
+from .app.service import Service
 from .content.intent import Intent
 from .activity_navigator import ActivityNavigator, get_foreground_app
 
@@ -74,6 +75,7 @@ __all__ = [
     # Core framework
     "App",
     "Activity",
+    "Service",
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",

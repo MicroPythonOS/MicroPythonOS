@@ -226,6 +226,7 @@ class About(Activity):
         """Helper to create and add a label with text."""
         label = lv.label(parent)
         label.set_text(text)
+        label.set_width(lv.pct(98))
         # Make labels focusable to allow scroll on devices without touch screen
         label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
         label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)

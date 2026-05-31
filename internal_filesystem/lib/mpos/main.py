@@ -322,28 +322,32 @@ def change_task_handler(period_ms=1):
 mpos.ui.change_task_handler = change_task_handler # make it accessible
 mpos.ui.change_task_handler()
 
-try:
-    from mpos.net.wifi_service import WifiService
-    _thread.stack_size(TaskManager.good_stack_size())
-    _thread.start_new_thread(WifiService.auto_connect, ())
-except Exception as e:
-    print(f"Couldn't start WifiService.auto_connect thread because: {e}")
-
 # Start launcher first so it's always at bottom of stack
 launcher_app = AppManager.get_launcher()
-started_launcher = AppManager.start_app(launcher_app.fullname)
-# Then start auto_start_app_early if configured
-auto_start_app_early = prefs.get_string("auto_start_app_early", "com.micropythonos.howto")
-if auto_start_app_early and launcher_app.fullname != auto_start_app_early:
-    result = AppManager.start_app(auto_start_app_early)
-    if result is not True:
-        print(f"WARNING: could not run {auto_start_app_early} app")
-else: # if no auto_start_app_early was configured (this could be improved to start it *after* auto_start_app_early finishes)
-    auto_start_app = prefs.get_string("auto_start_app", None)
-    if auto_start_app and launcher_app.fullname != auto_start_app and auto_start_app_early != auto_start_app:
-        result = AppManager.start_app(auto_start_app)
+if launcher_app is None:
+    print("FATAL: No launcher app found")
+    started_launcher = False
+else:
+    started_launcher = AppManager.start_app(launcher_app.fullname)
+    # Then start auto_start_app_early if configured
+    auto_start_app_early = prefs.get_string("auto_start_app_early", "com.micropythonos.howto")
+    if auto_start_app_early and launcher_app.fullname != auto_start_app_early:
+        result = AppManager.start_app(auto_start_app_early)
         if result is not True:
-            print(f"WARNING: could not run {auto_start_app} app")
+            print(f"WARNING: could not run {auto_start_app_early} app")
+    else:
+        auto_start_app = prefs.get_string("auto_start_app", None)
+        if auto_start_app and launcher_app.fullname != auto_start_app and auto_start_app_early != auto_start_app:
+            result = AppManager.start_app(auto_start_app)
+            if result is not True:
+                print(f"WARNING: could not run {auto_start_app} app")
+
+# Start boot services (apps declaring boot_completed in manifest)
+try:
+    from mpos.app.system_services import WifiBootService
+    AppManager.start_boot_services()
+except Exception as e:
+    print(f"Couldn't start boot services: {e}")
 
 # Create limited aiorepl because it's better than nothing:
 import aiorepl
@@ -353,7 +357,7 @@ async def asyncio_repl():
 TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
 
 try:
-    from mpos import WebServer
+    from mpos import WebServer # could be a boot_service
     WebServer.auto_start()
 except Exception as e:
     print(f"Could not start webserver - this is normal on desktop systems: {e}")

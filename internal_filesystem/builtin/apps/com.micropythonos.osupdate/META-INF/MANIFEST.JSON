@@ -6,7 +6,7 @@
 "fullname": "com.micropythonos.osupdate",
 "version": "0.1.5",
 "category": "osupdate",
-"activities": [
+  "activities": [
     {
       "entrypoint": "assets/osupdate.py",
       "classname": "OSUpdate",
@@ -14,6 +14,17 @@
         {
           "action": "main",
           "category": "launcher"
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "entrypoint": "assets/osupdate_boot_service.py",
+      "classname": "OSUpdateService",
+      "intent_filters": [
+        {
+          "action": "boot_completed"
         }
       ]
     }

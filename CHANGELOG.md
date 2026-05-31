@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Frameworks:
+- Add Services with intent filter boot_completed
+
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
 Put unreleased changes here!

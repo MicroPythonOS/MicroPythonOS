@@ -30,6 +30,7 @@ Question: does it make sense to cache the database?
 class AppManager:
 
     _registry = {}          # action → [ActivityClass, ...]
+    _service_registry = {}  # action → [(fullname_or_None, ServiceClass), ...]
 
     @classmethod
     def register_activity(cls, action, activity_cls):
@@ -38,6 +39,14 @@ class AppManager:
             cls._registry[action] = []
         if activity_cls not in cls._registry[action]:
             cls._registry[action].append(activity_cls)
+
+    @classmethod
+    def register_service(cls, action, service_cls, fullname=None):
+        if action not in cls._service_registry:
+            cls._service_registry[action] = []
+        entry = (fullname, service_cls)
+        if entry not in cls._service_registry[action]:
+            cls._service_registry[action].append(entry)
 
     @classmethod
     def resolve_activity(cls, intent):
@@ -430,6 +439,65 @@ class AppManager:
         end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
         print(f"start_app() took {end_time}ms")
         return result
+
+    @classmethod
+    def get_services_for_action(cls, action):
+        """Returns list of (app_fullname, ServiceClass) for services matching action."""
+        import sys
+        results = []
+        for app in cls.get_app_list():
+            for svc in app.services:
+                for f in svc.get("intent_filters", []):
+                    if f.get("action") != action:
+                        continue
+                    entrypoint = svc.get("entrypoint")
+                    classname = svc.get("classname")
+                    if not entrypoint or not classname:
+                        continue
+                    entrypoint_path = app.installed_path + "/" + entrypoint
+                    cwd = entrypoint_path.rsplit("/", 1)[0] if "/" in entrypoint else app.installed_path
+                    path_before = sys.path[:]
+                    try:
+                        if cwd and cwd not in sys.path:
+                            sys.path.insert(0, cwd)
+                        module_name = entrypoint.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                        module = __import__(module_name)
+                        service_cls = getattr(module, classname, None)
+                        if service_cls:
+                            results.append((app.fullname, service_cls))
+                    except Exception as e:
+                        print(f"AppManager: failed to import service {classname} from {app.fullname}: {e}")
+                    finally:
+                        sys.path = path_before
+        for fullname, service_cls in cls._service_registry.get(action, []):
+            results.append((fullname, service_cls))
+        return results
+
+    @classmethod
+    def start_boot_services(cls):
+        import sys
+        from .intent import Intent
+
+        services = cls.get_services_for_action("boot_completed")
+        if not services:
+            print("AppManager: no boot services found")
+            return
+
+        boot_intent = Intent(action="boot_completed")
+        _service_instances = {}
+
+        for fullname, service_cls in services:
+            try:
+                instance = service_cls()
+                instance.appFullName = fullname
+                key = (fullname, service_cls.__name__)
+                _service_instances[key] = instance
+                instance.onCreate()
+                instance.onStart(boot_intent)
+                print(f"AppManager: started {service_cls.__name__} from {fullname}")
+            except Exception as e:
+                print(f"AppManager: failed to start {service_cls.__name__} from {fullname}: {e}")
+                sys.print_exception(e)
 
     @staticmethod
     def restart_launcher():

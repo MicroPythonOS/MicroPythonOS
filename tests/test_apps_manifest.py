@@ -82,6 +82,34 @@ class TestAppsManifest(unittest.TestCase):
                         f"{classname=} not found in {entrypoint=} of {manifest=}",
                     )
 
+                # Test services.entrypoint
+                services = data.get("services", [])
+                for svc in services:
+                    entrypoint = svc.get("entrypoint")
+                    self.assertTrue(
+                        entrypoint, f"Missing entrypoint in service of {manifest=}"
+                    )
+                    self.assertTrue(
+                        entrypoint.endswith(".py"),
+                        f"Invalid entrypoint in service of {manifest=}: {entrypoint}",
+                    )
+                    entrypoint_path = app_path / entrypoint
+                    self.assertTrue(
+                        entrypoint_path.is_file(),
+                        f"{entrypoint=} in {manifest=} does not exist as file",
+                    )
+
+                    classname = svc.get("classname")
+                    self.assertTrue(
+                        classname, f"Missing classname in service of {manifest=}"
+                    )
+                    entrypoint_code = entrypoint_path.read_text()
+                    self.assertIn(
+                        classname,
+                        entrypoint_code,
+                        f"{classname=} not found in {entrypoint=} of {manifest=}",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

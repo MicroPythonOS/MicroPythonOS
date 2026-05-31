@@ -15,6 +15,7 @@ class App:
         version="0.0.0",
         category="",
         activities=None,
+        services=None,
         installed_path=None,
         icon_path="builtin/res/mipmap-mdpi/default_icon_64x64.png",
         icon_data=None,
@@ -29,6 +30,7 @@ class App:
         self.version = version
         self.category = category
         self.activities = activities or []
+        self.services = services or []
         self.installed_path = installed_path
 
         self.icon_path = self._find_icon_path()
@@ -98,6 +100,7 @@ class App:
             version=data.get("version", default.version),
             category=data.get("category", default.category),
             activities=data.get("activities", default.activities),
+            services=data.get("services", default.services),
             installed_path=appdir,
         )
 
