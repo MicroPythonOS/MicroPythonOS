@@ -296,9 +296,7 @@ class EditNetwork(Activity):
         #label.add_event_cb(lambda e, cont=self.hidden_cb: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
         label.add_event_cb(lambda e, cont=label: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
         #label.add_event_cb(lambda e, cont=self.hidden_cb: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(label)
+        lv.group_get_default().add_obj(label)
         if known_hidden:
             self.hidden_cb.set_state(lv.STATE.CHECKED, True)
 

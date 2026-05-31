@@ -1,24 +1,21 @@
 {
-"name": "ErrorTest",
-"publisher": "MicroPythonOS",
-"short_description": "Test app with intentional error",
-"long_description": "This app has an intentional import error for testing.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.errortest/icons/com.micropythonos.errortest_0.0.3_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.errortest/mpks/com.micropythonos.errortest_0.0.3.mpk",
-"fullname": "com.micropythonos.errortest",
-"version": "0.0.3",
-"category": "development",
-"activities": [
-    {
-      "entrypoint": "assets/error.py",
-      "classname": "Error",
-      "intent_filters": [
+    "name": "ErrorTest",
+    "publisher": "MicroPythonOS",
+    "short_description": "Test app with intentional error",
+    "long_description": "This app has an intentional import error for testing.",
+    "fullname": "com.micropythonos.errortest",
+    "version": "0.0.4",
+    "category": "development",
+    "activities": [
         {
-          "action": "main",
-          "category": "launcher"
+            "entrypoint": "assets/error.py",
+            "classname": "Error",
+            "intent_filters": [
+                {
+                    "action": "main",
+                    "category": "launcher"
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }
-

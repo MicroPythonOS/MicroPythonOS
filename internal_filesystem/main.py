@@ -5,7 +5,6 @@
 
 # Copy this file to / on the device's internal storage to have it run automatically instead of relying on the frozen-in files.
 import gc
-import os
 import sys
 
 sys.path.insert(0, "lib")
@@ -13,8 +12,15 @@ sys.path.insert(0, "lib")
 print(f"{sys.version=}")
 print(f"{sys.implementation=}")
 
+# Ensure os.path is available before starting apps.
+# internal_filesystem/lib/os/__init__.py provides a pure-Python os package
+# (from micropython-lib) that wraps uos and exposes os.path.
+import os as _os
+sys.modules["os"] = _os
+sys.modules["uos"] = _os
 
 print("Free space on root filesystem:")
+import os
 stat = os.statvfs("/")
 total_space = stat[0] * stat[2]
 free_space = stat[0] * stat[3]
@@ -31,9 +37,8 @@ print("Passing execution over to mpos.main")
 try:
     import mpos.main  # noqa: F401
 except Exception as e:
-    print("Error importing mpos.main, sleeping 5 seconds...")
+    print("Error importing mpos.main, sleeping 5 seconds before printing the exception...")
     import time
     time.sleep(5) # sleep so the user has time to connect to serial console
     sys.print_exception(e) # print it after the sleep so user can see it on serial console
     print("MicroPythonOS exiting.")
-

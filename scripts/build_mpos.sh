@@ -95,23 +95,30 @@ fi
 rm -f "$codebasedir"/lvgl_micropython/lib/lvgl/src/font/lv_font_simsun_14_cjk.c
 rm -f "$codebasedir"/lvgl_micropython/lib/lvgl/src/font/lv_font_simsun_16_cjk.c
 
-echo "Patching esp-idf for SPI SDCard fix"
-# Apply fix for https://github.com/espressif/esp-idf/issues/16909
-# for lack of https://github.com/espressif/esp-idf/commit/4a0db18ff1c8a488b6ed0346276f43028179da37#diff-8a9abab5cd683f427797b77a66be84832c0ec2ee0c5437e173e73778dce00637
-# In newer esp-idf versions, it should be possible to set this in rg_storage.c: slot_config.wait_for_miso = -1;
-filetopatch="$codebasedir"/lvgl_micropython/lib/esp-idf/components/esp_driver_sdspi/src/sdspi_host.c
-echo -n "Before: " ; grep "poll_busy(slot," "$filetopatch"
-sed -i.backup  "s/poll_busy(slot, 40/poll_busy(slot, 0/" "$filetopatch"
-echo -n "After: " ; grep "poll_busy(slot," "$filetopatch"
-
 # unix and macOS builds need these symlinks because make.py doesn't handle USER_C_MODULE arguments for them:
 echo "Symlinking secp256k1-embedded-ecdh for unix and macOS builds..."
 ln -sf ../../secp256k1-embedded-ecdh "$codebasedir"/lvgl_micropython/ext_mod/secp256k1-embedded-ecdh
 echo "Symlinking c_mpos for unix and macOS builds..."
 ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
-# Only for MicroPython 1.26.1 workaround:
-#echo "Applying lvgl_micropython i2c patch..."
-#patch -p0 --forward < "$codebasedir"/patches/i2c_ng.patch
+
+echo "Applying lvgl_micropython esp32 uart repl enable/disable at runtime patch..."
+pushd "$codebasedir"/lvgl_micropython/lib/micropython
+patch -p1 --forward < ../../esp32_uart_repl_runtime.patch || true
+popd
+
+# Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
+# non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
+# Pre-existence check so MPOS still builds against older pinned
+# lvgl_micropython SHAs that don't ship this patch yet (FontManager.py
+# degrades gracefully via try/except AttributeError when the setter is
+# absent — see internal_filesystem/lib/mpos/ui/font_manager.py).
+imgfont_patch="$codebasedir"/lvgl_micropython/imgfont_set_range.patch
+if [ -f "$imgfont_patch" ]; then
+	echo "Applying lvgl_micropython imgfont_set_range patch..."
+	pushd "$codebasedir"/lvgl_micropython/lib/lvgl
+	patch -p1 --forward < "$imgfont_patch" || true
+	popd
+fi
 
 echo "Minifying and inlining HTML..."
 pushd "$codebasedir"/webrepl/
@@ -128,6 +135,11 @@ echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" ]; then
+	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
+	pushd "$codebasedir"/lvgl_micropython/lib/micropython
+	patch -p1 --forward < ../../esp32_inisetup_warn_and_format.patch || true
+	popd
+
 	partition_size="4194304"
 	flash_size="16"
 	otasupport="--ota"
@@ -153,9 +165,9 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
         # There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
         extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n"
         # --py-freertos: add MicroPython FreeRTOS module to expose internals
-        extra_configs="$extra_configs --py-freertos"
-		# --enable-uart-repl={y/n}: This allows you to turn on and off the UART based REPL. You will wany to set this of you use USB-CDC or JTAG for the REPL output
-		extra_configs="$extra_configs --enable-uart-repl=n"
+        #extra_configs="$extra_configs --py-freertos"
+        # Enable UART based REPL, in addition to the USB-CDC or JTAG REPL. Can be disabled with esp.uart_repl(False)
+        extra_configs="$extra_configs --enable-uart-repl=y"
 	fi
 
 	if [ "$BOARD_VARIANT" == "SPIRAM" -o "$BOARD_VARIANT" == "SPIRAM_OCT" ]; then
@@ -188,9 +200,6 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	python3 make.py $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
-		CONFIG_FREERTOS_USE_TRACE_FACILITY=y \
-		CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y \
-		CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y \
 		CONFIG_ADC_MIC_TASK_CORE=1 \
 		$extra_configs \
 		"$frozenmanifest"
@@ -270,4 +279,3 @@ PY
 else
 	echo "invalid target $target"
 fi
-

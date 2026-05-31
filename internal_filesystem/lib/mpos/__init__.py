@@ -41,7 +41,8 @@ from .ui.testing import (
     click_button, click_label, click_keyboard_button, find_button_with_text,
     get_all_widgets_with_text, find_setting_value_label, get_setting_value_text,
     verify_setting_value_text, find_dropdown_widget, get_dropdown_options,
-    find_dropdown_option_index, select_dropdown_option_by_text
+    find_dropdown_option_index, select_dropdown_option_by_text,
+    get_all_children, simulate_long_press, wait_for_text, wait_for_widget
 )
 
 # UI utility functions
@@ -54,6 +55,7 @@ from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .ui.focus import save_and_clear_current_focusgroup
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.widget_animator import WidgetAnimator
+from .ui.font_manager import FontManager
 from .ui import focus_direction
 
 # Utility modules
@@ -94,6 +96,7 @@ __all__ = [
     "handle_back_swipe", "handle_top_swipe",
     "get_foreground_app",
     "WidgetAnimator",
+    "FontManager",
     "focus_direction",
     # Testing utilities
     "wait_for_render", "capture_screenshot", "simulate_click", "simulate_drag", "get_widget_coords",
@@ -102,6 +105,7 @@ __all__ = [
     "get_all_widgets_with_text", "find_setting_value_label", "get_setting_value_text",
     "verify_setting_value_text", "find_dropdown_widget", "get_dropdown_options",
     "find_dropdown_option_index", "select_dropdown_option_by_text",
+    "get_all_children", "simulate_long_press", "wait_for_text", "wait_for_widget",
     # Submodules
     "ui", "config", "net", "content", "time", "sensor_manager",
     "camera_manager", "sdcard", "audio", "hardware",

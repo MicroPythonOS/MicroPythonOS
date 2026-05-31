@@ -2,6 +2,7 @@ output=../apps/
 outputjson="$output"/app_index.json
 output=$(readlink -f "$output")
 outputjson=$(readlink -f "$outputjson")
+app_store_base_url="${APPS_BASE_URL:-https://apps.micropythonos.com}"
 
 #mpks="$output"/mpks/
 #icons="$output"/icons/
@@ -12,15 +13,14 @@ mkdir -p "$output"
 
 #rm "$output"/*.mpk
 #rm "$output"/*.png
-rm "$outputjson"
+rm -f "$outputjson"
 
 # These apps are for testing, or aren't ready yet:
 # com.quasikili.quasidoodle doesn't work on touch screen devices AND has the wrong download URL
-# com.micropythonos.file_manager doesn't do anything other than let you browse the filesystem, so it's confusing
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.nostr isn't ready for release yet
-blacklist="com.micropythonos.file_manager com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
-blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.nes_launcher com.micropythonos.gameboy_launcher" # not ready yet
+blacklist="com.quasikili.quasidoodle com.micropythonos.errortest com.micropythonos.nostr"
+blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.retrocore_launcher" # not ready yet
 blacklist="$blacklist com.micropythonos.doom com.micropythonos.breakout" # not ready yet
 blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.weather" # not ready yet
 
@@ -44,7 +44,15 @@ for apprepo in internal_filesystem/apps; do
                 echo "Failed to parse $apprepo/$appdir/$manifest !"
                 exit 1
             fi
-            cat "$manifest" | tee -a "$outputjson"
+            jq --arg appdir "$appdir" --arg version "$version" --arg base_url "$app_store_base_url" '. + {
+                icon_url: ($base_url + "/apps/" + $appdir + "/icons/" + $appdir + "_" + $version + "_64x64.png"),
+                download_url: ($base_url + "/apps/" + $appdir + "/mpks/" + $appdir + "_" + $version + ".mpk")
+            }' "$manifest" | tee -a "$outputjson"
+            result=$?
+            if [ $result -ne 0 ]; then
+                echo "Failed to enrich $apprepo/$appdir/$manifest !"
+                exit 1
+            fi
             echo -n "," | tee -a "$outputjson"
             thisappdir="$output"/apps/"$appdir"
             mkdir -p "$thisappdir"

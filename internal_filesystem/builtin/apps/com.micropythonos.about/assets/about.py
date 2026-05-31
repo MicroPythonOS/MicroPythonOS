@@ -1,7 +1,11 @@
 import sys
 import logging
+import time
 
-from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo
+import lvgl as lv
+
+from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo, FontManager
+import mpos
 
 class About(Activity):
 
@@ -9,14 +13,14 @@ class About(Activity):
     logger.setLevel(logging.INFO)
 
     def onCreate(self):
+        self._uptime_label = None
+        self._timer = None
+        self._header_font = FontManager.getFont(size=14, family="Montserrat")
+        self._body_font = FontManager.getFont(size=12, family="Montserrat")
         screen = lv.obj()
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
-        # Make the screen focusable so it can be scrolled with the arrow keys
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(screen)
 
         # Logo
         img = lv.image(screen)
@@ -63,7 +67,6 @@ class About(Activity):
         # These are always written to sys.stdout
         #self._add_label(screen, f"micropython.mem_info(): {micropython.mem_info()}")
         #self._add_label(screen, f"micropython.qstr_info(): {micropython.qstr_info()}")
-        import mpos
         self._add_label(screen, f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
 
         # ESP32 hardware info
@@ -158,7 +161,54 @@ class About(Activity):
         self._add_disk_info(screen, '/')
         self._add_disk_info(screen, '/sdcard')
 
+        # System uptime
+        self._add_label(screen, f"{lv.SYMBOL.REFRESH} System Uptime", is_header=True)
+        self._uptime_label = self._add_label(screen, f"Uptime: {self._get_uptime_str()}", margin_top=0)
+
         self.setContentView(screen)
+
+    def onResume(self, screen):
+        if self._timer is None:
+            self._timer = lv.timer_create(self._update_uptime, 1000, None)
+
+    def onPause(self, screen):
+        if self._timer is not None:
+            self._timer.delete()
+            self._timer = None
+
+    def _get_uptime_str(self):
+        ms = time.ticks_ms()
+        total_seconds = ms // 1000
+
+        years = total_seconds // (365 * 24 * 3600)
+        remaining = total_seconds % (365 * 24 * 3600)
+
+        months = remaining // (30 * 24 * 3600)
+        remaining %= (30 * 24 * 3600)
+
+        days = remaining // (24 * 3600)
+        remaining %= (24 * 3600)
+
+        hours = remaining // 3600
+        remaining %= 3600
+
+        minutes = remaining // 60
+        seconds = remaining % 60
+
+        parts = []
+        if years > 0:
+            parts.append(f"{years}y, {months}mo, {days}d")
+        elif months > 0:
+            parts.append(f"{months}mo, {days}d")
+        elif days > 0:
+            parts.append(f"{days}d")
+
+        parts.append(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        return " ".join(parts)
+
+    def _update_uptime(self, event=None):
+        if self._uptime_label is not None:
+            self._uptime_label.set_text(f"Uptime: {self._get_uptime_str()}")
 
     @staticmethod
     def _focus_obj(event):
@@ -179,17 +229,15 @@ class About(Activity):
         # Make labels focusable to allow scroll on devices without touch screen
         label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
         label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(label)
+        lv.group_get_default().add_obj(label)
         if is_header:
             primary_color = lv.theme_get_color_primary(None)
             label.set_style_text_color(primary_color, lv.PART.MAIN)
-            label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
+            label.set_style_text_font(self._header_font, lv.PART.MAIN)
             label.set_style_margin_top(margin_top, lv.PART.MAIN)
             label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
         else:
-            label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            label.set_style_text_font(self._body_font, lv.PART.MAIN)
             label.set_style_margin_bottom(2, lv.PART.MAIN)
         return label
 

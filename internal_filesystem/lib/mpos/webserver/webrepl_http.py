@@ -9,6 +9,7 @@ import websocket
 import lvgl as lv
 
 from mpos.ui.display_metrics import DisplayMetrics
+from mpos.ui.testing import capture_screenshot
 
 WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html.gz" # built by MicroPythonOS/webrepl/inline_minify_webrepl.py
 
@@ -99,15 +100,7 @@ def _snapshot_to_bmp():
     row_stride = ((width * 3 + 3) // 4) * 4
     pixel_data_size = row_stride * height
 
-    rgb_buffer = bytearray(rgb_size)
-    image_dsc = lv.image_dsc_t()
-    lv.snapshot_take_to_buf(
-        lv.screen_active(),
-        lv.COLOR_FORMAT.RGB888,
-        image_dsc,
-        rgb_buffer,
-        rgb_size,
-    )
+    rgb_buffer = capture_screenshot(width=width, height=height, color_format=lv.COLOR_FORMAT.RGB888)
 
     bmp = bytearray(54 + pixel_data_size)
     bmp[0:54] = _build_bmp_header(width, height, pixel_data_size)

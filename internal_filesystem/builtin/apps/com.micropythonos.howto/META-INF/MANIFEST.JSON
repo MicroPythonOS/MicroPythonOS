@@ -2,10 +2,8 @@
 "name": "HowTo",
 "publisher": "MicroPythonOS",
 "short_description": "Welcomes the user and gives a few pointers on how to control and use MicroPythonOS.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.howto/icons/com.micropythonos.howto_0.1.2_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.howto/mpks/com.micropythonos.howto_0.1.2.mpk",
 "fullname": "com.micropythonos.howto",
-"version": "0.1.2",
+"version": "0.1.5",
 "category": "help",
 "activities": [
     {
@@ -20,4 +18,3 @@
     }
   ]
 }
-

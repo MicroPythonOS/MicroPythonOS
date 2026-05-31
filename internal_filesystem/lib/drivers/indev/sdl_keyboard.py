@@ -195,14 +195,9 @@ class MposSDLKeyboard(keypad_framework.KeypadDriver):
         super().__init__()
         self.__last_key = -1
         self.__current_state = self.RELEASED
-
-        self.group = lv.group_create()
-        self.group.set_default()  # NOQA
-        self.set_group(self.group)
+        self.set_group(lv.group_get_default()) # otherwise the non-custom keys (ENTER, letters) don't go through
         self.set_mode(lv.INDEV_MODE.EVENT)  # NOQA
-
         self._py_disp_drv._data_bus.register_keypad_callback(self._keypad_cb)  # NOQA
-
         self.paste_text_callback = None
 
     def set_paste_text_callback(self, callback):

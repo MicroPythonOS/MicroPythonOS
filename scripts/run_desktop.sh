@@ -35,25 +35,47 @@ if [ -f "$script" ]; then
     "$binary" -v -i "$script"
 else
     CONFIG_FILE="data/com.micropythonos.settings/config.json"
+    set_autostart_config() {
+        local mode="$1"
+        local early_value="$2"
+        mkdir -p "$(dirname "$CONFIG_FILE")"
+        python3 - "$CONFIG_FILE" "$mode" "$early_value" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+mode = sys.argv[2]
+early_value = sys.argv[3]
+
+config = {}
+if os.path.exists(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+            if isinstance(loaded, dict):
+                config = loaded
+    except Exception:
+        config = {}
+
+if mode == "set":
+    config["auto_start_app_early"] = early_value
+elif mode == "clear":
+    config.pop("auto_start_app_early", None)
+
+config.pop("auto_start_app", None)
+
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(config, f, separators=(",", ":"))
+PY
+    }
+
     if [ -n "$script" ]; then
         echo "run_desktop.sh: running app $script"
-        if [ -f "$CONFIG_FILE" ]; then
-            if grep -q '"auto_start_app"' "$CONFIG_FILE"; then
-                echo "Updating auto_start_app field using sed"
-                sed -i.backup -e 's/"auto_start_app": "[^"]*"/"auto_start_app": "'$script'"/' "$CONFIG_FILE"
-            else
-                echo "Adding auto_start_app to config file"
-                sed -i.backup -E 's/[[:space:]]*}[[:space:]]*$/,"auto_start_app": "'$script'"}/' "$CONFIG_FILE"
-            fi
-        else
-            mkdir -p "$(dirname "$CONFIG_FILE")"
-            echo '{"auto_start_app": "'$script'"}' > "$CONFIG_FILE"
-        fi
+        set_autostart_config "set" "$script"
     else
-        if [ -f "$CONFIG_FILE" ]; then
-            echo "Removing auto_start_app from config file"
-            sed -i.backup -E 's/[[:space:]]*,?[[:space:]]*"auto_start_app"[[:space:]]*:[[:space:]]*"[^"]*"[[:space:]]*//g; s/\{[[:space:]]*,/\{/g; s/,[[:space:]]*\}/\}/g' "$CONFIG_FILE"
-        fi
+        echo "Clearing auto_start_app_early and auto_start_app in config file"
+        set_autostart_config "clear" ""
     fi
     "$binary" -X heapsize=$HEAPSIZE -v -i -m main # internal_filesystem/main.py is frozen in and can't be changed at runtime
 fi

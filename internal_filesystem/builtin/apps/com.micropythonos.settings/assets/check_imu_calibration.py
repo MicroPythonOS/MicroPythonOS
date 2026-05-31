@@ -36,9 +36,7 @@ class CheckIMUCalibrationActivity(Activity):
         screen = lv.obj()
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(1), lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(screen)
+        lv.group_get_default().add_obj(screen)
         self.setContentView(screen)
 
     def onResume(self, screen):

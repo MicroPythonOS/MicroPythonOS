@@ -20,11 +20,11 @@ class RetroGoLauncher(Activity):
         self.file_extensions = extras.get("file_extensions", (".wad", ".zip"))
 
         self.romdir = "/roms"
-        self.gamedir = self.romdir + "/" + self.roms_subdir
         self.retrogodir = "/retro-go"
         self.configdir = self.retrogodir + "/config"
         self.bootfile = self.configdir + "/boot.json"
         self.current_subdir = ""
+        self._at_root_level = False
 
         screen = lv.obj()
         screen.set_style_pad_all(15, lv.PART.MAIN)
@@ -68,52 +68,80 @@ class RetroGoLauncher(Activity):
 
         self.refresh_file_list()
 
-    def scan_subdirs(self, directory):
+    def scan_entries(self, directory):
         subdirs = []
-        try:
-            for entry in os.listdir(directory):
-                if entry.startswith("."):
-                    continue
-                full = directory + "/" + entry
-                try:
-                    if os.stat(full)[0] & 0x4000:
-                        subdirs.append(entry)
-                except Exception:
-                    pass
-            subdirs.sort()
-        except OSError:
-            pass
-        except Exception as e:
-            print(f"Error scanning subdirectories in {directory}: {e}")
-        return subdirs
-
-    def scan_files(self, directory):
         matching_files = []
         try:
-            for filename in os.listdir(directory):
-                if filename.lower().endswith(self.file_extensions):
-                    matching_files.append(filename)
-            matching_files.sort()
-            print(f"Found {len(matching_files)} files in {directory}: {matching_files}")
-        except OSError as e:
-            print(f"Directory does not exist or cannot be read: {directory}")
+            for entry in os.ilistdir(directory):
+                name = entry[0]
+                if name.startswith("."):
+                    continue
+
+                mode = entry[1] if len(entry) > 1 else 0
+                if mode & 0x4000:
+                    subdirs.append(name)
+                elif name.lower().endswith(self.file_extensions):
+                    matching_files.append(name)
+        except OSError:
+            pass
+        except AttributeError:
+            try:
+                for filename in os.listdir(directory):
+                    if filename.startswith("."):
+                        continue
+                    if filename.lower().endswith(self.file_extensions):
+                        matching_files.append(filename)
+            except OSError:
+                pass
+            except Exception as e:
+                print(f"Error scanning directory {directory}: {e}")
         except Exception as e:
             print(f"Error scanning directory {directory}: {e}")
-        return matching_files
 
-    def get_file_size_warning(self, filepath):
-        try:
-            size = os.stat(filepath)[6]
-            if size == 0:
-                return " (EMPTY FILE)"
-            elif size < 80 * 1024:
-                return " (TOO SMALL)"
-        except Exception as e:
-            print(f"Error checking file size for {filepath}: {e}")
-        return ""
+        subdirs.sort()
+        matching_files.sort()
+        print(f"Found {len(matching_files)} files in {directory}: {matching_files}")
+        return subdirs, matching_files
 
     def refresh_file_list(self):
-        current_full_dir = self.bootfile_prefix + self.gamedir
+        if self._at_root_level:
+            current_full_dir = self.bootfile_prefix + self.romdir
+            self.status_label.set_text(f"Listing: {current_full_dir}")
+            self.wadlist.clean()
+
+            subdirs = []
+            try:
+                for entry in os.ilistdir(current_full_dir):
+                    name = entry[0]
+                    if name.startswith("."):
+                        continue
+                    mode = entry[1] if len(entry) > 1 else 0
+                    if mode & 0x4000:
+                        subdirs.append(name)
+            except OSError:
+                pass
+            except AttributeError:
+                try:
+                    for filename in os.listdir(current_full_dir):
+                        if filename.startswith("."):
+                            continue
+                        fullpath = current_full_dir + "/" + filename
+                        if os.stat(fullpath)[0] & 0x4000:
+                            subdirs.append(filename)
+                except OSError:
+                    pass
+            subdirs.sort()
+
+            if not subdirs:
+                self.status_label.set_text("No ROM directories found")
+                return
+
+            for d in subdirs:
+                button = self.wadlist.add_button(None, lv.SYMBOL.DIRECTORY + "  " + d)
+                button.add_event_cb(lambda e, dirname=d: self.select_rom_subdir(dirname), lv.EVENT.CLICKED, None)
+            return
+
+        current_full_dir = self.bootfile_prefix + self.romdir + "/" + self.roms_subdir
         if self.current_subdir:
             current_full_dir += "/" + self.current_subdir
 
@@ -121,8 +149,7 @@ class RetroGoLauncher(Activity):
         print(f"refresh_file_list: Clearing current list (dir={self.current_subdir})")
         self.wadlist.clean()
 
-        subdirs = self.scan_subdirs(current_full_dir)
-        all_files = self.scan_files(current_full_dir)
+        subdirs, all_files = self.scan_entries(current_full_dir)
 
         if not subdirs and not all_files:
             self.status_label.set_text(f"No files found in {current_full_dir}")
@@ -131,19 +158,17 @@ class RetroGoLauncher(Activity):
 
         print(f"refresh_file_list: {len(subdirs)} dirs, {len(all_files)} files")
 
-        if self.current_subdir:
-            button = self.wadlist.add_button(None, "..")
-            button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
+        button = self.wadlist.add_button(None, "< Back")
+        button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
 
         for d in subdirs:
             button = self.wadlist.add_button(None, d + "/")
             button.add_event_cb(lambda e, dirname=d: self.navigate_into(dirname), lv.EVENT.CLICKED, None)
 
         for f in all_files:
-            fullpath = self.gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else self.gamedir + "/" + f
-            warning = self.get_file_size_warning(current_full_dir + "/" + f)
-            button_text = f + warning
-            button = self.wadlist.add_button(None, button_text)
+            gamedir = self.romdir + "/" + self.roms_subdir
+            fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
+            button = self.wadlist.add_button(None, f)
             button.add_event_cb(
                 lambda e, p=fullpath: TaskManager.create_task(self.start_game(self.bootfile_prefix, self.bootfile_to_write, p)),
                 lv.EVENT.CLICKED, None
@@ -157,11 +182,19 @@ class RetroGoLauncher(Activity):
         self.refresh_file_list()
 
     def navigate_up(self):
-        if not self.current_subdir:
-            return
-        parts = self.current_subdir.split("/")
-        parts.pop()
-        self.current_subdir = "/".join(parts)
+        if self.current_subdir:
+            parts = self.current_subdir.split("/")
+            parts.pop()
+            self.current_subdir = "/".join(parts)
+            self.refresh_file_list()
+        elif not self._at_root_level:
+            self._at_root_level = True
+            self.refresh_file_list()
+
+    def select_rom_subdir(self, dirname):
+        self._at_root_level = False
+        self.roms_subdir = dirname
+        self.current_subdir = ""
         self.refresh_file_list()
 
     def settings_button_tap(self, event):
@@ -208,7 +241,7 @@ class RetroGoLauncher(Activity):
         await TaskManager.sleep(1)
 
         self.mkdir(bootfile_prefix + self.romdir)
-        self.mkdir(bootfile_prefix + self.gamedir)
+        self.mkdir(bootfile_prefix + self.romdir + "/" + self.roms_subdir)
         self.mkdir(bootfile_prefix + self.retrogodir)
         self.mkdir(bootfile_prefix + self.configdir)
 

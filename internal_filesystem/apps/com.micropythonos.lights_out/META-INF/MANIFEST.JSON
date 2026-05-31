@@ -3,10 +3,8 @@
     "publisher": "MicroPythonOS",
     "short_description": "Classic Lights Out puzzle game",
     "long_description": "Turn off all the lights! Pressing a light toggles it and its neighbors. Solve each level with minimal moves.",
-    "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.lights_out/icons/com.micropythonos.lights_out_1.0.1_64x64.png",
-    "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.lights_out/mpks/com.micropythonos.lights_out_1.0.1.mpk",
     "fullname": "com.micropythonos.lights_out",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "category": "games",
     "activities": [
         {

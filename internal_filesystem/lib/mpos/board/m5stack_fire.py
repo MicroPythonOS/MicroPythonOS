@@ -184,8 +184,7 @@ def keypad_read_cb(indev, data):
         if current_key == lv.KEY.ESC and since_last_repeat == 0:
             mpos.ui.back_screen()
 
-group = lv.group_create()
-group.set_default()
+group = lv.group_get_default()
 
 # Create and set up the input device
 indev = lv.indev_create()

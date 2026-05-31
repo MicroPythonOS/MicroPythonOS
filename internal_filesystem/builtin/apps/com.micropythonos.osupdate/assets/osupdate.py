@@ -40,8 +40,7 @@ class OSUpdate(Activity):
         self.main_screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
 
         # Make the screen focusable so it can be scrolled with the arrow keys
-        if focusgroup := lv.group_get_default():
-            focusgroup.add_obj(self.main_screen)
+        lv.group_get_default().add_obj(self.main_screen)
 
         self.current_version_label = lv.label(self.main_screen)
         self.current_version_label.align(lv.ALIGN.TOP_LEFT,0,0)

@@ -129,8 +129,6 @@ class Connect4(Activity):
 
         # Create column buttons (invisible clickable areas)
         focusgroup = lv.group_get_default()
-        if not focusgroup:
-            print("WARNING: could not get default focusgroup")
 
         for col in range(self.COLS):
             btn = lv.obj(self.screen)
@@ -144,8 +142,7 @@ class Connect4(Activity):
             btn.add_event_cb(lambda e, b=btn: self.focus_column(b), lv.EVENT.FOCUSED, None)
             btn.add_event_cb(lambda e, b=btn: self.defocus_column(b), lv.EVENT.DEFOCUSED, None)
 
-            if focusgroup:
-                focusgroup.add_obj(btn)
+            focusgroup.add_obj(btn)
 
             self.column_buttons.append(btn)
 

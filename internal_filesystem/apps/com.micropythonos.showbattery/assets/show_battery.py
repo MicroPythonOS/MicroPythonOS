@@ -1,5 +1,6 @@
 from mpos import Activity, BatteryManager
 from mpos.battery_manager import MAX_VOLTAGE, MIN_VOLTAGE
+import lvgl as lv
 
 HISTORY_LEN = 60
 

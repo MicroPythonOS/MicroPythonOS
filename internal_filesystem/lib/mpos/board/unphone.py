@@ -516,8 +516,7 @@ def input_callback(indev, data):
             next_repeat = current_time + REPEAT_RATE_MS
 
 
-group = lv.group_create()
-group.set_default()
+group = lv.group_get_default()
 
 # Create and set up the input device
 indev = lv.indev_create()

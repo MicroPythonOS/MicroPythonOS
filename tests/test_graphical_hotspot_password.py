@@ -14,7 +14,8 @@ import lvgl as lv
 import mpos.ui
 from mpos import (
     AppManager,
-    wait_for_render,
+    wait_for_text,
+    wait_for_widget,
     print_screen_labels,
     click_button,
     verify_text_present,
@@ -43,7 +44,10 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
         """Start hotspot app and open the Settings screen."""
         result = AppManager.start_app("com.micropythonos.settings.hotspot")
         self.assertTrue(result, "Failed to start hotspot settings app")
-        wait_for_render(iterations=20)
+        self.assertTrue(
+            wait_for_text("Settings", timeout=10),
+            "Hotspot app did not load within timeout",
+        )
 
         screen = lv.screen_active()
         print("\nInitial screen labels:")
@@ -53,7 +57,10 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
             click_button("Settings"),
             "Could not find Settings button in hotspot app",
         )
-        wait_for_render(iterations=40)
+        self.assertTrue(
+            wait_for_text("Auth Mode", timeout=10),
+            "Settings screen did not load within timeout",
+        )
 
         screen = lv.screen_active()
         print("\nSettings screen labels:")
@@ -61,13 +68,35 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
         return screen
 
     def tearDown(self):
-        """Clean up after each test method."""
-        # Navigate back to launcher to close any opened apps
         try:
             mpos.ui.back_screen()
-            wait_for_render(5)
         except:
             pass
+
+    def _wait_for_settings_after_save(self):
+        """After clicking Save on an edit screen, wait for settings to reload."""
+        return wait_for_text("Auth Mode", timeout=10)
+
+    def _click_auth_mode_and_wait_for_dropdown(self):
+        self.assertTrue(
+            click_label("Auth Mode"),
+            "Could not click Auth Mode setting",
+        )
+        dropdown = wait_for_widget(
+            lambda: find_dropdown_widget(lv.screen_active()),
+            timeout=10,
+        )
+        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found")
+        return dropdown
+
+    def _open_dropdown_and_select(self, dropdown, option):
+        coords = get_widget_coords(dropdown)
+        self.assertIsNotNone(coords, "Could not get dropdown coordinates")
+        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
+        self.assertTrue(
+            select_dropdown_option_by_text(dropdown, option, allow_partial=True),
+            f"Could not select {option} option in dropdown",
+        )
 
     def test_auth_mode_defaults_label(self):
         """Verify Auth Mode shows defaults to none in hotspot settings."""
@@ -109,34 +138,18 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
             "Password setting should not be visible with Auth Mode None",
         )
 
-        self.assertTrue(
-            click_label("Auth Mode"),
-            "Could not click Auth Mode setting",
-        )
-        wait_for_render(iterations=40)
+        dropdown = self._click_auth_mode_and_wait_for_dropdown()
 
-        screen = lv.screen_active()
-        dropdown = find_dropdown_widget(screen)
-        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found")
-
-        coords = get_widget_coords(dropdown)
-        self.assertIsNotNone(coords, "Could not get dropdown coordinates")
-
-        print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
-        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
-        wait_for_render(iterations=20)
-
-        self.assertTrue(
-            select_dropdown_option_by_text(dropdown, "WPA2", allow_partial=True),
-            "Could not select WPA2 option in dropdown",
-        )
-        wait_for_render(iterations=20)
+        self._open_dropdown_and_select(dropdown, "WPA2")
 
         self.assertTrue(
             click_button("Save"),
             "Could not click Save button in Auth Mode settings",
         )
-        wait_for_render(iterations=40)
+        self.assertTrue(
+            self._wait_for_settings_after_save(),
+            "Settings screen did not reload after Save",
+        )
 
         screen = lv.screen_active()
         self.assertTrue(
@@ -144,34 +157,18 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
             "Password setting did not appear after selecting WPA2",
         )
 
-        self.assertTrue(
-            click_label("Auth Mode"),
-            "Could not click Auth Mode setting to revert",
-        )
-        wait_for_render(iterations=40)
+        dropdown = self._click_auth_mode_and_wait_for_dropdown()
 
-        screen = lv.screen_active()
-        dropdown = find_dropdown_widget(screen)
-        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found on revert")
-
-        coords = get_widget_coords(dropdown)
-        self.assertIsNotNone(coords, "Could not get dropdown coordinates on revert")
-
-        print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
-        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
-        wait_for_render(iterations=20)
-
-        self.assertTrue(
-            select_dropdown_option_by_text(dropdown, "None", allow_partial=True),
-            "Could not select None option in dropdown",
-        )
-        wait_for_render(iterations=20)
+        self._open_dropdown_and_select(dropdown, "None")
 
         self.assertTrue(
             click_button("Save"),
             "Could not click Save button in Auth Mode settings (revert)",
         )
-        wait_for_render(iterations=40)
+        self.assertTrue(
+            self._wait_for_settings_after_save(),
+            "Settings screen did not reload after Save (revert)",
+        )
 
         screen = lv.screen_active()
         print("\nSettings screen labels after Auth Mode revert:")
@@ -196,34 +193,18 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
             "Password setting should not be visible with Auth Mode None",
         )
 
-        self.assertTrue(
-            click_label("Auth Mode"),
-            "Could not click Auth Mode setting",
-        )
-        wait_for_render(iterations=40)
+        dropdown = self._click_auth_mode_and_wait_for_dropdown()
 
-        screen = lv.screen_active()
-        dropdown = find_dropdown_widget(screen)
-        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found")
-
-        coords = get_widget_coords(dropdown)
-        self.assertIsNotNone(coords, "Could not get dropdown coordinates")
-
-        print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
-        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
-        wait_for_render(iterations=20)
-
-        self.assertTrue(
-            select_dropdown_option_by_text(dropdown, "WPA2", allow_partial=True),
-            "Could not select WPA2 option in dropdown",
-        )
-        wait_for_render(iterations=20)
+        self._open_dropdown_and_select(dropdown, "WPA2")
 
         self.assertTrue(
             click_button("Save"),
             "Could not click Save button in Auth Mode settings",
         )
-        wait_for_render(iterations=40)
+        self.assertTrue(
+            self._wait_for_settings_after_save(),
+            "Settings screen did not reload after Save",
+        )
 
         screen = lv.screen_active()
         print("\nSettings screen labels after Auth Mode change:")
@@ -243,37 +224,22 @@ class TestGraphicalHotspotPassword(unittest.TestCase):
         self._reset_hotspot_preferences()
         screen = self._open_hotspot_settings_screen()
 
-        self.assertTrue(
-            click_label("Auth Mode"),
-            "Could not click Auth Mode setting",
-        )
-        wait_for_render(iterations=40)
+        dropdown = self._click_auth_mode_and_wait_for_dropdown()
 
         screen = lv.screen_active()
         print("\nAuth Mode edit screen labels:")
         print_screen_labels(screen)
 
-        dropdown = find_dropdown_widget(screen)
-        self.assertIsNotNone(dropdown, "Auth Mode dropdown not found")
-
-        coords = get_widget_coords(dropdown)
-        self.assertIsNotNone(coords, "Could not get dropdown coordinates")
-
-        print(f"Clicking dropdown at ({coords['center_x']}, {coords['center_y']})")
-        simulate_click(coords["center_x"], coords["center_y"], press_duration_ms=100)
-        wait_for_render(iterations=20)
-
-        self.assertTrue(
-            select_dropdown_option_by_text(dropdown, "WPA2", allow_partial=True),
-            "Could not select WPA2 option in dropdown",
-        )
-        wait_for_render(iterations=20)
+        self._open_dropdown_and_select(dropdown, "WPA2")
 
         self.assertTrue(
             click_button("Save"),
             "Could not click Save button in Auth Mode settings",
         )
-        wait_for_render(iterations=40)
+        self.assertTrue(
+            self._wait_for_settings_after_save(),
+            "Settings screen did not reload after Save",
+        )
 
         screen = lv.screen_active()
         print("\nSettings screen labels after save:")

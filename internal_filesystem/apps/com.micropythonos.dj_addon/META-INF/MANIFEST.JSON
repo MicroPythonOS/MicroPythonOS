@@ -1,23 +1,21 @@
 {
-  "name": "DJ Addon",
-  "publisher": "MicroPythonOS",
-  "short_description": "DJ Addon demo",
-  "long_description": "Shows off the capabilities of the Fri3d DJ Addon 2026.",
-  "icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.dj_addon/icons/com.micropythonos.dj_addon_0.0.1_64x64.png",
-  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.dj_addon/mpks/com.micropythonos.dj_addon_0.0.1.mpk",
-  "fullname": "com.micropythonos.dj_addon",
-  "version": "0.0.1",
-  "category": "development",
-  "activities": [
-    {
-      "entrypoint": "assets/dj_addon.py",
-      "classname": "DJAddonActivity",
-      "intent_filters": [
+    "name": "DJ Addon",
+    "publisher": "MicroPythonOS",
+    "short_description": "DJ Addon demo",
+    "long_description": "Shows off the capabilities of the Fri3d DJ Addon 2026.",
+    "fullname": "com.micropythonos.dj_addon",
+    "version": "0.1.0",
+    "category": "development",
+    "activities": [
         {
-          "action": "main",
-          "category": "launcher"
+            "entrypoint": "assets/dj_addon.py",
+            "classname": "DJAddonActivity",
+            "intent_filters": [
+                {
+                    "action": "main",
+                    "category": "launcher"
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }

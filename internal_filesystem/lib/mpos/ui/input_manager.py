@@ -85,20 +85,17 @@ class InputManager:
     @classmethod
     def emulate_focus_obj(cls, focusgroup, target):
         """
-        Emulate setting focus to a specific object in the focus group.
-        This function is needed because the current version of LVGL doesn't have a direct set_focus method.
-        It should exist, according to the API, so maybe it will be available in the next release and this function might no longer be needed someday.
+        Deprecated compatibility shim.
+
+        Use lv.group_focus_obj(target) directly.
         """
-        if not focusgroup:
-            print("emulate_focus_obj needs a focusgroup, returning...")
-            return
         if not target:
             print("emulate_focus_obj needs a target, returning...")
             return
-        for objnr in range(focusgroup.get_obj_count()):
-            currently_focused = focusgroup.get_focused()
-            if currently_focused is target:
-                return
-            else:
-                focusgroup.focus_next()
-        print("WARNING: emulate_focus_obj failed to find target")
+
+        print(
+            "WARNING: InputManager.emulate_focus_obj() is deprecated and unnecessary. "
+            "Use lv.group_focus_obj(target) directly."
+        )
+
+        lv.group_focus_obj(target)

@@ -18,6 +18,7 @@ Usage:
 import lvgl as lv
 
 from .appearance_manager import AppearanceManager
+from .font_manager import FontManager
 from .widget_animator import WidgetAnimator
 
 class MposKeyboard:
@@ -83,9 +84,9 @@ class MposKeyboard:
 
     # Additional special characters with emoticons
     _specials_map = [
-        "~", "`", "|", "•", ":-)", ";-)", ":-D", "\n",
-        ":-(" , ":'-(", "^", "°", "=", "{", "}", "\\", "\n",
-        LABEL_NUMBERS_SPECIALS, "%", ":-o", ":-P", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
+        "~", "`", "|", "•", "🙂", "😉", "😆", "\n",
+        "☹", "😭", "^", "°", "=", "{", "}", "\\", "\n",
+        LABEL_NUMBERS_SPECIALS, "%", "😱", "😋", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
         LABEL_LETTERS, "<", LABEL_SPACE, ">", lv.SYMBOL.OK, None
     ]
     _specials_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_specials_map)
@@ -107,13 +108,16 @@ class MposKeyboard:
     _saved_scroll_y = 0
     # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
     _textarea = None
+    _textarea_emoji_font_applied = False
 
     def __init__(self, parent):
         # Create underlying LVGL keyboard widget
         self._keyboard = lv.keyboard(parent)
         self._parent = parent # store it for later
         # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
-        self._keyboard.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+        keyboard_font = FontManager.getFont(16, emoji=True)
+        self._keyboard.set_style_text_font(keyboard_font, lv.PART.MAIN)
+        self._keyboard.set_style_text_font(keyboard_font, lv.PART.ITEMS)
 
         self.set_mode(self.MODE_LOWERCASE)
 
@@ -204,6 +208,7 @@ class MposKeyboard:
         else:
             # Regular character
             new_text = current_text + text
+            self._ensure_textarea_emoji_font(ta, text)
 
         # Update textarea
         ta.set_text(new_text)
@@ -221,9 +226,62 @@ class MposKeyboard:
             textarea: The lv.textarea widget to type into, or None to disconnect
         """
         self._textarea = textarea
+        self._textarea_emoji_font_applied = False
         # NOTE: We deliberately DO NOT call self._keyboard.set_textarea()
         # to avoid LVGL's automatic character insertion
         self._textarea.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
+
+    def _ensure_textarea_emoji_font(self, textarea, text):
+        if self._textarea_emoji_font_applied:
+            return
+        if not self._contains_emoji(text):
+            return
+
+        current_font = None
+        try:
+            current_font = textarea.get_style_text_font(lv.PART.MAIN)
+        except Exception:
+            pass
+
+        family = None
+        size = 12
+        if current_font is not None:
+            base_font = current_font
+            try:
+                fallback_font = current_font.fallback
+                if fallback_font is not None:
+                    base_font = fallback_font
+            except Exception:
+                pass
+
+            for record in FontManager._get_builtin_font_records():
+                if record["font"] is base_font:
+                    family = record["family"]
+                    size = record["size"]
+                    break
+
+            if family is None:
+                try:
+                    size = max(1, int(base_font.get_line_height()))
+                except Exception:
+                    pass
+
+        emoji_font = FontManager.getFont(size=size, family=family, emoji=True)
+        textarea.set_style_text_font(emoji_font, lv.PART.MAIN)
+        self._textarea_emoji_font_applied = True
+
+    def _contains_emoji(self, text):
+        if not text:
+            return False
+
+        emoji_codepoints = FontManager.getEmojiCodepoints()
+        if not emoji_codepoints:
+            return False
+
+        for char in text:
+            if ord(char) in emoji_codepoints:
+                return True
+        return False
 
     def get_textarea(self):
         """
@@ -248,9 +306,7 @@ class MposKeyboard:
     def focus_on_keyboard(self, timer=None):
         default_group = lv.group_get_default()
         if default_group:
-            from .input_manager import InputManager
-            from .focus_direction import move_focus_direction
-            InputManager.emulate_focus_obj(default_group, self._keyboard)
+            lv.group_focus_obj(self._keyboard)
 
     def scroll_back_after_hide(self, timer):
         self._parent.scroll_to_y(self._saved_scroll_y, True)

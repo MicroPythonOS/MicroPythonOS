@@ -1,4 +1,5 @@
 from mpos import Activity, SharedPreferences, DisplayMetrics
+import lvgl as lv
 
 class HowTo(Activity):
 
@@ -14,9 +15,7 @@ class HowTo(Activity):
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(5), lv.PART.MAIN)
         # Make the screen focusable so it can be scrolled with the arrow keys
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(screen)
+        lv.group_get_default().add_obj(screen)
         preamble = "How to Navigate"
         self._add_label(screen, preamble, is_header=True)
 
@@ -65,9 +64,7 @@ class HowTo(Activity):
         label.set_long_mode(lv.label.LONG_MODE.WRAP)
         label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
         label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(label)
+        lv.group_get_default().add_obj(label)
         if is_header:
             label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
             label.set_style_margin_bottom(4, lv.PART.MAIN)
@@ -88,10 +85,16 @@ class HowTo(Activity):
 
     def onPause(self, screen):
         checked = self.dontshow_checkbox.get_state() & lv.STATE.CHECKED
+        if checked:
+            new_value = "" # None might result in the OS starting it, empty string means explictly don't start it
+        else:
+            new_value = self.appname
+
+        old_value = self.prefs.get_string("auto_start_app_early")
+        if old_value == new_value:
+            return
+
         print("Removing this app from autostart")
         editor = self.prefs.edit()
-        if checked:
-            editor.put_string("auto_start_app_early", "") # None might result in the OS starting it, empty string means explictly don't start it
-        else:
-            editor.put_string("auto_start_app_early", self.appname)
+        editor.put_string("auto_start_app_early", new_value)
         editor.commit()

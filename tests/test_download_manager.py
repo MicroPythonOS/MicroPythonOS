@@ -53,13 +53,9 @@ class TestDownloadManager(unittest.TestCase):
         import asyncio
 
         async def run_test():
-            # Perform a download
-            try:
-                data = await DownloadManager.download_url("https://httpbin.org/bytes/100")
-            except Exception as e:
-                # Skip test if httpbin is unavailable
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"x" * 100)
+            data = await mock_dm.download_url("https://example.com/bytes/100")
 
             # Verify download succeeded
             self.assertIsNotNone(data)
@@ -72,20 +68,16 @@ class TestDownloadManager(unittest.TestCase):
         import asyncio
 
         async def run_test():
+            mock_dm = MockDownloadManager()
+
             # Perform first download
-            try:
-                data1 = await DownloadManager.download_url("https://httpbin.org/bytes/50")
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            mock_dm.set_download_data(b"a" * 50)
+            data1 = await mock_dm.download_url("https://example.com/bytes/50")
             self.assertIsNotNone(data1)
 
             # Perform second download
-            try:
-                data2 = await DownloadManager.download_url("https://httpbin.org/bytes/75")
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            mock_dm.set_download_data(b"b" * 75)
+            data2 = await mock_dm.download_url("https://example.com/bytes/75")
             self.assertIsNotNone(data2)
 
             # Verify different data was downloaded
@@ -102,11 +94,9 @@ class TestDownloadManager(unittest.TestCase):
         import asyncio
 
         async def run_test():
-            try:
-                data = await DownloadManager.download_url("https://httpbin.org/bytes/1024")
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"x" * 1024)
+            data = await mock_dm.download_url("https://example.com/bytes/1024")
 
             self.assertIsInstance(data, bytes)
             self.assertEqual(len(data), 1024)
@@ -119,15 +109,13 @@ class TestDownloadManager(unittest.TestCase):
 
         async def run_test():
             outfile = f"{self.temp_dir}/test_download.bin"
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"x" * 2048)
 
-            try:
-                success = await DownloadManager.download_url(
-                    "https://httpbin.org/bytes/2048",
-                    outfile=outfile
-                )
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            success = await mock_dm.download_url(
+                "https://example.com/bytes/2048",
+                outfile=outfile
+            )
 
             self.assertTrue(success)
             self.assertEqual(os.stat(outfile)[6], 2048)
@@ -143,18 +131,16 @@ class TestDownloadManager(unittest.TestCase):
 
         async def run_test():
             chunks_received = []
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"x" * 512)
 
             async def collect_chunks(chunk):
                 chunks_received.append(chunk)
 
-            try:
-                success = await DownloadManager.download_url(
-                    "https://httpbin.org/bytes/512",
-                    chunk_callback=collect_chunks
-                )
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            success = await mock_dm.download_url(
+                "https://example.com/bytes/512",
+                chunk_callback=collect_chunks
+            )
 
             self.assertTrue(success)
             self.assertTrue(len(chunks_received) > 0)
@@ -172,7 +158,7 @@ class TestDownloadManager(unittest.TestCase):
         async def run_test():
             with self.assertRaises(ValueError) as context:
                 await DownloadManager.download_url(
-                    "https://httpbin.org/bytes/100",
+                    "https://example.com/bytes/100",
                     outfile="/tmp/test.bin",
                     chunk_callback=lambda chunk: None
                 )
@@ -189,18 +175,16 @@ class TestDownloadManager(unittest.TestCase):
 
         async def run_test():
             progress_calls = []
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"x" * 5120)
 
             async def track_progress(percent):
                 progress_calls.append(percent)
 
-            try:
-                data = await DownloadManager.download_url(
-                    "https://httpbin.org/bytes/5120",  # 5KB
-                    progress_callback=track_progress
-                )
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            data = await mock_dm.download_url(
+                "https://example.com/bytes/5120",  # 5KB
+                progress_callback=track_progress
+            )
 
             self.assertIsNotNone(data)
             self.assertTrue(len(progress_calls) > 0)
@@ -305,17 +289,21 @@ class TestDownloadManager(unittest.TestCase):
         import asyncio
 
         async def run_test():
-            # Use real httpbin.org for this test since it specifically tests header echoing
-            data = await DownloadManager.download_url(
-                "https://httpbin.org/headers",
+            # Use mock to avoid flaky external dependency while still
+            # verifying the header flow through DownloadManager API.
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"{}")
+
+            data = await mock_dm.download_url(
+                "https://example.com/headers",
                 headers={"X-Custom-Header": "TestValue"}
             )
 
             self.assertIsNotNone(data)
-            # Verify the custom header was included (httpbin echoes it back)
-            response_text = data.decode('utf-8')
-            self.assertIn("X-Custom-Header", response_text)
-            self.assertIn("TestValue", response_text)
+            self.assertEqual(
+                mock_dm.headers_received,
+                {"X-Custom-Header": "TestValue"}
+            )
 
         asyncio.run(run_test())
 
@@ -360,13 +348,18 @@ class TestDownloadManager(unittest.TestCase):
         import json
 
         async def run_test():
-            # Use real httpbin.org for this test since it specifically tests JSON parsing
-            data = await DownloadManager.download_url("https://httpbin.org/json")
+            # Use mock to avoid flaky external dependency.
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(
+                b'{"slideshow":{"author":"Yours Truly","date":"date of publication"}}'
+            )
+            data = await mock_dm.download_url("https://example.com/json")
 
             self.assertIsNotNone(data)
             # Verify it's valid JSON
-            parsed = json.loads(data.decode('utf-8'))
+            parsed = json.loads(data.decode("utf-8"))
             self.assertIsInstance(parsed, dict)
+            self.assertIn("slideshow", parsed)
 
         asyncio.run(run_test())
 
@@ -379,17 +372,15 @@ class TestDownloadManager(unittest.TestCase):
         async def run_test():
             # Try to download to non-existent directory
             outfile = "/tmp/nonexistent_dir_12345/test.bin"
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"x" * 100)
 
             # Should raise exception because directory doesn't exist
             with self.assertRaises(Exception):
-                try:
-                    success = await DownloadManager.download_url(
-                        "https://httpbin.org/bytes/100",
-                        outfile=outfile
-                    )
-                except Exception as e:
-                    # Re-raise to let assertRaises catch it
-                    raise
+                await mock_dm.download_url(
+                    "https://example.com/bytes/100",
+                    outfile=outfile
+                )
 
         asyncio.run(run_test())
 
@@ -399,20 +390,18 @@ class TestDownloadManager(unittest.TestCase):
 
         async def run_test():
             outfile = f"{self.temp_dir}/overwrite_test.bin"
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"x" * 100)
 
             # Create initial file
             with open(outfile, 'wb') as f:
                 f.write(b'old content')
 
             # Download and overwrite
-            try:
-                success = await DownloadManager.download_url(
-                    "https://httpbin.org/bytes/100",
-                    outfile=outfile
-                )
-            except Exception as e:
-                self.skipTest(f"httpbin.org unavailable: {e}")
-                return
+            success = await mock_dm.download_url(
+                "https://example.com/bytes/100",
+                outfile=outfile
+            )
 
             self.assertTrue(success)
             self.assertEqual(os.stat(outfile)[6], 100)

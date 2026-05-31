@@ -71,7 +71,7 @@ btn_b = Pin(14, Pin.IN, Pin.PULL_UP)
 REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
 REPEAT_RATE_MS = 100  # Interval between repeats
 REPEAT_PREV_BECOMES_BACK = 700 # Long previous press becomes back button
-COMBO_GRACE_MS = 60  # Accept near-simultaneous A+B as ENTER
+COMBO_GRACE_MS = 90  # Accept near-simultaneous A+B as ENTER
 last_key = None
 last_state = lv.INDEV_STATE.RELEASED
 key_press_start = 0  # Time when key was first pressed
@@ -122,11 +122,10 @@ def keypad_read_cb(indev, data):
     # While in an on-screen keyboard, PREV button is LEFT and NEXT button is RIGHT
     focus_group = lv.group_get_default()
     focus_keyboard = False
-    if focus_group:
-        current_focused = focus_group.get_focused()
-        if isinstance(current_focused, lv.keyboard):
-            #print("focus is on a keyboard")
-            focus_keyboard = True
+    current_focused = focus_group.get_focused()
+    if isinstance(current_focused, lv.keyboard):
+        #print("focus is on a keyboard")
+        focus_keyboard = True
 
     if near_simul:
         current_key = lv.KEY.ENTER
@@ -197,14 +196,11 @@ def keypad_read_cb(indev, data):
         mpos.ui.back_screen()
 
 
-group = lv.group_create()
-group.set_default()
-
 # Create and set up the input device
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(keypad_read_cb)
-indev.set_group(group) # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
+indev.set_group(lv.group_get_default())
 disp = lv.display_get_default()  # NOQA
 indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA

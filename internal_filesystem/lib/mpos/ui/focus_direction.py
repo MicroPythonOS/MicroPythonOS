@@ -145,7 +145,6 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     return closest_obj
 
 def move_focus_direction(angle):
-    from .input_manager import InputManager
     focus_group = lv.group_get_default()
     if not focus_group:
         print("move_focus_direction: no default focus_group found, returning...")
@@ -174,4 +173,4 @@ def move_focus_direction(angle):
     if o:
         #print("move_focus_direction: moving focus to:")
         #mpos.util.print_lvgl_widget(o)
-        InputManager.emulate_focus_obj(focus_group, o)
+        lv.group_focus_obj(o)

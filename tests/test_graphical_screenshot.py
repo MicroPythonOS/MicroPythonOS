@@ -12,7 +12,7 @@ import os
 import sys
 import unittest
 import mpos.ui
-from mpos import AppManager, DeviceInfo, DisplayMetrics, capture_screenshot, wait_for_render
+from mpos import AppManager, DeviceInfo, DisplayMetrics, capture_screenshot, wait_for_text
 
 
 class TestScreenshotCapture(unittest.TestCase):
@@ -37,7 +37,6 @@ class TestScreenshotCapture(unittest.TestCase):
         """Clean up after each test method."""
         try:
             mpos.ui.back_screen()
-            wait_for_render(5)
         except Exception:
             pass
 
@@ -48,7 +47,10 @@ class TestScreenshotCapture(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.about")
         self.assertTrue(result, "Failed to start About app")
 
-        wait_for_render(iterations=15)
+        self.assertTrue(
+            wait_for_text("Hardware ID:", timeout=10),
+            "About app did not load within timeout",
+        )
 
         screenshot_path = f"{self.screenshot_dir}/about_app_{self.hardware_id}.raw"
         print(f"\nCapturing screenshot to: {screenshot_path}")

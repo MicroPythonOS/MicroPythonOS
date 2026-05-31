@@ -1,3 +1,4 @@
+import lvgl as lv
 from mpos import Activity
 
 class Hello(Activity):

@@ -55,8 +55,6 @@ class SettingsActivity(Activity):
             return
         # Get the group for focusable objects
         focusgroup = lv.group_get_default()
-        if not focusgroup:
-            print("WARNING: could not get default focusgroup")
 
         for setting in self.settings:
             # Check if it should be shown:
@@ -109,8 +107,7 @@ class SettingsActivity(Activity):
             setting_cont.add_event_cb(lambda e, s=setting: self.startSettingActivity(s), lv.EVENT.CLICKED, None)
             setting_cont.add_event_cb(lambda e, container=setting_cont: self.focus_container(container),lv.EVENT.FOCUSED,None)
             setting_cont.add_event_cb(lambda e, container=setting_cont: self.defocus_container(container),lv.EVENT.DEFOCUSED,None)
-            if focusgroup:
-                focusgroup.add_obj(setting_cont)
+            focusgroup.add_obj(setting_cont)
 
     def focus_container(self, container):
         #print(f"container {container} focused, setting border...")

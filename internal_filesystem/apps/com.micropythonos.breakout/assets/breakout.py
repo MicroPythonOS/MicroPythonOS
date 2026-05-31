@@ -9,6 +9,9 @@ import mpos.ui
 from mpos import Activity, DisplayMetrics, InputManager
 
 import sys
+# should check sys_mpy = sys.implementation._mpy
+# arch = (sys_mpy >> 10) & 0x0F
+# and put archN in the filename
 if sys.platform == "esp32":
     import breakout_xtensawin as breakout
 else:

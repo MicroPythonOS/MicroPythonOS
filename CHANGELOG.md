@@ -3,6 +3,60 @@ Future release (next version)
 
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
+Put unreleased changes here!
+
+0.11.2
+======
+
+Frameworks:
+- Fix SharedPreferences no-op guard silently discarding writes (affects all settings, not just WiFi)
+- Switch Fri3d Communicator Add-On 2026 Keyboard to polling mode to work around spotty IRQ
+
+
+0.11.1
+======
+
+Builtin Apps:
+- About: cleanup unnecessary code
+
+Board Support:
+- Fri3d 2024: register i2c with DeviceManager for add-ons
+- Fri3d 2024 and 2026: detect and initialize Fri3d Communicator 2024 or 2026 Keyboard
+- Fri3d Communicator Add-On: improve UART handling
+- Fri3d Communicator Add-On Keyboard: new input device (indev) for LVGL with IRQ mode, polling mode, key repeat, escape and arrows for navigation
+
+Frameworks:
+- AudioManager: tweak WAV input buffer to reduce glitches
+- FontManager: default to non-emoji font unless emoji=True to improve performance
+- FontManager: add a few more emojis
+
+
+0.11.0
+======
+
+Builtin Apps:
+- About: show system uptime, use FontManager
+- Compile builtin apps to bytecode .mpy files to reduce build size by 60KiB and improve startup performance
+- HowTo app: make import lvgl as lv explicit
+
+Frameworks:
+- AppManager: try .mpy after .py and use import instead of explicit compile
+- AppManager: require explicit import lvgl for clarity
+- FontManager: new framework that provides font listing, TTF support, emoji support
+- InputManager: mark emulate_focus_obj(group,o) as deprecated in favor of lv.group_focus_obj(o)
+- MposKeyboard: add support for typing a few basic emojis
+- SharedPreferences: avoid writing default-only configs at boot and prune empty config dirs/files
+
+OS:
+- Add os.path functionality like in CPython
+- c_mpos/quirc: fix compilation warnings
+- Disable unused OS facilities (FreeRTOS internals, tracing, INFO logging, broken GIF, Pinyin IME, LVGL window, BMP) to reduce build size by 109KiB
+- Simplify focusgroup handling
+- Re-enable UART REPL again BUT add esp.uart_repl(False) functionality to disable/enable it at runtime
+- Format internal storage if mounting fails instead of hanging (even if not empty)
+
+Board Support:
+- Freenove's ESP32-S3 display board by @Rohansi
 
 0.10.0
 ======
@@ -495,4 +549,3 @@ Known issues:
 0.0.1
 =====
 - Initial release
-

@@ -43,9 +43,7 @@ class CalibrateIMUActivity(Activity):
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(3), lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_flex_align(lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER)
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(screen)
+        lv.group_get_default().add_obj(screen)
 
         # Title
         self.title_label = lv.label(screen)
@@ -221,4 +219,3 @@ class CalibrateIMUActivity(Activity):
         self.set_state(CalibrationState.ERROR)
         self.status_label.set_text(f"Calibration failed:\n\n{error_msg}")
         self.detail_label.set_text("")
-

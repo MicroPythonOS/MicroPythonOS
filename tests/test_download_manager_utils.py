@@ -6,39 +6,18 @@ Tests the network error detection and resume position helpers.
 
 import unittest
 import os
-import sys
 
-# Handle both CPython and MicroPython path handling
+# unittest.sh initializes mpos and sets up sys.path before inlining this file.
+from mpos import DownloadManager
+
 try:
-    # CPython has os.path
-    from os.path import join, dirname
+    from os.path import join
 except ImportError:
-    # MicroPython doesn't have os.path, use string concatenation
     def join(*parts):
-        return '/'.join(parts)
-    def dirname(path):
-        parts = path.split('/')
-        return '/'.join(parts[:-1]) if len(parts) > 1 else '.'
+        return "/".join(parts)
 
-# Add parent directory to path for imports
-sys.path.insert(0, join(dirname(__file__), '..', 'internal_filesystem', 'lib'))
-
-# Import functions directly from the module file to avoid mpos.__init__ dependencies
-try:
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "download_manager",
-        join(dirname(__file__), '..', 'internal_filesystem', 'lib', 'mpos', 'net', 'download_manager.py')
-    )
-    download_manager = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(download_manager)
-except (ImportError, AttributeError):
-    # MicroPython doesn't have importlib.util, import directly
-    sys.path.insert(0, join(dirname(__file__), '..', 'internal_filesystem', 'lib', 'mpos', 'net'))
-    import download_manager
-
-is_network_error = download_manager.is_network_error
-get_resume_position = download_manager.get_resume_position
+is_network_error = DownloadManager.is_network_error
+get_resume_position = DownloadManager.get_resume_position
 
 
 class TestIsNetworkError(unittest.TestCase):

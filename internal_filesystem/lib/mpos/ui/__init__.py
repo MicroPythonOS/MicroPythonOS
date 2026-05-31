@@ -11,6 +11,7 @@ from .event import get_event_name, print_event
 from .setting_activity import SettingActivity
 from .settings_activity import SettingsActivity
 from .widget_animator import WidgetAnimator
+from .font_manager import FontManager
 from . import focus_direction
 
 # Ordered list of additional symbols, see ../lvgl_micropython/lib_lvgl_src_font/README.md
@@ -56,6 +57,7 @@ __all__ = [
     "SettingActivity",
     "SettingsActivity",
     "WidgetAnimator",
+    "FontManager",
     "focus_direction",
     "SEARCH_SYMBOL",
     "HEART_SYMBOL",

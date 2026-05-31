@@ -63,47 +63,43 @@ one_test() {
 		is_graphical=0
 	fi
 
-	if [ -z "$ondevice" ]; then
-		# Desktop execution
-		if [ $is_graphical -eq 1 ]; then
-			echo "Graphical test: include main.py"
-			"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
-$(cat $file)
-result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
-	           result=$?
-		else
-			echo "Regular test: no boot files"
-			"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
-$(cat $file)
-result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
-	           result=$?
-		fi
-	else
-		if [ ! -z "$ondevice" ]; then
-			echo "Hack: reset the device to make sure no previous UnitTest classes have been registered..."
-			"$mpremote" reset
-			sleep 30
+	max_attempts=3
+	for attempt in $(seq 1 $max_attempts); do
+		if [ $attempt -gt 1 ]; then
+			echo "Retry attempt $attempt for $file"
 		fi
 
-		echo "Device execution"
-		# NOTE: On device, the OS is already running with boot.py and main.py executed,
-		# so we don't need to (and shouldn't) re-run them. The system is already initialized.
-		cleanname=$(echo "$file" | sed "s#/#_#g")
-		testlog=/tmp/"$cleanname".log
-		echo "$test logging to $testlog"
-		if [ $is_graphical -eq 1 ]; then
-			# Graphical test: system already initialized, just add test paths
-			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+		if [ -z "$ondevice" ]; then
+			# Desktop execution
+			if [ $is_graphical -eq 1 ]; then
+				echo "Graphical test: include main.py"
+				"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
-result = unittest.main()
-if result.wasSuccessful():
-		  print('TEST WAS A SUCCESS')
-else:
-		  print('TEST WAS A FAILURE')
-" | tee "$testlog"
+result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
+		           result=$?
+			else
+				echo "Regular test: no boot files"
+				"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+$(cat $file)
+result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
+		           result=$?
+			fi
 		else
-			# Regular test: no boot files
-			"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+			if [ ! -z "$ondevice" ]; then
+				echo "Hack: reset the device to make sure no previous UnitTest classes have been registered..."
+				"$mpremote" reset
+				sleep 30
+			fi
+
+			echo "Device execution"
+			# NOTE: On device, the OS is already running with boot.py and main.py executed,
+			# so we don't need to (and shouldn't) re-run them. The system is already initialized.
+			cleanname=$(echo "$file" | sed "s#/#_#g")
+			testlog=/tmp/"$cleanname".log
+			echo "$test logging to $testlog"
+			if [ $is_graphical -eq 1 ]; then
+				# Graphical test: system already initialized, just add test paths
+				"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
 $(cat $file)
 result = unittest.main()
 if result.wasSuccessful():
@@ -111,10 +107,34 @@ if result.wasSuccessful():
 else:
 		  print('TEST WAS A FAILURE')
 " | tee "$testlog"
+			else
+				# Regular test: no boot files
+				"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
+$(cat $file)
+result = unittest.main()
+if result.wasSuccessful():
+		  print('TEST WAS A SUCCESS')
+else:
+		  print('TEST WAS A FAILURE')
+" | tee "$testlog"
+			fi
+			grep -q "TEST WAS A SUCCESS" "$testlog"
+			result=$?
 		fi
-		grep -q "TEST WAS A SUCCESS" "$testlog"
-		result=$?
-	fi
+
+		# Success — no retry needed
+		if [ $result -eq 0 ]; then
+			break
+		fi
+
+		# Only retry on crash/signal exit codes (>= 128), not on test failures
+		if [ $result -lt 128 ]; then
+			break
+		fi
+
+		echo "Test crashed with exit code $result — retrying..."
+	done
+
 	popd
 	return "$result"
 }

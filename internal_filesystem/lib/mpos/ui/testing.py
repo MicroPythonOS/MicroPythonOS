@@ -42,6 +42,7 @@ Usage in apps:
 """
 
 import lvgl as lv
+import sys
 import time
 
 try:
@@ -320,7 +321,7 @@ def wait_for_render(iterations=10):
         time.sleep(0.01)  # Small delay between iterations
 
 
-def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565):
+def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565):
     """
     Capture screenshot of current screen using LVGL snapshot.
 
@@ -350,7 +351,8 @@ def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FO
         from mpos.ui.testing import capture_screenshot
         capture_screenshot("tests/screenshots/home.raw")
     """
-    print(f"capture_screenshot writing to {filepath}")
+    if filepath:
+        print(f"capture_screenshot writing to {filepath}")
 
     # Calculate buffer size based on color format
     if color_format == lv.COLOR_FORMAT.RGB565:
@@ -367,11 +369,93 @@ def capture_screenshot(filepath, width=320, height=240, color_format=lv.COLOR_FO
     # Take snapshot of active screen
     lv.snapshot_take_to_buf(lv.screen_active(), color_format, image_dsc, buffer, size)
 
-    # Save to file
-    with open(filepath, "wb") as f:
-        f.write(buffer)
+    # Composite visible top layer children onto the screenshot
+    _composite_top_layer(buffer, width, height, bytes_per_pixel, color_format)
+
+    if filepath:
+        with open(filepath, "wb") as f:
+            f.write(buffer)
 
     return buffer
+
+
+def _composite_top_layer(dst, w, h, bpp, fmt):
+    """Composite visible lv.layer_top() children onto dst buffer."""
+    top = lv.layer_top()
+    n = top.get_child_count()
+    for i in range(n):
+        c = top.get_child(i)
+        if c.has_flag(lv.obj.FLAG.HIDDEN):
+            continue
+        ox, oy = c.get_x(), c.get_y()
+        cw, ch = c.get_width(), c.get_height()
+        if ox + cw <= 0 or oy + ch <= 0 or ox >= w or oy >= h:
+            continue
+        tb = bytearray(w * h * 4)
+        td = lv.image_dsc_t()
+        lv.snapshot_take_to_buf(c, lv.COLOR_FORMAT.ARGB8888, td, tb, w * h * 4)
+        _blend_child(dst, tb, ox, oy, cw, ch, w, h, bpp, fmt)
+
+
+def _blend_child(dst, src_argb, ox, oy, cw, ch, w, h, bpp, fmt):
+    """Blend ARGB8888 child snapshot onto dst at offset (ox, oy). Byte order: B,G,R,A."""
+    px0 = max(0, -ox)
+    px1 = min(cw, w - ox)
+    py0 = max(0, -oy)
+    py1 = min(ch, h - oy)
+    for py in range(py0, py1):
+        sy = oy + py
+        for px in range(px0, px1):
+            sx = ox + px
+            si = (py * w + px) * 4
+            a = src_argb[si + 3]
+            if a == 0:
+                continue
+            di = (sy * w + sx) * bpp
+            if fmt == lv.COLOR_FORMAT.RGB888 and a >= 254:
+                dst[di] = src_argb[si]
+                dst[di + 1] = src_argb[si + 1]
+                dst[di + 2] = src_argb[si + 2]
+            elif fmt == lv.COLOR_FORMAT.RGB565 and a >= 254:
+                r = src_argb[si + 2]
+                g = src_argb[si + 1]
+                b = src_argb[si]
+                v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+                dst[di] = v & 0xFF
+                dst[di + 1] = (v >> 8) & 0xFF
+            elif fmt == lv.COLOR_FORMAT.ARGB8888 and a >= 254:
+                dst[di] = src_argb[si]
+                dst[di + 1] = src_argb[si + 1]
+                dst[di + 2] = src_argb[si + 2]
+                dst[di + 3] = 255
+            else:
+                ai = 255 - a
+                if fmt == lv.COLOR_FORMAT.RGB888:
+                    dst[di] = (src_argb[si] * a + dst[di] * ai) // 255
+                    dst[di + 1] = (src_argb[si + 1] * a + dst[di + 1] * ai) // 255
+                    dst[di + 2] = (src_argb[si + 2] * a + dst[di + 2] * ai) // 255
+                elif fmt == lv.COLOR_FORMAT.RGB565:
+                    cur = dst[di] | (dst[di + 1] << 8)
+                    rd = ((cur >> 11) & 0x1F) << 3
+                    gd = ((cur >> 5) & 0x3F) << 2
+                    bd = (cur & 0x1F) << 3
+                    r = (src_argb[si + 2] * a + rd * ai) // 255
+                    g = (src_argb[si + 1] * a + gd * ai) // 255
+                    b = (src_argb[si] * a + bd * ai) // 255
+                    v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+                    dst[di] = v & 0xFF
+                    dst[di + 1] = (v >> 8) & 0xFF
+                elif fmt == lv.COLOR_FORMAT.ARGB8888:
+                    ad = dst[di + 3]
+                    rd = dst[di + 2]
+                    gd = dst[di + 1]
+                    bd = dst[di]
+                    oa = a + ad * ai // 255
+                    if oa:
+                        dst[di] = (src_argb[si] * a + bd * ad * ai // 255) // oa
+                        dst[di + 1] = (src_argb[si + 1] * a + gd * ad * ai // 255) // oa
+                        dst[di + 2] = (src_argb[si + 2] * a + rd * ad * ai // 255) // oa
+                    dst[di + 3] = oa
 
 
 def get_all_widgets_with_text(obj, widgets=None):
@@ -1034,10 +1118,11 @@ def simulate_click(x, y, press_duration_ms=100):
     _touch_y = y
     _touch_pressed = True
 
-    # Process the press event
-    lv.task_handler()
+    # Process the press event via direct indev read (reliable, doesn't depend
+    # on indev read timer period alignment with lv.task_handler)
+    _touch_indev.read()
     time.sleep(0.02)
-    lv.task_handler()
+    _touch_indev.read()
 
     # Wait for press duration
     time.sleep(press_duration_ms / 1000.0)
@@ -1045,17 +1130,22 @@ def simulate_click(x, y, press_duration_ms=100):
     # Release the touch
     _touch_pressed = False
 
-    # Process the release event - this triggers the CLICKED event
-    lv.task_handler()
+    # Process the release event via direct indev read
+    _touch_indev.read()
     time.sleep(0.02)
-    lv.task_handler()
+    _touch_indev.read()
     time.sleep(0.02)
-    lv.task_handler()
+    _touch_indev.read()
 
 
 def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
     """
     Simulate a drag gesture from start to end coordinates.
+
+    On desktop (Linux/macOS/Windows), uses a stepped approach with
+    discrete click+render at each interpolated point, which is proven
+    reliable with the LVGL unix port.  On device (ESP32), uses a
+    continuous press-and-drag for real touch input.
 
     Args:
         start_x: Starting X coordinate.
@@ -1065,6 +1155,37 @@ def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
         steps: Number of intermediate steps to simulate (default: 5).
         step_delay_ms: Delay between steps in milliseconds (default: 20).
     """
+    if sys.platform in ("linux", "darwin", "win32"):
+        global _touch_x, _touch_y, _touch_pressed
+
+        _ensure_touch_indev()
+        n = max(steps, 1)
+
+        _touch_x = start_x
+        _touch_y = start_y
+        _touch_pressed = True
+
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        time.sleep(step_delay_ms / 1000.0)
+
+        for i in range(1, n + 1):
+            _touch_x = start_x + (end_x - start_x) * i // n
+            _touch_y = start_y + (end_y - start_y) * i // n
+            _touch_indev.read()
+            time.sleep(0.01)
+            _touch_indev.read()
+            time.sleep(step_delay_ms / 1000.0)
+
+        _touch_pressed = False
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        return
+
     global _touch_x, _touch_y, _touch_pressed
 
     _ensure_touch_indev()
@@ -1290,6 +1411,188 @@ def find_text_on_screen(text):
     return find_label_with_text(lv.screen_active(), text) is not None
 
 
+def get_screen_widget_tree(obj=None, depth=0):
+    """
+    Dump the full widget tree with positions, text, types, and states.
+
+    Returns a JSON-serializable list of dicts describing every widget
+    in the tree. Useful for test assertions and screen understanding.
+    When called without arguments, dumps both lv.screen_active() and
+    lv.layer_top() with a \"layer\" key to distinguish them.
+
+    Args:
+        obj: Root LVGL object (default: None — dumps all layers)
+        depth: Current recursion depth (internal)
+
+    Returns:
+        list: List of widget dicts with keys:
+              - type: widget class name (str)
+              - text: text content (str or None)
+              - x1, y1, x2, y2: bounding box coordinates
+              - center_x, center_y: midpoint coordinates
+              - w, h: width and height
+              - clickable: bool (has FLAG.CLICKABLE)
+              - hidden: bool (has FLAG.HIDDEN)
+              - state: list of active state names
+              - children: list of child widget dicts
+              - depth: nesting depth
+              - layer: "active" or "top" (only when called without args)
+
+    Example:
+        from mpos.ui.testing import get_screen_widget_tree
+        import json
+        tree = get_screen_widget_tree()
+        print(json.dumps(tree))
+        # Find all clickable buttons with text:
+        buttons = [w for w in tree if w.get('clickable') and w.get('text')]
+    """
+    if obj is None:
+        result = []
+        for layer_name, layer_obj in (
+            ("active", lv.screen_active()),
+            ("top", lv.layer_top()),
+        ):
+            for entry in _dump_widget_tree(layer_obj, 0):
+                entry["layer"] = layer_name
+                result.append(entry)
+        return result
+    return _dump_widget_tree(obj, depth)
+
+
+ALL_FLAGS = (
+    "CLICKABLE", "CLICK_FOCUSABLE", "ADV_HITTEST", "PRESS_LOCK",
+    "SCROLLABLE", "SCROLL_CHAIN", "SCROLL_ELASTIC", "SCROLL_MOMENTUM",
+    "SCROLL_ONE", "SCROLL_WITH_ARROW", "SNAPPABLE", "FLOATING",
+    "EVENT_BUBBLE", "HIDDEN", "IGNORE_LAYOUT",
+)
+ALL_STATES = (
+    "CHECKED", "DISABLED", "FOCUSED", "FOCUS_KEY",
+    "EDITED", "PRESSED", "SCROLLED",
+    "USER_1", "USER_2", "USER_3", "USER_4", "USER_5", "USER_6",
+)
+
+
+def _dump_widget_tree(obj, depth):
+    """Recursive helper that dumps a single object tree branch."""
+    info = {"depth": depth}
+
+    # Widget type / class name
+    try:
+        info["type"] = obj.__class__.__name__
+    except Exception:
+        info["type"] = "unknown"
+
+    # Text content
+    try:
+        if hasattr(obj, "get_text"):
+            t = obj.get_text()
+            if t:
+                info["text"] = t
+    except Exception:
+        pass
+
+    # Coordinates
+    try:
+        area = lv.area_t()
+        obj.get_coords(area)
+        info["x1"] = area.x1
+        info["y1"] = area.y1
+        info["x2"] = area.x2
+        info["y2"] = area.y2
+        info["w"] = area.x2 - area.x1
+        info["h"] = area.y2 - area.y1
+        info["center_x"] = (area.x1 + area.x2) // 2
+        info["center_y"] = (area.y1 + area.y2) // 2
+    except Exception:
+        pass
+
+    # All flags
+    flag_names = []
+    for n in ALL_FLAGS:
+        try:
+            fl = getattr(lv.obj.FLAG, n, None)
+            if fl is not None and obj.has_flag(fl):
+                flag_names.append(n.lower())
+        except Exception:
+            pass
+    if flag_names:
+        info["flags"] = flag_names
+    info["clickable"] = "clickable" in flag_names
+    info["hidden"] = "hidden" in flag_names
+    info["scrollable"] = "scrollable" in flag_names
+    info["floating"] = "floating" in flag_names
+    info["event_bubble"] = "event_bubble" in flag_names
+
+    # All states
+    state_names = []
+    for n in ALL_STATES:
+        try:
+            fl = getattr(lv.STATE, n, None)
+            if fl is not None and obj.has_state(fl):
+                state_names.append(n.lower())
+        except Exception:
+            pass
+    if state_names:
+        info["state"] = state_names
+
+    # Scroll position
+    try:
+        sx = obj.get_scroll_x()
+        sy = obj.get_scroll_y()
+        if sx or sy:
+            info["scroll_x"] = sx
+            info["scroll_y"] = sy
+    except Exception:
+        pass
+
+    # Opacity
+    try:
+        opa = obj.get_style_opa(lv.PART.MAIN)
+        if opa != lv.OPA.COVER:
+            info["opa"] = opa
+    except Exception:
+        pass
+
+    # Widget-specific fields
+    t = info.get("type", "")
+    try:
+        if t in ("slider", "arc", "bar", "meter"):
+            info["value"] = obj.get_value()
+    except Exception:
+        pass
+    try:
+        if t == "dropdown":
+            info["selected"] = obj.get_selected()
+            info["options"] = obj.get_options()
+    except Exception:
+        pass
+    try:
+        if t == "textarea":
+            info["one_line"] = obj.get_one_line()
+            info["cursor_pos"] = obj.get_cursor_pos()
+    except Exception:
+        pass
+    try:
+        if t == "buttonmatrix":
+            info["selected_btn"] = obj.get_selected_button()
+    except Exception:
+        pass
+
+    # Children
+    try:
+        n = obj.get_child_count()
+        if n:
+            children = []
+            for i in range(n):
+                child = obj.get_child(i)
+                children.extend(_dump_widget_tree(child, depth + 1))
+            info["children"] = children
+    except Exception:
+        pass
+
+    return [info]
+
+
 def click_keyboard_button(keyboard, button_text, use_direct=True):
     """
     Click a keyboard button reliably.
@@ -1345,34 +1648,36 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
         return False
     
     if use_direct and is_mpos_keyboard:
-        # For MposKeyboard, directly manipulate the textarea
-        # This is the most reliable approach for testing
-        textarea = keyboard._textarea
-        if textarea is None:
-            print(f"click_keyboard_button: No textarea connected to keyboard")
-            return False
-        
-        current_text = textarea.get_text()
-        
-        # Handle special keys (matching keyboard.py logic)
-        if button_text == lv.SYMBOL.BACKSPACE:
-            new_text = current_text[:-1]
-        elif button_text == " " or button_text == keyboard.LABEL_SPACE:
-            new_text = current_text + " "
-        elif button_text in [lv.SYMBOL.UP, lv.SYMBOL.DOWN, keyboard.LABEL_LETTERS,
-                            keyboard.LABEL_NUMBERS_SPECIALS, keyboard.LABEL_SPECIALS,
-                            lv.SYMBOL.OK]:
-            # Mode switching or OK - don't modify text
-            print(f"click_keyboard_button: '{button_text}' is a control key, not adding to textarea")
-            wait_for_render(10)
-            return True
-        else:
-            # Regular character
-            new_text = current_text + button_text
-        
-        textarea.set_text(new_text)
+        # For MposKeyboard, run through its event handler logic so behavior
+        # matches real typing (including mode switching and emoji font updates).
+        class _SyntheticKeyboardTarget:
+            def __init__(self, idx, text):
+                self._idx = idx
+                self._text = text
+
+            def get_selected_button(self):
+                return self._idx
+
+            def get_button_text(self, idx):
+                if idx == self._idx:
+                    return self._text
+                return None
+
+        class _SyntheticKeyboardEvent:
+            def __init__(self, target):
+                self._target = target
+
+            def get_code(self):
+                return lv.EVENT.VALUE_CHANGED
+
+            def get_target_obj(self):
+                return self._target
+
+        target = _SyntheticKeyboardTarget(button_idx, button_text)
+        event = _SyntheticKeyboardEvent(target)
+        keyboard._handle_events(event)
         wait_for_render(10)
-        print(f"click_keyboard_button: Clicked '{button_text}' at index {button_idx} using direct textarea manipulation")
+        print(f"click_keyboard_button: Clicked '{button_text}' at index {button_idx} using direct handler simulation")
     else:
         # Use coordinate-based clicking
         coords = get_keyboard_button_coords(keyboard, button_text)
@@ -1385,3 +1690,74 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
             return False
     
     return True
+
+
+def get_all_children(parent):
+    result = []
+    count = parent.get_child_count()
+    for i in range(count):
+        child = parent.get_child(i)
+        result.append(child)
+        result.extend(get_all_children(child))
+    return result
+
+
+def simulate_long_press(x, y, duration_ms=1000):
+    simulate_click(x, y, press_duration_ms=duration_ms)
+
+
+def wait_for_text(text, timeout=10, interval=0.1):
+    """
+    Wait for text to appear on screen, polling periodically.
+
+    More robust than wait_for_render(N) because it actually checks
+    for the desired condition instead of waiting a fixed amount of time.
+    Handles slow CI machines gracefully — returns as soon as text appears.
+
+    Args:
+        text: Text to search for (substring match via verify_text_present)
+        timeout: Maximum time to wait in seconds (default: 10)
+        interval: Time between checks in seconds (default: 0.1)
+
+    Returns:
+        True if text found within timeout, False otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        if verify_text_present(lv.screen_active(), text):
+            return True
+        wait_for_render(5)
+        time.sleep(interval)
+    print(f"wait_for_text: '{text}' not found after {timeout}s")
+    return False
+
+
+def wait_for_widget(find_func, timeout=10, interval=0.1):
+    """
+    Wait for a widget condition, polling periodically.
+
+    find_func should be a callable that returns a widget or truthy value
+    when the condition is met, and None/falsy otherwise.  For example::
+
+        btn = wait_for_widget(
+            lambda: find_button_with_text(lv.screen_active(), "Submit"),
+            timeout=5
+        )
+
+    Args:
+        find_func: Callable that returns a widget or truthy value
+        timeout: Maximum time to wait in seconds (default: 10)
+        interval: Time between checks in seconds (default: 0.1)
+
+    Returns:
+        The result of find_func if found within timeout, None otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        result = find_func()
+        if result:
+            return result
+        wait_for_render(5)
+        time.sleep(interval)
+    print(f"wait_for_widget: condition not met after {timeout}s")
+    return None

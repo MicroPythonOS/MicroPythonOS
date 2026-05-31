@@ -807,6 +807,9 @@ class MockDownloadManager:
                 bytes_since_speed_update = 0
         
         if outfile or chunk_callback:
+            if outfile:
+                with open(outfile, "wb") as f:
+                    f.write(self.download_data)
             return True
         else:
             return b''.join(chunks)
@@ -888,7 +891,7 @@ class MockApps:
         return True
     
     @staticmethod
-    def execute_script(script_source, is_file, classname, cwd=None, app_fullname=None):
+    def execute_script(script_source, classname, cwd=None, app_fullname=None):
         """Mock execute_script function."""
         return True
 
@@ -912,7 +915,7 @@ class MockAppManager:
         return True
     
     @staticmethod
-    def execute_script(script_source, is_file, classname, cwd=None, app_fullname=None):
+    def execute_script(script_source, classname, cwd=None, app_fullname=None):
         """Mock execute_script function."""
         return True
 
@@ -969,6 +972,19 @@ class MockEditor:
 
     def put_dict(self, key, value):
         self.pending[key] = value
+
+    def put_dict_item(self, dict_key, item_key, config):
+        if dict_key not in self.pending:
+            existing = self.prefs._get_value(dict_key, {})
+            self.pending[dict_key] = dict(existing)
+        if isinstance(config, dict):
+            self.pending[dict_key][item_key] = config
+
+    def remove_dict_item(self, dict_key, item_key):
+        if dict_key not in self.pending:
+            existing = self.prefs._get_value(dict_key, {})
+            self.pending[dict_key] = dict(existing)
+        self.pending[dict_key].pop(item_key, None)
 
     def put_list(self, key, value):
         self.pending[key] = value

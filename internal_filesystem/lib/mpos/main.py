@@ -42,7 +42,7 @@ def single_address_i2c_scan(i2c_bus, address):
     Returns:
         True if a device responds at the specified address, False otherwise
     """
-    print(f"Attempt to write a single byte to I2C bus address 0x{address:02x}...")
+    print(f"Attempting to write a single byte to I2C bus address 0x{address:02x}...")
     try:
         # Attempt to write a single byte to the address
         # This will raise an exception if no device responds
@@ -206,6 +206,12 @@ def detect_board():
                     return "waveshare_esp32_s3_touch_lcd_2"
                 restore_i2c(sda=48, scl=47) # fix pin 47 (data6) and 48 (data7) breaking lilygo_t_display_s3's display
                 
+            print("freenove_esp32s3_display ?")
+            if i2c0 := fail_save_i2c(sda=16, scl=15):
+                if single_address_i2c_scan(i2c0, 0x38): # FT6336G touch controller
+                    return "freenove_esp32s3_display"
+                restore_i2c(sda=16, scl=15)
+
             print("fri3d_2024 ?")
             if i2c0 := fail_save_i2c(sda=9, scl=18):
                 if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
@@ -253,6 +259,12 @@ except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
 
+lv.init()
+focusgroup = lv.group_get_default()
+if not focusgroup:
+    focusgroup = lv.group_create()
+    focusgroup.set_default()
+
 board = detect_board()
 if board:
     print(f"Detected {board} system, importing mpos.board.{board}")
@@ -279,8 +291,7 @@ mpos.ui.handle_top_swipe()
 # Clear top menu, notification bar, swipe back and swipe down buttons
 # Ideally, these would be stored in a different focusgroup that is used when the user opens the drawer
 focusgroup = lv.group_get_default()
-if focusgroup: # on esp32 this may not be set
-    focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
+focusgroup.remove_all_objs() #  might be better to save and restore the group for "back" actions
 
 # Custom exception handler that does not deinit() the TaskHandler because then the UI hangs:
 def custom_exception_handler(e):
@@ -290,7 +301,6 @@ def custom_exception_handler(e):
     # No need to deinit() and re-init LVGL:
     #mpos.ui.task_handler.deinit() # default task handler does this, but then things hang
     #focusgroup = lv.group_get_default()
-    #if focusgroup: # on esp32 this may not be set
         # otherwise it does focus_next and then crashes while doing lv.deinit()
         #focusgroup.remove_all_objs()
         #focusgroup.delete()

@@ -1,0 +1,21 @@
+{
+    "name": "Space Invaders",
+    "publisher": "MicroPythonOS",
+    "short_description": "Classic space invaders shooter",
+    "long_description": "Defend Earth from invading aliens in this action-packed space shooter. Clear waves of invaders, earn high scores, and save your progress.",
+    "fullname": "com.micropythonos.space_invaders",
+    "version": "0.1.0",
+    "category": "games",
+    "activities": [
+        {
+            "entrypoint": "assets/space_invaders.py",
+            "classname": "SpaceInvaders",
+            "intent_filters": [
+                {
+                    "action": "main",
+                    "category": "launcher"
+                }
+            ]
+        }
+    ]
+}

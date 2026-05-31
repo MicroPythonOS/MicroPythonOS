@@ -226,8 +226,7 @@ def keypad_read_cb(indev, data):
         elif current_key == lv.KEY.DOWN:
             mpos.ui.focus_direction.move_focus_direction(180)
 
-group = lv.group_create()
-group.set_default()
+group = lv.group_get_default()
 
 # Create and set up the input device
 indev = lv.indev_create()
@@ -325,6 +324,8 @@ from mpos import SensorManager
 # Create I2C bus for IMU (different pins from display)
 from machine import I2C
 imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
+from mpos import DeviceManager
+DeviceManager.registerBus(i2c_bus=imu_i2c) # register because Communicator needs it
 SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 # === LED HARDWARE ===
@@ -332,6 +333,40 @@ import mpos.lights as LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12)
 LightsManager.set_led_num(5)
+
+# Communicator add-on keyboard input (UART HID reports -> LVGL keypad indev)
+try:
+    print("Checking for 2024 or 2026 Communicator Add-On over I2C")
+    from machine import UART
+
+    COMMUNICATOR_2024_ADDR = const(0x38)
+    COMMUNICATOR_2026_ADDR = const(0x39)
+
+    comm_i2c_bus = DeviceManager.getBus(type="i2c")
+    comm_uart = UART(2, baudrate=115200, rx=Pin(44), tx=Pin(43))
+
+    communicator = None
+    i2c_devices = comm_i2c_bus.scan()
+
+    if COMMUNICATOR_2026_ADDR in i2c_devices:
+        from drivers.fri3d.communicator import Communicator2026
+        communicator = Communicator2026(i2c_bus=comm_i2c_bus, uart_bus=comm_uart,use_irq=False)
+    elif COMMUNICATOR_2024_ADDR in i2c_devices:
+        from drivers.fri3d.communicator import Communicator2024
+        communicator = Communicator2024(i2c_bus=comm_i2c_bus,uart_bus=comm_uart,use_irq=False)
+
+    if communicator is not None:
+        print("Disabling UART REPL because it receives data from the Communicator Add-On. Use esp.uart_repl(True) to re-enable.")
+        import esp
+        esp.uart_repl(False)
+        print("Initializing Fri3dCommunicatorKeyboard and registering as indev")
+        from drivers.indev.fri3d_communicator_keyboard import Fri3dCommunicatorKeyboard
+        communicator_indev = Fri3dCommunicatorKeyboard(communicator)
+        communicator_indev.set_group(group)
+        communicator_indev.enable(True)
+        InputManager.register_indev(communicator_indev)
+except Exception as e:
+    print(f"communicator keyboard init got exception: {e}")
 
 # === STARTUP "WOW" EFFECT ===
 import time

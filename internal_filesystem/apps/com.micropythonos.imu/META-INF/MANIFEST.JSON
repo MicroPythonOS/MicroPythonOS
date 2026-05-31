@@ -1,24 +1,21 @@
 {
-"name": "IMU",
-"publisher": "MicroPythonOS",
-"short_description": "Inertial Measurement Unit Visualization",
-"long_description": "Visualize data from the Intertial Measurement Unit, also known as the accellerometer.",
-"icon_url": "https://apps.micropythonos.com/apps/com.micropythonos.imu/icons/com.micropythonos.imu_0.1.1_64x64.png",
-"download_url": "https://apps.micropythonos.com/apps/com.micropythonos.imu/mpks/com.micropythonos.imu_0.1.1.mpk",
-"fullname": "com.micropythonos.imu",
-"version": "0.1.1",
-"category": "hardware",
-"activities": [
-    {
-      "entrypoint": "assets/imu.py",
-      "classname": "IMU",
-      "intent_filters": [
+    "name": "IMU",
+    "publisher": "MicroPythonOS",
+    "short_description": "Inertial Measurement Unit Visualization",
+    "long_description": "Visualize data from the Intertial Measurement Unit, also known as the accellerometer.",
+    "fullname": "com.micropythonos.imu",
+    "version": "0.1.2",
+    "category": "hardware",
+    "activities": [
         {
-          "action": "main",
-          "category": "launcher"
+            "entrypoint": "assets/imu.py",
+            "classname": "IMU",
+            "intent_filters": [
+                {
+                    "action": "main",
+                    "category": "launcher"
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }
-
