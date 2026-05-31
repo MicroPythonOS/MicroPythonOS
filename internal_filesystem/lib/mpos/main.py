@@ -344,7 +344,7 @@ else:
 
 # Start boot services (apps declaring boot_completed in manifest)
 try:
-    from mpos.app.system_services import WifiBootService
+    import mpos.app.system_services
     AppManager.start_boot_services()
 except Exception as e:
     print(f"Couldn't start boot services: {e}")
@@ -355,12 +355,6 @@ async def asyncio_repl():
     print("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
     await aiorepl.task(g={'lv': lv, 'mpos': mpos}, prompt=">>> ") # same prompt as normal REPL, not to confuse ViperIDE
 TaskManager.create_task(asyncio_repl()) # only gets started after TaskManager.start()
-
-try:
-    from mpos import WebServer # could be a boot_service
-    WebServer.auto_start()
-except Exception as e:
-    print(f"Could not start webserver - this is normal on desktop systems: {e}")
 
 async def ota_rollback_cancel():
     try:

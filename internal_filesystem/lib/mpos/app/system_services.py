@@ -12,4 +12,12 @@ class WifiBootService(Service):
         _thread.start_new_thread(WifiService.auto_connect, ())
 
 
+class WebServerBootService(Service):
+
+    def onStart(self, intent):
+        from ..webserver.webserver import WebServer
+        WebServer.auto_start()
+
+
 AppManager.register_service("boot_completed", WifiBootService, fullname="com.micropythonos.system")
+AppManager.register_service("boot_completed", WebServerBootService, fullname="com.micropythonos.system")
