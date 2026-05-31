@@ -1,24 +1,20 @@
-from mpos import Service, ConnectivityManager, TaskManager
+from mpos import Service, TaskManager
+
+try:
+    from osupdate_core import UpdateManager
+except ImportError as e:
+    UpdateManager = None
+    print(f"OSUpdateService: osupdate_core unavailable: {e}")
 
 
 class OSUpdateService(Service):
 
-    def __init__(self):
-        super().__init__()
-        self._running = False
-
     def onStart(self, intent):
-        self._running = True
-        TaskManager.create_task(self._boot_loop())
+        if UpdateManager is None:
+            return
+        TaskManager.create_task(UpdateManager.get_instance().start())
 
     def onDestroy(self):
-        self._running = False
-
-    async def _boot_loop(self):
-        cm = ConnectivityManager.get()
-        while self._running:
-            await TaskManager.sleep(30)
-            if cm.is_online():
-                print("OSUpdateService: network connected")
-            else:
-                print("OSUpdateService: network not connected")
+        if UpdateManager is None:
+            return
+        UpdateManager.get_instance().stop()

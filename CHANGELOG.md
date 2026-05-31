@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Builtin Apps:
+- OSUpdate: redesign with split between UI and Service logic
+
 Frameworks:
 - Add Services with intent filter boot_completed
 
