@@ -1,6 +1,8 @@
 Future release (next version)
 =====
 
+OS:
+- build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
 Put unreleased changes here!
 
 0.11.2
