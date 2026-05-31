@@ -15,12 +15,10 @@ print(f"{sys.implementation=}")
 # Ensure os.path is available before starting apps.
 # internal_filesystem/lib/os/__init__.py provides a pure-Python os package
 # (from micropython-lib) that wraps uos and exposes os.path.
-import os as _os
-sys.modules["os"] = _os
-sys.modules["uos"] = _os
+import os
+sys.modules["uos"] = os
 
 print("Free space on root filesystem:")
-import os
 stat = os.statvfs("/")
 total_space = stat[0] * stat[2]
 free_space = stat[0] * stat[3]
