@@ -7,7 +7,7 @@ from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
 from .input_manager import InputManager
 from . import focus_direction
-from .widget_animator import WidgetAnimator
+from .widget_animator import SlidePanel
 from mpos.content.app_manager import AppManager
 from mpos.notification_manager import NotificationManager
 
@@ -17,21 +17,18 @@ BATTERY_ICON_UPDATE_INTERVAL = 15000 # not too often, but not too short, otherwi
 TEMPERATURE_UPDATE_INTERVAL = 2000
 MEMFREE_UPDATE_INTERVAL = 5000 # not too frequent because there's a forced gc.collect() to give it a reliable value
 
-DRAWER_ANIM_DURATION=300
-
-
-hide_bar_animation = None
-show_bar_animation = None
-show_bar_animation_start_value = -AppearanceManager.NOTIFICATION_BAR_HEIGHT
-show_bar_animation_end_value = 0
-hide_bar_animation_start_value = show_bar_animation_end_value
-hide_bar_animation_end_value = show_bar_animation_start_value
-
-drawer=None
-drawer_open=False
-bar_open=False
+BAR_ANIM_DURATION = 1000
+DRAWER_ANIM_DURATION = 1000
 
 scroll_start_y = None
+
+# SlidePanel instances (created in create_notification_bar / create_drawer)
+_bar_panel = None
+_drawer_panel = None
+
+# State variables (kept in sync with panel.is_open for external code)
+drawer_open = False
+bar_open = False
 
 # Widgets:
 notification_bar = None
@@ -197,65 +194,67 @@ def toggle_drawer():
         open_drawer()
 
 def open_drawer():
-    global drawer_open, drawer
-    if not drawer_open:
-        open_bar()
-        drawer_open=True
-        WidgetAnimator.show_widget(drawer, anim_type="slide_down", duration=1000, delay=0)
-        drawer.scroll_to(0,0,False) # make sure it's at the top, not scrolled down
-        _add_focusables_to_group(_drawer_focusables)
-        if _drawer_slider:
-            lv.group_focus_obj(_drawer_slider)
+    global drawer_open
+    if _drawer_panel is None or drawer_open:
+        return
+    open_bar()
+    drawer_open = True
+    _drawer_panel.show()
+    _drawer_panel.widget.scroll_to(0, 0, False)  # make sure it's at the top
+    _add_focusables_to_group(_drawer_focusables)
+    if _drawer_slider:
+        lv.group_focus_obj(_drawer_slider)
 
 def close_drawer(to_launcher=False):
-    global drawer_open, drawer
-    if drawer_open:
-        from mpos.activity_navigator import get_foreground_app
-        drawer_open=False
-        fg = get_foreground_app()
-        print(f"topmenu.py foreground app: {fg}")
-        if not to_launcher and fg is not None and not "launcher" in fg:
-            print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {get_foreground_app()}")
-            close_bar(False)
-        WidgetAnimator.hide_widget(drawer, anim_type="slide_up", duration=1000, delay=0)
-        _remove_focusables_from_group(_drawer_focusables)
+    global drawer_open
+    if _drawer_panel is None or not drawer_open:
+        return
+    from mpos.activity_navigator import get_foreground_app
+    drawer_open = False
+    fg = get_foreground_app()
+    print(f"topmenu.py foreground app: {fg}")
+    if not to_launcher and fg is not None and "launcher" not in fg:
+        print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {fg}")
+        close_bar(animate=False)
+    _drawer_panel.hide()
+    _remove_focusables_from_group(_drawer_focusables)
 
 def open_bar():
+    global bar_open
     print("opening bar...")
-    global bar_open, show_bar_animation, hide_bar_animation, notification_bar
-    if not bar_open:
-        bar_open=True
-        hide_bar_animation.current_value = hide_bar_animation_end_value
-        show_bar_animation.start()
-        _add_focusables_to_group(_bar_focusables)
-    else:
+    if _bar_panel is None or bar_open:
         print("bar already open")
+        return
+    bar_open = True
+    _bar_panel.show()
+    _add_focusables_to_group(_bar_focusables)
 
 def close_bar(animate=True):
-    global bar_open, show_bar_animation, hide_bar_animation
-    if bar_open:
-        bar_open=False
-        show_bar_animation.current_value = show_bar_animation_end_value
-        if animate:
-            hide_bar_animation.start()
-        else:
-            notification_bar.set_y(hide_bar_animation_end_value)
-        _remove_focusables_from_group(_bar_focusables)
+    global bar_open
+    if _bar_panel is None or not bar_open:
+        return
+    bar_open = False
+    _bar_panel.hide(animate=animate)
+    _remove_focusables_from_group(_bar_focusables)
 
 
 
 
 def create_notification_bar():
-    global notification_bar, notification_icon_label
+    global notification_bar, notification_icon_label, _bar_panel
     # Create notification bar
     notification_bar = lv.obj(lv.layer_top())
     notification_bar.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
-    notification_bar.set_pos(0, show_bar_animation_start_value)
+    hidden_y = -AppearanceManager.NOTIFICATION_BAR_HEIGHT
+    notification_bar.set_pos(0, hidden_y)
     notification_bar.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     notification_bar.set_scroll_dir(lv.DIR.NONE)
     notification_bar.set_style_border_width(0, lv.PART.MAIN)
     notification_bar.set_style_radius(0, lv.PART.MAIN)
     notification_bar.add_flag(lv.obj.FLAG.CLICKABLE)
+    # Create SlidePanel for the bar
+    _bar_panel = SlidePanel(notification_bar, shown_y=0, hidden_y=hidden_y,
+                            duration=BAR_ANIM_DURATION, use_hidden_flag=False)
     # Focus/defocus visual feedback + ENTER opens the drawer.
     _register_focus_callbacks(notification_bar)
     _bar_focusables.append(notification_bar)
@@ -368,24 +367,6 @@ def create_notification_bar():
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
     #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
     lv.timer_create(update_wifi_icon, WIFI_ICON_UPDATE_INTERVAL, None)
-    
-    # hide bar animation
-    global hide_bar_animation
-    hide_bar_animation = lv.anim_t()
-    hide_bar_animation.init()
-    hide_bar_animation.set_var(notification_bar)
-    hide_bar_animation.set_values(0, -AppearanceManager.NOTIFICATION_BAR_HEIGHT)
-    hide_bar_animation.set_duration(2000)
-    hide_bar_animation.set_custom_exec_cb(lambda not_used, value : notification_bar.set_y(value))
-    
-    # show bar animation
-    global show_bar_animation
-    show_bar_animation = lv.anim_t()
-    show_bar_animation.init()
-    show_bar_animation.set_var(notification_bar)
-    show_bar_animation.set_values(show_bar_animation_start_value, show_bar_animation_end_value)
-    show_bar_animation.set_duration(1000)
-    show_bar_animation.set_custom_exec_cb(lambda not_used, value : notification_bar.set_y(value))
 
     _register_notifications_listener()
     _refresh_notification_widgets()
@@ -393,10 +374,13 @@ def create_notification_bar():
 
 
 def create_drawer():
-    global drawer, drawer_notifications_title, drawer_notifications_container
-    drawer=lv.obj(lv.layer_top())
-    drawer.set_size(lv.pct(100),lv.pct(90))
-    drawer.set_pos(0,AppearanceManager.NOTIFICATION_BAR_HEIGHT)
+    global drawer, drawer_notifications_title, drawer_notifications_container, _drawer_panel
+    drawer = lv.obj(lv.layer_top())
+    drawer_height = DisplayMetrics.pct_of_height(90)
+    shown_y = AppearanceManager.NOTIFICATION_BAR_HEIGHT
+    hidden_y = shown_y - drawer_height  # slides up off-screen
+    drawer.set_size(lv.pct(100), drawer_height)
+    drawer.set_pos(0, hidden_y)  # start hidden
     drawer.set_scroll_dir(lv.DIR.VER)
     drawer.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     drawer.set_style_pad_all(2, lv.PART.MAIN)
@@ -406,6 +390,9 @@ def create_drawer():
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL_BEGIN, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL_END, None)
+    # Create SlidePanel for the drawer
+    _drawer_panel = SlidePanel(drawer, shown_y=shown_y, hidden_y=hidden_y,
+                               duration=DRAWER_ANIM_DURATION, use_hidden_flag=True)
 
     # ── Outer flex-column: stacks top_group + notifications section ──────────
     outer = lv.obj(drawer)

@@ -1,6 +1,117 @@
 import lvgl as lv
 
 
+def _safe_widget_access(callback):
+    """
+    Wrapper to safely access a widget, catching LvReferenceError.
+
+    If the widget has been deleted, the callback is silently skipped.
+    This prevents crashes when animations try to access deleted widgets.
+    """
+    try:
+        callback()
+    except Exception as e:
+        if "LvReferenceError" in str(type(e).__name__) or "Referenced object was deleted" in str(e):
+            pass
+        else:
+            raise
+
+
+class SlidePanel:
+    """
+    Manages a widget that slides vertically between shown/hidden positions.
+
+    Handles rapid open/close without animation glitches by:
+    - Tracking logical state (is_open) separately from animation state
+    - Always animating to fixed endpoint positions (not reading mid-flight Y)
+    - Cancelling in-flight animations before starting new ones
+
+    Usage:
+        panel = SlidePanel(drawer, shown_y=24, hidden_y=-200, duration=300)
+        panel.show()   # slides into view
+        panel.hide()   # slides out of view
+        panel.toggle() # toggles state
+    """
+
+    def __init__(self, widget, shown_y, hidden_y, duration=300, use_hidden_flag=True):
+        """
+        Args:
+            widget: The LVGL widget to animate
+            shown_y: Y position when fully visible
+            hidden_y: Y position when fully hidden (off-screen)
+            duration: Animation duration in milliseconds
+            use_hidden_flag: If True, add/remove HIDDEN flag at animation endpoints
+        """
+        self.widget = widget
+        self.shown_y = shown_y
+        self.hidden_y = hidden_y
+        self.duration = duration
+        self.use_hidden_flag = use_hidden_flag
+        self.is_open = False
+        self.on_shown = None   # optional callback when show animation completes
+        self.on_hidden = None  # optional callback when hide animation completes
+
+    def show(self, animate=True):
+        """Slide the widget to its shown position."""
+        if self.is_open:
+            return
+        self.is_open = True
+        lv.anim_delete(self.widget, None)
+        if self.use_hidden_flag:
+            self.widget.remove_flag(lv.obj.FLAG.HIDDEN)
+        if animate:
+            self._animate(self.hidden_y, self.shown_y, self._on_show_done)
+        else:
+            self.widget.set_y(self.shown_y)
+            if self.on_shown:
+                self.on_shown()
+
+    def hide(self, animate=True):
+        """Slide the widget to its hidden position."""
+        if not self.is_open:
+            return
+        self.is_open = False
+        lv.anim_delete(self.widget, None)
+        if animate:
+            self._animate(self.shown_y, self.hidden_y, self._on_hide_done)
+        else:
+            self.widget.set_y(self.hidden_y)
+            if self.use_hidden_flag:
+                self.widget.add_flag(lv.obj.FLAG.HIDDEN)
+            if self.on_hidden:
+                self.on_hidden()
+
+    def toggle(self, animate=True):
+        """Toggle between shown and hidden states."""
+        if self.is_open:
+            self.hide(animate)
+        else:
+            self.show(animate)
+
+    def _animate(self, from_y, to_y, on_complete):
+        anim = lv.anim_t()
+        anim.init()
+        anim.set_var(self.widget)
+        anim.set_duration(self.duration)
+        anim.set_values(from_y, to_y)
+        anim.set_custom_exec_cb(lambda _a, v: _safe_widget_access(lambda: self.widget.set_y(v)))
+        anim.set_path_cb(lv.anim_t.path_ease_in_out)
+        anim.set_completed_cb(lambda *args: _safe_widget_access(on_complete))
+        anim.start()
+
+    def _on_show_done(self):
+        self.widget.set_y(self.shown_y)
+        if self.on_shown:
+            self.on_shown()
+
+    def _on_hide_done(self):
+        self.widget.set_y(self.hidden_y)
+        if self.use_hidden_flag:
+            self.widget.add_flag(lv.obj.FLAG.HIDDEN)
+        if self.on_hidden:
+            self.on_hidden()
+
+
 class WidgetAnimator:
     """
     Utility for creating smooth, non-blocking animations on LVGL widgets.
@@ -8,31 +119,6 @@ class WidgetAnimator:
     Provides fade, slide, and value interpolation animations with automatic
     cleanup and safe widget access handling.
     """
-
-    @staticmethod
-    def _safe_widget_access(callback):
-        """
-        Wrapper to safely access a widget, catching LvReferenceError.
-
-        If the widget has been deleted, the callback is silently skipped.
-        This prevents crashes when animations try to access deleted widgets.
-
-        Args:
-            callback: Function to call (should access a widget)
-
-        Returns:
-            None (always, even if callback returns a value)
-        """
-        try:
-            callback()
-        except Exception as e:
-            # Check if it's an LvReferenceError (widget was deleted)
-            if "LvReferenceError" in str(type(e).__name__) or "Referenced object was deleted" in str(e):
-                # Widget was deleted - silently ignore
-                pass
-            else:
-                # Some other error - re-raise it
-                raise
 
     @staticmethod
     def show_widget(widget, anim_type="fade", duration=500, delay=0):
@@ -48,40 +134,33 @@ class WidgetAnimator:
         Returns:
             The animation object
         """
-        lv.anim_delete(widget, None)  # stop all ongoing animations to prevent visual glitches
+        lv.anim_delete(widget, None)
         anim = lv.anim_t()
         anim.init()
         anim.set_var(widget)
         anim.set_delay(delay)
         anim.set_duration(duration)
-        # Clear HIDDEN flag to make widget visible for animation:
-        anim.set_start_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: widget.remove_flag(lv.obj.FLAG.HIDDEN)))
+        anim.set_start_cb(lambda *args: _safe_widget_access(lambda: widget.remove_flag(lv.obj.FLAG.HIDDEN)))
 
         if anim_type == "fade":
-            # Create fade-in animation (opacity from 0 to 255)
             anim.set_values(0, 255)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(value, lv.PART.MAIN)))
+            anim.set_custom_exec_cb(lambda anim, value: _safe_widget_access(lambda: widget.set_style_opa(value, lv.PART.MAIN)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
-            # Ensure opacity is reset after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(255, lv.PART.MAIN)))
+            anim.set_completed_cb(lambda *args: _safe_widget_access(lambda: widget.set_style_opa(255, lv.PART.MAIN)))
         elif anim_type == "slide_down":
-            # Create slide-down animation (y from -height to original y)
             original_y = widget.get_y()
             height = widget.get_height()
             anim.set_values(original_y - height, original_y)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_y(value)))
+            anim.set_custom_exec_cb(lambda anim, value: _safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
-            # Reset y position after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: widget.set_y(original_y)))
+            anim.set_completed_cb(lambda *args: _safe_widget_access(lambda: widget.set_y(original_y)))
         else:  # "slide_up"
-            # Create slide-up animation (y from +height to original y)
             original_y = widget.get_y()
             height = widget.get_height()
             anim.set_values(original_y + height, original_y)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_y(value)))
+            anim.set_custom_exec_cb(lambda anim, value: _safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
-            # Reset y position after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: widget.set_y(original_y)))
+            anim.set_completed_cb(lambda *args: _safe_widget_access(lambda: widget.set_y(original_y)))
 
         anim.start()
         return anim
@@ -101,7 +180,7 @@ class WidgetAnimator:
         Returns:
             The animation object
         """
-        lv.anim_delete(widget, None)  # stop all ongoing animations to prevent visual glitches
+        lv.anim_delete(widget, None)
         anim = lv.anim_t()
         anim.init()
         anim.set_var(widget)
@@ -109,30 +188,24 @@ class WidgetAnimator:
         anim.set_delay(delay)
 
         if anim_type == "fade":
-            # Create fade-out animation (opacity from 255 to 0)
             anim.set_values(255, 0)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_style_opa(value, lv.PART.MAIN)))
+            anim.set_custom_exec_cb(lambda anim, value: _safe_widget_access(lambda: widget.set_style_opa(value, lv.PART.MAIN)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
-            # Set HIDDEN flag after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: WidgetAnimator._hide_complete_cb(widget, hide=hide)))
+            anim.set_completed_cb(lambda *args: _safe_widget_access(lambda: WidgetAnimator._hide_complete_cb(widget, hide=hide)))
         elif anim_type == "slide_down":
-            # Create slide-down animation (y from original y to +height)
             original_y = widget.get_y()
             height = widget.get_height()
             anim.set_values(original_y, original_y + height)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_y(value)))
+            anim.set_custom_exec_cb(lambda anim, value: _safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
-            # Set HIDDEN flag after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: WidgetAnimator._hide_complete_cb(widget, original_y, hide)))
+            anim.set_completed_cb(lambda *args: _safe_widget_access(lambda: WidgetAnimator._hide_complete_cb(widget, original_y, hide)))
         else:  # "slide_up"
-            # Create slide-up animation (y from original y to -height)
             original_y = widget.get_y()
             height = widget.get_height()
             anim.set_values(original_y, original_y - height)
-            anim.set_custom_exec_cb(lambda anim, value: WidgetAnimator._safe_widget_access(lambda: widget.set_y(value)))
+            anim.set_custom_exec_cb(lambda anim, value: _safe_widget_access(lambda: widget.set_y(value)))
             anim.set_path_cb(lv.anim_t.path_ease_in_out)
-            # Set HIDDEN flag after animation
-            anim.set_completed_cb(lambda *args: WidgetAnimator._safe_widget_access(lambda: WidgetAnimator._hide_complete_cb(widget, original_y, hide)))
+            anim.set_completed_cb(lambda *args: _safe_widget_access(lambda: WidgetAnimator._hide_complete_cb(widget, original_y, hide)))
 
         anim.start()
         return anim
