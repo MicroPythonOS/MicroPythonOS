@@ -1,8 +1,6 @@
 import ujson
 import time
 
-import lvgl as lv
-
 from mpos import (
     AppManager,
     ConnectivityManager,
@@ -351,7 +349,7 @@ class UpdateManager:
         NotificationManager.notify(
             Notification(
                 notification_id="osupdate.update_available",
-                icon=lv.SYMBOL.DOWN,
+                icon="M:builtin/apps/com.micropythonos.osupdate/res/mipmap-mdpi/icon_64x64.png",
                 title="OS update available",
                 text=details,
                 priority=Notification.PRIORITY_HIGH,

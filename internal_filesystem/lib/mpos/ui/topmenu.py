@@ -1,6 +1,7 @@
 import lvgl as lv
 
 import mpos.time
+import mpos.config
 from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
@@ -34,46 +35,28 @@ scroll_start_y = None
 
 # Widgets:
 notification_bar = None
-notification_icon_label = None
-notification_icon_image = None
+notification_icon_label = None   # bell indicator in the top bar (label only – no image in the bar)
 drawer_notifications_title = None
 drawer_notifications_container = None
 
 _notifications_listener_registered = False
 
 
-def _set_notification_icon(notification):
-    global notification_icon_label, notification_icon_image
-    if notification_icon_label is None or notification_icon_image is None:
-        return
+def _icon_is_image_path(icon):
+    """Return True if icon is a string that should be loaded as an image file."""
+    if not isinstance(icon, str):
+        return False
+    return "." in icon or icon.startswith("M:") or icon.startswith("/")
 
+
+def _set_notification_icon(notification):
+    """Update the bell indicator in the top notification bar (label widget only)."""
+    if notification_icon_label is None:
+        return
     if notification is None:
         notification_icon_label.add_flag(lv.obj.FLAG.HIDDEN)
-        notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
-        return
-
-    icon = notification.icon
-    if icon is None and notification.icon_symbol is not None:
-        icon = notification.icon_symbol
-
-    if isinstance(icon, str):
-        notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
-        notification_icon_label.set_text(icon)
+    else:
         notification_icon_label.remove_flag(lv.obj.FLAG.HIDDEN)
-        return
-
-    if icon is not None:
-        try:
-            notification_icon_image.set_src(icon)
-            notification_icon_label.add_flag(lv.obj.FLAG.HIDDEN)
-            notification_icon_image.remove_flag(lv.obj.FLAG.HIDDEN)
-            return
-        except Exception:
-            pass
-
-    notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
-    notification_icon_label.set_text(lv.SYMBOL.BELL)
-    notification_icon_label.remove_flag(lv.obj.FLAG.HIDDEN)
 
 
 
@@ -82,55 +65,49 @@ def _notification_pressed(event, notification_id):
     NotificationManager.trigger(notification_id)
 
 
-def _build_drawer_notification_item(parent, notification, previous_widget=None):
+def _build_drawer_notification_item(parent, notification):
+    # The parent is a flex-column container, so no manual positioning needed.
     item_button = lv.button(parent)
     item_button.set_width(lv.pct(100))
     item_button.set_height(lv.SIZE_CONTENT)
     item_button.set_style_pad_all(8, lv.PART.MAIN)
-    if previous_widget is None:
-        item_button.align(lv.ALIGN.TOP_LEFT, 0, 0)
-    else:
-        item_button.align_to(previous_widget, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
-
     item_button.add_event_cb(
         lambda e, nid=notification.notification_id: _notification_pressed(e, nid),
         lv.EVENT.CLICKED,
         None,
     )
 
-    content_left = 0
     icon = notification.icon
-    if icon is None and notification.icon_symbol is not None:
-        icon = notification.icon_symbol
+    icon_width = 0
 
-    if isinstance(icon, str):
+    if _icon_is_image_path(icon) or (icon is not None and not isinstance(icon, str)):
+        try:
+            icon_size = DisplayMetrics.pct_of_width(8)
+            icon_widget = lv.image(item_button)
+            icon_widget.set_src(icon)
+            icon_widget.set_size(icon_size, icon_size)
+            icon_widget.align(lv.ALIGN.LEFT_MID, 0, 0)
+            icon_width = icon_size + 6
+        except Exception:
+            icon = None  # fall through to symbol label
+    if isinstance(icon, str) and not _icon_is_image_path(icon):
         icon_label = lv.label(item_button)
         icon_label.set_text(icon)
         icon_label.align(lv.ALIGN.LEFT_MID, 0, 0)
-        content_left = DisplayMetrics.pct_of_width(8)
-    elif icon is not None:
-        try:
-            icon_image = lv.image(item_button)
-            icon_image.set_src(icon)
-            icon_image.align(lv.ALIGN.LEFT_MID, 0, 0)
-            content_left = DisplayMetrics.pct_of_width(8)
-        except Exception:
-            pass
+        icon_width = DisplayMetrics.pct_of_width(8)
 
     title_label = lv.label(item_button)
     title_label.set_text(notification.title)
-    title_label.set_width(lv.pct(92) - content_left)
+    title_label.set_width(lv.pct(100) - icon_width - 16)
     title_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-    title_label.align(lv.ALIGN.TOP_LEFT, content_left, 0)
+    title_label.align(lv.ALIGN.TOP_LEFT, icon_width, 0)
 
     if notification.text:
         text_label = lv.label(item_button)
         text_label.set_text(notification.text)
-        text_label.set_width(lv.pct(92) - content_left)
+        text_label.set_width(lv.pct(100) - icon_width - 16)
         text_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         text_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 4)
-
-    return item_button
 
 
 def _refresh_drawer_notifications():
@@ -151,13 +128,8 @@ def _refresh_drawer_notifications():
         lv.SYMBOL.BELL + " Notifications (" + str(len(notifications)) + ")"
     )
 
-    previous = None
     for notification in notifications:
-        previous = _build_drawer_notification_item(
-            drawer_notifications_container,
-            notification,
-            previous_widget=previous,
-        )
+        _build_drawer_notification_item(drawer_notifications_container, notification)
 
 
 def _refresh_notification_widgets():
@@ -219,7 +191,7 @@ def close_bar(animate=True):
 
 
 def create_notification_bar():
-    global notification_bar, notification_icon_label, notification_icon_image
+    global notification_bar, notification_icon_label
     # Create notification bar
     notification_bar = lv.obj(lv.layer_top())
     notification_bar.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
@@ -238,10 +210,6 @@ def create_notification_bar():
     notification_icon_label.set_text(lv.SYMBOL.BELL)
     notification_icon_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(2), 0)
     notification_icon_label.add_flag(lv.obj.FLAG.HIDDEN)
-
-    notification_icon_image = lv.image(notification_bar)
-    notification_icon_image.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(2), 0)
-    notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
 
     temp_label = lv.label(notification_bar)
     temp_label.set_text("00°C")
@@ -379,8 +347,23 @@ def create_drawer():
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL_END, None)
 
+    # ── Outer flex-column: stacks top_group + notifications section ──────────
+    outer = lv.obj(drawer)
+    outer.set_width(lv.pct(100))
+    outer.set_height(lv.SIZE_CONTENT)
+    outer.align(lv.ALIGN.TOP_LEFT, 0, 0)
+    outer.set_style_pad_all(0, lv.PART.MAIN)
+    outer.set_style_pad_row(8, lv.PART.MAIN)
+    outer.set_style_border_width(0, lv.PART.MAIN)
+    outer.set_style_radius(0, lv.PART.MAIN)
+    outer.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+    outer.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    outer.set_layout(lv.LAYOUT.FLEX)
+    outer.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+    outer.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
+
     # ── Top section: FLOW COLUMN container (brightness + icon row) ──────────
-    top_group = lv.obj(drawer)
+    top_group = lv.obj(outer)
     top_group.set_width(lv.pct(100))
     top_group.set_height(lv.SIZE_CONTENT)
     top_group.align(lv.ALIGN.TOP_MID, 0, 0)
@@ -533,24 +516,46 @@ def create_drawer():
     poweroff_btn.add_event_cb(poweroff_cb, lv.EVENT.CLICKED, None)
 
     # ── Notifications section ────────────────────────────────────────────────
-    drawer_notifications_title = lv.label(drawer)
-    drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
-    drawer_notifications_title.align_to(top_group, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
+    # notif_section is a flex child of outer, so it stacks automatically below top_group
+    notif_section = lv.obj(outer)
+    notif_section.set_width(lv.pct(100))
+    notif_section.set_height(lv.SIZE_CONTENT)
+    notif_section.set_style_pad_all(0, lv.PART.MAIN)
+    notif_section.set_style_pad_row(4, lv.PART.MAIN)
+    notif_section.set_style_border_width(0, lv.PART.MAIN)
+    notif_section.set_style_radius(0, lv.PART.MAIN)
+    notif_section.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+    notif_section.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    notif_section.set_layout(lv.LAYOUT.FLEX)
+    notif_section.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+    notif_section.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
 
-    drawer_notifications_container = lv.obj(drawer)
+    drawer_notifications_title = lv.label(notif_section)
+    drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
+    drawer_notifications_title.set_width(lv.pct(100))
+
+    drawer_notifications_container = lv.obj(notif_section)
     drawer_notifications_container.set_width(lv.pct(100))
     drawer_notifications_container.set_height(lv.SIZE_CONTENT)
-    drawer_notifications_container.align_to(drawer_notifications_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 4)
     drawer_notifications_container.set_style_pad_all(0, lv.PART.MAIN)
+    drawer_notifications_container.set_style_pad_row(4, lv.PART.MAIN)
     drawer_notifications_container.set_style_border_width(0, lv.PART.MAIN)
     drawer_notifications_container.set_style_radius(0, lv.PART.MAIN)
-    drawer_notifications_container.set_scroll_dir(lv.DIR.NONE)
-    drawer_notifications_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+    drawer_notifications_container.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+    drawer_notifications_container.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    drawer_notifications_container.set_layout(lv.LAYOUT.FLEX)
+    drawer_notifications_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+    drawer_notifications_container.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
 
-    # Add invisible padding at the bottom to make the drawer scrollable
-    l2 = lv.label(drawer)
-    l2.set_text("\n")
-    l2.set_pos(0, DisplayMetrics.height() + DisplayMetrics.pct_of_height(30))
+    # Populate notifications now that the container exists
+    _refresh_notification_widgets()
+
+    # Invisible spacer at the bottom of the outer flex column — makes the drawer
+    # content taller than the viewport so LVGL scroll events fire, which is what
+    # drawer_scroll_callback uses to detect the swipe-up-to-close gesture.
+    spacer = lv.label(outer)
+    spacer.set_text("")
+    spacer.set_height(DisplayMetrics.pct_of_height(40))
 
 
 def drawer_scroll_callback(event):
