@@ -1,7 +1,6 @@
 import lvgl as lv
 
 import mpos.time
-import mpos.config
 from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
@@ -35,8 +34,6 @@ scroll_start_y = None
 
 # Widgets:
 notification_bar = None
-time_label_widget = None
-temp_label_widget = None
 notification_icon_label = None
 notification_icon_image = None
 drawer_notifications_title = None
@@ -78,21 +75,6 @@ def _set_notification_icon(notification):
     notification_icon_label.set_text(lv.SYMBOL.BELL)
     notification_icon_label.remove_flag(lv.obj.FLAG.HIDDEN)
 
-
-def _remove_all_children(parent):
-    if parent is None:
-        return
-    while True:
-        try:
-            child_count = parent.get_child_count()
-        except Exception:
-            return
-        if child_count <= 0:
-            return
-        try:
-            parent.get_child(0).delete()
-        except Exception:
-            return
 
 
 def _notification_pressed(event, notification_id):
@@ -156,7 +138,7 @@ def _refresh_drawer_notifications():
         return
 
     notifications = NotificationManager.get_notifications()
-    _remove_all_children(drawer_notifications_container)
+    drawer_notifications_container.clean()
 
     if not notifications:
         drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
@@ -237,8 +219,7 @@ def close_bar(animate=True):
 
 
 def create_notification_bar():
-    global notification_bar, time_label_widget, temp_label_widget
-    global notification_icon_label, notification_icon_image
+    global notification_bar, notification_icon_label, notification_icon_image
     # Create notification bar
     notification_bar = lv.obj(lv.layer_top())
     notification_bar.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
@@ -252,7 +233,6 @@ def create_notification_bar():
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
     time_label.align(lv.ALIGN.LEFT_MID, DisplayMetrics.pct_of_width(10), 0)
-    time_label_widget = time_label
 
     notification_icon_label = lv.label(notification_bar)
     notification_icon_label.set_text(lv.SYMBOL.BELL)
@@ -266,7 +246,6 @@ def create_notification_bar():
     temp_label = lv.label(notification_bar)
     temp_label.set_text("00°C")
     temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(10), 0)
-    temp_label_widget = temp_label
     if False:
         memfree_label = lv.label(notification_bar)
         memfree_label.set_text("")
@@ -331,13 +310,6 @@ def create_notification_bar():
         seconds = mpos.time.localtime()[5]
         time_label.set_text(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
     
-    can_check_network = False
-    try:
-        import network
-        can_check_network = True
-    except Exception as e:
-        print("Warning: could not check WLAN status:", str(e))
-    
     def update_wifi_icon(timer):
         from mpos import WifiService
         if WifiService.is_connected():
@@ -363,15 +335,6 @@ def create_notification_bar():
                 temp_label.set_text("--°C")
         else:
             temp_label.set_text("42°C")
-    
-    def update_memfree(timer):
-        import gc
-        gc.collect() # otherwise it goes down to 10% before shooting back up to 70%
-        free = gc.mem_free()
-        used = gc.mem_alloc()
-        total_memory = gc.mem_free() + gc.mem_alloc()
-        percentage = round(free * 100 / (free + used))
-        memfree_label.set_text(f"{percentage}%")
     
     lv.timer_create(update_time, CLOCK_UPDATE_INTERVAL, None)
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
@@ -450,20 +413,16 @@ def create_drawer():
     if mpos.ui.main_display:
         mpos.ui.main_display.set_backlight(brightness_int)
 
-    #slider_label = lv.label(brightness_row)
-    #slider_label.set_text(f"Brightness: {brightness_int}%")
-    #slider_label.set_width(lv.pct(100))
-
     slider = lv.slider(brightness_row)
     slider.set_range(1, 100)
     slider.set_value(int(brightness_int), False)
-    slider.set_width(lv.pct(95))
-    slider.set_style_margin_top(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
+    slider.set_width(lv.pct(92))
+    slider.set_style_pad_all(5, lv.PART.MAIN)
+    slider.set_style_margin_top(DisplayMetrics.pct_of_height(3), lv.PART.MAIN)
     slider.set_style_margin_bottom(DisplayMetrics.pct_of_height(6), lv.PART.MAIN)
 
     def brightness_slider_changed(e):
         brightness_int = slider.get_value()
-        #slider_label.set_text(f"Brightness: {brightness_int}%")
         if mpos.ui.main_display:
             mpos.ui.main_display.set_backlight(brightness_int)
     def brightness_slider_released(e):
@@ -571,12 +530,6 @@ def create_drawer():
             lv.deinit()
             import os
             os.system("kill $PPID")
-            return
-            try:
-                print("Doing sys.exit(0)")
-                sys.exit(0)
-            except Exception as e:
-                print(f"sys.exit(0) threw exception: {e}")
     poweroff_btn.add_event_cb(poweroff_cb, lv.EVENT.CLICKED, None)
 
     # ── Notifications section ────────────────────────────────────────────────
@@ -598,9 +551,6 @@ def create_drawer():
     l2 = lv.label(drawer)
     l2.set_text("\n")
     l2.set_pos(0, DisplayMetrics.height() + DisplayMetrics.pct_of_height(30))
-
-    _register_notifications_listener()
-    _refresh_notification_widgets()
 
 
 def drawer_scroll_callback(event):

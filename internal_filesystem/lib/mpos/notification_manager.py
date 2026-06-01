@@ -3,6 +3,8 @@ import time
 from .config import SharedPreferences
 from .content.intent import Intent
 
+_DEBOUNCE_MS = 500
+
 
 class Notification:
     PRIORITY_MIN = -1
@@ -29,8 +31,8 @@ class Notification:
         if not resolved_id:
             raise ValueError("Notification requires notification_id or uniqueidString")
         self.notification_id = str(resolved_id)
+        # icon can be an lv.SYMBOL string, any other string, or an lv.image_dsc_t
         self.icon = icon
-        self.icon_symbol = icon if isinstance(icon, str) else None
         self.title = "" if title is None else str(title)
         self.text = "" if text is None else str(text)
         self.priority = int(priority)
@@ -42,7 +44,6 @@ class Notification:
 
     def update_from(self, other):
         self.icon = other.icon
-        self.icon_symbol = other.icon_symbol if other.icon_symbol is not None else self.icon_symbol
         self.title = other.title
         self.text = other.text
         self.priority = other.priority
@@ -77,9 +78,11 @@ class Notification:
         return intent
 
     def to_persisted_dict(self):
+        # Only string icons survive serialization; lv.image_dsc_t is not serializable
+        icon_symbol = self.icon if isinstance(self.icon, str) else None
         return {
             "notification_id": self.notification_id,
-            "icon_symbol": self.icon_symbol,
+            "icon_symbol": icon_symbol,
             "title": self.title,
             "text": self.text,
             "priority": self.priority,
@@ -119,6 +122,8 @@ class NotificationManager:
     _notifications = {}
     _listeners = []
     _persist_write_count = 0
+    _pending_persist = False
+    _debounce_timer = None
 
     @classmethod
     def _now_seconds(cls):
@@ -144,16 +149,15 @@ class NotificationManager:
         cls._initialized = True
         cls._notifications = {}
         prefs = cls._get_prefs()
-        persisted_items = prefs.get_list(cls._PREFS_KEY, [])
-        for item in persisted_items:
-            notification = Notification.from_persisted_dict(item)
-            if notification is None:
+        for item in prefs.get_list(cls._PREFS_KEY, []):
+            n = Notification.from_persisted_dict(item)
+            if n is None:
                 continue
-            if notification.created_at is None:
-                notification.created_at = cls._now_seconds()
-            if notification.updated_at is None:
-                notification.updated_at = notification.created_at
-            cls._notifications[notification.notification_id] = notification
+            if n.created_at is None:
+                n.created_at = cls._now_seconds()
+            if n.updated_at is None:
+                n.updated_at = n.created_at
+            cls._notifications[n.notification_id] = n
         cls._trim_to_limit(persist=False)
 
     @classmethod
@@ -162,8 +166,7 @@ class NotificationManager:
             return False
         ordered = cls._sorted_notifications()
         while len(ordered) > cls._MAX_NOTIFICATIONS:
-            dropped = ordered.pop()
-            cls._notifications.pop(dropped.notification_id, None)
+            cls._notifications.pop(ordered.pop().notification_id, None)
         if persist:
             cls._persist()
         return True
@@ -172,22 +175,47 @@ class NotificationManager:
     def _sorted_notifications(cls):
         return sorted(
             cls._notifications.values(),
-            key=lambda n: (
-                int(n.priority),
-                int(n.updated_at or 0),
-                int(n.created_at or 0),
-            ),
+            key=lambda n: (int(n.priority), int(n.updated_at or 0), int(n.created_at or 0)),
             reverse=True,
         )
 
     @classmethod
-    def _persist(cls):
+    def _do_persist(cls, _timer=None):
+        cls._pending_persist = False
+        cls._debounce_timer = None
         prefs = cls._get_prefs()
         payload = [n.to_persisted_dict() for n in cls._sorted_notifications()]
         editor = prefs.edit()
         editor.put_list(cls._PREFS_KEY, payload)
         editor.commit()
         cls._persist_write_count += 1
+
+    @classmethod
+    def _persist(cls, immediate=False):
+        """Schedule a deferred write. Pass immediate=True to skip debounce (e.g. on cancel)."""
+        if immediate:
+            # Cancel any pending debounce timer and write now
+            if cls._debounce_timer is not None:
+                try:
+                    cls._debounce_timer.delete()
+                except Exception:
+                    pass
+                cls._debounce_timer = None
+            cls._pending_persist = False
+            cls._do_persist()
+            return
+
+        if cls._pending_persist:
+            return  # already scheduled, coalesce
+
+        cls._pending_persist = True
+        try:
+            import lvgl as lv
+            cls._debounce_timer = lv.timer_create(cls._do_persist, _DEBOUNCE_MS, None)
+            cls._debounce_timer.set_repeat_count(1)
+        except Exception:
+            # LVGL not available (unit tests): write immediately
+            cls._do_persist()
 
     @classmethod
     def _notify_listeners(cls):
@@ -231,6 +259,7 @@ class NotificationManager:
         now_ts = cls._now_seconds()
         existing = cls._notifications.get(notification.notification_id)
         if existing:
+            # Update content + timestamp but do NOT persist — same ID, no flash write
             existing.update_from(notification)
             existing.updated_at = now_ts
             cls._notify_listeners()
@@ -241,7 +270,7 @@ class NotificationManager:
         notification.updated_at = now_ts
         cls._notifications[notification.notification_id] = notification
         cls._trim_to_limit(persist=False)
-        cls._persist()
+        cls._persist()           # debounced write
         cls._notify_listeners()
         return notification.notification_id
 
@@ -251,7 +280,7 @@ class NotificationManager:
         if notification_id not in cls._notifications:
             return False
         del cls._notifications[notification_id]
-        cls._persist()
+        cls._persist(immediate=True)   # removal must be immediate; we don't want it to reappear on reboot
         cls._notify_listeners()
         return True
 
@@ -261,32 +290,30 @@ class NotificationManager:
         if not cls._notifications:
             return
         cls._notifications = {}
-        cls._persist()
+        cls._persist(immediate=True)
         cls._notify_listeners()
 
     @classmethod
     def _dispatch_intent(cls, notification):
         intent = notification.intent
         target_app = notification.app_fullname
+
         if intent is not None:
             if intent.app_fullname is None and target_app is not None:
                 intent.app_fullname = target_app
-
-            try:
-                if intent.activity_class is not None or intent.action is not None:
+            if intent.activity_class is not None or intent.action is not None:
+                try:
                     from .activity_navigator import ActivityNavigator
-
                     ActivityNavigator.startActivity(intent)
                     return True
-            except Exception as e:
-                print("NotificationManager failed to start activity intent:", e)
-
+                except Exception as e:
+                    print("NotificationManager failed to start activity intent:", e)
+            # intent exists but has no activity_class/action — use app_fullname fallback
             target_app = intent.app_fullname
 
         if target_app:
             try:
                 from .content.app_manager import AppManager
-
                 return bool(AppManager.start_app(target_app))
             except Exception as e:
                 print("NotificationManager failed to start app:", e)
@@ -294,6 +321,7 @@ class NotificationManager:
 
     @classmethod
     def trigger(cls, notification_or_id):
+        """Dispatch the notification's intent and auto-cancel if configured."""
         cls._ensure_initialized()
         if isinstance(notification_or_id, Notification):
             notification = notification_or_id
@@ -313,6 +341,8 @@ class NotificationManager:
         cls._notifications = {}
         cls._listeners = []
         cls._persist_write_count = 0
+        cls._pending_persist = False
+        cls._debounce_timer = None
         if clear_storage:
             prefs = SharedPreferences(
                 cls._PREFS_APP_NAME,

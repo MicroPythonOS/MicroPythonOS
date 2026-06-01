@@ -65,7 +65,7 @@ class TestNotificationBarVisibility(unittest.TestCase):
                 text="Drawer item should be visible",
                 priority=Notification.PRIORITY_HIGH,
                 app_fullname="com.micropythonos.settings",
-                auto_cancel=False,
+                auto_cancel=True,
             )
         )
         AppManager.start_app("com.micropythonos.launcher")
