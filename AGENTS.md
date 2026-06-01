@@ -26,6 +26,7 @@ Guidelines for writing or updating tests:
 - When adding graphical tests, follow the helpers and conventions described in tests/README.md.
 
 LVGL tips:
+- `lv.OPA` enum only has values at steps of 10: `TRANSP` (0), `_10`, `_20`, ..., `_100`, and `COVER` (255). Values like `_5` do NOT exist — use the nearest step or a raw integer (0–255).
 - import lvgl as `lv` and use `lv.` to access it
 - `lv.screen_active()` (not `lv.scr_act()`)
 - use `button` instead of `btn`, `image` instead of `img`
