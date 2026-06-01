@@ -25,6 +25,7 @@ class RetroGoLauncher(Activity):
         self.bootfile = self.configdir + "/boot.json"
         self.current_subdir = ""
         self._at_root_level = False
+        self._launching = False
 
         screen = lv.obj()
         screen.set_style_pad_all(15, lv.PART.MAIN)
@@ -170,7 +171,7 @@ class RetroGoLauncher(Activity):
             fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
             button = self.wadlist.add_button(None, f)
             button.add_event_cb(
-                lambda e, p=fullpath: TaskManager.create_task(self.start_game(self.bootfile_prefix, self.bootfile_to_write, p)),
+                lambda e, p=fullpath: self._launch_game(p),
                 lv.EVENT.CLICKED, None
             )
 
@@ -235,6 +236,12 @@ class RetroGoLauncher(Activity):
             os.mkdir(dirname)
         except Exception as e:
             print(f"Info: could not create directory {dirname} because: {e}")
+
+    def _launch_game(self, gamefile):
+        if self._launching:
+            return
+        self._launching = True
+        TaskManager.create_task(self.start_game(self.bootfile_prefix, self.bootfile_to_write, gamefile))
 
     async def start_game(self, bootfile_prefix, bootfile_to_write, gamefile):
         self.status_label.set_text(f"Launching {self.game_name} with file: {bootfile_prefix}{gamefile}")
