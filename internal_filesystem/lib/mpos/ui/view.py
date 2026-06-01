@@ -2,7 +2,7 @@ import lvgl as lv
 import sys
 
 from .focus import save_and_clear_current_focusgroup
-from .topmenu import open_bar
+from .topmenu import open_bar, close_drawer
 
 screen_stack = []
 
@@ -80,6 +80,12 @@ def remove_and_stop_current_activity():
 
 def back_screen():
     global screen_stack
+
+    from . import topmenu
+    if topmenu.drawer_open:
+        close_drawer()
+        return True
+
     if len(screen_stack) <= 1:
         print("Warning: can't go back — stack empty")
         return False

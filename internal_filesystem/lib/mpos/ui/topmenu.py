@@ -110,17 +110,18 @@ def _notification_pressed(event, notification_id):
 def _build_drawer_notification_item(parent, notification):
     card = lv.obj(parent)
     card.set_width(lv.pct(100))
-    card.set_height(lv.SIZE_CONTENT)
+    #card.set_height(lv.SIZE_CONTENT)
+    card.set_height(DisplayMetrics.pct_of_height(20))
     card.remove_flag(lv.obj.FLAG.SCROLLABLE)
     card.set_style_radius(8, lv.PART.MAIN)
     card.set_style_border_width(0, lv.PART.MAIN)
     card.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
     card.set_style_bg_opa(lv.OPA._10, lv.PART.MAIN)
-    card.set_style_pad_all(10, lv.PART.MAIN)
-    card.set_style_pad_column(10, lv.PART.MAIN)
+    card.set_style_pad_all(5, lv.PART.MAIN)
+    card.set_style_pad_column(5, lv.PART.MAIN)
     card.set_layout(lv.LAYOUT.FLEX)
     card.set_flex_flow(lv.FLEX_FLOW.ROW)
-    card.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START)
+    #card.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START)
 
     card.add_flag(lv.obj.FLAG.CLICKABLE)
     card.add_event_cb(
@@ -131,13 +132,20 @@ def _build_drawer_notification_item(parent, notification):
     _register_focus_callbacks(card)
 
     icon = notification.icon
-    icon_size = DisplayMetrics.pct_of_width(7)
+    icon_size = DisplayMetrics.pct_of_width(12)
 
     if _icon_is_image_path(icon) or (icon is not None and not isinstance(icon, str)):
         try:
             icon_widget = lv.image(card)
             icon_widget.set_src(icon)
             icon_widget.set_size(icon_size, icon_size)
+            icon_widget.set_style_pad_all(0, lv.PART.MAIN)
+            header = lv.image_header_t()
+            icon_widget.decoder_get_info(icon, header)
+            if header.w > 0 and header.h > 0:
+                scale_factor_w = round(icon_size * 256 / header.w)
+                scale_factor_h = round(icon_size * 256 / header.h)
+                icon_widget.set_scale(min(scale_factor_w, scale_factor_h))
         except Exception:
             icon = None
     if isinstance(icon, str) and not _icon_is_image_path(icon):
@@ -152,7 +160,7 @@ def _build_drawer_notification_item(parent, notification):
     content_col.set_style_pad_row(2, lv.PART.MAIN)
     content_col.set_layout(lv.LAYOUT.FLEX)
     content_col.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-    content_col.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
+    #content_col.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
     content_col.set_flex_grow(1)
 
     title_label = lv.label(content_col)
@@ -480,9 +488,8 @@ def create_drawer():
     slider.set_range(1, 100)
     slider.set_value(int(brightness_int), False)
     slider.set_width(lv.pct(92))
-    slider.set_style_pad_all(5, lv.PART.MAIN)
-    slider.set_style_margin_top(DisplayMetrics.pct_of_height(3), lv.PART.MAIN)
-    slider.set_style_margin_bottom(DisplayMetrics.pct_of_height(6), lv.PART.MAIN)
+    slider.set_style_margin_top(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
+    slider.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
     _drawer_slider = slider
     _register_focus_callbacks(_drawer_slider)
     _drawer_focusables.append(slider)
@@ -506,17 +513,18 @@ def create_drawer():
     icon_row = lv.obj(top_group)
     icon_row.set_width(lv.pct(100))
     icon_row.set_height(lv.SIZE_CONTENT)
-    icon_row.set_style_pad_all(0, lv.PART.MAIN)
-    icon_row.set_style_pad_column(6, lv.PART.MAIN)
+    #icon_row.set_style_pad_all(0, lv.PART.MAIN)
+    icon_row.set_style_pad_row(5, lv.PART.MAIN)
+    icon_row.set_style_pad_column(5, lv.PART.MAIN)
     icon_row.set_style_border_width(0, lv.PART.MAIN)
     icon_row.set_style_radius(0, lv.PART.MAIN)
     icon_row.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
     icon_row.remove_flag(lv.obj.FLAG.SCROLLABLE)
     icon_row.set_layout(lv.LAYOUT.FLEX)
     icon_row.set_flex_flow(lv.FLEX_FLOW.ROW)
-    icon_row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+    icon_row.set_flex_align(lv.FLEX_ALIGN.SPACE_EVENLY, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
 
-    icon_btn_size = DisplayMetrics.pct_of_width(17)
+    icon_btn_size = DisplayMetrics.pct_of_width(12)
 
     # WiFi button
     wifi_btn = lv.button(icon_row)

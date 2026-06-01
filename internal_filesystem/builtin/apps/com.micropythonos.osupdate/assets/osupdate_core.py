@@ -282,8 +282,8 @@ def round_up_to_multiple(n, multiple):
 class UpdateManager:
     _instance = None
 
-    BOOT_INITIAL_DELAY = 30
-    BOOT_CHECK_INTERVAL = 60
+    BOOT_INITIAL_DELAY = 60 # how long to wait after startup to check for updates
+    BOOT_CHECK_INTERVAL = 60 * 60 * 24 # how often to check for updates
     WIFI_WAIT_TIMEOUT = 300
     WIFI_CHECK_INTERVAL = 2
 

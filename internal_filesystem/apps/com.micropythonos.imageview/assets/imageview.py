@@ -275,7 +275,6 @@ class ImageView(Activity):
         self.image.set_scale(min(scale_factor_w,scale_factor_h))
         print(f"after set_scale, the LVGL image has size: {self.image.get_width()}x{self.image.get_height()}")
 
-
     def clear_image(self):
         self.image.set_src(None)
         gc.collect()

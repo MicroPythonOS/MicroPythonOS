@@ -58,10 +58,7 @@ def _back_swipe_cb(event):
             backbutton_visible = False
             WidgetAnimator.smooth_hide(backbutton)
         if x > DisplayMetrics.width() / 5:
-            if topmenu.drawer_open :
-                topmenu.close_drawer()
-            else : 
-                back_screen()
+            back_screen()
         elif is_short_movement(dx, dy):
             # print("Short movement - treating as tap")
             _passthrough_click(x, y, indev)
