@@ -10,6 +10,8 @@ from mpos import (
     AppManager,
     AppearanceManager,
     DisplayMetrics,
+    Notification,
+    NotificationManager,
     get_widget_coords,
     simulate_drag,
     wait_for_widget,
@@ -54,6 +56,18 @@ class TestNotificationBarVisibility(unittest.TestCase):
         return None
 
     def setUp(self):
+        NotificationManager.cancel_all()
+        NotificationManager.notify(
+            Notification(
+                notification_id="graphical.test.notification",
+                icon=lv.SYMBOL.BELL,
+                title="Graphical test notification",
+                text="Drawer item should be visible",
+                priority=Notification.PRIORITY_HIGH,
+                app_fullname="com.micropythonos.settings",
+                auto_cancel=False,
+            )
+        )
         AppManager.start_app("com.micropythonos.launcher")
         topmenu.open_bar()
         bar = wait_for_widget(self._bar_visible_widget, timeout=8)
@@ -300,6 +314,13 @@ class TestNotificationBarVisibility(unittest.TestCase):
         self.assertTrue(
             any("Off" in text or lv.SYMBOL.POWER in text for _, text in drawer_labels),
             "Power-off label not found in drawer",
+        )
+        self.assertTrue(
+            any(
+                "Graphical test notification" in text or "Drawer item should be visible" in text
+                for _, text in drawer_labels
+            ),
+            "Notification item not found in drawer",
         )
 
         topmenu.close_drawer()

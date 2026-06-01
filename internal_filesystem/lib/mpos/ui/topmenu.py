@@ -1,6 +1,7 @@
 import lvgl as lv
 
 import mpos.time
+import mpos.config
 from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
@@ -8,6 +9,7 @@ from .input_manager import InputManager
 from . import focus_direction
 from .widget_animator import WidgetAnimator
 from mpos.content.app_manager import AppManager
+from mpos.notification_manager import NotificationManager
 
 CLOCK_UPDATE_INTERVAL = 1000 # 10 or even 1 ms doesn't seem to change the framerate but 100ms is enough
 WIFI_ICON_UPDATE_INTERVAL = 1500
@@ -33,6 +35,162 @@ scroll_start_y = None
 
 # Widgets:
 notification_bar = None
+time_label_widget = None
+temp_label_widget = None
+notification_icon_label = None
+notification_icon_image = None
+drawer_notifications_title = None
+drawer_notifications_container = None
+
+_notifications_listener_registered = False
+
+
+def _set_notification_icon(notification):
+    global notification_icon_label, notification_icon_image
+    if notification_icon_label is None or notification_icon_image is None:
+        return
+
+    if notification is None:
+        notification_icon_label.add_flag(lv.obj.FLAG.HIDDEN)
+        notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
+        return
+
+    icon = notification.icon
+    if icon is None and notification.icon_symbol is not None:
+        icon = notification.icon_symbol
+
+    if isinstance(icon, str):
+        notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
+        notification_icon_label.set_text(icon)
+        notification_icon_label.remove_flag(lv.obj.FLAG.HIDDEN)
+        return
+
+    if icon is not None:
+        try:
+            notification_icon_image.set_src(icon)
+            notification_icon_label.add_flag(lv.obj.FLAG.HIDDEN)
+            notification_icon_image.remove_flag(lv.obj.FLAG.HIDDEN)
+            return
+        except Exception:
+            pass
+
+    notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
+    notification_icon_label.set_text(lv.SYMBOL.BELL)
+    notification_icon_label.remove_flag(lv.obj.FLAG.HIDDEN)
+
+
+def _remove_all_children(parent):
+    if parent is None:
+        return
+    while True:
+        try:
+            child_count = parent.get_child_count()
+        except Exception:
+            return
+        if child_count <= 0:
+            return
+        try:
+            parent.get_child(0).delete()
+        except Exception:
+            return
+
+
+def _notification_pressed(event, notification_id):
+    close_drawer()
+    NotificationManager.trigger(notification_id)
+
+
+def _build_drawer_notification_item(parent, notification, previous_widget=None):
+    item_button = lv.button(parent)
+    item_button.set_width(lv.pct(100))
+    item_button.set_height(lv.SIZE_CONTENT)
+    item_button.set_style_pad_all(8, lv.PART.MAIN)
+    if previous_widget is None:
+        item_button.align(lv.ALIGN.TOP_LEFT, 0, 0)
+    else:
+        item_button.align_to(previous_widget, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
+
+    item_button.add_event_cb(
+        lambda e, nid=notification.notification_id: _notification_pressed(e, nid),
+        lv.EVENT.CLICKED,
+        None,
+    )
+
+    content_left = 0
+    icon = notification.icon
+    if icon is None and notification.icon_symbol is not None:
+        icon = notification.icon_symbol
+
+    if isinstance(icon, str):
+        icon_label = lv.label(item_button)
+        icon_label.set_text(icon)
+        icon_label.align(lv.ALIGN.LEFT_MID, 0, 0)
+        content_left = DisplayMetrics.pct_of_width(8)
+    elif icon is not None:
+        try:
+            icon_image = lv.image(item_button)
+            icon_image.set_src(icon)
+            icon_image.align(lv.ALIGN.LEFT_MID, 0, 0)
+            content_left = DisplayMetrics.pct_of_width(8)
+        except Exception:
+            pass
+
+    title_label = lv.label(item_button)
+    title_label.set_text(notification.title)
+    title_label.set_width(lv.pct(92) - content_left)
+    title_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+    title_label.align(lv.ALIGN.TOP_LEFT, content_left, 0)
+
+    if notification.text:
+        text_label = lv.label(item_button)
+        text_label.set_text(notification.text)
+        text_label.set_width(lv.pct(92) - content_left)
+        text_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        text_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 4)
+
+    return item_button
+
+
+def _refresh_drawer_notifications():
+    if drawer_notifications_container is None or drawer_notifications_title is None:
+        return
+
+    notifications = NotificationManager.get_notifications()
+    _remove_all_children(drawer_notifications_container)
+
+    if not notifications:
+        drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
+        empty_label = lv.label(drawer_notifications_container)
+        empty_label.set_text("No notifications")
+        empty_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        return
+
+    drawer_notifications_title.set_text(
+        lv.SYMBOL.BELL + " Notifications (" + str(len(notifications)) + ")"
+    )
+
+    previous = None
+    for notification in notifications:
+        previous = _build_drawer_notification_item(
+            drawer_notifications_container,
+            notification,
+            previous_widget=previous,
+        )
+
+
+def _refresh_notification_widgets():
+    notifications = NotificationManager.get_notifications()
+    top_notification = notifications[0] if notifications else None
+    _set_notification_icon(top_notification)
+    _refresh_drawer_notifications()
+
+
+def _register_notifications_listener():
+    global _notifications_listener_registered
+    if _notifications_listener_registered:
+        return
+    NotificationManager.register_listener(_refresh_notification_widgets, notify_immediately=False)
+    _notifications_listener_registered = True
 
 def open_drawer():
     global drawer_open, drawer
@@ -79,7 +237,8 @@ def close_bar(animate=True):
 
 
 def create_notification_bar():
-    global notification_bar
+    global notification_bar, time_label_widget, temp_label_widget
+    global notification_icon_label, notification_icon_image
     # Create notification bar
     notification_bar = lv.obj(lv.layer_top())
     notification_bar.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
@@ -93,9 +252,21 @@ def create_notification_bar():
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
     time_label.align(lv.ALIGN.LEFT_MID, DisplayMetrics.pct_of_width(10), 0)
+    time_label_widget = time_label
+
+    notification_icon_label = lv.label(notification_bar)
+    notification_icon_label.set_text(lv.SYMBOL.BELL)
+    notification_icon_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(2), 0)
+    notification_icon_label.add_flag(lv.obj.FLAG.HIDDEN)
+
+    notification_icon_image = lv.image(notification_bar)
+    notification_icon_image.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(2), 0)
+    notification_icon_image.add_flag(lv.obj.FLAG.HIDDEN)
+
     temp_label = lv.label(notification_bar)
     temp_label.set_text("00°C")
-    temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(7)	, 0)
+    temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(10), 0)
+    temp_label_widget = temp_label
     if False:
         memfree_label = lv.label(notification_bar)
         memfree_label.set_text("")
@@ -224,11 +395,14 @@ def create_notification_bar():
     show_bar_animation.set_values(show_bar_animation_start_value, show_bar_animation_end_value)
     show_bar_animation.set_duration(1000)
     show_bar_animation.set_custom_exec_cb(lambda not_used, value : notification_bar.set_y(value))
+
+    _register_notifications_listener()
+    _refresh_notification_widgets()
     
 
 
 def create_drawer():
-    global drawer
+    global drawer, drawer_notifications_title, drawer_notifications_container
     drawer=lv.obj(lv.layer_top())
     drawer.set_size(lv.pct(100),lv.pct(90))
     drawer.set_pos(0,AppearanceManager.NOTIFICATION_BAR_HEIGHT)
@@ -301,6 +475,20 @@ def create_drawer():
         AppManager.refresh_apps()
         AppManager.restart_launcher()
     launcher_btn.add_event_cb(launcher_event,lv.EVENT.CLICKED,None)
+
+    drawer_notifications_title = lv.label(drawer)
+    drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
+    drawer_notifications_title.align_to(launcher_btn, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(8))
+
+    drawer_notifications_container = lv.obj(drawer)
+    drawer_notifications_container.set_width(lv.pct(100))
+    drawer_notifications_container.set_height(lv.SIZE_CONTENT)
+    drawer_notifications_container.align_to(drawer_notifications_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
+    drawer_notifications_container.set_style_pad_all(0, lv.PART.MAIN)
+    drawer_notifications_container.set_style_border_width(0, lv.PART.MAIN)
+    drawer_notifications_container.set_style_radius(0, lv.PART.MAIN)
+    drawer_notifications_container.set_scroll_dir(lv.DIR.NONE)
+    drawer_notifications_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
     '''
     sleep_btn=lv.button(drawer)
     sleep_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
@@ -376,7 +564,10 @@ def create_drawer():
     # Add invisible padding at the bottom to make the drawer scrollable
     l2 = lv.label(drawer)
     l2.set_text("\n")
-    l2.set_pos(0, DisplayMetrics.height())
+    l2.set_pos(0, DisplayMetrics.height() + DisplayMetrics.pct_of_height(30))
+
+    _register_notifications_listener()
+    _refresh_notification_widgets()
 
 
 def drawer_scroll_callback(event):

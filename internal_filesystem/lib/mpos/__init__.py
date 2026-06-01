@@ -26,6 +26,7 @@ from .device_manager import DeviceManager
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
 from .webserver.webserver import WebServer
+from .notification_manager import NotificationManager, Notification
 
 # Common activities
 from .app.activities.chooser import ChooserActivity
@@ -79,6 +80,7 @@ __all__ = [
     "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
+    "NotificationManager", "Notification",
     "LoRaManager", "IRManager", "GPSManager", "DeviceManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",

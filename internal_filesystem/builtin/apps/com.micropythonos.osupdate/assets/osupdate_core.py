@@ -1,7 +1,19 @@
 import ujson
 import time
 
-from mpos import AppManager, ConnectivityManager, TaskManager, DownloadManager, DeviceInfo, BuildInfo
+import lvgl as lv
+
+from mpos import (
+    AppManager,
+    ConnectivityManager,
+    TaskManager,
+    DownloadManager,
+    DeviceInfo,
+    BuildInfo,
+    NotificationManager,
+    Notification,
+    Intent,
+)
 
 
 class UpdateState:
@@ -329,6 +341,29 @@ class UpdateManager:
                 self.set_state(UpdateState.CHECKING_UPDATE)
                 TaskManager.create_task(self.check_for_update())
 
+    def _notify_update_available(self):
+        info = self._update_info or {}
+        version = info.get("version")
+        details = "Tap to open OS updater"
+        if version:
+            details = "Version " + str(version) + " is available"
+
+        NotificationManager.notify(
+            Notification(
+                notification_id="osupdate.update_available",
+                icon=lv.SYMBOL.DOWN,
+                title="OS update available",
+                text=details,
+                priority=Notification.PRIORITY_HIGH,
+                intent=Intent(app_fullname="com.micropythonos.osupdate"),
+                auto_cancel=True,
+                app_fullname="com.micropythonos.osupdate",
+            )
+        )
+
+    def _clear_update_available_notification(self):
+        NotificationManager.cancel("osupdate.update_available")
+
     async def start(self):
         self._running = True
         self.connectivity_manager = ConnectivityManager.get()
@@ -344,7 +379,7 @@ class UpdateManager:
             if self.connectivity_manager.is_online():
                 await self.check_for_update()
                 if self.current_state == UpdateState.UPDATE_AVAILABLE:
-                    print("Update available! Later on this will use the NotificationManager to notify the user.")
+                    self._notify_update_available()
             else:
                 print("UpdateManager: offline, skipping check")
 
@@ -379,12 +414,16 @@ class UpdateManager:
             }
             if comparison == "newer":
                 self.set_state(UpdateState.UPDATE_AVAILABLE)
+                self._notify_update_available()
             else:
                 self.set_state(UpdateState.NO_UPDATE)
+                self._clear_update_available_notification()
         except ValueError:
             self.set_state(UpdateState.ERROR)
+            self._clear_update_available_notification()
         except RuntimeError:
             self.set_state(UpdateState.ERROR)
+            self._clear_update_available_notification()
         except Exception as e:
             print(f"UpdateManager.check_for_update got exception: {e}")
             if DownloadManager.is_network_error(e):
@@ -392,6 +431,7 @@ class UpdateManager:
                 self.set_state(UpdateState.WAITING_WIFI)
             else:
                 self.set_state(UpdateState.ERROR)
+            self._clear_update_available_notification()
         finally:
             self._check_in_progress = False
 

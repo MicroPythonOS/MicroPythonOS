@@ -8,6 +8,7 @@ Builtin Apps:
 
 Frameworks:
 - Add Services with intent filter boot_completed
+- NotificationManager: new framework to notify the user
 
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
