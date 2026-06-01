@@ -242,10 +242,13 @@ PY
 
 	# Suppress warnings that newer Clang (17+) treats as errors on macOS.
 	# GCC on Linux doesn't have -Wgnu-folding-constant so this must be skipped there.
+	# -Wno-unknown-warning-option prevents Clang from erroring on GCC-only flag names
+	# (e.g. -Wno-error=unterminated-string-initialization is GCC-only; Clang 21 rejects
+	# it with -Werror,-Wunknown-warning-option which kills the build).
 	unix_makefile="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/Makefile
 	if [ "$(uname -s)" = "Darwin" ]; then
 		echo "Temporarily suppressing Clang warnings for macOS build..."
-		sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers -Wno-error=unterminated-string-initialization/' "$unix_makefile"
+		sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-unknown-warning-option -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers -Wno-error=unterminated-string-initialization/' "$unix_makefile"
 	fi
 
 	# If it's still running, kill it, otherwise "text file busy"
