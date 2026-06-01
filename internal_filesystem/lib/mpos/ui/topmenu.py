@@ -41,6 +41,50 @@ drawer_notifications_container = None
 
 _notifications_listener_registered = False
 
+_drawer_slider = None     # brightness slider; receives focus when the drawer opens
+_drawer_focusables = []   # widgets added to / removed from the focus group when drawer opens/closes
+_bar_focusables = []      # widgets added to / removed from the focus group when bar opens/closes
+
+
+def _focus_topmenu_obj(event):
+    """Visual feedback: draw a 1-px primary-colour border on focus."""
+    target = event.get_target_obj()
+    target.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+    target.set_style_border_width(1, lv.PART.MAIN)
+
+
+def _defocus_topmenu_obj(event):
+    """Remove the focus border on defocus."""
+    target = event.get_target_obj()
+    target.set_style_border_width(0, lv.PART.MAIN)
+
+
+def _register_focus_callbacks(widget):
+    """
+    Register focus/defocus visual-feedback callbacks on *widget*.
+    Returns the widget for convenience.
+    """
+    widget.add_event_cb(_focus_topmenu_obj, lv.EVENT.FOCUSED, None)
+    widget.add_event_cb(_defocus_topmenu_obj, lv.EVENT.DEFOCUSED, None)
+    return widget
+
+
+def _add_focusables_to_group(focusables):
+    group = lv.group_get_default()
+    if group:
+        for w in focusables:
+            group.add_obj(w)
+
+
+def _remove_focusables_from_group(focusables):
+    group = lv.group_get_default()
+    if group:
+        for w in focusables:
+            try:
+                group.remove_obj(w)
+            except Exception:
+                pass
+
 
 def _icon_is_image_path(icon):
     """Return True if icon is a string that should be loaded as an image file."""
@@ -146,6 +190,12 @@ def _register_notifications_listener():
     NotificationManager.register_listener(_refresh_notification_widgets, notify_immediately=False)
     _notifications_listener_registered = True
 
+def toggle_drawer():
+    if drawer_open:
+        close_drawer()
+    else:
+        open_drawer()
+
 def open_drawer():
     global drawer_open, drawer
     if not drawer_open:
@@ -153,6 +203,9 @@ def open_drawer():
         drawer_open=True
         WidgetAnimator.show_widget(drawer, anim_type="slide_down", duration=1000, delay=0)
         drawer.scroll_to(0,0,False) # make sure it's at the top, not scrolled down
+        _add_focusables_to_group(_drawer_focusables)
+        if _drawer_slider:
+            lv.group_focus_obj(_drawer_slider)
 
 def close_drawer(to_launcher=False):
     global drawer_open, drawer
@@ -165,15 +218,16 @@ def close_drawer(to_launcher=False):
             print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {get_foreground_app()}")
             close_bar(False)
         WidgetAnimator.hide_widget(drawer, anim_type="slide_up", duration=1000, delay=0)
+        _remove_focusables_from_group(_drawer_focusables)
 
 def open_bar():
     print("opening bar...")
     global bar_open, show_bar_animation, hide_bar_animation, notification_bar
     if not bar_open:
-        #print("not open so opening...")
         bar_open=True
         hide_bar_animation.current_value = hide_bar_animation_end_value
         show_bar_animation.start()
+        _add_focusables_to_group(_bar_focusables)
     else:
         print("bar already open")
 
@@ -186,6 +240,7 @@ def close_bar(animate=True):
             hide_bar_animation.start()
         else:
             notification_bar.set_y(hide_bar_animation_end_value)
+        _remove_focusables_from_group(_bar_focusables)
 
 
 
@@ -201,6 +256,11 @@ def create_notification_bar():
     notification_bar.set_style_border_width(0, lv.PART.MAIN)
     notification_bar.set_style_radius(0, lv.PART.MAIN)
     notification_bar.add_flag(lv.obj.FLAG.CLICKABLE)
+    # Focus/defocus visual feedback + ENTER opens the drawer.
+    _register_focus_callbacks(notification_bar)
+    _bar_focusables.append(notification_bar)
+    # Pressing ENTER (click) on the focused notification bar opens the drawer.
+    notification_bar.add_event_cb(lambda e: open_drawer(), lv.EVENT.CLICKED, None)
     # Time label
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
@@ -396,6 +456,7 @@ def create_drawer():
     if mpos.ui.main_display:
         mpos.ui.main_display.set_backlight(brightness_int)
 
+    global _drawer_slider
     slider = lv.slider(brightness_row)
     slider.set_range(1, 100)
     slider.set_value(int(brightness_int), False)
@@ -403,6 +464,9 @@ def create_drawer():
     slider.set_style_pad_all(5, lv.PART.MAIN)
     slider.set_style_margin_top(DisplayMetrics.pct_of_height(3), lv.PART.MAIN)
     slider.set_style_margin_bottom(DisplayMetrics.pct_of_height(6), lv.PART.MAIN)
+    _drawer_slider = slider
+    _register_focus_callbacks(_drawer_slider)
+    _drawer_focusables.append(slider)
 
     def brightness_slider_changed(e):
         brightness_int = slider.get_value()
@@ -446,6 +510,8 @@ def create_drawer():
         close_drawer()
         AppManager.start_app("com.micropythonos.settings.wifi")
     wifi_btn.add_event_cb(wifi_event, lv.EVENT.CLICKED, None)
+    _register_focus_callbacks(wifi_btn)
+    _drawer_focusables.append(wifi_btn)
 
     # Settings button
     settings_btn = lv.button(icon_row)
@@ -458,6 +524,7 @@ def create_drawer():
         close_drawer()
         AppManager.start_app("com.micropythonos.settings")
     settings_btn.add_event_cb(settings_event, lv.EVENT.CLICKED, None)
+    _drawer_focusables.append(settings_btn)
 
     # Launcher (Home) button
     launcher_btn = lv.button(icon_row)
@@ -472,6 +539,8 @@ def create_drawer():
         AppManager.refresh_apps()
         AppManager.restart_launcher()
     launcher_btn.add_event_cb(launcher_event, lv.EVENT.CLICKED, None)
+    _register_focus_callbacks(launcher_btn)
+    _drawer_focusables.append(launcher_btn)
 
     # Reset button
     restart_btn = lv.button(icon_row)
@@ -491,6 +560,7 @@ def create_drawer():
         else:
             print("Warning: machine has no reset or soft_reset method available")
     restart_btn.add_event_cb(reset_cb, lv.EVENT.CLICKED, None)
+    _drawer_focusables.append(restart_btn)
 
     # Power-off button
     poweroff_btn = lv.button(icon_row)
@@ -514,6 +584,7 @@ def create_drawer():
             import os
             os.system("kill $PPID")
     poweroff_btn.add_event_cb(poweroff_cb, lv.EVENT.CLICKED, None)
+    _drawer_focusables.append(poweroff_btn)
 
     # ── Notifications section ────────────────────────────────────────────────
     # notif_section is a flex child of outer, so it stacks automatically below top_group
@@ -533,6 +604,7 @@ def create_drawer():
     drawer_notifications_title = lv.label(notif_section)
     drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
     drawer_notifications_title.set_width(lv.pct(100))
+    _register_focus_callbacks(drawer_notifications_title)
 
     drawer_notifications_container = lv.obj(notif_section)
     drawer_notifications_container.set_width(lv.pct(100))

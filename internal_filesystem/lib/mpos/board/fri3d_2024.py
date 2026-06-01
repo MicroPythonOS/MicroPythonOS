@@ -215,8 +215,12 @@ def keypad_read_cb(indev, data):
 
     # Handle ESC for back navigation (only on initial PRESSED)
     if last_state == lv.INDEV_STATE.PRESSED:
+        print(f"key: {current_key}")
         if current_key == lv.KEY.ESC and since_last_repeat == 0:
             mpos.ui.back_screen()
+        elif current_key == lv.KEY.HOME and since_last_repeat == 0:
+            from mpos.ui import topmenu as topmenu
+            topmenu.toggle_drawer()
         elif current_key == lv.KEY.RIGHT:
             mpos.ui.focus_direction.move_focus_direction(90)
         elif current_key == lv.KEY.LEFT:

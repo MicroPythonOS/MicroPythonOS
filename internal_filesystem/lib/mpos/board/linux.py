@@ -64,9 +64,12 @@ def catch_escape_key(indev, indev_data):
     #state = indev_data.state
     #print(f"indev_data: {state} and {key}") # this catches the previous key release instead of the next key press
     pressed, code = sdlkeyboard._get_key() # get the current key and state
-    #print(f"catch_escape_key caught: {pressed}, {code}")
-    if pressed == 1 and code == 27:
+    print(f"catch_escape_key caught: {pressed}, {code}")
+    if pressed == 1 and code == 27: # ESCAPE
         mpos.ui.back_screen()
+    elif pressed == 1 and code == 2: # HOME
+        from mpos.ui import topmenu as topmenu
+        topmenu.toggle_drawer()
     elif pressed == 1 and code == lv.KEY.RIGHT:
         mpos.ui.focus_direction.move_focus_direction(90)
     elif pressed == 1 and code == lv.KEY.LEFT:
