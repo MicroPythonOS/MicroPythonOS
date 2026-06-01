@@ -38,9 +38,10 @@ drawer_notifications_container = None
 
 _notifications_listener_registered = False
 
-_drawer_slider = None     # brightness slider; receives focus when the drawer opens
-_drawer_focusables = []   # widgets added to / removed from the focus group when drawer opens/closes
-_bar_focusables = []      # widgets added to / removed from the focus group when bar opens/closes
+_drawer_slider = None          # brightness slider; receives focus when the drawer opens
+_drawer_focusables = []        # widgets added to / removed from the focus group when drawer opens/closes
+_bar_focusables = []           # widgets added to / removed from the focus group when bar opens/closes
+_drawer_notif_focusables = []  # notification item_buttons; synced with focus group on every refresh
 
 
 def _focus_topmenu_obj(event):
@@ -117,6 +118,7 @@ def _build_drawer_notification_item(parent, notification):
         lv.EVENT.CLICKED,
         None,
     )
+    _register_focus_callbacks(item_button)
 
     icon = notification.icon
     icon_width = 0
@@ -150,10 +152,18 @@ def _build_drawer_notification_item(parent, notification):
         text_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         text_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 4)
 
+    return item_button
+
 
 def _refresh_drawer_notifications():
+    global _drawer_notif_focusables
     if drawer_notifications_container is None or drawer_notifications_title is None:
         return
+
+    # Remove stale notification buttons from the focus group before cleaning the container.
+    if drawer_open:
+        _remove_focusables_from_group(_drawer_notif_focusables)
+    _drawer_notif_focusables = []
 
     notifications = NotificationManager.get_notifications()
     drawer_notifications_container.clean()
@@ -170,7 +180,12 @@ def _refresh_drawer_notifications():
     )
 
     for notification in notifications:
-        _build_drawer_notification_item(drawer_notifications_container, notification)
+        btn = _build_drawer_notification_item(drawer_notifications_container, notification)
+        _drawer_notif_focusables.append(btn)
+
+    # If the drawer is already open, add the new buttons to the focus group immediately.
+    if drawer_open:
+        _add_focusables_to_group(_drawer_notif_focusables)
 
 
 def _refresh_notification_widgets():
@@ -202,6 +217,7 @@ def open_drawer():
     _drawer_panel.show()
     _drawer_panel.widget.scroll_to(0, 0, False)  # make sure it's at the top
     _add_focusables_to_group(_drawer_focusables)
+    _add_focusables_to_group(_drawer_notif_focusables)
     if _drawer_slider:
         lv.group_focus_obj(_drawer_slider)
 
@@ -218,6 +234,7 @@ def close_drawer(to_launcher=False):
         close_bar(animate=False)
     _drawer_panel.hide()
     _remove_focusables_from_group(_drawer_focusables)
+    _remove_focusables_from_group(_drawer_notif_focusables)
 
 def open_bar():
     global bar_open
@@ -511,6 +528,7 @@ def create_drawer():
         close_drawer()
         AppManager.start_app("com.micropythonos.settings")
     settings_btn.add_event_cb(settings_event, lv.EVENT.CLICKED, None)
+    _register_focus_callbacks(settings_btn)
     _drawer_focusables.append(settings_btn)
 
     # Launcher (Home) button
@@ -547,6 +565,7 @@ def create_drawer():
         else:
             print("Warning: machine has no reset or soft_reset method available")
     restart_btn.add_event_cb(reset_cb, lv.EVENT.CLICKED, None)
+    _register_focus_callbacks(restart_btn)
     _drawer_focusables.append(restart_btn)
 
     # Power-off button
@@ -571,6 +590,7 @@ def create_drawer():
             import os
             os.system("kill $PPID")
     poweroff_btn.add_event_cb(poweroff_cb, lv.EVENT.CLICKED, None)
+    _register_focus_callbacks(poweroff_btn)
     _drawer_focusables.append(poweroff_btn)
 
     # ── Notifications section ────────────────────────────────────────────────
@@ -591,7 +611,6 @@ def create_drawer():
     drawer_notifications_title = lv.label(notif_section)
     drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
     drawer_notifications_title.set_width(lv.pct(100))
-    _register_focus_callbacks(drawer_notifications_title)
 
     drawer_notifications_container = lv.obj(notif_section)
     drawer_notifications_container.set_width(lv.pct(100))
