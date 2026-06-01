@@ -11,9 +11,10 @@ Frameworks:
 - NotificationManager: new framework to notify the user
 
 OS:
-- New Drawer menu style with compact buttons to make room for notifications
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
 - Create WifiBoot-, WebServerBoot- and AIOReplService
+- Restyle drawer menu to accomodate notifications
+- shutil: add `move()`, `copyfile()`, and `copytree()`
 
 0.11.2
 ======

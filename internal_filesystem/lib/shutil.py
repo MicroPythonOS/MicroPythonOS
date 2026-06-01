@@ -1,5 +1,6 @@
 # Reimplement, because CPython3.3 impl is rather bloated
 import os
+import errno
 from collections import namedtuple
 
 _ntuple_diskusage = namedtuple("usage", ("total", "used", "free"))
@@ -36,6 +37,67 @@ def copyfileobj(src, dest, length=512):
             if not buf:
                 break
             dest.write(buf)
+
+
+def copyfile(src, dst):
+    with open(src, "rb") as fsrc:
+        with open(dst, "wb") as fdst:
+            copyfileobj(fsrc, fdst)
+
+
+def copytree(src, dst):
+    os.mkdir(dst)
+    for name, type, *_ in os.ilistdir(src):
+        src_path = src + "/" + name
+        dst_path = dst + "/" + name
+        if type & 0x4000:  # dir
+            copytree(src_path, dst_path)
+        else:
+            copyfile(src_path, dst_path)
+
+
+def move(src, dst):
+    """Move src to dst.
+
+    If dst is an existing directory, src is moved inside it.
+    Tries os.rename() first (fast, same-filesystem); falls back to
+    copy + delete when rename raises OSError (e.g. cross-filesystem).
+    """
+    # If dst is an existing directory, move src *into* it.
+    try:
+        st = os.stat(dst)
+        if st[0] & 0x4000:  # directory
+            dst = dst.rstrip("/") + "/" + src.rsplit("/", 1)[-1]
+    except OSError:
+        pass  # dst does not exist yet — that is fine
+
+    # Fast path: same filesystem rename.
+    try:
+        os.rename(src, dst)
+        return
+    except OSError as e:
+        if e.args[0] not in (errno.EXDEV, errno.EPERM, errno.ENOTSUP):
+            raise
+
+    # Slow path: copy then remove (cross-filesystem or FAT limitation).
+    try:
+        st = os.stat(src)
+        if st[0] & 0x4000:  # directory
+            copytree(src, dst)
+            rmtree(src)
+        else:
+            copyfile(src, dst)
+            os.unlink(src)
+    except Exception:
+        # Clean up partial destination on failure.
+        try:
+            os.unlink(dst)
+        except OSError:
+            try:
+                rmtree(dst)
+            except OSError:
+                pass
+        raise
 
 
 def disk_usage(path):
