@@ -108,51 +108,66 @@ def _notification_pressed(event, notification_id):
 
 
 def _build_drawer_notification_item(parent, notification):
-    # The parent is a flex-column container, so no manual positioning needed.
-    item_button = lv.button(parent)
-    item_button.set_width(lv.pct(100))
-    item_button.set_height(lv.SIZE_CONTENT)
-    item_button.set_style_pad_all(8, lv.PART.MAIN)
-    item_button.add_event_cb(
+    card = lv.obj(parent)
+    card.set_width(lv.pct(100))
+    card.set_height(lv.SIZE_CONTENT)
+    card.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    card.set_style_radius(8, lv.PART.MAIN)
+    card.set_style_border_width(0, lv.PART.MAIN)
+    card.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
+    card.set_style_bg_opa(lv.OPA._10, lv.PART.MAIN)
+    card.set_style_pad_all(10, lv.PART.MAIN)
+    card.set_style_pad_column(10, lv.PART.MAIN)
+    card.set_layout(lv.LAYOUT.FLEX)
+    card.set_flex_flow(lv.FLEX_FLOW.ROW)
+    card.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START)
+
+    card.add_flag(lv.obj.FLAG.CLICKABLE)
+    card.add_event_cb(
         lambda e, nid=notification.notification_id: _notification_pressed(e, nid),
         lv.EVENT.CLICKED,
         None,
     )
-    _register_focus_callbacks(item_button)
+    _register_focus_callbacks(card)
 
     icon = notification.icon
-    icon_width = 0
+    icon_size = DisplayMetrics.pct_of_width(7)
 
     if _icon_is_image_path(icon) or (icon is not None and not isinstance(icon, str)):
         try:
-            icon_size = DisplayMetrics.pct_of_width(8)
-            icon_widget = lv.image(item_button)
+            icon_widget = lv.image(card)
             icon_widget.set_src(icon)
             icon_widget.set_size(icon_size, icon_size)
-            icon_widget.align(lv.ALIGN.LEFT_MID, 0, 0)
-            icon_width = icon_size + 6
         except Exception:
-            icon = None  # fall through to symbol label
+            icon = None
     if isinstance(icon, str) and not _icon_is_image_path(icon):
-        icon_label = lv.label(item_button)
+        icon_label = lv.label(card)
         icon_label.set_text(icon)
-        icon_label.align(lv.ALIGN.LEFT_MID, 0, 0)
-        icon_width = DisplayMetrics.pct_of_width(8)
 
-    title_label = lv.label(item_button)
+    content_col = lv.obj(card)
+    content_col.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    content_col.set_style_border_width(0, lv.PART.MAIN)
+    content_col.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+    content_col.set_style_pad_all(0, lv.PART.MAIN)
+    content_col.set_style_pad_row(2, lv.PART.MAIN)
+    content_col.set_layout(lv.LAYOUT.FLEX)
+    content_col.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+    content_col.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
+    content_col.set_flex_grow(1)
+
+    title_label = lv.label(content_col)
     title_label.set_text(notification.title)
-    title_label.set_width(lv.pct(100) - icon_width - 16)
     title_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-    title_label.align(lv.ALIGN.TOP_LEFT, icon_width, 0)
+    title_label.set_width(lv.pct(100))
 
     if notification.text:
-        text_label = lv.label(item_button)
+        text_label = lv.label(content_col)
         text_label.set_text(notification.text)
-        text_label.set_width(lv.pct(100) - icon_width - 16)
         text_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        text_label.align_to(title_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 4)
+        text_label.set_width(lv.pct(100))
+        text_label.set_style_text_opa(lv.OPA._60, lv.PART.MAIN)
 
-    return item_button
+    return card
 
 
 def _refresh_drawer_notifications():
