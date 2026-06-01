@@ -408,28 +408,62 @@ def create_drawer():
     drawer.set_pos(0,AppearanceManager.NOTIFICATION_BAR_HEIGHT)
     drawer.set_scroll_dir(lv.DIR.VER)
     drawer.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-    drawer.set_style_pad_all(15, lv.PART.MAIN)
+    drawer.set_style_pad_all(2, lv.PART.MAIN)
     drawer.set_style_border_width(0, lv.PART.MAIN)
     drawer.set_style_radius(0, lv.PART.MAIN)
     drawer.add_flag(lv.obj.FLAG.HIDDEN)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL_BEGIN, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL_END, None)
-    slider_label=lv.label(drawer)
+
+    # ── Top section: FLOW COLUMN container (brightness + icon row) ──────────
+    top_group = lv.obj(drawer)
+    top_group.set_width(lv.pct(100))
+    top_group.set_height(lv.SIZE_CONTENT)
+    top_group.align(lv.ALIGN.TOP_MID, 0, 0)
+    top_group.set_style_pad_all(0, lv.PART.MAIN)
+    top_group.set_style_pad_row(2, lv.PART.MAIN)
+    top_group.set_style_border_width(0, lv.PART.MAIN)
+    top_group.set_style_radius(0, lv.PART.MAIN)
+    top_group.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+    top_group.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    top_group.set_layout(lv.LAYOUT.FLEX)
+    top_group.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+    top_group.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+
+    # ── Brightness row ───────────────────────────────────────────────────────
+    brightness_row = lv.obj(top_group)
+    brightness_row.set_width(lv.pct(100))
+    brightness_row.set_height(lv.SIZE_CONTENT)
+    brightness_row.set_style_pad_all(0, lv.PART.MAIN)
+    brightness_row.set_style_pad_row(2, lv.PART.MAIN)
+    brightness_row.set_style_border_width(0, lv.PART.MAIN)
+    brightness_row.set_style_radius(0, lv.PART.MAIN)
+    brightness_row.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+    brightness_row.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    brightness_row.set_layout(lv.LAYOUT.FLEX)
+    brightness_row.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+    brightness_row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+
     prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
     brightness_int = prefs.get_int("display_brightness", 100)
     if mpos.ui.main_display:
         mpos.ui.main_display.set_backlight(brightness_int)
-    slider_label.set_text(f"Brightness: {brightness_int}%")
-    slider_label.align(lv.ALIGN.TOP_MID,0,lv.pct(4))
-    slider=lv.slider(drawer)
-    slider.set_range(1,100)
-    slider.set_value(int(brightness_int),False)
-    slider.set_width(lv.pct(80))
-    slider.align_to(slider_label,lv.ALIGN.OUT_BOTTOM_MID,0,10)
+
+    #slider_label = lv.label(brightness_row)
+    #slider_label.set_text(f"Brightness: {brightness_int}%")
+    #slider_label.set_width(lv.pct(100))
+
+    slider = lv.slider(brightness_row)
+    slider.set_range(1, 100)
+    slider.set_value(int(brightness_int), False)
+    slider.set_width(lv.pct(95))
+    slider.set_style_margin_top(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
+    slider.set_style_margin_bottom(DisplayMetrics.pct_of_height(6), lv.PART.MAIN)
+
     def brightness_slider_changed(e):
         brightness_int = slider.get_value()
-        slider_label.set_text(f"Brightness: {brightness_int}%")
+        #slider_label.set_text(f"Brightness: {brightness_int}%")
         if mpos.ui.main_display:
             mpos.ui.main_display.set_backlight(brightness_int)
     def brightness_slider_released(e):
@@ -440,127 +474,126 @@ def create_drawer():
             editor = prefs.edit()
             editor.put_int("display_brightness", brightness_int)
             editor.commit()
-    slider.add_event_cb(brightness_slider_changed,lv.EVENT.VALUE_CHANGED,None)
-    slider.add_event_cb(brightness_slider_released,lv.EVENT.RELEASED,None)
-    drawer_button_pct = 31
-    wifi_btn=lv.button(drawer)
-    wifi_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
-    wifi_btn.align(lv.ALIGN.LEFT_MID,0,0)
-    wifi_label=lv.label(wifi_btn)
-    wifi_label.set_text(lv.SYMBOL.WIFI+" WiFi")
+    slider.add_event_cb(brightness_slider_changed, lv.EVENT.VALUE_CHANGED, None)
+    slider.add_event_cb(brightness_slider_released, lv.EVENT.RELEASED, None)
+
+    # ── Icon-only button row ─────────────────────────────────────────────────
+    icon_row = lv.obj(top_group)
+    icon_row.set_width(lv.pct(100))
+    icon_row.set_height(lv.SIZE_CONTENT)
+    icon_row.set_style_pad_all(0, lv.PART.MAIN)
+    icon_row.set_style_pad_column(6, lv.PART.MAIN)
+    icon_row.set_style_border_width(0, lv.PART.MAIN)
+    icon_row.set_style_radius(0, lv.PART.MAIN)
+    icon_row.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+    icon_row.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    icon_row.set_layout(lv.LAYOUT.FLEX)
+    icon_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+    icon_row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+
+    icon_btn_size = DisplayMetrics.pct_of_width(17)
+
+    # WiFi button
+    wifi_btn = lv.button(icon_row)
+    wifi_btn.set_size(icon_btn_size, icon_btn_size)
+    wifi_btn.set_style_pad_all(4, lv.PART.MAIN)
+    wifi_label = lv.label(wifi_btn)
+    wifi_label.set_text(lv.SYMBOL.WIFI)
     wifi_label.center()
     def wifi_event(e):
         close_drawer()
         AppManager.start_app("com.micropythonos.settings.wifi")
-    wifi_btn.add_event_cb(wifi_event,lv.EVENT.CLICKED,None)
-    settings_btn=lv.button(drawer)
-    settings_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
-    settings_btn.align(lv.ALIGN.RIGHT_MID,0,0)
-    settings_label=lv.label(settings_btn)
-    settings_label.set_text(lv.SYMBOL.SETTINGS+" Settings")
+    wifi_btn.add_event_cb(wifi_event, lv.EVENT.CLICKED, None)
+
+    # Settings button
+    settings_btn = lv.button(icon_row)
+    settings_btn.set_size(icon_btn_size, icon_btn_size)
+    settings_btn.set_style_pad_all(4, lv.PART.MAIN)
+    settings_label = lv.label(settings_btn)
+    settings_label.set_text(lv.SYMBOL.SETTINGS)
     settings_label.center()
     def settings_event(e):
         close_drawer()
         AppManager.start_app("com.micropythonos.settings")
-    settings_btn.add_event_cb(settings_event,lv.EVENT.CLICKED,None)
-    launcher_btn=lv.button(drawer)
-    launcher_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
-    launcher_btn.align(lv.ALIGN.CENTER,0,0)
-    launcher_label=lv.label(launcher_btn)
-    launcher_label.set_text(lv.SYMBOL.HOME+" Launch")
+    settings_btn.add_event_cb(settings_event, lv.EVENT.CLICKED, None)
+
+    # Launcher (Home) button
+    launcher_btn = lv.button(icon_row)
+    launcher_btn.set_size(icon_btn_size, icon_btn_size)
+    launcher_btn.set_style_pad_all(4, lv.PART.MAIN)
+    launcher_label = lv.label(launcher_btn)
+    launcher_label.set_text(lv.SYMBOL.HOME)
     launcher_label.center()
     def launcher_event(e):
         print("Launch button pressed!")
         close_drawer(True)
         AppManager.refresh_apps()
         AppManager.restart_launcher()
-    launcher_btn.add_event_cb(launcher_event,lv.EVENT.CLICKED,None)
+    launcher_btn.add_event_cb(launcher_event, lv.EVENT.CLICKED, None)
 
+    # Reset button
+    restart_btn = lv.button(icon_row)
+    restart_btn.set_size(icon_btn_size, icon_btn_size)
+    restart_btn.set_style_pad_all(4, lv.PART.MAIN)
+    restart_label = lv.label(restart_btn)
+    restart_label.set_text(lv.SYMBOL.REFRESH)
+    restart_label.center()
+    def reset_cb(e):
+        from .view import remove_and_stop_current_activity
+        remove_and_stop_current_activity()
+        import machine
+        if hasattr(machine, 'reset'):
+            machine.reset()
+        elif hasattr(machine, 'soft_reset'):
+            machine.soft_reset()
+        else:
+            print("Warning: machine has no reset or soft_reset method available")
+    restart_btn.add_event_cb(reset_cb, lv.EVENT.CLICKED, None)
+
+    # Power-off button
+    poweroff_btn = lv.button(icon_row)
+    poweroff_btn.set_size(icon_btn_size, icon_btn_size)
+    poweroff_btn.set_style_pad_all(4, lv.PART.MAIN)
+    poweroff_label = lv.label(poweroff_btn)
+    poweroff_label.set_text(lv.SYMBOL.POWER)
+    poweroff_label.center()
+    def poweroff_cb(e):
+        print("Power off action...")
+        from .view import remove_and_stop_current_activity
+        remove_and_stop_current_activity()
+        import sys
+        if sys.platform == "esp32":
+            import machine
+            print("Entering deep sleep...")
+            machine.deepsleep()
+        else:
+            import mpos ; mpos.TaskManager.stop()
+            lv.deinit()
+            import os
+            os.system("kill $PPID")
+            return
+            try:
+                print("Doing sys.exit(0)")
+                sys.exit(0)
+            except Exception as e:
+                print(f"sys.exit(0) threw exception: {e}")
+    poweroff_btn.add_event_cb(poweroff_cb, lv.EVENT.CLICKED, None)
+
+    # ── Notifications section ────────────────────────────────────────────────
     drawer_notifications_title = lv.label(drawer)
     drawer_notifications_title.set_text(lv.SYMBOL.BELL + " Notifications")
-    drawer_notifications_title.align_to(launcher_btn, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(8))
+    drawer_notifications_title.align_to(top_group, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
 
     drawer_notifications_container = lv.obj(drawer)
     drawer_notifications_container.set_width(lv.pct(100))
     drawer_notifications_container.set_height(lv.SIZE_CONTENT)
-    drawer_notifications_container.align_to(drawer_notifications_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 8)
+    drawer_notifications_container.align_to(drawer_notifications_title, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 4)
     drawer_notifications_container.set_style_pad_all(0, lv.PART.MAIN)
     drawer_notifications_container.set_style_border_width(0, lv.PART.MAIN)
     drawer_notifications_container.set_style_radius(0, lv.PART.MAIN)
     drawer_notifications_container.set_scroll_dir(lv.DIR.NONE)
     drawer_notifications_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-    '''
-    sleep_btn=lv.button(drawer)
-    sleep_btn.set_size(lv.pct(drawer_button_pct),lv.pct(20))
-    sleep_btn.align(lv.ALIGN.BOTTOM_LEFT,0,0)
-    sleep_label=lv.label(sleep_btn)
-    sleep_label.set_text("Zz Sleep")
-    sleep_label.center()
-    def sleep_event(e):
-        print("Sleep button pressed!")
-        import sys
-        if sys.platform == "esp32":
-            #On ESP32, there's no power off but there's a hundred-year deepsleep.
-            import machine
-            machine.deepsleep(10000) # TODO: make it wakeup when it receives an interrupt from the accelerometer or a button press
-        else: # assume unix:
-            # maybe do a system suspend here? or at least show a popup toast "not supported"
-            close_drawer(True)
-            AppManager.restart_launcher()
-    sleep_btn.add_event_cb(sleep_event,lv.EVENT.CLICKED,None)
-    '''
-    restart_btn=lv.button(drawer)
-    restart_btn.set_size(lv.pct(45),lv.pct(20))
-    restart_btn.align(lv.ALIGN.BOTTOM_LEFT,0,0)
-    restart_label=lv.label(restart_btn)
-    restart_label.set_text(lv.SYMBOL.REFRESH+" Reset")
-    restart_label.center()
-    def reset_cb(e):
-        from .view import remove_and_stop_current_activity
-        remove_and_stop_current_activity() # make sure current app, like camera, does cleanup, saves progress, stops hardware etc.
-        import machine
-        if hasattr(machine, 'reset'):
-            machine.reset()
-        elif hasattr(machine, 'soft_reset'):
-            machine.soft_reset() # this causes a SystemExit exception on desktop
-        else:
-            print("Warning: machine has no reset or soft_reset method available")
-    restart_btn.add_event_cb(reset_cb,lv.EVENT.CLICKED,None)
-    poweroff_btn=lv.button(drawer)
-    poweroff_btn.set_size(lv.pct(45),lv.pct(20))
-    poweroff_btn.align(lv.ALIGN.BOTTOM_RIGHT,0,0)
-    poweroff_label=lv.label(poweroff_btn)
-    poweroff_label.set_text(lv.SYMBOL.POWER+" Off")
-    poweroff_label.center()
-    def poweroff_cb(e):
-        print("Power off action...")
-        from .view import remove_and_stop_current_activity
-        remove_and_stop_current_activity() # make sure current app, like camera, does cleanup, saves progress, stops hardware etc.
-        import sys
-        if sys.platform == "esp32":
-            #On ESP32, there's no power off but there is a forever sleep
-            import machine
-            # DON'T configure BOOT button (Pin 0) as wake-up source because it wakes up immediately.
-            # Luckily, the RESET button can be used to wake it up.
-            #wake_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP)  # Pull-up enabled, active low
-            #import esp32
-            #esp32.wake_on_ext0(pin=wake_pin, level=esp32.WAKEUP_ALL_LOW)
-            print("Entering deep sleep...")
-            machine.deepsleep() # sleep forever
-        else: # assume unix:
-            import mpos ; mpos.TaskManager.stop() # fallback to a regular (non aiorepl) REPL shell
-            lv.deinit() # Deinitialize LVGL (if supported) so the window closes instead of hanging because of LvReferenceError
-            # On linux, and hopefully on macOS too, this seems to be the only way to kill the process, as sys.exit(0) just throws an exception:
-            import os
-            os.system("kill $PPID") # environment variable PPID seems to contain the process ID
-            return
-            # This is disable because it doesn't work - just throws an exception:
-            try:
-                print("Doing sys.exit(0)")
-                sys.exit(0) # throws "SystemExit: 0" exception
-            except Exception as e:
-                print(f"sys.exit(0) threw exception: {e}") # can't seem to catch it
-    poweroff_btn.add_event_cb(poweroff_cb,lv.EVENT.CLICKED,None)
+
     # Add invisible padding at the bottom to make the drawer scrollable
     l2 = lv.label(drawer)
     l2.set_text("\n")
