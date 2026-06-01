@@ -4,6 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Builtin Apps:
+- About: use shutil.disk_usage()
 - OSUpdate: redesign with split between UI and Service logic
 
 Frameworks:

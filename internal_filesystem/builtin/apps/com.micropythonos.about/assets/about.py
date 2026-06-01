@@ -244,14 +244,11 @@ class About(Activity):
 
     def _add_disk_info(self, screen, path):
         """Helper to add disk usage info for a given path."""
-        import os
+        import shutil
         try:
-            stat = os.statvfs(path)
-            total_space = stat[0] * stat[2]
-            free_space = stat[0] * stat[3]
-            used_space = total_space - free_space
-            self._add_label(screen, f"Total space {path}: {total_space} bytes")
-            self._add_label(screen, f"Free space {path}: {free_space} bytes")
-            self._add_label(screen, f"Used space {path}: {used_space} bytes")
+            usage = shutil.disk_usage(path)
+            self._add_label(screen, f"Total space {path}: {usage.total} bytes")
+            self._add_label(screen, f"Free space {path}: {usage.free} bytes")
+            self._add_label(screen, f"Used space {path}: {usage.used} bytes")
         except Exception as e:
             self.logger.warning(f"About app could not get info on {path} filesystem: {e}")

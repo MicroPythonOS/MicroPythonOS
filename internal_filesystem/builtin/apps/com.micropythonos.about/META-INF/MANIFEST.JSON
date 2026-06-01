@@ -4,7 +4,7 @@
 "short_description": "Info about MicroPythonOS",
 "long_description": "Shows current MicroPythonOS version, MicroPython version, build date and other useful info..",
 "fullname": "com.micropythonos.about",
-"version": "0.1.4",
+"version": "0.1.5",
 "category": "development",
 "activities": [
     {
