@@ -12,6 +12,8 @@ class Launcher(Activity):
         # Cache of the last app list + a quick hash of the icons
         self._last_app_list = None          # list of tuples (name, path, icon_hash)
         self._last_ui_built = False         # was UI built at least once?
+        self._last_started_fullname = None  # fullname of the last app the user launched
+        self._app_cont_map = {}             # fullname -> app_cont widget
 
     def onCreate(self):
         print("launcher.py onCreate()")
@@ -65,11 +67,13 @@ class Launcher(Activity):
         if not rebuild_needed:
             end = time.ticks_ms()
             print(f"Redraw icons took: {end-start}ms (cached – no change)")
+            self._focus_last_or_first()
             return
 
         # ------------------------------------------------------------------
         # 3. UI needs (re)building – clear screen and create widgets
         screen.clean()
+        self._app_cont_map = {}
 
         focusgroup = lv.group_get_default()
 
@@ -121,11 +125,12 @@ class Launcher(Activity):
             label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
 
             # ----- events --------------------------------------------------
-            app_cont.add_event_cb(lambda e, fullname=app.fullname: AppManager.start_app(fullname),lv.EVENT.CLICKED, None)
+            app_cont.add_event_cb(lambda e, fullname=app.fullname: self._launch_app(fullname), lv.EVENT.CLICKED, None)
             app_cont.add_event_cb(lambda e, cont=app_cont: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
             app_cont.add_event_cb(lambda e, cont=app_cont: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
 
             focusgroup.add_obj(app_cont)
+            self._app_cont_map[app.fullname] = app_cont
 
         # ------------------------------------------------------------------
         # 4. Store the new representation for the next resume
@@ -134,6 +139,26 @@ class Launcher(Activity):
 
         end = time.ticks_ms()
         print(f"Redraw icons took: {end-start}ms (full rebuild)")
+
+        self._focus_last_or_first()
+
+    # ------------------------------------------------------------------
+    def _launch_app(self, fullname):
+        """Record which app was launched, then start it."""
+        self._last_started_fullname = fullname
+        AppManager.start_app(fullname)
+
+    # ------------------------------------------------------------------
+    def _focus_last_or_first(self):
+        """Focus the last launched app tile, or the first tile if none was launched yet."""
+        focusgroup = lv.group_get_default()
+        if not focusgroup:
+            return
+        target = self._app_cont_map.get(self._last_started_fullname)
+        if target:
+            lv.group_focus_obj(target)
+        else:
+            focusgroup.focus_next()
 
     # ------------------------------------------------------------------
     @staticmethod

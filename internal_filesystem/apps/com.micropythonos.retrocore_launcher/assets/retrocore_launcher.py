@@ -44,6 +44,104 @@ class RetroCoreLauncher(Activity):
             None,
         )
 
+        gbc_btn = button_list.add_button(
+            None, "Gameboy Color"
+        )
+        gbc_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "gbc",
+                "GBC",
+                "Choose your Gameboy Color ROM:",
+                (".gbc", ".gb", ".zip"),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
+        gw_btn = button_list.add_button(
+            None, "Game & Watch"
+        )
+        gw_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "gw",
+                "GW",
+                "Choose your Game & Watch ROM:",
+                (".gw",),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
+        sms_btn = button_list.add_button(
+            None, "Sega Master System"
+        )
+        sms_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "sms",
+                "SMS",
+                "Choose your Master System ROM:",
+                (".sms", ".sg", ".zip"),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
+        gg_btn = button_list.add_button(
+            None, "Sega Game Gear"
+        )
+        gg_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "gg",
+                "GG",
+                "Choose your Game Gear ROM:",
+                (".gg", ".zip"),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
+        col_btn = button_list.add_button(
+            None, "ColecoVision"
+        )
+        col_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "col",
+                "COL",
+                "Choose your ColecoVision ROM:",
+                (".col", ".rom", ".zip"),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
+        pce_btn = button_list.add_button(
+            None, "PC Engine"
+        )
+        pce_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "pce",
+                "PCE",
+                "Choose your PC Engine ROM:",
+                (".pce", ".zip"),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
+        lnx_btn = button_list.add_button(
+            None, "Atari Lynx"
+        )
+        lnx_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "lnx",
+                "LNX",
+                "Choose your Atari Lynx ROM:",
+                (".lnx", ".zip"),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
         self.setContentView(screen)
 
     def launch_retrogo(self, roms_subdir, game_name, title, file_extensions):
