@@ -16,6 +16,7 @@ if [ -z "$target" ]; then
     echo "Example: $0 esp32-small"
     echo "Example: $0 esp32s3"
     echo "Example: $0 unphone"
+    echo "Example: $0 lilygo_t4"
     echo "Example: $0 clean"
 	exit 1
 fi
@@ -134,7 +135,7 @@ popd
 echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
 	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
 	pushd "$codebasedir"/lvgl_micropython/lib/micropython
 	patch -p1 --forward < ../../esp32_inisetup_warn_and_format.patch || true
@@ -151,6 +152,12 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
         # No PSRAM, so do not set SPIRAM-specific options
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=
+		partition_size="3900000"
+		flash_size="4"
+		otasupport="" # too small for 2 OTA partitions + internal storage
+	elif [ "$target" == "lilygo_t4" ]; then
+		BOARD=ESP32_GENERIC
+		BOARD_VARIANT=SPIRAM
 		partition_size="3900000"
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
