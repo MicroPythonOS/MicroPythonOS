@@ -263,26 +263,26 @@ class AppManager:
         """Compare two version numbers (e.g., '1.2.3' vs '4.5.6').
         Returns True if ver1 is greater than ver2, False otherwise.
         Invalid or empty version numbers also result in False."""
-        print(f"Comparing versions: {ver1} vs {ver2}")
+        #print(f"Comparing versions: {ver1} vs {ver2}")
         try:
             v1_parts = [int(x) for x in ver1.split('.')]
             v2_parts = [int(x) for x in ver2.split('.')]
         except ValueError as e:
             print(f"Invalid input, got error: {e}")
             return False
-        print(f"Version 1 parts: {v1_parts}")
-        print(f"Version 2 parts: {v2_parts}")
+        #print(f"Version 1 parts: {v1_parts}")
+        #print(f"Version 2 parts: {v2_parts}")
         for i in range(max(len(v1_parts), len(v2_parts))):
             v1 = v1_parts[i] if i < len(v1_parts) else 0
             v2 = v2_parts[i] if i < len(v2_parts) else 0
-            print(f"Comparing part {i}: {v1} vs {v2}")
+            #print(f"Comparing part {i}: {v1} vs {v2}")
             if v1 > v2:
-                print(f"{ver1} is greater than {ver2}")
+                #print(f"{ver1} is greater than {ver2}")
                 return True
             if v1 < v2:
-                print(f"{ver1} is less than {ver2}")
+                #print(f"{ver1} is less than {ver2}")
                 return False
-        print(f"Versions are equal or {ver1} is not greater than {ver2}")
+        #print(f"Versions are equal or {ver1} is not greater than {ver2}")
         return False
 
     @staticmethod
