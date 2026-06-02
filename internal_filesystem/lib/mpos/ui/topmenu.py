@@ -42,6 +42,7 @@ _drawer_slider = None          # brightness slider; receives focus when the draw
 _drawer_focusables = []        # widgets added to / removed from the focus group when drawer opens/closes
 _bar_focusables = []           # widgets added to / removed from the focus group when bar opens/closes
 _drawer_notif_focusables = []  # notification item_buttons; synced with focus group on every refresh
+_pre_drawer_focused = None     # widget that had focus before the drawer was opened
 
 
 def _focus_topmenu_obj(event):
@@ -232,9 +233,12 @@ def toggle_drawer():
         open_drawer()
 
 def open_drawer():
-    global drawer_open
+    global drawer_open, _pre_drawer_focused
     if _drawer_panel is None or drawer_open:
         return
+    # Save the currently focused widget so we can restore it on close.
+    group = lv.group_get_default()
+    _pre_drawer_focused = group.get_focused() if group else None
     open_bar()
     drawer_open = True
     _drawer_panel.show()
@@ -245,7 +249,7 @@ def open_drawer():
         lv.group_focus_obj(_drawer_slider)
 
 def close_drawer(to_launcher=False):
-    global drawer_open
+    global drawer_open, _pre_drawer_focused
     if _drawer_panel is None or not drawer_open:
         return
     from mpos.activity_navigator import get_foreground_app
@@ -258,6 +262,13 @@ def close_drawer(to_launcher=False):
     _drawer_panel.hide()
     _remove_focusables_from_group(_drawer_focusables)
     _remove_focusables_from_group(_drawer_notif_focusables)
+    # Restore focus to wherever it was before the drawer was opened.
+    if _pre_drawer_focused is not None:
+        try:
+            lv.group_focus_obj(_pre_drawer_focused)
+        except Exception:
+            pass
+        _pre_drawer_focused = None
 
 def open_bar():
     global bar_open
@@ -291,15 +302,9 @@ def create_notification_bar():
     notification_bar.set_scroll_dir(lv.DIR.NONE)
     notification_bar.set_style_border_width(0, lv.PART.MAIN)
     notification_bar.set_style_radius(0, lv.PART.MAIN)
-    notification_bar.add_flag(lv.obj.FLAG.CLICKABLE)
     # Create SlidePanel for the bar
     _bar_panel = SlidePanel(notification_bar, shown_y=0, hidden_y=hidden_y,
                             duration=BAR_ANIM_DURATION, use_hidden_flag=False)
-    # Focus/defocus visual feedback + ENTER opens the drawer.
-    _register_focus_callbacks(notification_bar)
-    _bar_focusables.append(notification_bar)
-    # Pressing ENTER (click) on the focused notification bar opens the drawer.
-    notification_bar.add_event_cb(lambda e: open_drawer(), lv.EVENT.CLICKED, None)
     # Time label
     time_label = lv.label(notification_bar)
     time_label.set_text("00:00:00")
