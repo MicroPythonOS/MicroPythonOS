@@ -1,4 +1,3 @@
-import os
 import json
 import lvgl as lv
 
@@ -31,13 +30,6 @@ class AppDetail(Activity):
         widget.set_style_border_width(border, lv.PART.MAIN)
         widget.set_style_radius(radius, lv.PART.MAIN)
         widget.set_style_pad_all(pad, lv.PART.MAIN)
-
-    def _cleanup_temp_file(self, path="tmp/temp.mpk"):
-        """Safely remove temporary file"""
-        try:
-            os.remove(path)
-        except Exception:
-            pass
 
     async def _update_progress(self, value, wait=True):
         """Update progress bar with optional wait"""
@@ -230,6 +222,7 @@ class AppDetail(Activity):
         self._hide_progress_bar()
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
+        self._trigger_update_recheck()
         if AppManager.is_builtin_app(app_fullname):
             self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
             self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
@@ -245,30 +238,19 @@ class AppDetail(Activity):
         self.progress_bar.set_value(scaled_percent, True)
 
     async def download_and_install(self, app_obj, dest_folder):
-        zip_url = app_obj.download_url
         app_fullname = app_obj.fullname
         download_url_size = getattr(app_obj, "download_url_size", None)
-        temp_zip_path = "tmp/temp.mpk"
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
         self._show_progress_bar()
         await self._update_progress(5)
-        # Download the .mpk file to temporary location
-        self._cleanup_temp_file(temp_zip_path)
         try:
-            os.mkdir("tmp")
-        except Exception:
-            pass
-        print(f"Downloading .mpk file from: {zip_url} to {temp_zip_path}")
-        try:
-            result = await DownloadManager.download_url(zip_url, outfile=temp_zip_path, total_size=download_url_size, progress_callback=self.pcb)
-            if result is not True:
-                print("Download failed...") # Would be good to show an error to the user if this failed...
-            else:
-                print("Downloaded .mpk file, size:", os.stat(temp_zip_path)[6], "bytes")
-                # Install it:
-                AppManager.install_mpk(temp_zip_path, dest_folder) # 60 until 80 percent is the unzip but no progress there...
-                await self._update_progress(80, wait=False)
+            await AppManager.download_and_install_package(
+                app_obj.download_url,
+                app_fullname,
+                download_url_size=download_url_size,
+                progress_callback=self.pcb,
+            )
         except Exception as e:
             print(f"Download failed with exception: {e}")
             if DownloadManager.is_network_error(e):
@@ -277,17 +259,26 @@ class AppDetail(Activity):
                 self.install_label.set_text(f"Download failed: {str(e)[:30]}")
             self.install_button.remove_state(lv.STATE.DISABLED)
             self._hide_progress_bar()
-            self._cleanup_temp_file(temp_zip_path)
             return
-        # Make sure there's no leftover file filling the storage:
-        self._cleanup_temp_file(temp_zip_path)
-        await self._update_progress(85, wait=False)
         # TODO: report the install if badgehub /report/install is fixed
-        # Success:
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self.set_install_label(app_fullname)
         self.install_button.remove_state(lv.STATE.DISABLED)
+        # Notify AppUpdateManager that an app was installed so it can refresh its state
+        self._trigger_update_recheck()
+
+    def _trigger_update_recheck(self):
+        """Ask AppUpdateManager to re-evaluate which apps need updates.
+
+        Called after a successful install or uninstall so the notification and
+        AppStore banner stay in sync without requiring a full app-index download.
+        """
+        try:
+            from appstore_core import AppUpdateManager
+            TaskManager.create_task(AppUpdateManager.get_instance().check_for_updates())
+        except Exception as e:
+            print(f"AppDetail: could not schedule update recheck: {e}")
 
     async def fetch_badgehub_app_details(self, app_obj):
         details_url = self.appstore.get_backend_details_url_from_settings() + "/" + app_obj.fullname

@@ -4,7 +4,7 @@
 "short_description": "Store for App(lication)s",
 "long_description": "This is the place to discover, find, install, uninstall and upgrade all the apps that make your device useless.",
 "fullname": "com.micropythonos.appstore",
-"version": "0.1.7",
+"version": "0.1.8",
 "category": "appstore",
 "activities": [
     {
@@ -14,6 +14,17 @@
         {
           "action": "main",
           "category": "launcher"
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "entrypoint": "assets/appstore_boot_service.py",
+      "classname": "AppStoreService",
+      "intent_filters": [
+        {
+          "action": "boot_completed"
         }
       ]
     }

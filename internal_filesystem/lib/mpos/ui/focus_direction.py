@@ -1,53 +1,203 @@
-import math
 import lvgl as lv
 import mpos.util
 
 
-def get_object_center(obj):
-    """Calculate the center (x, y) of an object based on its absolute screen coordinates."""
-    obj_area = lv.area_t()
-    obj.get_coords(obj_area)
-    width = obj_area.x2 - obj_area.x1
-    height = obj_area.y2 - obj_area.y1
-    x = obj_area.x1
-    y = obj_area.y1
-    center_x = x + width / 2
-    center_y = y + height / 2
-    return center_x, center_y
+# ---------------------------------------------------------------------------
+# Rectangle helpers
+# ---------------------------------------------------------------------------
 
-def compute_angle_to_object(from_obj, to_obj):
-    """
-    Compute the clockwise angle (degrees) from from_obj's center to to_obj's center.
-    Convention: 0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT (clockwise).
-    """
-    # Get centers
-    from_x, from_y = get_object_center(from_obj)
-    to_x, to_y = get_object_center(to_obj)
-    
-    # Compute vector
-    dx = to_x - from_x
-    dy = to_y - from_y
-    
-    # Calculate angle (0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT)
-    angle_rad = math.atan2(dx, -dy)
-    angle_deg = math.degrees(angle_rad)
-    return (angle_deg + 360) % 360  # Normalize to [0, 360)
+def _get_rect(obj):
+    """Return (x1, y1, x2, y2) absolute coords of obj."""
+    area = lv.area_t()
+    obj.get_coords(area)
+    return area.x1, area.y1, area.x2, area.y2
 
-def is_object_in_focus_group(focus_group, obj):
-    """Check if an object is in the focus group, not hidden, and has no hidden ancestor."""
-    if obj is None:
-        return False
-    # Walk up the parent chain: if any ancestor is hidden, the object is not visible
-    ancestor = obj
-    while ancestor is not None:
-        if ancestor.has_flag(lv.obj.FLAG.HIDDEN):
-            return False
-        ancestor = ancestor.get_parent()
-    for objnr in range(focus_group.get_obj_count()):
-        if focus_group.get_obj_by_index(objnr) is obj:
-            return True
+
+def _rect_center(x1, y1, x2, y2):
+    return (x1 + x2) / 2, (y1 + y2) / 2
+
+
+# ---------------------------------------------------------------------------
+# Android FocusFinder algorithm (ported from AOSP FocusFinder.java)
+#
+# Direction convention (matches the rest of MicroPythonOS):
+#   0   = UP
+#   90  = RIGHT
+#   180 = DOWN
+#   270 = LEFT
+# ---------------------------------------------------------------------------
+
+UP    = 0
+RIGHT = 90
+DOWN  = 180
+LEFT  = 270
+
+
+def is_candidate(src, dest, direction):
+    """Return True if dest is a valid focus candidate from src in direction.
+
+    Uses edge-overlap checks (no angle/cone). A candidate must be at least
+    partially past the source's leading edge in the travel direction AND must
+    have its far edge further in that direction than the source's near edge.
+
+    Equivalent to Android's FocusFinder.isCandidate().
+    """
+    sx1, sy1, sx2, sy2 = src
+    dx1, dy1, dx2, dy2 = dest
+    if direction == UP:
+        return (sy2 > dy2 or sy1 >= dy2) and sy1 > dy1
+    if direction == DOWN:
+        return (sy1 < dy1 or sy2 <= dy1) and sy2 < dy2
+    if direction == LEFT:
+        return (sx2 > dx2 or sx1 >= dx2) and sx1 > dx1
+    if direction == RIGHT:
+        return (sx1 < dx1 or sx2 <= dx1) and sx2 < dx2
     return False
 
+
+def beams_overlap(src, dest, direction):
+    """Return True if src and dest overlap on the axis perpendicular to direction.
+
+    The "beam" is the infinite strip projected in the travel direction,
+    bounded by the source's perpendicular edges.
+    Equivalent to Android's FocusFinder.beamsOverlap().
+    """
+    sx1, sy1, sx2, sy2 = src
+    dx1, dy1, dx2, dy2 = dest
+    if direction in (LEFT, RIGHT):
+        # beam is a horizontal band — check vertical overlap
+        return dy2 > sy1 and dy1 < sy2
+    else:  # UP, DOWN
+        # beam is a vertical band — check horizontal overlap
+        return dx2 > sx1 and dx1 < sx2
+
+
+def major_axis_distance(src, dest, direction):
+    """Gap between the trailing edge of src and the leading edge of dest, clamped to 0.
+
+    Equivalent to Android's majorAxisDistance (uses max(raw, 0)).
+    """
+    sx1, sy1, sx2, sy2 = src
+    dx1, dy1, dx2, dy2 = dest
+    if direction == UP:
+        return max(0, sy1 - dy2)
+    if direction == DOWN:
+        return max(0, dy1 - sy2)
+    if direction == LEFT:
+        return max(0, sx1 - dx2)
+    if direction == RIGHT:
+        return max(0, dx1 - sx2)
+    return 0
+
+
+def major_axis_distance_to_far_edge(src, dest, direction):
+    """Gap to the far (trailing) edge of dest, clamped to 0.
+
+    Equivalent to Android's majorAxisDistanceToFarEdge.
+    """
+    sx1, sy1, sx2, sy2 = src
+    dx1, dy1, dx2, dy2 = dest
+    if direction == UP:
+        return max(0, sy1 - dy1)
+    if direction == DOWN:
+        return max(0, dy2 - sy2)
+    if direction == LEFT:
+        return max(0, sx1 - dx1)
+    if direction == RIGHT:
+        return max(0, dx2 - sx2)
+    return 0
+
+
+def minor_axis_distance(src, dest, direction):
+    """Center-to-center offset on the axis perpendicular to direction.
+
+    Equivalent to Android's minorAxisDistance.
+    """
+    sx1, sy1, sx2, sy2 = src
+    dx1, dy1, dx2, dy2 = dest
+    src_cx, src_cy = _rect_center(sx1, sy1, sx2, sy2)
+    dst_cx, dst_cy = _rect_center(dx1, dy1, dx2, dy2)
+    if direction in (LEFT, RIGHT):
+        return abs(src_cy - dst_cy)
+    else:
+        return abs(src_cx - dst_cx)
+
+
+def weighted_distance(major, minor):
+    """Score used to rank candidates when beam-status is equal.
+
+    Equivalent to Android's getWeightedDistanceFor().
+    The ×13 weight on major axis means forward distance dominates, but
+    lateral misalignment (minor axis) breaks ties.
+    """
+    return 13 * major * major + minor * minor
+
+
+def _is_to_direction_of(src, dest, direction):
+    """Return True if dest is in the general direction from src (loose check)."""
+    sx1, sy1, sx2, sy2 = src
+    dx1, dy1, dx2, dy2 = dest
+    if direction == UP:
+        return dy1 < sy1
+    if direction == DOWN:
+        return dy2 > sy2
+    if direction == LEFT:
+        return dx1 < sx1
+    if direction == RIGHT:
+        return dx2 > sx2
+    return False
+
+
+def beam_beats(src, rect1, rect2, direction):
+    """Return True if rect1 should beat rect2 purely based on beam membership.
+
+    Equivalent to Android's beamBeats().
+    rect1 wins if it is in the beam and rect2 is not — with the additional
+    constraint for UP/DOWN that rect1 must be at least as close as rect2's
+    far edge (so an out-of-beam widget that is extremely close can still win).
+    """
+    rect1_in_beam = beams_overlap(src, rect1, direction)
+    rect2_in_beam = beams_overlap(src, rect2, direction)
+
+    # rect1 only wins by beam if it IS in beam and rect2 is NOT
+    if rect2_in_beam or not rect1_in_beam:
+        return False
+
+    # rect2 is not in beam. If rect2 isn't even in the direction, rect1 wins.
+    if not _is_to_direction_of(src, rect2, direction):
+        return True
+
+    # For LEFT/RIGHT: being in-beam is an absolute win.
+    if direction in (LEFT, RIGHT):
+        return True
+
+    # For UP/DOWN: in-beam only wins if rect1's near edge is closer than
+    # rect2's far edge (prevents an extremely close out-of-beam widget losing).
+    return major_axis_distance(src, rect1, direction) < major_axis_distance_to_far_edge(src, rect2, direction)
+
+
+def is_better_candidate(src, rect1, rect2, direction):
+    """Return True if rect1 is a better focus candidate than rect2 from src.
+
+    5-step hierarchy, equivalent to Android's isBetterCandidate().
+    """
+    if not is_candidate(src, rect1, direction):
+        return False
+    if not is_candidate(src, rect2, direction):
+        return True
+    if beam_beats(src, rect1, rect2, direction):
+        return True
+    if beam_beats(src, rect2, rect1, direction):
+        return False
+    return (weighted_distance(major_axis_distance(src, rect1, direction),
+                              minor_axis_distance(src, rect1, direction))
+            < weighted_distance(major_axis_distance(src, rect2, direction),
+                                minor_axis_distance(src, rect2, direction)))
+
+
+# ---------------------------------------------------------------------------
+# Focus group traversal
+# ---------------------------------------------------------------------------
 
 def _is_on_layer_top(obj):
     """Return True if obj is a descendant of lv.layer_top()."""
@@ -62,110 +212,91 @@ def _is_on_layer_top(obj):
     return False
 
 
-def get_closest_edge_point_and_distance(from_x, from_y, obj, direction_degrees, debug=False):
-    """
-    Calculate the distance to the closest edge point on obj, and check if its angle is within the direction cone.
-    Returns (distance, closest_x, closest_y, angle_deg) or None if not in direction or inside.
-    """
-    obj_area = lv.area_t()
-    obj.get_coords(obj_area)
-    x = obj_area.x1
-    y = obj_area.y1
-    right = obj_area.x2
-    bottom = obj_area.y2
-    width = right - x
-    height = bottom - y
-    
-    # Clamp to the rect bounds to find closest point
-    closest_x = max(x, min(from_x, right))
-    closest_y = max(y, min(from_y, bottom))
-    
-    # Compute vector to closest point
-    dx = closest_x - from_x
-    dy = closest_y - from_y
-    
-    # If closest point is the from point, the from is inside the obj, skip
-    if dx == 0 and dy == 0:
-        if debug:
-            print(f"  Skipping {obj} because current center is inside the object.")
-        return None
-    
-    # Compute distance
-    distance = math.sqrt(dx**2 + dy**2)
-    
-    # Compute angle to the closest point (using same convention)
-    angle_rad = math.atan2(dx, -dy)
-    angle_deg = math.degrees(angle_rad)
-    angle_deg = (angle_deg + 360) % 360
-    
-    # Check if in direction cone (±45°)
-    angle_diff = min((angle_deg - direction_degrees) % 360, (direction_degrees - angle_deg) % 360)
-    if angle_diff > 45:
-        if debug:
-            print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, diff {angle_diff:.1f}° > 45°, skipped")
-        return None
-    
-    if debug:
-        print(f"  {obj} at ({x}, {y}) size ({width}x{height}): closest point ({closest_x:.1f}, {closest_y:.1f}), angle {angle_deg:.1f}°, distance {distance:.1f}, diff {angle_diff:.1f}°")
-    
-    return distance, closest_x, closest_y, angle_deg
+def is_object_in_focus_group(focus_group, obj):
+    """Return True if obj is in the focus group, visible, and has no hidden ancestor."""
+    if obj is None:
+        return False
+    ancestor = obj
+    while ancestor is not None:
+        if ancestor.has_flag(lv.obj.FLAG.HIDDEN):
+            return False
+        ancestor = ancestor.get_parent()
+    for i in range(focus_group.get_obj_count()):
+        if focus_group.get_obj_by_index(i) is obj:
+            return True
+    return False
+
 
 def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees, debug=False):
-    """
-    Find the closest object in the specified direction from the current focused object.
-    Uses closest edge point for distance to handle object sizes intuitively.
-    Only considers objects that are in the focus_group and not hidden (including children).
-    Direction is in degrees: 0° = UP, 90° = RIGHT, 180° = DOWN, 270° = LEFT (clockwise).
-    Returns the closest object or None.
+    """Find the best focus target in direction_degrees from current_focused.
+
+    Uses the Android FocusFinder algorithm:
+      1. isCandidate — edge-overlap filter (no angular cone)
+      2. beamBeats   — in-beam widgets get priority
+      3. weightedDistance — tie-break by 13*major² + minor²
+
+    direction_degrees: 0=UP, 90=RIGHT, 180=DOWN, 270=LEFT
+    Returns the winning object, or None.
     """
     if not current_focused:
-        print("No current focused object.")
+        print("find_closest_obj_in_direction: no focused object")
         return None
 
-    if debug:
-        print("Current focused object:")
-        mpos.util.print_lvgl_widget(current_focused)
-        print(f"Default focus group has {focus_group.get_obj_count()} items")
+    direction = direction_degrees  # alias for readability
 
-    closest_obj = None
-    min_distance = float('inf')
-    current_x, current_y = get_object_center(current_focused)
+    src = _get_rect(current_focused)
     current_on_layer_top = _is_on_layer_top(current_focused)
 
-    def process_object(obj, depth=0):
-        """Recursively process an object and its children to find the closest in direction."""
-        nonlocal closest_obj, min_distance
+    # Seed best_rect as a ghost rect displaced one pixel PAST the source in
+    # the opposite direction, so the first real candidate always beats it.
+    # (Equivalent to Android's mBestCandidateRect seeding.)
+    sx1, sy1, sx2, sy2 = src
+    w = sx2 - sx1
+    h = sy2 - sy1
+    if direction == UP:
+        best_rect = (sx1, sy2 + 1, sx2, sy2 + 1 + h)
+    elif direction == DOWN:
+        best_rect = (sx1, sy1 - 1 - h, sx2, sy1 - 1)
+    elif direction == LEFT:
+        best_rect = (sx2 + 1, sy1, sx2 + 1 + w, sy2)
+    else:  # RIGHT
+        best_rect = (sx1 - 1 - w, sy1, sx1 - 1, sy2)
+
+    best_obj = None
+
+    if debug:
+        print("find_closest_obj_in_direction: src=" + str(src) + " dir=" + str(direction))
+
+    def process_object(obj):
+        nonlocal best_rect, best_obj
 
         if obj is None or obj is current_focused:
             return
 
-        # Only consider candidates on the same layer as the currently focused object
         if _is_on_layer_top(obj) != current_on_layer_top:
             return
 
-        # Check if the object is in the focus group and not hidden, then evaluate it
         if is_object_in_focus_group(focus_group, obj):
-            result = get_closest_edge_point_and_distance(current_x, current_y, obj, direction_degrees, debug)
-            if result:
-                distance, closest_x, closest_y, angle_deg = result
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_obj = obj
-                    if debug:
-                        print(f"  Updated closest (distance {distance:.1f}, angle {angle_deg:.1f}°):")
-                        mpos.util.print_lvgl_widget(obj, depth=depth)
+            dest = _get_rect(obj)
+            if is_better_candidate(src, dest, best_rect, direction):
+                best_rect = dest
+                best_obj = obj
+                if debug:
+                    print("  new best: " + str(dest))
+                    mpos.util.print_lvgl_widget(obj)
 
-        # Process children regardless of parent's focus group membership
-        for childnr in range(obj.get_child_count()):
-            child = obj.get_child(childnr)
-            process_object(child, depth + 1)
+        for i in range(obj.get_child_count()):
+            process_object(obj.get_child(i))
 
-    # Iterate through objects in the focus group
-    for objnr in range(focus_group.get_obj_count()):
-        obj = focus_group.get_obj_by_index(objnr)
-        process_object(obj)
+    for i in range(focus_group.get_obj_count()):
+        process_object(focus_group.get_obj_by_index(i))
 
-    return closest_obj
+    return best_obj
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 def move_focus_direction(angle):
     focus_group = lv.group_get_default()
@@ -182,12 +313,6 @@ def move_focus_direction(angle):
         return
     if isinstance(current_focused, lv.keyboard):
         print("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
-        return
-    if False and isinstance(current_focused, lv.checkbox): # arrow up/down or left/right is the toggle
-        print("focus is on a checkbox, which has its own move_focus_direction: NOT moving")
-        return
-    if False and isinstance(current_focused, lv.slider): # arrows change the slider
-        print("focus is on a slider, which has its own move_focus_direction: NOT moving")
         return
     if isinstance(current_focused, lv.dropdown) and current_focused.is_open():
         print("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")

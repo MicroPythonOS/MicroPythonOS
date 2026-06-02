@@ -155,6 +155,49 @@ class AppManager:
         cls._app_list.sort(key=lambda a: a.name.lower())
 
     @staticmethod
+    async def download_and_install_package(download_url, fullname, download_url_size=None, progress_callback=None):
+        """Download an .mpk package and install it into apps/<fullname>.
+
+        Raises an exception on failure so the caller can handle UI feedback.
+        Returns True on success.
+        """
+        import os
+        from ..net.download_manager import DownloadManager
+
+        temp_path = "tmp/temp.mpk"
+        try:
+            os.mkdir("tmp")
+        except Exception:
+            pass
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+
+        print(f"AppManager: downloading {download_url} -> {temp_path}")
+        result = await DownloadManager.download_url(
+            download_url,
+            outfile=temp_path,
+            total_size=download_url_size,
+            progress_callback=progress_callback,
+        )
+        if result is not True:
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+            raise RuntimeError(f"Download failed for {fullname}")
+
+        print(f"AppManager: installing {temp_path} -> apps/{fullname}")
+        AppManager.install_mpk(temp_path, f"apps/{fullname}")
+        # install_mpk removes the temp file on success; clean up in case it didn't
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+        return True
+
+    @staticmethod
     def uninstall_app(app_fullname):
         try:
             import shutil

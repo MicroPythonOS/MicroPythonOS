@@ -5,6 +5,7 @@ Put unreleased changes here!
 
 Builtin Apps:
 - About: use shutil.disk_usage()
+- AppStore: add "Update All" functionality, redesign with split between UI and Service logic
 - OSUpdate: redesign with split between UI and Service logic
 
 Frameworks:
@@ -16,6 +17,7 @@ OS:
 - Create WifiBoot-, WebServerBoot- and AIOReplService
 - Restyle drawer menu to accomodate notifications
 - shutil: add `move()`, `copyfile()`, and `copytree()`
+- Focus direction: rewrite algorithm for speed and widget reachability
 
 0.11.2
 ======
