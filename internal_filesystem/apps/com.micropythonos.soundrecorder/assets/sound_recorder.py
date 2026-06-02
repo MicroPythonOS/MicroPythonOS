@@ -82,7 +82,6 @@ class SoundRecorder(Activity):
         # Status label (shows microphone availability)
         self._status_label = lv.label(screen)
         self._status_label.align(lv.ALIGN.TOP_LEFT, 20, 20)
-        lv.group_get_default().add_obj(self._status_label) # Make focusable so focus_direction can use it too
 
         # Timer display
         self._timer_label = lv.label(screen)
