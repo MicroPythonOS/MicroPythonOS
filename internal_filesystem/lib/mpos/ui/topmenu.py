@@ -77,12 +77,21 @@ def _add_focusables_to_group(focusables):
 
 def _remove_focusables_from_group(focusables):
     group = lv.group_get_default()
-    if group:
-        for w in focusables:
-            try:
-                group.remove_obj(w)
-            except Exception:
-                pass
+    if not group or not focusables:
+        return
+    to_remove = set(id(w) for w in focusables)
+    # Collect all current objects that should survive.
+    survivors = []
+    for i in range(group.get_obj_count()):
+        obj = group.get_obj_by_index(i)
+        if obj is not None and id(obj) not in to_remove:
+            survivors.append(obj)
+    group.remove_all_objs()
+    for obj in survivors:
+        try:
+            group.add_obj(obj)
+        except Exception:
+            pass
 
 
 def _icon_is_image_path(icon):
@@ -302,6 +311,7 @@ def create_notification_bar():
     notification_bar.set_scroll_dir(lv.DIR.NONE)
     notification_bar.set_style_border_width(0, lv.PART.MAIN)
     notification_bar.set_style_radius(0, lv.PART.MAIN)
+    notification_bar.remove_flag(lv.obj.FLAG.CLICKABLE)
     # Create SlidePanel for the bar
     _bar_panel = SlidePanel(notification_bar, shown_y=0, hidden_y=hidden_y,
                             duration=BAR_ANIM_DURATION, use_hidden_flag=False)
