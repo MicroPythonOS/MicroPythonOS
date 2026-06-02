@@ -227,13 +227,31 @@ def is_object_in_focus_group(focus_group, obj):
     return False
 
 
-def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees, debug=False):
+def _first_focusable_on_layer_top(focus_group):
+    """Return the first non-hidden focus-group member that lives on layer_top, or None.
+
+    This drives the modal-overlay behaviour: when layer_top has any focusable
+    content (e.g. a confirmation dialog's Yes/No buttons), focus must stay
+    there and must be redirected there if it currently lives elsewhere.
+    """
+    for i in range(focus_group.get_obj_count()):
+        obj = focus_group.get_obj_by_index(i)
+        if is_object_in_focus_group(focus_group, obj) and _is_on_layer_top(obj):
+            return obj
+    return None
+
+
+def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees,
+                                   top_layer_active=False, debug=False):
     """Find the best focus target in direction_degrees from current_focused.
 
     Uses the Android FocusFinder algorithm:
       1. isCandidate — edge-overlap filter (no angular cone)
       2. beamBeats   — in-beam widgets get priority
       3. weightedDistance — tie-break by 13*major² + minor²
+
+    top_layer_active: when True only layer_top candidates are considered;
+                      when False only non-layer_top candidates are considered.
 
     direction_degrees: 0=UP, 90=RIGHT, 180=DOWN, 270=LEFT
     Returns the winning object, or None.
@@ -245,7 +263,6 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     direction = direction_degrees  # alias for readability
 
     src = _get_rect(current_focused)
-    current_on_layer_top = _is_on_layer_top(current_focused)
 
     # Seed best_rect as a ghost rect displaced one pixel PAST the source in
     # the opposite direction, so the first real candidate always beats it.
@@ -265,7 +282,8 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     best_obj = None
 
     if debug:
-        print("find_closest_obj_in_direction: src=" + str(src) + " dir=" + str(direction))
+        print("find_closest_obj_in_direction: src=" + str(src) + " dir=" + str(direction)
+              + " top_layer_active=" + str(top_layer_active))
 
     def process_object(obj):
         nonlocal best_rect, best_obj
@@ -273,7 +291,8 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         if obj is None or obj is current_focused:
             return
 
-        if _is_on_layer_top(obj) != current_on_layer_top:
+        # Enforce layer constraint: only consider candidates in the active layer.
+        if _is_on_layer_top(obj) != top_layer_active:
             return
 
         if is_object_in_focus_group(focus_group, obj):
@@ -317,7 +336,22 @@ def move_focus_direction(angle):
     if isinstance(current_focused, lv.dropdown) and current_focused.is_open():
         print("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")
         return
-    o = find_closest_obj_in_direction(focus_group, current_focused, angle, False)
+
+    # Modal-overlay handling: if layer_top has any focusable content (e.g. a
+    # confirmation dialog), treat it as a modal — constrain all navigation to
+    # that layer.  If current focus is still on the normal screen, redirect it
+    # to the first overlay widget on the first keypress (Android-style: focus
+    # jumps to the dialog on the first directional key, not proactively).
+    first_on_top = _first_focusable_on_layer_top(focus_group)
+    top_layer_active = first_on_top is not None
+
+    if top_layer_active and not _is_on_layer_top(current_focused):
+        print("move_focus_direction: modal overlay present — redirecting focus to layer_top")
+        lv.group_focus_obj(first_on_top)
+        return
+
+    o = find_closest_obj_in_direction(focus_group, current_focused, angle,
+                                      top_layer_active=top_layer_active)
     if o:
         print("move_focus_direction: moving focus to:")
         mpos.util.print_lvgl_widget(o)
