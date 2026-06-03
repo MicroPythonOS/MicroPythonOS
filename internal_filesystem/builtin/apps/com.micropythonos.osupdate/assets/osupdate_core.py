@@ -304,12 +304,21 @@ class UpdateManager:
         self._state_callback = None
         self._running = False
         self._check_in_progress = False
+        self._suppress_notifications = False
 
     def set_state_callback(self, callback):
         self._state_callback = callback
 
     def clear_state_callback(self):
         self._state_callback = None
+
+    @property
+    def suppress_notifications(self):
+        return self._suppress_notifications
+
+    @suppress_notifications.setter
+    def suppress_notifications(self, value):
+        self._suppress_notifications = bool(value)
 
     def set_state(self, new_state):
         print(f"UpdateManager: state change {self.current_state} -> {new_state}")
@@ -340,6 +349,9 @@ class UpdateManager:
                 TaskManager.create_task(self.check_for_update())
 
     def _notify_update_available(self):
+        if self._suppress_notifications:
+            print("UpdateManager: suppressing notification because OSUpdate is in foreground")
+            return
         info = self._update_info or {}
         version = info.get("version")
         details = "Tap to open OS updater"
@@ -362,11 +374,13 @@ class UpdateManager:
     def _clear_update_available_notification(self):
         NotificationManager.cancel("osupdate.update_available")
 
-    async def start(self):
+    def start(self):
         self._running = True
         self.connectivity_manager = ConnectivityManager.get()
         self.connectivity_manager.register_callback(self._network_changed)
+        TaskManager.create_task(self._run_loop())
 
+    async def _run_loop(self):
         await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
 
         while self._running:
@@ -391,6 +405,12 @@ class UpdateManager:
         self._running = False
         if self.connectivity_manager:
             self.connectivity_manager.unregister_callback(self._network_changed)
+
+    def check_for_update_now(self):
+        """Kick off a one-off update check if none is already in progress."""
+        if self._check_in_progress:
+            return
+        TaskManager.create_task(self.check_for_update())
 
     async def check_for_update(self):
         if self._check_in_progress:

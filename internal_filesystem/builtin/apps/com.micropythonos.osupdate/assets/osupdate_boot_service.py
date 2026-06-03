@@ -1,4 +1,4 @@
-from mpos import Service, TaskManager
+from mpos import Service
 
 try:
     from osupdate_core import UpdateManager
@@ -12,7 +12,7 @@ class OSUpdateService(Service):
     def onStart(self, intent):
         if UpdateManager is None:
             return
-        TaskManager.create_task(UpdateManager.get_instance().start())
+        UpdateManager.get_instance().start()
 
     def onDestroy(self):
         if UpdateManager is None:

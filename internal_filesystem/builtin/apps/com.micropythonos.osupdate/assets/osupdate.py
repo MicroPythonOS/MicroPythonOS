@@ -65,14 +65,16 @@ class OSUpdate(Activity):
         super().onResume(screen)
         self._ensure_update_manager()
         self._um.set_state_callback(self._on_um_state_change)
+        self._um.suppress_notifications = True
         current_state = self._um.get_state()
         self._sync_ui(current_state)
 
         if current_state == UpdateState.IDLE:
-            TaskManager.create_task(self._um.check_for_update())
+            self._um.check_for_update_now()
 
     def onPause(self, screen):
         self._um.clear_state_callback()
+        self._um.suppress_notifications = False
         super().onPause(screen)
 
     def _on_um_state_change(self, state):
@@ -168,7 +170,7 @@ class OSUpdate(Activity):
     def check_again_click(self):
         print("OSUpdate: Check Again button clicked")
         self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
-        TaskManager.create_task(self._um.check_for_update())
+        self._um.check_for_update_now()
 
     def _get_user_friendly_error(self, error):
         error_str = str(error).lower()
