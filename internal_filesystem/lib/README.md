@@ -1,6 +1,5 @@
 This /lib folder contains:
 
-- mip.install('github:jonnor/micropython-zipfile')
 - mip.install("aiohttp") # easy websockets
 
 - https://github.com/micropython/micropython-lib/blob/master/micropython/aiorepl/aiorepl.py version 0.2.2 # for asyncio REPL, allowing await expressions
