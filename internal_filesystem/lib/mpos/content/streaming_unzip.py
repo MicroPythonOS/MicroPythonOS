@@ -350,7 +350,21 @@ def peek_strip_prefix(data_bytes, expected_name):
                 else:
                     top_dirs.add(filename)
 
-        buf = buf[header_total + compressed_size:]
+        # Skip over the header and the compressed data.
+        # If we don't have the full file data in the buffer, scan forward
+        # for the next local file header magic instead.
+        if len(buf) >= header_total + compressed_size:
+            buf = buf[header_total + compressed_size:]
+        else:
+            # The file data extends beyond our buffer.  Search for the
+            # next local header magic in what's left.
+            remainder = buf[header_total:]
+            idx = remainder.find(_LOCAL_HEADER_MAGIC)
+            if idx >= 0:
+                buf = buf[header_total + idx:]
+            else:
+                break
+
         if len(buf) < _LOCAL_HEADER_SIZE:
             break
 

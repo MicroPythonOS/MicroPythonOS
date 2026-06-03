@@ -127,11 +127,27 @@ class TestPeekStripPrefix(unittest.TestCase):
         prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
         self.assertEqual(prefix, "")
 
+    def test_no_strip_small_buffer(self):
+        """Flat package peeked with a buffer smaller than the first large file."""
+        with open("../tests/com.micropythonos.ziptest_Xr0.mpk", "rb") as f:
+            data = f.read(600)
+        # The icon_64x64.png file is larger than 600 bytes, but the peek
+        # should still recognise this as a flat (no top-level dir) package.
+        prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
+        self.assertEqual(prefix, "")
+
     def test_strip_expected(self):
         with open("../tests/com.micropythonos.ziptest_topdir.mpk", "rb") as f:
             data = f.read(1024)
         prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
         self.assertEqual(prefix, "com.micropythonos.ziptest/")
+
+    def test_largefirst_full_buffer(self):
+        """Flat package with a very large first file — full buffer peek."""
+        with open("../tests/com.micropythonos.ziptest_largefirst.mpk", "rb") as f:
+            data = f.read()
+        prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
+        self.assertEqual(prefix, "")
 
     def test_mismatch(self):
         with open("../tests/com.micropythonos.ziptest_invalid_topdir.mpk", "rb") as f:

@@ -120,6 +120,19 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         self._run_streaming_install("../tests/com.micropythonos.ziptest_topdir.mpk")
         self._assert_app_tree(self.DEST)
 
+    def test_streaming_install_largefirst_flat(self):
+        """Flat package whose first file is larger than a single chunk.
+
+        This reproduces the bug where early peek incorrectly concluded
+        the package had a top-level directory because only the first
+        entry was visible in the initial 4 KiB buffer.
+        """
+        self._run_streaming_install("../tests/com.micropythonos.ziptest_largefirst.mpk")
+        self._assert_dir(self.DEST)
+        self._assert_dir(f"{self.DEST}/assets")
+        self._assert_dir(f"{self.DEST}/META-INF")
+        self._assert_dir(f"{self.DEST}/res")
+
     def test_streaming_rejects_invalid_topdir(self):
         from mpos.net.download_manager import DownloadManager
 

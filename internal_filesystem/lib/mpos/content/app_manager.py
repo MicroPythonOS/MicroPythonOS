@@ -1,10 +1,5 @@
 import os
 
-try:
-    import zipfile
-except ImportError:
-    print("import zipfile failed, installation won't work!")
-
 '''
 Initialized at boot.
 Typical users: appstore, launcher
@@ -190,20 +185,14 @@ class AppManager:
 
         print(f"AppManager: streaming download+install {download_url} -> {dest_folder}")
 
-        _state = {"buf": bytearray(), "extractor": None}
+        # Accumulate the entire download in RAM so we can reliably determine
+        # the strip prefix (packages with a single large first file cannot be
+        # correctly analysed from a partial buffer).  Typical MPKs are small
+        # (< 100 KB) so this is fine on device.
+        _buf = {"data": bytearray()}
 
         async def _chunk_callback(chunk):
-            if _state["extractor"] is None:
-                _state["buf"] += chunk
-                # Wait until we have enough bytes to peek the top-level dir.
-                if len(_state["buf"]) < 1024:
-                    return
-                prefix = peek_strip_prefix(_state["buf"], fullname)
-                _state["extractor"] = StreamingUnzip(dest_folder, strip_prefix=prefix)
-                _state["extractor"].feed(_state["buf"])
-                _state["buf"] = None
-            else:
-                _state["extractor"].feed(chunk)
+            _buf["data"] += chunk
 
         try:
             result = await DownloadManager.download_url(
@@ -227,13 +216,21 @@ class AppManager:
                 pass
             raise RuntimeError(f"Download failed for {fullname}")
 
-        # If the total file was smaller than the peek threshold, finalize now.
-        if _state["extractor"] is None:
-            prefix = peek_strip_prefix(_state["buf"], fullname)
-            _state["extractor"] = StreamingUnzip(dest_folder, strip_prefix=prefix)
-            _state["extractor"].feed(_state["buf"])
+        # Now that we have the full archive, peek prefix and extract.
+        data = _buf["data"]
+        try:
+            prefix = peek_strip_prefix(data, fullname)
+            extractor = StreamingUnzip(dest_folder, strip_prefix=prefix)
+            extractor.feed(data)
+            extractor.finish()
+        except Exception as e:
+            print(f"AppManager: install exception for {fullname}: {e}")
+            try:
+                shutil.rmtree(dest_folder)
+            except Exception:
+                pass
+            raise RuntimeError(f"Download failed for {fullname}: {e}")
 
-        _state["extractor"].finish()
         print(f"AppManager: installed {fullname} successfully")
         AppManager.refresh_apps()
         return True
@@ -249,12 +246,14 @@ class AppManager:
 
     @staticmethod
     def install_mpk(temp_zip_path, dest_folder):
+        import shutil
+        from .streaming_unzip import StreamingUnzip, peek_strip_prefix
+
         try:
             # Step 1: Remove any existing (possibly partial) install or symlink
             try:
                 st = os.stat(dest_folder)
                 if st[0] & 0x4000:  # It's a real directory
-                    import shutil
                     shutil.rmtree(dest_folder)
                     print("Removed existing folder:", dest_folder)
                 else:
@@ -269,70 +268,28 @@ class AppManager:
             except OSError:
                 pass  # Not a symlink or already removed
 
-            # Step 2: Unzip the file
+            # Step 2: Read the whole file and stream-extract it
             print("Unzipping it to:", dest_folder)
 
-            with zipfile.ZipFile(temp_zip_path, "r") as zip_ref:
-                dest_name = dest_folder.rstrip(os.sep).split(os.sep)[-1]
-                nested_prefix = f"{dest_name}/"
-                top_dirs = set()
-                has_top_files = False
-                for member in zip_ref.infolist():
-                    name = member.filename.lstrip("/")
-                    if not name:
-                        continue
-                    stripped = name.strip("/")
-                    if not stripped:
-                        continue
-                    if "/" in stripped:
-                        top_dirs.add(stripped.split("/", 1)[0])
-                    else:
-                        if not member.is_dir():
-                            has_top_files = True
-                        else:
-                            top_dirs.add(stripped)
+            with open(temp_zip_path, "rb") as f:
+                data = f.read()
 
-                strip_prefix = ""
-                if not has_top_files and len(top_dirs) == 1:
-                    sole_top = next(iter(top_dirs))
-                    if sole_top == dest_name:
-                        strip_prefix = nested_prefix
-                    else:
-                        raise ValueError(
-                            "Invalid top-level dir '{}' (expected '{}')".format(
-                                sole_top,
-                                dest_name,
-                            )
-                        )
+            dest_name = dest_folder.rstrip(os.sep).split(os.sep)[-1]
+            prefix = peek_strip_prefix(data, dest_name)
+            extractor = StreamingUnzip(dest_folder, strip_prefix=prefix)
+            extractor.feed(data)
+            extractor.finish()
 
-                for member in zip_ref.infolist():
-                    arcname = member.filename.lstrip("/")
-                    if strip_prefix:
-                        if not arcname.startswith(strip_prefix):
-                            continue
-                        arcname = arcname[len(strip_prefix):]
-                        if not arcname:
-                            continue
-                    original_name = member.filename
-                    try:
-                        member.filename = arcname
-                        zip_ref.extract(member, dest_folder)
-                    finally:
-                        member.filename = original_name
             print("Unzipped successfully")
             # Step 3: Clean up
             os.remove(temp_zip_path)
             print("Removed temporary .mpk file")
         except Exception as e:
             print(f"install_mpk got exception, will attempt cleanup: {e}")
-            # Would be good to show error message here if it fails...
             try:
                 import shutil
                 shutil.rmtree(dest_folder)
-            except Exception as e:
-                #print(f"install_mpk got shutil.rmtree exception: {e}")
-                #import sys
-                #sys.print_exception(e)
+            except Exception:
                 pass
             try:
                 os.remove(temp_zip_path)
