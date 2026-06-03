@@ -13,7 +13,7 @@ Frameworks:
 - NotificationManager: new framework to notify the user
 - AppManager: buffer .mpk/.zip in RAM instead of ROM before extracting (less space required, less flash wear, faster)
 - AppManager: check sufficient free storage space before installing app package
-- FontManager: switch openmoji to noto-emoji and add 5 additional emojis
+- FontManager: switch openmoji to noto-emoji and add 10 additional emojis
 
 
 OS:
