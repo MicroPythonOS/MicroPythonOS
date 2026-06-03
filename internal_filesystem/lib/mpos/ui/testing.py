@@ -1706,6 +1706,23 @@ def simulate_long_press(x, y, duration_ms=1000):
     simulate_click(x, y, press_duration_ms=duration_ms)
 
 
+def find_label_on_any_layer(text):
+    """Search for text on both lv.screen_active() and lv.layer_top().
+
+    Useful for finding text in popups/dialogs created on the top layer.
+    Returns the widget if found on either layer, None otherwise.
+    """
+    result = find_label_with_text(lv.screen_active(), text)
+    if result:
+        return result
+    return find_label_with_text(lv.layer_top(), text)
+
+
+def verify_text_on_any_layer(text):
+    """Check if text is present on either the active screen or top layer."""
+    return find_label_on_any_layer(text) is not None
+
+
 def wait_for_text(text, timeout=10, interval=0.1):
     """
     Wait for text to appear on screen, polling periodically.

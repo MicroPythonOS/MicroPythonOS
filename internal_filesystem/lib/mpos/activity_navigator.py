@@ -72,6 +72,10 @@ class ActivityNavigator:
         except Exception as e:
             print(f"activity.onCreate caught exception:")
             sys.print_exception(e)
+            from mpos.ui.errordialog import show_app_error_dialog
+            show_app_error_dialog(
+                activity.appFullName, e, is_lifecycle=True
+            )
         end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
         print(f"apps.py _launch_activity: activity.onCreate took {end_time}ms")
         return activity

@@ -44,6 +44,10 @@ def setContentView(new_activity, new_screen):
         except Exception as e:
             print(f"onStart caught exception:")
             sys.print_exception(e)
+            from mpos.ui.errordialog import show_app_error_dialog
+            show_app_error_dialog(
+                new_activity.appFullName, e, is_lifecycle=True
+            )
     lv.screen_load_anim(new_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, 500, 0, False)
     if new_activity:
         try:
@@ -51,6 +55,10 @@ def setContentView(new_activity, new_screen):
         except Exception as e:
             print(f"onResume caught exception:")
             sys.print_exception(e)
+            from mpos.ui.errordialog import show_app_error_dialog
+            show_app_error_dialog(
+                new_activity.appFullName, e, is_lifecycle=True
+            )
 
 def remove_and_stop_all_activities():
     global screen_stack

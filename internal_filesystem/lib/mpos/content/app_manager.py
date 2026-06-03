@@ -452,6 +452,10 @@ class AppManager:
                         f"from {compile_name}: {import_error}"
                     )
                     sys.print_exception(import_error)
+                    from mpos.ui.errordialog import show_app_error_dialog
+                    show_app_error_dialog(
+                        app_fullname, import_error, is_lifecycle=False
+                    )
                     return False
                 finally:
                     if had_previous_module:
@@ -461,6 +465,10 @@ class AppManager:
             except Exception as e:
                 print(f"Thread {thread_id}: exception during execution:")
                 sys.print_exception(e)
+                from mpos.ui.errordialog import show_app_error_dialog
+                show_app_error_dialog(
+                    app_fullname, e, is_lifecycle=False
+                )
                 return False
             finally:
                 # Always restore sys.path, even if we return early or raise an exception
