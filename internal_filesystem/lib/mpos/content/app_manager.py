@@ -189,7 +189,7 @@ class AppManager:
 
         extractor = StreamingUnzip(
             dest_folder,
-            expected_prefix=fullname,
+            expected_app_name=fullname,
             free_space_limit=lambda req: AppManager._check_free_space(".", req),
         )
 
@@ -288,19 +288,22 @@ class AppManager:
             except OSError:
                 pass  # Not a symlink or already removed
 
-            # Step 2: Read the whole file and stream-extract it
+            # Step 2: Stream-extract the file in chunks
             print("Unzipping it to:", dest_folder)
-
-            with open(temp_zip_path, "rb") as f:
-                data = f.read()
 
             dest_name = dest_folder.rstrip(os.sep).split(os.sep)[-1]
             extractor = StreamingUnzip(
                 dest_folder,
-                expected_prefix=dest_name,
+                expected_app_name=dest_name,
                 free_space_limit=lambda req: AppManager._check_free_space(".", req),
             )
-            extractor.feed(data)
+
+            with open(temp_zip_path, "rb") as f:
+                while True:
+                    chunk = f.read(4096)
+                    if not chunk:
+                        break
+                    extractor.feed(chunk)
             extractor.finish()
 
             print("Unzipped successfully")

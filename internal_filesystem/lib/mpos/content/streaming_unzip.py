@@ -24,7 +24,7 @@ Usage:
     from mpos.content.streaming_unzip import StreamingUnzip
 
     async def download_and_extract(url, dest_folder):
-        extractor = StreamingUnzip(dest_folder, expected_prefix="com.micropythonos.helloworld")
+        extractor = StreamingUnzip(dest_folder, expected_app_name="com.micropythonos.helloworld")
         result = await DownloadManager.download_url(
             url,
             chunk_callback=extractor.feed,
@@ -97,7 +97,7 @@ def _makedirs(path):
             pass
 
 
-def _check_top_dir(filename, expected_prefix):
+def _check_top_dir(filename, expected_app_name):
     """Validate the first ZIP entry is the expected top-level directory.
 
     Raises RuntimeError if the archive violates MPK spec.
@@ -108,9 +108,9 @@ def _check_top_dir(filename, expected_prefix):
             "MPK archives must start with the top-level folder." % filename
         )
     top_dir = filename.rstrip("/")
-    if top_dir != expected_prefix:
+    if top_dir != expected_app_name:
         raise RuntimeError(
-            "Invalid top-level dir '%s' (expected '%s')" % (top_dir, expected_prefix)
+            "Invalid top-level dir '%s' (expected '%s')" % (top_dir, expected_app_name)
         )
 
 
@@ -121,7 +121,7 @@ class StreamingUnzip:
     ----------
     dest_folder : str
         Root directory to write into.
-    expected_prefix : str
+    expected_app_name : str
         The app fullname that must appear as the single top-level directory.
         Example: ``"com.micropythonos.helloworld"``.
     free_space_limit : int or callable
@@ -131,13 +131,13 @@ class StreamingUnzip:
         When ``None`` (default), no pre-extraction space check is performed.
     """
 
-    def __init__(self, dest_folder, expected_prefix, free_space_limit=None):
+    def __init__(self, dest_folder, expected_app_name, free_space_limit=None):
         if not dest_folder:
             raise ValueError("dest_folder required")
-        if not expected_prefix:
-            raise ValueError("expected_prefix required")
+        if not expected_app_name:
+            raise ValueError("expected_app_name required")
         self.dest_folder = dest_folder.rstrip(os.sep)
-        self.expected_prefix = expected_prefix
+        self.expected_app_name = expected_app_name
         self.free_space_limit = free_space_limit
         self._buf = bytearray()
         self._state = "idle"
@@ -217,7 +217,7 @@ class StreamingUnzip:
             filename = _strip_leading_slash(filename)
 
             if not self._first_header_checked:
-                _check_top_dir(filename, self.expected_prefix)
+                _check_top_dir(filename, self.expected_app_name)
                 self._first_header_checked = True
                 _makedirs(self.dest_folder)
 
@@ -236,15 +236,15 @@ class StreamingUnzip:
             filename = _sanitize_path(filename)
 
             # Every subsequent entry must live under the top-level dir
-            if not filename.startswith(self.expected_prefix + "/"):
+            if not filename.startswith(self.expected_app_name + "/"):
                 extra = filename.split("/")[0] if "/" in filename else filename
                 raise RuntimeError(
                     "Out-of-spec archive: entry '%s' is outside top-level dir '%s'"
-                    % (filename, self.expected_prefix)
+                    % (filename, self.expected_app_name)
                 )
 
             # Remove the prefix from the member name for extraction
-            filename = filename[len(self.expected_prefix) + 1:]
+            filename = filename[len(self.expected_app_name) + 1:]
 
             # Determine compression method and sizes
             comp_method = vals[_FH_COMPRESSION_METHOD]

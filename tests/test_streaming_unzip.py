@@ -50,7 +50,7 @@ class TestStreamingUnzip(unittest.TestCase):
         with open("../tests/com.micropythonos.ziptest_flat.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
         chunk_size = 512
         for i in range(0, len(data), chunk_size):
             extractor.feed(data[i:i + chunk_size])
@@ -63,7 +63,7 @@ class TestStreamingUnzip(unittest.TestCase):
         with open("../tests/com.micropythonos.ziptest_flat_deflated.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
         for i in range(0, len(data), 713):
             extractor.feed(data[i:i + 713])
         extractor.finish()
@@ -75,7 +75,7 @@ class TestStreamingUnzip(unittest.TestCase):
         with open("../tests/com.micropythonos.ziptest_flat_largefirst.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
         for i in range(0, len(data), 1024):
             extractor.feed(data[i:i + 1024])
         extractor.finish()
@@ -90,7 +90,7 @@ class TestStreamingUnzip(unittest.TestCase):
         with open("../tests/com.micropythonos.ziptest_flat_deflated.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
         for b in data:
             extractor.feed(bytes([b]))
         extractor.finish()
@@ -108,7 +108,7 @@ class TestStreamingUnzip(unittest.TestCase):
         with open("../tests/com.micropythonos.ziptest_largefirst.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
         with self.assertRaises(RuntimeError) as ctx:
             for i in range(0, len(data), 512):
                 extractor.feed(data[i:i + 512])
@@ -116,11 +116,11 @@ class TestStreamingUnzip(unittest.TestCase):
         self.assertIn("not a directory", str(ctx.exception))
 
     def test_rejects_wrong_topdir(self):
-        """Package whose top dir does not match expected_prefix is refused."""
+        """Package whose top dir does not match expected_app_name is refused."""
         with open("../tests/com.micropythonos.ziptest_invalid_topdir.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
         with self.assertRaises(RuntimeError) as ctx:
             for i in range(0, len(data), 512):
                 extractor.feed(data[i:i + 512])
@@ -132,7 +132,7 @@ class TestStreamingUnzip(unittest.TestCase):
         with open("../tests/com.micropythonos.ziptest_mixed_topdir.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
         with self.assertRaises(RuntimeError) as ctx:
             extractor.feed(data)
             extractor.finish()
@@ -147,7 +147,7 @@ class TestStreamingUnzip(unittest.TestCase):
 
         # Use a limit of 1 byte to force failure
         extractor = StreamingUnzip(
-            self.DEST, expected_prefix="com.micropythonos.ziptest", free_space_limit=1
+            self.DEST, expected_app_name="com.micropythonos.ziptest", free_space_limit=1
         )
         with self.assertRaises(RuntimeError) as ctx:
             extractor.feed(data[:2048])  # first chunk is enough to trigger check
@@ -164,7 +164,7 @@ class TestStreamingUnzip(unittest.TestCase):
                 raise RuntimeError("Custom space check failed: need %d bytes" % req)
 
         extractor = StreamingUnzip(
-            self.DEST, expected_prefix="com.micropythonos.ziptest", free_space_limit=check
+            self.DEST, expected_app_name="com.micropythonos.ziptest", free_space_limit=check
         )
         with self.assertRaises(RuntimeError) as ctx:
             extractor.feed(data[:2048])
