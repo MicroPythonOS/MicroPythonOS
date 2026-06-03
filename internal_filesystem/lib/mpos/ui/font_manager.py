@@ -89,6 +89,7 @@ flower_group,🎊
 flower_group,🌺
 flower_group,🌼
 flower_group,🌻
+flower_group,🍀
 birthday_cakes,🎂
 birthday_cakes,👑
 """
