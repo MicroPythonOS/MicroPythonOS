@@ -47,6 +47,7 @@ class AppStore(Activity):
     title_label = None
     update_all_button = None
     update_all_label = None
+    _update_labels = {}
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
@@ -101,7 +102,9 @@ class AppStore(Activity):
             from appstore_core import AppUpdateManager, AppUpdateState
             um = AppUpdateManager.get_instance()
             um.set_state_callback(self._on_update_state_change)
+            um.suppress_notifications = True
             self._sync_update_banner(um.current_state, um.updatable_apps)
+            um.check_for_updates_now(self.get_backend_list_url_from_settings())
         except Exception as e:
             print(f"AppStore: could not attach to AppUpdateManager: {e}")
 
@@ -112,6 +115,7 @@ class AppStore(Activity):
         try:
             from appstore_core import AppUpdateManager
             AppUpdateManager.get_instance().clear_state_callback()
+            AppUpdateManager.get_instance().suppress_notifications = False
         except Exception as e:
             print(f"AppStore: could not detach from AppUpdateManager: {e}")
         super().onPause(screen)
@@ -144,6 +148,14 @@ class AppStore(Activity):
             # Move the list back up
             if hasattr(self, "apps_list") and self.apps_list:
                 self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, self._TOP_BAR_HEIGHT)
+
+        # Show/hide per-app "Update available" labels
+        updatable_set = {a.get("fullname") for a in (updatable_apps or [])}
+        for fullname, label in self._update_labels.items():
+            if fullname in updatable_set:
+                label.remove_flag(lv.obj.FLAG.HIDDEN)
+            else:
+                label.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _update_all_click(self, event):
         try:
@@ -181,7 +193,7 @@ class AppStore(Activity):
         self.refresh_list()
         try:
             from appstore_core import AppUpdateManager
-            TaskManager.create_task(AppUpdateManager.get_instance().check_for_updates())
+            AppUpdateManager.get_instance().check_for_updates_now()
         except Exception as e:
             print(f"AppStore: post-update check error: {e}")
 
@@ -276,6 +288,7 @@ class AppStore(Activity):
         self.apps_list.set_size(lv.pct(100), lv.pct(100))
         self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, list_top)
         self._icon_widgets = {}
+        self._update_labels = {}
         print("create_apps_list iterating")
         for app in self.apps:
             print(app)
@@ -309,6 +322,12 @@ class AppStore(Activity):
             desc_label.set_text(app.short_description)
             desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
             self._add_click_handler(desc_label, self.show_app_detail, app)
+            update_label = lv.label(label_cont)
+            update_label.set_text("Update available")
+            update_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
+            update_label.add_flag(lv.obj.FLAG.HIDDEN)
+            self._update_labels[app.fullname] = update_label
         print("create_apps_list done")
 
     async def download_icons(self):

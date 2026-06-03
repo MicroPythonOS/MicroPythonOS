@@ -57,6 +57,7 @@ class AppUpdateManager:
         self._check_in_progress = False
         self._connectivity_manager = None
         self._state_callback = None
+        self._suppress_notifications = False
 
         # Results of the last check
         self.updatable_apps = []   # list of App objects (from store) that are newer than installed
@@ -71,6 +72,14 @@ class AppUpdateManager:
     def clear_state_callback(self):
         self._state_callback = None
 
+    @property
+    def suppress_notifications(self):
+        return self._suppress_notifications
+
+    @suppress_notifications.setter
+    def suppress_notifications(self, value):
+        self._suppress_notifications = bool(value)
+
     def _set_state(self, new_state):
         print(f"AppUpdateManager: {self.current_state} -> {new_state}")
         self.current_state = new_state
@@ -84,11 +93,13 @@ class AppUpdateManager:
     # Background service loop
     # ------------------------------------------------------------------
 
-    async def start(self):
+    def start(self):
         self._running = True
         self._connectivity_manager = ConnectivityManager.get()
         self._connectivity_manager.register_callback(self._network_changed)
+        TaskManager.create_task(self._run_loop())
 
+    async def _run_loop(self):
         await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
 
         while self._running:
@@ -111,6 +122,12 @@ class AppUpdateManager:
         self._running = False
         if self._connectivity_manager:
             self._connectivity_manager.unregister_callback(self._network_changed)
+
+    def check_for_updates_now(self, index_url=None):
+        """Kick off a one-off update check if none is already in progress."""
+        if self._check_in_progress:
+            return
+        TaskManager.create_task(self.check_for_updates(index_url))
 
     def _network_changed(self, online):
         print(f"AppUpdateManager: network {'ONLINE' if online else 'OFFLINE'}")
@@ -190,6 +207,9 @@ class AppUpdateManager:
     # ------------------------------------------------------------------
 
     def _notify_updates_available(self):
+        if self._suppress_notifications:
+            print("AppUpdateManager: suppressing notification because AppStore is in foreground")
+            return
         n = len(self.updatable_apps)
         text = f"{n} app{'s' if n != 1 else ''} can be updated"
         NotificationManager.notify(

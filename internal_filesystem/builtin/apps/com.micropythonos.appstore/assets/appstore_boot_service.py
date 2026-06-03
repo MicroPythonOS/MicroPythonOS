@@ -1,4 +1,4 @@
-from mpos import Service, TaskManager
+from mpos import Service
 
 try:
     from appstore_core import AppUpdateManager
@@ -12,7 +12,7 @@ class AppStoreService(Service):
     def onStart(self, intent):
         if AppUpdateManager is None:
             return
-        TaskManager.create_task(AppUpdateManager.get_instance().start())
+        AppUpdateManager.get_instance().start()
 
     def onDestroy(self):
         if AppUpdateManager is None:
