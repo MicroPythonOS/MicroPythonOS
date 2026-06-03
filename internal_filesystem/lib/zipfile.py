@@ -811,20 +811,37 @@ class DeflateCompressor:
 class DeflateDecompressor:
 
     def __init__(self):
-        self._decomp = None
+        self._stream = None
+        self._decompressor = None
         self.unconsumed_tail = b''
         self.eof = False
 
     def decompress(self, data):
-        stream = io.BytesIO(data)
+        if not data:
+            return b''
+        if self._stream is None:
+            self._stream = io.BytesIO(data)
+            try:
+                self._decompressor = deflate.DeflateIO(self._stream, deflate.RAW, 15)
+            except Exception:
+                self.eof = True
+                return b''
+        else:
+            pos = self._stream.tell()
+            self._stream.seek(0, 2)
+            self._stream.write(data)
+            self._stream.seek(pos)
         try:
-            with deflate.DeflateIO(stream, deflate.RAW, 15) as d:
-                decompressed = d.read()
+            result = self._decompressor.read()
+            if not result:
+                self.eof = True
+            return result
         except EOFError:
+            self.eof = True
             return b''
         except OSError:
+            # Not enough compressed data yet or stream truncated
             return b''
-        return decompressed
 
 
 compressor_names = {
