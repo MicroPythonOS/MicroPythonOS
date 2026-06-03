@@ -15,7 +15,6 @@ Frameworks:
 - AppManager: check sufficient free storage space before installing app package
 - FontManager: switch openmoji to noto-emoji and add 10 additional emojis
 
-
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
 - Create WifiBoot-, WebServerBoot- and AIOReplService
