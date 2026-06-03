@@ -14,8 +14,9 @@ class HowTo(Activity):
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(5), lv.PART.MAIN)
-        # Make the screen focusable so it can be scrolled with the arrow keys
-        lv.group_get_default().add_obj(screen)
+        # Children (labels, checkbox, button) are auto-added to the default group;
+        # the screen itself must NOT be in the group, otherwise move_focus_direction
+        # cannot find widgets below it (the fullscreen rect blocks spatial navigation).
         preamble = "How to Navigate"
         self._add_label(screen, preamble, is_header=True)
 
