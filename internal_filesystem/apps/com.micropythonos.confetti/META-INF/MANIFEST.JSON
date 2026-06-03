@@ -4,7 +4,7 @@
     "short_description": "Just shows confetti",
     "long_description": "Nothing special, just a demo.",
     "fullname": "com.micropythonos.confetti",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "category": "games",
     "activities": [
         {

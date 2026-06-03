@@ -1,5 +1,6 @@
 # This is a copy of LightningPiggyApp's confetti.py
 
+import os
 import time
 import random
 import lvgl as lv
@@ -50,17 +51,30 @@ class Confetti:
         self._init_images()
     
     def _init_images(self):
-        """Pre-create LVGL image objects for confetti."""
+        """Pre-create LVGL image objects for confetti using random emoji images."""
+        emoji_files = []
+        dir_path = self.asset_path
+        if dir_path.startswith("M:"):
+            dir_path = dir_path[2:]
+        try:
+            for entry in os.listdir(dir_path):
+                name = entry[0] if isinstance(entry, tuple) else entry
+                if name.lower().endswith(".png"):
+                    emoji_files.append(name)
+        except OSError:
+            pass
+
         iconimages = 2
         for _ in range(iconimages):
             img = lv.image(lv.layer_top())
             img.set_src(f"{self.icon_path}icon_64x64.png")
             img.add_flag(lv.obj.FLAG.HIDDEN)
             self.confetti_images.append(img)
-        
+
         for i in range(self.max_confetti - iconimages):
             img = lv.image(lv.layer_top())
-            img.set_src(f"{self.asset_path}confetti{random.randint(0, 4)}.png")
+            src = f"{self.asset_path}{random.choice(emoji_files)}" if emoji_files else f"{self.asset_path}confetti{random.randint(0, 4)}.png"
+            img.set_src(src)
             img.add_flag(lv.obj.FLAG.HIDDEN)
             self.confetti_images.append(img)
     
