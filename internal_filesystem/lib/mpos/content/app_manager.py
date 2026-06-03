@@ -154,7 +154,9 @@ class AppManager:
         """Download an .mpk package and install it into apps/<fullname>.
 
         The download is fed directly into a streaming ZIP extractor so no
-        temporary file is written to storage.
+        temporary file is written to storage.  Extraction starts immediately
+        once the first chunk arrives, and the archive is validated against the
+        strict MPK spec (single top-level dir matching ``fullname``).
 
         Raises an exception on failure so the caller can handle UI feedback.
         Returns True on success.
@@ -162,7 +164,7 @@ class AppManager:
         import os
         import shutil
         from ..net.download_manager import DownloadManager
-        from .streaming_unzip import StreamingUnzip, peek_strip_prefix, estimate_uncompressed_size
+        from .streaming_unzip import StreamingUnzip
 
         dest_folder = f"apps/{fullname}"
 
@@ -185,14 +187,14 @@ class AppManager:
 
         print(f"AppManager: streaming download+install {download_url} -> {dest_folder}")
 
-        # Accumulate the entire download in RAM so we can reliably determine
-        # the strip prefix (packages with a single large first file cannot be
-        # correctly analysed from a partial buffer).  Typical MPKs are small
-        # (< 100 KB) so this is fine on device.
-        _buf = {"data": bytearray()}
+        extractor = StreamingUnzip(
+            dest_folder,
+            expected_prefix=fullname,
+            free_space_limit=lambda req: AppManager._check_free_space(".", req),
+        )
 
         async def _chunk_callback(chunk):
-            _buf["data"] += chunk
+            extractor.feed(chunk)
 
         try:
             result = await DownloadManager.download_url(
@@ -216,14 +218,7 @@ class AppManager:
                 pass
             raise RuntimeError(f"Download failed for {fullname}")
 
-        # Now that we have the full archive, check space, peek prefix and extract.
-        data = _buf["data"]
         try:
-            needed = estimate_uncompressed_size(data)
-            AppManager._check_free_space(".", needed)
-            prefix = peek_strip_prefix(data, fullname)
-            extractor = StreamingUnzip(dest_folder, strip_prefix=prefix)
-            extractor.feed(data)
             extractor.finish()
         except Exception as e:
             print(f"AppManager: install exception for {fullname}: {e}")
@@ -272,7 +267,7 @@ class AppManager:
     def install_mpk(temp_zip_path, dest_folder):
         import shutil
         import os
-        from .streaming_unzip import StreamingUnzip, peek_strip_prefix, estimate_uncompressed_size
+        from .streaming_unzip import StreamingUnzip
 
         try:
             # Step 1: Remove any existing (possibly partial) install or symlink
@@ -293,19 +288,18 @@ class AppManager:
             except OSError:
                 pass  # Not a symlink or already removed
 
-            # Step 2: Read the whole file and check free space
+            # Step 2: Read the whole file and stream-extract it
             print("Unzipping it to:", dest_folder)
 
             with open(temp_zip_path, "rb") as f:
                 data = f.read()
 
-            # Check free space before extracting
-            needed = estimate_uncompressed_size(data)
-            AppManager._check_free_space(".", needed)
-
             dest_name = dest_folder.rstrip(os.sep).split(os.sep)[-1]
-            prefix = peek_strip_prefix(data, dest_name)
-            extractor = StreamingUnzip(dest_folder, strip_prefix=prefix)
+            extractor = StreamingUnzip(
+                dest_folder,
+                expected_prefix=dest_name,
+                free_space_limit=lambda req: AppManager._check_free_space(".", req),
+            )
             extractor.feed(data)
             extractor.finish()
 

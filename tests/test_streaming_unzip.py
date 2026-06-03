@@ -2,11 +2,10 @@ import os
 import shutil
 import unittest
 
-from mpos.content.streaming_unzip import StreamingUnzip, peek_strip_prefix
+from mpos.content.streaming_unzip import StreamingUnzip
 
 
 class TestStreamingUnzip(unittest.TestCase):
-
     DEST = "tmp_streaming_unzip"
 
     def setUp(self):
@@ -40,120 +39,137 @@ class TestStreamingUnzip(unittest.TestCase):
         self._assert_dir(f"{dest}/META-INF")
         self._assert_dir(f"{dest}/res")
         self._assert_dir(f"{dest}/res/mipmap-mdpi")
-        self._assert_file_size(
-            f"{dest}/assets/hello.py",
-            232,
-        )
-        self._assert_file_size(
-            f"{dest}/META-INF/MANIFEST.JSON",
-            406,
-        )
-        self._assert_file_size(
-            f"{dest}/res/mipmap-mdpi/icon_64x64.png",
-            5499,
-        )
+        self._assert_file_size(f"{dest}/assets/hello.py", 232)
+        self._assert_file_size(f"{dest}/META-INF/MANIFEST.JSON", 406)
+        self._assert_file_size(f"{dest}/res/mipmap-mdpi/icon_64x64.png", 5499)
 
-    def test_extracts_uncompressed(self):
-        source_mpk = "../tests/com.micropythonos.ziptest_Xr0.mpk"
-        with open(source_mpk, "rb") as f:
+    # ---- happy path -------------------------------------------------
+
+    def test_extracts_flat_stored(self):
+        """Well-formed flat (stored) MPK."""
+        with open("../tests/com.micropythonos.ziptest_flat.mpk", "rb") as f:
             data = f.read()
 
-        # Feed in small chunks (simulating network download)
-        extractor = StreamingUnzip(self.DEST)
+        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
         chunk_size = 512
         for i in range(0, len(data), chunk_size):
             extractor.feed(data[i:i + chunk_size])
         extractor.finish()
 
-        # The zip has no top-level directory, but it should strip nothing
         self._assert_app_tree(self.DEST)
 
-    def test_extracts_deflated(self):
-        source_mpk = "../tests/com.micropythonos.ziptest_r.mpk"
-        with open(source_mpk, "rb") as f:
+    def test_extracts_flat_deflated(self):
+        """Well-formed deflated MPK."""
+        with open("../tests/com.micropythonos.ziptest_flat_deflated.mpk", "rb") as f:
             data = f.read()
 
-        extractor = StreamingUnzip(self.DEST)
-        chunk_size = 1024
-        for i in range(0, len(data), chunk_size):
-            extractor.feed(data[i:i + chunk_size])
-        extractor.finish()
-
-        self._assert_app_tree(self.DEST)
-
-    def test_extracts_with_topdir(self):
-        source_mpk = "../tests/com.micropythonos.ziptest_topdir.mpk"
-        with open(source_mpk, "rb") as f:
-            data = f.read()
-
-        # peek_strip_prefix only needs the first few hundred bytes
-        prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
-        self.assertEqual(prefix, "com.micropythonos.ziptest/")
-
-        extractor = StreamingUnzip(self.DEST, strip_prefix=prefix)
+        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
         for i in range(0, len(data), 713):
             extractor.feed(data[i:i + 713])
         extractor.finish()
 
         self._assert_app_tree(self.DEST)
 
-    def test_rejects_invalid_topdir(self):
-        source_mpk = "../tests/com.micropythonos.ziptest_invalid_topdir.mpk"
-        with open(source_mpk, "rb") as f:
+    def test_extracts_largefirst(self):
+        """Well-formed MPK with large first file."""
+        with open("../tests/com.micropythonos.ziptest_flat_largefirst.mpk", "rb") as f:
             data = f.read()
 
-        with self.assertRaises(ValueError):
-            peek_strip_prefix(data, "com.micropythonos.ziptest")
+        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        for i in range(0, len(data), 1024):
+            extractor.feed(data[i:i + 1024])
+        extractor.finish()
+
+        self._assert_dir(self.DEST)
+        self._assert_dir(f"{self.DEST}/assets")
+        self._assert_dir(f"{self.DEST}/META-INF")
+        self._assert_dir(f"{self.DEST}/res")
 
     def test_deflated_with_tiny_chunks(self):
-        source_mpk = "../tests/com.micropythonos.ziptest_r.mpk"
-        with open(source_mpk, "rb") as f:
+        """Feed single-byte chunks to stress the state machine."""
+        with open("../tests/com.micropythonos.ziptest_flat_deflated.mpk", "rb") as f:
             data = f.read()
 
-        # Feed single-byte chunks to stress the state machine
-        extractor = StreamingUnzip(self.DEST)
+        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
         for b in data:
             extractor.feed(bytes([b]))
         extractor.finish()
 
         self._assert_app_tree(self.DEST)
 
+    # ---- error path -------------------------------------------------
 
-class TestPeekStripPrefix(unittest.TestCase):
+    def test_rejects_flat_no_topdir(self):
+        """Package without a top-level dir is refused.
 
-    def test_no_strip(self):
-        with open("../tests/com.micropythonos.ziptest_Xr0.mpk", "rb") as f:
-            data = f.read(1024)
-        prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
-        self.assertEqual(prefix, "")
-
-    def test_no_strip_small_buffer(self):
-        """Flat package peeked with a buffer smaller than the first large file."""
-        with open("../tests/com.micropythonos.ziptest_Xr0.mpk", "rb") as f:
-            data = f.read(600)
-        # The icon_64x64.png file is larger than 600 bytes, but the peek
-        # should still recognise this as a flat (no top-level dir) package.
-        prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
-        self.assertEqual(prefix, "")
-
-    def test_strip_expected(self):
-        with open("../tests/com.micropythonos.ziptest_topdir.mpk", "rb") as f:
-            data = f.read(1024)
-        prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
-        self.assertEqual(prefix, "com.micropythonos.ziptest/")
-
-    def test_largefirst_full_buffer(self):
-        """Flat package with a very large first file — full buffer peek."""
+        Uses ``ziptest_largefirst.mpk`` (old flat package) whose first entry
+        is ``assets/main.py`` — a file, not a directory.
+        """
         with open("../tests/com.micropythonos.ziptest_largefirst.mpk", "rb") as f:
             data = f.read()
-        prefix = peek_strip_prefix(data, "com.micropythonos.ziptest")
-        self.assertEqual(prefix, "")
 
-    def test_mismatch(self):
+        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        with self.assertRaises(RuntimeError) as ctx:
+            for i in range(0, len(data), 512):
+                extractor.feed(data[i:i + 512])
+            extractor.finish()
+        self.assertIn("not a directory", str(ctx.exception))
+
+    def test_rejects_wrong_topdir(self):
+        """Package whose top dir does not match expected_prefix is refused."""
         with open("../tests/com.micropythonos.ziptest_invalid_topdir.mpk", "rb") as f:
-            data = f.read(1024)
-        with self.assertRaises(ValueError):
-            peek_strip_prefix(data, "com.micropythonos.ziptest")
+            data = f.read()
+
+        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        with self.assertRaises(RuntimeError) as ctx:
+            for i in range(0, len(data), 512):
+                extractor.feed(data[i:i + 512])
+            extractor.finish()
+        self.assertIn("Invalid top-level dir", str(ctx.exception))
+
+    def test_enforces_topdir_entry(self):
+        """Any entry not under the top-level dir is caught as out-of-spec."""
+        with open("../tests/com.micropythonos.ziptest_mixed_topdir.mpk", "rb") as f:
+            data = f.read()
+
+        extractor = StreamingUnzip(self.DEST, expected_prefix="com.micropythonos.ziptest")
+        with self.assertRaises(RuntimeError) as ctx:
+            extractor.feed(data)
+            extractor.finish()
+        self.assertIn("outside top-level dir", str(ctx.exception))
+
+    # ---- free-space check ------------------------------------------
+
+    def test_free_space_limit_int(self):
+        """Integer free_space_limit is enforced."""
+        with open("../tests/com.micropythonos.ziptest_flat.mpk", "rb") as f:
+            data = f.read()
+
+        # Use a limit of 1 byte to force failure
+        extractor = StreamingUnzip(
+            self.DEST, expected_prefix="com.micropythonos.ziptest", free_space_limit=1
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            extractor.feed(data[:2048])  # first chunk is enough to trigger check
+            extractor.finish()
+        self.assertIn("Not enough free space", str(ctx.exception))
+
+    def test_free_space_limit_callable(self):
+        """Callable free_space_limit is invoked with required bytes."""
+        with open("../tests/com.micropythonos.ziptest_flat.mpk", "rb") as f:
+            data = f.read()
+
+        def check(req):
+            if req > 100:
+                raise RuntimeError("Custom space check failed: need %d bytes" % req)
+
+        extractor = StreamingUnzip(
+            self.DEST, expected_prefix="com.micropythonos.ziptest", free_space_limit=check
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            extractor.feed(data[:2048])
+            extractor.finish()
+        self.assertIn("Custom space check", str(ctx.exception))
 
 
 if __name__ == "__main__":

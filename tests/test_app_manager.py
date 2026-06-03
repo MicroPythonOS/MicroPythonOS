@@ -4,7 +4,10 @@ import unittest
 
 from mpos import AppManager
 
+
 class TestAppManagerInstallMpk(unittest.TestCase):
+    """Tests for the offline ``install_mpk`` path using the strict MPK spec."""
+
     APP_FULLNAME = "com.micropythonos.ziptest"
     APP_ROOT = f"apps/{APP_FULLNAME}"
     TEMP_MPK = "data/tmp_ziptest_Xr0.mpk"
@@ -64,59 +67,67 @@ class TestAppManagerInstallMpk(unittest.TestCase):
         self._assert_dir(f"{root}/META-INF")
         self._assert_dir(f"{root}/res")
         self._assert_dir(f"{root}/res/mipmap-mdpi")
+        self._assert_file_size(f"{root}/assets/hello.py", 232)
+        self._assert_file_size(f"{root}/META-INF/MANIFEST.JSON", 406)
+        self._assert_file_size(f"{root}/res/mipmap-mdpi/icon_64x64.png", 5499)
 
-        self._assert_file_size(
-            f"{root}/assets/hello.py",
-            232,
-        )
-        self._assert_file_size(
-            f"{root}/META-INF/MANIFEST.JSON",
-            406,
-        )
-        self._assert_file_size(
-            f"{root}/res/mipmap-mdpi/icon_64x64.png",
-            5499,
-        )
+    # ---- happy path -------------------------------------------------
 
-    def test_install_mpk_extracts_files(self):
-        # Uncompressed and without extended attributes:
-        source_mpk = "../tests/com.micropythonos.ziptest_Xr0.mpk"
-        self._copy_file(source_mpk, self.temp_mpk)
-
+    def test_install_flat_mpk(self):
+        """Well-formed flat (stored) MPK extracts correctly."""
+        self._copy_file("../tests/com.micropythonos.ziptest_flat.mpk", self.temp_mpk)
         AppManager.install_mpk(self.temp_mpk, self.dest_folder)
-
         self.assertFalse(self._exists(self.temp_mpk))
         self._assert_app_tree(self.APP_ROOT)
 
-    def test_install_mpk_extracts_files_xr(self):
-        # Default zip (deflate.RAW)
-        source_mpk = "../tests/com.micropythonos.ziptest_r.mpk"
-        self._copy_file(source_mpk, self.temp_mpk)
-
+    def test_install_deflated_mpk(self):
+        """Well-formed deflated MPK extracts correctly."""
+        self._copy_file("../tests/com.micropythonos.ziptest_flat_deflated.mpk", self.temp_mpk)
         AppManager.install_mpk(self.temp_mpk, self.dest_folder)
-
         self.assertFalse(self._exists(self.temp_mpk))
         self._assert_app_tree(self.APP_ROOT)
 
-
-    def test_install_mpk_extracts_files_topdir(self):
-        # Zip contains top dir
-        source_mpk = "../tests/com.micropythonos.ziptest_topdir.mpk"
-        self._copy_file(source_mpk, self.temp_mpk)
-
-        self.dest_folder = "apps/com.micropythonos.ziptest"
+    def test_install_largefirst_mpk(self):
+        """Well-formed MPK with a large first file extracts correctly."""
+        self._copy_file("../tests/com.micropythonos.ziptest_flat_largefirst.mpk", self.temp_mpk)
         AppManager.install_mpk(self.temp_mpk, self.dest_folder)
-
         self.assertFalse(self._exists(self.temp_mpk))
-        self._assert_app_tree(self.dest_folder)
+        self._assert_dir(self.APP_ROOT)
+        self._assert_dir(f"{self.APP_ROOT}/assets")
+        self._assert_dir(f"{self.APP_ROOT}/META-INF")
+        self._assert_dir(f"{self.APP_ROOT}/res")
 
-    def test_install_mpk_rejects_invalid_topdir(self):
-        # Zip contains top dir that does not match destination name
-        source_mpk = "../tests/com.micropythonos.ziptest_invalid_topdir.mpk"
-        self._copy_file(source_mpk, self.temp_mpk)
+    # ---- error path -------------------------------------------------
 
-        self.dest_folder = "apps/com.micropythonos.ziptest_invalid"
-        with self.assertRaises(ValueError):
+    def test_rejects_first_entry_not_a_dir(self):
+        """Package whose first entry is a file (not a directory) is refused."""
+        self._copy_file("../tests/com.micropythonos.ziptest_largefirst.mpk", self.temp_mpk)
+
+        with self.assertRaises(RuntimeError) as ctx:
             AppManager.install_mpk(self.temp_mpk, self.dest_folder)
 
+        self.assertIn("not a directory", str(ctx.exception))
         self.assertFalse(self._exists(self.dest_folder))
+
+    def test_rejects_wrong_topdir(self):
+        """Package whose top dir does not match destination name is refused."""
+        self._copy_file("../tests/com.micropythonos.ziptest_Xr0.mpk", self.temp_mpk)
+
+        with self.assertRaises(RuntimeError) as ctx:
+            AppManager.install_mpk(self.temp_mpk, self.dest_folder)
+
+        self.assertIn("Invalid top-level dir", str(ctx.exception))
+        self.assertFalse(self._exists(self.dest_folder))
+
+    def test_rejects_wrong_topdir(self):
+        """Package whose top dir does not match the expected fullname is refused."""
+        self._copy_file("../tests/com.micropythonos.ziptest_invalid_topdir.mpk", self.temp_mpk)
+        self.dest_folder = "apps/com.micropythonos.ziptest_invalid"
+        with self.assertRaises(RuntimeError) as ctx:
+            AppManager.install_mpk(self.temp_mpk, self.dest_folder)
+        self.assertIn("Invalid top-level dir", str(ctx.exception))
+        self.assertFalse(self._exists(self.dest_folder))
+
+
+if __name__ == "__main__":
+    unittest.main()

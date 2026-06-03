@@ -7,7 +7,6 @@ from mpos.content.app_manager import AppManager
 
 
 class TestAppManagerStreamingInstall(unittest.TestCase):
-
     DEST = "apps/com.micropythonos.ziptest"
     APP_FULLNAME = "com.micropythonos.ziptest"
 
@@ -37,13 +36,6 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
                         break
                     df.write(chunk)
 
-    def _exists(self, path):
-        try:
-            os.stat(path)
-            return True
-        except OSError:
-            return False
-
     def _assert_dir(self, path):
         st = os.stat(path)
         self.assertTrue(st[0] & 0x4000)
@@ -63,13 +55,8 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         self._assert_file_size(f"{root}/META-INF/MANIFEST.JSON", 406)
         self._assert_file_size(f"{root}/res/mipmap-mdpi/icon_64x64.png", 5499)
 
-    def _run_install(self, source_mpk):
-        """Helper that runs the old install_mpk path using the real file."""
-        self._copy_file(source_mpk, "data/tmp_ziptest_Xr0.mpk")
-        AppManager.install_mpk("data/tmp_ziptest_Xr0.mpk", self.DEST)
-
     def _run_streaming_install(self, source_mpk):
-        """Helper that mocks download_url with chunk_callback to exercise streaming."""
+        """Mock download by streaming chunks into the extractor (real streaming)."""
         from mpos.net.download_manager import DownloadManager
 
         async def fake_download(url, outfile=None, total_size=None,
@@ -96,44 +83,57 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         finally:
             DownloadManager.download_url = orig_download
 
-    def test_install_mpk_uncompressed(self):
-        self._run_install("../tests/com.micropythonos.ziptest_Xr0.mpk")
+    # ---- happy path -------------------------------------------------
+
+    def test_streaming_flat(self):
+        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat.mpk")
         self._assert_app_tree(self.DEST)
 
-    def test_install_mpk_deflated(self):
-        self._run_install("../tests/com.micropythonos.ziptest_r.mpk")
+    def test_streaming_deflated(self):
+        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat_deflated.mpk")
         self._assert_app_tree(self.DEST)
 
-    def test_install_mpk_topdir(self):
-        self._run_install("../tests/com.micropythonos.ziptest_topdir.mpk")
-        self._assert_app_tree(self.DEST)
-
-    def test_streaming_install_uncompressed(self):
-        self._run_streaming_install("../tests/com.micropythonos.ziptest_Xr0.mpk")
-        self._assert_app_tree(self.DEST)
-
-    def test_streaming_install_deflated(self):
-        self._run_streaming_install("../tests/com.micropythonos.ziptest_r.mpk")
-        self._assert_app_tree(self.DEST)
-
-    def test_streaming_install_topdir(self):
-        self._run_streaming_install("../tests/com.micropythonos.ziptest_topdir.mpk")
-        self._assert_app_tree(self.DEST)
-
-    def test_streaming_install_largefirst_flat(self):
-        """Flat package whose first file is larger than a single chunk.
-
-        This reproduces the bug where early peek incorrectly concluded
-        the package had a top-level directory because only the first
-        entry was visible in the initial 4 KiB buffer.
-        """
-        self._run_streaming_install("../tests/com.micropythonos.ziptest_largefirst.mpk")
+    def test_streaming_largefirst(self):
+        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat_largefirst.mpk")
         self._assert_dir(self.DEST)
         self._assert_dir(f"{self.DEST}/assets")
         self._assert_dir(f"{self.DEST}/META-INF")
         self._assert_dir(f"{self.DEST}/res")
 
-    def test_streaming_rejects_invalid_topdir(self):
+    # ---- error path -------------------------------------------------
+
+    def test_rejects_flat_first_file_not_dir(self):
+        """Package whose first entry is a file (not a directory) is refused."""
+        from mpos.net.download_manager import DownloadManager
+
+        async def fake_download(url, outfile=None, total_size=None,
+                                progress_callback=None, chunk_callback=None,
+                                headers=None, speed_callback=None, redact_url=False):
+            with open("../tests/com.micropythonos.ziptest_largefirst.mpk", "rb") as f:
+                while True:
+                    data = f.read(512)
+                    if not data:
+                        break
+                    if chunk_callback:
+                        await chunk_callback(data)
+            return True
+
+        orig_download = DownloadManager.download_url
+        DownloadManager.download_url = fake_download
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                asyncio.run(
+                    AppManager.download_and_install_package(
+                        "http://mock/bad.mpk",
+                        self.APP_FULLNAME,
+                    )
+                )
+            self.assertIn("not a directory", str(ctx.exception))
+        finally:
+            DownloadManager.download_url = orig_download
+
+    def test_rejects_wrong_topdir(self):
+        """Package whose top dir does not match the expected fullname is refused."""
         from mpos.net.download_manager import DownloadManager
 
         async def fake_download(url, outfile=None, total_size=None,
@@ -141,7 +141,7 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
                                 headers=None, speed_callback=None, redact_url=False):
             with open("../tests/com.micropythonos.ziptest_invalid_topdir.mpk", "rb") as f:
                 while True:
-                    data = f.read(1024)
+                    data = f.read(512)
                     if not data:
                         break
                     if chunk_callback:
@@ -162,30 +162,11 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         finally:
             DownloadManager.download_url = orig_download
 
-
-    def test_install_mpk_fails_on_insufficient_space(self):
-        """install_mpk raises RuntimeError when free space is too low."""
-        orig_check = AppManager._check_free_space
-        def _always_fail(path, needed):
-            raise RuntimeError(
-                "Not enough free space (0 KB available, %d KB needed)" % (needed // 1024)
-            )
-        AppManager._check_free_space = staticmethod(_always_fail)
-        try:
-            self._copy_file("../tests/com.micropythonos.ziptest_Xr0.mpk", "data/tmp_ziptest_Xr0.mpk")
-            with self.assertRaises(RuntimeError) as ctx:
-                AppManager.install_mpk("data/tmp_ziptest_Xr0.mpk", self.DEST)
-            self.assertIn("Not enough free space", str(ctx.exception))
-        finally:
-            AppManager._check_free_space = orig_check
-
-    def test_streaming_install_fails_on_insufficient_space(self):
+    def test_rejects_insufficient_space(self):
         """download_and_install_package raises RuntimeError when free space is too low."""
         orig_check = AppManager._check_free_space
-        def _always_fail(path, needed):
-            raise RuntimeError(
-                "Not enough free space (0 KB available, %d KB needed)" % (needed // 1024)
-            )
+        def _always_fail(path, req):
+            raise RuntimeError("Not enough free space (0 KB available, %d KB needed)" % (req // 1024))
         AppManager._check_free_space = staticmethod(_always_fail)
 
         from mpos.net.download_manager import DownloadManager
@@ -193,7 +174,7 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         async def fake_download(url, outfile=None, total_size=None,
                                 progress_callback=None, chunk_callback=None,
                                 headers=None, speed_callback=None, redact_url=False):
-            with open("../tests/com.micropythonos.ziptest_Xr0.mpk", "rb") as f:
+            with open("../tests/com.micropythonos.ziptest_flat.mpk", "rb") as f:
                 while True:
                     data = f.read(512)
                     if not data:
