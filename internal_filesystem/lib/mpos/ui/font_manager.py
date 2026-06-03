@@ -92,6 +92,10 @@ flower_group,🌻
 flower_group,🍀
 birthday_cakes,🎂
 birthday_cakes,👑
+pigs,🐷
+pigs,🐖
+droplet_sweat,💦
+droplet_sweat,💧
 """
 
     @classmethod
