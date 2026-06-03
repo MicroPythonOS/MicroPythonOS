@@ -11,7 +11,8 @@ Builtin Apps:
 Frameworks:
 - Add Services with intent filter boot_completed
 - NotificationManager: new framework to notify the user
-- AppManager: install mpk/zip packages streaming without writing to tempfile first
+- AppManager: buffer .mpk/.zip in RAM instead of ROM before extracting (less space required, less flash wear, faster)
+- AppManager: check sufficient free storage space before installing app package
 
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
