@@ -163,5 +163,62 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
             DownloadManager.download_url = orig_download
 
 
+    def test_install_mpk_fails_on_insufficient_space(self):
+        """install_mpk raises RuntimeError when free space is too low."""
+        orig_check = AppManager._check_free_space
+        def _always_fail(path, needed):
+            raise RuntimeError(
+                "Not enough free space (0 KB available, %d KB needed)" % (needed // 1024)
+            )
+        AppManager._check_free_space = staticmethod(_always_fail)
+        try:
+            self._copy_file("../tests/com.micropythonos.ziptest_Xr0.mpk", "data/tmp_ziptest_Xr0.mpk")
+            with self.assertRaises(RuntimeError) as ctx:
+                AppManager.install_mpk("data/tmp_ziptest_Xr0.mpk", self.DEST)
+            self.assertIn("Not enough free space", str(ctx.exception))
+        finally:
+            AppManager._check_free_space = orig_check
+
+    def test_streaming_install_fails_on_insufficient_space(self):
+        """download_and_install_package raises RuntimeError when free space is too low."""
+        orig_check = AppManager._check_free_space
+        def _always_fail(path, needed):
+            raise RuntimeError(
+                "Not enough free space (0 KB available, %d KB needed)" % (needed // 1024)
+            )
+        AppManager._check_free_space = staticmethod(_always_fail)
+
+        from mpos.net.download_manager import DownloadManager
+
+        async def fake_download(url, outfile=None, total_size=None,
+                                progress_callback=None, chunk_callback=None,
+                                headers=None, speed_callback=None, redact_url=False):
+            with open("../tests/com.micropythonos.ziptest_Xr0.mpk", "rb") as f:
+                while True:
+                    data = f.read(512)
+                    if not data:
+                        break
+                    if chunk_callback:
+                        await chunk_callback(data)
+            return True
+
+        orig_download = DownloadManager.download_url
+        DownloadManager.download_url = fake_download
+        try:
+            with self.assertRaises(RuntimeError) as ctx:
+                asyncio.run(
+                    AppManager.download_and_install_package(
+                        "http://mock/ziptest.mpk",
+                        self.APP_FULLNAME,
+                    )
+                )
+            msg = str(ctx.exception)
+            self.assertIn("Download failed", msg)
+            self.assertIn("Not enough free space", msg)
+        finally:
+            DownloadManager.download_url = orig_download
+            AppManager._check_free_space = orig_check
+
+
 if __name__ == "__main__":
     unittest.main()

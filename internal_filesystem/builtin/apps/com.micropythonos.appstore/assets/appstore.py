@@ -187,6 +187,11 @@ class AppStore(Activity):
                 print(f"AppStore: updated {fullname}")
             except Exception as e:
                 print(f"AppStore: update of {fullname} failed: {e}")
+                if "Not enough free space" in str(e):
+                    self.update_all_label.set_text(f"Not enough space for {app_data.get('name', fullname)}")
+                else:
+                    self.update_all_label.set_text(f"Update failed for {app_data.get('name', fullname)}")
+                await TaskManager.sleep(1.5)
 
         # Refresh everything after all updates
         self.update_all_button.remove_state(lv.STATE.DISABLED)

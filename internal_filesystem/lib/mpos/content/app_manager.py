@@ -162,7 +162,7 @@ class AppManager:
         import os
         import shutil
         from ..net.download_manager import DownloadManager
-        from .streaming_unzip import StreamingUnzip, peek_strip_prefix
+        from .streaming_unzip import StreamingUnzip, peek_strip_prefix, estimate_uncompressed_size
 
         dest_folder = f"apps/{fullname}"
 
@@ -216,9 +216,11 @@ class AppManager:
                 pass
             raise RuntimeError(f"Download failed for {fullname}")
 
-        # Now that we have the full archive, peek prefix and extract.
+        # Now that we have the full archive, check space, peek prefix and extract.
         data = _buf["data"]
         try:
+            needed = estimate_uncompressed_size(data)
+            AppManager._check_free_space(".", needed)
             prefix = peek_strip_prefix(data, fullname)
             extractor = StreamingUnzip(dest_folder, strip_prefix=prefix)
             extractor.feed(data)
@@ -232,8 +234,30 @@ class AppManager:
             raise RuntimeError(f"Download failed for {fullname}: {e}")
 
         print(f"AppManager: installed {fullname} successfully")
-        AppManager.refresh_apps()
         return True
+
+    @staticmethod
+    def _check_free_space(path, required_bytes):
+        """Raise RuntimeError if there is not enough free space.
+
+        MicroPython ``os.statvfs`` returns a tuple where:
+            index 0 = f_bsize (block size)
+            index 4 = f_bavail (free blocks available to unprivileged user)
+        """
+        try:
+            st = os.statvfs(path)
+            bsize = st[0]
+            bavail = st[4]
+            free = bsize * bavail
+        except (OSError, AttributeError, IndexError):
+            # statvfs not available or wrong shape – cannot check, assume OK
+            return
+        if free < required_bytes:
+            pretty = required_bytes // 1024
+            raise RuntimeError(
+                "Not enough free space (%d KB available, %d KB needed)"
+                % (free // 1024, pretty)
+            )
 
     @staticmethod
     def uninstall_app(app_fullname):
@@ -247,7 +271,8 @@ class AppManager:
     @staticmethod
     def install_mpk(temp_zip_path, dest_folder):
         import shutil
-        from .streaming_unzip import StreamingUnzip, peek_strip_prefix
+        import os
+        from .streaming_unzip import StreamingUnzip, peek_strip_prefix, estimate_uncompressed_size
 
         try:
             # Step 1: Remove any existing (possibly partial) install or symlink
@@ -268,11 +293,15 @@ class AppManager:
             except OSError:
                 pass  # Not a symlink or already removed
 
-            # Step 2: Read the whole file and stream-extract it
+            # Step 2: Read the whole file and check free space
             print("Unzipping it to:", dest_folder)
 
             with open(temp_zip_path, "rb") as f:
                 data = f.read()
+
+            # Check free space before extracting
+            needed = estimate_uncompressed_size(data)
+            AppManager._check_free_space(".", needed)
 
             dest_name = dest_folder.rstrip(os.sep).split(os.sep)[-1]
             prefix = peek_strip_prefix(data, dest_name)
@@ -297,6 +326,7 @@ class AppManager:
                 print(f"install_mpk got os.remove exception: {e}")
                 import sys
                 sys.print_exception(e)
+            raise
         AppManager.refresh_apps()
 
     @staticmethod

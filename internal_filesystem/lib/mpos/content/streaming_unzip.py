@@ -307,6 +307,47 @@ class StreamingUnzip:
         self._files_extracted += 1
 
 
+def estimate_uncompressed_size(data_bytes):
+    """Return the total uncompressed size of all files in the ZIP.
+
+    Sums the uncompressed_size field from every local file header.
+    This is a lower-bound estimate that does not account for filesystem
+    block-size overhead, but it is sufficient for a pre-extraction free-space
+    sanity check.
+    """
+    total = 0
+    buf = bytearray(data_bytes)
+    while True:
+        if len(buf) < _LOCAL_HEADER_SIZE:
+            break
+        if bytes(buf[:4]) != _LOCAL_HEADER_MAGIC:
+            idx = buf.find(_LOCAL_HEADER_MAGIC, 1)
+            if idx == -1:
+                break
+            buf = buf[idx:]
+            continue
+        vals = struct.unpack(_LOCAL_HEADER_STRUCT, buf[:_LOCAL_HEADER_SIZE])
+        fname_len = vals[_FH_FILENAME_LENGTH]
+        extra_len = vals[_FH_EXTRA_FIELD_LENGTH]
+        header_total = _LOCAL_HEADER_SIZE + fname_len + extra_len
+        if len(buf) < header_total:
+            break
+        total += vals[_FH_UNCOMPRESSED_SIZE]
+        compressed_size = vals[_FH_COMPRESSED_SIZE]
+        if len(buf) >= header_total + compressed_size:
+            buf = buf[header_total + compressed_size:]
+        else:
+            remainder = buf[header_total:]
+            idx = remainder.find(_LOCAL_HEADER_MAGIC)
+            if idx >= 0:
+                buf = buf[header_total + idx:]
+            else:
+                break
+        if len(buf) < _LOCAL_HEADER_SIZE:
+            break
+    return total
+
+
 def peek_strip_prefix(data_bytes, expected_name):
     """Peek at local headers in the first chunk to figure out strip_prefix.
 

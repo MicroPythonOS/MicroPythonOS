@@ -255,6 +255,8 @@ class AppDetail(Activity):
             print(f"Download failed with exception: {e}")
             if DownloadManager.is_network_error(e):
                 self.install_label.set_text(f"Network error - check WiFi")
+            elif "Not enough free space" in str(e):
+                self.install_label.set_text(f"Not enough space")
             else:
                 self.install_label.set_text(f"Download failed: {str(e)[:30]}")
             self.install_button.remove_state(lv.STATE.DISABLED)

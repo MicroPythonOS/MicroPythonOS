@@ -116,7 +116,7 @@ class TestAppManagerInstallMpk(unittest.TestCase):
         self._copy_file(source_mpk, self.temp_mpk)
 
         self.dest_folder = "apps/com.micropythonos.ziptest_invalid"
-        AppManager.install_mpk(self.temp_mpk, self.dest_folder)
+        with self.assertRaises(ValueError):
+            AppManager.install_mpk(self.temp_mpk, self.dest_folder)
 
-        self.assertFalse(self._exists(self.temp_mpk))
         self.assertFalse(self._exists(self.dest_folder))
