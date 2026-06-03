@@ -19,10 +19,23 @@ class AppDetail(Activity):
     version_label = None
     buttoncont = None
     publisher_label = None
+    _open_button = None
 
     # Received from the Intent extras:
     app = None
     appstore = None
+
+    def _open_app(self, app_fullname):
+        AppManager.start_app(app_fullname)
+
+    def _sync_open_button(self):
+        if self._open_button is None:
+            return
+        installed = AppManager.is_installed_by_name(self.app.fullname)
+        if installed:
+            self._open_button.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._open_button.add_flag(lv.obj.FLAG.HIDDEN)
 
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):
@@ -126,10 +139,23 @@ class AppDetail(Activity):
             self.long_desc_label.set_text(self.app.short_description)
         self.long_desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.long_desc_label.set_width(lv.pct(100))
+
+        self._open_button = lv.button(app_detail_screen)
+        self._apply_default_styles(self._open_button)
+        self._open_button.set_size(60, 42)
+        self._open_button.align(lv.ALIGN.TOP_RIGHT, -4, 0)
+        self._open_button.add_flag(lv.obj.FLAG.FLOATING)
+        self._open_button.add_event_cb(lambda e, a=self.app: self._open_app(a.fullname), lv.EVENT.CLICKED, None)
+        open_label = lv.label(self._open_button)
+        open_label.set_text("Open")
+        open_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        open_label.center()
+
         print("Loading app detail screen...")
         self.setContentView(app_detail_screen)
 
     def onResume(self, screen):
+        self._sync_open_button()
         backend_type = self.appstore.get_backend_type_from_settings()
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
@@ -162,6 +188,7 @@ class AppDetail(Activity):
         self.long_desc_label.set_text(self.app.long_description)
         self.publisher_label.set_text(self.app.publisher)
         self.add_action_buttons(self.buttoncont, self.app)
+        self._sync_open_button()
 
     def set_install_label(self, app_fullname):
         # Figure out whether to show:
@@ -221,6 +248,7 @@ class AppDetail(Activity):
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self.set_install_label(app_fullname)
+        self._sync_open_button()
         self.install_button.remove_state(lv.STATE.DISABLED)
         self._trigger_update_recheck()
         if AppManager.is_builtin_app(app_fullname):
@@ -266,6 +294,7 @@ class AppDetail(Activity):
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self.set_install_label(app_fullname)
+        self._sync_open_button()
         self.install_button.remove_state(lv.STATE.DISABLED)
         # Notify AppUpdateManager that an app was installed so it can refresh its state
         self._trigger_update_recheck()
