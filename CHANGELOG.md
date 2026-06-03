@@ -22,6 +22,7 @@ OS:
 - shutil: add `move()`, `copyfile()`, and `copytree()`
 - Focus direction: rewrite algorithm for speed and widget reachability
 - Show warning if an app throws an exception (with optional details)
+- Require top-level directory in .mpk files that matches the app name
 
 0.11.2
 ======

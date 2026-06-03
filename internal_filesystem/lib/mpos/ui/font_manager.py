@@ -32,6 +32,7 @@ class FontManager:
     _imgfont_source_size_cache = {}
     _imgfont_empty_src_cache = {}
     _emoji_src_lookup_cache = {}
+    _emoji_sequence_lookup_cache = {}
     _unknown_emoji_codepoints_logged = {}
     _emoji_similarity_group_members_by_cp = None
 
@@ -276,7 +277,12 @@ droplet_sweat,💧
         cls._ensure_emoji_maps()
         all_cps = set()
         for m in cls._emoji_maps.values():
-            all_cps.update(m.keys())
+            for key in m:
+                try:
+                    cp = int(key.split("-")[0], 16)
+                    all_cps.add(cp)
+                except Exception:
+                    pass
         return sorted(all_cps)
 
     @classmethod
@@ -323,7 +329,11 @@ droplet_sweat,💧
         lo = None
         hi = None
         for emap in cls._emoji_maps.values():
-            for cp in emap:
+            for key in emap:
+                try:
+                    cp = int(key.split("-")[0], 16)
+                except Exception:
+                    continue
                 if lo is None or cp < lo: lo = cp
                 if hi is None or cp > hi: hi = cp
         if lo is None:
@@ -369,57 +379,76 @@ droplet_sweat,💧
                 continue
 
             name_without_ext = name[:-4]
-            is_fe0f_variant = name_without_ext.endswith("-FE0F")
-            codepoint_hex = name_without_ext[:-5] if is_fe0f_variant else name_without_ext
-            try:
-                codepoint = int(codepoint_hex, 16)
-            except Exception:
+            segments = name_without_ext.split("-")
+            valid = True
+            for seg in segments:
+                try:
+                    int(seg, 16)
+                except Exception:
+                    valid = False
+                    break
+            if not valid:
                 print("font_manager: skip non-hex emoji file: " + name)
                 continue
 
-            if not is_fe0f_variant and codepoint in emoji_map:
-                continue
+            base_key = segments[0].upper()
+            full_key = name_without_ext.upper()
 
-            emoji_map[codepoint] = prefix + name
+            if full_key not in emoji_map:
+                emoji_map[full_key] = prefix + name
+
+            # Also register under the base key (without trailing modifiers).
+            # This matches the old behaviour where "203C-FE0F.png" was stored
+            # under 0x203C so that a plain U+203C lookup finds it.
+            if base_key not in emoji_map:
+                emoji_map[base_key] = prefix + name
 
         print("font_manager: loaded {} emoji png mappings from {}".format(len(emoji_map), dir_path))
         return emoji_map
 
     @classmethod
     def _get_emoji_src(cls, codepoint, target_height):
-        if codepoint < cls._UNKNOWN_EMOJI_LOG_THRESHOLD:
-            return None
-        if 0xE000 <= codepoint <= 0xF8FF:
-            return None
+        if isinstance(codepoint, int):
+            if codepoint < cls._UNKNOWN_EMOJI_LOG_THRESHOLD:
+                return None
+            if 0xE000 <= codepoint <= 0xF8FF:
+                return None
+            key = "{:X}".format(int(codepoint))
+        else:
+            key = str(codepoint).upper()
 
         cls._ensure_emoji_maps()
 
         preferred_dir = cls._get_preferred_emoji_dir(target_height)
-        cache_key = (int(codepoint), preferred_dir)
+        cache_key = (key, preferred_dir)
         if cache_key in cls._emoji_src_lookup_cache:
             return cls._emoji_src_lookup_cache[cache_key]
 
-        src = cls._lookup_emoji_src_for_codepoint(codepoint, preferred_dir)
+        src = cls._lookup_emoji_src_by_key(key, preferred_dir)
         if src is not None:
             cls._emoji_src_lookup_cache[cache_key] = src
             return src
 
-        cls._ensure_emoji_similarity_groups()
-        similar_codepoints = cls._emoji_similarity_group_members_by_cp.get(codepoint)
-        if similar_codepoints is None:
-            cls._emoji_src_lookup_cache[cache_key] = None
-            return None
-
-        for fallback_cp in similar_codepoints:
-            if fallback_cp == codepoint:
-                continue
-            src = cls._lookup_emoji_src_for_codepoint(fallback_cp, preferred_dir)
-            if src is not None:
-                cls._debug(
-                    "emoji fallback 0x{:X} -> 0x{:X}".format(codepoint, fallback_cp)
-                )
-                cls._emoji_src_lookup_cache[cache_key] = src
-                return src
+        # Only attempt similarity fallback for single-codepoint lookups
+        if "-" not in key:
+            try:
+                cp = int(key, 16)
+            except Exception:
+                cp = None
+            if cp is not None:
+                cls._ensure_emoji_similarity_groups()
+                similar_codepoints = cls._emoji_similarity_group_members_by_cp.get(cp)
+                if similar_codepoints is not None:
+                    for fallback_cp in similar_codepoints:
+                        if fallback_cp == cp:
+                            continue
+                        src = cls._lookup_emoji_src_by_key("{:X}".format(int(fallback_cp)), preferred_dir)
+                        if src is not None:
+                            cls._debug(
+                                "emoji fallback 0x{:X} -> 0x{:X}".format(cp, fallback_cp)
+                            )
+                            cls._emoji_src_lookup_cache[cache_key] = src
+                            return src
 
         cls._emoji_src_lookup_cache[cache_key] = None
         return None
@@ -432,24 +461,33 @@ droplet_sweat,💧
         return None
 
     @classmethod
-    def _lookup_emoji_src_for_codepoint(cls, codepoint, preferred_dir=None):
+    def _lookup_emoji_src_by_key(cls, key, preferred_dir=None):
+        key = key.upper()
+        parts = key.split("-")
+
         if preferred_dir is not None:
             preferred_map = cls._emoji_maps.get(preferred_dir, {})
-            if codepoint in preferred_map:
-                return preferred_map[codepoint]
+            for i in range(len(parts), 0, -1):
+                candidate = "-".join(parts[:i])
+                if candidate in preferred_map:
+                    return preferred_map[candidate]
 
             # For large emoji requests, explicitly fall back to 20x20.
             # The renderer will upscale it to target_height.
             if preferred_dir == "56x56":
                 fallback_map = cls._emoji_maps.get("20x20", {})
-                if codepoint in fallback_map:
-                    return fallback_map[codepoint]
+                for i in range(len(parts), 0, -1):
+                    candidate = "-".join(parts[:i])
+                    if candidate in fallback_map:
+                        return fallback_map[candidate]
 
         for tier in cls._EMOJI_TIERS:
             dir_name = tier["dir"]
             emoji_map = cls._emoji_maps.get(dir_name, {})
-            if codepoint in emoji_map:
-                return emoji_map[codepoint]
+            for i in range(len(parts), 0, -1):
+                candidate = "-".join(parts[:i])
+                if candidate in emoji_map:
+                    return emoji_map[candidate]
         return None
 
     @classmethod
@@ -519,16 +557,52 @@ droplet_sweat,💧
             return "?"
 
     @classmethod
+    def _is_emoji_modifier(cls, codepoint):
+        if codepoint is None or codepoint == 0:
+            return False
+        return (
+            (0x1F3FB <= codepoint <= 0x1F3FF)
+            or codepoint == 0x200D
+            or (0xE0020 <= codepoint <= 0xE007F)
+            or (0x1F1E6 <= codepoint <= 0x1F1FF)
+            or codepoint == 0x20E3
+            or (0x1F9B0 <= codepoint <= 0x1F9B3)
+            or codepoint in (0x2640, 0x2642, 0x2695, 0x2696)
+        )
+
+    @classmethod
     def _imgfont_path_cb(cls, font, unicode_cp, unicode_next, offset_y, user_data):
         baseline = cls._font_base_line(font)
         if unicode_cp == CP_VARIATION_SELECTOR_TEXT or unicode_cp == CP_VARIATION_SELECTOR_EMOJI:
             offset_y.__dereference__(-baseline)
             return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
 
-        src = cls._get_emoji_src(unicode_cp, cls._font_pixel_height(font))
+        # Emoji modifiers / continuation codepoints should not render as separate glyphs
+        if cls._is_emoji_modifier(unicode_cp):
+            offset_y.__dereference__(-baseline)
+            return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
+
+        target_height = cls._font_pixel_height(font)
+        preferred_dir = cls._get_preferred_emoji_dir(target_height)
+
+        # Try combined sequence when next codepoint is a modifier
+        if unicode_next and cls._is_emoji_modifier(unicode_next):
+            candidate_key = "{:X}-{:X}".format(int(unicode_cp), int(unicode_next))
+            cache_key = (candidate_key, preferred_dir)
+            if cache_key in cls._emoji_sequence_lookup_cache:
+                src = cls._emoji_sequence_lookup_cache[cache_key]
+            else:
+                src = cls._lookup_emoji_src_by_key(candidate_key, preferred_dir)
+                cls._emoji_sequence_lookup_cache[cache_key] = src
+
+            if src is not None:
+                offset_y.__dereference__(-baseline)
+                return cls._get_scaled_imgfont_src(src, target_height)
+
+        src = cls._get_emoji_src(unicode_cp, target_height)
         if src is not None:
             offset_y.__dereference__(-baseline)
-            return cls._get_scaled_imgfont_src(src, cls._font_pixel_height(font))
+            return cls._get_scaled_imgfont_src(src, target_height)
 
         cls._log_unknown_emoji_codepoint(unicode_cp)
         return None

@@ -28,12 +28,14 @@ def _reset_font_manager():
     FontManager._ttf_font_cache.clear()
     FontManager._emoji_maps.clear()
     FontManager._emoji_src_lookup_cache.clear()
+    FontManager._emoji_sequence_lookup_cache.clear()
     FontManager._imgfont_scaled_src_cache.clear()
     FontManager._imgfont_source_size_cache.clear()
     FontManager._imgfont_empty_src_cache.clear()
     FontManager._unknown_emoji_codepoints_logged.clear()
     FontManager._builtin_font_records = None
     FontManager._emoji_similarity_group_members_by_cp = None
+    FontManager._emoji_cp_bounds = None
 
 
 class TestFontManagerGetFont(GraphicalTestCase):
@@ -272,8 +274,8 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
     def test_similarity_group_fallback_uses_available_emoji(self):
         """Missing emoji falls back to another available emoji in the same group."""
         FontManager._emoji_maps = {
-            "20x20": {ord("❤"): "M:builtin/res/emojis/20x20/2764.png"},
-            "56x56": {ord("❤"): "M:builtin/res/emojis/56x56/2764.png"},
+            "20x20": {"2764": "M:builtin/res/emojis/20x20/2764.png"},
+            "56x56": {"2764": "M:builtin/res/emojis/56x56/2764.png"},
         }
 
         src = FontManager._get_emoji_src(ord("♥"), 16)
@@ -282,8 +284,8 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
     def test_similarity_group_fallback_respects_requested_tier(self):
         """When possible, fallback picks a source from the preferred emoji tier."""
         FontManager._emoji_maps = {
-            "20x20": {ord("❤"): "M:builtin/res/emojis/20x20/2764.png"},
-            "56x56": {ord("❤"): "M:builtin/res/emojis/56x56/2764.png"},
+            "20x20": {"2764": "M:builtin/res/emojis/20x20/2764.png"},
+            "56x56": {"2764": "M:builtin/res/emojis/56x56/2764.png"},
         }
 
         src = FontManager._get_emoji_src(ord("♥"), 32)
@@ -292,8 +294,8 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
     def test_similarity_group_fallback_returns_none_when_group_unavailable(self):
         """If no emoji from the group is present, fallback returns None."""
         FontManager._emoji_maps = {
-            "20x20": {ord("😀"): "M:builtin/res/emojis/20x20/1f600.png"},
-            "56x56": {ord("😀"): "M:builtin/res/emojis/56x56/1f600.png"},
+            "20x20": {"1F600": "M:builtin/res/emojis/20x20/1f600.png"},
+            "56x56": {"1F600": "M:builtin/res/emojis/56x56/1f600.png"},
         }
 
         src = FontManager._get_emoji_src(ord("♥"), 16)
@@ -322,6 +324,94 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         src = FontManager._get_emoji_src(0xF004, 16)
         self.assertIsNone(src)
         self.assertEqual(FontManager._emoji_src_lookup_cache, {})
+
+
+class TestFontManagerVariantFallback(GraphicalTestCase):
+    """Tests for variant fallback (stripping trailing modifiers)."""
+
+    def setUp(self):
+        super().setUp()
+        _reset_font_manager()
+
+    def test_variant_fallback_strips_modifier(self):
+        """Missing skin-tone variant falls back to the base emoji."""
+        FontManager._emoji_maps = {
+            "20x20": {"1F44D": "M:builtin/res/emojis/20x20/1F44D.png"},
+        }
+
+        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "20x20")
+        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F44D.png")
+
+    def test_variant_exact_match(self):
+        """Exact variant file is returned when present."""
+        FontManager._emoji_maps = {
+            "20x20": {
+                "1F44D": "M:builtin/res/emojis/20x20/1F44D.png",
+                "1F44D-1F3FB": "M:builtin/res/emojis/20x20/1F44D-1F3FB.png",
+            },
+        }
+
+        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "20x20")
+        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F44D-1F3FB.png")
+
+    def test_variant_fallback_multi_segment(self):
+        """Longer sequences fall back through each prefix."""
+        FontManager._emoji_maps = {
+            "20x20": {
+                "1F468": "M:builtin/res/emojis/20x20/1F468.png",
+                "1F468-200D": "M:builtin/res/emojis/20x20/1F468-200D.png",
+            },
+        }
+
+        src = FontManager._lookup_emoji_src_by_key("1F468-200D-1F469", "20x20")
+        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F468-200D.png")
+
+    def test_imgfont_modifier_returns_empty(self):
+        """Skin-tone modifier passed directly returns an empty image source."""
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+
+        class _FakePtr:
+            def __init__(self):
+                self.value = None
+            def __dereference__(self, value=None):
+                if value is None:
+                    return self.value
+                self.value = value
+
+        ptr = _FakePtr()
+        src = FontManager._imgfont_path_cb(
+            font, 0x1F3FB, 0, ptr, None
+        )
+        self.assertIsNotNone(src)
+        self.assertIsInstance(src, lv.image_dsc_t)
+
+    def test_imgfont_base_plus_modifier_lookup(self):
+        """_imgfont_path_cb looks up base+modifier and falls back to base."""
+        FontManager._emoji_maps = {
+            "20x20": {"1F44D": "M:builtin/res/emojis/20x20/1F44D.png"},
+        }
+
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+
+        class _FakePtr:
+            def __init__(self):
+                self.value = None
+            def __dereference__(self, value=None):
+                if value is None:
+                    return self.value
+                self.value = value
+
+        ptr = _FakePtr()
+        src = FontManager._imgfont_path_cb(
+            font, 0x1F44D, 0x1F3FB, ptr, None
+        )
+        self.assertIsNotNone(src)
+        # It should resolve to the base image (as a string path, not yet scaled)
+        # Wait: _imgfont_path_cb returns the result of _get_scaled_imgfont_src,
+        # which may return a string or an lv.image_dsc_t. Since the source path
+        # is a string and target height equals source height (both 20x20), it
+        # returns the string path.
+        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F44D.png")
 
 
 class TestFontManagerNormalizeEmojiText(unittest.TestCase):
