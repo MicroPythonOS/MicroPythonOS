@@ -5,6 +5,7 @@ This file provides guidance to agents when working with code in this repository.
 - Build is driven by `./scripts/build_mpos.sh <target>`; it mutates tracked files (patches `lvgl_micropython/lib/micropython/ports/esp32/main/idf_component.yml`, appends include to `micropython-camera-API/src/manifest.py`, and toggles `@micropython.viper` in `internal_filesystem/lib/mpos/audio/stream_wav.py`). Re-run builds expecting these edits to persist unless reverted.
 - Unix/macOS builds rely on symlinks created by `build_mpos.sh` in `lvgl_micropython/ext_mod/` for `c_mpos` and `secp256k1-embedded-ecdh` because `USER_C_MODULE` is unreliable on those targets.
 - Syntax tests run via `./tests/syntax.sh` and compile every `internal_filesystem/**/*.py` with `mpy-cross`; failing files are reported by path.
+- `mpy-cross` binary lives at `./lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross`.
 - Unit tests run via `./tests/unittest.sh [test_file] [--ondevice]`; runner injects `main.py` and disables `mpos.TaskManager` for desktop, but on-device runs must NOT re-run boot/main (the script handles this).
 - Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files.
 - To run a single test, pass a file path to `./tests/unittest.sh` (absolute path is resolved inside the script).
