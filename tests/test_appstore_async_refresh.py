@@ -1,10 +1,13 @@
 """
-test_appstore_async_refresh.py - Verify AppStore refresh_list is non-blocking.
+test_appstore_async_refresh.py - Verify AppStore refresh_list is non-blocking
+and that update flows trigger AppManager.refresh_apps before rechecking.
 
 Regression tests:
 - refresh_list() must return immediately (not await the download itself).
 - refresh_list() must spawn an async task via TaskManager when online.
 - refresh_list() must NOT spawn a task when WiFi is disconnected.
+- _run_update_all must call AppManager.refresh_apps before AppUpdateManager recheck.
+- _trigger_update_recheck must refresh apps before scheduling recheck.
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_appstore_async_refresh.py
@@ -56,6 +59,49 @@ class MockPrefs:
 
     def commit(self):
         pass
+
+
+class MockAppUpdateManager:
+    """Trackable stand-in for AppUpdateManager."""
+
+    def __init__(self):
+        self.check_calls = []
+        self.current_state = "idle"
+        self.updatable_apps = []
+
+    def check_for_updates(self, index_url=None):
+        self.check_calls.append("check_for_updates")
+        async def _noop():
+            pass
+        return _noop()
+
+    def check_for_updates_now(self, index_url=None):
+        self.check_calls.append("check_for_updates_now")
+
+    @classmethod
+    def get_instance(cls):
+        if not hasattr(cls, "_inst"):
+            cls._inst = cls()
+        return cls._inst
+
+    @classmethod
+    def clear_instance(cls):
+        if hasattr(cls, "_inst"):
+            delattr(cls, "_inst")
+
+
+class MockStateLabel(MockLabel):
+    """MockLabel with add_state/remove_state for update-all flow."""
+
+    def __init__(self):
+        super().__init__()
+        self._states = set()
+
+    def add_state(self, state):
+        self._states.add(state)
+
+    def remove_state(self, state):
+        self._states.discard(state)
 
 
 class TestAppStoreAsyncRefresh(unittest.TestCase):
@@ -186,4 +232,144 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
             len(self.tasks_created),
             1,
             "download_icons() should be started as a separate background task",
+        )
+
+
+class TestAppStoreUpdateAllRecheck(unittest.TestCase):
+    """Ensure _run_update_all refreshes AppManager before rechecking updates."""
+
+    def setUp(self):
+        import asyncio
+        import mpos
+        import appstore_core
+
+        asyncio.new_event_loop()
+        self.tasks_created = []
+        self.refresh_calls = []
+        self._orig_create_task = mpos.TaskManager.create_task
+
+        def _capture_task(coro):
+            self.tasks_created.append(coro)
+            return self._orig_create_task(coro)
+
+        mpos.TaskManager.create_task = _capture_task
+
+        self._orig_refresh_apps = mpos.AppManager.refresh_apps
+        mpos.AppManager.refresh_apps = lambda: self.refresh_calls.append(True)
+
+        async def _fake_download_and_install(*args, **kwargs):
+            pass
+
+        self._orig_download_and_install = mpos.AppManager.download_and_install_package
+        mpos.AppManager.download_and_install_package = _fake_download_and_install
+
+        self._orig_aum = appstore_core.AppUpdateManager
+        appstore_core.AppUpdateManager = MockAppUpdateManager
+        MockAppUpdateManager.clear_instance()
+
+    def tearDown(self):
+        import mpos
+        import appstore_core
+        mpos.TaskManager.create_task = self._orig_create_task
+        mpos.AppManager.refresh_apps = self._orig_refresh_apps
+        mpos.AppManager.download_and_install_package = self._orig_download_and_install
+        appstore_core.AppUpdateManager = self._orig_aum
+
+    def _make_store(self):
+        from appstore import AppStore
+        store = AppStore()
+        store.prefs = MockPrefs()
+        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
+        store.please_wait_label = MockLabel()
+        store._refresh_in_progress = False
+        store.update_all_button = MockStateLabel()
+        store.update_all_label = MockStateLabel()
+        store.main_screen = MockLabel()
+        store.apps = []
+        return store
+
+    def test_update_all_calls_refresh_before_recheck(self):
+        import asyncio
+        store = self._make_store()
+        app = {
+            "fullname": "com.test.app",
+            "name": "TestApp",
+            "download_url": "http://example.com/app.zip",
+        }
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(store._run_update_all([app]))
+        self.assertTrue(
+            self.refresh_calls,
+            "AppManager.refresh_apps() must be called after update_all completes",
+        )
+        instance = MockAppUpdateManager.get_instance()
+        self.assertIn(
+            "check_for_updates_now",
+            instance.check_calls,
+            "AppUpdateManager.check_for_updates_now() must be called after update_all",
+        )
+        self.assertEqual(len(self.refresh_calls), 1)
+        self.assertEqual(instance.check_calls.count("check_for_updates_now"), 1)
+
+
+class TestAppDetailUpdateRecheck(unittest.TestCase):
+    """Ensure AppDetail._trigger_update_recheck refreshes AppManager first."""
+
+    def setUp(self):
+        import asyncio
+        import mpos
+        import appstore_core
+
+        asyncio.new_event_loop()
+        self.tasks_created = []
+        self.refresh_calls = []
+        self._orig_create_task = mpos.TaskManager.create_task
+
+        def _capture_task(coro):
+            self.tasks_created.append(coro)
+            return self._orig_create_task(coro)
+
+        mpos.TaskManager.create_task = _capture_task
+
+        self._orig_refresh_apps = mpos.AppManager.refresh_apps
+        mpos.AppManager.refresh_apps = lambda: self.refresh_calls.append(True)
+
+        self._orig_aum = appstore_core.AppUpdateManager
+        appstore_core.AppUpdateManager = MockAppUpdateManager
+        MockAppUpdateManager.clear_instance()
+
+    def tearDown(self):
+        import mpos
+        import appstore_core
+        mpos.TaskManager.create_task = self._orig_create_task
+        mpos.AppManager.refresh_apps = self._orig_refresh_apps
+        appstore_core.AppUpdateManager = self._orig_aum
+
+    def _make_detail(self):
+        from app_detail import AppDetail
+        detail = AppDetail()
+        detail.app = type("App", (), {"fullname": "com.test.a"})()
+        detail.appstore = type("AppStore", (), {
+            "get_backend_type_from_settings": lambda self: "github",
+            "_BACKEND_API_BADGEHUB": "badgehub",
+        })()
+        return detail
+
+    def test_trigger_update_recheck_calls_refresh_apps(self):
+        detail = self._make_detail()
+        detail._trigger_update_recheck()
+        self.assertTrue(
+            self.refresh_calls,
+            "AppManager.refresh_apps() must be called by _trigger_update_recheck",
+        )
+        instance = MockAppUpdateManager.get_instance()
+        self.assertEqual(
+            len(instance.check_calls),
+            1,
+            "AppUpdateManager.check_for_updates() must be called by _trigger_update_recheck",
+        )
+        self.assertEqual(
+            len(self.tasks_created),
+            1,
+            "_trigger_update_recheck must schedule check_for_updates via TaskManager.create_task",
         )

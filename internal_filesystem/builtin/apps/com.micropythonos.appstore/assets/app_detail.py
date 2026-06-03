@@ -306,6 +306,7 @@ class AppDetail(Activity):
         AppStore banner stay in sync without requiring a full app-index download.
         """
         try:
+            AppManager.refresh_apps()
             from appstore_core import AppUpdateManager
             TaskManager.create_task(AppUpdateManager.get_instance().check_for_updates())
         except Exception as e:

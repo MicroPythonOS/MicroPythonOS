@@ -199,6 +199,7 @@ class AppStore(Activity):
         self.refresh_list()
         try:
             from appstore_core import AppUpdateManager
+            AppManager.refresh_apps()
             AppUpdateManager.get_instance().check_for_updates_now()
         except Exception as e:
             print(f"AppStore: post-update check error: {e}")
@@ -361,7 +362,7 @@ class AppStore(Activity):
                     print(f"Download of {app.icon_url} got exception: {e}")
                     continue
             if app.icon_data:
-                print("download_icons has icon_data, showing it...")
+                #print("download_icons has icon_data, showing it...")
                 image_icon_widget = None
                 try:
                     image_icon_widget = app.image_icon_widget
