@@ -15,10 +15,10 @@ def _format_exception(e):
 def show_app_error_dialog(app_fullname, exception, is_lifecycle=False):
     if is_lifecycle:
         title = "Warning"
-        message = 'Warning: app "' + str(app_fullname) + '" threw exception. It might be glitchy. Maybe there\'s an update that fixes it?'
+        message = 'App "' + str(app_fullname) + '" threw an exception. It might be glitchy. Maybe there\'s an update that fixes it?'
     else:
         title = "Error"
-        message = 'Error: could not load app "' + str(app_fullname) + '". Maybe there\'s an update that fixes it?'
+        message = 'Could not load app "' + str(app_fullname) + '". Maybe there\'s an update that fixes it?'
 
     detail = _format_exception(exception)
 
