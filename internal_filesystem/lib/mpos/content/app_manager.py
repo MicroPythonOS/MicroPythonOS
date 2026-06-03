@@ -158,43 +158,84 @@ class AppManager:
     async def download_and_install_package(download_url, fullname, download_url_size=None, progress_callback=None):
         """Download an .mpk package and install it into apps/<fullname>.
 
+        The download is fed directly into a streaming ZIP extractor so no
+        temporary file is written to storage.
+
         Raises an exception on failure so the caller can handle UI feedback.
         Returns True on success.
         """
         import os
+        import shutil
         from ..net.download_manager import DownloadManager
+        from .streaming_unzip import StreamingUnzip, peek_strip_prefix
 
-        temp_path = "tmp/temp.mpk"
+        dest_folder = f"apps/{fullname}"
+
+        # Step 1: Remove any existing (possibly partial) install or symlink
         try:
-            os.mkdir("tmp")
-        except Exception:
+            st = os.stat(dest_folder)
+            if st[0] & 0x4000:
+                shutil.rmtree(dest_folder)
+                print("Removed existing folder:", dest_folder)
+            else:
+                os.remove(dest_folder)
+                print("Removed existing file:", dest_folder)
+        except OSError:
             pass
         try:
-            os.remove(temp_path)
-        except Exception:
+            os.remove(dest_folder)
+            print("Removed symlink:", dest_folder)
+        except OSError:
             pass
 
-        print(f"AppManager: downloading {download_url} -> {temp_path}")
-        result = await DownloadManager.download_url(
-            download_url,
-            outfile=temp_path,
-            total_size=download_url_size,
-            progress_callback=progress_callback,
-        )
+        print(f"AppManager: streaming download+install {download_url} -> {dest_folder}")
+
+        _state = {"buf": bytearray(), "extractor": None}
+
+        async def _chunk_callback(chunk):
+            if _state["extractor"] is None:
+                _state["buf"] += chunk
+                # Wait until we have enough bytes to peek the top-level dir.
+                if len(_state["buf"]) < 1024:
+                    return
+                prefix = peek_strip_prefix(_state["buf"], fullname)
+                _state["extractor"] = StreamingUnzip(dest_folder, strip_prefix=prefix)
+                _state["extractor"].feed(_state["buf"])
+                _state["buf"] = None
+            else:
+                _state["extractor"].feed(chunk)
+
+        try:
+            result = await DownloadManager.download_url(
+                download_url,
+                chunk_callback=_chunk_callback,
+                total_size=download_url_size,
+                progress_callback=progress_callback,
+            )
+        except Exception as e:
+            print(f"AppManager: download exception for {fullname}: {e}")
+            try:
+                shutil.rmtree(dest_folder)
+            except Exception:
+                pass
+            raise RuntimeError(f"Download failed for {fullname}: {e}")
+
         if result is not True:
             try:
-                os.remove(temp_path)
+                shutil.rmtree(dest_folder)
             except Exception:
                 pass
             raise RuntimeError(f"Download failed for {fullname}")
 
-        print(f"AppManager: installing {temp_path} -> apps/{fullname}")
-        AppManager.install_mpk(temp_path, f"apps/{fullname}")
-        # install_mpk removes the temp file on success; clean up in case it didn't
-        try:
-            os.remove(temp_path)
-        except Exception:
-            pass
+        # If the total file was smaller than the peek threshold, finalize now.
+        if _state["extractor"] is None:
+            prefix = peek_strip_prefix(_state["buf"], fullname)
+            _state["extractor"] = StreamingUnzip(dest_folder, strip_prefix=prefix)
+            _state["extractor"].feed(_state["buf"])
+
+        _state["extractor"].finish()
+        print(f"AppManager: installed {fullname} successfully")
+        AppManager.refresh_apps()
         return True
 
     @staticmethod
