@@ -133,6 +133,9 @@ class NostrClient():
 
     def __init__(self, nsec, follow_npub, relay):
         super().__init__()
+        # Per-instance cleanup flag (defaults to True; flipped during
+        # stop() while the async close_connections task is in flight).
+        self._cleanup_done = True
         self.nsec = nsec
         self.follow_npub = follow_npub
         self.relay = relay
@@ -165,7 +168,14 @@ class NostrClient():
             await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
             
             self.connected = False
-            for _ in range(100):
+            nrconnected = 0
+            # Up to 30 s wait. The first connect attempt can fail fast
+            # (ECONNABORTED during a WiFi blip), then the relay's own
+            # auto-reconnect (3 s back-off + fresh TLS handshake) needs ~15 s
+            # before on_open actually fires. A 10 s wait here used to time
+            # out right before the successful reconnect, leaving the relay
+            # task to exit while the websocket quietly came up behind it.
+            for _ in range(300):
                 await TaskManager.sleep(0.1)
                 nrconnected = self.relay_manager.connected_or_errored_relays()
                 if nrconnected == 1 or not self.keep_running:
@@ -284,8 +294,24 @@ class NostrClient():
         TaskManager.create_task(self.async_event_manager_task())
 
     def stop(self):
-        """Stop the event manager task"""
+        """Stop the event manager AND eagerly close relay websockets so a
+        quick restart doesn't race against old sockets still holding ESP32's
+        limited TCP pool. Without this, a new connection attempt can fail
+        with 'Could not connect to relay' even when the network is fine."""
         self.keep_running = False
+        if self.relay_manager is not None and self._cleanup_done:
+            self._cleanup_done = False
+            TaskManager.create_task(self._close_relays())
+
+    async def _close_relays(self):
+        try:
+            await self.relay_manager.close_connections()
+        except Exception as e:
+            print("NostrClient: error closing relay connections: {}".format(e))
+        self._cleanup_done = True
 
     def is_running(self):
         return self.keep_running
+
+    def is_stopped(self):
+        return (not self.keep_running) and self._cleanup_done
