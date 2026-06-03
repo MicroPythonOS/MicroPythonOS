@@ -32,7 +32,7 @@ class AppUpdateManager:
 
     _instance = None
 
-    BOOT_INITIAL_DELAY = 9       # seconds to wait after boot before first check
+    BOOT_INITIAL_DELAY = 90       # seconds to wait after boot before first check
     BOOT_CHECK_INTERVAL = 60 * 60 * 24  # re-check every 24 h
     WIFI_CHECK_INTERVAL = 5
 
