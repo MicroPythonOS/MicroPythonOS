@@ -53,6 +53,7 @@ class AppStore(Activity):
         self.prefs = SharedPreferences(self.appFullName)
         self._migrate_backend_pref()
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
+        self._refresh_in_progress = False
         self.main_screen = lv.obj()
 
         # ---- top bar ----
@@ -202,14 +203,19 @@ class AppStore(Activity):
     # ------------------------------------------------------------------
 
     def refresh_list(self):
+        if self._refresh_in_progress:
+            print("AppStore: refresh already in progress, skipping")
+            return
         try:
             import network
             if not network.WLAN(network.STA_IF).isconnected():
                 self.please_wait_label.remove_flag(lv.obj.FLAG.HIDDEN)
                 self.please_wait_label.set_text("Error: WiFi is not connected.")
+                return
         except Exception as e:
             print("Warning: can't check network state, assuming we're online...")
-        TaskManager.create_task(self.download_app_index(self.get_backend_list_url_from_settings()))
+        self._refresh_in_progress = True
+        TaskManager.create_task(self._download_app_index_wrapper(self.get_backend_list_url_from_settings()))
 
     def settings_button_tap(self, event):
         intent = Intent(activity_class=SettingActivity)
@@ -234,7 +240,14 @@ class AppStore(Activity):
             print(f"Migrating AppStore backend preference to mpos_api_{BuildInfo.version.api_level}")
             self.prefs.edit().put_string("backend", new_pref).commit()
 
+    async def _download_app_index_wrapper(self, json_url):
+        try:
+            await self.download_app_index(json_url)
+        finally:
+            self._refresh_in_progress = False
+
     async def download_app_index(self, json_url):
+        await TaskManager.sleep(0)
         try:
             response = await DownloadManager.download_url(json_url)
         except Exception as e:
@@ -270,8 +283,8 @@ class AppStore(Activity):
         print("Creating apps list...")
         self.create_apps_list()
         await TaskManager.sleep(0.1)
-        print("awaiting self.download_icons()")
-        await self.download_icons()
+        print("starting self.download_icons() in background")
+        TaskManager.create_task(self.download_icons())
 
     def create_apps_list(self):
         print("create_apps_list")
