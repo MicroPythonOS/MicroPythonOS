@@ -120,10 +120,9 @@ def _notification_pressed(event, notification_id):
 def _build_drawer_notification_item(parent, notification):
     card = lv.obj(parent)
     card.set_width(lv.pct(100))
-    #card.set_height(lv.SIZE_CONTENT)
     card.set_height(DisplayMetrics.pct_of_height(20))
     card.remove_flag(lv.obj.FLAG.SCROLLABLE)
-    card.set_style_radius(8, lv.PART.MAIN)
+    card.set_style_radius(0, lv.PART.MAIN)
     card.set_style_border_width(0, lv.PART.MAIN)
     card.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
     card.set_style_bg_opa(lv.OPA._10, lv.PART.MAIN)
@@ -150,6 +149,7 @@ def _build_drawer_notification_item(parent, notification):
             icon_widget.set_src(icon)
             icon_widget.set_size(icon_size, icon_size)
             icon_widget.set_style_pad_all(0, lv.PART.MAIN)
+            icon_widget.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
             header = lv.image_header_t()
             icon_widget.decoder_get_info(icon, header)
             if header.w > 0 and header.h > 0:
@@ -161,9 +161,12 @@ def _build_drawer_notification_item(parent, notification):
     if isinstance(icon, str) and not _icon_is_image_path(icon):
         icon_label = lv.label(card)
         icon_label.set_text(icon)
+        icon_label.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        icon_label.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
     content_col = lv.obj(card)
     content_col.remove_flag(lv.obj.FLAG.SCROLLABLE)
+    content_col.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
     content_col.set_style_border_width(0, lv.PART.MAIN)
     content_col.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
     content_col.set_style_pad_all(0, lv.PART.MAIN)
@@ -177,6 +180,8 @@ def _build_drawer_notification_item(parent, notification):
     title_label.set_text(notification.title)
     title_label.set_long_mode(lv.label.LONG_MODE.WRAP)
     title_label.set_width(lv.pct(100))
+    title_label.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+    title_label.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
     if notification.text:
         text_label = lv.label(content_col)
@@ -184,6 +189,8 @@ def _build_drawer_notification_item(parent, notification):
         text_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         text_label.set_width(lv.pct(100))
         text_label.set_style_text_opa(lv.OPA._60, lv.PART.MAIN)
+        text_label.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        text_label.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
     return card
 
