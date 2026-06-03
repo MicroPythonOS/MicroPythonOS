@@ -363,11 +363,16 @@ birthday_cakes,👑
             if not name.lower().endswith(".png"):
                 continue
 
-            codepoint_hex = name[:-4]
+            name_without_ext = name[:-4]
+            is_fe0f_variant = name_without_ext.endswith("-FE0F")
+            codepoint_hex = name_without_ext[:-5] if is_fe0f_variant else name_without_ext
             try:
                 codepoint = int(codepoint_hex, 16)
             except Exception:
                 print("font_manager: skip non-hex emoji file: " + name)
+                continue
+
+            if not is_fe0f_variant and codepoint in emoji_map:
                 continue
 
             emoji_map[codepoint] = prefix + name

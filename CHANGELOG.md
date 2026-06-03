@@ -13,6 +13,8 @@ Frameworks:
 - NotificationManager: new framework to notify the user
 - AppManager: buffer .mpk/.zip in RAM instead of ROM before extracting (less space required, less flash wear, faster)
 - AppManager: check sufficient free storage space before installing app package
+- FontManager: switch openmoji to noto-emoji and add 5 additional emojis
+
 
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
@@ -20,6 +22,7 @@ OS:
 - Restyle drawer menu to accomodate notifications
 - shutil: add `move()`, `copyfile()`, and `copytree()`
 - Focus direction: rewrite algorithm for speed and widget reachability
+- Show warning if an app throws an exception (with optional details)
 
 0.11.2
 ======
