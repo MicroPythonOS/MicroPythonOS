@@ -25,6 +25,7 @@ OS:
 Frameworks:
 - Fix SharedPreferences no-op guard silently discarding writes (affects all settings, not just WiFi)
 - Switch Fri3d Communicator Add-On 2026 Keyboard to polling mode to work around spotty IRQ
+- New board support: LilyGo T4
 
 
 0.11.1
