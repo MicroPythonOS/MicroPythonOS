@@ -84,6 +84,9 @@ class DJAddonActivity(Activity):
             print("DJ Addon FW version:", ".".join(str(i) for i in version))
             if version != (1, 0, 0):
                 raise ValueError("unexpected firmware version")
+            print("Disabling UART REPL because it receives data from the DJ Add-On. Use esp.uart_repl(True) to re-enable.")
+            import esp
+            esp.uart_repl(False)
         except Exception as e:
             print("DJ Addon not available, using mock:", e)
             self.dj = _MockDJAddon()
@@ -242,11 +245,20 @@ class DJAddonActivity(Activity):
     def onResume(self, screen):
         if self.timer is None:
             self.timer = lv.timer_create(self.refresh, _REFRESH_MS, None)
+        if self.dj is not None:
+            for idx in range(len(self.pad_buttons)):
+                r, g, b = _COLORS[self.pad_button_states[idx]]
+                self.set_button_color(idx, r, g, b)
+
 
     def onPause(self, screen):
         if self.timer:
             self.timer.delete()
             self.timer = None
+        if self.dj is not None:
+            for idx in range(len(self.pad_buttons)):
+                self.dj.set_led(idx, 0, 0, 0)
+
 
     def refresh(self, timer):
         if self.dj is None:
