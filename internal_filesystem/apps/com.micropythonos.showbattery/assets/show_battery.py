@@ -1,6 +1,8 @@
+import time
+
+import lvgl as lv
 from mpos import Activity, BatteryManager
 from mpos.battery_manager import MAX_VOLTAGE, MIN_VOLTAGE
-import lvgl as lv
 
 HISTORY_LEN = 60
 
@@ -106,7 +108,7 @@ class ShowBattery(Activity):
 
         def update(timer):
             # --- DATE+TIME ---
-            now = mpos.time.localtime()
+            now = time.localtime()
             year, month, day = now[0], now[1], now[2]
             hour, minute, second = now[3], now[4], now[5]
             self.lbl_datetime.set_text(
