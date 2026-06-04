@@ -1,15 +1,11 @@
 # Hardware initialization for Fri3d Camp 2024 Badge
-from machine import Pin, SPI, SDCard
+from machine import Pin
 import lcd_bus
 import machine
-import i2c
 import math
 
-import micropython
-import gc
 
 import lvgl as lv
-import task_handler
 
 import drivers.display.st7789 as st7789
 

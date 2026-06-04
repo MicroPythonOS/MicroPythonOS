@@ -1,5 +1,5 @@
 import lvgl as lv
-from mpos import Activity, DisplayMetrics, InputManager
+from mpos import Activity, InputManager
 
 indev_error_x = 160
 indev_error_y = 120

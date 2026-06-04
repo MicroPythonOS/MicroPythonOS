@@ -5,7 +5,6 @@ variance, expected value comparison, and overall quality score.
 """
 
 import lvgl as lv
-import time
 import sys
 from mpos import Activity, SensorManager, DisplayMetrics
 

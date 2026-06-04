@@ -1,5 +1,3 @@
-import machine
-import os
 import time
 import lvgl as lv
 

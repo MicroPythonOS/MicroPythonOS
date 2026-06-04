@@ -3,8 +3,6 @@ Robot translated that from bwatch/magcali.js
 
 """
 
-import time
-import os
 import math
 
 try:
@@ -12,7 +10,7 @@ try:
 except ImportError:
     pass
 
-from mpos import Activity, MposKeyboard, SensorManager
+from mpos import Activity, SensorManager
 
 # -----------------------------
 # Utilities

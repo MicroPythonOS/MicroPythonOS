@@ -40,21 +40,21 @@ class SX126X:
     def __init__(self, spi_bus, clk, mosi, miso, cs, irq, rst, gpio):
         self._irq = irq
         if implementation.name == 'micropython':
-          try:
+            try:
               print("Trying Pycom SPI...")
               self.spi = SPI(spi_bus, mode=SPI.MASTER, baudrate=2000000, pins=(clk, mosi, miso))        # Pycom variant uPy
-          except:
-              try:
-                  print("Trying Hardware SPI...")
-                  self.spi = SPI(spi_bus, baudrate=2000000, sck=Pin(clk), mosi=Pin(mosi), miso=Pin(miso))   # Generic variant uPy
-              except Exception as e:
-                  print("Trying Software SPI...")
-	          from machine import SoftSPI
-	          self.spi = SoftSPI(baudrate=500000, sck=Pin(clk), mosi=Pin(mosi), miso=Pin(miso))   # SoftSPI
-          self.cs = Pin(cs, mode=Pin.OUT)
-          self.irq = Pin(irq, mode=Pin.IN)
-          self.rst = Pin(rst, mode=Pin.OUT)
-          self.gpio = Pin(gpio, mode=Pin.IN)
+            except:
+                try:
+                    print("Trying Hardware SPI...")
+                    self.spi = SPI(spi_bus, baudrate=2000000, sck=Pin(clk), mosi=Pin(mosi), miso=Pin(miso))   # Generic variant uPy
+                except Exception as e:
+                    print("Trying Software SPI...")
+                    from machine import SoftSPI
+                    self.spi = SoftSPI(baudrate=500000, sck=Pin(clk), mosi=Pin(mosi), miso=Pin(miso))   # SoftSPI
+            self.cs = Pin(cs, mode=Pin.OUT)
+            self.irq = Pin(irq, mode=Pin.IN)
+            self.rst = Pin(rst, mode=Pin.OUT)
+            self.gpio = Pin(gpio, mode=Pin.IN)
 
         if implementation.name == 'circuitpython':
           self.spi = busio.SPI(clk, MOSI=mosi, MISO=miso)
@@ -123,14 +123,14 @@ class SX126X:
 
         state = self.standby()
         ASSERT(state)
-        
+
         if tcxoVoltage > 0.0:
             state = self.setTCXO(tcxoVoltage)
             ASSERT(state)
 
         state = self.config(SX126X_PACKET_TYPE_LORA)
         ASSERT(state)
-        
+
         if useRegulatorLDO:
             state = self.setRegulatorLDO()
         else:
@@ -176,14 +176,14 @@ class SX126X:
 
         state = self.standby()
         ASSERT(state)
-        
+
         if tcxoVoltage > 0.0:
             state = self.setTCXO(tcxoVoltage)
             ASSERT(state)
 
         state = self.config(SX126X_PACKET_TYPE_GFSK)
         ASSERT(state)
-        
+
         if useRegulatorLDO:
             state = self.setRegulatorLDO()
         else:
@@ -288,7 +288,7 @@ class SX126X:
                 if abs(ticks_diff(start, ticks_us())) > timeout:
                     self.clearIrqStatus()
                     self.standby()
-                    return ERR_TX_TIMEOUT                     
+                    return ERR_TX_TIMEOUT
 
         elapsed = abs(ticks_diff(start, ticks_us()))
 
@@ -334,7 +334,7 @@ class SX126X:
             timeoutValue = int(float(timeout) / 15.625)
         else:
             timeoutValue = SX126X_RX_TIMEOUT_NONE
-            
+
         state = self.startReceive(timeoutValue)
         ASSERT(state)
 
@@ -398,7 +398,7 @@ class SX126X:
         if implementation.name == 'circuitpython':
             while not self.irq.value:
                 yield_()
-        
+
 
         cadResult = self.getIrqStatus()
         if cadResult & SX126X_IRQ_CAD_DETECTED:
@@ -442,10 +442,10 @@ class SX126X:
     def startTransmit(self, data, len_, addr=0):
         if len_ > SX126X_MAX_PACKET_LENGTH:
             return ERR_PACKET_TOO_LONG
-                
+
         if self._addrComp != SX126X_GFSK_ADDRESS_FILT_OFF and len_ > (SX126X_MAX_PACKET_LENGTH - 1):
             return ERR_PACKET_TOO_LONG
-                
+
         state = ERR_NONE
         modem = self.getPacketType()
         if modem == SX126X_PACKET_TYPE_LORA:
@@ -453,40 +453,40 @@ class SX126X:
                 self._invertIQ = SX126X_LORA_IQ_INVERTED
             else:
                 self._invertIQ = SX126X_LORA_IQ_STANDARD
-                
+
             if self._headerType == SX126X_LORA_HEADER_IMPLICIT:
                 if len_ != self._implicitLen:
                     return ERR_INVALID_PACKET_LENGTH
-                
+
             state = self.setPacketParams(self._preambleLength, self._crcType, len_, self._headerType, self._invertIQ)
         elif modem == SX126X_PACKET_TYPE_GFSK:
             if self._packetType == SX126X_GFSK_PACKET_FIXED:
                 if len_ != self._packetLength:
                     return ERR_INVALID_PACKET_LENGTH
-                
+
             state = self.setPacketParamsFSK(self._preambleLengthFSK, self._crcTypeFSK, self._syncWordLength, self._addrComp, self._whitening, self._packetType, len_, self._preambleDetectorLength)
         else:
             return ERR_UNKNOWN
         ASSERT(state)
-        
+
         state = self.setDioIrqParams(SX126X_IRQ_TX_DONE | SX126X_IRQ_TIMEOUT, SX126X_IRQ_TX_DONE)
         ASSERT(state)
-        
+
         state = self.setBufferBaseAddress()
         ASSERT(state)
-        
+
         state = self.writeBuffer(data, len_)
         ASSERT(state)
-        
+
         state = self.clearIrqStatus()
         ASSERT(state)
-        
+
         state = self.fixSensitivity()
         ASSERT(state)
-        
+
         state = self.setTx(SX126X_TX_TIMEOUT_NONE)
         ASSERT(state)
-        
+
         if implementation.name == 'micropython':
           while self.gpio.value():
               yield_()
@@ -496,7 +496,7 @@ class SX126X:
               yield_()
 
         return state
-		
+
     def startReceive(self, timeout=SX126X_RX_TIMEOUT_INF):
         state = ERR_NONE
         modem = self.getPacketType()
@@ -505,67 +505,67 @@ class SX126X:
                 self._invertIQ = SX126X_LORA_IQ_INVERTED
             else:
                 self._invertIQ = SX126X_LORA_IQ_STANDARD
-                
+
             state = self.setPacketParams(self._preambleLength, self._crcType, self._implicitLen, self._headerType, self._invertIQ)
         elif modem == SX126X_PACKET_TYPE_GFSK:
             state = self.setPacketParamsFSK(self._preambleLengthFSK, self._crcTypeFSK, self._syncWordLength, self._addrComp, self._whitening, self._packetType, self._packetLength, self._preambleDetectorLength)
         else:
             return ERR_UNKNOWN
         ASSERT(state)
-        
+
         state = self.startReceiveCommon()
         ASSERT(state)
-        
+
         state = self.setRx(timeout)
-        
+
         return state
-            
+
     def startReceiveDutyCycle(self, rxPeriod, sleepPeriod):
         transitionTime = int(self._tcxoDelay + 1000)
         sleepPeriod -= transitionTime
-        
+
         rxPeriodRaw = int((rxPeriod * 8) / 125)
         sleepPeriodRaw = int((sleepPeriod * 8) / 125)
-        
+
         if rxPeriodRaw & 0xFF000000 or rxPeriodRaw == 0:
             return ERR_INVALID_RX_PERIOD
-                
+
         if sleepPeriodRaw & 0xFF000000 or sleepPeriodRaw == 0:
             return ERR_INVALID_SLEEP_PERIOD
-                
+
         state = self.startReceiveCommon()
         ASSERT(state)
-        
+
         data = [int((rxPeriodRaw >> 16) & 0xFF), int((rxPeriodRaw >> 8) & 0xFF), int(rxPeriodRaw & 0xFF),
                 int((sleepPeriodRaw >> 16) & 0xFF),int((sleepPeriodRaw >> 8) & 0xFF),int(sleepPeriodRaw & 0xFF)]
         return self.SPIwriteCommand([SX126X_CMD_SET_RX_DUTY_CYCLE], 1, data, 6)
-            
+
     def startReceiveDutyCycleAuto(self, senderPreambleLength=0, minSymbols=8):
         if senderPreambleLength == 0:
             senderPreambleLength = self._preambleLength
-                
+
         sleepSymbols = int(senderPreambleLength - 2 * minSymbols)
-        
+
         if (2 * minSymbols) > senderPreambleLength:
             return self.startReceive()
-                
+
         symbolLength = int(((10*1000) << self._sf) / (10 * self._bwKhz))
         sleepPeriod = symbolLength * sleepSymbols
-        
+
         wakePeriod = int(max((symbolLength * (senderPreambleLength + 1) - (sleepPeriod - 1000)) / 2, symbolLength * (minSymbols + 1)))
-        
+
         if sleepPeriod < (self._tcxoDelay + 1016):
             return self.startReceive()
-                
+
         return self.startReceiveDutyCycle(wakePeriod, sleepPeriod)
-            
+
     def startReceiveCommon(self):
         state = self.setDioIrqParams(SX126X_IRQ_RX_DONE | SX126X_IRQ_TIMEOUT | SX126X_IRQ_CRC_ERR | SX126X_IRQ_HEADER_ERR, SX126X_IRQ_RX_DONE)
         ASSERT(state)
-        
+
         state = self.setBufferBaseAddress()
         ASSERT(state)
-        
+
         state = self.clearIrqStatus()
 
         modem = self.getPacketType()
@@ -575,38 +575,38 @@ class SX126X:
             state = self.setPacketParamsFSK(self._preambleLengthFSK, self._crcTypeFSK, self._syncWordLength, self._addrComp, self._whitening, self._packetType)
         else:
             return ERR_UNKNOWN
-                
+
         return state
-            
+
     def readData(self, data, len_):
         state = self.standby()
         ASSERT(state)
-        
+
         irq = self.getIrqStatus()
         crcState = ERR_NONE
         if irq & SX126X_IRQ_CRC_ERR or irq & SX126X_IRQ_HEADER_ERR:
             crcState = ERR_CRC_MISMATCH
-                
+
         length = len_
         if len_ == SX126X_MAX_PACKET_LENGTH:
             length = self.getPacketLength()
-                
+
         state = self.readBuffer(data, length)
         ASSERT(state)
-        
+
         state = self.clearIrqStatus()
-        
+
         ASSERT(crcState)
-        
+
         return state
-            
+
     def setBandwidth(self, bw):
         if self.getPacketType() != SX126X_PACKET_TYPE_LORA:
             return ERR_WRONG_MODEM
-                
+
         if not ((bw > 0) and (bw < 510)):
             return ERR_INVALID_BANDWIDTH
-                
+
         bw_div2 = int(bw / 2 + 0.01)
         switch = {3: SX126X_LORA_BW_7_8,
                   5: SX126X_LORA_BW_10_4,
@@ -901,7 +901,7 @@ class SX126X:
             ASSERT(state)
         else:
             self._whitening = SX126X_GFSK_WHITENING_ON
-            
+
             data = bytearray(1)
             data_mv = memoryview(data)
             state = self.readRegister(SX126X_REG_WHITENING_INITIAL_MSB, data_mv, 1)

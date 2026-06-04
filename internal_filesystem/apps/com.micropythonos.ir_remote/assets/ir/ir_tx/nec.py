@@ -6,7 +6,7 @@
 
 # With thanks to J.E. Tannenbaum for information re Samsung protocol
 from micropython import const
-from . import IR, STOP
+from . import IR
 
 _TBURST = const(563)
 _T_ONE = const(1687)

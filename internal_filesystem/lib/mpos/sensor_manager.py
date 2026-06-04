@@ -19,7 +19,7 @@ Copyright (c) 2024 MicroPythonOS contributors
 """
 
 try:
-    import _thread
+    import _thread  # noqa: F401
 
     _lock = _thread.allocate_lock()
 except ImportError:
@@ -36,33 +36,32 @@ from mpos.imu.constants import (
     FACING_SKY,
 )
 from mpos.imu.manager import ImuManager
-from mpos.imu.sensor import Sensor
 
 
 class SensorManager:
     """
     Centralized sensor management service.
     Implements singleton pattern for unified sensor access.
-    
+
     Usage:
         from mpos import SensorManager
-        
+
         # Initialize
         SensorManager.init(i2c_bus, address=0x6B)
-        
+
         # Get sensor
         accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
-        
+
         # Read sensor
         ax, ay, az = SensorManager.read_sensor(accel)
     """
-    
+
     _instance = None
 
     # Class-level state variables (for testing and singleton pattern)
     _initialized = False
     _imu_manager = None
-    
+
     # Class-level constants
     TYPE_ACCELEROMETER = TYPE_ACCELEROMETER
     TYPE_MAGNETIC_FIELD = TYPE_MAGNETIC_FIELD
@@ -72,13 +71,13 @@ class SensorManager:
     TYPE_SOC_TEMPERATURE = TYPE_SOC_TEMPERATURE
     FACING_EARTH = FACING_EARTH
     FACING_SKY = FACING_SKY
-    
+
     def __init__(self):
         """Initialize SensorManager singleton instance."""
         if SensorManager._instance:
             return
         SensorManager._instance = self
-    
+
     @classmethod
     def get(cls):
         """Get or create the singleton instance."""
@@ -112,7 +111,7 @@ class SensorManager:
     def _ensure_imu_manager(self):
         if self._imu_manager is None:
             self._imu_manager = ImuManager()
-    
+
     def is_available(self):
         """Check if sensors are available.
 
@@ -180,7 +179,7 @@ class SensorManager:
         finally:
             if _lock:
                 _lock.release()
-    
+
     def calibrate_sensor(self, sensor, samples=100):
         """Calibrate sensor and save to SharedPreferences.
 
@@ -279,12 +278,12 @@ for method_name in _methods_to_delegate:
 def _make_class_method(method_name):
     """Create a class method that delegates to the singleton instance."""
     original_method = _original_methods[method_name]
-    
+
     @classmethod
     def class_method(cls, *args, **kwargs):
         instance = cls.get()
         return original_method(instance, *args, **kwargs)
-    
+
     return class_method
 
 for method_name in _methods_to_delegate:

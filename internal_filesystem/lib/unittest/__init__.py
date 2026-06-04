@@ -1,9 +1,8 @@
 import io
-import os
 import sys
 
 try:
-    import traceback
+    import traceback  # noqa: F401
 except ImportError:
     traceback = None
 

@@ -1,6 +1,6 @@
 try:
     simulation_mode = False
-    from machine import Pin, SPI
+    from machine import Pin
 except Exception as e:
     print(f"Activating simulation mode because could not import Pin, SPI from machine: {e}")
     simulation_mode = True

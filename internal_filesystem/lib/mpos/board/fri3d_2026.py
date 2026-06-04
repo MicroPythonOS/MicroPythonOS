@@ -23,7 +23,7 @@
 #
 # After board initialization: 4 to 0 (rainbow colors)
 
-from machine import ADC, I2C, Pin, SPI, SDCard
+from machine import I2C, Pin, SPI
 import lcd_bus
 import i2c
 import time

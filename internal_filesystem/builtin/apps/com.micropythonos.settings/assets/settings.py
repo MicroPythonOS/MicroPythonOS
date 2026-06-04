@@ -1,6 +1,5 @@
-import lvgl as lv
 
-from mpos import Activity, Intent, AppearanceManager, AppManager, NumberFormat, SettingActivity, SettingsActivity, TimeZone
+from mpos import Activity, Intent, AppearanceManager, AppManager, NumberFormat, SettingsActivity, TimeZone
 
 from bootloader import ResetIntoBootloader
 from calibrate_imu import CalibrateIMUActivity
@@ -143,7 +142,7 @@ class Settings(SettingsActivity):
         vfs.mount(fs, "/")
         print("Done formatting, (re)mounting /builtin")
         try:
-            import freezefs_mount_builtin
+            import freezefs_mount_builtin   # noqa E401
         except Exception as e:
             # This will throw an exception if there is already a "/builtin" folder present
             print("settings.py: WARNING: could not import/run freezefs_mount_builtin: ", e)

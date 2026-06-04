@@ -1,7 +1,7 @@
 import time
 import random
 
-from mpos import Activity, ui
+from mpos import Activity
 
 try:
     import lvgl as lv

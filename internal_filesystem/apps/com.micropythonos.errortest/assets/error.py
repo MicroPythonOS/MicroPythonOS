@@ -1,5 +1,6 @@
 import lvgl as lv
-from mpos import ActivityDoesntExist # should fail here
+from mpos import ActivityDoesntExist  # noqa: F401 - should fail here!
+
 
 class Error(Activity):
 

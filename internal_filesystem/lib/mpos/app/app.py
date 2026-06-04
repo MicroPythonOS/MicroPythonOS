@@ -1,6 +1,5 @@
 import os
 import ujson
-from ..activity_navigator import ActivityNavigator
 
 class App:
     def __init__(

@@ -4,7 +4,6 @@
 # Author: Peter Hinch
 # Copyright Peter Hinch 2020 Released under the MIT license
 
-from micropython import const
 from . import IR
 
 class SONY_ABC(IR):

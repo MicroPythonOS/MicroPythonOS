@@ -5,8 +5,6 @@
 
 import urandom
 import ubinascii
-import uhashlib
-import utime
 
 class SystemRandom:
     """Emulates random.SystemRandom using MicroPython's urandom."""

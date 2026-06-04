@@ -81,7 +81,6 @@ def init_pmu(m_i2c):
 import mpos
 from machine import I2C, Pin, SPI
 import micropython
-import time
 from mpos import IRManager, GPSManager
 
 IRManager.txPin = Pin(2, Pin.OUT, value=0) # don't leave default high because it drains current!

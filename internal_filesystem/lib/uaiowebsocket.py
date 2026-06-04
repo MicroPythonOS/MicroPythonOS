@@ -6,7 +6,7 @@ import uasyncio as asyncio
 import time
 import ucollections
 import aiohttp
-from aiohttp import WSMsgType, ClientWebSocketResponse
+from aiohttp import WSMsgType
 
 # Simplified logging for MicroPython with timestamps
 def _log_debug(msg):
@@ -51,9 +51,9 @@ def _run_callback(callback, *args):
 
 async def _process_callbacks_async():
     """Process queued callbacks asynchronously."""
-    import _thread
     while True: # this stops when "NWCWallet: manage_wallet_thread stopping, closing connections..."
-        #print(f"_process_callbacks_async thread {_thread.get_ident()}: _process_callbacks_async")
+        # import _thread
+        # print(f"_process_callbacks_async thread {_thread.get_ident()}: _process_callbacks_async")
         while _callback_queue:
             _log_debug("Processing callbacks queue...")
             try:

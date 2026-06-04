@@ -46,7 +46,7 @@ import sys
 import time
 
 try:
-    import unittest
+    import unittest  # noqa: F401
 except ImportError:  # pragma: no cover - fallback for device builds without unittest
     unittest = None
 
@@ -698,16 +698,16 @@ def verify_setting_value_text(obj, setting_title_text, expected_text):
 def text_to_hex(text):
     """
     Convert text to hex representation for debugging.
-    
+
     Useful for identifying Unicode symbols like lv.SYMBOL.SETTINGS
     which may not display correctly in terminal output.
-    
+
     Args:
         text: String to convert
-        
+
     Returns:
         str: Hex representation of the text bytes (UTF-8 encoded)
-        
+
     Example:
         >>> text_to_hex("⚙")  # lv.SYMBOL.SETTINGS
         'e29a99'
@@ -725,7 +725,7 @@ def print_screen_labels(obj):
     Useful for debugging tests to see what text is actually present.
     Prints to stdout with numbered list. Includes text from labels,
     checkboxes, buttons, and any other widgets with text.
-    
+
     For each text, also prints the hex representation to help identify
     Unicode symbols (like lv.SYMBOL.SETTINGS) that may not display
     correctly in terminal output.
@@ -1227,14 +1227,14 @@ def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
 
 def click_button(button_text, timeout=5, use_send_event=True):
     """Find and click a button with given text.
-    
+
     Args:
         button_text: Text to search for in button labels
         timeout: Maximum time to wait for button to appear (default: 5s)
         use_send_event: If True, use send_event() which is more reliable for
                         triggering button actions. If False, use simulate_click()
                         which simulates actual touch input. (default: True)
-    
+
     Returns:
         True if button was found and clicked, False otherwise
     """
@@ -1259,17 +1259,17 @@ def click_button(button_text, timeout=5, use_send_event=True):
 
 def click_label(label_text, timeout=5, use_send_event=True):
     """Find a label with given text and click on it (or its clickable parent).
-    
+
     This function finds a label, scrolls it into view (with multiple attempts
     if needed), verifies it's within the visible viewport, and then clicks it.
     If the label itself is not clickable, it will try clicking the parent container.
-    
+
     Args:
         label_text: Text to search for in labels
         timeout: Maximum time to wait for label to appear (default: 5s)
         use_send_event: If True, use send_event() on clickable parent which is more
                         reliable. If False, use simulate_click(). (default: True)
-    
+
     Returns:
         True if label was found and clicked, False otherwise
     """
@@ -1282,19 +1282,19 @@ def click_label(label_text, timeout=5, use_send_event=True):
             screen_coords = get_widget_coords(screen)
             if not screen_coords:
                 screen_coords = {'x1': 0, 'y1': 0, 'x2': 320, 'y2': 240}
-            
+
             # Try scrolling multiple times to ensure label is fully visible
             max_scroll_attempts = 5
             for scroll_attempt in range(max_scroll_attempts):
                 print(f"Scrolling label to view (attempt {scroll_attempt + 1}/{max_scroll_attempts})...")
                 label.scroll_to_view_recursive(True)
                 wait_for_render(iterations=50)  # needs quite a bit of time for scroll animation
-                
+
                 # Get updated coordinates after scroll
                 coords = get_widget_coords(label)
                 if not coords:
                     break
-                
+
                 # Check if label center is within visible viewport
                 # Account for some margin (e.g., status bar at top, nav bar at bottom)
                 # Use a larger bottom margin to ensure the element is fully clickable
@@ -1302,16 +1302,16 @@ def click_label(label_text, timeout=5, use_send_event=True):
                 viewport_bottom = screen_coords['y2'] - 30  # Larger margin at bottom for clickability
                 viewport_left = screen_coords['x1']
                 viewport_right = screen_coords['x2']
-                
+
                 center_x = coords['center_x']
                 center_y = coords['center_y']
-                
+
                 is_visible = (viewport_left <= center_x <= viewport_right and
                               viewport_top <= center_y <= viewport_bottom)
-                
+
                 if is_visible:
                     print(f"Label '{label_text}' is visible at ({center_x}, {center_y})")
-                    
+
                     # Try to find a clickable parent (container) - many UIs have clickable containers
                     # with non-clickable labels inside. We'll click on the label's position but
                     # the event should bubble up to the clickable parent.
@@ -1337,7 +1337,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                                 click_coords = {'center_x': click_x, 'center_y': click_y}
                     except Exception as e:
                         print(f"Could not check parent clickability: {e}")
-                    
+
                     print(f"Clicking label '{label_text}' at ({click_coords['center_x']}, {click_coords['center_y']})")
                     if use_send_event and clickable_parent:
                         # Use send_event on the clickable parent for more reliable triggering
@@ -1364,7 +1364,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                                         scrollable = grandparent
                                 except:
                                     break
-                            
+
                             # Scroll by a fixed amount to bring label more into view
                             current_scroll = scrollable.get_scroll_y()
                             if center_y > viewport_bottom:
@@ -1376,7 +1376,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                             wait_for_render(iterations=30)
                     except Exception as e:
                         print(f"Additional scroll failed: {e}")
-            
+
             # If we exhausted scroll attempts, try clicking anyway
             coords = get_widget_coords(label)
             if coords:
@@ -1391,7 +1391,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                             print(f"Using clickable parent for fallback click")
                 except:
                     pass
-                
+
                 print(f"Clicking at ({click_coords['center_x']}, {click_coords['center_y']}) after max scroll attempts")
                 # Try to use send_event if we have a clickable parent
                 try:
@@ -1405,7 +1405,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                     simulate_click(click_coords['center_x'], click_coords['center_y'])
                 wait_for_render(iterations=20)
                 return True
-                
+
         wait_for_render(iterations=5)
     print(f"ERROR: Label '{label_text}' not found after {timeout}s")
     return False
@@ -1600,42 +1600,42 @@ def _dump_widget_tree(obj, depth):
 def click_keyboard_button(keyboard, button_text, use_direct=True):
     """
     Click a keyboard button reliably.
-    
+
     This function handles the complexity of clicking keyboard buttons.
     For MposKeyboard, it directly manipulates the textarea (most reliable).
     For raw lv.keyboard, it uses simulate_click with coordinates.
-    
+
     Args:
         keyboard: MposKeyboard instance or lv.keyboard widget
         button_text: Text of the button to click (e.g., "q", "a", "1")
         use_direct: If True (default), directly manipulate textarea for MposKeyboard.
                    If False, use simulate_click with coordinates.
-        
+
     Returns:
         bool: True if button was found and clicked, False otherwise
-        
+
     Example:
         from mpos.ui.keyboard import MposKeyboard
         from mpos.ui.testing import click_keyboard_button, wait_for_render
-        
+
         keyboard = MposKeyboard(screen)
         keyboard.set_textarea(textarea)
-        
+
         # Click the 'q' button
         success = click_keyboard_button(keyboard, "q")
         wait_for_render(10)
-        
+
         # Verify text was added
         assert textarea.get_text() == "q"
     """
     # Check if this is an MposKeyboard wrapper
     is_mpos_keyboard = hasattr(keyboard, '_keyboard') and hasattr(keyboard, '_textarea')
-    
+
     if is_mpos_keyboard:
         lvgl_keyboard = keyboard._keyboard
     else:
         lvgl_keyboard = keyboard
-    
+
     # Find button index by searching through all buttons
     button_idx = None
     for i in range(100):  # Check up to 100 buttons
@@ -1646,11 +1646,11 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
                 break
         except:
             break  # No more buttons
-    
+
     if button_idx is None:
         print(f"click_keyboard_button: Button '{button_text}' not found on keyboard")
         return False
-    
+
     if use_direct and is_mpos_keyboard:
         # For MposKeyboard, run through its event handler logic so behavior
         # matches real typing (including mode switching and emoji font updates).
@@ -1692,7 +1692,7 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
         else:
             print(f"click_keyboard_button: Could not get coordinates for '{button_text}'")
             return False
-    
+
     return True
 
 

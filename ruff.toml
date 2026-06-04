@@ -1,2 +1,31 @@
+line-length = 120
+
+exclude = [
+    "tests", # TODO: Remove in the future, but it causes too many errors right now
+    # Exclude all git submodules:
+    "esp32-component-rvswd",
+    "freezeFS",
+    "lvgl_micropython",
+    "micropython-camera-API",
+    "micropython-nostr",
+    "secp256k1-embedded-ecdh",
+]
+
+[lint]
+preview = false  # TODO: enable this at some point, but it causes too many errors right now
+select = [
+    "F401", # imported but unused
+]
+extend-select = [
+    # TODO:
+#    "E", # pycodestyle: https://docs.astral.sh/ruff/rules/#error-e
+#    "I", # isort: https://docs.astral.sh/ruff/rules/#isort-i
+]
+ignore = []
+
+[lint.isort]
+# https://docs.astral.sh/ruff/settings/#lintisort
+lines-after-imports = 2
+
 [format]
 quote-style = "double"

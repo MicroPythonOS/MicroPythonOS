@@ -6,7 +6,6 @@ from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
 from .input_manager import InputManager
-from . import focus_direction
 from .widget_animator import SlidePanel
 from mpos.content.app_manager import AppManager
 from mpos.notification_manager import NotificationManager

@@ -3,7 +3,6 @@
 # Uses synchronous recording in a separate thread for non-blocking operation
 # On desktop (no I2S hardware), generates a 440Hz sine wave for testing
 
-import sys
 import time
 
 from mpos.audio.audiomanager import AudioManager

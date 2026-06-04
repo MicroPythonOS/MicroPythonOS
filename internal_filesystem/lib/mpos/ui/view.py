@@ -1,7 +1,6 @@
 import lvgl as lv
 import sys
 
-from .focus import save_and_clear_current_focusgroup
 from .topmenu import open_bar, close_drawer
 
 screen_stack = []

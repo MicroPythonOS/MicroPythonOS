@@ -4,7 +4,6 @@ Test/visualization of gyroscope / accelerometer
 """
 
 import time
-import os
 import math
 
 try:
@@ -12,7 +11,7 @@ try:
 except ImportError:
     pass
 
-from mpos import Activity, MposKeyboard, SensorManager
+from mpos import Activity, SensorManager
 
 # -----------------------------
 # Utilities

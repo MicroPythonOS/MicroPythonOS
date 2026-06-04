@@ -30,7 +30,7 @@ SOFTWARE.
 from sys import implementation
 
 if implementation.name == 'micropython':
-    from machine import Pin, I2C
+    from machine import I2C
 if implementation.name == 'circuitpython':
     from adafruit_bus_device import i2c_device
 

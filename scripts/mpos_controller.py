@@ -13,7 +13,6 @@ Usage:
 """
 
 import ast
-import json
 import os
 import pty
 import select
@@ -21,10 +20,8 @@ import signal
 import struct
 import subprocess
 import sys
-import tempfile
 import termios
 import time
-import platform
 
 
 # ── Widget tree introspection ──────────────────────────────────────
