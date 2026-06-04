@@ -26,7 +26,7 @@ _TEST_TTF_PATH = "M:../tests/TimesNRW01-SmallTextRegular.ttf"
 def _reset_font_manager():
     FontManager._composed_font_cache.clear()
     FontManager._ttf_font_cache.clear()
-    FontManager._emoji_maps.clear()
+    FontManager._emoji_map = None
     FontManager._emoji_src_lookup_cache.clear()
     FontManager._emoji_sequence_lookup_cache.clear()
     FontManager._imgfont_scaled_src_cache.clear()
@@ -218,7 +218,7 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
 
     def _get_emoji_map(self):
         FontManager.getEmojiCodepoints()
-        return FontManager._emoji_maps["32x32"]
+        return FontManager._emoji_map
 
     def test_getemoji_codepoints_nonempty(self):
         """getEmojiCodepoints() returns a non-empty list."""
@@ -248,25 +248,21 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         self.assertTrue(len(cps) > 0)
 
     def test_tier_sources_point_to_correct_dir(self):
-        """Source paths in the 32x32 emoji map point to the expected directory."""
+        """Source paths in the emoji map point to the 32x32 directory."""
         FontManager.getEmojiCodepoints()
-        for cp, src in FontManager._emoji_maps["32x32"].items():
-            self.assertIn("32x32", src, "32x32 tier src should reference 32x32 dir")
+        for cp, src in FontManager._emoji_map.items():
+            self.assertIn("32x32", src, "emoji src should reference 32x32 dir")
 
     def test_similarity_group_fallback_uses_available_emoji(self):
         """Missing emoji falls back to another available emoji in the same group."""
-        FontManager._emoji_maps = {
-            "32x32": {"2764": "M:builtin/res/emojis/32x32/2764.png"},
-        }
+        FontManager._emoji_map = {"2764": "M:builtin/res/emojis/32x32/2764.png"}
 
         src = FontManager._get_emoji_src(ord("♥"), 16)
         self.assertEqual(src, "M:builtin/res/emojis/32x32/2764.png")
 
     def test_similarity_group_fallback_returns_none_when_group_unavailable(self):
         """If no emoji from the group is present, fallback returns None."""
-        FontManager._emoji_maps = {
-            "32x32": {"1F600": "M:builtin/res/emojis/32x32/1f600.png"},
-        }
+        FontManager._emoji_map = {"1F600": "M:builtin/res/emojis/32x32/1f600.png"}
 
         src = FontManager._get_emoji_src(ord("♥"), 16)
         self.assertIsNone(src)
@@ -305,35 +301,29 @@ class TestFontManagerVariantFallback(GraphicalTestCase):
 
     def test_variant_fallback_strips_modifier(self):
         """Missing skin-tone variant falls back to the base emoji."""
-        FontManager._emoji_maps = {
-            "32x32": {"1F44D": "M:builtin/res/emojis/32x32/1F44D.png"},
-        }
+        FontManager._emoji_map = {"1F44D": "M:builtin/res/emojis/32x32/1F44D.png"}
 
-        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "32x32")
+        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB")
         self.assertEqual(src, "M:builtin/res/emojis/32x32/1F44D.png")
 
     def test_variant_exact_match(self):
         """Exact variant file is returned when present."""
-        FontManager._emoji_maps = {
-            "32x32": {
-                "1F44D": "M:builtin/res/emojis/32x32/1F44D.png",
-                "1F44D-1F3FB": "M:builtin/res/emojis/32x32/1F44D-1F3FB.png",
-            },
+        FontManager._emoji_map = {
+            "1F44D": "M:builtin/res/emojis/32x32/1F44D.png",
+            "1F44D-1F3FB": "M:builtin/res/emojis/32x32/1F44D-1F3FB.png",
         }
 
-        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "32x32")
+        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB")
         self.assertEqual(src, "M:builtin/res/emojis/32x32/1F44D-1F3FB.png")
 
     def test_variant_fallback_multi_segment(self):
         """Longer sequences fall back through each prefix."""
-        FontManager._emoji_maps = {
-            "32x32": {
-                "1F468": "M:builtin/res/emojis/32x32/1F468.png",
-                "1F468-200D": "M:builtin/res/emojis/32x32/1F468-200D.png",
-            },
+        FontManager._emoji_map = {
+            "1F468": "M:builtin/res/emojis/32x32/1F468.png",
+            "1F468-200D": "M:builtin/res/emojis/32x32/1F468-200D.png",
         }
 
-        src = FontManager._lookup_emoji_src_by_key("1F468-200D-1F469", "32x32")
+        src = FontManager._lookup_emoji_src_by_key("1F468-200D-1F469")
         self.assertEqual(src, "M:builtin/res/emojis/32x32/1F468-200D.png")
 
     def test_imgfont_modifier_returns_empty(self):
@@ -357,9 +347,7 @@ class TestFontManagerVariantFallback(GraphicalTestCase):
 
     def test_imgfont_base_plus_modifier_lookup(self):
         """_imgfont_path_cb looks up base+modifier and falls back to base."""
-        FontManager._emoji_maps = {
-            "32x32": {"1F44D": "M:builtin/res/emojis/32x32/1F44D.png"},
-        }
+        FontManager._emoji_map = {"1F44D": "M:builtin/res/emojis/32x32/1F44D.png"}
 
         font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
 
@@ -462,7 +450,7 @@ class TestFontManagerRendering(GraphicalTestCase):
         font = FontManager.getFont(size=16, family="Montserrat")
         line_h = FontManager._font_pixel_height(font)
         FontManager.getEmojiCodepoints()
-        cps = list(FontManager._emoji_maps.get("32x32", {}).keys())
+        cps = list((FontManager._emoji_map or {}).keys())
         if cps:
             src = FontManager._get_emoji_src(cps[0], line_h)
             self.assertIsNotNone(src)

@@ -5,28 +5,19 @@ import os
 CP_VARIATION_SELECTOR_TEXT = 0xFE0E
 CP_VARIATION_SELECTOR_EMOJI = 0xFE0F
 
+_EMOJI_DIR_PATH = "builtin/res/emojis/32x32"
+_EMOJI_SRC_PREFIX = "M:" + _EMOJI_DIR_PATH + "/"
+
 
 class FontManager:
     _DEFAULT_SIZE = 12
     _DEBUG = False
     _UNKNOWN_EMOJI_LOG_THRESHOLD = 0x203C
-    _EMOJI_TIERS = (
-#        {"max_height": 20, "dir": "20x20"},
-#        {"max_height": 33, "dir": "32x32"},
-#       {"max_height": 9999, "dir": "56x56"},
-        {"max_height": 999, "dir": "32x32"},
-    )
-
-    _EMOJI_DIR_CANDIDATE_FORMATS = (
-        "builtin/res/emojis/{dir}",
-        "./builtin/res/emojis/{dir}",
-        "M:builtin/res/emojis/{dir}",
-    )
 
     # Multiple caches are intentional here: emoji rendering on ESP32 is very
     # expensive, so we avoid repeated filesystem scans, repeated image decode
     # probes, and repeated per-codepoint fallback walks.
-    _emoji_maps = {}
+    _emoji_map = None  # dict of hex-key -> src path, populated on first use
     _builtin_font_records = None
     _composed_font_cache = {}
     _ttf_font_cache = {}
@@ -37,6 +28,7 @@ class FontManager:
     _emoji_sequence_lookup_cache = {}
     _unknown_emoji_codepoints_logged = {}
     _emoji_similarity_group_members_by_cp = None
+    _emoji_cp_bounds = None
 
     # Paste/update emoji similarity groups here as CSV with header: group_id,emoji
     _EMOJI_SIMILARITY_GROUPS_CSV = """group_id,emoji
@@ -276,21 +268,20 @@ droplet_sweat,💧
 
     @classmethod
     def getEmojiCodepoints(cls):
-        cls._ensure_emoji_maps()
+        cls._ensure_emoji_map()
         all_cps = set()
-        for m in cls._emoji_maps.values():
-            for key in m:
-                try:
-                    cp = int(key.split("-")[0], 16)
-                    all_cps.add(cp)
-                except Exception:
-                    pass
+        for key in cls._emoji_map:
+            try:
+                cp = int(key.split("-")[0], 16)
+                all_cps.add(cp)
+            except Exception:
+                pass
         return sorted(all_cps)
 
     @classmethod
     def _create_emoji_font(cls, size):
         size = max(1, int(size))
-        cls._ensure_emoji_maps()
+        cls._ensure_emoji_map()
 
         try:
             font = lv.imgfont_create(size, cls._imgfont_path_cb, None)
@@ -321,61 +312,46 @@ droplet_sweat,💧
 
     @classmethod
     def _emoji_codepoint_bounds(cls):
-        """Smallest / largest codepoint present across all loaded emoji maps.
-        Recomputed on demand and cached — the maps are immutable after init.
-        Falls back to a safe wide range if no emojis are loaded yet, so we
-        never narrow the filter in a way that would hide future glyphs."""
-        bounds = cls.__dict__.get("_emoji_cp_bounds")
-        if bounds is not None:
-            return bounds
+        """Smallest / largest codepoint in the emoji map.
+        Cached after first computation — the map is immutable after init.
+        Falls back to a safe wide range if no emojis are loaded yet."""
+        if cls._emoji_cp_bounds is not None:
+            return cls._emoji_cp_bounds
         lo = None
         hi = None
-        for emap in cls._emoji_maps.values():
-            for key in emap:
-                try:
-                    cp = int(key.split("-")[0], 16)
-                except Exception:
-                    continue
-                if lo is None or cp < lo: lo = cp
-                if hi is None or cp > hi: hi = cp
+        for key in cls._emoji_map or {}:
+            try:
+                cp = int(key.split("-")[0], 16)
+            except Exception:
+                continue
+            if lo is None or cp < lo: lo = cp
+            if hi is None or cp > hi: hi = cp
         if lo is None:
             # No emojis loaded — accept everything so behaviour matches the
             # unpatched code path. Caller should re-create the font once
-            # maps are populated.
+            # the map is populated.
             return (0, 0xFFFFFFFF)
-        bounds = (lo, hi)
-        cls._emoji_cp_bounds = bounds
-        return bounds
+        cls._emoji_cp_bounds = (lo, hi)
+        return cls._emoji_cp_bounds
 
     @classmethod
-    def _ensure_emoji_maps(cls):
-        for tier in cls._EMOJI_TIERS:
-            dir_name = tier["dir"]
-            if dir_name not in cls._emoji_maps:
-                cls._emoji_maps[dir_name] = cls._build_emoji_map_from_png_dir(dir_name)
+    def _ensure_emoji_map(cls):
+        if cls._emoji_map is None:
+            cls._emoji_map = cls._build_emoji_map()
 
     @classmethod
-    def _emoji_src_prefix(cls, dir_name):
-        return "M:builtin/res/emojis/" + dir_name + "/"
-
-    @classmethod
-    def _build_emoji_map_from_png_dir(cls, dir_name):
+    def _build_emoji_map(cls):
         emoji_map = {}
-        dir_path = None
-        entries = None
 
-        for fmt in cls._EMOJI_DIR_CANDIDATE_FORMATS:
-            candidate = fmt.format(dir=dir_name)
-            entries = cls._list_dir_names(candidate)
-            if entries is not None:
-                dir_path = candidate
-                break
-
+        entries = cls._list_dir_names(_EMOJI_DIR_PATH)
         if entries is None:
-            print("font_manager: could not list emoji dir '{}' (cwd={})".format(dir_name, cls._safe_getcwd()))
+            try:
+                cwd = os.getcwd()
+            except Exception:
+                cwd = "?"
+            print("font_manager: could not list emoji dir '{}' (cwd={})".format(_EMOJI_DIR_PATH, cwd))
             return emoji_map
 
-        prefix = cls._emoji_src_prefix(dir_name)
         for name in entries:
             if not name.lower().endswith(".png"):
                 continue
@@ -397,15 +373,14 @@ droplet_sweat,💧
             full_key = name_without_ext.upper()
 
             if full_key not in emoji_map:
-                emoji_map[full_key] = prefix + name
+                emoji_map[full_key] = _EMOJI_SRC_PREFIX + name
 
-            # Also register under the base key (without trailing modifiers).
-            # This matches the old behaviour where "203C-FE0F.png" was stored
-            # under 0x203C so that a plain U+203C lookup finds it.
+            # Also register under the base key (without trailing modifiers)
+            # so a plain codepoint lookup (e.g. U+203C) finds "203C-FE0F.png".
             if base_key not in emoji_map:
-                emoji_map[base_key] = prefix + name
+                emoji_map[base_key] = _EMOJI_SRC_PREFIX + name
 
-        print("font_manager: loaded {} emoji png mappings from {}".format(len(emoji_map), dir_path))
+        print("font_manager: loaded {} emoji png mappings from {}".format(len(emoji_map), _EMOJI_DIR_PATH))
         return emoji_map
 
     @classmethod
@@ -419,17 +394,14 @@ droplet_sweat,💧
         else:
             key = str(codepoint).upper()
 
-        cls._ensure_emoji_maps()
+        cls._ensure_emoji_map()
 
-        preferred_dir = cls._get_preferred_emoji_dir(target_height)
-        #print("Preferred dir: ", preferred_dir)
-        cache_key = (key, preferred_dir)
-        if cache_key in cls._emoji_src_lookup_cache:
-            return cls._emoji_src_lookup_cache[cache_key]
+        if key in cls._emoji_src_lookup_cache:
+            return cls._emoji_src_lookup_cache[key]
 
-        src = cls._lookup_emoji_src_by_key(key, preferred_dir)
+        src = cls._lookup_emoji_src_by_key(key)
         if src is not None:
-            cls._emoji_src_lookup_cache[cache_key] = src
+            cls._emoji_src_lookup_cache[key] = src
             return src
 
         # Only attempt similarity fallback for single-codepoint lookups
@@ -445,52 +417,26 @@ droplet_sweat,💧
                     for fallback_cp in similar_codepoints:
                         if fallback_cp == cp:
                             continue
-                        src = cls._lookup_emoji_src_by_key("{:X}".format(int(fallback_cp)), preferred_dir)
+                        src = cls._lookup_emoji_src_by_key("{:X}".format(int(fallback_cp)))
                         if src is not None:
                             cls._debug(
                                 "emoji fallback 0x{:X} -> 0x{:X}".format(cp, fallback_cp)
                             )
-                            cls._emoji_src_lookup_cache[cache_key] = src
+                            cls._emoji_src_lookup_cache[key] = src
                             return src
 
-        cls._emoji_src_lookup_cache[cache_key] = None
+        cls._emoji_src_lookup_cache[key] = None
         return None
 
     @classmethod
-    def _get_preferred_emoji_dir(cls, target_height):
-        for tier in cls._EMOJI_TIERS:
-            if target_height <= tier["max_height"]:
-                return tier["dir"]
-        return None
-
-    @classmethod
-    def _lookup_emoji_src_by_key(cls, key, preferred_dir=None):
+    def _lookup_emoji_src_by_key(cls, key):
         key = key.upper()
         parts = key.split("-")
-
-        if preferred_dir is not None:
-            preferred_map = cls._emoji_maps.get(preferred_dir, {})
-            for i in range(len(parts), 0, -1):
-                candidate = "-".join(parts[:i])
-                if candidate in preferred_map:
-                    return preferred_map[candidate]
-
-            # For large emoji requests, explicitly fall back to 20x20.
-            # The renderer will upscale it to target_height.
-            if preferred_dir == "56x56":
-                fallback_map = cls._emoji_maps.get("20x20", {})
-                for i in range(len(parts), 0, -1):
-                    candidate = "-".join(parts[:i])
-                    if candidate in fallback_map:
-                        return fallback_map[candidate]
-
-        for tier in cls._EMOJI_TIERS:
-            dir_name = tier["dir"]
-            emoji_map = cls._emoji_maps.get(dir_name, {})
-            for i in range(len(parts), 0, -1):
-                candidate = "-".join(parts[:i])
-                if candidate in emoji_map:
-                    return emoji_map[candidate]
+        emoji_map = cls._emoji_map or {}
+        for i in range(len(parts), 0, -1):
+            candidate = "-".join(parts[:i])
+            if candidate in emoji_map:
+                return emoji_map[candidate]
         return None
 
     @classmethod
@@ -553,13 +499,6 @@ droplet_sweat,💧
             return None
 
     @classmethod
-    def _safe_getcwd(cls):
-        try:
-            return os.getcwd()
-        except Exception:
-            return "?"
-
-    @classmethod
     def _is_emoji_modifier(cls, codepoint):
         if codepoint is None or codepoint == 0:
             return False
@@ -586,17 +525,15 @@ droplet_sweat,💧
             return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
 
         target_height = cls._font_pixel_height(font)
-        preferred_dir = cls._get_preferred_emoji_dir(target_height)
 
         # Try combined sequence when next codepoint is a modifier
         if unicode_next and cls._is_emoji_modifier(unicode_next):
             candidate_key = "{:X}-{:X}".format(int(unicode_cp), int(unicode_next))
-            cache_key = (candidate_key, preferred_dir)
-            if cache_key in cls._emoji_sequence_lookup_cache:
-                src = cls._emoji_sequence_lookup_cache[cache_key]
+            if candidate_key in cls._emoji_sequence_lookup_cache:
+                src = cls._emoji_sequence_lookup_cache[candidate_key]
             else:
-                src = cls._lookup_emoji_src_by_key(candidate_key, preferred_dir)
-                cls._emoji_sequence_lookup_cache[cache_key] = src
+                src = cls._lookup_emoji_src_by_key(candidate_key)
+                cls._emoji_sequence_lookup_cache[candidate_key] = src
 
             if src is not None:
                 offset_y.__dereference__(-baseline)
@@ -618,7 +555,6 @@ droplet_sweat,💧
             return
 
         cls._unknown_emoji_codepoints_logged[unicode_cp] = True
-        #print("font_manager: unknown emoji codepoint 0x{:X}".format(unicode_cp))
 
     @classmethod
     def _get_empty_imgfont_src(cls, target_height):
@@ -708,7 +644,6 @@ droplet_sweat,💧
                 return src
 
             target_width = max(1, round(src_w * target_height / src_h))
-            #print(f"scaling {src_w}x{src_h} to {target_width}x{target_height}")
             dsc, buf = cls._render_scaled_image_src(src, src_w, src_h, target_width, target_height)
             if dsc is not None:
                 cls._imgfont_scaled_src_cache[key] = (dsc, buf)
@@ -742,21 +677,20 @@ droplet_sweat,💧
         try:
             # Container is needed, otherwise lv.snapshot_take_to_buf() doesn't see that the image has been scaled
             container.add_flag(lv.obj.FLAG.HIDDEN)
-            container.set_size(target_width,target_height)
+            container.set_size(target_width, target_height)
             container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
             container.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
             container.set_style_border_width(0, lv.PART.MAIN)
 
             renderer.center()
             renderer.set_src(src)
-            # renderer.set_antialias(True) # assume lv.display_get_default().set_antialiasing(True) and if not, then follow that
-            renderer.set_size(target_width,target_height)
+            renderer.set_size(target_width, target_height)
 
             if abs(target_width - src_w) > 1 or abs(target_height - src_h) > 1:
                 # Only scale if they're not (almost) the same size
                 renderer.set_scale(256 * target_width // src_w)
 
-            buflen = target_width * target_height * 4 # 4 bpp
+            buflen = target_width * target_height * 4  # 4 bytes per pixel (ARGB8888)
             buf = bytearray(buflen)
             dsc = lv.image_dsc_t()
             lv.snapshot_take_to_buf(container, lv.COLOR_FORMAT.ARGB8888, dsc, buf, buflen)
