@@ -32,6 +32,7 @@ class About(Activity):
         self._add_label(screen, f"Release version: {BuildInfo.version.release}")
         self._add_label(screen, f"API Level: {BuildInfo.version.api_level}")
         self._add_label(screen, f"Hardware ID: {DeviceInfo.hardware_id}")
+        self._add_label(screen, f"LVGL version: {lv.version_major()}.{lv.version_minor()}.{lv.version_patch()}")
         self._add_label(screen, f"sys.version: {sys.version}")
         self._add_label(screen, f"sys.implementation: {sys.implementation}")
         self._add_label(screen, f"sys.byteorder: {sys.byteorder}")
