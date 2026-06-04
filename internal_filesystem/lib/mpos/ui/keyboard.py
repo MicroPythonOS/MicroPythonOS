@@ -85,7 +85,7 @@ class MposKeyboard:
     # Additional special characters with emoticons
     _specials_map = [
         "~", "`", "|", "•", "🙂", "😉", "😆", "\n",
-        "☹", "😭", "^", "°", "=", "{", "}", "\\", "\n",
+        "😒", "😭", "^", "°", "=", "{", "}", "\\", "\n",
         LABEL_NUMBERS_SPECIALS, "%", "😱", "😋", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
         LABEL_LETTERS, "<", LABEL_SPACE, ">", lv.SYMBOL.OK, None
     ]
@@ -115,7 +115,7 @@ class MposKeyboard:
         self._keyboard = lv.keyboard(parent)
         self._parent = parent # store it for later
         # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
-        keyboard_font = FontManager.getFont(16, emoji=True)
+        keyboard_font = FontManager.getFont(20, emoji=True)
         self._keyboard.set_style_text_font(keyboard_font, lv.PART.MAIN)
         self._keyboard.set_style_text_font(keyboard_font, lv.PART.ITEMS)
 

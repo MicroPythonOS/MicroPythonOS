@@ -79,26 +79,27 @@ class ShowFonts(Activity):
 
     def onResume(self, screen):
         title = lv.label(screen)
-        title.set_text("ShowFonts")
+        title.set_text("ShowFonts Demo")
 
         resume_start = self._now_ms()
 
         emojilabel = lv.label(screen)
-        emojifont = FontManager.getFont(size=16, emoji=True)
+        emojifont = FontManager.getFont(size=12, emoji=True)
         print("emoji font height: ", emojifont.get_line_height()) # 16 gives height 20
         emojilabel.set_style_text_font(emojifont, lv.PART.MAIN)
-        text = "😊 "
-        text += "👍 👍🏻" # neutral thumbs up, light thumbs up
+        text = "☺️ 😊" # basic smile 263A-FE0F, modern smile
+        text += "👍 👍🏻 / " # neutral thumbs up, light thumbs up
+        text += "👌 👌🏻 / " # neutral OK symbol which should fall back to similarity group for thumbs up + light OK symbol
         text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️" # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
-        emojilabel.set_text(text)
+        emojilabel.set_text(f"fontSize 12, fontHeight {emojifont.get_line_height()}: " + text)
+        emojilabel.set_width(lv.pct(99))
 
         emojilabel2 = lv.label(screen)
-        emojifont2 = FontManager.getFont(size=30, emoji=True) # 32 givs height 33 is the maximum because Montserrat 28 is the maximum (TTF can go bigger)
-        print("emoji2 font height: ", emojifont2.get_line_height())
+        emojifont2 = FontManager.getFont(size=28, emoji=True) # 32 givs height 33 is the maximum because Montserrat 28 is the maximum (TTF can go bigger)
+        print("emoji2 font height: ", )
         emojilabel2.set_style_text_font(emojifont2, lv.PART.MAIN)
-        text = "test 👍 👍🏻" # neutral thumbs up, light thumbs up
-        text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️" # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
-        emojilabel2.set_text(text)
+        emojilabel2.set_text(f"fontSize 28, fontHeight {emojifont2.get_line_height()}: " + text)
+        emojilabel2.set_width(lv.pct(99))
 
         self.addAllFontsTitles(screen)
         self._log_timing("addAllFontsTitles", resume_start)
@@ -118,17 +119,14 @@ class ShowFonts(Activity):
         import os
         ttf_start = self._now_ms()
         mydir = os.path.dirname(os.path.abspath(__file__))
-        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf", emoji=True)
-        self._log_timing("addAllFontsTitles/getFont TTF", ttf_start)
-        #self._ttf_font56 = FontManager.getFont(size=56, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
-        #self._ttf_font72 = FontManager.getFont(size=72, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
-        #fonts.append((self._ttf_font56, "TTF Rancourt 56"))
-        #fonts.append((self._ttf_font72, "TTF Rancourt 72"))
+        self._ttf_font = FontManager.getFont(size=64, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf", emoji=True)
+        print("_ttf_font height: ", self._ttf_font.get_line_height())
+        #self._log_timing("addAllFontsTitles/getFont TTF", ttf_start)
         title = lv.label(screen)
         self.labelSelectable(title)
-        title.set_width(lv.pct(99))
+        title.set_width(lv.pct(100))
         title.set_style_text_font(self._ttf_font, lv.PART.MAIN)
-        title.set_text("Rancourt 42 TTF test with minimal glyphs 👍")
+        title.set_text(f"Rancourt ttf size height {self._ttf_font.get_line_height()} 👍 😊 ❤️")
 
         listfonts_start = self._now_ms()
         fonts = FontManager.listFonts()
