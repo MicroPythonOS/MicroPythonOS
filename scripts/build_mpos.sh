@@ -234,12 +234,6 @@ PY
 	ensure_mpconfig_define MICROPY_PY_WEBREPL
 	ensure_mpconfig_define MICROPY_PY_OS_DUPTERM
 
-	# Comment out @micropython.viper decorator for Unix/macOS builds
-	# (cross-compiler doesn't support Viper native code emitter)
-	echo "Temporarily commenting out @micropython.viper decorator for Unix/macOS build..."
-	stream_wav_file="$codebasedir"/internal_filesystem/lib/mpos/audio/stream_wav.py
-	sed -i.backup 's/^@micropython\.viper$/#@micropython.viper/' "$stream_wav_file"
-
 	# Suppress warnings that newer Clang (17+) treats as errors on macOS.
 	# GCC on Linux doesn't have -Wgnu-folding-constant so this must be skipped there.
 	# -Wno-unknown-warning-option prevents Clang from erroring on GCC-only flag names
@@ -265,14 +259,10 @@ PY
 		DISPLAY=sdl_display \
 		INDEV=sdl_pointer \
 		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
+		MPY_CROSS_FLAGS="-march=host" \
 		"$frozenmanifest"
 
 	popd
-
-	# Restore @micropython.viper decorator after build
-	echo "Restoring @micropython.viper decorator..."
-	sed -i.backup 's/^#@micropython\.viper$/@micropython.viper/' "$stream_wav_file"
-	rm "$stream_wav_file".backup
 
 	# Restore original Makefile CWARN (only if we patched it on macOS)
 	if [ -f "$unix_makefile".backup ]; then
