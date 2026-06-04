@@ -17,6 +17,7 @@ Frameworks:
 - FontManager: switch openmoji to noto-emoji
 - FontManager: add 10 additional emojis
 - FontManager: switch from 20x20 to 32x32 emojis to improve quality (same filesize!)
+- FontManager: delegate emoji image scaling to LVGL (native C)
 
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1

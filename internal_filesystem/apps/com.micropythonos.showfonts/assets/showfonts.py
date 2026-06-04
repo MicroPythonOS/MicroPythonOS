@@ -83,20 +83,19 @@ class ShowFonts(Activity):
 
         resume_start = self._now_ms()
 
-        emojilabel = lv.label(screen)
-        emojifont = FontManager.getFont(size=12, emoji=True)
-        print("emoji font height: ", emojifont.get_line_height()) # 16 gives height 20
-        emojilabel.set_style_text_font(emojifont, lv.PART.MAIN)
         text = "☺️ 😊" # basic smile 263A-FE0F, modern smile
         text += "👍 👍🏻 / " # neutral thumbs up, light thumbs up
         text += "👌 👌🏻 / " # neutral OK symbol which should fall back to similarity group for thumbs up + light OK symbol
         text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️" # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
+
+        emojilabel = lv.label(screen)
+        emojifont = FontManager.getFont(size=12, emoji=True)
+        emojilabel.set_style_text_font(emojifont, lv.PART.MAIN)
         emojilabel.set_text(f"fontSize 12, fontHeight {emojifont.get_line_height()}: " + text)
         emojilabel.set_width(lv.pct(99))
 
         emojilabel2 = lv.label(screen)
         emojifont2 = FontManager.getFont(size=28, emoji=True) # 32 givs height 33 is the maximum because Montserrat 28 is the maximum (TTF can go bigger)
-        print("emoji2 font height: ", )
         emojilabel2.set_style_text_font(emojifont2, lv.PART.MAIN)
         emojilabel2.set_text(f"fontSize 28, fontHeight {emojifont2.get_line_height()}: " + text)
         emojilabel2.set_width(lv.pct(99))

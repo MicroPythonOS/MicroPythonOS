@@ -736,187 +736,39 @@ droplet_sweat,💧
 
     @classmethod
     def _render_scaled_image_src(cls, src, src_w, src_h, target_width, target_height):
-        renderer = lv.image(lv.layer_top())
+        container = lv.obj(lv.layer_top())
+        renderer = lv.image(container)
+
         try:
-            renderer.add_flag(lv.obj.FLAG.HIDDEN)
-            renderer.set_size(src_w, src_h)
-            renderer.set_inner_align(lv.image.ALIGN.CENTER)
+            # Container is needed, otherwise lv.snapshot_take_to_buf() doesn't see that the image has been scaled
+            container.add_flag(lv.obj.FLAG.HIDDEN)
+            container.set_size(target_width,target_height)
+            container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+            container.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+            container.set_style_border_width(0, lv.PART.MAIN)
+
+            renderer.center()
             renderer.set_src(src)
+            # renderer.set_antialias(True) # assume lv.display_get_default().set_antialiasing(True) and if not, then follow that
+            renderer.set_size(target_width,target_height)
 
-            bpp = 4
-            src_buf = bytearray(src_w * src_h * bpp)
-            src_dsc = lv.image_dsc_t()
-            lv.snapshot_take_to_buf(
-                renderer, lv.COLOR_FORMAT.ARGB8888, src_dsc, src_buf, len(src_buf)
-            )
+            if abs(target_width - src_w) > 1 or abs(target_height - src_h) > 1:
+                # Only scale if they're not (almost) the same size
+                renderer.set_scale(256 * target_width // src_w)
 
-            if int(src_dsc.header.w) <= 0 or int(src_dsc.header.h) <= 0:
+            buflen = target_width * target_height * 4 # 4 bpp
+            buf = bytearray(buflen)
+            dsc = lv.image_dsc_t()
+            lv.snapshot_take_to_buf(container, lv.COLOR_FORMAT.ARGB8888, dsc, buf, buflen)
+
+            if int(dsc.header.w) <= 0 or int(dsc.header.h) <= 0:
+                print("returning none!")
                 return None, None
 
-            if target_width == src_w and target_height == src_h:
-                return src_dsc, src_buf
-
-            if abs(target_width - src_w) <= 1 and abs(target_height - src_h) <= 1:
-                return src_dsc, src_buf
-
-            if target_width <= src_w or target_height <= src_h:
-                buf = _scale_argb8888_bilinear_fixed(src_buf, src_w, src_h, target_width, target_height)
-                #buf = _scale_argb8888_area_downscale(src_buf, src_w, src_h, target_width, target_height)
-                #buf = _scale_argb8888_bilinear_float(src_buf, src_w, src_h, target_width, target_height)
-            else:
-                buf = _scale_argb8888_nearest(src_buf, src_w, src_h, target_width, target_height)
-                #buf = _scale_argb8888_bilinear_fixed(src_buf, src_w, src_h, target_width, target_height)
-            dsc = cls._build_argb8888_dsc(buf, target_width, target_height)
-
             return dsc, buf
+        except Exception as e:
+            # This doesn't seem to get caught, instead if fails silently, probably because it's LVGL C code calling this...
+            print("Font Manager _render_scaled_image_src got exception: ", e)
         finally:
             renderer.delete()
-
-
-@micropython.native
-def _scale_argb8888_nearest(src_buf, src_w, src_h, target_width, target_height):
-    bpp = 4
-    buf = bytearray(target_width * target_height * bpp)
-    for y in range(target_height):
-        src_y = (y * src_h) // target_height
-        src_row = src_y * src_w
-        dst_row = y * target_width
-        for x in range(target_width):
-            src_x = (x * src_w) // target_width
-            src_idx = (src_row + src_x) * bpp
-            dst_idx = (dst_row + x) * bpp
-            buf[dst_idx] = src_buf[src_idx]
-            buf[dst_idx + 1] = src_buf[src_idx + 1]
-            buf[dst_idx + 2] = src_buf[src_idx + 2]
-            buf[dst_idx + 3] = src_buf[src_idx + 3]
-    return buf
-
-
-@micropython.native
-def _scale_argb8888_bilinear_fixed(src_buf, src_w, src_h, target_width, target_height):
-    F = 8
-    bpp = 4
-    buf = bytearray(target_width * target_height * bpp)
-    x_ratio = ((src_w - 1) << F) // target_width
-    y_ratio = ((src_h - 1) << F) // target_height
-    for ty in range(target_height):
-        src_y_fixed = ty * y_ratio
-        y0 = src_y_fixed >> F
-        y1 = y0 + 1 if y0 < src_h - 1 else y0
-        dy = src_y_fixed & ((1 << F) - 1)
-        dy1 = (1 << F) - dy
-        src_row0 = y0 * src_w
-        src_row1 = y1 * src_w
-        for tx in range(target_width):
-            src_x_fixed = tx * x_ratio
-            x0 = src_x_fixed >> F
-            x1 = x0 + 1 if x0 < src_w - 1 else x0
-            dx = src_x_fixed & ((1 << F) - 1)
-            dx1 = (1 << F) - dx
-
-            idx00 = (src_row0 + x0) * bpp
-            idx01 = (src_row0 + x1) * bpp
-            idx10 = (src_row1 + x0) * bpp
-            idx11 = (src_row1 + x1) * bpp
-            dst_idx = (ty * target_width + tx) * bpp
-
-            w00 = dx1 * dy1
-            w01 = dx * dy1
-            w10 = dx1 * dy
-            w11 = dx * dy
-
-            total = w00 + w01 + w10 + w11
-
-            buf[dst_idx] = (src_buf[idx00] * w00 + src_buf[idx01] * w01 + src_buf[idx10] * w10 + src_buf[idx11] * w11) // total
-            buf[dst_idx + 1] = (src_buf[idx00 + 1] * w00 + src_buf[idx01 + 1] * w01 + src_buf[idx10 + 1] * w10 + src_buf[idx11 + 1] * w11) // total
-            buf[dst_idx + 2] = (src_buf[idx00 + 2] * w00 + src_buf[idx01 + 2] * w01 + src_buf[idx10 + 2] * w10 + src_buf[idx11 + 2] * w11) // total
-            buf[dst_idx + 3] = (src_buf[idx00 + 3] * w00 + src_buf[idx01 + 3] * w01 + src_buf[idx10 + 3] * w10 + src_buf[idx11 + 3] * w11) // total
-    return buf
-
-'''
-Unused:
-
-@micropython.native
-def _scale_argb8888_area_downscale(src_buf, src_w, src_h, target_width, target_height):
-    bpp = 4
-    buf = bytearray(target_width * target_height * bpp)
-    for ty in range(target_height):
-        sy_start = (ty * src_h) // target_height
-        sy_end = ((ty + 1) * src_h) // target_height
-        dst_row = ty * target_width
-        for tx in range(target_width):
-            sx_start = (tx * src_w) // target_width
-            sx_end = ((tx + 1) * src_w) // target_width
-
-            count = (sx_end - sx_start) * (sy_end - sy_start)
-            if count <= 1:
-                src_idx = (sy_start * src_w + sx_start) * bpp
-                dst_idx = (dst_row + tx) * bpp
-                buf[dst_idx] = src_buf[src_idx]
-                buf[dst_idx + 1] = src_buf[src_idx + 1]
-                buf[dst_idx + 2] = src_buf[src_idx + 2]
-                buf[dst_idx + 3] = src_buf[src_idx + 3]
-                continue
-
-            r = 0
-            g = 0
-            b_val = 0
-            a = 0
-            for sy in range(sy_start, sy_end):
-                row_offset = sy * src_w
-                for sx in range(sx_start, sx_end):
-                    idx = (row_offset + sx) * bpp
-                    r += src_buf[idx]
-                    g += src_buf[idx + 1]
-                    b_val += src_buf[idx + 2]
-                    a += src_buf[idx + 3]
-
-            dst_idx = (dst_row + tx) * bpp
-            buf[dst_idx] = r // count
-            buf[dst_idx + 1] = g // count
-            buf[dst_idx + 2] = b_val // count
-            buf[dst_idx + 3] = a // count
-    return buf
-
-
-def _scale_argb8888_bilinear_float(src_buf, src_w, src_h, target_width, target_height):
-    bpp = 4
-    buf = bytearray(target_width * target_height * bpp)
-    src_w_f = src_w - 1
-    src_h_f = src_h - 1
-    for y in range(target_height):
-        print(y)
-        src_y = y * src_h_f / target_height
-        y0 = int(src_y)
-        y1 = y0 + 1 if y0 < src_h_f else y0
-        dy = src_y - y0
-        dy1 = 1.0 - dy
-        src_row0 = y0 * src_w
-        src_row1 = y1 * src_w
-        dst_row = y * target_width
-        for x in range(target_width):
-            print(x)
-            src_x = x * src_w_f / target_width
-            x0 = int(src_x)
-            x1 = x0 + 1 if x0 < src_w_f else x0
-            dx = src_x - x0
-            dx1 = 1.0 - dx
-
-            idx00 = (src_row0 + x0) * bpp
-            idx01 = (src_row0 + x1) * bpp
-            idx10 = (src_row1 + x0) * bpp
-            idx11 = (src_row1 + x1) * bpp
-            dst_idx = (dst_row + x) * bpp
-
-            w00 = dx1 * dy1
-            w01 = dx * dy1
-            w10 = dx1 * dy
-            w11 = dx * dy
-
-            buf[dst_idx] = int(src_buf[idx00] * w00 + src_buf[idx01] * w01 + src_buf[idx10] * w10 + src_buf[idx11] * w11)
-            buf[dst_idx + 1] = int(src_buf[idx00 + 1] * w00 + src_buf[idx01 + 1] * w01 + src_buf[idx10 + 1] * w10 + src_buf[idx11 + 1] * w11)
-            buf[dst_idx + 2] = int(src_buf[idx00 + 2] * w00 + src_buf[idx01 + 2] * w01 + src_buf[idx10 + 2] * w10 + src_buf[idx11 + 2] * w11)
-            buf[dst_idx + 3] = int(src_buf[idx00 + 3] * w00 + src_buf[idx01 + 3] * w01 + src_buf[idx10 + 3] * w10 + src_buf[idx11 + 3] * w11)
-    return buf
-
-'''
+            container.delete()
