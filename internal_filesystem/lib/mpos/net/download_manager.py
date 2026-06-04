@@ -252,6 +252,7 @@ class DownloadManager:
                         raise OSError(-110, "Failed to download chunk after retries")
                     
                     if chunk_data:
+                        #print("Chunk: ", chunk_data) # for debugging
                         # Output chunk
                         if fd:
                             fd.write(chunk_data)

@@ -2,7 +2,7 @@ from mpos import Activity
 import lvgl as lv
 import time
 
-from mpos import FontManager
+from mpos import DisplayMetrics, FontManager
 
 
 class ShowFonts(Activity):
@@ -71,12 +71,25 @@ class ShowFonts(Activity):
 
     def onCreate(self):
         screen = lv.obj()
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+        #screen.set_style_margin_all(DisplayMetrics.pct_of_width(1), lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
         self.setContentView(screen)
 
     def onResume(self, screen):
+        title = lv.label(screen)
+        title.set_text("ShowFonts")
+
         resume_start = self._now_ms()
+        emojilabel = lv.label(screen)
+        emojifont = FontManager.getFont(size=16, emoji=True)
+        print("emoji font height: ", emojifont.get_line_height())
+        emojilabel.set_style_text_font(emojifont, lv.PART.MAIN)
+        text = "👍 👍🏻" # neutral thumbs up, light thumbs up
+        text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️" # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
+        emojilabel.set_text(text)
+
         self.addAllFontsTitles(screen)
         self._log_timing("addAllFontsTitles", resume_start)
 
