@@ -4,7 +4,7 @@ Graphical tests for FontManager.
 Covers:
 - getFont(): builtin families, size snapping, emoji=True/False, TTF loading, caching
 - listFonts(): structure, completeness, renderability
-- getEmojiCodepoints(): non-empty, sorted, both size tiers loaded
+- getEmojiCodepoints(): non-empty, sorted, emoji tier loaded
 - normalizeEmojiText(): variation-selector stripping
 - End-to-end rendering: labels using composed emoji fonts render without crashing
 
@@ -210,20 +210,15 @@ class TestFontManagerListFonts(GraphicalTestCase):
 
 
 class TestFontManagerEmojiCodepoints(GraphicalTestCase):
-    """Tests for FontManager.getEmojiCodepoints() and emoji tier loading."""
+    """Tests for FontManager.getEmojiCodepoints() and emoji map loading."""
 
     def setUp(self):
         super().setUp()
         _reset_font_manager()
 
-    def _get_emoji_tier_maps(self):
+    def _get_emoji_map(self):
         FontManager.getEmojiCodepoints()
-        maps = FontManager._emoji_maps
-        return maps["20x20"], maps["56x56"]
-
-    def _skip_if_56x56_not_bundled(self, cps_56):
-        if not cps_56:
-            self.skipTest("56x56 emoji tier not bundled in this environment")
+        return FontManager._emoji_maps["32x32"]
 
     def test_getemoji_codepoints_nonempty(self):
         """getEmojiCodepoints() returns a non-empty list."""
@@ -247,55 +242,30 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
             self.assertTrue(cp >= 0x100, "Codepoint should not be plain ASCII")
             self.assertTrue(cp <= 0x10FFFF, "Codepoint should be within Unicode range")
 
-    def test_both_tiers_loaded_after_getemoji(self):
-        """After getEmojiCodepoints(), 20x20 is populated and 56x56 is available when bundled."""
-        cps_20, cps_56 = self._get_emoji_tier_maps()
-        self.assertTrue(len(cps_20) > 0)
-        # Some dev/test environments ship only the 20x20 emoji assets.
-        # In those cases 56x56 is present as an empty map and should not fail the suite.
-        self.assertIsInstance(cps_56, dict)
+    def test_emoji_tier_loaded_after_getemoji(self):
+        """After getEmojiCodepoints(), the 32x32 tier is populated."""
+        cps = self._get_emoji_map()
+        self.assertTrue(len(cps) > 0)
 
-    def test_both_tiers_have_same_codepoints(self):
-        """When 56x56 assets are present, both tiers expose the same set of codepoints."""
-        cps_20, cps_56 = self._get_emoji_tier_maps()
-        cps_20 = set(cps_20.keys())
-        cps_56 = set(cps_56.keys())
-        self._skip_if_56x56_not_bundled(cps_56)
-        self.assertEqual(cps_20, cps_56)
-
-    def test_tier_sources_point_to_correct_dirs(self):
-        """Source paths in each tier map point to the expected directory."""
+    def test_tier_sources_point_to_correct_dir(self):
+        """Source paths in the 32x32 emoji map point to the expected directory."""
         FontManager.getEmojiCodepoints()
-        for cp, src in FontManager._emoji_maps["20x20"].items():
-            self.assertIn("20x20", src, "20x20 tier src should reference 20x20 dir")
-        for cp, src in FontManager._emoji_maps["56x56"].items():
-            self.assertIn("56x56", src, "56x56 tier src should reference 56x56 dir")
+        for cp, src in FontManager._emoji_maps["32x32"].items():
+            self.assertIn("32x32", src, "32x32 tier src should reference 32x32 dir")
 
     def test_similarity_group_fallback_uses_available_emoji(self):
         """Missing emoji falls back to another available emoji in the same group."""
         FontManager._emoji_maps = {
-            "20x20": {"2764": "M:builtin/res/emojis/20x20/2764.png"},
-            "56x56": {"2764": "M:builtin/res/emojis/56x56/2764.png"},
+            "32x32": {"2764": "M:builtin/res/emojis/32x32/2764.png"},
         }
 
         src = FontManager._get_emoji_src(ord("♥"), 16)
-        self.assertEqual(src, "M:builtin/res/emojis/20x20/2764.png")
-
-    def test_similarity_group_fallback_respects_requested_tier(self):
-        """When possible, fallback picks a source from the preferred emoji tier."""
-        FontManager._emoji_maps = {
-            "20x20": {"2764": "M:builtin/res/emojis/20x20/2764.png"},
-            "56x56": {"2764": "M:builtin/res/emojis/56x56/2764.png"},
-        }
-
-        src = FontManager._get_emoji_src(ord("♥"), 32)
-        self.assertEqual(src, "M:builtin/res/emojis/56x56/2764.png")
+        self.assertEqual(src, "M:builtin/res/emojis/32x32/2764.png")
 
     def test_similarity_group_fallback_returns_none_when_group_unavailable(self):
         """If no emoji from the group is present, fallback returns None."""
         FontManager._emoji_maps = {
-            "20x20": {"1F600": "M:builtin/res/emojis/20x20/1f600.png"},
-            "56x56": {"1F600": "M:builtin/res/emojis/56x56/1f600.png"},
+            "32x32": {"1F600": "M:builtin/res/emojis/32x32/1f600.png"},
         }
 
         src = FontManager._get_emoji_src(ord("♥"), 16)
@@ -314,10 +284,10 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         self.assertEqual(FontManager._emoji_src_lookup_cache, {})
 
     def test_emoji_203C_is_found(self):
-        """U+203C (‼ double exclamation mark, the threshold) is found in the 20x20 tier."""
+        """U+203C (‼ double exclamation mark, the threshold) is found in the 32x32 tier."""
         src = FontManager._get_emoji_src(0x203C, 16)
         self.assertIsNotNone(src)
-        self.assertIn("20x20", src)
+        self.assertIn("32x32", src)
 
     def test_private_use_codepoint_short_circuits_without_cache_entry(self):
         """Private Use Area codepoints skip emoji lookup work and are not cached."""
@@ -336,35 +306,35 @@ class TestFontManagerVariantFallback(GraphicalTestCase):
     def test_variant_fallback_strips_modifier(self):
         """Missing skin-tone variant falls back to the base emoji."""
         FontManager._emoji_maps = {
-            "20x20": {"1F44D": "M:builtin/res/emojis/20x20/1F44D.png"},
+            "32x32": {"1F44D": "M:builtin/res/emojis/32x32/1F44D.png"},
         }
 
-        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "20x20")
-        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F44D.png")
+        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "32x32")
+        self.assertEqual(src, "M:builtin/res/emojis/32x32/1F44D.png")
 
     def test_variant_exact_match(self):
         """Exact variant file is returned when present."""
         FontManager._emoji_maps = {
-            "20x20": {
-                "1F44D": "M:builtin/res/emojis/20x20/1F44D.png",
-                "1F44D-1F3FB": "M:builtin/res/emojis/20x20/1F44D-1F3FB.png",
+            "32x32": {
+                "1F44D": "M:builtin/res/emojis/32x32/1F44D.png",
+                "1F44D-1F3FB": "M:builtin/res/emojis/32x32/1F44D-1F3FB.png",
             },
         }
 
-        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "20x20")
-        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F44D-1F3FB.png")
+        src = FontManager._lookup_emoji_src_by_key("1F44D-1F3FB", "32x32")
+        self.assertEqual(src, "M:builtin/res/emojis/32x32/1F44D-1F3FB.png")
 
     def test_variant_fallback_multi_segment(self):
         """Longer sequences fall back through each prefix."""
         FontManager._emoji_maps = {
-            "20x20": {
-                "1F468": "M:builtin/res/emojis/20x20/1F468.png",
-                "1F468-200D": "M:builtin/res/emojis/20x20/1F468-200D.png",
+            "32x32": {
+                "1F468": "M:builtin/res/emojis/32x32/1F468.png",
+                "1F468-200D": "M:builtin/res/emojis/32x32/1F468-200D.png",
             },
         }
 
-        src = FontManager._lookup_emoji_src_by_key("1F468-200D-1F469", "20x20")
-        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F468-200D.png")
+        src = FontManager._lookup_emoji_src_by_key("1F468-200D-1F469", "32x32")
+        self.assertEqual(src, "M:builtin/res/emojis/32x32/1F468-200D.png")
 
     def test_imgfont_modifier_returns_empty(self):
         """Skin-tone modifier passed directly returns an empty image source."""
@@ -388,7 +358,7 @@ class TestFontManagerVariantFallback(GraphicalTestCase):
     def test_imgfont_base_plus_modifier_lookup(self):
         """_imgfont_path_cb looks up base+modifier and falls back to base."""
         FontManager._emoji_maps = {
-            "20x20": {"1F44D": "M:builtin/res/emojis/20x20/1F44D.png"},
+            "32x32": {"1F44D": "M:builtin/res/emojis/32x32/1F44D.png"},
         }
 
         font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
@@ -406,12 +376,10 @@ class TestFontManagerVariantFallback(GraphicalTestCase):
             font, 0x1F44D, 0x1F3FB, ptr, None
         )
         self.assertIsNotNone(src)
-        # It should resolve to the base image (as a string path, not yet scaled)
-        # Wait: _imgfont_path_cb returns the result of _get_scaled_imgfont_src,
-        # which may return a string or an lv.image_dsc_t. Since the source path
-        # is a string and target height equals source height (both 20x20), it
-        # returns the string path.
-        self.assertEqual(src, "M:builtin/res/emojis/20x20/1F44D.png")
+        # _get_scaled_imgfont_src returns a raw string path only when source
+        # and target dimensions match. With 32x32 emoji and a font-16 target
+        # height (~16-18px) it returns a scaled lv.image_dsc_t instead.
+        self.assertIsInstance(src, lv.image_dsc_t)
 
 
 class TestFontManagerNormalizeEmojiText(unittest.TestCase):
@@ -489,30 +457,16 @@ class TestFontManagerRendering(GraphicalTestCase):
         label.set_text(text)
         self.wait_for_render()
 
-    def test_small_font_uses_20x20_tier(self):
-        """For font sizes with line_height <= 20, the 20x20 emoji tier is selected."""
-        font_16 = FontManager.getFont(size=16, family="Montserrat")
-        line_h = FontManager._font_pixel_height(font_16)
-        if line_h <= 20:
-            # Trigger emoji map loading
-            FontManager.getEmojiCodepoints()
-            cps = list(FontManager._emoji_maps.get("20x20", {}).keys())
-            if cps:
-                src = FontManager._get_emoji_src(cps[0], line_h)
-                self.assertIsNotNone(src)
-                self.assertIn("20x20", src)
-
-    def test_large_font_uses_56x56_tier(self):
-        """For font sizes with line_height > 20, the 56x56 emoji tier is selected."""
-        font_28 = FontManager.getFont(size=28, family="Montserrat")
-        line_h = FontManager._font_pixel_height(font_28)
-        if line_h > 20:
-            FontManager.getEmojiCodepoints()
-            cps = list(FontManager._emoji_maps.get("56x56", {}).keys())
-            if cps:
-                src = FontManager._get_emoji_src(cps[0], line_h)
-                self.assertIsNotNone(src)
-                self.assertIn("56x56", src)
+    def test_emoji_resolves_from_32x32_tier(self):
+        """All font sizes resolve emoji from the 32x32 tier."""
+        font = FontManager.getFont(size=16, family="Montserrat")
+        line_h = FontManager._font_pixel_height(font)
+        FontManager.getEmojiCodepoints()
+        cps = list(FontManager._emoji_maps.get("32x32", {}).keys())
+        if cps:
+            src = FontManager._get_emoji_src(cps[0], line_h)
+            self.assertIsNotNone(src)
+            self.assertIn("32x32", src)
 
     def test_ttf_label_renders(self):
         """A label using a TTF-based font renders without crashing."""

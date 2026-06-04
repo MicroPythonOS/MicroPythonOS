@@ -142,6 +142,7 @@ with MPOSController(backend='process') as mpos:
 ### LVGL debugging pitfalls
 - `lv_color_t` in this MicroPython LVGL binding has ONLY `.red`, `.green`, `.blue` attributes — there is NO `.full` attribute.
 - `lv.snapshot_take()` on a hidden `lv.obj()` still captures non-transparent pixel data because inherited theme styles (borders, shadows, background from parent theme) leak through the hidden object into the snapshot. For truly empty images, construct an `lv.image_dsc_t()` manually with a zeroed `bytearray()`.
+- To snapshot a scaled `lv.image`, wrap it in a container (`lv.obj()`). `lv.snapshot_take_to_buf()` on the image alone won't see that the image size changed due to `set_scale()` and only captures a middle crop. Create a hidden container sized to the target dimensions, place the image inside it with `center()` and `set_size(target_w,target_h)`, then snapshot the container. Don't forget `set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)` and opaque style resets to avoid theme leakage. See `font_manager.py:_render_scaled_image_src()` for the canonical pattern.
 - `except Exception: pass` is especially dangerous in image rendering paths — it silently falls back to unscaled/unprocessed source data, making it appear that transformations run when they don't.
 - To create a manual empty image descriptor:
   ```python
