@@ -5,6 +5,7 @@ Put unreleased changes here!
 
 Builtin Apps:
 - About: use shutil.disk_usage()
+- About: add LVGL version info
 - AppStore: add "Update All" functionality, redesign with split between UI and Service logic
 - OSUpdate: redesign with split between UI and Service logic
 
@@ -13,7 +14,9 @@ Frameworks:
 - NotificationManager: new framework to notify the user
 - AppManager: buffer .mpk/.zip in RAM instead of ROM before extracting (less space required, less flash wear, faster)
 - AppManager: check sufficient free storage space before installing app package
-- FontManager: switch openmoji to noto-emoji and add 10 additional emojis
+- FontManager: switch openmoji to noto-emoji
+- FontManager: add 10 additional emojis
+- FontManager: switch from 20x20 to 32x32 emojis to improve quality (same filesize!)
 
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1

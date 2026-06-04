@@ -82,13 +82,23 @@ class ShowFonts(Activity):
         title.set_text("ShowFonts")
 
         resume_start = self._now_ms()
+
         emojilabel = lv.label(screen)
         emojifont = FontManager.getFont(size=16, emoji=True)
-        print("emoji font height: ", emojifont.get_line_height())
+        print("emoji font height: ", emojifont.get_line_height()) # 16 gives height 20
         emojilabel.set_style_text_font(emojifont, lv.PART.MAIN)
-        text = "👍 👍🏻" # neutral thumbs up, light thumbs up
+        text = "😊 "
+        text += "👍 👍🏻" # neutral thumbs up, light thumbs up
         text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️" # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
         emojilabel.set_text(text)
+
+        emojilabel2 = lv.label(screen)
+        emojifont2 = FontManager.getFont(size=30, emoji=True) # 32 givs height 33 is the maximum because Montserrat 28 is the maximum (TTF can go bigger)
+        print("emoji2 font height: ", emojifont2.get_line_height())
+        emojilabel2.set_style_text_font(emojifont2, lv.PART.MAIN)
+        text = "test 👍 👍🏻" # neutral thumbs up, light thumbs up
+        text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️" # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
+        emojilabel2.set_text(text)
 
         self.addAllFontsTitles(screen)
         self._log_timing("addAllFontsTitles", resume_start)
@@ -108,7 +118,7 @@ class ShowFonts(Activity):
         import os
         ttf_start = self._now_ms()
         mydir = os.path.dirname(os.path.abspath(__file__))
-        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
+        self._ttf_font = FontManager.getFont(size=42, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf", emoji=True)
         self._log_timing("addAllFontsTitles/getFont TTF", ttf_start)
         #self._ttf_font56 = FontManager.getFont(size=56, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
         #self._ttf_font72 = FontManager.getFont(size=72, ttf=f"M:{mydir}/Rancourt-SmallCaps.ttf")
@@ -118,7 +128,7 @@ class ShowFonts(Activity):
         self.labelSelectable(title)
         title.set_width(lv.pct(99))
         title.set_style_text_font(self._ttf_font, lv.PART.MAIN)
-        title.set_text("Rancourt 42 TTF test with minimal glyphs")
+        title.set_text("Rancourt 42 TTF test with minimal glyphs 👍")
 
         listfonts_start = self._now_ms()
         fonts = FontManager.listFonts()
