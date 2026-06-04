@@ -122,6 +122,21 @@ class SettingActivity(Activity):
             self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
             self.keyboard.set_textarea(self.textarea)
 
+        # Optional informational note below the input widget. Apps use
+        # this for short context that isn't a placeholder/title — e.g.
+        # privacy nudges, hardware caveats, or "why would I pick this".
+        # Wraps to the screen width and uses muted small-font styling
+        # so it never competes with the title above or the value below.
+        note_text = setting.get("note")
+        if note_text:
+            note_label = lv.label(settings_screen_detail)
+            note_label.set_text(note_text)
+            note_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+            note_label.set_width(lv.pct(95))
+            note_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            note_label.set_style_text_color(lv.color_hex(0x999999), lv.PART.MAIN)
+            note_label.set_style_pad_top(DisplayMetrics.pct_of_width(3), lv.PART.MAIN)
+
         # Button container
         btn_cont = lv.obj(settings_screen_detail)
         btn_cont.set_width(lv.pct(100))
