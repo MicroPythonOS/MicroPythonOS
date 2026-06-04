@@ -12,6 +12,7 @@ class FontManager:
     _UNKNOWN_EMOJI_LOG_THRESHOLD = 0x203C
     _EMOJI_TIERS = (
         {"max_height": 20, "dir": "20x20"},
+#        {"max_height": 33, "dir": "32x32"},
         {"max_height": 9999, "dir": "56x56"},
     )
 
@@ -420,6 +421,7 @@ droplet_sweat,💧
         cls._ensure_emoji_maps()
 
         preferred_dir = cls._get_preferred_emoji_dir(target_height)
+        #print("Preferred dir: ", preferred_dir)
         cache_key = (key, preferred_dir)
         if cache_key in cls._emoji_src_lookup_cache:
             return cls._emoji_src_lookup_cache[cache_key]
@@ -705,9 +707,8 @@ droplet_sweat,💧
                 return src
 
             target_width = max(1, round(src_w * target_height / src_h))
-            dsc, buf = cls._render_scaled_image_src(
-                src, src_w, src_h, target_width, target_height
-            )
+            #print(f"scaling {src_w}x{src_h} to {target_width}x{target_height}")
+            dsc, buf = cls._render_scaled_image_src(src, src_w, src_h, target_width, target_height)
             if dsc is not None:
                 cls._imgfont_scaled_src_cache[key] = (dsc, buf)
                 return dsc
@@ -733,6 +734,64 @@ droplet_sweat,💧
         return size
 
     @classmethod
+    def _scale_argb8888_nearest(cls, src_buf, src_w, src_h, target_width, target_height):
+        bpp = 4
+        buf = bytearray(target_width * target_height * bpp)
+        for y in range(target_height):
+            src_y = (y * src_h) // target_height
+            src_row = src_y * src_w
+            dst_row = y * target_width
+            for x in range(target_width):
+                src_x = (x * src_w) // target_width
+                src_idx = (src_row + src_x) * bpp
+                dst_idx = (dst_row + x) * bpp
+                buf[dst_idx] = src_buf[src_idx]
+                buf[dst_idx + 1] = src_buf[src_idx + 1]
+                buf[dst_idx + 2] = src_buf[src_idx + 2]
+                buf[dst_idx + 3] = src_buf[src_idx + 3]
+        return buf
+
+    #@micropython.viper # would be nice
+    @classmethod
+    def _scale_argb8888_bilinear(cls, src_buf, src_w, src_h, target_width, target_height):
+        bpp = 4
+        buf = bytearray(target_width * target_height * bpp)
+        src_w_f = src_w - 1
+        src_h_f = src_h - 1
+        for y in range(target_height):
+            src_y = y * src_h_f / target_height
+            y0 = int(src_y)
+            y1 = y0 + 1 if y0 < src_h_f else y0
+            dy = src_y - y0
+            dy1 = 1.0 - dy
+            src_row0 = y0 * src_w
+            src_row1 = y1 * src_w
+            dst_row = y * target_width
+            for x in range(target_width):
+                src_x = x * src_w_f / target_width
+                x0 = int(src_x)
+                x1 = x0 + 1 if x0 < src_w_f else x0
+                dx = src_x - x0
+                dx1 = 1.0 - dx
+
+                idx00 = (src_row0 + x0) * bpp
+                idx01 = (src_row0 + x1) * bpp
+                idx10 = (src_row1 + x0) * bpp
+                idx11 = (src_row1 + x1) * bpp
+                dst_idx = (dst_row + x) * bpp
+
+                w00 = dx1 * dy1
+                w01 = dx * dy1
+                w10 = dx1 * dy
+                w11 = dx * dy
+
+                buf[dst_idx] = int(src_buf[idx00] * w00 + src_buf[idx01] * w01 + src_buf[idx10] * w10 + src_buf[idx11] * w11)
+                buf[dst_idx + 1] = int(src_buf[idx00 + 1] * w00 + src_buf[idx01 + 1] * w01 + src_buf[idx10 + 1] * w10 + src_buf[idx11 + 1] * w11)
+                buf[dst_idx + 2] = int(src_buf[idx00 + 2] * w00 + src_buf[idx01 + 2] * w01 + src_buf[idx10 + 2] * w10 + src_buf[idx11 + 2] * w11)
+                buf[dst_idx + 3] = int(src_buf[idx00 + 3] * w00 + src_buf[idx01 + 3] * w01 + src_buf[idx10 + 3] * w10 + src_buf[idx11 + 3] * w11)
+        return buf
+
+    @classmethod
     def _render_scaled_image_src(cls, src, src_w, src_h, target_width, target_height):
         renderer = lv.image(lv.layer_top())
         try:
@@ -754,20 +813,11 @@ droplet_sweat,💧
             if target_width == src_w and target_height == src_h:
                 return src_dsc, src_buf
 
-            buf = bytearray(target_width * target_height * bpp)
-            for y in range(target_height):
-                src_y = (y * src_h) // target_height
-                src_row = src_y * src_w
-                dst_row = y * target_width
-                for x in range(target_width):
-                    src_x = (x * src_w) // target_width
-                    src_idx = (src_row + src_x) * bpp
-                    dst_idx = (dst_row + x) * bpp
-                    buf[dst_idx] = src_buf[src_idx]
-                    buf[dst_idx + 1] = src_buf[src_idx + 1]
-                    buf[dst_idx + 2] = src_buf[src_idx + 2]
-                    buf[dst_idx + 3] = src_buf[src_idx + 3]
+            if abs(target_width - src_w) <= 1 and abs(target_height - src_h) <= 1:
+                return src_dsc, src_buf
 
+            #buf = cls._scale_argb8888_nearest(src_buf, src_w, src_h, target_width, target_height)
+            buf = cls._scale_argb8888_bilinear(src_buf, src_w, src_h, target_width, target_height)
             dsc = cls._build_argb8888_dsc(buf, target_width, target_height)
 
             return dsc, buf
