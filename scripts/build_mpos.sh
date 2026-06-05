@@ -253,13 +253,22 @@ PY
 	# USER_C_MODULE doesn't seem to work properly so there are symlinks in lvgl_micropython/extmod/
 	# To avoid X11/Wayland being loaded dynamically at runtime, you can use: -DSDL_LOADSO=OFF
 	# but then those need to be provided at compile time, or excluded by using: -DSDL_WAYLAND=OFF -DSDL_X11=OFF
+	# -march=host tells mpy-cross to generate native code for the host arch.
+	# Only supported on architectures where mpy-cross has a native emitter:
+	# x86, x64, armv6 (no Thumb2), riscv64. On aarch64/other, skip it — the
+	# viper/native decorators will still work (bytecode fallback).
+	mpy_cross_arch=""
+	case "$(uname -m)" in
+		x86_64|i686|i386|armv6l|riscv64) mpy_cross_arch="host" ;;
+	esac
+	[ -n "$mpy_cross_arch" ] && mpy_cross_flags="-march=$mpy_cross_arch" || mpy_cross_flags=""
 	python3 make.py "$target" \
 		LV_CFLAGS="-g -O0 -ggdb" \
 		STRIP= \
 		DISPLAY=sdl_display \
 		INDEV=sdl_pointer \
 		SDL_FLAGS="-DSDL_OPENGL=OFF -DSDL_OPENGLES=OFF -DSDL_VULKAN=OFF -DSDL_KMSDRM=OFF -DSDL_IBUS=OFF -DSDL_DBUS=OFF -DSDL_ALSA=OFF -DSDL_PULSEAUDIO=OFF -DSDL_SNDIO=OFF -DSDL_LIBSAMPLERATE=OFF" \
-		MPY_CROSS_FLAGS="-march=host" \
+		MPY_CROSS_FLAGS="$mpy_cross_flags" \
 		"$frozenmanifest"
 
 	popd
