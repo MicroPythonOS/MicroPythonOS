@@ -246,6 +246,16 @@ def detect_board():
                     return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
             except Exception as e:
                 print(f"lilygo_t_display_s3 detection got exception: {e}")
+        else:
+            print("(emulated) lilygo_t4 ?")
+            try:
+                pin37 = Pin(37, Pin.IN)
+                pin38 = Pin(38, Pin.IN)
+                pin39 = Pin(39, Pin.IN)
+                if pin37.value() == 1 and pin38.value() == 1 and pin39.value() == 1:
+                    return "lilygo_t4"
+            except Exception as e:
+                print(f"lilygo_t4 detection got exception: {e}")
 
         print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 

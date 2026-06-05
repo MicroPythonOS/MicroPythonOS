@@ -30,6 +30,13 @@ OS:
 - Show warning if an app throws an exception (with optional details)
 - Require top-level directory in .mpk files that matches the app name
 
+0.11.3
+======
+
+Board Support:
+- New board support: LilyGo T4
+
+
 0.11.2
 ======
 

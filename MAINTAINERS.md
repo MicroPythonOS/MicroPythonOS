@@ -18,5 +18,6 @@ This table tracks board definitions from `internal_filesystem/lib/mpos/board/`.
 | `qemu.py` | QEMU target profile | Thomas Farstrike | @ThomasFarstrike | @ThomasF7e |
 | `unphone.py` | unPhone | Jens Diemer | @jedie | Unknown |
 | `waveshare_esp32_s3_touch_lcd_2.py` | Waveshare ESP32-S3-Touch-LCD-2 | Thomas Farstrike | @ThomasFarstrike | @ThomasF7e |
+| `lilygo_t4.py` | LilyGo T4 | yusuhua | @yusuhua | Unknown |
 
 If you know missing contact handles, update this table.
