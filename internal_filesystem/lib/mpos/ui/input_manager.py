@@ -71,7 +71,23 @@ class InputManager:
     def has_pointer(cls):
         """Check if any registered input device is a pointer/touch device."""
         return cls.has_indev_type(lv.INDEV_TYPE.POINTER)
-    
+
+    @classmethod
+    def set_touch_feedback_cb(cls, cb):
+        """Attach cb(event) to every registered pointer indev on LV_EVENT_CLICKED.
+
+        LVGL sends CLICKED on touch release only when the press did not scroll a
+        scrollable parent, so cb fires on taps but not on swipes that scroll.
+        Whether to act is the callback's own decision. It can read a preference
+        on each call. Call once at boot. A second call registers cb again.
+        """
+        for indev in cls._registered_indevs:
+            try:
+                if indev.get_type() == lv.INDEV_TYPE.POINTER and hasattr(indev, "add_event_cb"):
+                    indev.add_event_cb(cb, lv.EVENT.CLICKED, None)
+            except Exception as e:
+                print("InputManager.set_touch_feedback_cb:", e)
+
     @classmethod
     def pointer_xy(cls):
         """Get current pointer/touch coordinates."""

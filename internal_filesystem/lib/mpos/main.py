@@ -175,6 +175,10 @@ def detect_board():
         if unique_id_prefixes == b'\x30\xae\xa4':
             return "odroid_go"
 
+        print("squixl ?")
+        if unique_id_prefixes == b'\xb8\xf8\x62':  # Unexpected Maker SQUiXL (MAC b8:f8:62)
+            return "squixl"
+
         # Do I2C-based board detection
         # IMPORTANT: ESP32 GPIO 6-11 are internal SPI flash pins and will cause WDT reset if used.
         # ESP32-S3 has more usable GPIOs (up to 48). Detect chip variant first to skip unsafe probes.

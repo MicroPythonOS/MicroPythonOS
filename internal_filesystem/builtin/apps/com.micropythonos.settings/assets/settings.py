@@ -91,6 +91,7 @@ class Settings(SettingsActivity):
                 "placeholder": "Input/output devices",
             },
             # Basic settings, alphabetically:
+            {"title": "Haptic feedback", "key": "haptic_feedback", "ui": "radiobuttons", "ui_options":  [("On", "on"), ("Off", "off")], "default_value": "off"}, # TODO: Use https://docs.micropythonos.com/frameworks/setting-activity/#should_show
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},
             {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in TimeZone.get_timezones()], "changed_callback": lambda *args: TimeZone.refresh_timezone_preference()},
