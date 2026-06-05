@@ -15,6 +15,15 @@ import time
 
 from mpos import wait_for_render, ui, AppManager
 
+def _native_supported():
+    try:
+        exec("import micropython\n@micropython.native\ndef _probe():\n pass")
+        return True
+    except Exception:
+        return False
+
+HAS_NATIVE = _native_supported()
+
 
 class TestLaunchAllApps(unittest.TestCase):
     """Test launching all installed apps."""
@@ -26,6 +35,25 @@ class TestLaunchAllApps(unittest.TestCase):
 
         # Discover all apps
         self._discover_apps()
+
+    def _app_uses_native(self, package):
+        """Check if any activity file in the package uses @micropython.native/viper."""
+        for activity in package.activities:
+            entrypoint = activity.get("entrypoint", "")
+            if not entrypoint:
+                continue
+            # Resolve entrypoint relative to the app directory
+            app_dir = package.installed_path if hasattr(package, "installed_path") and package.installed_path else ""
+            src_path = os.path.join(app_dir, entrypoint) if app_dir else entrypoint
+            if os.path.isfile(src_path):
+                try:
+                    with open(src_path) as f:
+                        content = f.read()
+                    if "@micropython.native" in content or "@micropython.viper" in content:
+                        return True
+                except OSError:
+                    pass
+        return False
 
     def _discover_apps(self):
         """Discover all installed apps."""
@@ -42,6 +70,13 @@ class TestLaunchAllApps(unittest.TestCase):
         for package in all_packages:
             # Skip apps that should not be launched by this test
             if package.fullname in skipped_packages:
+                continue
+
+            # On platforms without native code support, skip apps that
+            # use @micropython.native or @micropython.viper decorators.
+            if not HAS_NATIVE and self._app_uses_native(package):
+                print(f"  ⚠ Skipping {package.name} ({package.fullname}) — "
+                      f"no native emitter on {sys.platform}")
                 continue
 
             # Get the main activity for each app
