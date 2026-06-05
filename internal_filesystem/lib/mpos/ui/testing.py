@@ -321,7 +321,7 @@ def wait_for_render(iterations=10):
         time.sleep(0.01)  # Small delay between iterations
 
 
-def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565):
+def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565, all_layers=False):
     """
     Capture screenshot of current screen using LVGL snapshot.
 
@@ -340,6 +340,9 @@ def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COL
         width: Screen width in pixels (default: 320)
         height: Screen height in pixels (default: 240)
         color_format: LVGL color format (default: RGB565 for memory efficiency)
+        all_layers: If True, composite lv.layer_top() widgets onto the screenshot.
+                    This is slower but captures overlays like notifications.
+                    (default: False)
 
     Returns:
         bytearray: The screenshot buffer
@@ -369,8 +372,9 @@ def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COL
     # Take snapshot of active screen
     lv.snapshot_take_to_buf(lv.screen_active(), color_format, image_dsc, buffer, size)
 
-    # Composite visible top layer children onto the screenshot
-    _composite_top_layer(buffer, width, height, bytes_per_pixel, color_format)
+    # Composite visible top layer children onto the screenshot (slower)
+    if all_layers:
+        _composite_top_layer(buffer, width, height, bytes_per_pixel, color_format)
 
     if filepath:
         with open(filepath, "wb") as f:

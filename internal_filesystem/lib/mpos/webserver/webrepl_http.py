@@ -93,14 +93,14 @@ def _build_bmp_header(width, height, pixel_data_size):
     return header
 
 
-def _snapshot_to_bmp():
+def _snapshot_to_bmp(all_layers=False):
     width = DisplayMetrics.width()
     height = DisplayMetrics.height()
     rgb_size = width * height * 3
     row_stride = ((width * 3 + 3) // 4) * 4
     pixel_data_size = row_stride * height
 
-    rgb_buffer = capture_screenshot(width=width, height=height, color_format=lv.COLOR_FORMAT.RGB888)
+    rgb_buffer = capture_screenshot(width=width, height=height, color_format=lv.COLOR_FORMAT.RGB888, all_layers=all_layers)
 
     bmp = bytearray(54 + pixel_data_size)
     bmp[0:54] = _build_bmp_header(width, height, pixel_data_size)
@@ -167,7 +167,12 @@ def accept_handler(listen_sock):
             return _send_file_response(cl, asset_path, content_type, extra_headers=extra_headers)
 
         if path == b"/screenshot.bmp":
-            bmp = _snapshot_to_bmp()
+            bmp = _snapshot_to_bmp(all_layers=False)
+            _send_response(cl, b"200 OK", b"image/bmp", bmp)
+            return False
+
+        if path == b"/screenshot_all_layers.bmp":
+            bmp = _snapshot_to_bmp(all_layers=True)
             _send_response(cl, b"200 OK", b"image/bmp", bmp)
             return False
 
