@@ -18,7 +18,7 @@ import time
 import os
 
 try:
-    import lvgl as lv
+    import lvgl as lv  # noqa: F401
 except ImportError:
     pass
 

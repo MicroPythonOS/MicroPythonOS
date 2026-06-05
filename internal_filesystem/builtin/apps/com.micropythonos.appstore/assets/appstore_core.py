@@ -8,7 +8,6 @@ from mpos import (
     NotificationManager,
     Notification,
     Intent,
-    BuildInfo,
 )
 
 

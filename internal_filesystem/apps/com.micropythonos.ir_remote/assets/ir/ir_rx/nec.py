@@ -7,7 +7,7 @@
 # Author: Peter Hinch
 # Copyright Peter Hinch 2020-2022 Released under the MIT license
 
-from utime import ticks_us, ticks_diff
+from utime import ticks_diff
 from . import IR_RX
 
 class NEC_ABC(IR_RX):

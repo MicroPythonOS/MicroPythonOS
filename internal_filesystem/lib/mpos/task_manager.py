@@ -1,5 +1,4 @@
 import asyncio # this is the only place where asyncio is allowed to be imported - apps should not use it directly but use this TaskManager
-import _thread
 
 class TaskManager:
 

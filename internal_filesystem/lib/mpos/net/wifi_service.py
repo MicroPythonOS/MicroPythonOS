@@ -10,8 +10,6 @@ Manages WiFi connections including:
 This service works alongside ConnectivityManager which monitors connection status.
 """
 
-import ujson
-import os
 import time
 
 import mpos.config
@@ -23,7 +21,7 @@ HOTSPOT_PREFS_KEY = "com.micropythonos.settings.hotspot"
 # Try to import network module (not available on desktop)
 HAS_NETWORK_MODULE = False
 try:
-    import network
+    import network  # noqa: F401
     HAS_NETWORK_MODULE = True
 except ImportError:
     pass
@@ -572,10 +570,10 @@ class WifiService:
     def is_busy():
         """
         Check if WiFi operations are currently in progress.
-        
+
         Use this to check if scanning or other WiFi operations can be started.
         Operations like scan_networks() manage the busy flag automatically.
-        
+
         Returns:
             bool: True if WiFi is busy, False if available
         """
@@ -628,7 +626,7 @@ class WifiService:
     def scan_networks(network_module=None):
         """
         Scan for available WiFi networks.
-        
+
         This method manages the wifi_busy flag internally. If WiFi is already busy,
         returns an empty list. The busy flag is automatically cleared when scanning
         completes (even on error).

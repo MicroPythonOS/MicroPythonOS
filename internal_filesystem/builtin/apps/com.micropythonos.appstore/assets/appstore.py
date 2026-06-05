@@ -100,7 +100,7 @@ class AppStore(Activity):
 
         # Attach to AppUpdateManager so the banner refreshes live
         try:
-            from appstore_core import AppUpdateManager, AppUpdateState
+            from appstore_core import AppUpdateManager
             um = AppUpdateManager.get_instance()
             um.set_state_callback(self._on_update_state_change)
             um.suppress_notifications = True

@@ -6,10 +6,11 @@ Introduction:
 
 This repo contains MicroPythonOS, a graphical user interface and operating system for microcontrollers, complete with appstore, over-the-air updates, and lots of apps.
 The main code is in the internal_filesystem/ folder, which is a one-to-one filesystem layout.
-It's built on top of the lvgl_micropython/ submodule project, with itself builds on submodules like lvgl_micropython/lib/lvgl and lvgl_micropython/lib/micropython 
+It's built on top of the lvgl_micropython/ submodule project, with itself builds on submodules like lvgl_micropython/lib/lvgl and lvgl_micropython/lib/micropython
 MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mpos/
 
 - Build is driven by `./scripts/build_mpos.sh <target>`; it mutates tracked files (patches `lvgl_micropython/lib/micropython/ports/esp32/main/idf_component.yml`, appends include to `micropython-camera-API/src/manifest.py`). Re-run builds expecting these edits to persist unless reverted.
+- A root `Makefile` now provides the preferred entry points for common tasks. Prefer these targets over direct script calls when an equivalent target exists: `make build-mpos-unix`, `make syntax-tests`, `make unittest-tests`, `make tests`, `make lint`, `make lint-fix` (use `make help` to list all targets).
 - Unix/macOS builds rely on symlinks created by `build_mpos.sh` in `lvgl_micropython/ext_mod/` for `c_mpos` and `secp256k1-embedded-ecdh` because `USER_C_MODULE` is unreliable on those targets.
 - Syntax tests run via `./tests/syntax.sh` and compile every `internal_filesystem/**/*.py` with `mpy-cross` but remove the .mpy files afterwards; failing files are reported by path.
 - `mpy-cross` binary lives at `./lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross`.
@@ -24,6 +25,7 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 
 Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
+- Every code change must pass `make lint`.
 - Always add a timeout -s 9 30 to ./scripts/run_desktop.sh so run: timeout -s 9 30 ./scripts/run_desktop.sh
 - Write temporary files to a `tmp/` folder in the CWD, not `/` or `/tmp`, due to permissions constraints.
 - To kill processes, use `killall <name>` instead of `pkill -f <pattern>` — `pkill -f` matches the pkill command's own argv and can kill itself.

@@ -1,6 +1,5 @@
 import lvgl as lv
-import mpos
-from mpos import Activity, MposKeyboard
+from mpos import Activity
 
 
 # -----------------------------

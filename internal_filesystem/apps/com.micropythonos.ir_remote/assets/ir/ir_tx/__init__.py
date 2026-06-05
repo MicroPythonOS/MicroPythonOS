@@ -5,22 +5,15 @@
 
 # Copyright (c) 2020-2021 Peter Hinch
 from sys import platform
-ESP32 = platform == 'esp32'  # Loboris not supported owing to RMT
-RP2 = platform == 'rp2'
-if ESP32:
-    from machine import Pin, PWM
-    from esp32 import RMT
-elif RP2:
-    from .rp2_rmt import RP2_RMT
-else:
-    from pyb import Pin, Timer  # Pyboard does not support machine.PWM
-
 from micropython import const
 from array import array
 from time import ticks_us, ticks_diff, sleep_ms
+
 # import micropython
 # micropython.alloc_emergency_exception_buf(100)
 
+ESP32 = platform == 'esp32'  # Loboris not supported owing to RMT
+RP2 = platform == 'rp2'
 
 # Shared by NEC
 STOP = const(0)  # End of data
@@ -42,12 +35,15 @@ class IR:
 
     def __init__(self, pin, cfreq, asize, duty, verbose):
         if ESP32:
+            from esp32 import RMT
             self._rmt = RMT(0, pin=pin, clock_div=80, tx_carrier = (cfreq, duty, 1))
             # 1μs resolution
         elif RP2:  # PIO-based RMT-like device
+            from .rp2_rmt import RP2_RMT
             self._rmt = RP2_RMT(pin_pulse=None, carrier=(pin, cfreq, duty))  # 1μs resolution
             asize += 1  # Allow for possible extra space pulse
         else:  # Pyboard
+            from pyb import Timer  # Pyboard does not support machine.PWM
             if not IR._active_high:
                 duty = 100 - duty
             tim = Timer(2, freq=cfreq)  # Timer 2/pin produces 36/38/40KHz carrier
@@ -57,7 +53,7 @@ class IR:
             self._duty = duty
             self._tim = Timer(5)  # Timer 5 controls carrier on/off times
         self._tcb = self._cb  # Pre-allocate
-        self._arr = array('H', 0 for _ in range(asize))  # on/off times (μs)
+        self._arr = array('H', (0 for _ in range(asize)))  # on/off times (μs)
         self._mva = memoryview(self._arr)
         # Subclass interface
         self.verbose = verbose

@@ -3,11 +3,3 @@
 # This module keeps NostrEvent and formatting helpers for backward compat;
 # new code should import from nostr_service directly.
 
-from nostr_service import (
-    EVENT_KIND_NAMES,
-    get_kind_name,
-    format_timestamp,
-    format_tags,
-    NostrEvent,
-    NostrManager,
-)

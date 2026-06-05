@@ -2,8 +2,6 @@
 Diagnostic test for screenshot rendering.
 Tests basic LVGL rendering to understand what's visible in screenshots.
 """
-import sys
-import os
 import unittest
 import lvgl as lv
 from mpos import capture_screenshot, wait_for_render

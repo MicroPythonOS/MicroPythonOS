@@ -13,7 +13,7 @@ try:
 except ImportError:
     pass
 
-from mpos import Activity, MposKeyboard
+from mpos import Activity
 
 TMP = "/tmp/cmd.json"
 
@@ -34,7 +34,7 @@ def dbus_json(cmd):
 class CellularManager:
     def init(self):
         v = dbus_json("loc_on")
-    
+
     def poll(self):
         v = dbus_json("signal")
         print(v)
@@ -93,10 +93,10 @@ class Main(Activity):
         #self.sms = lv.textarea(self.screen)
         #self.sms.set_style_text_font(lv.font_montserrat_24, 0)
         #self.sms.align_to(self.number, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 10)
-        
+
         l = lv.label(self.call)
         l.set_text("Call")
-	l.center()
+        l.center()
 
         kb = lv.keyboard(self.screen)
         kb.set_textarea(self.number)
@@ -104,7 +104,7 @@ class Main(Activity):
 
         self.setContentView(self.screen)
         cm.init()
-        
+
     def onResume(self, screen):
         self.timer = lv.timer_create(self.tick, 60000, None)
         self.tick(0)
@@ -144,7 +144,7 @@ class Main(Activity):
         self.lbl_time.set_text("%02d:%02d" % (hh, mm))
         s = ""
         self.lbl_date.set_text("%04d-%02d-%02d %s" % (y, m, d, s))
-        
+
 
     # --------------------
 

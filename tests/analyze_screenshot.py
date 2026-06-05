@@ -14,7 +14,6 @@ Checks:
 
 import sys
 import struct
-from pathlib import Path
 
 def rgb565_to_rgb888(pixel):
     """Convert RGB565 pixel to RGB888."""

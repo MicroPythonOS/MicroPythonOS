@@ -1,7 +1,6 @@
 # Uncomment this line if you want to be dropped to a REPL shell without loading any MicroPythonOS code:
 # raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
 
-import _thread
 import lvgl as lv
 
 import mpos
@@ -205,7 +204,7 @@ def detect_board():
                 if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
                     return "waveshare_esp32_s3_touch_lcd_2"
                 restore_i2c(sda=48, scl=47) # fix pin 47 (data6) and 48 (data7) breaking lilygo_t_display_s3's display
-                
+
             print("freenove_esp32s3_display ?")
             if i2c0 := fail_save_i2c(sda=16, scl=15):
                 if single_address_i2c_scan(i2c0, 0x38): # FT6336G touch controller
@@ -221,7 +220,7 @@ def detect_board():
                 restore_i2c(sda=9, scl=18)
 
         else: # not is_esp32s3
-          
+
             print("m5stack_core2 ?")
             if i2c0 := fail_save_i2c(sda=21, scl=22):
                 if single_address_i2c_scan(i2c0, 0x34): # AXP192 power management (Core2 has it, Fire doesn't)
@@ -264,7 +263,7 @@ print(f"MicroPythonOS {BuildInfo.version.release} running lib/mpos/main.py")
 
 # Needed to load the logo and firmware files for boards from storage:
 try:
-    import freezefs_mount_builtin
+    import freezefs_mount_builtin  # noqa E401
 except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
     print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
@@ -354,7 +353,7 @@ else:
 
 # Start boot services (apps declaring boot_completed in manifest)
 try:
-    import mpos.app.system_services
+    import mpos.app.system_services  # noqa: F401
     AppManager.start_boot_services()
 except Exception as e:
     print(f"Couldn't start boot services: {e}")

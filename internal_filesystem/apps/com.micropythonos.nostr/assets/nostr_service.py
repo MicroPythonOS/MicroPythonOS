@@ -255,7 +255,6 @@ class NostrManager:
 
     def configure_nwc(self, nwc_url):
         """Configure and start NWC subscriptions."""
-        from mpos.util import urldecode
 
         if self._nwc_nwc_url == nwc_url:
             return

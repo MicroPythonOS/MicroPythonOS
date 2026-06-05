@@ -12,7 +12,7 @@ import lcd_bus
 import lvgl as lv
 import machine
 import mpos.ui
-from machine import ADC, PWM, Pin
+from machine import ADC, Pin
 from micropython import const
 from mpos import AudioManager, BatteryManager, InputManager
 

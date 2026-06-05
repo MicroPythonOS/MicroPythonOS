@@ -16,7 +16,6 @@ import lcd_bus
 import machine
 
 import lvgl as lv
-import task_handler
 
 import mpos.ui
 
@@ -117,7 +116,7 @@ from mpos import CameraManager
 def init_cam(width, height, colormode):
     toreturn = None
     try:
-        from camera import Camera, GrabMode, PixelFormat, FrameSize, GainCeiling
+        from camera import Camera, GrabMode, PixelFormat
 
         # Map resolution to FrameSize enum using CameraManager
         frame_size = CameraManager.resolution_to_framesize(width, height)

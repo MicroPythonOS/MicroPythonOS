@@ -6,7 +6,6 @@ try:
     from machine import Pin
     from ir.ir_rx.nec import SAMSUNG
     from ir.ir_rx.acquire import IR_GET
-    from ir.ir_rx.nec import NEC_16
 
     simulation_mode = False
 except Exception as e:

@@ -5,14 +5,12 @@
 
 import sys
 import time
-import gc
-import array
 
 from mpos.audio.audiomanager import AudioManager
 
 # Try to import machine module (not available on desktop)
 try:
-    import machine
+    import machine  # noqa: F401
     import adc_mic
     _HAS_HARDWARE = True
 except ImportError:
@@ -29,7 +27,7 @@ class ADCRecordStream:
     DEFAULT_SAMPLE_RATE = 16000  # 16kHz - good for voice/ADC
     DEFAULT_MAX_DURATION_MS = 60000  # 60 seconds max
     DEFAULT_FILESIZE = 1024 * 1024 * 1024  # 1GB data size
-    
+
     # ADC configuration defaults
     DEFAULT_ADC_PIN = 1  # GPIO1 on Fri3d 2026
     DEFAULT_ADC_UNIT = 0 # ADC_UNIT_1 = 0
@@ -55,13 +53,13 @@ class ADCRecordStream:
         self.sample_rate = sample_rate if sample_rate else self.DEFAULT_SAMPLE_RATE
         self.adc_pin = adc_pin if adc_pin is not None else self.DEFAULT_ADC_PIN
         self.on_complete = on_complete
-        
+
         # Determine ADC unit and channel from pin
         # This is a simple mapping for ESP32-S3
         # TODO: Make this more robust or pass in unit/channel directly
         self.adc_unit = self.DEFAULT_ADC_UNIT
         self.adc_channel = self.DEFAULT_ADC_CHANNEL
-        
+
         # Simple mapping for Fri3d 2026 (GPIO1 -> ADC1_CH0)
         if self.adc_pin == 1:
             self.adc_unit = 0 # ADC_UNIT_1
@@ -70,7 +68,7 @@ class ADCRecordStream:
             self.adc_unit = 0
             self.adc_channel = 1
         # Add more mappings as needed
-            
+
         self._keep_running = True
         self._is_recording = False
         self._bytes_recorded = 0
@@ -151,7 +149,7 @@ class ADCRecordStream:
                 f.write(header)
 
             print(f"ADCRecordStream: Recording to {self.file_path}")
-            
+
             # Check if we have real hardware or need to simulate
             use_simulation = not _HAS_HARDWARE
 
@@ -169,15 +167,15 @@ class ADCRecordStream:
 
             # Calculate recording parameters
             max_bytes = int((self.duration_ms / 1000) * self.sample_rate * 2)
-            
+
             # Open file for appending audio data
             f = open(self.file_path, 'ab')
-            
+
             # Chunk size for reading
             # For ADC, we want a reasonable chunk size to minimize overhead
             # 4096 samples = 8192 bytes = ~0.25s at 16kHz
             chunk_samples = 4096
-            
+
             sample_offset = 0
 
             try:
@@ -197,33 +195,33 @@ class ADCRecordStream:
                         # Generate sine wave samples for desktop testing
                         buf, num_samples = self._generate_sine_wave_chunk(chunk_samples * 2, sample_offset)
                         sample_offset += num_samples
-                        
+
                         f.write(buf)
                         self._bytes_recorded += len(buf)
-                        
+
                         # Simulate real-time recording speed
                         time.sleep_ms(int((chunk_samples) / self.sample_rate * 1000))
-                        
+
                     else:
                         # Read from C module
                         # adc_mic.read(chunk_samples, unit_id, adc_channel_list, adc_channel_num, sample_rate_hz, atten)
                         # Returns bytes object
-                        
+
                         # unit_id: 0 (ADC_UNIT_1)
                         # adc_channel_list: [self.adc_channel]
                         # adc_channel_num: 1
                         # sample_rate_hz: self.sample_rate
                         # atten: 2 (ADC_ATTEN_DB_6)
-                        
+
                         data = adc_mic.read(
-                            chunk_samples, 
-                            self.adc_unit, 
-                            [self.adc_channel], 
-                            1, 
-                            self.sample_rate, 
+                            chunk_samples,
+                            self.adc_unit,
+                            [self.adc_channel],
+                            1,
+                            self.sample_rate,
                             self.DEFAULT_ATTEN
                         )
-                        
+
                         if data:
                             f.write(data)
                             self._bytes_recorded += len(data)
@@ -233,7 +231,7 @@ class ADCRecordStream:
 
             finally:
                 f.close()
-                
+
                 # Update WAV header with actual size
                 try:
                     # Only update if we actually recorded something
@@ -244,7 +242,7 @@ class ADCRecordStream:
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
             print(f"ADCRecordStream: Finished recording {self._bytes_recorded} bytes ({elapsed_ms}ms)")
-            
+
             if self.on_complete:
                 self.on_complete(f"Recorded: {self.file_path}")
 

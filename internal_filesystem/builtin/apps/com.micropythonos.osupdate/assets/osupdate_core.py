@@ -1,5 +1,4 @@
 import ujson
-import time
 
 from mpos import (
     AppManager,

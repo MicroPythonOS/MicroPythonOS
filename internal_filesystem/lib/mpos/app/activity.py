@@ -1,6 +1,4 @@
 import lvgl as lv
-import mpos.ui
-import time
 
 class Activity:
 
@@ -28,6 +26,9 @@ class Activity:
         pass
 
     def setContentView(self, screen):
+        # Lazy import avoids circular import during mpos/ui package initialization.
+        import mpos.ui
+
         mpos.ui.setContentView(self, screen)
 
     def startActivity(self, intent):
@@ -57,6 +58,8 @@ class Activity:
             self.initError(e)
 
     def finish(self):
+        import mpos.ui
+
         mpos.ui.back_screen()
         try:
             if self._result_callback and self.result:

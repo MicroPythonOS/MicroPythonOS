@@ -1,6 +1,7 @@
 from .view import (
     setContentView, back_screen,
-    screen_stack, remove_and_stop_current_activity, remove_and_stop_all_activities
+    remove_and_stop_current_activity, remove_and_stop_all_activities,
+    screen_stack,
 )
 from .gesture_navigation import handle_back_swipe, handle_top_swipe
 from .appearance_manager import AppearanceManager
@@ -47,6 +48,7 @@ def get_foreground_app():
 
 __all__ = [
     "setContentView", "back_screen", "remove_and_stop_current_activity", "remove_and_stop_all_activities",
+    "screen_stack",
     "handle_back_swipe", "handle_top_swipe",
     "AppearanceManager",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
@@ -66,8 +68,8 @@ __all__ = [
     "SEARCH_MINUS_SYMBOL",
     "QR_SYMBOL",
     "CAMERA_SYMBOL",
-    "BTC_SYMBOL",
-    "BITCOIN_B_SYMBOL",
+    "BITCOIN_LOGO",
+    "BITCOIN_B",
     "SATOSHI_ITALIC_SYMBOL",
     "SATOSHI_SYMBOL",
     "THUMBS_UP_SYMBOL",

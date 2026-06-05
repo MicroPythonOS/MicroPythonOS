@@ -6,7 +6,7 @@
 # displays without requiring a full-size framebuffer.
 import lvgl as lv
 import mpos.ui
-from mpos import Activity, DisplayMetrics, InputManager
+from mpos import Activity, InputManager
 
 import sys
 # should check sys_mpy = sys.implementation._mpy

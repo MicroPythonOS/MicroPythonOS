@@ -6,7 +6,7 @@
 
 # WARNING: This is experimental and subject to change.
 
-from utime import ticks_us, ticks_diff
+from utime import ticks_diff
 from . import IR_RX
 
 class MCE(IR_RX):

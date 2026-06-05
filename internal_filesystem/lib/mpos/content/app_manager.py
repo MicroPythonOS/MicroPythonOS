@@ -392,7 +392,6 @@ class AppManager:
     def execute_script(script_source, classname, cwd=None, app_fullname=None):
         """Run an app entrypoint file by importing its module. Returns True if successful."""
         import utime # for timing read and compile
-        import mpos.ui
         import _thread
         import sys
 

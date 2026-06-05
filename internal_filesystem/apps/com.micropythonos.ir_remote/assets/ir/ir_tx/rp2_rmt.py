@@ -14,7 +14,7 @@
 # switches the duty ratio of a PWM running at the carrier frequency. It also feeds
 # the FIFO. See RP2_RMT.md in the repository root.
 
-from machine import Pin, PWM
+from machine import PWM
 import rp2
 
 # See above: this function is unused by the IR class.

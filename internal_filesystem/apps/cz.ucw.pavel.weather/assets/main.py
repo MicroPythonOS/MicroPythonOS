@@ -5,18 +5,16 @@ Look at https://open-meteo.com/en/docs , then design an application that would d
 """
 
 import time
-import os
 
 try:
     import lvgl as lv
 except ImportError:
     pass
 
-from mpos import Activity, MposKeyboard, DownloadManager
+from mpos import Activity, DownloadManager
 
 import ujson
 import utime
-import usocket as socket
 import ujson
 
 # -----------------------------

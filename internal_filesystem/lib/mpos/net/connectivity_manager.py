@@ -1,11 +1,10 @@
 # connectivity.py — Universal ConnectivityManager for MicroPythonOS
 # Works on ESP32, ESP8266, Unix/Desktop, and anything else
 
-import sys
 import time
 
 try:
-    import network
+    import network  # noqa: F401
     HAS_NETWORK_MODULE = True
 except ImportError:
     HAS_NETWORK_MODULE = False
@@ -40,7 +39,7 @@ class ConnectivityManager:
         from machine import Timer # Import Timer lazily to allow test mocks to be set up first
         self._check_timer = Timer(1) # 0 is already taken by task_handler.py
         self._check_timer.init(period=8000, mode=Timer.PERIODIC, callback=self._periodic_check_connected)
-        
+
         self._periodic_check_connected(notify=False)
         #print("init done")
 
@@ -140,12 +139,12 @@ for method_name in _methods_to_delegate:
 def _make_class_method(method_name):
     """Create a class method that delegates to the singleton instance."""
     original_method = _original_methods[method_name]
-    
+
     @classmethod
     def class_method(cls, *args, **kwargs):
         instance = cls.get()
         return original_method(instance, *args, **kwargs)
-    
+
     return class_method
 
 for method_name in _methods_to_delegate:

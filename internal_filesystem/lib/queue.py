@@ -1,5 +1,5 @@
 try:
-    import _thread
+    import _thread  # noqa: F401
 except ImportError:
     _thread = None
 

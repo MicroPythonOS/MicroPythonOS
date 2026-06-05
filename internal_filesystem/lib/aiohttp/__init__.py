@@ -13,6 +13,17 @@ from .aiohttp_ws import (
 HttpVersion10 = "HTTP/1.0"
 HttpVersion11 = "HTTP/1.1"
 
+__all__ = (
+    "ClientSession",
+    "ClientResponse",
+    "ChunkedClientResponse",
+    "ClientWebSocketResponse",
+    "WebSocketClient",
+    "WSMsgType",
+    "HttpVersion10",
+    "HttpVersion11",
+)
+
 
 class ClientResponse:
     def __init__(self, reader):

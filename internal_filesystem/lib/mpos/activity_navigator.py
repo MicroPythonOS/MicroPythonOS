@@ -1,15 +1,17 @@
 import sys
+
 import utime
 
-from .content.intent import Intent
-from .content.app_manager import AppManager
-
 import mpos.ui
+from mpos.ui.view import screen_stack
+
+from .content.app_manager import AppManager
+from .content.intent import Intent
 
 
 def get_foreground_app():
-    if mpos.ui.screen_stack:
-        current_activity, _, _, _ = mpos.ui.screen_stack[-1]
+    if screen_stack:
+        current_activity, _, _, _ = screen_stack[-1]
         if current_activity:
             return current_activity.appFullName
     return None

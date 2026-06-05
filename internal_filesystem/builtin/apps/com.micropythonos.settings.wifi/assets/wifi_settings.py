@@ -1,4 +1,3 @@
-import time
 import lvgl as lv
 import _thread
 

@@ -72,7 +72,7 @@ from . import sdcard
 from . import audio
 from . import hardware
 
-__all__ = [
+__all__ = (
     # Core framework
     "App",
     "Activity",
@@ -93,6 +93,7 @@ __all__ = [
     "DisplayMetrics",
     "InputManager",
     "AppearanceManager",
+    "SensorManager",
     "get_event_name", "print_event",
     "setContentView", "back_screen",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
@@ -102,6 +103,7 @@ __all__ = [
     "WidgetAnimator",
     "FontManager",
     "focus_direction",
+    "NumberFormat",
     # Testing utilities
     "wait_for_render", "capture_screenshot", "simulate_click", "simulate_drag", "get_widget_coords",
     "find_label_with_text", "verify_text_present", "print_screen_labels", "find_text_on_screen",
@@ -115,4 +117,4 @@ __all__ = [
     "camera_manager", "sdcard", "audio", "hardware",
     # Timezone utilities
     "TimeZone"
-]
+)

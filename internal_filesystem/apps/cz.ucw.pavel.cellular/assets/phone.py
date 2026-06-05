@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-from pydbus import SystemBus, Variant
+from pydbus import Variant
 import pydbus
-import time
 import sys
 import json
 
