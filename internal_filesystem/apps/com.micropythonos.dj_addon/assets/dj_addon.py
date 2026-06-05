@@ -22,6 +22,7 @@ _ARC_GAP      = 4
 _BTN_GAP      = 2
 _CROSSFADER_H = 22
 _REFRESH_MS   = 100
+_MIDI_MS      = 10
 
 # LVGL arc default angles (0°=east, clockwise). In REVERSE mode the needle
 # tip sits at _ARC_END_DEG when value=0 and sweeps _ARC_RANGE_DEG CCW to
@@ -33,6 +34,7 @@ _ARC_RANGE_DEG = 270
 # DJ row 0 (indices 0-3) sits at the bottom of the hardware, which corresponds
 # to pad row 1 (indices 4-7) at the bottom of the display grid, and vice versa.
 _DJ_TO_PAD = (3,7,1,2,0,5,6,4)
+_PAD_COLORS = ((0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255))
 
 class _MockDJAddon:
     version = (1, 0, 0)
@@ -61,7 +63,11 @@ class DJAddonActivity(Activity):
     def __init__(self):
         super().__init__()
         self.dj = None
+        self.m = None
+        self.uart = None
+        self.write_idx = 0
         self.timer = None
+        self.midi_timer = None
         self.arcs_left  = []  # list of (arc, needle, cx, cy, r)
         self.arcs_right = []  # list of (arc, needle, cx, cy, r)
         self.bar_left   = None
@@ -85,14 +91,51 @@ class DJAddonActivity(Activity):
             if version != (1, 0, 0):
                 raise ValueError("unexpected firmware version")
             print("Disabling UART REPL because it receives data from the DJ Add-On. Use esp.uart_repl(True) to re-enable.")
+
+            # disable the REPL on the uart
             import esp
             esp.uart_repl(False)
+
+            # enable a USB midi device
+            import usb.device
+            from usb.device.midi import MIDIInterface
+            self.m = MIDIInterface()
+            usb.device.get().init(self.m, builtin_driver=True)
+
+            # start reading MIDI messages from UART
+            from machine import UART, Pin
+            self.uart = UART(2, baudrate=115200, rx=Pin(44), tx=Pin(43))
+            self.uart.init(115200, bits=8, parity=None, stop=1)
+            self._uart_rx_buf = bytearray(4)
+            self._uart_rx_mv = memoryview(self._uart_rx_buf)
+            self.uart.flush()
+
         except Exception as e:
             print("DJ Addon not available, using mock:", e)
             self.dj = _MockDJAddon()
 
         self._build_ui(screen)
         self.setContentView(screen)
+
+    # pipes the DJ Add-on UART MIDI messages to USB
+    def _flush_midi(self, _):
+        if self.uart is None or self.m is None:
+            return
+        try:
+            if not self.uart.any():
+                return
+            n = self.uart.readinto(self._uart_rx_mv[self.write_idx:], 4 - self.write_idx)
+            if not n:
+                return
+            self.write_idx += n
+            if self.write_idx >= 4:
+                if self.m.is_open():
+                    self.m.send_event(self._uart_rx_buf[0], self._uart_rx_buf[1], self._uart_rx_buf[2], self._uart_rx_buf[3])
+                self.write_idx = 0
+        except Exception as e:
+            print("MIDI flush error:", e)
+            self.uart.flush()
+            self.write_idx = 0
 
     # --- widget factories ---
 
@@ -155,9 +198,8 @@ class DJAddonActivity(Activity):
         needle.set_points([{'x': cx, 'y': cy}, {'x': tx, 'y': ty}], 2)
 
     def _on_pad_click(self, idx):
-        _COLORS = ((0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255))
         self.pad_button_states[idx] = (self.pad_button_states[idx] + 1) % 4
-        r, g, b = _COLORS[self.pad_button_states[idx]]
+        r, g, b = _PAD_COLORS[self.pad_button_states[idx]]
         self.set_button_color(idx, r, g, b)
 
     # --- public API ---
@@ -245,9 +287,11 @@ class DJAddonActivity(Activity):
     def onResume(self, screen):
         if self.timer is None:
             self.timer = lv.timer_create(self.refresh, _REFRESH_MS, None)
+        if self.midi_timer is None and self.uart is not None:
+            self.midi_timer = lv.timer_create(self._flush_midi, _MIDI_MS, None)
         if self.dj is not None:
             for idx in range(len(self.pad_buttons)):
-                r, g, b = _COLORS[self.pad_button_states[idx]]
+                r, g, b = _PAD_COLORS[self.pad_button_states[idx]]
                 self.set_button_color(idx, r, g, b)
 
 
@@ -255,6 +299,9 @@ class DJAddonActivity(Activity):
         if self.timer:
             self.timer.delete()
             self.timer = None
+        if self.midi_timer:
+            self.midi_timer.delete()
+            self.midi_timer = None
         if self.dj is not None:
             for idx in range(len(self.pad_buttons)):
                 self.dj.set_led(idx, 0, 0, 0)
