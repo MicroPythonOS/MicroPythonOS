@@ -14,6 +14,7 @@ class Launcher(Activity):
         self._last_ui_built = False         # was UI built at least once?
         self._last_started_fullname = None  # fullname of the last app the user launched
         self._app_cont_map = {}             # fullname -> app_cont widget
+        self._splash_fullname = None        # fullname of the app being launched (splash shown)
 
     def onCreate(self):
         print("launcher.py onCreate()")
@@ -44,6 +45,12 @@ class Launcher(Activity):
 
     # ------------------------------------------------------------------
     def onResume(self, screen):
+        # If we were showing a splash, force a full rebuild to clean up
+        if self._splash_fullname is not None:
+            self._splash_fullname = None
+            self._last_app_list = None
+            screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+
         # ------------------------------------------------------------------
         # 1. Build a *compact* representation of the current app list
         current_apps = []
@@ -144,8 +151,28 @@ class Launcher(Activity):
 
     # ------------------------------------------------------------------
     def _launch_app(self, fullname):
-        """Record which app was launched, then start it."""
+        """Record which app was launched, show centered icon as splash, then start it."""
         self._last_started_fullname = fullname
+        self._splash_fullname = fullname
+
+        splash_cont = self._app_cont_map.get(fullname)
+        if splash_cont:
+            for fullname2, cont in self._app_cont_map.items():
+                if fullname2 != fullname:
+                    cont.add_flag(lv.obj.FLAG.HIDDEN)
+            label = splash_cont.get_child(1)
+            if label:
+                label.add_flag(lv.obj.FLAG.HIDDEN)
+            splash_cont.add_flag(lv.obj.FLAG.FLOATING)
+            splash_cont.set_style_border_width(0, lv.PART.MAIN)
+            splash_cont.align(lv.ALIGN.CENTER, 0, 0)
+        lv.screen_active().set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+
+        # Small delay so LVGL renders the splash before the app starts
+        timer = lv.timer_create(lambda t: self._do_start_app(t, fullname), 100, None)
+        timer.set_repeat_count(1)
+
+    def _do_start_app(self, timer, fullname):
         AppManager.start_app(fullname)
 
     # ------------------------------------------------------------------

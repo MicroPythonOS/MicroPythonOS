@@ -7,6 +7,7 @@ Builtin Apps:
 - About: use shutil.disk_usage()
 - About: add LVGL version info
 - AppStore: add "Update All" functionality, redesign with split between UI and Service logic
+- Launcher: show splash screen (app icon centered) while starting an app
 - OSUpdate: redesign with split between UI and Service logic
 
 Frameworks:
@@ -18,6 +19,7 @@ Frameworks:
 - FontManager: add 10 additional emojis
 - FontManager: switch from 20x20 to 32x32 emojis to improve quality (same filesize!)
 - FontManager: delegate emoji image scaling to LVGL (native C)
+- WebServer: add fast one-layer screenshot view in addition to slower all-layer mode
 
 OS:
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1

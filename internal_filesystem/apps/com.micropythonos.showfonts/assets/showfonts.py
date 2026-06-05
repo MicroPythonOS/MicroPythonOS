@@ -108,6 +108,10 @@ class ShowFonts(Activity):
         self._log_timing("addAllGlyphs", glyphs_start)
         self._log_timing("onResume total", resume_start)
         #lv.log_register_print_cb(ShowFonts.log_callback) # Show FPS to demonstrate that emoji fonts are 3-4x slower
+        import sys
+        if sys.platform in ("linux", "darwin", "win32"):
+            import time
+            time.sleep(3) # simulate slowness on desktop for testing
 
     def onPause(self, screen): # Activity goes background
         #lv.log_register_print_cb(None)
