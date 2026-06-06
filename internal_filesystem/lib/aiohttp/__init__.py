@@ -127,6 +127,7 @@ class ClientSession:
         while redir_cnt < 2:
             reader = await self.request_raw(method, url, data, json, ssl, params, headers, timeout=timeout)
             _headers = []
+            redirect_location = None
             sline = await reader.readline()
             sline = sline.split(None, 2)
             status = int(sline[1])
@@ -140,9 +141,11 @@ class ClientSession:
                     if b"chunked" in line:
                         chunked = True
                 elif line.startswith(b"Location:"):
-                    url = line.rstrip().split(None, 1)[1].decode()
+                    redirect_location = line.rstrip().split(None, 1)[1].decode()
 
             if 301 <= status <= 303:
+                if redirect_location:
+                    url = self._resolve_redirect_url(url, redirect_location)
                 redir_cnt += 1
                 await reader.aclose()
                 continue
@@ -166,6 +169,48 @@ class ClientSession:
             pass
         self._reader = reader
         return resp
+
+    # Normalize redirect Location values so relative URLs do not break request parsing.
+    def _resolve_redirect_url(self, current_url, location):
+        if "://" in location:
+            return location
+
+        try:
+            proto, dummy, host, path = current_url.split("/", 3)
+        except ValueError:
+            try:
+                proto, dummy, host = current_url.split("/", 2)
+                path = ""
+            except ValueError:
+                return location
+
+        if location.startswith("//"):
+            return proto + ":" + location
+
+        base_path = "/" + path if path else "/"
+        base_path = base_path.split("?", 1)[0].split("#", 1)[0]
+
+        if location.startswith("?") or location.startswith("#"):
+            return proto + "//" + host + base_path + location
+
+        if location.startswith("/"):
+            return proto + "//" + host + location
+
+        if not base_path.endswith("/"):
+            base_path = base_path.rsplit("/", 1)[0] + "/"
+
+        merged = base_path + location
+        parts = []
+        for p in merged.split("/"):
+            if p == "" or p == ".":
+                continue
+            if p == "..":
+                if parts:
+                    parts.pop()
+                continue
+            parts.append(p)
+
+        return proto + "//" + host + "/" + "/".join(parts)
 
     async def request_raw(
         self,

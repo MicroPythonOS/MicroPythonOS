@@ -4,7 +4,11 @@ Future release (next version)
 Put unreleased changes here!
 
 Framework:
+- DownloadManager: print stack trace in case of download error
 - WidgetAnimator: fix animations with large values (like a large on-chain balance in LightningPiggy) not being animated
+
+OS:
+- aiohttp: add support for relative HTTP redirects instead of only absolute HTTP redirects
 
 0.12.0
 ======
