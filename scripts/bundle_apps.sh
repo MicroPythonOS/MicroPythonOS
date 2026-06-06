@@ -62,9 +62,10 @@ for apprepo in internal_filesystem/apps; do
             mkdir -p "$thisappdir"/icons
             mpkname="$thisappdir"/mpks/"$appdir"_"$version".mpk
             echo "Setting file modification times to a fixed value..."
-            find -L "$appfullpath" -type f -exec touch -t 202501010000.00 {} \;
+            find -L "$appfullpath" -exec touch -t 202501010000.00 {} \;
+            rm -f "$mpkname"
             echo "Creating $mpkname with deterministic file order..."
-            (cd "$apprepo" && find -L "$appdir" -type f | grep -v ".git/" | sort | TZ=CET zip -X -r0 "$mpkname" -@)
+            (cd "$apprepo" && (find -L "$appdir" -type d; find -L "$appdir" -type f) | grep -v ".git/" | sort | TZ=CET zip -X -r0 "$mpkname" -@)
             cp "$appfullpath"/res/mipmap-mdpi/icon_64x64.png "$thisappdir"/icons/"$appdir"_"$version"_64x64.png
         fi
     done
