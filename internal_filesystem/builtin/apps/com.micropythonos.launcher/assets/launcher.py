@@ -175,8 +175,8 @@ class Launcher(Activity):
             splash_cont.align(lv.ALIGN.CENTER, 0, 0)
         lv.screen_active().set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
-        # Small delay so LVGL renders the splash before the app starts
-        timer = lv.timer_create(lambda t: self._do_start_app(t, fullname), 100, None)
+        # Small delay so LVGL renders the splash before the app starts, unless the app starts very quickly
+        timer = lv.timer_create(lambda t: self._do_start_app(t, fullname), 33, None) # 33 is the LV_DEF_REFR_PERIOD
         timer.set_repeat_count(1)
 
     def _do_start_app(self, timer, fullname):
