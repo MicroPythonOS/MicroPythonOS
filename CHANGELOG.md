@@ -6,6 +6,9 @@ Put unreleased changes here!
 0.12.0
 ======
 
+Known issues:
+- OSUpdate: progress bar goes over 100% (only a display issue)
+
 Board Support:
 - New board: LilyGo T4
 - New board: SQUiXL device by Unexpected Maker - https://squixl.io
