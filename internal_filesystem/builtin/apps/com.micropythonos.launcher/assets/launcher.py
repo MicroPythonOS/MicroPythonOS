@@ -167,10 +167,10 @@ class Launcher(Activity):
             splash_cont.set_style_border_width(0, lv.PART.MAIN)
             image = splash_cont.get_child(0)
             if image:
-                image.set_scale(512)
+                image.set_scale(384)
                 image.align(lv.ALIGN.CENTER, 0, 0)
-                scaled_w = image.get_width() * 512 // 256
-                scaled_h = image.get_height() * 512 // 256
+                scaled_w = image.get_width() * 384 // 256
+                scaled_h = image.get_height() * 384 // 256
                 splash_cont.set_size(scaled_w, scaled_h)
             splash_cont.align(lv.ALIGN.CENTER, 0, 0)
         lv.screen_active().set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
