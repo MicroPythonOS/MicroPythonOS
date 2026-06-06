@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Framework:
+- WidgetAnimator: fix animations with large values (like a large on-chain balance in LightningPiggy) not being animated
+
 0.12.0
 ======
 
