@@ -260,7 +260,7 @@ class AppManager:
             import shutil
             shutil.rmtree(f"apps/{app_fullname}") # never in builtin/apps because those can't be uninstalled
         except Exception as e:
-            print(f"Removing app_folder {app_folder} got error: {e}")
+            print(f"Removing app_folder apps/{app_fullname} got error: {e}")
         AppManager.refresh_apps()
 
     @staticmethod
