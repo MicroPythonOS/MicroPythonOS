@@ -8,6 +8,7 @@ Put unreleased changes here!
 
 Known issues:
 - OSUpdate: progress bar goes over 100% (only a display issue)
+- Animations with large values (like a large on-chain balance in LightningPiggy) are not animated
 
 Board Support:
 - New board: LilyGo T4

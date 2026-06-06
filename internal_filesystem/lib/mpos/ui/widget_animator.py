@@ -235,7 +235,14 @@ class WidgetAnimator:
         anim.set_duration(duration)
 
         if anim_type == "interpolate":
-            anim.set_values(begin_value, end_value)
+            # lv.anim_t.set_values() takes int32_t arguments; clamp to avoid OverflowError
+            # on large values (e.g. Bitcoin balances in satoshis > ~21 BTC).
+            # The display_change/completed callbacks still receive the original end_value.
+            _INT32_MAX = 2147483647
+            _INT32_MIN = -2147483648
+            anim_begin = max(_INT32_MIN, min(_INT32_MAX, begin_value))
+            anim_end = max(_INT32_MIN, min(_INT32_MAX, end_value))
+            anim.set_values(anim_begin, anim_end)
             if display_change is not None:
                 anim.set_custom_exec_cb(lambda anim, value: _safe_widget_access(lambda: display_change(value)))
                 # Ensure final value is set after animation
