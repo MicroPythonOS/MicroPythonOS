@@ -24,7 +24,7 @@ class Confetti:
         self.icon_path = icon_path
         self.asset_path = asset_path
         self.duration = duration
-        self.max_confetti = 21
+        self.max_confetti = 16
         
         # Physics constants
         self.GRAVITY = 100  # pixels/sec²
@@ -73,7 +73,7 @@ class Confetti:
 
         for i in range(self.max_confetti - iconimages):
             img = lv.image(lv.layer_top())
-            src = f"{self.asset_path}{random.choice(emoji_files)}" if emoji_files else f"{self.asset_path}confetti{random.randint(0, 4)}.png"
+            src = f"{self.asset_path}{random.choice(emoji_files)}" if emoji_files else self.asset_path
             img.set_src(src)
             img.add_flag(lv.obj.FLAG.HIDDEN)
             self.confetti_images.append(img)

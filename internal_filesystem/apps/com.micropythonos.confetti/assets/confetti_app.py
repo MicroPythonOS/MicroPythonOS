@@ -6,7 +6,7 @@ from confetti import Confetti
 
 class ConfettiApp(Activity):
 
-    ASSET_PATH = "M:builtin/res/emojis/20x20/"
+    ASSET_PATH = "M:builtin/res/emojis/32x32/"
     ICON_PATH = "M:apps/com.micropythonos.confetti/res/mipmap-mdpi/"
     confetti_duration = 60 * 1000
 
