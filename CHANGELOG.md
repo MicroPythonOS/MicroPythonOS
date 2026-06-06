@@ -3,29 +3,39 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.12.0
+======
+
+Board Support:
+- New board: LilyGo T4
+- New board: SQUiXL device by Unexpected Maker - https://squixl.io
+
 Builtin Apps:
 - About: use shutil.disk_usage()
 - About: add LVGL version info
-- AppStore: add "Update All" functionality, redesign with split between UI and Service logic
+- AppStore: add 'Update All' functionality, redesign with split between UI and Service logic
 - Launcher: show splash screen (app icon centered) while starting an app
 - OSUpdate: redesign with split between UI and Service logic
 
 Frameworks:
 - Add Services with intent filter boot_completed
-- NotificationManager: new framework to notify the user
 - AppManager: buffer .mpk/.zip in RAM instead of ROM before extracting (less space required, less flash wear, faster)
 - AppManager: check sufficient free storage space before installing app package
 - FontManager: switch openmoji to noto-emoji
 - FontManager: add 10 additional emojis
 - FontManager: switch from 20x20 to 32x32 emojis to improve quality (same filesize!)
 - FontManager: delegate emoji image scaling to LVGL (native C)
+- FontManager: speed up and simplify emoji scaling
+- NotificationManager: new framework to notify the user
+- SettingActivity: add new optional 'note' field for inline informational text about a setting
 - WebServer: add fast one-layer screenshot view in addition to slower all-layer mode
 
 OS:
+- Gesture navgation:  use lv.SYMBOL.NEW_LINE for the swipe from the left edge to go back
 - build_mpos.sh: suppress Clang 21's -Wunterminated-string-initialization so the macOS build doesn't fail compiling secp256k1
 - Create WifiBoot-, WebServerBoot- and AIOReplService
 - Restyle drawer menu to accomodate notifications
-- shutil: add `move()`, `copyfile()`, and `copytree()`
+- shutil: add move, copyfile, and copytree() functions
 - Focus direction: rewrite algorithm for speed and widget reachability
 - Show warning if an app throws an exception (with optional details)
 - Require top-level directory in .mpk files that matches the app name
@@ -33,8 +43,6 @@ OS:
 0.11.3
 ======
 
-Board Support:
-- New board support: LilyGo T4
 
 
 0.11.2
