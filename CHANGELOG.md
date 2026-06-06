@@ -3,7 +3,7 @@ Future release (next version)
 
 Put unreleased changes here!
 
-Framework:
+Frameworks:
 - DownloadManager: print stack trace in case of download error
 - WidgetAnimator: fix animations with large values (like a large on-chain balance in LightningPiggy) not being animated
 
@@ -12,10 +12,6 @@ OS:
 
 0.12.0
 ======
-
-Known issues:
-- OSUpdate: progress bar goes over 100% (only a display issue)
-- Animations with large values (like a large on-chain balance in LightningPiggy) are not animated
 
 Board Support:
 - New board: LilyGo T4
@@ -51,6 +47,8 @@ OS:
 - Show warning if an app throws an exception (with optional details)
 - Require top-level directory in .mpk files that matches the app name
 
+Known issues:
+- Animations with large values (like a large on-chain balance in LightningPiggy) are not animated
 
 0.11.2
 ======
