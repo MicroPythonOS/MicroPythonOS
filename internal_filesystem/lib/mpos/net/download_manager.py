@@ -306,6 +306,8 @@ class DownloadManager:
             if redact_url and url in err_str:
                 err_str = err_str.replace(url, log_url)
             print(f"DownloadManager: Exception during download: {err_str}")
+            import sys
+            sys.print_exception(e)
             if fd:
                 fd.close()
             raise  # Re-raise the exception instead of suppressing it
