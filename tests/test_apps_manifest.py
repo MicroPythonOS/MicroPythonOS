@@ -54,6 +54,30 @@ class TestAppsManifest(unittest.TestCase):
                     f"{version=} in {manifest=} is not in canonical form",
                 )
 
+                # Test download_url:
+                download_url = data.get("download_url")
+                self.assertTrue(download_url, f"Missing download_url in {manifest=}")
+                self.assertTrue(
+                    download_url.startswith("https://apps.micropythonos.com/apps/"),
+                    f"Invalid download_url in {manifest=}: {download_url}",
+                )
+                self.assertEqual(
+                    download_url,
+                    f"https://apps.micropythonos.com/apps/{fullname}/mpks/{fullname}_{version}.mpk",
+                )
+
+                # Test icon_url:
+                icon_url = data.get("icon_url")
+                self.assertTrue(icon_url, f"Missing icon_url in {manifest=}")
+                self.assertTrue(
+                    icon_url.startswith("https://apps.micropythonos.com/apps/"),
+                    f"Invalid icon_url in {manifest=}: {icon_url}",
+                )
+                self.assertEqual(
+                    icon_url,
+                    f"https://apps.micropythonos.com/apps/{fullname}/icons/{fullname}_{version}_64x64.png",
+                )
+
                 # Test activities.entrypoint
                 activities = data.get("activities", [])
                 for act in activities:
@@ -109,6 +133,10 @@ class TestAppsManifest(unittest.TestCase):
                         entrypoint_code,
                         f"{classname=} not found in {entrypoint=} of {manifest=}",
                     )
+
+                # Enforce JSON formatting to keep changes minimal and avoid merge conflicts:
+                content = json.dumps(data, indent=0, ensure_ascii=False, sort_keys=True)
+                manifest.write_text(content, encoding="utf-8")
 
 
 if __name__ == "__main__":
