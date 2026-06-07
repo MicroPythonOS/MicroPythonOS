@@ -15,6 +15,7 @@ class Launcher(Activity):
         self._last_started_fullname = None  # fullname of the last app the user launched
         self._app_cont_map = {}             # fullname -> app_cont widget
         self._splash_fullname = None        # fullname of the app being launched (splash shown)
+        self._screen = None                 # the launcher's own screen object
 
     def onCreate(self):
         print("launcher.py onCreate()")
@@ -25,6 +26,7 @@ class Launcher(Activity):
         main_screen.set_style_pad_hor(0, lv.PART.MAIN)
         main_screen.set_style_pad_ver(AppearanceManager.NOTIFICATION_BAR_HEIGHT, lv.PART.MAIN)
         main_screen.set_flex_flow(lv.FLEX_FLOW.ROW_WRAP)
+        self._screen = main_screen
         self.setContentView(main_screen)
 
     # ------------------------------------------------------------------
@@ -178,11 +180,13 @@ class Launcher(Activity):
 
     def _do_start_app(self, timer, fullname):
         start_result = AppManager.start_app(fullname)
+        print(f"_do_start_app: start_result={start_result}")
 
-        # If app launch failed and launcher is still foreground, restore icons
-        # right away instead of waiting for a later onResume.
-        if start_result is False and self._splash_fullname is not None:
-            self.onResume(lv.screen_active())
+        # On failure restore the launcher icon grid immediately using our own
+        # screen reference (lv.screen_active() would be unreliable here if a
+        # new app screen was partially pushed before failing).
+        if start_result is False:
+            self.onResume(self._screen)
 
     def _exit_splash_mode(self, screen):
         if self._splash_fullname is None:
