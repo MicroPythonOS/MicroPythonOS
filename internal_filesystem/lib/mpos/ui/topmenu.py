@@ -584,9 +584,12 @@ def create_drawer():
     launcher_label.center()
     def launcher_event(e):
         print("Launch button pressed!")
+        def _on_drawer_hidden():
+            _drawer_panel.on_hidden = None
+            AppManager.refresh_apps()
+            AppManager.restart_launcher()
+        _drawer_panel.on_hidden = _on_drawer_hidden
         close_drawer(True)
-        AppManager.refresh_apps()
-        AppManager.restart_launcher()
     launcher_btn.add_event_cb(launcher_event, lv.EVENT.CLICKED, None)
     _register_focus_callbacks(launcher_btn)
     _drawer_focusables.append(launcher_btn)

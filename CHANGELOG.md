@@ -12,6 +12,7 @@ Frameworks:
 
 OS:
 - aiohttp: add support for relative HTTP redirects instead of only absolute HTTP redirects
+- TopMenu: fix Home button restarting launcher before the menu drawer finishes closing
 
 0.12.0
 ======
