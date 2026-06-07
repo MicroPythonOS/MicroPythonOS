@@ -182,6 +182,23 @@ class Launcher(Activity):
     def _do_start_app(self, timer, fullname):
         AppManager.start_app(fullname)
 
+        # If launch failed before a new screen was pushed, the launcher keeps
+        # showing the temporary splash tile. Detect that state and restore the
+        # normal icon grid immediately.
+        if self._is_foreground_launcher() and self._splash_fullname is not None:
+            self.onResume(lv.screen_active())
+
+    def _is_foreground_launcher(self):
+        try:
+            from mpos.ui.view import screen_stack
+
+            if not screen_stack:
+                return False
+            current_activity, _, _, _ = screen_stack[-1]
+            return current_activity is self
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------
     def _focus_last_or_first(self):
         """Focus the last launched app tile, or the first tile if none was launched yet."""
