@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Board Support:
+- Fri3d 2026: add button repeat on long press
+
 Builtin Apps:
 - Launcher: fix splash screen remaining visible when app fails to start
 
@@ -12,7 +15,7 @@ Frameworks:
 
 OS:
 - aiohttp: add support for relative HTTP redirects instead of only absolute HTTP redirects
-- TopMenu: fix Home button restarting launcher before the menu drawer finishes closing
+- Drawer menu: close when home button is clicked
 
 0.12.0
 ======

@@ -12,6 +12,7 @@ import drivers.display.st7789 as st7789
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager, IRManager
+from mpos.ui.input_manager import KeyRepeatHandler
 
 spi_bus = machine.SPI.Bus(
     host=2,
@@ -126,25 +127,13 @@ def read_joystick_angle(threshold=0.1):
     angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
     return angle_deg
 
-# Key repeat configuration
-# This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
-# the lv_keyboard widget doesn't handle PRESSING (long presses) properly, it loses focus.
-REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
-REPEAT_RATE_MS = 100  # Interval between repeats
-last_key = None
-last_state = lv.INDEV_STATE.RELEASED
-key_press_start = 0  # Time when key was first pressed
-last_repeat_time = 0  # Time of last repeat event
+# Key repeat handler (avoids LVGL 9.2 PRESSING bug that loses focus)
+krh = KeyRepeatHandler()
 
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
-    global last_key, last_state, key_press_start, last_repeat_time
-    data.continue_reading = False
-    since_last_repeat = 0
-
-    # Check buttons and joystick
     current_key = None
     current_time = time.ticks_ms()
 
@@ -176,45 +165,15 @@ def keypad_read_cb(indev, data):
             else:
                 print(f"WARNING: unhandled joystick angle {angle}") # maybe we could also handle diagonals?
 
-    # Key repeat logic
-    if current_key:
-        if current_key != last_key:
-            # New key press
-            data.key = current_key
-            data.state = lv.INDEV_STATE.PRESSED
-            last_key = current_key
-            last_state = lv.INDEV_STATE.PRESSED
-            key_press_start = current_time
-            last_repeat_time = current_time
-        else: # same key
-            # Key held: Check for repeat
-            elapsed = time.ticks_diff(current_time, key_press_start)
-            since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
-            if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
-                # Send a new PRESSED/RELEASED pair for repeat
-                data.key = current_key
-                data.state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
-                last_state = data.state
-                last_repeat_time = current_time
-            else:
-                # No repeat yet, send RELEASED to avoid PRESSING
-                data.state = lv.INDEV_STATE.RELEASED
-                last_state = lv.INDEV_STATE.RELEASED
-    else:
-        # No key pressed
-        data.key = last_key if last_key else lv.KEY.ENTER
-        data.state = lv.INDEV_STATE.RELEASED
-        last_key = None
-        last_state = lv.INDEV_STATE.RELEASED
-        key_press_start = 0
-        last_repeat_time = 0
+    # Key repeat logic (uses KeyRepeatHandler to work around LVGL 9.2 PRESSING bug)
+    is_initial = krh.process(data, current_key, current_time)
 
-    # Handle ESC for back navigation (only on initial PRESSED)
-    if last_state == lv.INDEV_STATE.PRESSED:
+    # Handle navigation actions (only on PRESSED state)
+    if data.state == lv.INDEV_STATE.PRESSED:
         print(f"key: {current_key}")
-        if current_key == lv.KEY.ESC and since_last_repeat == 0:
+        if current_key == lv.KEY.ESC and is_initial:
             mpos.ui.back_screen()
-        elif current_key == lv.KEY.HOME and since_last_repeat == 0:
+        elif current_key == lv.KEY.HOME and is_initial:
             from mpos.ui import topmenu as topmenu
             topmenu.toggle_drawer()
         elif current_key == lv.KEY.RIGHT:
