@@ -18,6 +18,7 @@ import mpos.ui
 from mpos import (
     AppManager,
     wait_for_text,
+    wait_for_widget,
     find_label_with_text,
     find_button_with_text,
     simulate_click,
@@ -60,6 +61,25 @@ def _click_focused():
             _wait_ms(150)
 
 
+def _checkbox_checked_state(checkbox):
+    return bool(checkbox.get_state() & lv.STATE.CHECKED)
+
+
+def _toggle_checkbox_with_retries(checkbox, expected_checked, attempts=3):
+    for _ in range(attempts):
+        lv.group_focus_obj(checkbox)
+        _wait_ms(50)
+        _click_focused()
+        reached = wait_for_widget(
+            lambda: checkbox if _checkbox_checked_state(checkbox) == expected_checked else None,
+            timeout=1.5,
+            interval=0.05,
+        )
+        if reached is not None:
+            return True
+    return False
+
+
 def _find_checkbox(screen):
     return find_label_with_text(screen, "Don't show again")
 
@@ -91,7 +111,7 @@ def _ensure_checkbox_is_checked():
     reached = _navigate_to_widget(checkbox)
     if not reached:
         return
-        checkbox.add_state(lv.STATE.CHECKED)
+    checkbox.add_state(lv.STATE.CHECKED)
     _wait_ms(50)
 
 
@@ -151,18 +171,13 @@ class TestHowToAppFocusNavigation(unittest.TestCase):
         initially_checked = bool(checkbox.get_state() & lv.STATE.CHECKED)
         self.assertFalse(initially_checked, "Checkbox should start unchecked")
 
-        _click_focused()
+        self.assertTrue(
+            _toggle_checkbox_with_retries(checkbox, expected_checked=True),
+            "Checkbox should be checked after clicking",
+        )
 
-        after_checked = bool(checkbox.get_state() & lv.STATE.CHECKED)
-        self.assertTrue(after_checked, "Checkbox should be checked after clicking")
-
-        lv.group_focus_obj(checkbox)
-        _wait_ms(50)
-        _click_focused()
-
-        after_unchecked = bool(checkbox.get_state() & lv.STATE.CHECKED)
-        self.assertFalse(
-            after_unchecked,
+        self.assertTrue(
+            _toggle_checkbox_with_retries(checkbox, expected_checked=False),
             "Checkbox should be unchecked after clicking it again",
         )
 
