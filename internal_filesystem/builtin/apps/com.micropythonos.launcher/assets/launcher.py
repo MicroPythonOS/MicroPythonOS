@@ -46,10 +46,7 @@ class Launcher(Activity):
     # ------------------------------------------------------------------
     def onResume(self, screen):
         # If we were showing a splash, force a full rebuild to clean up
-        if self._splash_fullname is not None:
-            self._splash_fullname = None
-            self._last_app_list = None
-            screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        self._exit_splash_mode(screen)
 
         # ------------------------------------------------------------------
         # 1. Build a *compact* representation of the current app list
@@ -180,24 +177,19 @@ class Launcher(Activity):
         timer.set_repeat_count(1)
 
     def _do_start_app(self, timer, fullname):
-        AppManager.start_app(fullname)
+        start_result = AppManager.start_app(fullname)
 
-        # If launch failed before a new screen was pushed, the launcher keeps
-        # showing the temporary splash tile. Detect that state and restore the
-        # normal icon grid immediately.
-        if self._is_foreground_launcher() and self._splash_fullname is not None:
+        # If app launch failed and launcher is still foreground, restore icons
+        # right away instead of waiting for a later onResume.
+        if start_result is False and self._splash_fullname is not None:
             self.onResume(lv.screen_active())
 
-    def _is_foreground_launcher(self):
-        try:
-            from mpos.ui.view import screen_stack
-
-            if not screen_stack:
-                return False
-            current_activity, _, _, _ = screen_stack[-1]
-            return current_activity is self
-        except Exception:
-            return False
+    def _exit_splash_mode(self, screen):
+        if self._splash_fullname is None:
+            return
+        self._splash_fullname = None
+        self._last_app_list = None
+        screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
 
     # ------------------------------------------------------------------
     def _focus_last_or_first(self):

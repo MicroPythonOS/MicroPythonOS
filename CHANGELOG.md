@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Builtin Apps:
+- Launcher: fix splash screen remaining visible when app fails to start
+
 Frameworks:
 - DownloadManager: print stack trace in case of download error
 - WidgetAnimator: fix animations with large values (like a large on-chain balance in LightningPiggy) not being animated
