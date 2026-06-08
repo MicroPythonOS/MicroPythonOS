@@ -248,13 +248,13 @@ class CameraActivity(Activity):
             after = time.ticks_ms()
             if __debug__: logger.debug("qrdecode took %sms" % (after-before))
         except ValueError as e:
-            logger.error("QR ValueError: ", e)
+            if __debug__: logger.debug("QR ValueError: %s", e)
             self.status_label.set_text(self.STATUS_SEARCHING_QR)
         except TypeError as e:
-            logger.error("QR TypeError: ", e)
+            if __debug__: logger.debug("QR TypeError: %s", e)
             self.status_label.set_text(self.STATUS_FOUND_QR)
         except Exception as e:
-            logger.error("QR got other error: ", e)
+            if __debug__: logger.debug("QR got other error: %s", e)
         #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
         if result is None:
             return
