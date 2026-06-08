@@ -749,6 +749,9 @@ class MockDownloadManager:
                           progress_callback=None, chunk_callback=None, headers=None,
                           speed_callback=None, redact_url=False):
         """Mock async download with flexible output modes."""
+        from mpos.net.download_manager import DownloadManager
+
+        headers = DownloadManager._merge_headers(headers)
         self.url_received = url
         self.headers_received = headers
         self.redact_url_received = redact_url

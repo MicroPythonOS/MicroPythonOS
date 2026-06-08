@@ -24,6 +24,46 @@ _SPEED_UPDATE_INTERVAL_MS = 1000  # Update speed every 1 second
 
 class DownloadManager:
     """Centralized HTTP download service with flexible output modes."""
+
+    @staticmethod
+    def _build_user_agent():
+        """Build the default User-Agent value for DownloadManager requests."""
+        version = "unknown"
+        device = "unknown"
+
+        try:
+            from mpos import BuildInfo
+
+            version = BuildInfo.version.release
+        except Exception:
+            pass
+
+        try:
+            from mpos import DeviceInfo
+
+            device = DeviceInfo.get_hardware_id()
+        except Exception:
+            pass
+
+        return "MicroPythonOS/{} (device={})".format(version, device)
+
+    @classmethod
+    def _merge_headers(cls, headers=None):
+        """Return request headers with a guaranteed User-Agent value."""
+        merged_headers = {}
+        if headers:
+            merged_headers.update(headers)
+
+        has_user_agent = False
+        for key in merged_headers.keys():
+            if str(key).lower() == "user-agent":
+                has_user_agent = True
+                break
+
+        if not has_user_agent:
+            merged_headers["User-Agent"] = cls._build_user_agent()
+
+        return merged_headers
     
     @classmethod
     def download_url(cls, url, outfile=None, total_size=None,
@@ -151,9 +191,7 @@ class DownloadManager:
         
         fd = None
         try:
-            # Ensure headers is a dict (aiohttp expects dict, not None)
-            if headers is None:
-                headers = {}
+            headers = cls._merge_headers(headers)
             
             async with session.get(url, headers=headers, ssl=sslctx, timeout=_CHUNK_TIMEOUT_SECONDS) as response:
                 if response.status < 200 or response.status >= 400:
