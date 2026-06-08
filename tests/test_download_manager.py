@@ -649,7 +649,7 @@ class TestRedactedExceptionPath(unittest.TestCase):
 
     Real-world trigger: aiohttp's `ClientConnectorError` (and friends) often
     embed the full request URL in `str(e)`. Without scrubbing, the
-    `print(f"DownloadManager: Exception during download: {err_str}")` line
+    `logger.error("Exception during download: %s", err_str)` line
     leaks the secret-bearing URL to the serial / REPL log on every failed
     download attempt — exactly the case `redact_url=True` is meant to cover.
 
@@ -694,12 +694,25 @@ class TestRedactedExceptionPath(unittest.TestCase):
         fake_aiohttp = _FakeAiohttp()
         fake_aiohttp.ClientSession = _FakeClientSession
 
-        # Capture print output without disturbing other tests' stdout.
+        # Capture print and logger output.
         captured = []
         orig_print = builtins.print
 
         def _fake_print(*args, **kwargs):
             captured.append(" ".join(str(a) for a in args))
+
+        # Add a handler to the download_manager logger to capture log output.
+        import logging
+
+        dl_logger = logging.getLogger("mpos.net.download_manager")
+        _orig_dl_handlers = list(dl_logger.handlers)
+
+        class _CaptureHandler(logging.Handler):
+            def emit(self, record):
+                captured.append(record.message)
+
+        _capture_handler = _CaptureHandler()
+        dl_logger.addHandler(_capture_handler)
 
         old_aiohttp = sys.modules.get("aiohttp")
         sys.modules["aiohttp"] = fake_aiohttp
@@ -716,6 +729,7 @@ class TestRedactedExceptionPath(unittest.TestCase):
                 raised = e
         finally:
             builtins.print = orig_print
+            dl_logger.handlers = _orig_dl_handlers
             if old_aiohttp is None:
                 # Don't leave a fake module behind that would mask real
                 # aiohttp imports in subsequent tests in the same run.
