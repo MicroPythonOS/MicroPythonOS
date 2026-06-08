@@ -35,7 +35,6 @@ import drivers.display.st7789 as st7789
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager, IRManager, DeviceManager
-from mpos.ui.input_manager import KeyRepeatHandler
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
@@ -178,20 +177,28 @@ mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 # Button handling code:
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
 
-# Key repeat handler (tracks initial press for navigation-action gating)
-krh = KeyRepeatHandler()
-
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
+_last_key = None
+
 def keypad_read_cb(indev, data):
+    global _last_key
     current_key = None
 
     if btn_start.value() == 0:
         current_key = lv.KEY.END
 
-    # Key repeat logic (LVGL handles repeat natively; handler tracks initial press)
-    krh.process(data, current_key)
+    data.continue_reading = False
+
+    if current_key is not None:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        _last_key = current_key
+    else:
+        data.key = _last_key if _last_key is not None else lv.KEY.ENTER
+        data.state = lv.INDEV_STATE.RELEASED
+        _last_key = None
 
 group = lv.group_get_default()
 
@@ -203,6 +210,8 @@ indev.set_group(group) # is this needed? maybe better to move the default group 
 disp = lv.display_get_default()
 indev.set_display(disp)  # different from display
 indev.enable(True)
+indev.set_long_press_time(400)
+indev.set_long_press_repeat_time(100)
 InputManager.register_indev(indev)
 
 # initialize the expander as indev driver

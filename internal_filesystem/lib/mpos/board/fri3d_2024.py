@@ -12,7 +12,6 @@ import drivers.display.st7789 as st7789
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager, IRManager
-from mpos.ui.input_manager import KeyRepeatHandler
 
 spi_bus = machine.SPI.Bus(
     host=2,
@@ -127,13 +126,17 @@ def read_joystick_angle(threshold=0.1):
     angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
     return angle_deg
 
-# Key repeat handler (tracks initial press for navigation-action gating)
-krh = KeyRepeatHandler()
+# Repeat timing for navigation actions (same as LVGL indev timing for consistency)
+LONG_PRESS_TIME = const(400)
+LONG_PRESS_REPEAT_TIME = const(100)
+_last_key = None
+_next_repeat_at = 0
 
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
+    global _last_key, _next_repeat_at
     current_key = None
 
     # Check buttons
@@ -164,25 +167,45 @@ def keypad_read_cb(indev, data):
             else:
                 print(f"WARNING: unhandled joystick angle {angle}") # maybe we could also handle diagonals?
 
-    # Key repeat logic (LVGL handles repeat natively; handler tracks initial press)
-    is_initial = krh.process(data, current_key)
+    data.continue_reading = False
 
-    # Handle navigation actions (only on PRESSED state)
-    if data.state == lv.INDEV_STATE.PRESSED:
-        print(f"key: {current_key}")
-        if current_key == lv.KEY.ESC and is_initial:
-            mpos.ui.back_screen()
-        elif current_key == lv.KEY.HOME and is_initial:
-            from mpos.ui import topmenu as topmenu
-            topmenu.toggle_drawer()
-        elif current_key == lv.KEY.RIGHT:
-            mpos.ui.focus_direction.move_focus_direction(90)
-        elif current_key == lv.KEY.LEFT:
-            mpos.ui.focus_direction.move_focus_direction(270)
-        elif current_key == lv.KEY.UP:
-            mpos.ui.focus_direction.move_focus_direction(0)
-        elif current_key == lv.KEY.DOWN:
-            mpos.ui.focus_direction.move_focus_direction(180)
+    if current_key is not None:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        now = time.ticks_ms()
+
+        if current_key != _last_key:
+            _last_key = current_key
+            _next_repeat_at = now + LONG_PRESS_TIME
+            should_act = True
+        elif time.ticks_diff(now, _next_repeat_at) >= 0:
+            _next_repeat_at = now + LONG_PRESS_REPEAT_TIME
+            should_act = True
+        else:
+            should_act = False
+
+        if should_act:
+            print(f"key: {current_key}")
+            if current_key == lv.KEY.ESC:
+                mpos.ui.back_screen()
+            elif current_key == lv.KEY.HOME:
+                from mpos.ui import topmenu as topmenu
+                topmenu.toggle_drawer()
+            elif current_key == lv.KEY.RIGHT:
+                mpos.ui.focus_direction.move_focus_direction(90)
+            elif current_key == lv.KEY.LEFT:
+                mpos.ui.focus_direction.move_focus_direction(270)
+            elif current_key == lv.KEY.UP:
+                mpos.ui.focus_direction.move_focus_direction(0)
+            elif current_key == lv.KEY.DOWN:
+                mpos.ui.focus_direction.move_focus_direction(180)
+
+        _last_key = current_key
+    else:
+        data.key = _last_key if _last_key is not None else lv.KEY.ENTER
+        data.state = lv.INDEV_STATE.RELEASED
+        _last_key = None
+        _next_repeat_at = 0
 
 group = lv.group_get_default()
 
@@ -194,6 +217,8 @@ indev.set_group(group) # is this needed? maybe better to move the default group 
 disp = lv.display_get_default()
 indev.set_display(disp)  # different from display
 indev.enable(True)
+indev.set_long_press_time(LONG_PRESS_TIME)
+indev.set_long_press_repeat_time(LONG_PRESS_REPEAT_TIME)
 InputManager.register_indev(indev)
 
 import mpos.sdcard
