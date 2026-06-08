@@ -21,7 +21,9 @@ extend-select = [
 #    "E", # pycodestyle: https://docs.astral.sh/ruff/rules/#error-e
 #    "I", # isort: https://docs.astral.sh/ruff/rules/#isort-i
 ]
-ignore = []
+ignore = [
+    "E701", # compound statements (if __debug__: logger.debug()) — deliberate
+]
 
 [lint.isort]
 # https://docs.astral.sh/ruff/settings/#lintisort

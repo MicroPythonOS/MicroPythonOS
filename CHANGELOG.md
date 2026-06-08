@@ -9,6 +9,7 @@ Board Support:
 
 Builtin Apps:
 - Launcher: fix splash screen remaining visible when app fails to start
+- Use logger/logging with `__debug__` guard for smaller build size
 
 Frameworks:
 - DownloadManager: print stack trace in case of download error

@@ -1,7 +1,11 @@
 import json
+import logging
+
 import lvgl as lv
 
 from mpos import Activity, DownloadManager, AppManager, TaskManager
+
+logger = logging.getLogger(__name__)
 
 class AppDetail(Activity):
 
@@ -64,15 +68,15 @@ class AppDetail(Activity):
     def _find_download_file(files, preferred_exts):
         for preferred_ext in preferred_exts:
             for file in files:
-                print(f"parsing file: {file}")
+                if __debug__: logger.debug("parsing file: %s", file)
                 ext = file.get("ext").lower()
-                print(f"file has extension: {ext}")
+                if __debug__: logger.debug("file has extension: %s", ext)
                 if ext == preferred_ext:
                     return file
         return None
 
     def onCreate(self):
-        print("Creating app detail screen...")
+        if __debug__: logger.debug("creating app detail screen")
         self.app = self.getIntent().extras.get("app")
         self.appstore = self.getIntent().extras.get("appstore")
         app_detail_screen = lv.obj()
@@ -151,7 +155,7 @@ class AppDetail(Activity):
         open_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
         open_label.center()
 
-        print("Loading app detail screen...")
+        if __debug__: logger.debug("loading app detail screen")
         self.setContentView(app_detail_screen)
 
     def onResume(self, screen):
@@ -160,11 +164,11 @@ class AppDetail(Activity):
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
         else:
-            print("No need to fetch app details as the github app index already contains all the app data.")
+            if __debug__: logger.debug("no need to fetch app details (GitHub index already complete)")
 
     def add_action_buttons(self, buttoncont, app):
         buttoncont.clean()
-        print(f"Adding (un)install button for url: {self.app.download_url}")
+        if __debug__: logger.debug("adding (un)install button for url: %s", self.app.download_url)
         self.install_button = lv.button(buttoncont)
         self.install_button.add_event_cb(lambda e, a=self.app: self.toggle_install(a), lv.EVENT.CLICKED, None)
         self.install_button.set_size(lv.pct(100), 40)
@@ -173,7 +177,7 @@ class AppDetail(Activity):
         self.set_install_label(self.app.fullname)
         if app.version and AppManager.is_update_available(self.app.fullname, app.version):
             self.install_button.set_size(lv.pct(47), 40) # make space for update button
-            print("Update available, adding update button.")
+            if __debug__: logger.debug("update available, adding update button")
             self.update_button = lv.button(buttoncont)
             self.update_button.set_size(lv.pct(47), 40)
             self.update_button.add_event_cb(lambda e, a=self.app: self.update_button_click(a), lv.EVENT.CLICKED, None)
@@ -183,7 +187,7 @@ class AppDetail(Activity):
 
     async def fetch_and_set_app_details(self):
         await self.fetch_badgehub_app_details(self.app)
-        print(f"app has version: {self.app.version}")
+        if __debug__: logger.debug("app has version: %s", self.app.version)
         self.version_label.set_text(self.app.version)
         self.long_desc_label.set_text(self.app.long_description)
         self.publisher_label.set_text(self.app.publisher)
@@ -218,22 +222,22 @@ class AppDetail(Activity):
         self.install_label.set_text(action_label)
 
     def toggle_install(self, app_obj):
-        print(f"Install button clicked for {app_obj}")
+        if __debug__: logger.debug("install button clicked for %s", app_obj)
         download_url = app_obj.download_url
         fullname = app_obj.fullname
-        print(f"With {download_url} and fullname {fullname}")
+        if __debug__: logger.debug("with %s and fullname %s", download_url, fullname)
         label_text = self.install_label.get_text()
         if label_text == self.action_label_install:
-            print("Starting install task...")
+            if __debug__: logger.debug("starting install task")
             TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
         elif label_text == self.action_label_uninstall or label_text == self.action_label_restore:
-            print("Starting uninstall task...")
+            if __debug__: logger.debug("starting uninstall task")
             TaskManager.create_task(self.uninstall_app(fullname))
     
     def update_button_click(self, app_obj):
         download_url = app_obj.download_url
         fullname = app_obj.fullname
-        print(f"Update button clicked for {download_url} and fullname {fullname}")
+        if __debug__: logger.debug("update button clicked for %s and fullname %s", download_url, fullname)
         self.update_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.install_button.set_size(lv.pct(100), 40)
         TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
@@ -256,7 +260,7 @@ class AppDetail(Activity):
             self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
 
     async def pcb(self, percent):
-        print(f"pcb called: {percent}")
+        if __debug__: logger.debug("pcb: %s", percent)
         scaled_percent_start = 5 # before 5% is preparation
         scaled_percent_finished = 60 # after 60% is unzip
         scaled_percent_diff = scaled_percent_finished - scaled_percent_start
@@ -280,7 +284,7 @@ class AppDetail(Activity):
                 progress_callback=self.pcb,
             )
         except Exception as e:
-            print(f"Download failed with exception: {e}")
+            logger.error("download failed: %s", e)
             if DownloadManager.is_network_error(e):
                 self.install_label.set_text(f"Network error - check WiFi")
             elif "Not enough free space" in str(e):
@@ -310,28 +314,27 @@ class AppDetail(Activity):
             from appstore_core import AppUpdateManager
             TaskManager.create_task(AppUpdateManager.get_instance().check_for_updates())
         except Exception as e:
-            print(f"AppDetail: could not schedule update recheck: {e}")
+            logger.warning("could not schedule update recheck: %s", e)
 
     async def fetch_badgehub_app_details(self, app_obj):
         details_url = self.appstore.get_backend_details_url_from_settings() + "/" + app_obj.fullname
         try:
             response = await DownloadManager.download_url(details_url)
         except Exception as e:
-            print(f"Could not download app details from {details_url}: {e}")
+            logger.warning("could not download app details from %s: %s", details_url, e)
             if DownloadManager.is_network_error(e):
-                print("Network error while fetching app details")
+                if __debug__: logger.debug("network error while fetching app details")
             return
-        print(f"fetch_badgehub_app_details got response text: {response[0:42]}")
+        if __debug__: logger.debug("fetched app details response: %s", response[:42])
         try:
             parsed = json.loads(response)
-            #print(f"parsed json: {parsed}")
-            print("Finding version number...")
+            if __debug__: logger.debug("finding version number")
             try:
                 version = parsed.get("version")
             except Exception as e:
-                print(f"Could not get version object from appdetails: {e}")
+                logger.warning("could not get version from app details: %s", e)
                 return
-            print(f"got version object: {version}")
+            if __debug__: logger.debug("got version object: %s", version)
             # Find .mpk download URL:
             try:
                 files = version.get("files")
@@ -340,32 +343,31 @@ class AppDetail(Activity):
                     app_obj.download_url = download_file.get("url")
                     app_obj.download_url_size = download_file.get("size_of_content")
             except Exception as e:
-                print(f"Could not get files from version: {e}")
+                logger.warning("could not get files from version: %s", e)
             try:
                 app_metadata = version.get("app_metadata")
             except Exception as e:
-                print(f"Could not get app_metadata object from version object: {e}")
+                logger.warning("could not get app_metadata from version: %s", e)
                 return
             # publisher / author:
             try:
                 app_obj.publisher = app_metadata.get("author")
             except Exception as e:
-                print(f"Could not get author from version object: {e}")
+                logger.warning("could not get author from version: %s", e)
             # long_description
             try:
                 app_obj.long_description = app_metadata.get("long_description")
             except Exception as e:
-                print(f"Could not get long_description from version object: {e}")
+                logger.warning("could not get long_description from version: %s", e)
             # version
             try:
                 app_version = app_metadata.get("version")
-                #print(f"what: {version.get('app_metadata')}")
-                print(f"app has app_version: {app_version}")
+                if __debug__: logger.debug("app has app_version: %s", app_version)
                 app_obj.version = app_version
             except Exception as e:
-                print(f"Could not get version from app_metadata: {e}")
+                logger.warning("could not get version from app_metadata: %s", e)
         except Exception as e:
             err = f"ERROR: could not parse app details JSON: {e}"
-            print(err)
+            logger.error(err)
             self.appstore.please_wait_label.set_text(err)
             return

@@ -1,6 +1,10 @@
+import logging
+
 import lvgl as lv
 
 from mpos import Activity, DisplayMetrics, TaskManager, BuildInfo
+
+logger = logging.getLogger(__name__)
 
 
 class OSUpdate(Activity):
@@ -142,11 +146,11 @@ class OSUpdate(Activity):
     def install_button_click(self):
         info = self._um.get_update_info()
         if not info:
-            print("Install button clicked but no update info available")
+            if __debug__: logger.debug("install clicked but no update info")
             return
 
         url = info["download_url"]
-        print(f"install_button_click for url {url}")
+        if __debug__: logger.debug("install button click for url %s", url)
 
         self.install_button.add_state(lv.STATE.DISABLED)
         self._download_in_progress = True
@@ -168,7 +172,7 @@ class OSUpdate(Activity):
         TaskManager.create_task(self._run_download(url))
 
     def check_again_click(self):
-        print("OSUpdate: Check Again button clicked")
+        if __debug__: logger.debug("Check Again button clicked")
         self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         self._um.check_for_update_now()
 

@@ -1,5 +1,9 @@
+import logging
+
 from mpos import Activity, SharedPreferences, DisplayMetrics
 import lvgl as lv
+
+logger = logging.getLogger(__name__)
 
 class HowTo(Activity):
 
@@ -40,7 +44,7 @@ class HowTo(Activity):
 
         closebutton = lv.button(screen)
         closebutton.add_event_cb(lambda *args: self.finish(), lv.EVENT.CLICKED, None)
-        closebutton.add_event_cb(lambda *args: print("HowTo: long press detected"), lv.EVENT.LONG_PRESSED, None)
+        closebutton.add_event_cb(self._on_long_press, lv.EVENT.LONG_PRESSED, None)
         closelabel = lv.label(closebutton)
         closelabel.set_text("Close")
 
@@ -74,11 +78,14 @@ class HowTo(Activity):
             label.set_style_margin_bottom(2, lv.PART.MAIN)
         return label
 
+    def _on_long_press(self, event):
+        if __debug__: logger.debug("long press detected")
+
     def onResume(self, screen):
         # Autostart can only be disabled if nothing was enabled or if this app was enabled
         self.prefs = SharedPreferences("com.micropythonos.settings")
         auto_start_app_early = self.prefs.get_string("auto_start_app_early")
-        print(f"auto_start_app_early: {auto_start_app_early}")
+        if __debug__: logger.debug("auto_start_app_early: %s", auto_start_app_early)
         if auto_start_app_early is None or auto_start_app_early == self.appname: # empty also means autostart because then it's the default
             self.dontshow_checkbox.remove_state(lv.STATE.CHECKED)
         else:
@@ -95,7 +102,7 @@ class HowTo(Activity):
         if old_value == new_value:
             return
 
-        print("Removing this app from autostart")
+        if __debug__: logger.debug("removing app from autostart")
         editor = self.prefs.edit()
         editor.put_string("auto_start_app_early", new_value)
         editor.commit()

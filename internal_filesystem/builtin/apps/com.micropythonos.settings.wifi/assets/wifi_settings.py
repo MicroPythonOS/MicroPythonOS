@@ -1,7 +1,11 @@
+import logging
+
 import lvgl as lv
 import _thread
 
 from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager
+
+logger = logging.getLogger(__name__)
 
 class WiFiSettings(Activity):
     """
@@ -28,7 +32,7 @@ class WiFiSettings(Activity):
     scan_button_label = None
 
     def onCreate(self):
-        print("wifi.py onCreate")
+        if __debug__: logger.debug("onCreate")
         main_screen = lv.obj()
         main_screen.set_style_pad_all(5, lv.PART.MAIN)
         self.aplist = lv.list(main_screen)
@@ -56,7 +60,7 @@ class WiFiSettings(Activity):
         self.setContentView(main_screen)
 
     def onResume(self, screen):
-        print("wifi.py onResume")
+        if __debug__: logger.debug("onResume")
         super().onResume(screen)
 
         # Ensure WifiService has loaded saved networks
@@ -70,7 +74,7 @@ class WiFiSettings(Activity):
 
     def show_error(self, message):
         # Schedule UI updates because different thread
-        print(f"show_error: Displaying error: {message}")
+        if __debug__: logger.debug("show_error: %s", message)
         self.update_ui_threadsafe_if_foreground(self.error_label.set_text, message)
         self.update_ui_threadsafe_if_foreground(self.error_label.remove_flag, lv.obj.FLAG.HIDDEN)
         self.error_timer = lv.timer_create(self.hide_error, 5000, None)
@@ -80,12 +84,12 @@ class WiFiSettings(Activity):
         self.update_ui_threadsafe_if_foreground(self.error_label.add_flag, lv.obj.FLAG.HIDDEN)
 
     def scan_networks_thread(self):
-        print("scan_networks: Scanning for Wi-Fi networks")
+        if __debug__: logger.debug("scanning for Wi-Fi networks")
         try:
             self.scanned_ssids = WifiService.scan_networks()
-            print(f"scan_networks: Found networks: {self.scanned_ssids}")
+            if __debug__: logger.debug("found networks: %s", self.scanned_ssids)
         except Exception as e:
-            print(f"scan_networks: Scan failed: {e}")
+            logger.warning("scan failed: %s", e)
             self.show_error("Wi-Fi scan failed")
         # scan done - WifiService.scan_networks() manages wifi_busy flag internally
         self.busy_scanning = False
@@ -95,7 +99,7 @@ class WiFiSettings(Activity):
 
     def start_scan_networks(self):
         if self.busy_scanning:
-            print("Not scanning for networks because already busy_scanning.")
+            if __debug__: logger.debug("not scanning, already busy")
             return
         self.busy_scanning = True
         self.scan_button.add_state(lv.STATE.DISABLED)
@@ -104,9 +108,9 @@ class WiFiSettings(Activity):
         _thread.start_new_thread(self.scan_networks_thread, ())
 
     def refresh_list(self):
-        print("refresh_list: Clearing current list")
+        if __debug__: logger.debug("clearing current list")
         self.aplist.clean()  # this causes an issue with lost taps if an ssid is clicked that has been removed
-        print("refresh_list: Populating list with scanned networks")
+        if __debug__: logger.debug("populating list with scanned networks")
         
         # Combine scanned SSIDs with saved networks
         saved_networks = WifiService.get_saved_networks()
@@ -114,9 +118,9 @@ class WiFiSettings(Activity):
         
         for ssid in all_ssids:
             if len(ssid) < 1 or len(ssid) > 32:
-                print(f"Skipping too short or long SSID: {ssid}")
+                if __debug__: logger.debug("skipping invalid SSID: %s", ssid)
                 continue
-            print(f"refresh_list: Adding SSID: {ssid}")
+            if __debug__: logger.debug("adding SSID: %s", ssid)
             button = self.aplist.add_button(None, ssid)
             button.add_event_cb(lambda e, s=ssid: self.select_ssid_cb(s), lv.EVENT.CLICKED, None)
             
@@ -136,17 +140,17 @@ class WiFiSettings(Activity):
             label.align(lv.ALIGN.RIGHT_MID, 0, 0)
 
     def add_network_callback(self, event):
-        print(f"add_network_callback clicked")
+        if __debug__: logger.debug("add_network clicked")
         intent = Intent(activity_class=EditNetwork)
         intent.putExtra("selected_ssid", None)
         self.startActivityForResult(intent, self.edit_network_result_callback)
 
     def scan_cb(self, event):
-        print("scan_cb: Scan button clicked, refreshing list")
+        if __debug__: logger.debug("scan button clicked")
         self.start_scan_networks()
 
     def select_ssid_cb(self, ssid):
-        print(f"select_ssid_cb: SSID selected: {ssid}")
+        if __debug__: logger.debug("SSID selected: %s", ssid)
         intent = Intent(activity_class=EditNetwork)
         intent.putExtra("selected_ssid", ssid)
         intent.putExtra("known_password", WifiService.get_network_password(ssid))
@@ -162,7 +166,7 @@ class WiFiSettings(Activity):
             _redacted["data"] = dict(_redacted["data"])
             if "password" in _redacted["data"]:
                 _redacted["data"]["password"] = "***"
-        print(f"EditNetwork finished, result: {_redacted}")
+        if __debug__: logger.debug("EditNetwork finished, result: %s", _redacted)
         if result.get("result_code") is True:
             data = result.get("data")
             if data:
@@ -181,18 +185,18 @@ class WiFiSettings(Activity):
     def start_attempt_connecting(self, ssid, password):
         # Log only the SSID — the password is sensitive and was being
         # printed to serial/REPL on every connect attempt.
-        print(f"start_attempt_connecting: Attempting to connect to SSID '{ssid}'")
+        if __debug__: logger.debug("attempting to connect to SSID '%s'", ssid)
         self.scan_button.add_state(lv.STATE.DISABLED)
         self.scan_button_label.set_text("Connecting...")
         if self.busy_connecting:
-            print("Not attempting connect because busy_connecting.")
+            if __debug__: logger.debug("not connecting, already busy")
         else:
             self.busy_connecting = True
             _thread.stack_size(TaskManager.good_stack_size())
             _thread.start_new_thread(self.attempt_connecting_thread, (ssid, password))
 
     def attempt_connecting_thread(self, ssid, password):
-        print(f"attempt_connecting_thread: Attempting to connect to SSID '{ssid}'")
+        if __debug__: logger.debug("attempting to connect to SSID '%s'", ssid)
         result = "connected"
         try:
             if WifiService.attempt_connecting(ssid, password):
@@ -200,11 +204,11 @@ class WiFiSettings(Activity):
             else:
                 result = "timeout"
         except Exception as e:
-            print(f"attempt_connecting: Connection error: {e}")
+            logger.warning("connection error: %s", e)
             result = f"{e}"
             self.show_error(f"Connecting to {ssid} failed!")
         
-        print(f"Connecting to {ssid} got result: {result}")
+        if __debug__: logger.debug("connecting to %s got result: %s", ssid, result)
         self.last_tried_ssid = ssid
         self.last_tried_result = result
         
@@ -242,7 +246,7 @@ class EditNetwork(Activity):
 
         # SSID:
         if self.selected_ssid is None:
-            print("No ssid selected, the user should fill it out.")
+            if __debug__: logger.debug("no SSID selected, user must fill it out")
             label = lv.label(password_page)
             label.set_text(f"Network name:")
             self.ssid_ta = lv.textarea(password_page)
@@ -350,7 +354,7 @@ class EditNetwork(Activity):
         app_cont.set_style_border_width(0, lv.PART.MAIN)
 
     def hidden_clicked(self, event):
-        print("hidden clicked")
+        if __debug__: logger.debug("hidden clicked")
         checked = self.hidden_cb.get_state() & lv.STATE.CHECKED
         self.hidden_cb.set_state(lv.STATE.CHECKED, not checked)
 
@@ -379,21 +383,20 @@ class EditNetwork(Activity):
         if not label:
             return
         action = label.get_text()
-        print(f"{action} button clicked")
+        if __debug__: logger.debug("%s button clicked", action)
         if action == self.action_button_label_forget:
-            print("Closing Activity")
+            if __debug__: logger.debug("closing Activity")
             self.setResult(True, {"ssid": self.selected_ssid, "forget": True})
             self.finish()
         else:
-            print("Opening CameraApp")
+            if __debug__: logger.debug("opening CameraApp")
             self.startActivityForResult(Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True), self.gotqr_result_callback)
 
     def gotqr_result_callback(self, result):
         # Don't print the raw result — a WiFi QR code's payload
         # (`WIFI:T:...;S:SSID;P:password;H:...;;`) contains the password
         # in plaintext and this runs every time a QR is scanned.
-        print("QR capture finished, result_code={}".format(
-            result.get("result_code") if isinstance(result, dict) else None))
+        if __debug__: logger.debug("QR capture finished, result_code=%s", result.get("result_code") if isinstance(result, dict) else None)
         if result.get("result_code"):
             data = result.get("data")
             # Not logging `data` either — same reason: it's the raw QR.
@@ -415,7 +418,7 @@ class EditNetwork(Activity):
         
         Returns: (authentication_type, ssid, password, hidden)
         """
-        print(f"decoding {to_decode}")
+        if __debug__: logger.debug("decoding %s", to_decode)
         
         # Initialize return values
         authentication_type = "WPA"
@@ -455,6 +458,6 @@ class EditNetwork(Activity):
                     hidden = value.lower() in ("true", "1", "yes")
         
         except Exception as e:
-            print(f"Error decoding WiFi QR code: {e}")
+            logger.warning("error decoding WiFi QR code: %s", e)
         
         return authentication_type, ssid, password, hidden

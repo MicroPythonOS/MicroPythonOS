@@ -1,3 +1,4 @@
+import logging
 import lvgl as lv
 import math
 import time
@@ -5,6 +6,8 @@ import uhashlib
 import ubinascii
 
 from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics
+
+logger = logging.getLogger(__name__)
 
 class Launcher(Activity):
     def __init__(self):
@@ -19,7 +22,7 @@ class Launcher(Activity):
         self._screen = None                 # the launcher's own screen object
 
     def onCreate(self):
-        print("launcher.py onCreate()")
+        if __debug__: logger.debug("onCreate")
         main_screen = lv.obj()
         main_screen.set_style_border_width(0, lv.PART.MAIN)
         main_screen.set_style_radius(0, lv.PART.MAIN)
@@ -73,7 +76,7 @@ class Launcher(Activity):
 
         if not rebuild_needed:
             end = time.ticks_ms()
-            print(f"Redraw icons took: {end-start}ms (cached – no change)")
+            if __debug__: logger.debug("redraw took %dms (cached)", end - start)
             self._focus_last_or_first()
             return
 
@@ -89,9 +92,7 @@ class Launcher(Activity):
         label_height = 24
         width_margin = 25
         icons_fit_width = math.floor((DisplayMetrics.width()-width_margin) / icon_size)
-        #print(f"{icons_fit_width} icons fit")
         iconcont_width = int((DisplayMetrics.width()-width_margin) / icons_fit_width)
-        #print(f"{iconcont_width} iconcont_width")
         iconcont_height = icon_size + label_height
 
         for app in AppManager.get_app_list():
@@ -101,7 +102,6 @@ class Launcher(Activity):
 
             app_name = app.name
             app_dir_fullpath = app.installed_path
-            #print(f"Adding app {app_name} from {app_dir_fullpath}")
 
             # ----- container ------------------------------------------------
             app_cont = lv.obj(screen)
@@ -145,7 +145,7 @@ class Launcher(Activity):
         self._last_ui_built = True
 
         end = time.ticks_ms()
-        print(f"Redraw icons took: {end-start}ms (full rebuild)")
+        if __debug__: logger.debug("redraw took %dms (full rebuild)", end - start)
 
         self._focus_last_or_first()
 
@@ -179,7 +179,7 @@ class Launcher(Activity):
 
     def _do_start_app(self, timer, fullname):
         start_result = AppManager.start_app(fullname)
-        print(f"_do_start_app: start_result={start_result}")
+        if __debug__: logger.debug("start_result=%s", start_result)
 
         # On failure restore the launcher icon grid immediately using our own
         # screen reference (lv.screen_active() would be unreliable here if a

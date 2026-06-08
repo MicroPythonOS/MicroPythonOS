@@ -1,10 +1,14 @@
+import logging
+
 from mpos import Service
+
+logger = logging.getLogger(__name__)
 
 try:
     from appstore_core import AppUpdateManager
 except ImportError as e:
     AppUpdateManager = None
-    print(f"AppStoreService: appstore_core unavailable: {e}")
+    logger.error("appstore_core unavailable: %s", e)
 
 
 class AppStoreService(Service):

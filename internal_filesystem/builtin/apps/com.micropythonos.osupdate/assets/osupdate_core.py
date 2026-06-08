@@ -1,3 +1,5 @@
+import logging
+
 import ujson
 
 from mpos import (
@@ -11,6 +13,8 @@ from mpos import (
     Notification,
     Intent,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UpdateState:
@@ -49,7 +53,7 @@ class UpdateDownloader:
                 from esp32 import Partition
                 self.partition_module = Partition
             except ImportError:
-                print("UpdateDownloader: Partition module not available, will simulate")
+                if __debug__: logger.debug("Partition module not available, will simulate")
                 self.simulate = True
 
     def _setup_partition(self):
@@ -58,7 +62,7 @@ class UpdateDownloader:
             self._current_partition = get_next_update_partition(
                 partition_module=self.partition_module
             )
-            print(f"UpdateDownloader: Writing to partition: {self._current_partition}")
+            if __debug__: logger.debug("writing to partition: %s", self._current_partition)
 
     async def _process_chunk(self, chunk):
         if not self._should_continue:
@@ -72,7 +76,7 @@ class UpdateDownloader:
             is_online = True
 
         if not is_online:
-            print("UpdateDownloader: Network lost during chunk processing")
+            if __debug__: logger.debug("network lost during chunk processing")
             self.is_paused = True
             raise OSError(-113, "Network lost during download")
 
@@ -94,7 +98,7 @@ class UpdateDownloader:
         if self._chunk_buffer:
             remaining = len(self._chunk_buffer)
             padded = self._chunk_buffer + b'\xFF' * (self.CHUNK_SIZE - remaining)
-            print(f"UpdateDownloader: Padding final chunk from {remaining} to {self.CHUNK_SIZE} bytes")
+            if __debug__: logger.debug("padding final chunk from %d to %d bytes", remaining, self.CHUNK_SIZE)
 
             if not self.simulate:
                 self._current_partition.writeblocks(self._block_index, padded)
@@ -127,7 +131,7 @@ class UpdateDownloader:
             headers = None
             if self.bytes_written_so_far > 0:
                 headers = {'Range': f'bytes={self.bytes_written_so_far}-'}
-                print(f"UpdateDownloader: Resuming from byte {self.bytes_written_so_far} (last complete block)")
+                if __debug__: logger.debug("resuming from byte %d", self.bytes_written_so_far)
 
             dm = self.download_manager
 
@@ -140,7 +144,7 @@ class UpdateDownloader:
             if self.bytes_written_so_far == 0:
                 self.total_size_expected = 0
 
-            print(f"UpdateDownloader: Starting async download from {url}")
+            if __debug__: logger.debug("starting async download from %s", url)
             success = await dm.download_url(
                 url,
                 chunk_callback=chunk_handler,
@@ -167,7 +171,7 @@ class UpdateDownloader:
                 self._chunk_buffer = b''
                 self._total_bytes_received = 0
 
-                print(f"UpdateDownloader: Download complete ({result['bytes_written']} bytes)")
+                if __debug__: logger.debug("download complete (%d bytes)", result["bytes_written"])
             else:
                 result['error'] = "Download failed"
                 result['bytes_written'] = self.bytes_written_so_far
@@ -175,36 +179,36 @@ class UpdateDownloader:
 
         except Exception as e:
             error_msg = str(e)
-            print(f"error_msg: {error_msg}")
+            if __debug__: logger.debug("error_msg: %s", error_msg)
 
             if "cancelled" in error_msg.lower():
                 result['error'] = error_msg
                 result['bytes_written'] = self.bytes_written_so_far
                 result['total_size'] = self.total_size_expected
             elif DownloadManager.is_network_error(e):
-                print(f"UpdateDownloader: Network error ({e}), pausing download")
+                logger.warning("network error, pausing download: %s", e)
 
                 if self._chunk_buffer:
                     buffer_len = len(self._chunk_buffer)
-                    print(f"UpdateDownloader: Discarding {buffer_len} bytes from buffer (will re-download on resume)")
+                    if __debug__: logger.debug("discarding %d bytes from buffer", buffer_len)
                     self._chunk_buffer = b''
 
                 self.is_paused = True
                 result['paused'] = True
                 result['bytes_written'] = self.bytes_written_so_far
                 result['total_size'] = self.total_size_expected
-                print(f"UpdateDownloader: Will resume from byte {self.bytes_written_so_far} (last complete block)")
+                if __debug__: logger.debug("will resume from byte %d", self.bytes_written_so_far)
             else:
                 result['error'] = error_msg
                 result['bytes_written'] = self.bytes_written_so_far
                 result['total_size'] = self.total_size_expected
-                print(f"UpdateDownloader: Error during download: {e}")
+                logger.error("download error: %s", e)
 
         return result
 
     def set_boot_partition_and_restart(self):
         if self.simulate:
-            print("UpdateDownloader: Simulating restart (desktop mode)")
+            if __debug__: logger.debug("simulating restart (desktop mode)")
             return
 
         try:
@@ -213,12 +217,12 @@ class UpdateDownloader:
                 partition_module=self.partition_module
             )
             next_partition.set_boot()
-            print("UpdateDownloader: Boot partition set, restarting...")
+            if __debug__: logger.debug("boot partition set, restarting")
 
             import machine
             machine.reset()
         except Exception as e:
-            print(f"UpdateDownloader: Error setting boot partition: {e}")
+            logger.error("error setting boot partition: %s", e)
             raise
 
 
@@ -233,7 +237,7 @@ class UpdateChecker:
 
     async def fetch_update_info(self, hardware_id):
         url = self.get_update_url(hardware_id)
-        print(f"UpdateChecker: fetching {url}")
+        if __debug__: logger.debug("fetching %s", url)
 
         try:
             response_data = await self.download_manager.download_url(url)
@@ -250,14 +254,12 @@ class UpdateChecker:
                     f"Update file missing required fields: {', '.join(missing_fields)}"
                 )
 
-            print("Version:", update_data["version"])
-            print("Download URL:", update_data["download_url"])
-            print("Changelog:", update_data["changelog"])
+            if __debug__: logger.debug("version %s, url %s", update_data["version"], update_data["download_url"])
 
             return update_data
 
         except Exception as e:
-            print(f"Error fetching update info: {e}")
+            logger.error("error fetching update info: %s", e)
             raise
 
     def is_update_available(self, remote_version, current_version):
@@ -320,7 +322,7 @@ class UpdateManager:
         self._suppress_notifications = bool(value)
 
     def set_state(self, new_state):
-        print(f"UpdateManager: state change {self.current_state} -> {new_state}")
+        if __debug__: logger.debug("state %s -> %s", self.current_state, new_state)
         self.current_state = new_state
         if self._state_callback:
             self._state_callback(new_state)
@@ -332,7 +334,7 @@ class UpdateManager:
         return self._update_info
 
     def _network_changed(self, online):
-        print(f"UpdateManager: network_changed, now: {'ONLINE' if online else 'OFFLINE'}")
+        if __debug__: logger.debug("network %s", "ONLINE" if online else "OFFLINE")
         if not online:
             if self.current_state == UpdateState.IDLE or self.current_state == UpdateState.CHECKING_UPDATE:
                 self.set_state(UpdateState.WAITING_WIFI)
@@ -343,13 +345,13 @@ class UpdateManager:
                 self.set_state(UpdateState.CHECKING_UPDATE)
                 TaskManager.create_task(self.check_for_update())
             elif self.current_state == UpdateState.ERROR:
-                print("UpdateManager: Retrying update check after network came back online")
+                if __debug__: logger.debug("retrying update check after network came back")
                 self.set_state(UpdateState.CHECKING_UPDATE)
                 TaskManager.create_task(self.check_for_update())
 
     def _notify_update_available(self):
         if self._suppress_notifications:
-            print("UpdateManager: suppressing notification because OSUpdate is in foreground")
+            if __debug__: logger.debug("suppressing notification (OSUpdate in foreground)")
             return
         info = self._update_info or {}
         version = info.get("version")
@@ -392,7 +394,7 @@ class UpdateManager:
                 if self.current_state == UpdateState.UPDATE_AVAILABLE:
                     self._notify_update_available()
             else:
-                print("UpdateManager: offline, skipping check")
+                if __debug__: logger.debug("offline, skipping check")
 
             for _ in range(self.BOOT_CHECK_INTERVAL):
                 if not self._running:
@@ -400,7 +402,7 @@ class UpdateManager:
                 await TaskManager.sleep(1)
 
     def stop(self):
-        print("UpdateManager: stopping")
+        if __debug__: logger.debug("stopping")
         self._running = False
         if self.connectivity_manager:
             self.connectivity_manager.unregister_callback(self._network_changed)
@@ -442,9 +444,9 @@ class UpdateManager:
             self.set_state(UpdateState.ERROR)
             self._clear_update_available_notification()
         except Exception as e:
-            print(f"UpdateManager.check_for_update got exception: {e}")
+            logger.error("check_for_update got exception: %s", e)
             if DownloadManager.is_network_error(e):
-                print("UpdateManager: Network error while checking for updates, waiting for WiFi")
+                logger.warning("network error while checking for updates, waiting for WiFi")
                 self.set_state(UpdateState.WAITING_WIFI)
             else:
                 self.set_state(UpdateState.ERROR)
@@ -477,7 +479,7 @@ class UpdateManager:
                 bytes_written = result.get('bytes_written', 0)
                 total_size = result.get('total_size', 0)
                 percent = (bytes_written / total_size * 100) if total_size > 0 else 0
-                print(f"UpdateManager: Download paused at {percent:.1f}% ({bytes_written}/{total_size} bytes)")
+                if __debug__: logger.debug("download paused at %.1f%% (%d/%d bytes)", percent, bytes_written, total_size)
                 self.set_state(UpdateState.DOWNLOAD_PAUSED)
 
                 ok = await self._wait_for_wifi_retry(should_continue_callback)
@@ -490,20 +492,20 @@ class UpdateManager:
             return result
 
     async def _wait_for_wifi_retry(self, should_continue_callback=None):
-        print("UpdateManager: Waiting for network to return...")
+        if __debug__: logger.debug("waiting for network to return")
         elapsed = 0
 
         while elapsed < self.WIFI_WAIT_TIMEOUT:
             if should_continue_callback and not should_continue_callback():
-                print("UpdateManager: User cancelled while waiting for wifi")
+                if __debug__: logger.debug("user cancelled while waiting for wifi")
                 return False
             if self.connectivity_manager and self.connectivity_manager.is_online():
-                print("UpdateManager: Network reconnected, waiting for stabilization...")
+                if __debug__: logger.debug("network reconnected, waiting for stabilization")
                 await TaskManager.sleep(2)
-                print("UpdateManager: Resuming download")
+                if __debug__: logger.debug("resuming download")
                 return True
             await TaskManager.sleep(self.WIFI_CHECK_INTERVAL)
             elapsed += self.WIFI_CHECK_INTERVAL
 
-        print("UpdateManager: Timed out waiting for network")
+        logger.warning("timed out waiting for network")
         return False

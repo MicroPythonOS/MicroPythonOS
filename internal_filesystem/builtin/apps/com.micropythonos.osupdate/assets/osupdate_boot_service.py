@@ -1,10 +1,14 @@
+import logging
+
 from mpos import Service
+
+logger = logging.getLogger(__name__)
 
 try:
     from osupdate_core import UpdateManager
 except ImportError as e:
     UpdateManager = None
-    print(f"OSUpdateService: osupdate_core unavailable: {e}")
+    logger.error("osupdate_core unavailable: %s", e)
 
 
 class OSUpdateService(Service):

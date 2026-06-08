@@ -1,9 +1,13 @@
 import json
+import logging
+
 import lvgl as lv
 
 from mpos import Activity, App, BuildInfo, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
 
 from app_detail import AppDetail
+
+logger = logging.getLogger(__name__)
 
 
 class AppStore(Activity):
@@ -107,7 +111,7 @@ class AppStore(Activity):
             self._sync_update_banner(um.current_state, um.updatable_apps)
             um.check_for_updates_now(self.get_backend_list_url_from_settings())
         except Exception as e:
-            print(f"AppStore: could not attach to AppUpdateManager: {e}")
+            logger.warning("could not attach to AppUpdateManager: %s", e)
 
         if not len(self.apps):
             self.refresh_list()
@@ -118,7 +122,7 @@ class AppStore(Activity):
             AppUpdateManager.get_instance().clear_state_callback()
             AppUpdateManager.get_instance().suppress_notifications = False
         except Exception as e:
-            print(f"AppStore: could not detach from AppUpdateManager: {e}")
+            logger.warning("could not detach from AppUpdateManager: %s", e)
         super().onPause(screen)
 
     # ------------------------------------------------------------------
@@ -133,7 +137,7 @@ class AppStore(Activity):
             um = AppUpdateManager.get_instance()
             self._sync_update_banner(state, um.updatable_apps)
         except Exception as e:
-            print(f"AppStore: _on_update_state_change error: {e}")
+            logger.warning("state change error: %s", e)
 
     def _sync_update_banner(self, state, updatable_apps):
         from appstore_core import AppUpdateState
@@ -163,7 +167,7 @@ class AppStore(Activity):
             from appstore_core import AppUpdateManager
             updatable = AppUpdateManager.get_instance().updatable_apps
         except Exception as e:
-            print(f"AppStore: _update_all_click error: {e}")
+            logger.warning("update all click error: %s", e)
             return
         if not updatable:
             return
@@ -178,15 +182,15 @@ class AppStore(Activity):
             fullname = app_data.get("fullname")
             download_url = app_data.get("download_url")
             if not fullname or not download_url:
-                print(f"AppStore: skipping update for {app_data} (missing fullname/download_url)")
+                if __debug__: logger.debug("skipping update for %s (missing fullname/download_url)", app_data)
                 continue
 
             self.update_all_label.set_text(f"Updating {app_data.get('name', fullname)}...")
             try:
                 await AppManager.download_and_install_package(download_url, fullname)
-                print(f"AppStore: updated {fullname}")
+                if __debug__: logger.debug("updated %s", fullname)
             except Exception as e:
-                print(f"AppStore: update of {fullname} failed: {e}")
+                logger.warning("update of %s failed: %s", fullname, e)
                 if "Not enough free space" in str(e):
                     self.update_all_label.set_text(f"Not enough space for {app_data.get('name', fullname)}")
                 else:
@@ -202,7 +206,7 @@ class AppStore(Activity):
             AppManager.refresh_apps()
             AppUpdateManager.get_instance().check_for_updates_now()
         except Exception as e:
-            print(f"AppStore: post-update check error: {e}")
+            logger.warning("post-update check error: %s", e)
 
     # ------------------------------------------------------------------
     # Existing AppStore methods (unchanged)
@@ -210,7 +214,7 @@ class AppStore(Activity):
 
     def refresh_list(self):
         if self._refresh_in_progress:
-            print("AppStore: refresh already in progress, skipping")
+            if __debug__: logger.debug("refresh already in progress, skipping")
             return
         try:
             import network
@@ -219,7 +223,7 @@ class AppStore(Activity):
                 self.please_wait_label.set_text("Error: WiFi is not connected.")
                 return
         except Exception as e:
-            print("Warning: can't check network state, assuming we're online...")
+            if __debug__: logger.debug("can't check network state, assuming online (%s)", e)
         self._refresh_in_progress = True
         TaskManager.create_task(self._download_app_index_wrapper(self.get_backend_list_url_from_settings()))
 
@@ -235,7 +239,7 @@ class AppStore(Activity):
         self.startActivity(intent)
 
     def backend_changed(self, new_value):
-        print(f"backend changed to {new_value}, refreshing...")
+        if __debug__: logger.debug("backend changed to %s", new_value)
         self.refresh_list()
 
     def _migrate_backend_pref(self):
@@ -243,7 +247,7 @@ class AppStore(Activity):
         new_pref = f"badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_{BuildInfo.version.api_level},https://badgehub.eu/api/v3/projects"
         current_pref = self.prefs.get_string("backend")
         if current_pref == old_pref:
-            print(f"Migrating AppStore backend preference to mpos_api_{BuildInfo.version.api_level}")
+            if __debug__: logger.debug("migrating backend preference to mpos_api_%s", BuildInfo.version.api_level)
             self.prefs.edit().put_string("backend", new_pref).commit()
 
     async def _download_app_index_wrapper(self, json_url):
@@ -257,13 +261,13 @@ class AppStore(Activity):
         try:
             response = await DownloadManager.download_url(json_url)
         except Exception as e:
-            print(f"Failed to download app index: {e}")
+            logger.error("failed to download app index: %s", e)
             if DownloadManager.is_network_error(e):
                 self.please_wait_label.set_text(f"Network error - check your WiFi connection\nand try again.")
             else:
                 self.please_wait_label.set_text(f"Could not download app index from\n{json_url}\nError: {e}")
             return
-        print(f"Got response text: {response[0:20]}")
+        if __debug__: logger.debug("got response text: %s", response[:20])
         try:
             parsed = json.loads(response)
             self.apps.clear()
@@ -275,27 +279,27 @@ class AppStore(Activity):
                     else:
                         self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
                 except Exception as e:
-                    print(f"Warning: could not add app from {json_url} to apps list: {e}")
+                    logger.warning("could not add app from %s: %s", json_url, e)
         except Exception as e:
             self.please_wait_label.set_text(f"ERROR: could not parse reponse.text JSON: {e}")
             return
         self.please_wait_label.set_text(f"Download successful, building list...")
         await TaskManager.sleep(0.1)
-        print("Remove duplicates based on app.name")
+        if __debug__: logger.debug("removing duplicates by app.name")
         seen = set()
         self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
-        print("Sort apps by app.name")
+        if __debug__: logger.debug("sorting apps by name")
         self.apps.sort(key=lambda x: x.name.lower())
-        print("Creating apps list...")
+        if __debug__: logger.debug("creating apps list")
         self.create_apps_list()
         await TaskManager.sleep(0.1)
-        print("starting self.download_icons() in background")
+        if __debug__: logger.debug("starting icon downloads")
         TaskManager.create_task(self.download_icons())
 
     def create_apps_list(self):
-        print("create_apps_list")
+        if __debug__: logger.debug("create_apps_list")
 
-        print("Hiding please wait label...")
+        if __debug__: logger.debug("hiding please wait label")
         self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Determine top offset (update button may be visible)
@@ -308,9 +312,9 @@ class AppStore(Activity):
         self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, list_top)
         self._icon_widgets = {}
         self._update_labels = {}
-        print("create_apps_list iterating")
+        if __debug__: logger.debug("create_apps_list iterating")
         for app in self.apps:
-            print(app)
+            if __debug__: logger.debug(app)
             item = self.apps_list.add_button(None, "")
             item.set_style_pad_all(0, lv.PART.MAIN)
             item.set_size(lv.pct(100), lv.SIZE_CONTENT)
@@ -347,19 +351,19 @@ class AppStore(Activity):
             update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
             update_label.add_flag(lv.obj.FLAG.HIDDEN)
             self._update_labels[app.fullname] = update_label
-        print("create_apps_list done")
+        if __debug__: logger.debug("create_apps_list done")
 
     async def download_icons(self):
-        print("Downloading icons...")
+        if __debug__: logger.debug("downloading icons")
         for app in self.apps:
             if not self.has_foreground():
-                print(f"App is stopping, aborting icon downloads.")
+                if __debug__: logger.debug("app stopping, aborting icon downloads")
                 break
             if not app.icon_data:
                 try:
                     app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
                 except Exception as e:
-                    print(f"Download of {app.icon_url} got exception: {e}")
+                    if __debug__: logger.debug("download of %s failed: %s", app.icon_url, e)
                     continue
             if app.icon_data:
                 #print("download_icons has icon_data, showing it...")
@@ -367,14 +371,14 @@ class AppStore(Activity):
                 try:
                     image_icon_widget = app.image_icon_widget
                 except Exception as e:
-                    print(f"app.image_icon_widget got exception {e}")
+                    logger.warning("image_icon_widget error: %s", e)
                 if image_icon_widget:
                     image_dsc = lv.image_dsc_t({
                         'data_size': len(app.icon_data),
                         'data': app.icon_data
                     })
                     image_icon_widget.set_src(image_dsc)
-        print("Finished downloading icons.")
+        if __debug__: logger.debug("finished downloading icons")
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
@@ -399,19 +403,19 @@ class AppStore(Activity):
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
         name = bhapp.get("name")
-        print(f"Got app name: {name}")
+        if __debug__: logger.debug("got app name: %s", name)
         short_description = bhapp.get("description")
         fullname = bhapp.get("slug")
         icon_url = None
         try:
             icon_url = bhapp.get("icon_map", {}).get("64x64", {}).get("url")
         except Exception:
-            print("Could not find icon_map 64x64 url")
+            if __debug__: logger.debug("could not find icon_map 64x64 url")
         category = None
         try:
             category = bhapp.get("categories", [None])[0]
         except Exception:
-            print("Could not parse category")
+            if __debug__: logger.debug("could not parse category")
         return App(name, None, short_description, None, icon_url, None, fullname, None, category, None)
 
     @staticmethod

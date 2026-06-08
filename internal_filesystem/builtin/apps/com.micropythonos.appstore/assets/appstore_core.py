@@ -1,3 +1,5 @@
+import logging
+
 import ujson
 
 from mpos import (
@@ -9,6 +11,8 @@ from mpos import (
     Notification,
     Intent,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AppUpdateState:
@@ -80,13 +84,13 @@ class AppUpdateManager:
         self._suppress_notifications = bool(value)
 
     def _set_state(self, new_state):
-        print(f"AppUpdateManager: {self.current_state} -> {new_state}")
+        if __debug__: logger.debug("state %s -> %s", self.current_state, new_state)
         self.current_state = new_state
         if self._state_callback:
             try:
                 self._state_callback(new_state)
             except Exception as e:
-                print(f"AppUpdateManager: state callback error: {e}")
+                logger.error("state callback error: %s", e)
 
     # ------------------------------------------------------------------
     # Background service loop
@@ -109,7 +113,7 @@ class AppUpdateManager:
             if self._connectivity_manager.is_online():
                 await self.check_for_updates()
             else:
-                print("AppUpdateManager: offline, skipping check")
+                if __debug__: logger.debug("offline, skipping check")
 
             for _ in range(self.BOOT_CHECK_INTERVAL):
                 if not self._running:
@@ -117,7 +121,7 @@ class AppUpdateManager:
                 await TaskManager.sleep(1)
 
     def stop(self):
-        print("AppUpdateManager: stopping")
+        if __debug__: logger.debug("stopping")
         self._running = False
         if self._connectivity_manager:
             self._connectivity_manager.unregister_callback(self._network_changed)
@@ -129,7 +133,7 @@ class AppUpdateManager:
         TaskManager.create_task(self.check_for_updates(index_url))
 
     def _network_changed(self, online):
-        print(f"AppUpdateManager: network {'ONLINE' if online else 'OFFLINE'}")
+        if __debug__: logger.debug("network %s", "ONLINE" if online else "OFFLINE")
         if online:
             if self.current_state in (
                 AppUpdateState.IDLE,
@@ -163,7 +167,7 @@ class AppUpdateManager:
             try:
                 response = await DownloadManager.download_url(index_url)
             except Exception as e:
-                print(f"AppUpdateManager: download error: {e}")
+                logger.error("download error: %s", e)
                 if DownloadManager.is_network_error(e):
                     self._set_state(AppUpdateState.WAITING_WIFI)
                 else:
@@ -173,7 +177,7 @@ class AppUpdateManager:
             try:
                 apps_json = ujson.loads(response)
             except Exception as e:
-                print(f"AppUpdateManager: JSON parse error: {e}")
+                logger.error("JSON parse error: %s", e)
                 self._set_state(AppUpdateState.ERROR)
                 return
 
@@ -187,7 +191,7 @@ class AppUpdateManager:
                     if AppManager.is_update_available(fullname, remote_version):
                         updatable.append(app_data)
                 except Exception as e:
-                    print(f"AppUpdateManager: error checking {app_data}: {e}")
+                    logger.error("error checking %s: %s", app_data, e)
 
             self.updatable_apps = updatable
 
@@ -207,7 +211,7 @@ class AppUpdateManager:
 
     def _notify_updates_available(self):
         if self._suppress_notifications:
-            print("AppUpdateManager: suppressing notification because AppStore is in foreground")
+            if __debug__: logger.debug("suppressing notification (AppStore in foreground)")
             return
         n = len(self.updatable_apps)
         text = f"{n} app{'s' if n != 1 else ''} can be updated"

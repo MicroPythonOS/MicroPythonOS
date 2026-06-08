@@ -1,5 +1,9 @@
 
+import logging
+
 from mpos import Activity, Intent, AppearanceManager, AppManager, NumberFormat, SettingsActivity, TimeZone
+
+logger = logging.getLogger(__name__)
 
 from bootloader import ResetIntoBootloader
 from calibrate_imu import CalibrateIMUActivity
@@ -129,25 +133,24 @@ class Settings(SettingsActivity):
             import vfs
             from flashbdev import bdev
         except Exception as e:
-            print(f"Could not format internal data partition because: {e}")
+            logger.error("could not format internal data partition: %s", e)
             return
         if bdev.info()[4] == "vfs":
-            print(f"Formatting {bdev} as LittleFS2")
+            if __debug__: logger.debug("formatting %s as LittleFS2", bdev)
             vfs.VfsLfs2.mkfs(bdev)
             fs = vfs.VfsLfs2(bdev)
         elif bdev.info()[4] == "ffat":
-            print(f"Formatting {bdev} as FAT")
+            if __debug__: logger.debug("formatting %s as FAT", bdev)
             vfs.VfsFat.mkfs(bdev)
             fs = vfs.VfsFat(bdev)
-        print(f"Mounting {fs} at /")
+        if __debug__: logger.debug("mounting %s at /", fs)
         vfs.mount(fs, "/")
-        print("Done formatting, (re)mounting /builtin")
+        if __debug__: logger.debug("done formatting, remounting /builtin")
         try:
             import freezefs_mount_builtin   # noqa E401
         except Exception as e:
-            # This will throw an exception if there is already a "/builtin" folder present
-            print("settings.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
-        print("Done mounting, refreshing apps")
+            logger.warning("could not import/run freezefs_mount_builtin: %s", e)
+        if __debug__: logger.debug("done mounting, refreshing apps")
         AppManager.refresh_apps()
 
     def theme_changed(self, new_value):
