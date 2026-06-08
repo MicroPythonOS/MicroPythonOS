@@ -15,6 +15,7 @@ class Launcher(Activity):
         self._last_started_fullname = None  # fullname of the last app the user launched
         self._app_cont_map = {}             # fullname -> app_cont widget
         self._splash_fullname = None        # fullname of the app being launched (splash shown)
+        self._splash_screen = None          # temporary splash screen shown before app launch
         self._screen = None                 # the launcher's own screen object
 
     def onCreate(self):
@@ -150,32 +151,30 @@ class Launcher(Activity):
 
     # ------------------------------------------------------------------
     def _launch_app(self, fullname):
-        """Record which app was launched, show centered icon as splash, then start it."""
+        """Record which app was launched, show splash screen, then start it."""
         self._last_started_fullname = fullname
         self._splash_fullname = fullname
 
+        splash_screen = lv.obj()
+        splash_screen.set_style_border_width(0, lv.PART.MAIN)
+        splash_screen.set_style_radius(0, lv.PART.MAIN)
+        splash_screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+
         splash_cont = self._app_cont_map.get(fullname)
         if splash_cont:
-            for fullname2, cont in self._app_cont_map.items():
-                if fullname2 != fullname:
-                    cont.add_flag(lv.obj.FLAG.HIDDEN)
-            label = splash_cont.get_child(1)
-            if label:
-                label.add_flag(lv.obj.FLAG.HIDDEN)
-            splash_cont.add_flag(lv.obj.FLAG.FLOATING)
-            splash_cont.set_style_border_width(0, lv.PART.MAIN)
             image = splash_cont.get_child(0)
             if image:
-                image.set_scale(384)
-                image.align(lv.ALIGN.CENTER, 0, 0)
-                scaled_w = image.get_width() * 384 // 256
-                scaled_h = image.get_height() * 384 // 256
-                splash_cont.set_size(scaled_w, scaled_h)
-            splash_cont.align(lv.ALIGN.CENTER, 0, 0)
-        lv.screen_active().set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+                splash_icon = lv.image(splash_screen)
+                splash_icon.set_src(image.get_src())
+                splash_icon.set_scale(384)
+                splash_icon.align(lv.ALIGN.CENTER, 0, 0)
 
-        # Small delay so LVGL renders the splash before the app starts, unless the app starts very quickly
-        timer = lv.timer_create(lambda t: self._do_start_app(t, fullname), 33, None) # 33 is the LV_DEF_REFR_PERIOD
+        self._splash_screen = splash_screen
+        animation_time = 250
+        lv.screen_load_anim(splash_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, animation_time, 0, False)
+
+        # Wait until after the animation so LVGL renders the splash before the app starts
+        timer = lv.timer_create(lambda t: self._do_start_app(t, fullname), 2*animation_time, None)
         timer.set_repeat_count(1)
 
     def _do_start_app(self, timer, fullname):
@@ -186,13 +185,14 @@ class Launcher(Activity):
         # screen reference (lv.screen_active() would be unreliable here if a
         # new app screen was partially pushed before failing).
         if start_result is False:
+            lv.screen_load_anim(self._screen, lv.SCREEN_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
             self.onResume(self._screen)
 
     def _exit_splash_mode(self, screen):
-        if self._splash_fullname is None:
+        if self._splash_fullname is None and self._splash_screen is None:
             return
         self._splash_fullname = None
-        self._last_app_list = None
+        self._splash_screen = None
         screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
 
     # ------------------------------------------------------------------
