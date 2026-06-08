@@ -17,7 +17,7 @@ Frameworks:
 - WidgetAnimator: fix animations with large values (like a large on-chain balance in LightningPiggy) not being animated
 
 OS:
-- aiohttp: add support for relative HTTP redirects instead of only absolute HTTP redirects
+- aiohttp: add support for relative HTTP redirects (in addition to absolute HTTP redirects)
 - Drawer menu: close when home button is clicked
 - Optional override of builtin boot splash image by /data/images/boot_splash.png
 
