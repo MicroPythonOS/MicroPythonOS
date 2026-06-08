@@ -124,7 +124,7 @@ class UnPhoneTCA:
         self.output_states = self._read_word(0x02)
 
     def _write_word(self, reg, value):
-        if __debug__: logger.debug("Writing to TCA9555: reg=%s, value=%s" % (reg:#02x, value:#04x))
+        if __debug__: logger.debug("Writing to TCA9555: reg=%#02x, value=%#04x" % (reg, value))
         self.tca_dev.write(bytes([reg, value & 0xFF, (value >> 8) & 0xFF]))
 
     def _read_word(self, reg):
@@ -200,19 +200,19 @@ class UnPhone:
         self.reset()
 
     def expander_power(self, *, on):
-        if __debug__: logger.debug("Turning Expander power %s..." % (on=))
+        if __debug__: logger.debug("Turning Expander power %s..." % (on,))
         self.tca.digital_write(EXPANDER_POWER, 1 if on else 0)
 
     def backlight(self, *, on):
-        if __debug__: logger.debug("Turning LCD backlight %s..." % (on=))
+        if __debug__: logger.debug("Turning LCD backlight %s..." % (on,))
         self.tca.digital_write(BACKLIGHT, 1 if on else 0)
 
     def vibe(self, *, on):
-        if __debug__: logger.debug("Turning VIBE %s..." % (on=))
+        if __debug__: logger.debug("Turning VIBE %s..." % (on,))
         self.tca.digital_write(VIBE, 1 if on else 0)
 
     def ir(self, *, on):
-        if __debug__: logger.debug("Turning IR_LEDS %s..." % (on=))
+        if __debug__: logger.debug("Turning IR_LEDS %s..." % (on,))
         self.tca.digital_write(IR_LEDS, 1 if on else 0)
 
     def rgb(self, r, g, b):
@@ -245,7 +245,7 @@ class UnPhone:
         esp32.wake_on_ext0(pin=wake_pin, level=esp32.WAKEUP_ALL_LOW)
 
     def set_shipping(self, *, enable):
-        if __debug__: logger.debug("Setting shipping mode to: %s" % (enable=))
+        if __debug__: logger.debug("Setting shipping mode to: %s" % (enable,))
         wdt = self.i2c.readfrom_mem(self.BM_I2CADD, self.BM_WATCHDOG, 1)[0]
         opcon = self.i2c.readfrom_mem(self.BM_I2CADD, self.BM_OPCON, 1)[0]
         if enable:
@@ -354,7 +354,7 @@ except Exception as e:
 else:
     if __debug__: logger.debug("Scanning I2C bus for devices...")
     for dev in i2c_bus.scan():
-        if __debug__: logger.debug("Found I2C device at address: %s ($%s)" % (dev, dev:#02X))
+        if __debug__: logger.debug("Found I2C device at address: %s ($%#02X)" % (dev, dev))
     # Typical output here is:
     # Found I2C device at address: 38 ($0x26) -> TCA9555 IO expansion chip
     # Found I2C device at address: 106 ($0x6A) -> Touchscreen controller
@@ -434,7 +434,7 @@ else:
         startup_rotation=startup_rotation,
         # debug=True,
     )
-    if __debug__: logger.debug("%s" % (touch_input_dev.is_calibrated=))
+    if __debug__: logger.debug("%s" % (touch_input_dev.is_calibrated,))
     # FIXME: Persistent calibration data is not working yet?
     # if touch_input_dev.is_calibrated:
     # else:
@@ -493,7 +493,7 @@ def input_callback(indev, data):
     current_time = time.ticks_ms()
     repeat = current_time > next_repeat if next_repeat else False  # Auto repeat?
     if repeat or current_key != data.key:
-        if __debug__: logger.debug("Key %s pressed %s" % (current_key, repeat=))
+        if __debug__: logger.debug("Key %s pressed %s" % (current_key, repeat))
 
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED

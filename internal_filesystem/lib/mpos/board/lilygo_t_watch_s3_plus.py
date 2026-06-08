@@ -1,13 +1,13 @@
 # Manufacturer's website at https://lilygo.cc/products/t-watch-s3-plus
 
-if __debug__: logger.debug("lilygo_t_watch_s3_plus.py initialization")
-
-def init_pmu(m_i2c):
-    if __debug__: logger.debug("Initializing AXP2101 PMU")
 import logging
 
 logger = logging.getLogger(__name__)
 
+if __debug__: logger.debug("lilygo_t_watch_s3_plus.py initialization")
+
+def init_pmu(m_i2c):
+    if __debug__: logger.debug("Initializing AXP2101 PMU")
     from drivers.power.AXP2101 import AXP2101
     pmu = AXP2101(m_i2c, addr=0x34)
     # Set the minimum common working voltage of the PMU VBUS input, below this value will turn off the PMU
@@ -117,7 +117,7 @@ def _pmu_irq_task(_arg):
     pmu = BatteryManager.pmu
     try:
         status = pmu.getIrqStatus()
-        if __debug__: logger.debug("PMU interrupt: status=0x%s" % (status:06X))
+        if __debug__: logger.debug("PMU interrupt: status=0x%06X" % (status))
         if status == 0:
             if __debug__: logger.debug("PMU: spurious interrupt (status already cleared)")
             return

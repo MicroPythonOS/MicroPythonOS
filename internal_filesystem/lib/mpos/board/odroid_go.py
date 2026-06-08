@@ -278,7 +278,7 @@ def input_callback(indev, data):
     current_time = time.ticks_ms()
     repeat = current_time > next_repeat if next_repeat else False  # Auto repeat?
     if repeat or current_key != data.key:
-        if __debug__: logger.debug("Key %s pressed %s" % (current_key, repeat=))
+        if __debug__: logger.debug("Key %s pressed %s" % (current_key, repeat))
 
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED
