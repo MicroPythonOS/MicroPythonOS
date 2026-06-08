@@ -17,7 +17,7 @@ Example:
     
     # Check light/dark mode
     if AppearanceManager.is_light_mode():
-        print("Light mode enabled")
+        if __debug__: logger.debug("Light mode enabled")
     
     # Get UI dimensions
     bar_height = AppearanceManager.get_notification_bar_height()

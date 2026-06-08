@@ -1,4 +1,7 @@
+if __debug__: logger.debug("qemu.py running")
+
 import logging
+
 logger = logging.getLogger(__name__)
 
 import lcd_bus
@@ -6,7 +9,7 @@ import lvgl as lv
 import machine
 import time
 
-if __debug__: logger.debug("display bus initialization")
+if __debug__: logger.debug("qemu.py display bus initialization")
 try:
     display_bus = lcd_bus.I80Bus(
         dc=7,
@@ -23,8 +26,8 @@ try:
         #reverse_color_bits=False # doesnt seem to do anything?
     )
 except Exception as e:
-    logger.error("Error initializing display bus: %s", e)
-    logger.error("Attempting hard reset in 3sec...")
+    logger.error("Error initializing display bus: %s" % (e))
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -118,7 +121,7 @@ def keypad_read_cb(indev, data):
     if near_simul or single_press_wait:
         dt_a = time.ticks_diff(current_time, last_a_down_time) if last_a_down_time else None
         dt_b = time.ticks_diff(current_time, last_b_down_time) if last_b_down_time else None
-        if __debug__: logger.debug("combo guard: a=%s b=%s near=%s wait=%s dt_a=%s dt_b=%s", btn_a_pressed, btn_b_pressed, near_simul, single_press_wait, dt_a, dt_b)
+        if __debug__: logger.debug("combo guard: a=%s b=%s near=%s wait=%s dt_a=%s dt_b=%s" % (btn_a_pressed, btn_b_pressed, near_simul, single_press_wait, dt_a, dt_b))
 
     # While in an on-screen keyboard, PREV button is LEFT and NEXT button is RIGHT
     focus_group = lv.group_get_default()
@@ -147,14 +150,13 @@ def keypad_read_cb(indev, data):
     if current_key is None:
         # No key pressed
         data.key = last_key if last_key else -1
-            # This doesn't seem to make the key navigation in on-screen keyboards work, unlike on the m5stack_fire...?
         data.state = lv.INDEV_STATE.RELEASED
         last_key = None
         last_state = lv.INDEV_STATE.RELEASED
         key_press_start = 0
         last_repeat_time = 0
     elif last_key is None or current_key != last_key:
-        if __debug__: logger.debug("New key press: %s", current_key)
+        if __debug__: logger.debug("New key press: %s" % (current_key))
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED
         last_key = current_key
@@ -162,7 +164,7 @@ def keypad_read_cb(indev, data):
         key_press_start = current_time
         last_repeat_time = current_time
     else:
-        if __debug__: logger.debug("key repeat because current_key %s == last_key %s", current_key, last_key)
+        if __debug__: logger.debug("key repeat because current_key %s == last_key %s" % (current_key, last_key))
         elapsed = time.ticks_diff(current_time, key_press_start)
         since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
         if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
@@ -186,6 +188,7 @@ def keypad_read_cb(indev, data):
                 last_state = data.state
                 last_repeat_time = current_time
         else:
+            # This doesn't seem to make the key navigation in on-screen keyboards work, unlike on the m5stack_fire...?
             data.state = lv.INDEV_STATE.RELEASED
             last_state = lv.INDEV_STATE.RELEASED
 
@@ -206,4 +209,4 @@ indev.enable(True)  # NOQA
 from mpos import InputManager
 InputManager.register_indev(indev)
 
-if __debug__: logger.debug("finished")
+if __debug__: logger.debug("qemu.py finished")

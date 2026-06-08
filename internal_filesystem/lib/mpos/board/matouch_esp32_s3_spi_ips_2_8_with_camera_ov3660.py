@@ -1,6 +1,4 @@
-import logging
-logger = logging.getLogger(__name__)
-
+if __debug__: logger.debug("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660.py initialization")
 # Hardware initialization for Makerfabs MaTouch ESP32-S3 SPI 2.8" with Camera
 # Manufacturer's website: https://www.makerfabs.com/matouch-esp32-s3-spi-ips-2-8-with-camera-ov3660.html
 # Hardware Specifications:
@@ -12,6 +10,10 @@ logger = logging.getLogger(__name__)
 # - No NeoPixel LEDs
 # - No buzzer or I2S audio
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from micropython import const
 import drivers.display.st7789 as st7789
 import lcd_bus
@@ -22,6 +24,7 @@ import lvgl as lv
 import mpos.ui
 
 # Pin configuration for Display (SPI)
+# Correct pins from hardware schematic
 SPI_BUS = 1
 SPI_FREQ = 40000000
 LCD_SCLK = 14
@@ -79,18 +82,16 @@ mpos.ui.main_display.set_backlight(100)
 
 # Touch handling
 def init_touch():
-    # Power off, otherwise it keeps using a lot of current
-            # disable and enable touch pad because camera initialization breaks it
     try:
         import i2c
         i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39, freq=I2C_FREQ, use_locks=False)
         import drivers.indev.gt911 as gt911
         touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
-        indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=False)
+        indev = gt911.GT911(touch_dev, reset_pin=1, interrupt_pin=40, debug=False) # debug makes it slower
         from mpos import InputManager
         InputManager.register_indev(indev)
     except Exception as e:
-        logger.error("Touch init got exception: %s", e)
+        logger.error("Touch init got exception: %s" % (e))
 init_touch()
 
 # IO0 Button interrupt handler
@@ -109,10 +110,11 @@ lv.init()
 from mpos import sdcard
 sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
 
-# === CAMERA HARDWARE ===
 # === LED HARDWARE ===
 # Note: MaTouch ESP32-S3 has no NeoPixel LEDs
 # LightsManager will not be initialized (functions will return False)
+
+# === CAMERA HARDWARE ===
 from mpos import CameraManager
 
 def init_cam(width, height, colormode):
@@ -122,7 +124,7 @@ def init_cam(width, height, colormode):
 
         # Map resolution to FrameSize enum using CameraManager
         frame_size = CameraManager.resolution_to_framesize(width, height)
-        if __debug__: logger.debug("init_internal_cam: Using FrameSize %s for %sx%s", frame_size, width, height)
+        if __debug__: logger.debug("init_internal_cam: Using FrameSize %s for %sx%s" % (frame_size, width, height))
 
         # Try to initialize, with one retry for I2C poweroff issue
         max_attempts = 3
@@ -151,12 +153,13 @@ def init_cam(width, height, colormode):
                 break
             except Exception as e:
                 if attempt < max_attempts-1:
-                    if __debug__: logger.debug("init_cam attempt %s failed: %s, retrying...", attempt, e)
+                    logger.error("init_cam attempt %s failed: %s, retrying..." % (attempt, e))
                 else:
-                    logger.error("init_cam final exception: %s", e)
+                    logger.error("init_cam final exception: %s" % (e))
                     break
 
         if toreturn:
+            # disable and enable touch pad because camera initialization breaks it
             try:
                 from mpos import InputManager
                 indev = InputManager.list_indevs()[0]
@@ -164,27 +167,28 @@ def init_cam(width, height, colormode):
                 InputManager.unregister_indev(indev)
                 if __debug__: logger.debug("input disabled")
             except Exception as e:
-                logger.error("init_cam: disabling indev got exception: %s", e)
+                logger.error("init_cam: disabling indev got exception: %s" % (e))
             init_touch()
 
     except Exception as e:
-        logger.error("init_cam exception: %s", e)
+        logger.error("init_cam exception: %s" % (e))
 
     return toreturn
 
 def deinit_cam(cam):
     cam.deinit()
+    # Power off, otherwise it keeps using a lot of current
     try:
         from machine import Pin, I2C
-        i2c = I2C(1, scl=Pin(38), sda=Pin(39))
-        camera_addr = 0x3C
+        i2c = I2C(1, scl=Pin(38), sda=Pin(39))  # Adjust pins and frequency
+        camera_addr = 0x3C # for OV3660
         reg_addr = 0x3008
-        reg_high = (reg_addr >> 8) & 0xFF
-        reg_low = reg_addr & 0xFF
-        power_off_command = 0x42
+        reg_high = (reg_addr >> 8) & 0xFF  # 0x30
+        reg_low = reg_addr & 0xFF         # 0x08
+        power_off_command = 0x42 # Power off command
         i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
     except Exception as e:
-        logger.warning("powering off camera got exception: %s", e)
+        logger.error("Warning: powering off camera got exception: %s" % (e))
     import time
     time.sleep_ms(100)
     init_touch()
@@ -207,8 +211,8 @@ CameraManager.add_camera(CameraManager.Camera(
     apply_settings=apply_cam_settings
 ))
 
-if __debug__: logger.debug("finished")
+if __debug__: logger.debug("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660.py finished")
 if __debug__: logger.debug("Board capabilities:")
-if __debug__: logger.debug("  - Display: 320x240 ST7789 with GT911 touch")
-if __debug__: logger.debug("  - Camera: OV3660 (3MP)")
-if __debug__: logger.debug("  - No LEDs")
+if __debug__: logger.debug(" - Display: 320x240 ST7789 with GT911 touch")
+if __debug__: logger.debug(" - Camera: OV3660 (3MP)")
+if __debug__: logger.debug(" - No LEDs")

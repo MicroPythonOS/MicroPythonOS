@@ -9,6 +9,7 @@
 # IMU: MPU6886 (I2C 0x68)
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import time
@@ -54,7 +55,7 @@ MPU6886_ADDR = const(0x68)
 # ==============================
 # Step 1: AXP192 Power Management
 # ==============================
-if __debug__: logger.debug("init AXP192 power management")
+if __debug__: logger.debug("m5stack_core2.py init AXP192 power management")
 # All I2C devices (AXP192, Touch, IMU) share one bus on host 0
 i2c_bus = I2C(0, scl=Pin(I2C_SCL), sda=Pin(I2C_SDA), freq=I2C_FREQ)
 
@@ -65,12 +66,12 @@ axp.init_core2()
 # ==============================
 # Step 2: Display (ILI9342C via SPI)
 # ==============================
-if __debug__: logger.debug("init SPI display")
+if __debug__: logger.debug("m5stack_core2.py init SPI display")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, sck=LCD_SCLK)
 except Exception as e:
-    logger.error("Error initializing SPI bus: %s", e)
-    logger.error("Attempting hard reset in 3sec...")
+    logger.error("Error initializing SPI bus: %s" % (e))
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -106,7 +107,7 @@ lv.init()
 # ==============================
 # Step 3: Touch (FT6336U)
 # ==============================
-if __debug__: logger.debug("init touch (FT6336U)")
+if __debug__: logger.debug("m5stack_core2.py init touch (FT6336U)")
 import i2c as i2c_lvgl
 import drivers.indev.ft6x36 as ft6x36
 import pointer_framework
@@ -123,7 +124,7 @@ InputManager.register_indev(indev)
 # ==============================
 # Step 4: Audio (I2S Speaker + PDM Mic)
 # ==============================
-if __debug__: logger.debug("init audio")
+if __debug__: logger.debug("m5stack_core2.py init audio")
 
 # I2S speaker output (NS4168, enabled via AXP192 GPIO2)
 i2s_output_pins = {
@@ -158,7 +159,7 @@ AudioManager.add(
 # ==============================
 # Step 5: IMU (MPU6886)
 # ==============================
-if __debug__: logger.debug("init IMU")
+if __debug__: logger.debug("m5stack_core2.py init IMU")
 SensorManager.init(
     i2c_bus=i2c_bus,
     address=MPU6886_ADDR,
@@ -168,7 +169,7 @@ SensorManager.init(
 # ==============================
 # Step 6: Battery (via AXP192)
 # ==============================
-if __debug__: logger.debug("init battery monitoring")
+if __debug__: logger.debug("m5stack_core2.py init battery monitoring")
 from mpos import BatteryManager
 
 def axp_adc_to_voltage(adc_value):
@@ -178,4 +179,4 @@ def axp_adc_to_voltage(adc_value):
 # Use a dummy pin (35) - the actual reading comes from axp via the conversion function
 BatteryManager.init_adc(35, axp_adc_to_voltage)
 
-if __debug__: logger.debug("finished")
+if __debug__: logger.debug("m5stack_core2.py finished")

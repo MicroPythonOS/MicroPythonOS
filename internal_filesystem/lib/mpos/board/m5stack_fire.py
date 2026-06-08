@@ -2,6 +2,7 @@
 # Manufacturer's website at https://https://docs.m5stack.com/en/core/fire_v2.7
 # Original author: https://github.com/ancebfer
 import logging
+
 logger = logging.getLogger(__name__)
 
 import time
@@ -49,7 +50,7 @@ MPU6886_I2C_SDA = const(21)
 MPU6886_I2C_FREQ = const(400000)
 
 
-if __debug__: logger.debug("init buzzer")
+if __debug__: logger.debug("m5stack_fire.py init buzzer")
 buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
 AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=BUZZER_PIN))
 AudioManager.set_volume(40)
@@ -63,7 +64,7 @@ while player.is_playing():
     time.sleep(0.1)
 
 
-if __debug__: logger.debug("init IMU")
+if __debug__: logger.debug("m5stack_fire.py init IMU")
 i2c_bus = I2C(0, scl=Pin(MPU6886_I2C_SCL), sda=Pin(MPU6886_I2C_SDA), freq=MPU6886_I2C_FREQ)
 SensorManager.init(
     i2c_bus=i2c_bus,
@@ -72,12 +73,12 @@ SensorManager.init(
 )
 
 
-if __debug__: logger.debug("machine.SPI.Bus() initialization")
+if __debug__: logger.debug("m5stack_fire.py machine.SPI.Bus() initialization")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, sck=LCD_SCLK)
 except Exception as e:
-    logger.error("Error initializing SPI bus: %s", e)
-    logger.error("Attempting hard reset in 3sec...")
+    logger.error("Error initializing SPI bus: %s" % (e))
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -199,4 +200,4 @@ indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
 InputManager.register_indev(indev)
 
-if __debug__: logger.debug("finished")
+if __debug__: logger.debug("m5stack_fire.py finished")

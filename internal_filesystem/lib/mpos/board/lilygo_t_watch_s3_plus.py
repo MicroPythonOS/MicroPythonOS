@@ -1,10 +1,13 @@
 # Manufacturer's website at https://lilygo.cc/products/t-watch-s3-plus
 
-import logging
-logger = logging.getLogger(__name__)
+if __debug__: logger.debug("lilygo_t_watch_s3_plus.py initialization")
 
 def init_pmu(m_i2c):
     if __debug__: logger.debug("Initializing AXP2101 PMU")
+import logging
+
+logger = logging.getLogger(__name__)
+
     from drivers.power.AXP2101 import AXP2101
     pmu = AXP2101(m_i2c, addr=0x34)
     # Set the minimum common working voltage of the PMU VBUS input, below this value will turn off the PMU
@@ -25,16 +28,16 @@ def init_pmu(m_i2c):
     # Vibrator
     pmu.setBLDO2Voltage(3300)
     pmu.enableBLDO2()
-    pmu.setBLDO1Voltage(3300);
-    pmu.enableBLDO1();
-    # RTC backup battery:
     # GPS
     #pmu.setDC3Voltage(3300);    # Earlier versions use DC3 (without BOOT button and RST)
     #pmu.enableDC3();    # Earlier versions use DC3 (without BOOT button and RST)
+    pmu.setBLDO1Voltage(3300);  # The version with BOOT button and RST on the back cover
+    pmu.enableBLDO1();  # The version with BOOT button and RST on the back cover
+    # RTC backup battery:
     pmu.setButtonBatteryChargeVoltage(3300)
     pmu.enableButtonBatteryCharge()
-    pmu.setDLDO1Voltage(3300)
     # Speaker
+    pmu.setDLDO1Voltage(3300) # even 500mV doesn't seem to cause issues, but Imax=300mA is << 1.6A capability of MAX98357
     pmu.enableDLDO1()
     # Others
     pmu.setPowerKeyPressOffTime(AXP2101.XPOWERS_POWEROFF_4S)
@@ -75,7 +78,7 @@ def init_pmu(m_i2c):
     BatteryManager.has_battery = lambda *args: True
     BatteryManager.get_battery_percentage = pmu.getBatteryPercent
     BatteryManager.read_battery_voltage = lambda *args: pmu.getBattVoltage() / 1000
-    BatteryManager.pmu = pmu
+    BatteryManager.pmu = pmu # make the PMU object accessible just in case
     if __debug__: logger.debug("Initializing AXP2101 PMU completed.")
 
 
@@ -84,7 +87,7 @@ from machine import I2C, Pin, SPI
 import micropython
 from mpos import IRManager, GPSManager
 
-IRManager.txPin = Pin(2, Pin.OUT, value=0)
+IRManager.txPin = Pin(2, Pin.OUT, value=0) # don't leave default high because it drains current!
 GPSManager.txPin = Pin(42, Pin.OUT, value=0)
 GPSManager.rxPin = Pin(41, Pin.IN)
 GPSManager.connectionType = "uart"
@@ -96,15 +99,15 @@ m_i2c = I2C(1, sda=Pin(10), scl=Pin(11), freq=400000)
 try:
     init_pmu(m_i2c)
 except Exception as e:
-    logger.error("Exception while initializing PMU: %s", e)
+    logger.error("Exception while initializing PMU: %s" % (e))
 
 async def pmu_irq_watchdog():
     # Workaround for IRQ's that don't always get cleared (race condition?)
     pmu = BatteryManager.pmu
     while True:
-        await TaskManager.sleep(3)
-        if pmu_int.value() == 0:
-            logger.warning("PMU IRQ line is stuck low - running recovery...")
+        await TaskManager.sleep(3)          # check every 3 seconds
+        if pmu_int.value() == 0:        # IRQ pin is still LOW → stuck!
+            if __debug__: logger.debug("PMU IRQ line is stuck low - running recovery...")
             for _ in range(10):
                 pmu.clearIrqStatus()
                 await TaskManager.sleep_ms(10)
@@ -114,27 +117,27 @@ def _pmu_irq_task(_arg):
     pmu = BatteryManager.pmu
     try:
         status = pmu.getIrqStatus()
-        if __debug__: logger.debug("PMU interrupt: status=0x%06X", status)
+        if __debug__: logger.debug("PMU interrupt: status=0x%s" % (status:06X))
         if status == 0:
             if __debug__: logger.debug("PMU: spurious interrupt (status already cleared)")
             return
         if pmu.isPekeyShortPressIrq():
             if __debug__: logger.debug("PMU interrupt: PEKEY short press")
             if pmu.isEnableALDO2():
-                pmu.disableALDO2()
-                pmu.disableALDO3()
+                pmu.disableALDO2() # backlight
+                pmu.disableALDO3() # touch chip
                 # Would be good to put the ESP32 in a sleep state, turn off wifi etc...
             else:
-                pmu.enableALDO3()
-                pmu.enableALDO2()
+                pmu.enableALDO3() # touch chip (takes about 1 second to become operational)
+                pmu.enableALDO2() # backlight
         if pmu.isPekeyLongPressIrq():
             if __debug__: logger.debug("PMU interrupt: PEKEY long press")
     except Exception as e:
-        logger.error("Exception in PMU IRQ task: %s", e)
+        logger.error("Exception in PMU IRQ task: %s" % (e))
     finally:
         # clear interrupt, can take multiple tries
         attempts = 0
-        while pmu.getIrqStatus() != 0 and attempts < 5:
+        while pmu.getIrqStatus() != 0 and attempts < 5:   # safety limit
             attempts += 1
             pmu.clearIrqStatus()
 
@@ -152,13 +155,14 @@ from mpos import TaskManager
 TaskManager.create_task(pmu_irq_watchdog())
 
 
+
 if __debug__: logger.debug("DRV2605L vibrator test")
 DRV2605L_ADDR = 0x5A
-m_i2c.writeto_mem(DRV2605L_ADDR, 0x01, bytes([0x00]))
-m_i2c.writeto_mem(DRV2605L_ADDR, 0x03, bytes([0x00]))
-m_i2c.writeto_mem(DRV2605L_ADDR, 0x04, bytes([12]))
-m_i2c.writeto_mem(DRV2605L_ADDR, 0x05, bytes([89]))
-m_i2c.writeto_mem(DRV2605L_ADDR, 0x0C, bytes([1]))
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x01, bytes([0x00])) # reg 0x01 = mode (0x00 = internal trigger)
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x03, bytes([0x00])) # reg 0x03 = waveform sequence slot 1 (0 = Library A)
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x04, bytes([12])) # Triple Click - 100%
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x05, bytes([89])) # Transition Ramp Up Long Sharp 2 – 0 to 100%
+m_i2c.writeto_mem(DRV2605L_ADDR, 0x0C, bytes([1])) # reg 0x0C = GO (1 = start, 0 = stop)
 
 
 if __debug__: logger.debug("BMA423 IMU init")
@@ -211,7 +215,7 @@ mpos.ui.main_display = st7789.ST7789(
     backlight_pin=45,
     backlight_on_state=st7789.STATE_PWM,
     offset_y=80
-)
+) # triggers lv.init()
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
@@ -230,9 +234,9 @@ mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
 # Audio:
 from mpos import AudioManager
 i2s_output_pins = {
-    'ws': 15,
-    'sck': 48,
-    'sd': 46,
+    'ws': 15,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck': 48,      # SCLK or BCLK - Bit Clock for DAC output (mandatory)
+    'sd': 46,       # Serial Data OUT (speaker/DAC)
 }
 AudioManager.add(
     AudioManager.Output(
@@ -242,8 +246,8 @@ AudioManager.add(
     )
 )
 pdm_input_pins = {
-    'sck_in': 44,
-    'sd_in': 47,
+    'sck_in': 44,   # SCLK - Serial Clock for microphone input
+    'sd_in': 47,    # DIN - Serial Data IN (microphone)
 }
 AudioManager.add(
     AudioManager.Input(
@@ -256,15 +260,15 @@ AudioManager.add(
 # RTC
 import drivers.rtc.pcf8563 as pcf8563
 rtc = pcf8563.PCF8563(m_i2c)
-dt = rtc.datetime()
-if __debug__: logger.debug("Datetime from RTC chip: %s", dt)
+dt = rtc.datetime() # Get datetime tuple from PCF8563: (year, month, day, wday, hour, min, sec)
+if __debug__: logger.debug("Datetime from RTC chip:", dt)
 # machine.RTC expects 8-tuple: (year, month, day, weekday, hour, minute, second, subsecond) so need to set subsecond
 rtc_tuple = (dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], dt[6], 0)
 from machine import RTC
 RTC().datetime(rtc_tuple)
 from mpos import TimeZone
 TimeZone.rtc = rtc
-
 # Would be good to also do this:
 # rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
-if __debug__: logger.debug("finished")
+
+if __debug__: logger.debug("lilygo_t_watch_s3_plus.py finished")

@@ -1,3 +1,4 @@
+if __debug__: logger.debug("freenove_esp32s3_display.py initialization")
 # Hardware initialization for Freenove ESP32-S3 Display (FNK0104)
 # Manufacturer's website: https://github.com/Freenove/Freenove_ESP32_S3_Display
 # Hardware Specifications (confirmed from TFT_eSPI_Setups/FNK0104A_2.8_240x320_ILI9341.h
@@ -7,13 +8,14 @@
 # - Touch: FT6336G capacitive touch, I2C addr 0x38, SDA=16, SCL=15
 # - NeoPixel: WS2812B, 1 LED, GPIO 42
 # - Button: GPIO 0 (INPUT_PULLUP)
-# - Battery ADC: GPIO 9 (200K/200K voltage divider -> V_bat = raw_adc x 4.06/2398, calibrated at raw=2398 -> 4.06V)
+# - Battery ADC: GPIO 9 (200K/200K voltage divider → V_bat = raw_adc × 4.06/2398, calibrated at raw=2398 → 4.06V)
 # - SD Card: SDMMC 4-bit (CLK=38, CMD=40, D0=39, D1=41, D2=48, D3=47)
 # - Audio: ES8311 codec (I2C SDA=16/SCL=15, I2S MCK=4/BCK=5/DOUT=8/DIN=6/WS=7)
 #          FM8002E amplifier (enable pin GPIO 1, LOW=enabled)
 # - No IMU
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import time
@@ -38,9 +40,9 @@ LCD_SCLK = const(12)
 LCD_CS   = const(10)
 LCD_DC   = const(46)
 LCD_BL   = const(45)
+# LCD_RST = -1 (tied to 3.3V / board RST, no software reset needed)
 
 # Touch I2C pins (confirmed from official FT6336U sketch)
-# LCD_RST = -1 (tied to 3.3V / board RST, no software reset needed)
 TOUCH_SDA = const(16)
 TOUCH_SCL = const(15)
 TOUCH_I2C_FREQ = const(400000)
@@ -53,12 +55,12 @@ TFT_HEIGHT = const(320)
 # ==============================
 # Step 1: Display (ILI9341V, SPI)
 # ==============================
-if __debug__: logger.debug("init SPI display")
+if __debug__: logger.debug("freenove_esp32s3_display.py: init SPI display")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, miso=LCD_MISO, sck=LCD_SCLK)
 except Exception as e:
-    logger.error("Error initializing SPI bus: %s", e)
-    logger.error("Attempting hard reset in 3sec...")
+    logger.error("Error initializing SPI bus: %s" % (e))
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -69,7 +71,6 @@ display_bus = lcd_bus.SPIBus(
     cs=LCD_CS,
 )
 
-# IMU: not present on this board — SensorManager not initialized
 _BUFFER_SIZE = const(28800)  # 240 * 60 * 2 bytes (RGB565)
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
@@ -95,7 +96,7 @@ mpos.ui.main_display.set_color_inversion(True)  # TFT_INVERSION_ON in official s
 # ==============================
 # Step 2: Touch (FT6336G)
 # ==============================
-if __debug__: logger.debug("init touch (FT6336G)")
+if __debug__: logger.debug("freenove_esp32s3_display.py: init touch (FT6336G)")
 import drivers.indev.ft6x36 as ft6x36
 
 # Hardware reset of FT6336G via RST pin (GPIO18, active low).
@@ -105,7 +106,7 @@ touch_rst = Pin(TOUCH_RST, Pin.OUT)
 touch_rst.value(0)
 time.sleep_ms(10)
 touch_rst.value(1)
-time.sleep_ms(200)
+time.sleep_ms(200)  # chip needs time to fully initialize after reset
 
 # Use a plain machine.I2C and override _bus in the LVGL I2C.Bus wrapper.
 # This avoids an IDF I2C driver conflict: fail_save_i2c() in board detection
@@ -121,14 +122,14 @@ try:
     indev = ft6x36.FT6x36(touch_dev, startup_rotation=pointer_framework.lv.DISPLAY_ROTATION._180)
     InputManager.register_indev(indev)
 except Exception as e:
-    logger.error("Touch init got exception: %s", e)
+    logger.error("Touch init got exception: %s" % (e))
 
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)  # landscape
 
 # ==============================
 # Step 3: Button (GPIO 0)
 # ==============================
-if __debug__: logger.debug("init button")
+if __debug__: logger.debug("freenove_esp32s3_display.py: init button")
 
 btn_boot = Pin(0, Pin.IN, Pin.PULL_UP)
 
@@ -191,7 +192,7 @@ InputManager.register_indev(btn_indev)
 # ==============================
 # Step 4: Battery (GPIO 9, 2:1 voltage divider)
 # ==============================
-if __debug__: logger.debug("init battery")
+if __debug__: logger.debug("freenove_esp32s3_display.py: init battery")
 
 def adc_to_voltage(raw_adc):
     # Schematic uses equal 200K/200K resistor divider (1:2), so V_bat = V_pin * 2.
@@ -204,21 +205,28 @@ BatteryManager.init_adc(9, adc_to_voltage)
 # ==============================
 # Step 5: SD Card (SDMMC 4-bit)
 # ==============================
-if __debug__: logger.debug("init SD card (SDMMC 4-bit)")
+if __debug__: logger.debug("freenove_esp32s3_display.py: init SD card (SDMMC 4-bit)")
 import mpos.sdcard
 mpos.sdcard.init(cmd_pin=40, clk_pin=38, d0_pin=39, d1_pin=41, d2_pin=48, d3_pin=47)
 
 # ==============================
 # Step 6: NeoPixel (WS2812B, 1 LED, GPIO 42)
 # ==============================
-if __debug__: logger.debug("init NeoPixel")
+if __debug__: logger.debug("freenove_esp32s3_display.py: init NeoPixel")
 import mpos.lights as LightsManager
 LightsManager.init(neopixel_pin=42, num_leds=1)
 
 # ==============================
 # Step 7: Audio (ES8311 codec + FM8002E amplifier)
+# I2S pins (confirmed from Freenove Sketch_07.1_Music and schematic):
+#   MCK=4  (MCLK to codec — driven by PWM during playback/recording)
+#   BCK=5  (BCLK, I2S bit clock)
+#   WS=7   (LRCK, I2S word select)
+#   sd=8   (ESP32 I2S TX → ES8311 SDIN → DAC → speaker)
+#   sd_in=6 (ES8311 SDOUT → ADC → ESP32 I2S RX → recording)
+# I2C addr 0x18, shared bus with touch (SDA=16, SCL=15)
 # ==============================
-if __debug__: logger.debug("init audio (ES8311 + FM8002E)")
+if __debug__: logger.debug("freenove_esp32s3_display.py: init audio (ES8311 + FM8002E)")
 
 # Initialise the ES8311 codec over the shared I2C bus.
 # machine_i2c is already open on SDA=16, SCL=15 from the touch init above.
@@ -227,25 +235,27 @@ try:
     import drivers.codec.es8311 as es8311_drv
     _es8311 = es8311_drv.ES8311(machine_i2c)
 except Exception as e:
-    logger.error("ES8311 init failed: %s", e)
-
-_amp_enable = Pin(1, Pin.OUT, value=1)
-
+    logger.error("ES8311 init failed: %s" % (e))
 
 # FM8002E speaker amplifier enable pin (GPIO1: LOW=enabled, HIGH=disabled).
 # Start disabled at boot — enabled only around active playback to prevent ring noise.
+_amp_enable = Pin(1, Pin.OUT, value=1)  # HIGH = FM8002E amplifier disabled
+
+
 def _audio_on_open():
-    _amp_enable.value(0)
+    """Called after MCLK starts and before I2S init. Enables amp and unmutes DAC."""
+    _amp_enable.value(0)          # LOW = enable FM8002E amplifier
     if _es8311:
-        time.sleep_ms(10)
-        _es8311.dac_mute(False)
+        time.sleep_ms(10)         # let amp rail settle before unmuting
+        _es8311.dac_mute(False)   # release DAC soft-mute
 
 
 def _audio_on_close():
+    """Called before I2S deinit. Mutes DAC then disables amp to suppress pops."""
     if _es8311:
-        _es8311.dac_mute(True)
-        time.sleep_ms(20)
-    _amp_enable.value(1)
+        _es8311.dac_mute(True)    # soft-mute DAC first (ramp prevents click)
+        time.sleep_ms(20)         # wait for ramp to complete
+    _amp_enable.value(1)          # HIGH = disable FM8002E amplifier
 
 
 # Register I2S audio devices with AudioManager.
@@ -259,10 +269,10 @@ AudioManager.add(
         kind="i2s",
         channels=1,
         i2s_pins={
-            'mck': 4,
-            'sck': 5,
-            'ws':  7,
-            'sd':  8,
+            'mck': 4,   # MCLK — PWM-driven at 256 × sample_rate during playback
+            'sck': 5,   # BCLK
+            'ws':  7,   # LRCK
+            'sd':  8,   # I2S TX (ESP32 → ES8311 DAC)
         },
         on_open=_audio_on_open,
         on_close=_audio_on_close,
@@ -275,13 +285,15 @@ AudioManager.add(
         kind="i2s",
         channels=1,
         i2s_pins={
-            'mck':   4,
-            'sck':   5,
-            'ws':    7,
-            'sd_in': 6,
+            'mck':   4,  # MCLK — PWM-driven at 256 × sample_rate during recording
+            'sck':   5,  # BCLK
+            'ws':    7,  # LRCK
+            'sd_in': 6,  # I2S RX (ES8311 ADC → ESP32)
         },
         preferred_sample_rate=16000,
     )
 )
 
-if __debug__: logger.debug("finished")
+# IMU: not present on this board — SensorManager not initialized
+
+if __debug__: logger.debug("freenove_esp32s3_display.py finished")

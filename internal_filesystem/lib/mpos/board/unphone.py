@@ -1,3 +1,4 @@
+if __debug__: logger.debug("unphone.py initialization")
 """
 Hardware initialization for the unPhone 9
 https://unphone.net/
@@ -15,6 +16,7 @@ Original author: https://github.com/jedie
 """
 
 import logging
+
 logger = logging.getLogger(__name__)
 
 import struct
@@ -43,47 +45,47 @@ SPI_HOST = const(1)  # Shared SPI for hx8357d display and xpt2046 touch controll
 
 # 27Mhz used in extras/port-lvgl/lib9/TFT_eSPI_files/Setup15_HX8357D.h
 SPI_LCD_FREQ = const(27_000_000)
-
 # SPI_LCD_FREQ = const(20_000_000)
 # SPI_LCD_FREQ = const(10_000_000)
 # SPI_LCD_FREQ = const(1_000_000)
-I2C_BUS = const(0)
-I2C_FREQ = const(100_000)
 
-LCD_CS = const(48)
-LCD_DC = const(47)
+I2C_BUS = const(0)
+I2C_FREQ = const(100_000)  # rates > 100k used to trigger an unPhoneTCA bug...?
+
+LCD_CS = const(48)  # Chip select control pin
+LCD_DC = const(47)  # Data Command control pin
 LCD_RESET = const(46)
 
-LCD_BACKLIGHT = const(2)
 # FIXME: Two backlights? One on the TCA9555 expander, one directly controlled by the ESP32?
+LCD_BACKLIGHT = const(2)  # 0x02
 BACKLIGHT = const(0x42)
 
 TFT_WIDTH = const(320)
 TFT_HEIGHT = const(480)
 
-TOUCH_I2C_ADDR = const(106)
+TOUCH_I2C_ADDR = const(106)  # 0x6a - Touchscreen controller
 TOUCH_REGBITS = const(8)
-TOUCH_CS = const(38)
+TOUCH_CS = const(38)  # Chip select pin (T_CS) of touch screen
 
 # 2,5Mhz used in extras/port-lvgl/lib9/TFT_eSPI_files/Setup15_HX8357D.h
 SPI_TOUCH_FREQ = const(2_500_000)
-
 # SPI_TOUCH_FREQ = const(500_000)
 # SPI_TOUCH_FREQ = const(100_000)
+
 EXPANDER_POWER = const(0x40)
 LED_GREEN = const(0x49)
-LED_BLUE = const(0x4D)
+LED_BLUE = const(0x4D)  # 13 | 0x40
 LED_RED = const(13)
 
-BM_I2C_ADDR = const(107)
-
 # Power management (known variously as PMU, BMU or just BM):
+BM_I2C_ADDR = const(107)  # 0x6b
+
 LORA_CS = const(44)
 LORA_RESET = const(42)
 SD_CS = const(43)
 VIBE = const(0x47)
 IR_LEDS = const(12)
-USB_VSENSE = const(78)
+USB_VSENSE = const(78)  # 14 | 0x40
 
 POWER_SWITCH = const(18)
 BUTTON_LEFT = const(45)
@@ -91,14 +93,18 @@ BUTTON_MIDDLE = const(0)
 BUTTON_RIGHT = const(21)
 
 
-if __debug__: logger.debug("turn on red LED")
+if __debug__: logger.debug("unphone.py turn on red LED")
 machine.Pin(LED_RED, machine.Pin.OUT).on()
 time.sleep(1)
-if __debug__: logger.debug("init...")
+if __debug__: logger.debug("unphone.py init...")
 
 
 class UnPhoneTCA:
-    I2C_DEV_ID = const(38)
+    """
+    unPhone spin 9 - TCA9555 IO expansion chip
+    """
+
+    I2C_DEV_ID = const(38)  # 0x26 - TI TCA9555's I²C addr
 
     # Register addresses
     REG_INPUT = const(0x00)
@@ -107,8 +113,8 @@ class UnPhoneTCA:
 
     def __init__(self, i2c_bus: i2c.I2C.Bus):
         self.tca_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=self.I2C_DEV_ID)
-        self.directions = 0xFFFF
-        self.output_states = 0x0000
+        self.directions = 0xFFFF  # All inputs by default
+        self.output_states = 0x0000  # All low by default
 
         # Set IO expander initially as all inputs
         self._write_word(0x06, self.directions)
@@ -118,7 +124,7 @@ class UnPhoneTCA:
         self.output_states = self._read_word(0x02)
 
     def _write_word(self, reg, value):
-        if __debug__: logger.debug("Writing to TCA9555: reg=%#02x, value=%#04x", reg, value)
+        if __debug__: logger.debug("Writing to TCA9555: reg=%s, value=%s" % (reg:#02x, value:#04x))
         self.tca_dev.write(bytes([reg, value & 0xFF, (value >> 8) & 0xFF]))
 
     def _read_word(self, reg):
@@ -127,13 +133,11 @@ class UnPhoneTCA:
         return struct.unpack("<H", data)[0]
 
     def pin_mode(self, pin, mode):
-        if pin & 0x40:
-            pin &= 0xBF
+        if pin & 0x40:  # Pins with 0x40 bit set are controlled by TCA9555
+            pin &= 0xBF  # Mask out high bit
             if mode == machine.Pin.OUT:
-            # Ensure pin is set to output
                 self.directions &= ~(1 << pin)
             else:
-            # Ensure pin is set to input
                 self.directions |= 1 << pin
             self._write_word(self.REG_OUTPUT, self.directions)
         else:
@@ -141,7 +145,7 @@ class UnPhoneTCA:
             machine.Pin(pin, mode)
 
     def digital_write(self, pin, value):
-        if pin & 0x40:
+        if pin & 0x40:  # Pins with 0x40 bit set are controlled by TCA9555
             pin &= 0xBF
             if value:
                 self.output_states |= 1 << pin
@@ -149,6 +153,7 @@ class UnPhoneTCA:
                 self.output_states &= ~(1 << pin)
             self._write_word(self.REG_OUTPUT, self.output_states)
 
+            # Ensure pin is set to output
             self.directions &= ~(1 << pin)
             self._write_word(self.REG_CONFIG, self.directions)
         else:
@@ -157,8 +162,9 @@ class UnPhoneTCA:
             p.value(value)
 
     def digital_read(self, pin):
-        if pin & 0x40:
+        if pin & 0x40:  # Pins with 0x40 bit set are controlled by TCA9555
             pin &= 0xBF
+            # Ensure pin is set to input
             self.directions |= 1 << pin
             self._write_word(self.REG_CONFIG, self.directions)
 
@@ -190,22 +196,23 @@ class UnPhone:
         #     self.current_store_index = self.nvs.get_i8("unPhoneStoreIdx")
         # except OSError:
         #     self.current_store_index = 0
+
         self.reset()
 
     def expander_power(self, *, on):
-        if __debug__: logger.debug("Turning Expander power=%s...", on)
+        if __debug__: logger.debug("Turning Expander power %s..." % (on=))
         self.tca.digital_write(EXPANDER_POWER, 1 if on else 0)
 
     def backlight(self, *, on):
-        if __debug__: logger.debug("Turning LCD backlight=%s...", on)
+        if __debug__: logger.debug("Turning LCD backlight %s..." % (on=))
         self.tca.digital_write(BACKLIGHT, 1 if on else 0)
 
     def vibe(self, *, on):
-        if __debug__: logger.debug("Turning VIBE=%s...", on)
+        if __debug__: logger.debug("Turning VIBE %s..." % (on=))
         self.tca.digital_write(VIBE, 1 if on else 0)
 
     def ir(self, *, on):
-        if __debug__: logger.debug("Turning IR_LEDS=%s...", on)
+        if __debug__: logger.debug("Turning IR_LEDS %s..." % (on=))
         self.tca.digital_write(IR_LEDS, 1 if on else 0)
 
     def rgb(self, r, g, b):
@@ -222,13 +229,14 @@ class UnPhone:
     #         self.current_store_index = 0
     #     self.nvs.set_i8("unPhoneStoreIdx", self.current_store_index)
     #     self.nvs.commit()
+
     def power_switch_is_on(self):
         return bool(self.tca.digital_read(POWER_SWITCH))
 
     def usb_power_connected(self):
         status = self.i2c.readfrom_mem(self.BM_I2CADD, self.BM_STATUS, 1)[0]
-        connected = bool((status >> 2) & 1)
-        if __debug__: logger.debug("USB power connected: %s", connected)
+        connected = bool((status >> 2) & 1)  # Bit 2 indicates USB connection
+        if __debug__: logger.debug("USB power connected: %s" % (connected))
         return connected
 
     def _wake_on_power_switch(self):
@@ -237,17 +245,17 @@ class UnPhone:
         esp32.wake_on_ext0(pin=wake_pin, level=esp32.WAKEUP_ALL_LOW)
 
     def set_shipping(self, *, enable):
-        if __debug__: logger.debug("Setting shipping mode to: %s", enable)
+        if __debug__: logger.debug("Setting shipping mode to: %s" % (enable=))
         wdt = self.i2c.readfrom_mem(self.BM_I2CADD, self.BM_WATCHDOG, 1)[0]
         opcon = self.i2c.readfrom_mem(self.BM_I2CADD, self.BM_OPCON, 1)[0]
         if enable:
             if __debug__: logger.debug("Asks BM chip to powering down and shutting off USB power")
-            wdt = wdt & ~(1 << 5) & ~(1 << 4)
-            opcon = opcon | (1 << 5)
+            wdt = wdt & ~(1 << 5) & ~(1 << 4)  # Clear bits 5 and 4
+            opcon = opcon | (1 << 5)  # Set bit 5
         else:
             if __debug__: logger.debug("Asks BM chip to power up and enable USB power")
-            wdt = (wdt & ~(1 << 5)) | (1 << 4)
-            opcon = opcon & ~(1 << 5)
+            wdt = (wdt & ~(1 << 5)) | (1 << 4)  # Clear 5, Set 4
+            opcon = opcon & ~(1 << 5)  # Clear bit 5
         self.i2c.writeto_mem(self.BM_I2CADD, self.BM_WATCHDOG, bytes([wdt]))
         self.i2c.writeto_mem(self.BM_I2CADD, self.BM_OPCON, bytes([opcon]))
 
@@ -267,7 +275,7 @@ class UnPhone:
         else:
             if __debug__: logger.debug("switch is off, but power is ON: going to deep sleep")
             self._wake_on_power_switch()
-            machine.deepsleep(60000)
+            machine.deepsleep(60000)  # Deep sleep
 
     def check_power_switch(self):
         if not self.power_switch_is_on():
@@ -298,20 +306,23 @@ class UnPhone:
         for pin in [LCD_CS, TOUCH_CS, LORA_CS, SD_CS]:
             machine.Pin(pin, machine.Pin.OUT, value=1)
 
-    # Short delay to help things settle
-        time.sleep_ms(200)
+        time.sleep_ms(200)  # Short delay to help things settle
 
         # Turn RGB LED blue to indicate reset is done:
         self.rgb(0, 0, 1)
 
 
 def recover_i2c():
+    """
+    NOTE: only do this in setup **BEFORE** Wire.begin!
+    from: https://gitlab.com/hamishcunningham/unphonelibrary/-/blob/main/unPhone.cpp#L220
+    """
     if __debug__: logger.debug("try to recover I2C bus in case it's locked up...")
     scl = machine.Pin(SCL, machine.Pin.OUT)
     sda = machine.Pin(SDA, machine.Pin.OUT)
     sda.value(1)
 
-    for _ in range(10):
+    for _ in range(10):  # 9th cycle acts as NACK
         scl.value(1)
         time.sleep_us(5)
         scl.value(0)
@@ -325,30 +336,30 @@ def recover_i2c():
     sda.value(1)
     time.sleep_us(2)
 
+    # Short delay to help things settle
     time.sleep_ms(200)
 
 
 try:
     recover_i2c()
-    if __debug__: logger.debug("init i2c Bus with: scl=%s, sda=%s...", SCL, SDA)
+    if __debug__: logger.debug("unphone.py init i2c Bus with: scl=%s, sda=%s..." % (SCL, SDA))
     i2c_bus = i2c.I2C.Bus(
         host=I2C_BUS, scl=SCL, sda=SDA, freq=I2C_FREQ, use_locks=False
-        # debug=True,
     )
 except Exception as e:
     sys.print_exception(e)
-    logger.error("Attempting hard reset in 3sec...")
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 else:
     if __debug__: logger.debug("Scanning I2C bus for devices...")
     for dev in i2c_bus.scan():
-        if __debug__: logger.debug("Found I2C device at address: %s ($%#02X)", dev, dev)
-
+        if __debug__: logger.debug("Found I2C device at address: %s ($%s)" % (dev, dev:#02X))
     # Typical output here is:
     # Found I2C device at address: 38 ($0x26) -> TCA9555 IO expansion chip
     # Found I2C device at address: 106 ($0x6A) -> Touchscreen controller
     # Found I2C device at address: 107 ($0x6B) -> Power management unit (PMU/BMU)
+
     unphone = UnPhone(i2c=i2c_bus)
 
 
@@ -357,21 +368,21 @@ else:
 Pin(MISO, Pin.IN, Pin.PULL_UP)
 
 
-if __debug__: logger.debug("shared SPI bus initialization")
-time.sleep_ms(200)
+if __debug__: logger.debug("unphone.py shared SPI bus initialization")
+time.sleep_ms(200)  # Short delay to help things settle
 try:
     spi_bus = machine.SPI.Bus(host=SPI_HOST, sck=SCK, mosi=MOSI, miso=MISO)
 except Exception as e:
     sys.print_exception(e)
-    logger.error("Attempting hard reset in 3sec...")
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
 
-if __debug__: logger.debug("HX8357D() display initialization")
+if __debug__: logger.debug("unphone.py HX8357D() display initialization")
 try:
     display_bus = lcd_bus.SPIBus(
-        spi_bus=spi_bus,
+        spi_bus=spi_bus,  # Use **the same** SPI bus hx8357d display
         freq=SPI_LCD_FREQ,
         dc=LCD_DC,
         cs=LCD_CS,
@@ -390,30 +401,30 @@ try:
     )
 except Exception as e:
     sys.print_exception(e)
-    logger.error("Attempting hard reset in 3sec...")
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
 
-if __debug__: logger.debug("display.init()")
+if __debug__: logger.debug("unphone.py display.init()")
 mpos.ui.main_display.init()
 
-if __debug__: logger.debug("XPT2046() touch controller initialization")
-time.sleep_ms(200)
+if __debug__: logger.debug("unphone.py XPT2046() touch controller initialization")
+time.sleep_ms(200)  # Short delay to help things settle
 startup_rotation = lv.DISPLAY_ROTATION._0
 try:
     touch_dev = machine.SPI.Device(
-        spi_bus=spi_bus,
+        spi_bus=spi_bus,  # Use **the same** SPI bus for xpt2046 touch
         freq=SPI_TOUCH_FREQ,
         cs=TOUCH_CS,
     )
 except Exception as e:
     sys.print_exception(e)
-    logger.error("Attempting hard reset in 3sec...")
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 else:
-    if __debug__: logger.debug("init touch...")
+    if __debug__: logger.debug("unphone.py init touch...")
     touch_input_dev = XPT2046(
         device=touch_dev,
         lcd_cs=LCD_CS,
@@ -421,30 +432,31 @@ else:
         display_width=TFT_WIDTH,
         display_height=TFT_HEIGHT,
         startup_rotation=startup_rotation,
+        # debug=True,
     )
-    if __debug__: logger.debug("touch_input_dev.is_calibrated=%s", touch_input_dev.is_calibrated)
-    #     touch_input_dev.calibrate()
-    # else:
+    if __debug__: logger.debug("%s" % (touch_input_dev.is_calibrated=))
     # FIXME: Persistent calibration data is not working yet?
     # if touch_input_dev.is_calibrated:
+    # else:
+    #     touch_input_dev.calibrate()
     InputManager.register_indev(touch_input_dev)
 
 
-if __debug__: logger.debug("display.set_rotation() initialization")
+if __debug__: logger.debug("unphone.py display.set_rotation() initialization")
 mpos.ui.main_display.set_rotation(
     startup_rotation
-)
+)  # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 
-if __debug__: logger.debug("button initialization...")
+if __debug__: logger.debug("unphone.py button initialization...")
 button_left = Pin(BUTTON_LEFT, Pin.IN, Pin.PULL_UP)
 button_middle = Pin(BUTTON_MIDDLE, Pin.IN, Pin.PULL_UP)
 button_right = Pin(BUTTON_RIGHT, Pin.IN, Pin.PULL_UP)
 
 
-REPEAT_INITIAL_DELAY_MS = 300
-REPEAT_RATE_MS = 100
-next_repeat = None
+REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
+REPEAT_RATE_MS = 100  # Interval between repeats
+next_repeat = None  # Used for auto-repeat key handling
 last_power_switch = None
 next_check = time.time() + 1
 
@@ -462,8 +474,9 @@ def input_callback(indev, data):
         current_key = lv.KEY.ENTER
 
     else:
-        if data.key:
         # No buttons pressed
+
+        if data.key:  # A key was previously pressed and now released
             data.key = 0
             data.state = lv.INDEV_STATE.RELEASED
             next_repeat = None
@@ -471,20 +484,21 @@ def input_callback(indev, data):
         if time.time() > next_check:
             # Check power switch state and update backlight accordingly
             unphone.check_power_switch()
-            next_check = time.time() + 1
+            next_check = time.time() + 1  # Check every second
 
         return
 
     # A key is currently pressed
+
     current_time = time.ticks_ms()
-    repeat = current_time > next_repeat if next_repeat else False
+    repeat = current_time > next_repeat if next_repeat else False  # Auto repeat?
     if repeat or current_key != data.key:
-        if __debug__: logger.debug("Key %s pressed repeat=%s", current_key, repeat)
+        if __debug__: logger.debug("Key %s pressed %s" % (current_key, repeat=))
 
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED
 
-        if current_key == lv.KEY.ESC:
+        if current_key == lv.KEY.ESC:  # Handle ESC for back navigation
             mpos.ui.back_screen()
         elif current_key == lv.KEY.RIGHT:
             mpos.ui.focus_direction.move_focus_direction(90)
@@ -511,12 +525,12 @@ indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(input_callback)
 indev.set_group(
     group
-)
-disp = lv.display_get_default()
-indev.set_display(disp)
-indev.enable(True)
+)  # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
+disp = lv.display_get_default()  # NOQA
+indev.set_display(disp)  # different from display
+indev.enable(True)  # NOQA
 InputManager.register_indev(indev)
 
-unphone.rgb(0, 1, 0)
+unphone.rgb(0, 1, 0)  # Green to indicate init is done
 
-if __debug__: logger.debug("init finished")
+if __debug__: logger.debug("\nunphone.py init finished\n")

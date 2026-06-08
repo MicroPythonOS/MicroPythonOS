@@ -1,5 +1,6 @@
 # Hardware initialization for Unix and MacOS systems
 import logging
+
 logger = logging.getLogger(__name__)
 
 import lcd_bus
@@ -60,11 +61,11 @@ InputManager.register_indev(mouse)
 
 def catch_escape_key(indev, indev_data):
     global sdlkeyboard
+    #key = indev.get_key() # always 0
     #key = indev_data.key
     #state = indev_data.state
-    #key = indev.get_key() # always 0
     pressed, code = sdlkeyboard._get_key() # get the current key and state
-    if __debug__: logger.debug("catch_escape_key caught: %s, %s", pressed, code)
+    if __debug__: logger.debug("catch_escape_key caught: %s, %s" % (pressed, code))
     if pressed == 1 and code == 27: # ESCAPE
         mpos.ui.back_screen()
     elif pressed == 1 and code == 2: # HOME
@@ -87,14 +88,16 @@ InputManager.register_indev(sdlkeyboard)
 try:
     sdlkeyboard.set_paste_text_callback(mpos.clipboard.paste_text)
 except Exception as e:
-    logger.warning("could not set paste_text callback for sdlkeyboard, copy-paste won't work")
+    logger.warning("Warning: could not set paste_text callback for sdlkeyboard, copy-paste won't work")
 
 
-# Simulated battery voltage ADC measuring
-#keyboard.add_event_cb(keyboard_cb, lv.EVENT.ALL, None)
 #def keyboard_cb(event):
  #   global canvas
   #  event_code=event.get_code()
+#keyboard.add_event_cb(keyboard_cb, lv.EVENT.ALL, None)
+
+
+# Simulated battery voltage ADC measuring
 from mpos import BatteryManager
 
 def adc_to_voltage(adc_value):
@@ -141,7 +144,7 @@ def init_cam(width, height, colormode):
         import webcam
         return webcam.init("/dev/video0", width=width, height=height)
     except Exception as e:
-        if __debug__: logger.debug("webcam initialization failed, camera will not be available: %s", e)
+        logger.error("Info: webcam initialization failed, camera will not be available: %s" % (e))
 
 def deinit_cam(cam_obj):
     import webcam
@@ -166,4 +169,7 @@ CameraManager.add_camera(CameraManager.Camera(
 ))
 
 
-if __debug__: logger.debug("finished")
+if __debug__: logger.debug("linux.py finished")
+
+
+

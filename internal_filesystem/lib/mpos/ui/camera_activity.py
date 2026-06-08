@@ -1,399 +1,71 @@
 import logging
-import lvgl as lv
-from .activity import Activity
-from .appearance_manager import AppearanceManager
-from .display_metrics import DisplayMetrics
-from .settings_activity import SettingsActivity
 
 logger = logging.getLogger(__name__)
 
+import lvgl as lv
+import time
+
+from ..time import epoch_seconds
+from .camera_settings import CameraSettingsActivity
+from ..camera_manager import CameraManager
+from .. import ui as mpos_ui
+from ..app.activity import Activity
 
 class CameraActivity(Activity):
-    def __init__(self):
-        super().__init__()
-        self._camera = None
-        self._container = None
-        self._main_btn = None
-        self._is_recording = False
-        self._settings_button = None
-        self._timer = None
-        self._flash_ctrl = None
-        self._current_mode = "photo"
 
-        self.SETTINGS = {
-            "settings_resolution": {
-                "type": "options",
-                "label": "Resolution",
-                "values": {
-                    "64x64": 0,
-                    "QVGA": 1,
-                    "CIF": 2,
-                    "VGA": 4,
-                    "SVGA": 5,
-                    "XGA": 6,
-                    "SXGA": 7,
-                    "UXGA": 8,
-            # Defaults come from constructor, no need to pass them here
-                # Merge common and normal-specific defaults
-                },
-                "value": 4,
-                "dropdown": True,
-            },
-            "settings_pixformat": {
-                "type": "options",
-                "label": "Pixel Format",
-                "values": {
-                    "RGB565": 1,
-                    "YUV422": 2,
-                    "GRAYSCALE": 4,
-                    "JPEG": 5,
-                },
-                "value": 1,
-                "dropdown": True,
-            },
-            "settings_led_intensity": {
-                "type": "options",
-                "label": "LED Intensity",
-                "values": {
-                    "0": 0,
-                    "1": 1,
-                    "2": 2,
-                    "3": 3,
-                },
-                "value": 0,
-                "dropdown": True,
-            },
-            "settings_quality": {
-                "type": "options",
-                "label": "Quality",
-                "values": {
-                    "10": 10,
-                    "12": 12,
-                    "14": 14,
-                    "16": 16,
-                    "18": 18,
-                    "20": 20,
-                    "22": 22,
-                    "24": 24,
-                    "26": 26,
-                    "28": 28,
-                    "30": 30,
-                    "32": 32,
-                    "34": 34,
-                    "36": 36,
-                    "38": 38,
-                    "40": 40,
-                    "42": 42,
-                    "44": 44,
-                    "46": 46,
-                    "48": 48,
-                    "50": 50,
-                    "52": 52,
-                    "54": 54,
-                    "56": 56,
-                    "58": 58,
-                    "60": 60,
-                    "62": 62,
-                    "63": 63,
-                },
-                "value": 10,
-                "dropdown": True,
-            },
-            "settings_brightness": {
-                "type": "options",
-                "label": "Brightness",
-                "values": {
-                    "-2": -2,
-                    "-1": -1,
-                    "0": 0,
-                    "1": 1,
-                    "2": 2,
-                },
-                "value": 0,
-                "dropdown": True,
-            },
-            "settings_contrast": {
-                "type": "options",
-                "label": "Contrast",
-                "values": {
-                    "-2": -2,
-                    "-1": -1,
-                    "0": 0,
-                    "1": 1,
-                    "2": 2,
-                },
-                "value": 0,
-                "dropdown": True,
-            },
-            "settings_saturation": {
-                "type": "options",
-                "label": "Saturation",
-                "values": {
-                    "-2": -2,
-                    "-1": -1,
-                    "0": 0,
-                    "1": 1,
-                    "2": 2,
-                },
-                "value": 0,
-                "dropdown": True,
-            },
-            "settings_hmirror": {
-                "type": "bool",
-                "label": "H-Mirror",
-                "value": False,
-            },
-            "settings_vflip": {
-                "type": "bool",
-                "label": "V-Flip",
-                "value": False,
-            },
-            "settings_gainceiling": {
-                "type": "options",
-                "label": "Gain Ceiling",
-                "values": {
-                    "2x": 0,
-                    "4x": 1,
-                    "8x": 2,
-                    "16x": 3,
-                    "32x": 4,
-                    "64x": 5,
-                    "128x": 6,
-                },
-                "value": 0,
-                "dropdown": True,
-            },
-            "settings_agc_gain": {
-                "type": "options",
-                "label": "AGC Gain",
-                "values": {
-                    "0x": 0,
-                    "2x": 1,
-                    "4x": 2,
-                    "8x": 3,
-                    "16x": 4,
-                    "32x": 5,
-                    "64x": 6,
-                    "128x": 7,
-                },
-                "value": 0,
-                "dropdown": True,
-            },
-            "settings_dcw": {
-                "type": "options",
-                "label": "DCW",
-                "values": {
-                    "Enable": 1,
-                    "Disable": 0,
-                },
-                "value": 1,
-                "dropdown": True,
-            },
-            "settings_raw_gma": {
-                "type": "options",
-                "label": "Raw GMA",
-                "values": {
-                    "Enable": 1,
-                    "Disable": 0,
-                },
-                "value": 1,
-                "dropdown": True,
-            },
-            "settings_bpc": {
-                "type": "options",
-                "label": "BPC",
-                "values": {
-                    "Enable": 1,
-                    "Disable": 0,
-                },
-                "value": 1,
-                "dropdown": True,
-            },
-            "settings_wpc": {
-                "type": "options",
-                "label": "WPC",
-                "values": {
-                    "Enable": 1,
-                    "Disable": 0,
-                },
-                "value": 1,
-                "dropdown": True,
-            },
-            "settings_aec_sensor": {
-                "type": "options",
-                "label": "AEC Sensor",
-                "values": {
-                    "Enable": 1,
-                    "Disable": 0,
-                },
-                "value": 1,
-                "dropdown": True,
-            },
-            "settings_aec_dsp": {
-                "type": "options",
-                "label": "AEC DSP",
-                "values": {
-                    "Enable": 1,
-                    "Disable": 0,
-                },
-                "value": 1,
-                "dropdown": True,
-            },
-        }
+    CONFIGFILE = "config.json"
+    SCANQR_CONFIG = "config_scanqr_mode.json"
 
-    def on_start(self, request):
-        super().on_start(request)
-        self._create_ui()
+    STATUS_NO_CAMERA = "No camera found."
+    STATUS_SEARCHING_QR = "Searching QR codes...\n\nHold still and try varying scan distance (10-25cm) and make the QR code big (4-12cm). Ensure proper lighting."
+    STATUS_FOUND_QR = "Found QR, trying to decode... hold still..."
 
-    def on_resume(self):
-        super().on_resume()
+    cam = None
+    current_cam_buffer = None # Holds the current memoryview to prevent garba
+    width = None
+    height = None
+    colormode = False
 
-    def on_new_intent(self, request):
-        super().on_new_intent(request)
+    image_dsc = None
+    scanqr_mode = False
+    scanqr_intent = False
+    capture_timer = None
 
-    def on_pause(self):
-        super().on_pause()
-        self._stop_camera()
-
-    def _create_ui(self):
-        container = lv.obj(lv.screen_active())
-        container.set_size(lv.pct(100), lv.pct(100))
-        self._container = container
-
-        #self.image.invalidate() # does not work so do this:
-        # Display the image:
-        # Would be nice to check that there's enough free space here, and show an error if not...
-        #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
-        try:
-            import camera
-            self._camera = camera
-            self._init_camera()
-            self._create_camera_feed()
-            if __debug__: logger.debug("Camera initialized successfully")
-        except ImportError:
-            logger.error("Camera module not available on this device")
-            self._show_no_camera_message()
-            # Check if the string is printable (ASCII printable characters)
-            # Try to decode buffer as a UTF-8 string
-                # Due to buggy behavior in MicroPython and/or qrdecode_rgb565 of quirc_decode.c
-                # the exceptions are not caught in self.qrdecode_one() so must be done here
-        except Exception as e:
-    # Byte-Order-Mark is added sometimes
-        # If not a valid string or not printable, convert to hex
-            logger.error("Failed to initialize camera: %s", e)
-            self._show_no_camera_message()
-
-        self._create_controls()
-        self._create_settings_button()
-
-    def _init_camera(self):
-        if self._camera is None:
-        # Check if it's necessary to restart the camera:
-        # Check if it's necessary to restart the camera:
-        # Activate QR mode settings
-        # Check enough free space?
-        #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
-            return
-        self._cam = self._camera.init(0, format=self._camera.JPEG,
-                                      fb_location=self._camera.PSRAM_HUB)
-        if __debug__: logger.debug("Camera init returned: %s", self._cam)
-
-    def _show_no_camera_message(self):
-        no_cam_label = lv.label(self._container)
-        no_cam_label.set_text("Camera not available")
-        no_cam_label.center()
-
-    def _create_camera_feed(self):
-        if self._cam is None:
-            if __debug__: logger.debug("No camera object, not creating feed")
-            return
-        try:
-            self._img = lv.image(self._container)
-            self._img.set_size(lv.pct(100), DisplayMetrics.height_pct(80))
-            self._img.align(lv.ALIGN.TOP_MID, 0, 0)
-            self._img.set_style_border_width(0, 0)
-            self._img.set_style_border_opa(lv.OPA.TRANSP, 0)
-            self._img.set_style_radius(0, 0)
-            self._img.set_style_bg_opa(lv.OPA.TRANSP, 0)
-            self._img.set_style_pad_all(0, 0)
-            self._img.set_style_pad_top(0, 0)
-            self._img.set_style_pad_bottom(0, 0)
-            self._img.set_style_pad_left(0, 0)
-            self._img.set_style_pad_right(0, 0)
-            self._img.set_style_clip_corner(True, 0)
-
-            self._img.add_flag(lv.obj.FLAG.CLICKABLE)
-            self._img.add_event_cb(self._on_feed_click, lv.EVENT.CLICKED, None)
-        except Exception as e:
-            logger.error("Error creating camera feed: %s", e)
-
-    def _create_controls(self):
-        ctrl_bar = lv.obj(self._container)
-        ctrl_bar.set_size(lv.pct(100), lv.pct(20))
-        ctrl_bar.align(lv.ALIGN.BOTTOM_MID, 0, 0)
-
-        capture_btn = lv.button(ctrl_bar)
-        capture_btn.set_size(64, 64)
-        capture_btn.align(lv.ALIGN.CENTER, 0, 0)
-        capture_btn.add_event_cb(self._on_capture, lv.EVENT.CLICKED, None)
-        capture_btn.set_style_radius(32, 0)
-        self._main_btn = capture_btn
-
-        cap_label = lv.label(capture_btn)
-        cap_label.set_text("Capture")
-
-        if self._camera is not None:
-            mode_btn = lv.button(ctrl_bar)
-            mode_btn.align_to(capture_btn, lv.ALIGN.OUT_LEFT_MID, -10, 0)
-            mode_btn.add_event_cb(self._on_mode_switch, lv.EVENT.CLICKED, None)
-
-            mode_label = lv.label(mode_btn)
-            mode_label.set_text("Photo")
-
-            flash_btn = lv.button(ctrl_bar)
-            flash_btn.align_to(capture_btn, lv.ALIGN.OUT_RIGHT_MID, 10, 0)
-            flash_btn.add_event_cb(self._on_flash_toggle, lv.EVENT.CLICKED, None)
-
-            flash_label = lv.label(flash_btn)
-            flash_label.set_text("Flash: OFF")
-            self._flash_ctrl = flash_label
-
-    def _create_settings_button(self):
-        self._settings_button = lv.button(self._container)
-        self._settings_button.set_size(40, 40)
-        self._settings_button.align(lv.ALIGN.TOP_RIGHT, 0, AppearanceManager.NOTIFICATION_BAR_HEIGHT)
-        self._settings_button.add_event_cb(self._on_settings_click, lv.EVENT.CLICKED, None)
-
-        settings_label = lv.label(self._settings_button)
-        # Settings button
-        # Initialize LVGL image widget
+    prefs = None # regular prefs
+    scanqr_prefs = None # qr code scanning prefs
+    
     # Widgets:
+    main_screen = None
+    image = None
+    qr_label = None
+    qr_button = None
+    snap_button = None
+    status_label = None
+    status_label_cont = None
+
+    def onCreate(self):
+        self.main_screen = lv.obj()
+        self.main_screen.set_style_pad_all(1, lv.PART.MAIN)
+        self.main_screen.set_style_border_width(0, lv.PART.MAIN)
+        self.main_screen.set_size(lv.pct(100), lv.pct(100))
+        self.main_screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
+
+        # Initialize LVGL image widget
+        self.image = lv.image(self.main_screen)
+        self.image.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        self.close_button = lv.button(self.main_screen)
+        close_label = lv.label(self.close_button)
+        close_label.set_text(lv.SYMBOL.CLOSE)
+        close_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+        close_label.center()
+        self.close_button.add_event_cb(lambda e: self.finish(),lv.EVENT.CLICKED,None)
+        # Settings button
+        self.settings_button = lv.button(self.main_screen)
+        settings_label = lv.label(self.settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
-
-    def _on_settings_click(self, event):
-        if __debug__: logger.debug("Settings button clicked, starting SettingsActivity")
-        from .activity_manager import start_activity
-        start_activity(self, SettingsActivity(self.SETTINGS))
-
-    def _on_capture(self, event):
-        if self._cam is None:
-            if __debug__: logger.debug("Camera not available, cannot capture")
-            return
-        if __debug__: logger.debug("Capture button pressed")
-        try:
-            buf = self._cam.capture()
-            if buf is not None:
-                if __debug__: logger.debug("Captured image, buffer length: %s", len(buf))
-        # Instead of checking if any setting changed, just reload and restart the camera:
-                # exceptions from this one are not caught - see comments in quirc_decode.c
-            # Defaults come from constructor, no need to pass them here
-                # Merge common and scanqr-specific defaults
-            # Start refreshing:
-            # Apply saved camera settings, only for internal camera for now:
-        # Init camera:
-                # leave it open so the user can read the error and maybe open the settings
-            # landscape
-            # poster
+        settings_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+        settings_label.center()
+        self.settings_button.add_event_cb(lambda e: self.open_settings(),lv.EVENT.CLICKED,None)
         #self.zoom_button = lv.button(self.main_screen)
         #self.zoom_button.set_size(self.button_width, self.button_height)
         #self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 5)
@@ -401,46 +73,322 @@ class CameraActivity(Activity):
         #zoom_label = lv.label(self.zoom_button)
         #zoom_label.set_text("Z")
         #zoom_label.center()
+        self.qr_button = lv.button(self.main_screen)
+        self.qr_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.qr_button.add_event_cb(self.qr_button_click,lv.EVENT.CLICKED,None)
+        self.qr_label = lv.label(self.qr_button)
+        self.qr_label.set_text(mpos_ui.QR_SYMBOL) # QR code symbol
+        self.qr_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        self.qr_label.center()
+
+        self.snap_button = lv.button(self.main_screen)
+        self.snap_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.snap_button.add_event_cb(self.snap_button_click,lv.EVENT.CLICKED,None)
+        snap_label = lv.label(self.snap_button)
+        snap_label.set_text(lv.SYMBOL.OK)
+        snap_label.center()
+
+        self.status_label_cont = lv.obj(self.main_screen)
+        self.status_label_cont.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
+        self.status_label_cont.set_style_bg_opa(66, lv.PART.MAIN)
+        self.status_label_cont.set_style_border_width(0, lv.PART.MAIN)
+        self.status_label = lv.label(self.status_label_cont)
+        self.status_label.set_text(self.STATUS_NO_CAMERA)
+        self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.status_label.set_width(lv.pct(100))
+        self.status_label.center()
+
+        if mpos_ui.DisplayMetrics.width() < mpos_ui.DisplayMetrics.height():
+            # poster
+            self.button_width = int((mpos_ui.DisplayMetrics.width() / 4 ) - 5)
+            self.button_height = 50
+            self.resize_buttons()
+            self.snap_button.set_size(self.button_height, self.button_height)
+            self.close_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, -5)
+            self.settings_button.align_to(self.close_button, lv.ALIGN.OUT_LEFT_MID, -5, 0)
+            self.qr_button.align(lv.ALIGN.BOTTOM_LEFT, 0, -5)
+            self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_RIGHT_MID, 5, 0) # needs -2 to avoid being too low
+            width = mpos_ui.DisplayMetrics.pct_of_width(85)
+            height = mpos_ui.DisplayMetrics.pct_of_height(45)
+            center_w = round((mpos_ui.DisplayMetrics.width() - width)/2)
+            center_h = round((mpos_ui.DisplayMetrics.height() - self.button_height - 10 - height)/2)
+        else:
+            # landscape
+            self.button_width = 75
+            self.button_height = int((mpos_ui.DisplayMetrics.height() / 4 ) - 10)
+            self.resize_buttons()
+            self.snap_button.set_size(self.button_height, self.button_height)
+            self.close_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
+            self.settings_button.align_to(self.close_button, lv.ALIGN.OUT_BOTTOM_MID, 0, 10)
+            self.qr_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+            self.snap_button.align_to(self.qr_button, lv.ALIGN.OUT_TOP_MID, 0, -10)
+            width = mpos_ui.DisplayMetrics.pct_of_width(70)
+            height = mpos_ui.DisplayMetrics.pct_of_height(60)
+            center_w = round((mpos_ui.DisplayMetrics.width() - self.button_width - 5 - width)/2)
+            center_h = round((mpos_ui.DisplayMetrics.height() - height)/2)
+
+        self.status_label_cont.set_pos(center_w,center_h)
+        self.status_label_cont.set_size(width,height)
+        self.setContentView(self.main_screen)
+    
+    def onResume(self, screen):
+        self.scanqr_intent = self.getIntent().extras.get("scanqr_intent")
+        self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
+        if self.scanqr_mode or self.scanqr_intent:
+            self.start_qr_decoding()
+            if not self.cam and self.scanqr_mode:
+                self.status_label.set_text(self.STATUS_NO_CAMERA)
+                # leave it open so the user can read the error and maybe open the settings
+        else:
+            self.load_settings_cached()
+            self.start_cam()
+            self.qr_button.remove_flag(lv.obj.FLAG.HIDDEN)
+            self.snap_button.remove_flag(lv.obj.FLAG.HIDDEN)
+
+    def onPause(self, screen):
+        if __debug__: logger.debug("camera app backgrounded, cleaning up...")
+        self.stop_cam()
+        if __debug__: logger.debug("camera app cleanup done.")
+
+    def resize_buttons(self):
+        self.close_button.set_size(self.button_width, self.button_height)
+        self.settings_button.set_size(self.button_width, self.button_height)
+        self.qr_button.set_size(self.button_width, self.button_height)
+        self.snap_button.set_style_radius(self.button_width, lv.PART.MAIN)
+
+    def start_cam(self):
+        # Init camera:
+        firstcam = CameraManager.get_cameras()[0]
+        self.cam = firstcam.init(self.width, self.height, self.colormode)
+        if self.cam:
+            self.image.set_rotation(-10 * firstcam.get_rotation_degrees()) # counter the rotation so * -1 and convert to tens-of-a-degree for LVGL
+            # Apply saved camera settings, only for internal camera for now:
+            firstcam.apply_settings(self.cam, self.scanqr_prefs if self.scanqr_mode else self.prefs) # needs to be done AFTER the camera is initialized
+            # Start refreshing:
+            if __debug__: logger.debug("Camera app initialized, continuing...")
+            self.update_preview_image()
+            self.capture_timer = lv.timer_create(self.try_capture, 100, None)
+
+    def stop_cam(self):
+        if self.capture_timer:
+            self.capture_timer.delete()
+        if self.cam:
+            CameraManager.get_cameras()[0].deinit(self.cam)
+        self.cam = None
+        if self.image_dsc: # it's important to delete the image when stopping the camera, otherwise LVGL might try to display it and crash
+            if __debug__: logger.debug("emptying self.current_cam_buffer...")
+            self.image_dsc.data = None
+
+    def load_settings_cached(self):
+        from mpos import SharedPreferences
+        if self.scanqr_mode:
+            if __debug__: logger.debug("loading scanqr settings...")
+            if not self.scanqr_prefs:
+                # Merge common and scanqr-specific defaults
+                scanqr_defaults = {}
+                scanqr_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
+                scanqr_defaults.update(CameraSettingsActivity.SCANQR_DEFAULTS)
+                self.scanqr_prefs = SharedPreferences(
+                    self.appFullName,
+                    filename=self.SCANQR_CONFIG,
+                    defaults=scanqr_defaults
+                )
+            # Defaults come from constructor, no need to pass them here
+            self.width = self.scanqr_prefs.get_int("resolution_width")
+            self.height = self.scanqr_prefs.get_int("resolution_height")
+            self.colormode = self.scanqr_prefs.get_bool("colormode")
+        else:
+            if not self.prefs:
+                # Merge common and normal-specific defaults
+                normal_defaults = {}
+                normal_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
+                normal_defaults.update(CameraSettingsActivity.NORMAL_DEFAULTS)
+                self.prefs = SharedPreferences(self.appFullName, defaults=normal_defaults)
+            # Defaults come from constructor, no need to pass them here
+            self.width = self.prefs.get_int("resolution_width")
+            self.height = self.prefs.get_int("resolution_height")
+            self.colormode = self.prefs.get_bool("colormode")
+
+    def update_preview_image(self):
+        self.image_dsc = lv.image_dsc_t({
+            "header": {
+                "magic": lv.IMAGE_HEADER_MAGIC,
+                "w": self.width,
+                "h": self.height,
+                "stride": self.width * (2 if self.colormode else 1),
+                "cf": lv.COLOR_FORMAT.RGB565 if self.colormode else lv.COLOR_FORMAT.L8
+            },
+            'data_size': self.width * self.height * (2 if self.colormode else 1),
+            'data': None # Will be updated per frame
+        })
+        self.image.set_src(self.image_dsc)
+        if mpos_ui.DisplayMetrics.width() < mpos_ui.DisplayMetrics.height():
+            target_h = mpos_ui.DisplayMetrics.width()
+        else:
+            target_h = mpos_ui.DisplayMetrics.height()
+        target_w = target_h # square
+        if __debug__: logger.debug("scaling to size: %sx%s" % (target_w, target_h))
+        scale_factor_w = round(target_w * 256 / self.width)
+        scale_factor_h = round(target_h * 256 / self.height)
+        if __debug__: logger.debug("scale_factors: %s,%s" % (scale_factor_w, scale_factor_h))
+        self.image.set_size(target_w, target_h)
+        #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
+        self.image.set_scale(min(scale_factor_w,scale_factor_h))
+
+    def qrdecode_one(self):
+        try:
+            result = None
+            before = time.ticks_ms()
+            import qrdecode
+            if self.colormode:
+                # exceptions from this one are not caught - see comments in quirc_decode.c
+                result = qrdecode.qrdecode_rgb565(self.current_cam_buffer, self.width, self.height)
             else:
-                if __debug__: logger.debug("Captured image is None")
+                result = qrdecode.qrdecode(self.current_cam_buffer, self.width, self.height)
+            after = time.ticks_ms()
+            if __debug__: logger.debug("qrdecode took %sms" % (after-before))
+        except ValueError as e:
+            logger.error("QR ValueError: ", e)
+            self.status_label.set_text(self.STATUS_SEARCHING_QR)
+        except TypeError as e:
+            logger.error("QR TypeError: ", e)
+            self.status_label.set_text(self.STATUS_FOUND_QR)
         except Exception as e:
-            logger.error("Error during capture: %s", e)
-
-    def _on_mode_switch(self, event):
-        if self._current_mode == "photo":
-            self._current_mode = "video"
-            if __debug__: logger.debug("Switched to video mode")
+            logger.error("QR got other error: ", e)
+        #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
+        if result is None:
+            return
+        result = self.remove_bom(result)
+        result = self.print_qr_buffer(result)
+        if __debug__: logger.debug("QR decoding found: %s" % (result))
+        if self.scanqr_intent:
+            self.stop_qr_decoding(activate_non_qr_mode=False)
+            self.setResult(True, result)
+            self.finish()
         else:
-            self._current_mode = "photo"
-            if __debug__: logger.debug("Switched to photo mode")
+            self.status_label.set_text(result) # in the future, the status_label text should be copy-paste-able
+            self.stop_qr_decoding()
 
-    def _on_flash_toggle(self, event):
-        if __debug__: logger.debug("Flash toggle pressed")
-        if self._flash_ctrl.get_text() == "Flash: OFF":
-            self._flash_ctrl.set_text("Flash: ON")
-            if __debug__: logger.debug("Flash turned ON")
+    def snap_button_click(self, e):
+        if __debug__: logger.debug("Taking picture...")
+        # Would be nice to check that there's enough free space here, and show an error if not...
+        import os
+        path = "data/images"
+        try:
+            os.mkdir("data")
+        except OSError:
+            pass
+        try:
+            os.mkdir(path)
+        except OSError:
+            pass
+        if self.current_cam_buffer is None:
+            if __debug__: logger.debug("snap_button_click: won't save empty image")
+            return
+        # Check enough free space?
+        stat = os.statvfs("data/images")
+        free_space = stat[0] * stat[3]
+        size_needed = len(self.current_cam_buffer)
+        if __debug__: logger.debug("Free space %s and size needed %s" % (free_space, size_needed))
+        if free_space < size_needed:
+            self.status_label.set_text(f"Free storage space is {free_space}, need {size_needed}, not saving...")
+            self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+            return
+        colorname = "RGB565" if self.colormode else "GRAY"
+        filename=f"{path}/picture_{epoch_seconds()}_{self.width}x{self.height}_{colorname}.raw"
+        try:
+            with open(filename, 'wb') as f:
+                f.write(self.current_cam_buffer) # This takes around 17 seconds to store 921600 bytes, so ~50KB/s, so would be nice to show some progress bar
+            report = f"Successfully wrote image to {filename}"
+            if __debug__: logger.debug(report)
+            self.status_label.set_text(report)
+            self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+        except OSError as e:
+            logger.error("Error writing to file: %s" % (e))
+    
+    def start_qr_decoding(self):
+        if __debug__: logger.debug("Activating live QR decoding...")
+        self.scanqr_mode = True
+        oldwidth = self.width
+        oldheight = self.height
+        oldcolormode = self.colormode
+        # Activate QR mode settings
+        self.load_settings_cached()
+        # Check if it's necessary to restart the camera:
+        if not self.cam or self.width != oldwidth or self.height != oldheight or self.colormode != oldcolormode:
+            if self.cam:
+                self.stop_cam()
+            self.start_cam()
+        self.qr_label.set_text(lv.SYMBOL.EYE_CLOSE)
+        self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+        self.status_label.set_text(self.STATUS_SEARCHING_QR)
+    
+    def stop_qr_decoding(self, activate_non_qr_mode=True):
+        if __debug__: logger.debug("Deactivating live QR decoding...")
+        self.scanqr_mode = False
+        self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
+        status_label_text = self.status_label.get_text()
+        if status_label_text in (self.STATUS_NO_CAMERA, self.STATUS_SEARCHING_QR, self.STATUS_FOUND_QR): # if it found a QR code, leave it
+            self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
+        # Check if it's necessary to restart the camera:
+        if activate_non_qr_mode is False:
+            return
+        # Instead of checking if any setting changed, just reload and restart the camera:
+        self.load_settings_cached()
+        self.stop_cam()
+        self.start_cam()
+    
+    def qr_button_click(self, e):
+        if not self.scanqr_mode:
+            self.start_qr_decoding()
         else:
-            self._flash_ctrl.set_text("Flash: OFF")
-            if __debug__: logger.debug("Flash turned OFF")
+            self.stop_qr_decoding()
 
-    def _on_feed_click(self, event):
-        if __debug__: logger.debug("Camera feed clicked (acts as tap-to-focus)")
+    def open_settings(self):
+        from ..content.intent import Intent
+        intent = Intent(activity_class=CameraSettingsActivity, extras={"prefs": self.prefs if not self.scanqr_mode else self.scanqr_prefs, "scanqr_mode": self.scanqr_mode})
+        self.startActivity(intent)
 
-    def _start_recording(self):
-        if __debug__: logger.debug("Starting recording...")
-        self._is_recording = True
-
-    def _stop_recording(self):
-        if __debug__: logger.debug("Stopping recording...")
-        self._is_recording = False
-
-    def _stop_camera(self):
-        if self._cam is not None:
+    def try_capture(self, event):
+        if not self.cam:
+            return
+        try:
+            self.current_cam_buffer = CameraManager.get_cameras()[0].capture(self.cam, self.colormode)
+        except Exception as e:
+            logger.error("Camera capture exception: %s" % (e))
+            return
+        # Display the image:
+        self.image_dsc.data = self.current_cam_buffer
+        #self.image.invalidate() # does not work so do this:
+        self.image.set_src(self.image_dsc)
+        if self.scanqr_mode:
             try:
-                self._cam.deinit()
-                if __debug__: logger.debug("Camera deinitialized")
+                # Due to buggy behavior in MicroPython and/or qrdecode_rgb565 of quirc_decode.c
+                # the exceptions are not caught in self.qrdecode_one() so must be done here
+                self.qrdecode_one()
             except Exception as e:
-                logger.error("Error deinitializing camera: %s", e)
-        if self._timer is not None:
-            self._timer.delete()
-            self._timer = None
+                logger.error("self.qrdecode_one() was unable to catch exception from qrdecode_rgb565(): %s" % (e))
+        try:
+            self.cam.free_buffer()  # After QR decoding, free the old buffer, otherwise the camera doesn't provide a new one
+        except Exception as e:
+            pass # some camera API's don't have this
+
+    def print_qr_buffer(self, buffer):
+        try:
+            # Try to decode buffer as a UTF-8 string
+            result = buffer.decode('utf-8')
+            # Check if the string is printable (ASCII printable characters)
+            if all(32 <= ord(c) <= 126 for c in result):
+                return result
+        except Exception as e:
+            pass
+        # If not a valid string or not printable, convert to hex
+        hex_str = ' '.join([f'{b:02x}' for b in buffer])
+        return hex_str.lower()
+    
+    # Byte-Order-Mark is added sometimes
+    def remove_bom(self, buffer):
+        bom = b'\xEF\xBB\xBF'
+        if buffer.startswith(bom):
+            return buffer[3:]
+        return buffer

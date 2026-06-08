@@ -1,8 +1,10 @@
-import logging
-logger = logging.getLogger(__name__)
-
+if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_2.py initialization")
 # Hardware initialization for ESP32-S3-Touch-LCD-2
 # Manufacturer's website at https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 import time
 
@@ -25,13 +27,12 @@ LCD_DC = 42
 LCD_CS = 45
 LCD_BL = 1
 
-if __debug__: logger.debug("machine.SPI.Bus() initialization")
-    # Power off, otherwise it keeps using a lot of current
+if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_2.py machine.SPI.Bus() initialization")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, miso=LCD_MISO, sck=LCD_SCLK)
 except Exception as e:
-    logger.error("Error initializing SPI bus: %s", e)
-    logger.error("Attempting hard reset in 3sec...")
+    logger.error("Error initializing SPI bus: %s" % (e))
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -43,11 +44,6 @@ display_bus = lcd_bus.SPIBus(
     cs=LCD_CS,
 )
 
-# Max buffer size (breaks SPI camera because it also needs DMA memory)
-# 148480 (320*232*2) is too much
-# 147841 (320*231*2) is too much
-# 147200 (320*230*2) is fine!
-# 140800 (320*220*2) is fine!
  # lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
  # The default was /10 so 15360 bytes.
  # /2 = 76800 shows something on display and then hangs the board
@@ -55,6 +51,13 @@ display_bus = lcd_bus.SPIBus(
  # /2 = 19200 works, including camera at 9FPS
  # 28800 is between the two and still works with camera!
  # 30720 is /5 and is already too much
+
+# Max buffer size (breaks SPI camera because it also needs DMA memory)
+# 148480 (320*232*2) is too much
+# 147841 (320*231*2) is too much
+# 147200 (320*230*2) is fine!
+# 140800 (320*220*2) is fine!
+
 _BUFFER_SIZE = const(320 * 45 * 2) # 28800
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
@@ -70,7 +73,7 @@ mpos.ui.main_display = st7789.ST7789(
     rgb565_byte_swap=True,
     backlight_pin=LCD_BL,
     backlight_on_state=st7789.STATE_PWM,
-)
+) # triggers lv.init()
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
@@ -78,15 +81,23 @@ mpos.ui.main_display.set_backlight(100)
 # Touch handling:
 i2c_bus = i2c.I2C.Bus(host=0, scl=47, sda=48, freq=400000, use_locks=False)
 touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
-indev = cst816s.CST816S(touch_dev, startup_rotation=lv.DISPLAY_ROTATION._180)
+indev = cst816s.CST816S(touch_dev, startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
 InputManager.register_indev(indev)
 
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90)
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 # Battery voltage ADC measuring
 from mpos import BatteryManager
 
 def adc_to_voltage(adc_value):
+    """
+    Convert raw ADC value to battery voltage.
+    Currently uses simple linear scaling: voltage = adc * 0.00262
+
+    This could be improved with calibration data similar to Fri3d board.
+    To calibrate: measure actual battery voltages and corresponding ADC readings,
+    then fit a linear or polynomial function.
+    """
     return adc_value * 0.00262
 
 BatteryManager.init_adc(5, adc_to_voltage)
@@ -95,16 +106,16 @@ BatteryManager.init_adc(5, adc_to_voltage)
 # so it needs a software power off to prevent it from staying hot all the time and quickly draining the battery.
 try:
     from machine import Pin, I2C
-    i2c = I2C(1, scl=Pin(16), sda=Pin(21))
+    i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
     # Warning: don't do an i2c scan because it confuses the camera!
     camera_addr = 0x3C # for OV5640
     reg_addr = 0x3008
-    reg_high = (reg_addr >> 8) & 0xFF
-    reg_low = reg_addr & 0xFF
-    power_off_command = 0x42
+    reg_high = (reg_addr >> 8) & 0xFF  # 0x30
+    reg_low = reg_addr & 0xFF         # 0x08
+    power_off_command = 0x42 # Power off command
     i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
 except Exception as e:
-    logger.warning("powering off camera got exception: %s", e)
+    logger.error("Warning: powering off camera got exception: %s" % (e))
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
@@ -122,7 +133,7 @@ def init_cam(width, height, colormode):
 
         # Map resolution to FrameSize enum using CameraManager
         frame_size = CameraManager.resolution_to_framesize(width, height)
-        if __debug__: logger.debug("init_internal_cam: Using FrameSize %s for %sx%s", frame_size, width, height)
+        if __debug__: logger.debug("init_internal_cam: Using FrameSize %s for %sx%s" % (frame_size, width, height))
 
         # Try to initialize, with one retry for I2C poweroff issue
         max_attempts = 3
@@ -150,28 +161,29 @@ def init_cam(width, height, colormode):
                 break
             except Exception as e:
                 if attempt < max_attempts-1:
-                    if __debug__: logger.debug("init_cam attempt %s failed: %s, retrying...", attempt, e)
+                    logger.error("init_cam attempt %s failed: %s, retrying..." % (attempt, e))
                 else:
-                    logger.error("init_cam final exception: %s", e)
+                    logger.error("init_cam final exception: %s" % (e))
                     break
     except Exception as e:
-        logger.error("init_cam exception: %s", e)
+        logger.error("init_cam exception: %s" % (e))
 
     return toreturn
 
 def deinit_cam(cam):
     cam.deinit()
+    # Power off, otherwise it keeps using a lot of current
     try:
         from machine import Pin, I2C
-        i2c = I2C(1, scl=Pin(16), sda=Pin(21))
-        camera_addr = 0x3C
+        i2c = I2C(1, scl=Pin(16), sda=Pin(21))  # Adjust pins and frequency
+        camera_addr = 0x3C # for OV5640
         reg_addr = 0x3008
-        reg_high = (reg_addr >> 8) & 0xFF
-        reg_low = reg_addr & 0xFF
-        power_off_command = 0x42
+        reg_high = (reg_addr >> 8) & 0xFF  # 0x30
+        reg_low = reg_addr & 0xFF         # 0x08
+        power_off_command = 0x42 # Power off command
         i2c.writeto(camera_addr, bytes([reg_high, reg_low, power_off_command]))
     except Exception as e:
-        logger.warning("powering off camera got exception: %s", e)
+        logger.error("Warning: powering off camera got exception: %s" % (e))
     import time
     time.sleep_ms(100)
 
@@ -190,7 +202,7 @@ CameraManager.add_camera(CameraManager.Camera(
     deinit=deinit_cam,
     capture=capture_cam,
     apply_settings=apply_cam_settings,
-    rotation_degrees=-90
+    rotation_degrees=-90 # camera is rotated 90 degrees counterclockwise so -90 degrees clockwise
 ))
 
-if __debug__: logger.debug("finished")
+if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_2.py finished")
