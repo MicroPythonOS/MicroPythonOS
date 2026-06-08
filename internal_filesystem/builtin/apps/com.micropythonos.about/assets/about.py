@@ -10,7 +10,7 @@ import mpos
 class About(Activity):
 
     logger = logging.getLogger(__file__)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG) # default is WARNING
 
     def onCreate(self):
         self._uptime_label = None
