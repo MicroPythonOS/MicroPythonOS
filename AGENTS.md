@@ -27,7 +27,10 @@ Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
 - Every code change must pass `make lint`.
 - Never add, remove or modify inline comments or docstrings on your own initiative, unless the task explicitly asks for it. Comments and docstrings preserve intent and are treated as critical documentation. Refactoring or logging-conversion tasks must target only the specific code elements they're asked about and leave all other content untouched.
-- Debug logging: use `if __debug__: logger.debug("fmt %s", var)` (one line, `ruff.toml` ignores E701). `mpy-cross -O3` eliminates these blocks entirely at compile time — strings AND bytecode gone. Use `logger.warning/error/critical` without `__debug__` guard. Always `import logging; logger = logging.getLogger(__name__)` per file. Prefer `%s` formatting over f-strings for lazy eval. 
+- Danger: batch-editing agents that operate on many files at once MUST be strictly constrained to only touch the specific patterns requested. Without tight boundary rules (e.g. "only edit lines matching `print(`"), agents may delete unrelated code: docstrings, constant definitions, function bodies, inline comments, imports, etc. If damage occurs, the safest fix might be restoring from git and running a precise targeted script, but request user confirmation before doing so.
+- Debug logging: use `if __debug__: logger.debug("fmt %s", var)` (one line, `ruff.toml` ignores E701). `mpy-cross -O3` eliminates these blocks entirely at compile time — strings AND bytecode gone. Use `logger.warning/error/critical` without `__debug__` guard. Always `import logging; logger = logging.getLogger(__name__)` per file. Prefer `%s` formatting over f-strings for lazy eval.
+- When converting `print()` calls to structured logging, watch for f-string edge cases: (a) `{var:format_spec}` → `%format_spec` in the format string with the var as positional arg, (b) `{var=}` debug syntax → strip the trailing `=`, (c) compound statements (`; print(...)`) need line-level matching, not just line-start matching. 
+- Logging trap: `logger.error("msg: ", e)` — MicroPython's logging module formats messages with `msg % args`. A format string without `%s` (or similar) combined with a non-empty `args` raises `TypeError: format string didn't convert all arguments`. Always include a `%s` placeholder when passing variables: `logger.error("msg: %s", e)`. The same applies to `logger.warning()`, `logger.info()`, and `logger.debug()`. 
 - Always add a timeout -s 9 30 to ./scripts/run_desktop.sh so run: timeout -s 9 30 ./scripts/run_desktop.sh
 - Write temporary files to a `tmp/` folder in the CWD, not `/` or `/tmp`, due to permissions constraints.
 - To kill processes, use `killall <name>` instead of `pkill -f <pattern>` — `pkill -f` matches the pkill command's own argv and can kill itself.
@@ -36,6 +39,7 @@ Guidelines:
 Guidelines for writing or updating tests:
 - Use the testing facilities in ./internal_filesystem/lib/mpos/ui/testing.py and feel free to add new ones there, NOT ad hoc in the test itself.
 - When adding graphical tests, follow the helpers and conventions described in tests/README.md.
+- To capture logger output in tests: the logging module's `StreamHandler` stores `sys.stderr` at import time in `_stream`. Replacing `sys.stderr` at runtime does NOT redirect existing loggers. Instead, add a custom handler to the specific logger: `logging.getLogger("mpos.net.download_manager").addHandler(handler)`. In the handler's `emit()`, access the formatted message via `record.message` (not `self.format(record)`, which requires a formatter to be set). Restore the original handlers list in `finally:`.
 
 LVGL tips:
 - `lv.OPA` enum only has values at steps of 10: `TRANSP` (0), `_10`, `_20`, ..., `_100`, and `COVER` (255). Values like `_5` do NOT exist — use the nearest step or a raw integer (0–255).
@@ -81,6 +85,7 @@ MicroPython compatibility:
 MicroPython compatibility:
 - Some builds ship a minimal `random` module without `random.Random` or `random.shuffle`. For shuffling, implement Fisher-Yates manually with `random.randint`.
 - For deterministic jitter in apps, prefer a tiny local LCG (linear congruential generator) instead of `random.Random`.
+- MicroPython's `logging.Logger.log()` (and by extension `error()`, `warning()`, etc.) formats messages via `msg % args`. Passing a variable to a format string without a `%s` placeholder raises `TypeError`. Always include a `%s` in the format string: `logger.error("msg: %s", e)`.
 
 MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
