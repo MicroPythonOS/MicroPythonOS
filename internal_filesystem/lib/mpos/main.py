@@ -167,6 +167,9 @@ def detect_board():
         import machine
         unique_id_prefixes = machine.unique_id()[0:3]
 
+        print(f'{unique_id_prefixes=}')
+        return "soldered_nula_tft" # FIXME: Add working detection!
+
         print("unPhone ?")
         if unique_id_prefixes == b'\x30\x30\xf9':
             return "unphone"
