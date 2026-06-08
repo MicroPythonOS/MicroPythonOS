@@ -10,11 +10,12 @@ if [ -z "$indir" -o -z "$outdir" ]; then
 	exit 1
 fi
 
-mkdir "$outdir"
+mkdir -p "$outdir"
 
-cp -R "$indir"/* "$outdir"
+# Follow symlinks so linked app directories are copied as real files.
+cp -RL "$indir"/* "$outdir"
 
-find "$outdir" -iname "*.py" | while read pyfile; do
+find -L "$outdir" -iname "*.py" | while read pyfile; do
 	if [ -L "$pyfile" ]; then
 		oldtarget=$(readlink -f "$pyfile")
 		newtarget=$(echo "$oldtarget" | sed "s/.py\$/.mpy/g")
@@ -38,5 +39,4 @@ find "$outdir" -iname "*.py" | while read pyfile; do
 	#echo "Removing it from the target folder..."
 	rm "$pyfile"
 done
-
 
