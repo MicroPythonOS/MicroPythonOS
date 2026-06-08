@@ -178,7 +178,7 @@ mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 # Button handling code:
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
 
-# Key repeat handler (avoids LVGL 9.2 PRESSING bug that loses focus)
+# Key repeat handler (tracks initial press for navigation-action gating)
 krh = KeyRepeatHandler()
 
 # Read callback
@@ -186,13 +186,12 @@ krh = KeyRepeatHandler()
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
     current_key = None
-    current_time = time.ticks_ms()
 
     if btn_start.value() == 0:
         current_key = lv.KEY.END
 
-    # Key repeat logic (uses KeyRepeatHandler to work around LVGL 9.2 PRESSING bug)
-    krh.process(data, current_key, current_time)
+    # Key repeat logic (LVGL handles repeat natively; handler tracks initial press)
+    krh.process(data, current_key)
 
 group = lv.group_get_default()
 

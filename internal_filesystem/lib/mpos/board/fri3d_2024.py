@@ -127,7 +127,7 @@ def read_joystick_angle(threshold=0.1):
     angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
     return angle_deg
 
-# Key repeat handler (avoids LVGL 9.2 PRESSING bug that loses focus)
+# Key repeat handler (tracks initial press for navigation-action gating)
 krh = KeyRepeatHandler()
 
 # Read callback
@@ -135,7 +135,6 @@ krh = KeyRepeatHandler()
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
     current_key = None
-    current_time = time.ticks_ms()
 
     # Check buttons
     if btn_x.value() == 0:
@@ -165,8 +164,8 @@ def keypad_read_cb(indev, data):
             else:
                 print(f"WARNING: unhandled joystick angle {angle}") # maybe we could also handle diagonals?
 
-    # Key repeat logic (uses KeyRepeatHandler to work around LVGL 9.2 PRESSING bug)
-    is_initial = krh.process(data, current_key, current_time)
+    # Key repeat logic (LVGL handles repeat natively; handler tracks initial press)
+    is_initial = krh.process(data, current_key)
 
     # Handle navigation actions (only on PRESSED state)
     if data.state == lv.INDEV_STATE.PRESSED:
