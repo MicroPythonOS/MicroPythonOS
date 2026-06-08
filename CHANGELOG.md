@@ -20,6 +20,7 @@ OS:
 - aiohttp: add support for relative HTTP redirects (in addition to absolute HTTP redirects)
 - Drawer menu: close when home button is clicked
 - Optional override of builtin boot splash image by /data/images/boot_splash.png
+- Compile Python code with -O3 to optimize for speed and size
 
 0.12.0
 ======
