@@ -81,8 +81,7 @@ class About(Activity):
 
             # Machine info
             try:
-                if __debug__:
-                    self.logger.debug("Trying to find out additional board info, not available on every platform...")
+                if __debug__: self.logger.debug("Trying to find out additional board info, not available on every platform...")
                 self._add_label(screen, f"{lv.SYMBOL.POWER} Machine Info", is_header=True)
                 import machine
                 self._add_label(screen, f"machine.freq: {machine.freq()}")
@@ -129,8 +128,7 @@ class About(Activity):
 
         # Freezefs info (production builds only)
         try:
-            if __debug__:
-                self.logger.debug("Trying to find out freezefs info")
+            if __debug__: self.logger.debug("Trying to find out freezefs info")
             self._add_label(screen, f"{lv.SYMBOL.DOWNLOAD} Frozen Filesystem", is_header=True)
             import freezefs_mount_builtin
             self._add_label(screen, f"freezefs_mount_builtin.date_frozen: {freezefs_mount_builtin.date_frozen}")
