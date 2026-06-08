@@ -130,6 +130,14 @@ def handle_back_swipe():
     backbutton.add_flag(lv.obj.FLAG.HIDDEN)
     backbutton.add_state(lv.STATE.DISABLED)
     backlabel = lv.label(backbutton)
+    # lv.SYMBOL.NEW_LINE (FontAwesome U+F149, "↵") instead of
+    # lv.SYMBOL.LEFT (chevron-left "‹"). Same FontAwesome font range,
+    # which MPOS already relies on via `keyboard.py`'s Enter key, so
+    # availability is guaranteed — but the return-arrow shape maps to
+    # the universal "back" / "go back" / "return" affordance from
+    # physical-keyboard convention more directly than the chevron does.
+    # Renders as a hooked left-pointing arrow at the existing 18 pt
+    # weight that matches the surrounding chrome.
     backlabel.set_text(lv.SYMBOL.NEW_LINE)
     backlabel.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
     backlabel.center()

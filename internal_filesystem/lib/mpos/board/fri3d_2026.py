@@ -56,6 +56,7 @@ spi_bus = SPI.Bus(
 )
 
 # Would be better to do this only when the LoRa app starts:
+# initialize the expander as indev driver
 try:
     lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
 except Exception as e:
@@ -77,13 +78,23 @@ display_bus = lcd_bus.SPIBus(
     cs=5
 )
 
+# lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
+# The default was /10 so 15360 bytes.
+# /2 = 76800 shows something on display and then hangs the board
+# /2 = 38400 works and pretty high framerate but camera gets ESP_FAIL
+# /2 = 19200 works, including camera at 9FPS
+# 28800 is between the two and still works with camera!
+# 30720 is /5 and is already too much
+#_BUFFER_SIZE = const(28800)
 buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
+# Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
     twentieth = int(pct / 20)
     lednr = max(0,4 - twentieth)
+    #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
     from mpos import AppearanceManager
     color = AppearanceManager.percent_to_rainbow_color(pct)
     LightsManager.set_led(lednr, *color)
@@ -134,6 +145,7 @@ expander.config = 0x01 # 3v3 aux on + LCD off
 time.sleep_ms(100)
 expander.config = 0x03 # 3v3 aux + LCD on
 
+# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
@@ -145,6 +157,7 @@ mpos.ui.main_display = st7789.ST7789(
     rgb565_byte_swap=True,
 )
 
+    # reset_pin is driven by the CH32 microcontroller
 mpos.ui.main_display.init()
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(100)
@@ -166,6 +179,9 @@ mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 # Button handling code:
 btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
 
+# Read callback
+# Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
+# that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 _last_key = None
 
 def keypad_read_cb(indev, data):
@@ -188,6 +204,7 @@ def keypad_read_cb(indev, data):
 
 group = lv.group_get_default()
 
+# Create and set up the input device
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(keypad_read_cb)
@@ -202,7 +219,9 @@ InputManager.register_indev(indev)
 try:
     from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
     tindev_buttons=Fri3d2026Expander(expander)
+    #expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
     tindev_buttons.set_group(group)
+    #tindev_buttons.set_display(disp) # error? weird? probably a fluke...
     tindev_buttons.enable(True)
     InputManager.register_indev(tindev_buttons)
 except Exception as e:
@@ -240,6 +259,7 @@ AudioManager.add(
     )
 )
 
+# Add this after the headset output so that it doesn't become the default:
 buzzer_output = AudioManager.add(
     AudioManager.Output(
         name="Badge Buzzer",
@@ -248,6 +268,7 @@ buzzer_output = AudioManager.add(
     )
 )
 
+# Would be better to only add these if the communicator is connected:
 communicator_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
@@ -319,11 +340,15 @@ import _thread
 
 def startup_wow_effect():
     try:
+        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
+        #startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
         startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
 
+        #startup_jingle = "Megalovania:d=16,o=5,b=150:d5,d5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,c5,c5,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,b4,b4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,a#4,a#4,d6,p,a5,8p,g#5,p,g5,p,f5,p,d5,f5,g5,d5,d5"
         player = AudioManager.player(rtttl=startup_jingle,stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output)
         player.start()
 
+        # Rainbow colors for the 5 LEDs
         rainbow = [
             (255, 0, 0),    # Red
             (255, 128, 0),  # Orange
@@ -332,7 +357,9 @@ def startup_wow_effect():
             (0, 0, 255),    # Blue
         ]
 
+        # Single rainbow sweep
         for i in range(5):
+            # Light up LEDs progressively
             for j in range(i + 1):
                 LightsManager.set_led(j, *rainbow[j])
             LightsManager.write()
@@ -349,6 +376,7 @@ def startup_wow_effect():
     except Exception as e:
         logger.error("Startup effect error: %s", e)
 
+# Would be nice if this were a setting:
 from mpos import TaskManager
 _thread.stack_size(TaskManager.good_stack_size())
 _thread.start_new_thread(startup_wow_effect, ())

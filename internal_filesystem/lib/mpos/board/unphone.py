@@ -41,8 +41,12 @@ MISO = const(41)
 
 SPI_HOST = const(1)  # Shared SPI for hx8357d display and xpt2046 touch controller
 
+# 27Mhz used in extras/port-lvgl/lib9/TFT_eSPI_files/Setup15_HX8357D.h
 SPI_LCD_FREQ = const(27_000_000)
 
+# SPI_LCD_FREQ = const(20_000_000)
+# SPI_LCD_FREQ = const(10_000_000)
+# SPI_LCD_FREQ = const(1_000_000)
 I2C_BUS = const(0)
 I2C_FREQ = const(100_000)
 
@@ -51,6 +55,7 @@ LCD_DC = const(47)
 LCD_RESET = const(46)
 
 LCD_BACKLIGHT = const(2)
+# FIXME: Two backlights? One on the TCA9555 expander, one directly controlled by the ESP32?
 BACKLIGHT = const(0x42)
 
 TFT_WIDTH = const(320)
@@ -60,8 +65,11 @@ TOUCH_I2C_ADDR = const(106)
 TOUCH_REGBITS = const(8)
 TOUCH_CS = const(38)
 
+# 2,5Mhz used in extras/port-lvgl/lib9/TFT_eSPI_files/Setup15_HX8357D.h
 SPI_TOUCH_FREQ = const(2_500_000)
 
+# SPI_TOUCH_FREQ = const(500_000)
+# SPI_TOUCH_FREQ = const(100_000)
 EXPANDER_POWER = const(0x40)
 LED_GREEN = const(0x49)
 LED_BLUE = const(0x4D)
@@ -69,6 +77,7 @@ LED_RED = const(13)
 
 BM_I2C_ADDR = const(107)
 
+# Power management (known variously as PMU, BMU or just BM):
 LORA_CS = const(44)
 LORA_RESET = const(42)
 SD_CS = const(43)
@@ -91,6 +100,7 @@ if __debug__: logger.debug("init...")
 class UnPhoneTCA:
     I2C_DEV_ID = const(38)
 
+    # Register addresses
     REG_INPUT = const(0x00)
     REG_OUTPUT = const(0x02)
     REG_CONFIG = const(0x06)
@@ -100,8 +110,10 @@ class UnPhoneTCA:
         self.directions = 0xFFFF
         self.output_states = 0x0000
 
+        # Set IO expander initially as all inputs
         self._write_word(0x06, self.directions)
 
+        # Read current directions and states
         self.directions = self._read_word(0x06)
         self.output_states = self._read_word(0x02)
 
@@ -118,11 +130,14 @@ class UnPhoneTCA:
         if pin & 0x40:
             pin &= 0xBF
             if mode == machine.Pin.OUT:
+            # Ensure pin is set to output
                 self.directions &= ~(1 << pin)
             else:
+            # Ensure pin is set to input
                 self.directions |= 1 << pin
             self._write_word(self.REG_OUTPUT, self.directions)
         else:
+            # Handle standard ESP32 pin
             machine.Pin(pin, mode)
 
     def digital_write(self, pin, value):
@@ -137,6 +152,7 @@ class UnPhoneTCA:
             self.directions &= ~(1 << pin)
             self._write_word(self.REG_CONFIG, self.directions)
         else:
+            # Handle standard ESP32 pin
             p = machine.Pin(pin, machine.Pin.OUT)
             p.value(value)
 
@@ -149,11 +165,13 @@ class UnPhoneTCA:
             inputs = self._read_word(self.REG_INPUT)
             return 1 if (inputs & (1 << pin)) else 0
         else:
+            # Handle standard ESP32 pin
             p = machine.Pin(pin, machine.Pin.IN)
             return p.value()
 
 
 class UnPhone:
+    # Power management chip API
     BM_I2CADD = const(0x6B)
     BM_WATCHDOG = const(0x05)
     BM_OPCON = const(0x07)
@@ -165,6 +183,13 @@ class UnPhone:
         self.i2c = i2c
         self.tca = UnPhoneTCA(self.i2c)
 
+        # TODO: Persistent Store
+        # # https://docs.micropython.org/en/latest/library/esp32.html#esp32.NVS
+        # self.nvs = esp32.NVS("unPhoneStore")
+        # try:
+        #     self.current_store_index = self.nvs.get_i8("unPhoneStoreIdx")
+        # except OSError:
+        #     self.current_store_index = 0
         self.reset()
 
     def expander_power(self, *, on):
@@ -188,6 +213,15 @@ class UnPhone:
         self.tca.digital_write(LED_GREEN, 0 if g else 1)
         self.tca.digital_write(LED_BLUE, 0 if b else 1)
 
+    # TODO: Storage API
+    # def store(self, message):
+    #     key = str(self.current_store_index)
+    #     self.nvs.set_blob(key, message.encode())
+    #     self.current_store_index += 1
+    #     if self.current_store_index >= self.STORE_SIZE:
+    #         self.current_store_index = 0
+    #     self.nvs.set_i8("unPhoneStoreIdx", self.current_store_index)
+    #     self.nvs.commit()
     def power_switch_is_on(self):
         return bool(self.tca.digital_read(POWER_SWITCH))
 
@@ -243,6 +277,7 @@ class UnPhone:
     def reset(self):
         if __debug__: logger.debug("Resetting unPhone TCA9555 to default state...")
 
+        # Setup pins:
         self.tca.pin_mode(EXPANDER_POWER, machine.Pin.OUT)
         self.tca.pin_mode(VIBE, machine.Pin.OUT)
         self.tca.pin_mode(BUTTON_LEFT, machine.Pin.IN)
@@ -253,16 +288,20 @@ class UnPhone:
         self.tca.pin_mode(LED_GREEN, machine.Pin.OUT)
         self.tca.pin_mode(LED_BLUE, machine.Pin.OUT)
 
+        # Initialise unPhone hardware to default state:
         self.backlight(on=True)
         self.expander_power(on=True)
         self.vibe(on=False)
         self.ir(on=False)
 
+        # Mute devices on the SPI bus by deselecting them:
         for pin in [LCD_CS, TOUCH_CS, LORA_CS, SD_CS]:
             machine.Pin(pin, machine.Pin.OUT, value=1)
 
+    # Short delay to help things settle
         time.sleep_ms(200)
 
+        # Turn RGB LED blue to indicate reset is done:
         self.rgb(0, 0, 1)
 
 
@@ -278,6 +317,7 @@ def recover_i2c():
         scl.value(0)
         time.sleep_us(5)
 
+    # STOP signal (SDA from low to high while SCL is high)
     sda.value(0)
     time.sleep_us(5)
     scl.value(1)
@@ -293,6 +333,7 @@ try:
     if __debug__: logger.debug("init i2c Bus with: scl=%s, sda=%s...", SCL, SDA)
     i2c_bus = i2c.I2C.Bus(
         host=I2C_BUS, scl=SCL, sda=SDA, freq=I2C_FREQ, use_locks=False
+        # debug=True,
     )
 except Exception as e:
     sys.print_exception(e)
@@ -304,9 +345,15 @@ else:
     for dev in i2c_bus.scan():
         if __debug__: logger.debug("Found I2C device at address: %s ($%#02X)", dev, dev)
 
+    # Typical output here is:
+    # Found I2C device at address: 38 ($0x26) -> TCA9555 IO expansion chip
+    # Found I2C device at address: 106 ($0x6A) -> Touchscreen controller
+    # Found I2C device at address: 107 ($0x6B) -> Power management unit (PMU/BMU)
     unphone = UnPhone(i2c=i2c_bus)
 
 
+# Manually set MISO pin to input with pull-up to avoid it floating and causing issues on the SPI bus,
+# since it's shared between display and touch controller:
 Pin(MISO, Pin.IN, Pin.PULL_UP)
 
 
@@ -376,6 +423,10 @@ else:
         startup_rotation=startup_rotation,
     )
     if __debug__: logger.debug("touch_input_dev.is_calibrated=%s", touch_input_dev.is_calibrated)
+    #     touch_input_dev.calibrate()
+    # else:
+    # FIXME: Persistent calibration data is not working yet?
+    # if touch_input_dev.is_calibrated:
     InputManager.register_indev(touch_input_dev)
 
 
@@ -412,16 +463,19 @@ def input_callback(indev, data):
 
     else:
         if data.key:
+        # No buttons pressed
             data.key = 0
             data.state = lv.INDEV_STATE.RELEASED
             next_repeat = None
 
         if time.time() > next_check:
+            # Check power switch state and update backlight accordingly
             unphone.check_power_switch()
             next_check = time.time() + 1
 
         return
 
+    # A key is currently pressed
     current_time = time.ticks_ms()
     repeat = current_time > next_repeat if next_repeat else False
     if repeat or current_key != data.key:
@@ -442,13 +496,16 @@ def input_callback(indev, data):
             mpos.ui.focus_direction.move_focus_direction(180)
 
         if not repeat:
+            # Initial press: Delay before first repeat
             next_repeat = current_time + REPEAT_INITIAL_DELAY_MS
         else:
+            # Faster auto repeat after initial press
             next_repeat = current_time + REPEAT_RATE_MS
 
 
 group = lv.group_get_default()
 
+# Create and set up the input device
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(input_callback)

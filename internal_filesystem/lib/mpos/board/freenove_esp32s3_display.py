@@ -40,6 +40,7 @@ LCD_DC   = const(46)
 LCD_BL   = const(45)
 
 # Touch I2C pins (confirmed from official FT6336U sketch)
+# LCD_RST = -1 (tied to 3.3V / board RST, no software reset needed)
 TOUCH_SDA = const(16)
 TOUCH_SCL = const(15)
 TOUCH_I2C_FREQ = const(400000)
@@ -68,6 +69,7 @@ display_bus = lcd_bus.SPIBus(
     cs=LCD_CS,
 )
 
+# IMU: not present on this board — SensorManager not initialized
 _BUFFER_SIZE = const(28800)  # 240 * 60 * 2 bytes (RGB565)
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
@@ -96,12 +98,20 @@ mpos.ui.main_display.set_color_inversion(True)  # TFT_INVERSION_ON in official s
 if __debug__: logger.debug("init touch (FT6336G)")
 import drivers.indev.ft6x36 as ft6x36
 
+# Hardware reset of FT6336G via RST pin (GPIO18, active low).
+# Freenove's official FT6336U library drives RST low for 10ms then waits
+# for the chip to stabilize before any I2C communication.
 touch_rst = Pin(TOUCH_RST, Pin.OUT)
 touch_rst.value(0)
 time.sleep_ms(10)
 touch_rst.value(1)
 time.sleep_ms(200)
 
+# Use a plain machine.I2C and override _bus in the LVGL I2C.Bus wrapper.
+# This avoids an IDF I2C driver conflict: fail_save_i2c() in board detection
+# leaves machine.I2C(0) open on the same pins, and creating i2c.I2C.Bus(host=0)
+# on top of it can leave subsequent write_readinto calls returning ENODEV.
+# This is the same pattern used by m5stack_core2 (also FT6x36 touch).
 machine_i2c = machine.I2C(0, sda=Pin(TOUCH_SDA), scl=Pin(TOUCH_SCL), freq=TOUCH_I2C_FREQ)
 i2c_bus = i2c.I2C.Bus(host=0, sda=TOUCH_SDA, scl=TOUCH_SCL, freq=TOUCH_I2C_FREQ, use_locks=False)
 i2c_bus._bus = machine_i2c
@@ -129,6 +139,9 @@ last_state = lv.INDEV_STATE.RELEASED
 key_press_start = 0
 last_repeat_time = 0
 
+# Warning: This gets called several times per second, and if it outputs continuous debugging
+# on the serial line, that will break tools like mpremote from working properly to upload
+# new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
     global last_key, last_state, key_press_start, last_repeat_time
 
@@ -181,6 +194,9 @@ InputManager.register_indev(btn_indev)
 if __debug__: logger.debug("init battery")
 
 def adc_to_voltage(raw_adc):
+    # Schematic uses equal 200K/200K resistor divider (1:2), so V_bat = V_pin * 2.
+    # ATTN_11DB on the ESP32-S3 allows reading up to ~3.5V (used as reference here).
+    # TODO: switch to adc.read_uv() for per-chip factory calibration.
     return raw_adc * (3.5 / 4095) * 2
 
 BatteryManager.init_adc(9, adc_to_voltage)
@@ -204,6 +220,8 @@ LightsManager.init(neopixel_pin=42, num_leds=1)
 # ==============================
 if __debug__: logger.debug("init audio (ES8311 + FM8002E)")
 
+# Initialise the ES8311 codec over the shared I2C bus.
+# machine_i2c is already open on SDA=16, SCL=15 from the touch init above.
 _es8311 = None
 try:
     import drivers.codec.es8311 as es8311_drv
@@ -214,6 +232,8 @@ except Exception as e:
 _amp_enable = Pin(1, Pin.OUT, value=1)
 
 
+# FM8002E speaker amplifier enable pin (GPIO1: LOW=enabled, HIGH=disabled).
+# Start disabled at boot — enabled only around active playback to prevent ring noise.
 def _audio_on_open():
     _amp_enable.value(0)
     if _es8311:
@@ -228,6 +248,9 @@ def _audio_on_close():
     _amp_enable.value(1)
 
 
+# Register I2S audio devices with AudioManager.
+# Both output and input share MCLK (GPIO4), BCLK (GPIO5), and WS (GPIO7).
+# Only one I2S session can be active at a time; AudioManager handles conflicts.
 from mpos import AudioManager
 
 AudioManager.add(

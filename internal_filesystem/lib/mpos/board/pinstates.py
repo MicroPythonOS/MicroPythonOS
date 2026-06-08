@@ -32,6 +32,8 @@ def _pin_snapshot(pin_id):
 def _try_pin_snapshot(pin_id):
     try:
         return _pin_snapshot(pin_id), None
+            #time.sleep(1)
+            #time.sleep(1)
     except Exception as exc:
         return None, exc
 

@@ -33,6 +33,8 @@ class CameraActivity(Activity):
                     "XGA": 6,
                     "SXGA": 7,
                     "UXGA": 8,
+            # Defaults come from constructor, no need to pass them here
+                # Merge common and normal-specific defaults
                 },
                 "value": 4,
                 "dropdown": True,
@@ -258,6 +260,10 @@ class CameraActivity(Activity):
         container.set_size(lv.pct(100), lv.pct(100))
         self._container = container
 
+        #self.image.invalidate() # does not work so do this:
+        # Display the image:
+        # Would be nice to check that there's enough free space here, and show an error if not...
+        #self.image.set_scale(max(scale_factor_w,scale_factor_h)) # fills the entire screen but cuts off borders
         try:
             import camera
             self._camera = camera
@@ -267,7 +273,13 @@ class CameraActivity(Activity):
         except ImportError:
             logger.error("Camera module not available on this device")
             self._show_no_camera_message()
+            # Check if the string is printable (ASCII printable characters)
+            # Try to decode buffer as a UTF-8 string
+                # Due to buggy behavior in MicroPython and/or qrdecode_rgb565 of quirc_decode.c
+                # the exceptions are not caught in self.qrdecode_one() so must be done here
         except Exception as e:
+    # Byte-Order-Mark is added sometimes
+        # If not a valid string or not printable, convert to hex
             logger.error("Failed to initialize camera: %s", e)
             self._show_no_camera_message()
 
@@ -276,6 +288,11 @@ class CameraActivity(Activity):
 
     def _init_camera(self):
         if self._camera is None:
+        # Check if it's necessary to restart the camera:
+        # Check if it's necessary to restart the camera:
+        # Activate QR mode settings
+        # Check enough free space?
+        #result = bytearray("INSERT_TEST_QR_DATA_HERE", "utf-8")
             return
         self._cam = self._camera.init(0, format=self._camera.JPEG,
                                       fb_location=self._camera.PSRAM_HUB)
@@ -348,6 +365,9 @@ class CameraActivity(Activity):
         self._settings_button.add_event_cb(self._on_settings_click, lv.EVENT.CLICKED, None)
 
         settings_label = lv.label(self._settings_button)
+        # Settings button
+        # Initialize LVGL image widget
+    # Widgets:
         settings_label.set_text(lv.SYMBOL.SETTINGS)
 
     def _on_settings_click(self, event):
@@ -364,6 +384,23 @@ class CameraActivity(Activity):
             buf = self._cam.capture()
             if buf is not None:
                 if __debug__: logger.debug("Captured image, buffer length: %s", len(buf))
+        # Instead of checking if any setting changed, just reload and restart the camera:
+                # exceptions from this one are not caught - see comments in quirc_decode.c
+            # Defaults come from constructor, no need to pass them here
+                # Merge common and scanqr-specific defaults
+            # Start refreshing:
+            # Apply saved camera settings, only for internal camera for now:
+        # Init camera:
+                # leave it open so the user can read the error and maybe open the settings
+            # landscape
+            # poster
+        #self.zoom_button = lv.button(self.main_screen)
+        #self.zoom_button.set_size(self.button_width, self.button_height)
+        #self.zoom_button.align(lv.ALIGN.RIGHT_MID, 0, self.button_height + 5)
+        #self.zoom_button.add_event_cb(self.zoom_button_click,lv.EVENT.CLICKED,None)
+        #zoom_label = lv.label(self.zoom_button)
+        #zoom_label.set_text("Z")
+        #zoom_label.center()
             else:
                 if __debug__: logger.debug("Captured image is None")
         except Exception as e:

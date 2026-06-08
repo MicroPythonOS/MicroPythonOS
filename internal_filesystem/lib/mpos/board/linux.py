@@ -60,6 +60,9 @@ InputManager.register_indev(mouse)
 
 def catch_escape_key(indev, indev_data):
     global sdlkeyboard
+    #key = indev_data.key
+    #state = indev_data.state
+    #key = indev.get_key() # always 0
     pressed, code = sdlkeyboard._get_key() # get the current key and state
     if __debug__: logger.debug("catch_escape_key caught: %s, %s", pressed, code)
     if pressed == 1 and code == 27: # ESCAPE
@@ -88,6 +91,10 @@ except Exception as e:
 
 
 # Simulated battery voltage ADC measuring
+#keyboard.add_event_cb(keyboard_cb, lv.EVENT.ALL, None)
+#def keyboard_cb(event):
+ #   global canvas
+  #  event_code=event.get_code()
 from mpos import BatteryManager
 
 def adc_to_voltage(adc_value):

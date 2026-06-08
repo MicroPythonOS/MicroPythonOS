@@ -160,11 +160,14 @@ button_volume = Pin(BUTTON_VOLUME, Pin.IN, Pin.PULL_UP)
 button_select = Pin(BUTTON_SELECT, Pin.IN, Pin.PULL_UP)
 button_start = Pin(BUTTON_START, Pin.IN, Pin.PULL_UP)  # -> ENTER
 
+# PREV <- B | A -> NEXT
 button_b = Pin(BUTTON_B, Pin.IN, Pin.PULL_UP)
 button_a = Pin(BUTTON_A, Pin.IN, Pin.PULL_UP)
 
 
 class CrossbarHandler:
+    # ADC values are around low: ~236 and high ~511
+    # So the mid value is around (236+511)/2 = 373.5
     CROSSBAR_MIN_ADC_LOW = const(100)
     CROSSBAR_MIN_ADC_MID = const(370)
 
@@ -240,6 +243,7 @@ def input_callback(indev, data):
         current_key = lv.KEY.NEXT
     else:
         if data.key:
+        # No crossbar/buttons pressed
             data.key = 0
             data.state = lv.INDEV_STATE.RELEASED
             next_repeat = None
@@ -248,6 +252,7 @@ def input_callback(indev, data):
 
     blue_led.on()
 
+    # A key is currently pressed
     current_time = time.ticks_ms()
     repeat = current_time > next_repeat if next_repeat else False
     if repeat or current_key != data.key:
@@ -268,14 +273,17 @@ def input_callback(indev, data):
             mpos.ui.focus_direction.move_focus_direction(180)
 
         if not repeat:
+            # Initial press: Delay before first repeat
             next_repeat = current_time + REPEAT_INITIAL_DELAY_MS
         else:
+            # Faster auto repeat after initial press
             next_repeat = current_time + REPEAT_RATE_MS
             blue_led.off()
 
 
 group = lv.group_get_default()
 
+# Create and set up the input device
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(input_callback)

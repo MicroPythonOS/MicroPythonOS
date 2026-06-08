@@ -29,10 +29,42 @@ SETTINGS = {
     },
     "settings_hmirror": {"type": "bool", "label": "H-Mirror", "value": False},
     "settings_vflip": {"type": "bool", "label": "V-Flip", "value": False},
+        # Store metadata separately
+        #raw_tab = tabview.add_tab("Raw")
+        #self.create_raw_tab(raw_tab, self.prefs)
+        # Create Basic tab (always)
+        #tabview.set_size(lv.pct(100), pct_of_display_height(80))
+        # Create tabview
+        # Create main screen
+    # Scanqr mode specific defaults
+    # Normal mode specific defaults
+        # Advanced corrections
+        # Sensor-specific
+        # White balance
+        # Gain control
+        # Exposure control
+        # Visual effects
+        # Orientation
+        # Basic image adjustments
+    # Common defaults shared by both normal and scanqr modes (25 settings)
+    # Original: { 2560, 1920,   0,   0, 2623, 1951, 32, 16, 2844, 1968 }
+    # Worked for digital zoom in C: { 2560, 1920, 0, 0, 2623, 1951, 992, 736, 2844, 1968 }
 }
 
 
 class CameraSettingsActivity(Activity):
+    # Widgets:
+        #("1280x720", "1280x720"), # too thin (16:9) and same pixel area as 960x960
+        #("1024x1024", "1024x1024"), # somehow this fails to initialize
+        # Disabled because they use a lot of RAM and are very slow:
+        #("1280x1024", "1280x1024"),
+        #("1280x1280", "1280x1280"),
+        #("1600x1200", "1600x1200"),
+        #("1920x1080", "1920x1080"),
+        #("800x600", "800x600"), # somehow this fails to initialize
+        #("800x800", "800x800"), # somehow this fails to initialize
+        #("1024x768", "1024x768"), # this resolution is lower than 960x960 but it looks higher
+    # Resolution options are the same for all cameras for now (can be split later)
     def __init__(self):
         super().__init__()
 
@@ -89,7 +121,49 @@ class CameraSettingsActivity(Activity):
                 for i, v in enumerate(setting["values"].values()):
                     if v == setting["value"]:
                         idx = i
+        # Resolution dropdown
+        # Color Mode
+        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        # Save/Cancel buttons at bottom
+        # Initialize keyboard (hidden initially)
                         break
+        # Return success result
+                    # Other dropdowns store integer enum values
+                        # Resolution stored as 2 ints
+        # Save all UI control values
+        # This would be nice but does not provide adequate resolution:
+        #startX, label, cont = self.create_slider(tab, "startX", 0, 2844, startX, "startX")
+        # Lens Correction
+        # Raw Gamma Mode
+        # White Point Compensation
+        # Black Point Compensation
+        # DCW Mode
+        # Color Bar
+        # JPEG Quality
+        # Disabled because JPEG is not used right now
+        #quality = prefs.get_int("quality", 85)
+        #slider, label, cont = self.create_slider(tab, "JPEG Quality", 0, 100, quality, "quality")
+        #self.ui_controls["quality"] = slider
+        # Denoise
+        # Sharpness
+        #tab.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
+        # Special Effect
+        # AWB Gain
+        # White Balance Mode (dependent)
+        # Auto White Balance (master switch)
+        # Gain Ceiling
+        # Manual Gain Value (dependent)
+        # Auto Gain Control (master switch)
+        # Night Mode (AEC2)
+        # Add dependency handler
+        # Auto Exposure Level (dependent)
+        # Manual Exposure Value (dependent)
+        # Auto Exposure Control (master switch)
+        # Vertical Flip
+        # Horizontal Mirror
+        # Saturation
+        # Contrast
+        # Brightness
                 dd.set_options_static(items)
                 dd.set_selected(idx)
                 dd.add_event_cb(lambda e, k=key: self._on_option_change(e, k), lv.EVENT.VALUE_CHANGED, None)

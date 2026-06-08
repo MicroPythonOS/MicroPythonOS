@@ -7,23 +7,36 @@ def init_pmu(m_i2c):
     if __debug__: logger.debug("Initializing AXP2101 PMU")
     from drivers.power.AXP2101 import AXP2101
     pmu = AXP2101(m_i2c, addr=0x34)
+    # Set the minimum common working voltage of the PMU VBUS input, below this value will turn off the PMU
     pmu.setVbusVoltageLimit(AXP2101.XPOWERS_AXP2101_VBUS_VOL_LIM_4V36);
+    # Set the maximum current of the PMU VBUS input, higher than this value will turn off the PMU
     pmu.setVbusCurrentLimit(AXP2101.XPOWERS_AXP2101_VBUS_CUR_LIM_900MA);
+    # Set VSY off voltage as 2600mV , Adjustment range 2600mV ~ 3300mV
     pmu.setSysPowerDownVoltage(2600);
+    # Display backlight
     pmu.setALDO2Voltage(3300)
     pmu.enableALDO2()
+    # Display chip
     pmu.setALDO3Voltage(3300)
     pmu.enableALDO3()
+    # LoRa radio (might be better to only power this on if LoRa is used)
     pmu.setALDO4Voltage(3300)
     pmu.enableALDO4()
+    # Vibrator
     pmu.setBLDO2Voltage(3300)
     pmu.enableBLDO2()
     pmu.setBLDO1Voltage(3300);
     pmu.enableBLDO1();
+    # RTC backup battery:
+    # GPS
+    #pmu.setDC3Voltage(3300);    # Earlier versions use DC3 (without BOOT button and RST)
+    #pmu.enableDC3();    # Earlier versions use DC3 (without BOOT button and RST)
     pmu.setButtonBatteryChargeVoltage(3300)
     pmu.enableButtonBatteryCharge()
     pmu.setDLDO1Voltage(3300)
+    # Speaker
     pmu.enableDLDO1()
+    # Others
     pmu.setPowerKeyPressOffTime(AXP2101.XPOWERS_POWEROFF_4S)
     pmu.setPowerKeyPressOnTime(AXP2101.XPOWERS_POWERON_512MS)
     pmu.enableBattDetection()
@@ -31,22 +44,33 @@ def init_pmu(m_i2c):
     pmu.enableBattVoltageMeasure()
     pmu.enableSystemVoltageMeasure()
     pmu.enableTemperatureMeasure()
+    # Disable unused:
     pmu.disableDC2()
     pmu.disableDC4()
     pmu.disableDC5()
     pmu.disableALDO1()
     pmu.disableCPUSLDO()
     pmu.disableDLDO2()
+    # PMU interrupts
     pmu.disableIRQ(AXP2101.XPOWERS_AXP2101_ALL_IRQ);
+    # Enable the required interrupt function
     pmu.enableIRQ(
+        #AXP2101.XPOWERS_AXP2101_BAT_INSERT_IRQ    | AXP2101.XPOWERS_AXP2101_BAT_REMOVE_IRQ      |   # BATTERY is not removable
+        #AXP2101.XPOWERS_AXP2101_VBUS_INSERT_IRQ   | AXP2101.XPOWERS_AXP2101_VBUS_REMOVE_IRQ     |   # VBUS don't think this will be used
         AXP2101.XPOWERS_AXP2101_PKEY_SHORT_IRQ    | AXP2101.XPOWERS_AXP2101_PKEY_LONG_IRQ       |   # POWER KEY
         AXP2101.XPOWERS_AXP2101_BAT_CHG_DONE_IRQ  | AXP2101.XPOWERS_AXP2101_BAT_CHG_START_IRQ       # CHARGE
     )
+    # Clear all interrupt flags
     pmu.clearIrqStatus()
+    # Set the precharge charging current
     pmu.setPrechargeCurr(AXP2101.XPOWERS_AXP2101_PRECHARGE_50MA)
+    # It is recommended to charge at less than 130mA
     pmu.setChargerConstantCurr(AXP2101.XPOWERS_AXP2101_CHG_CUR_125MA)
+    # Set stop charging termination current
     pmu.setChargerTerminationCurr(AXP2101.XPOWERS_AXP2101_CHG_ITERM_25MA)
+    # T-Watch-S3 uses a high-voltage(4.35V) battery by default but let's use a bit less (4.2V) to increase battery life
     pmu.setChargeTargetVoltage(AXP2101.XPOWERS_AXP2101_CHG_VOL_4V2)
+    # Quick and dirty patch of BatteryManager to use the PMU:
     BatteryManager.read_raw_adc =  lambda *args: 0
     BatteryManager.has_battery = lambda *args: True
     BatteryManager.get_battery_percentage = pmu.getBatteryPercent
@@ -75,6 +99,7 @@ except Exception as e:
     logger.error("Exception while initializing PMU: %s", e)
 
 async def pmu_irq_watchdog():
+    # Workaround for IRQ's that don't always get cleared (race condition?)
     pmu = BatteryManager.pmu
     while True:
         await TaskManager.sleep(3)
@@ -98,6 +123,7 @@ def _pmu_irq_task(_arg):
             if pmu.isEnableALDO2():
                 pmu.disableALDO2()
                 pmu.disableALDO3()
+                # Would be good to put the ESP32 in a sleep state, turn off wifi etc...
             else:
                 pmu.enableALDO3()
                 pmu.enableALDO2()
@@ -106,6 +132,7 @@ def _pmu_irq_task(_arg):
     except Exception as e:
         logger.error("Exception in PMU IRQ task: %s", e)
     finally:
+        # clear interrupt, can take multiple tries
         attempts = 0
         while pmu.getIrqStatus() != 0 and attempts < 5:
             attempts += 1
@@ -140,6 +167,10 @@ SensorManager.init(m_i2c, address=0x19, mounted_position=SensorManager.FACING_EA
 
 
 try:
+    # Doesn't work with the new split Bus/Device Hardware SPI driver and drivers.lora.sx1262 yet
+    # so use the original drivers.lora.micropySX126X.sx1262 that's patched to fallback to Software SPI
+    #lora_spi_bus = SPI.Bus(host=1,mosi=1,miso=4,sck=3)
+    #lora_spi_device = SPI.Device(spi_bus=lora_spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
     pass
 except Exception as e:
     import sys
@@ -227,10 +258,13 @@ import drivers.rtc.pcf8563 as pcf8563
 rtc = pcf8563.PCF8563(m_i2c)
 dt = rtc.datetime()
 if __debug__: logger.debug("Datetime from RTC chip: %s", dt)
+# machine.RTC expects 8-tuple: (year, month, day, weekday, hour, minute, second, subsecond) so need to set subsecond
 rtc_tuple = (dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], dt[6], 0)
 from machine import RTC
 RTC().datetime(rtc_tuple)
 from mpos import TimeZone
 TimeZone.rtc = rtc
 
+# Would be good to also do this:
+# rtc.setClockOutput(SensorPCF8563::CLK_DISABLE);   //Disable clock output to conserve backup battery power
 if __debug__: logger.debug("finished")

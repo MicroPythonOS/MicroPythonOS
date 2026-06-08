@@ -133,6 +133,7 @@ def _build_drawer_notification_item(parent, notification):
     card.set_layout(lv.LAYOUT.FLEX)
     card.set_flex_flow(lv.FLEX_FLOW.ROW)
 
+    #card.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START)
     card.add_flag(lv.obj.FLAG.CLICKABLE)
     card.add_event_cb(
         lambda e, nid=notification.notification_id: _notification_pressed(e, nid),
@@ -174,6 +175,7 @@ def _build_drawer_notification_item(parent, notification):
     content_col.set_style_pad_row(2, lv.PART.MAIN)
     content_col.set_layout(lv.LAYOUT.FLEX)
     content_col.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+    #content_col.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
     content_col.set_flex_grow(1)
 
     title_label = lv.label(content_col)
@@ -341,6 +343,14 @@ def create_notification_bar():
         memfree_label.align_to(temp_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(7), 0)
 
     # WiFi icon
+    #style = lv.style_t()
+    #style.init()
+    #style.set_text_font(lv.font_montserrat_8)  # tiny font
+    #memfree_label.add_style(style, 0)
+    # Notification icon (bell)
+    #notif_icon = lv.label(notification_bar)
+    #notif_icon.set_text(lv.SYMBOL.BELL)
+    #notif_icon.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, PADDING_TINY, 0)
     wifi_icon = lv.label(notification_bar)
     wifi_icon.set_text(lv.SYMBOL.WIFI)
     wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
@@ -351,6 +361,7 @@ def create_notification_bar():
         # Battery icon
         battery_icon = lv.label(notification_bar)
         battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
+        #battery_icon.align_to(battery_label, lv.ALIGN.OUT_LEFT_MID, 0, 0)
         battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
         wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
         battery_icon.add_flag(lv.obj.FLAG.HIDDEN) # keep it hidden until it has a correct value
@@ -373,6 +384,9 @@ def create_notification_bar():
             battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
             wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
             battery_icon.remove_flag(lv.obj.FLAG.HIDDEN)
+            # Percentage is not shown for now:
+            #battery_label.set_text(f"{round(percent)}%")
+            #battery_label.remove_flag(lv.obj.FLAG.HIDDEN)
         update_battery_icon() # run it immediately instead of waiting for the timer
         lv.timer_create(update_battery_icon, BATTERY_ICON_UPDATE_INTERVAL, None)
 
@@ -411,6 +425,7 @@ def create_notification_bar():
     
     lv.timer_create(update_time, CLOCK_UPDATE_INTERVAL, None)
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
+    #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
     lv.timer_create(update_wifi_icon, WIFI_ICON_UPDATE_INTERVAL, None)
 
     _register_notifications_listener()
@@ -518,6 +533,7 @@ def create_drawer():
     icon_row = lv.obj(top_group)
     icon_row.set_width(lv.pct(100))
     icon_row.set_height(lv.SIZE_CONTENT)
+    #icon_row.set_style_pad_all(0, lv.PART.MAIN)
     icon_row.set_style_pad_row(5, lv.PART.MAIN)
     icon_row.set_style_pad_column(5, lv.PART.MAIN)
     icon_row.set_style_border_width(0, lv.PART.MAIN)
@@ -669,6 +685,7 @@ def drawer_scroll_callback(event):
     global scroll_start_y
     event_code=event.get_code()
     x, y = InputManager.pointer_xy()
+    #name = mpos.ui.get_event_name(event_code)
     if event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y == None:
         scroll_start_y = y
     elif event_code == lv.EVENT.SCROLL and scroll_start_y != None:

@@ -26,6 +26,7 @@ LCD_CS = 45
 LCD_BL = 1
 
 if __debug__: logger.debug("machine.SPI.Bus() initialization")
+    # Power off, otherwise it keeps using a lot of current
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, miso=LCD_MISO, sck=LCD_SCLK)
 except Exception as e:
@@ -42,6 +43,18 @@ display_bus = lcd_bus.SPIBus(
     cs=LCD_CS,
 )
 
+# Max buffer size (breaks SPI camera because it also needs DMA memory)
+# 148480 (320*232*2) is too much
+# 147841 (320*231*2) is too much
+# 147200 (320*230*2) is fine!
+# 140800 (320*220*2) is fine!
+ # lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
+ # The default was /10 so 15360 bytes.
+ # /2 = 76800 shows something on display and then hangs the board
+ # /2 = 38400 works and pretty high framerate but camera gets ESP_FAIL
+ # /2 = 19200 works, including camera at 9FPS
+ # 28800 is between the two and still works with camera!
+ # 30720 is /5 and is already too much
 _BUFFER_SIZE = const(320 * 45 * 2) # 28800
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
@@ -83,6 +96,7 @@ BatteryManager.init_adc(5, adc_to_voltage)
 try:
     from machine import Pin, I2C
     i2c = I2C(1, scl=Pin(16), sda=Pin(21))
+    # Warning: don't do an i2c scan because it confuses the camera!
     camera_addr = 0x3C # for OV5640
     reg_addr = 0x3008
     reg_high = (reg_addr >> 8) & 0xFF
@@ -106,9 +120,11 @@ def init_cam(width, height, colormode):
     try:
         from camera import Camera, GrabMode, PixelFormat
 
+        # Map resolution to FrameSize enum using CameraManager
         frame_size = CameraManager.resolution_to_framesize(width, height)
         if __debug__: logger.debug("init_internal_cam: Using FrameSize %s for %sx%s", frame_size, width, height)
 
+        # Try to initialize, with one retry for I2C poweroff issue
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -125,6 +141,7 @@ def init_cam(width, height, colormode):
                         reset_pin=-1,
                         pixel_format=PixelFormat.RGB565 if colormode else PixelFormat.GRAYSCALE,
                         frame_size=frame_size,
+                        #grab_mode=GrabMode.WHEN_EMPTY,
                         grab_mode=GrabMode.LATEST,
                         fb_count=1
                     )
@@ -164,6 +181,7 @@ def capture_cam(cam_obj, colormode):
 def apply_cam_settings(cam_obj, prefs):
     return CameraManager.ov_apply_camera_settings(cam_obj, prefs)
 
+# Waveshare ESP32-S3-Touch-LCD-2 has OV5640 camera
 CameraManager.add_camera(CameraManager.Camera(
     lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
     name="OV5640",

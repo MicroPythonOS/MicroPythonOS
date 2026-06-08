@@ -176,6 +176,7 @@ SD_MOSI_PIN = const(46)
 SD_MISO_PIN = const(41)
 SD_CS_PIN = const(42)
 
+# TCA9555 expander
 TCA9555_ADDR = const(0x20)
 TCA_EXP = const(0x40)
 TCA_BL_EN = const(TCA_EXP | 0)
@@ -195,14 +196,41 @@ FG_INT = const(43)
 RTC_INT = const(44)
 BOOT_BTN = const(0)
 
+# TMUX1574 IO-MUX: SD and I2S share GPIO41/42/45/46 (mutually exclusive)
+# native GPIO
 IOMUX_OFF = const(0)
 IOMUX_SD = const(1)
 IOMUX_I2S = const(2)
 
 AMP_SD = const(41)
 
+# RGB data GPIOs in LVGL RGB565 bit order: data0=B-LSB .. data15=R-MSB
+# i.e. B0..B4, G0..G5, R0..R4 by GPIO. This is not DevOS's UM_GFX data_gpio
+# scramble, which matches UM_GFX's own framebuffer packing, not LVGL's standard RGB565.
 RGB_DATA = (21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4)
 
+# SOC temperature (ESP32-S3 internal) -> top-bar temperature readout
+# Without a registered temp sensor the top bar shows a hardcoded "42°C" placeholder. This
+# registers the MCU/SOC sensor (esp32.mcu_temperature()). No IMU on this board, so pass None.
+# audio (MAX98357A on I2S: sck46 ws42 sd45) + SD<->I2S mux arbiter
+#
+# SD and I2S share GPIO41/42/45/46 through the TMUX1574 and cannot be live at once, so audio
+# borrows the pins via the AudioManager Output's on_open/on_close hooks:
+#   on_open  (before machine.I2S() binds the pins): release SD -> mux to I2S -> un-mute amp
+#   on_close (before I2S.deinit()):                  mute amp -> mux back to SD
+#
+# LIMITATION: SD is NOT auto-restored after audio. Once I2S has run, the SD card will not
+# re-detect when the freed SPI host is re-initialized. This is an ESP32-S3 SPI/I2S GDMA
+# interaction that is not fixable in board code. No-DMA breaks SD block reads, a GPIO pad
+# reset does not help, and the host number is irrelevant. A fresh host init survives I2S but
+# a re-init does not. So after playing audio, /sdcard stays unmounted until the next reboot.
+# Workloads that need both SD and audio should treat them as mutually exclusive across a
+# reboot. If a future MicroPython/IDF fix lets the SPI re-init survive I2S, restoring SD
+# becomes a few lines in on_close: re-create the SPI.Bus + SDCard and remount.
+# RTC (RV-3028 @ 0x52) -> machine.RTC + TimeZone.rtc
+# battery (MAX17048 @ 0x36) -> BatteryManager
+# 6) GT911 touch (reset on expander, interrupt on native GPIO3)
+# 1) I2C bus (shared: expander @0x20, GT911, RTC, fuel-gauge)
 try:
     i2c_bus = i2c.I2C.Bus(
         host=I2C_HOST,
@@ -220,17 +248,20 @@ except Exception as e:
 
 tca = TCA9555(i2c_bus, dev_id=TCA9555_ADDR)
 
+# 2) LCD hardware reset (expander) + backlight enable (expander) + PWM (GPIO40, active-low)
 tca.digital_write(TCA_LCD_RST, 0)
 time.sleep_ms(20)
 tca.digital_write(TCA_LCD_RST, 1)
 time.sleep_ms(120)
 tca.digital_write(TCA_BL_EN, 1)
 
+# 3) 3-wire SPI init channel over the expander
 spi_3wire = ExpanderSpi3Wire(
     tca, cs_pin=TCA_LCD_CS, clk_pin=TCA_LCD_CLK, mosi_pin=TCA_LCD_MOSI
 )
 
 
+# 4) RGB pixel bus, all 16 data pins in RGB565 bit order, DevOS timings, 6.5 MHz pclk
 display_bus = lcd_bus.RGBBus(
     hsync=LCD_BUS_HSYNC,
     vsync=LCD_BUS_VSYNC,
@@ -266,6 +297,9 @@ display_bus = lcd_bus.RGBBus(
 )
 
 _FB_SIZE = const(LCD_WIDTH * LCD_HEIGHT * 2)
+# Two FULL-size framebuffers in PSRAM -> FULL double-buffered render mode so LVGL
+# draws to a back buffer and swaps on vsync (tear-free). Without this the framework
+# auto-allocates a 1/10-screen PARTIAL buffer, which tears on full-screen animations.
 frame_buffer1 = display_bus.allocate_framebuffer(
     _FB_SIZE, lcd_bus.MEMORY_SPIRAM | lcd_bus.MEMORY_DMA
 )
@@ -273,6 +307,7 @@ frame_buffer2 = display_bus.allocate_framebuffer(
     _FB_SIZE, lcd_bus.MEMORY_SPIRAM | lcd_bus.MEMORY_DMA
 )
 
+# 5) Driver: register-init (via spi_3wire) runs BEFORE the RGB bus (_init_bus=False)
 mpos.ui.main_display = ST7701S(
     data_bus=display_bus,
     spi_3wire=spi_3wire,
@@ -288,12 +323,15 @@ mpos.ui.main_display = ST7701S(
 mpos.ui.main_display.init()
 
 backlight_pwm = machine.PWM(
+# full brightness at boot
     machine.Pin(BACKLIGHT_PWM_PIN),
     freq=BACKLIGHT_PWM_FREQ_HZ,
     duty_u16=BACKLIGHT_FULL_BRIGHT_DUTY,
 )
 mpos.ui.main_display.set_backlight(100)
 
+# This panel needs color inversion ON: without it every color renders as its
+# complement. The init seq sends INVON then a trailing INVOFF, so re-enable it here.
 mpos.ui.main_display.set_color_inversion(True)
 
 try:
@@ -314,9 +352,17 @@ except Exception as e:
     time.sleep(3)
     machine.reset()
 
+# 7) rotation AFTER init + touch creation
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._0)
 
 tca.digital_write(TCA_HAPTICS_EN, 1)
+# haptic (DRV2605L @ 0x5A)
+# Onboard peripherals: haptic, battery gauge, RTC, VBUS, BOOT button.
+#
+# Every I2C chip shares `i2c_bus` (the i2c.I2C.Bus created above for the expander
+# and touch). i2c.I2C.Bus wraps machine.I2C and exposes readfrom_mem/writeto_mem,
+# which is all these drivers need. Do NOT open a second machine.I2C on controller 0:
+# it re-installs the IDF driver and kills the live expander/touch/backlight.
 time.sleep_ms(10)
 try:
     haptic = drv2605.DRV2605(i2c_bus)
@@ -335,6 +381,7 @@ except Exception as e:
 
 try:
     gauge = max17048.MAX17048(i2c_bus)
+    # BatteryManager methods are @staticmethod (called with no self) -> variadic lambdas
     BatteryManager.has_battery = lambda *a, **k: True
     BatteryManager.get_battery_percentage = lambda *a, **k: gauge.state_of_charge
     BatteryManager.read_battery_voltage = lambda *a, **k: gauge.cell_voltage
@@ -344,6 +391,7 @@ except Exception as e:
     logger.error("fuel gauge init failed: %s", e)
     gauge = None
 
+# FG_INT (GPIO43) empty-battery alert
 if gauge:
     try:
         gauge.set_empty_alert_threshold(10)
@@ -368,6 +416,7 @@ try:
     rtc = rv3028.RV3028(i2c_bus)
     rtc.enable_backup()
 
+    # machine.RTC().datetime() requires an 8-tuple (append subsec=0)
     dt = rtc.datetime()
     year, month, day, weekday, hour, minute, second = dt
     machine.RTC().datetime((year, month, day, weekday, hour, minute, second, 0))
@@ -377,6 +426,7 @@ except Exception as e:
     logger.error("RTC init failed: %s", e)
     rtc = None
 
+# RTC_INT (GPIO44) daily alarm
 _rtc_alarm_cb = None
 
 
@@ -407,11 +457,13 @@ if rtc:
         logger.error("RTC_INT setup failed: %s", e)
 
 
+# VBUS sense (expander P11)
 def vbus_present():
     return tca.digital_read(TCA_VBUS_SENSE) == 1
 
 
 _boot_btn = machine.Pin(BOOT_BTN, machine.Pin.IN, machine.Pin.PULL_UP)
+# BOOT button (GPIO0) as a KEYPAD indev (press -> ESC/back navigation)
 _boot_last = False
 
 
@@ -443,6 +495,7 @@ try:
 except Exception as e:
     logger.error("BOOT keypad init failed: %s", e)
 
+# TMUX1574 IO-MUX
 _iomux_state = IOMUX_OFF
 
 
@@ -461,6 +514,7 @@ def set_iomux(state):
     _iomux_state = state
 
 
+# SD card (SPI on the mux SD-side: SCK45 MISO41 MOSI46, CS42)
 _sd_spi = None
 
 
@@ -481,6 +535,8 @@ def _sd_mount():
 
 
 def sd_init():
+    # Boot bring-up: mux to SD, create the SPI bus, register the card with mpos.sdcard
+    # (which owns the manager singleton), and mount it.
     global _sd_spi
     set_iomux(IOMUX_SD)
     _sd_spi = machine.SPI.Bus(
@@ -543,6 +599,7 @@ except Exception as e:
     logger.error("sensor init failed: %s", e)
 
 
+# opt-in haptic touch feedback (generic InputManager hook, reads the Settings pref live)
 def _haptic_feedback_cb(event=None):
     try:
         if (

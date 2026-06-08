@@ -33,9 +33,11 @@ LCD_BL = 48
 
 I2C_FREQ = 400000
 
+# Display resolution
 TFT_HOR_RES = 320
 TFT_VER_RES = 240
 
+# Initialize SPI bus for display
 spi_bus = machine.SPI.Bus(
     host=SPI_BUS,
     mosi=LCD_MOSI,
@@ -50,10 +52,14 @@ display_bus = lcd_bus.SPIBus(
     cs=LCD_CS,
 )
 
+# Allocate frame buffers
+# Buffer size calculation: 2 bytes per pixel (RGB565) * width * height / divisor
+# Using 28800 bytes (same as Waveshare and Fri3d) for good performance
 _BUFFER_SIZE = const(28800)
 fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
+# Initialize ST7789 display
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
@@ -73,6 +79,8 @@ mpos.ui.main_display.set_backlight(100)
 
 # Touch handling
 def init_touch():
+    # Power off, otherwise it keeps using a lot of current
+            # disable and enable touch pad because camera initialization breaks it
     try:
         import i2c
         i2c_bus = i2c.I2C.Bus(host=0, scl=38, sda=39, freq=I2C_FREQ, use_locks=False)
@@ -94,6 +102,7 @@ def io0_interrupt_handler(pin):
 io0_pin = machine.Pin(0, machine.Pin.IN, machine.Pin.PULL_UP)
 io0_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=io0_interrupt_handler)
 
+# Initialize LVGL
 lv.init()
 
 # Initialize SD card in SDIO mode
@@ -101,6 +110,9 @@ from mpos import sdcard
 sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
 
 # === CAMERA HARDWARE ===
+# === LED HARDWARE ===
+# Note: MaTouch ESP32-S3 has no NeoPixel LEDs
+# LightsManager will not be initialized (functions will return False)
 from mpos import CameraManager
 
 def init_cam(width, height, colormode):
@@ -108,9 +120,11 @@ def init_cam(width, height, colormode):
     try:
         from camera import Camera, GrabMode, PixelFormat
 
+        # Map resolution to FrameSize enum using CameraManager
         frame_size = CameraManager.resolution_to_framesize(width, height)
         if __debug__: logger.debug("init_internal_cam: Using FrameSize %s for %sx%s", frame_size, width, height)
 
+        # Try to initialize, with one retry for I2C poweroff issue
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -127,6 +141,7 @@ def init_cam(width, height, colormode):
                     reset_pin=-1,
                     pixel_format=PixelFormat.RGB565 if colormode else PixelFormat.GRAYSCALE,
                     frame_size=frame_size,
+                    #grab_mode=GrabMode.WHEN_EMPTY,
                     grab_mode=GrabMode.LATEST,
                     fb_count=1
                 )
@@ -180,6 +195,8 @@ def capture_cam(cam_obj, colormode):
 def apply_cam_settings(cam_obj, prefs):
     return CameraManager.ov_apply_camera_settings(cam_obj, prefs)
 
+# MaTouch ESP32-S3 has OV3660 camera (3MP, up to 2048x1536)
+# Camera pins are available but initialization is handled by the camera driver
 CameraManager.add_camera(CameraManager.Camera(
     lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
     name="OV3660",

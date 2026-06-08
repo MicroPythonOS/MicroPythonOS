@@ -29,10 +29,19 @@ display_bus = lcd_bus.SPIBus(
     cs=5
 )
 
+# lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
+# The default was /10 so 15360 bytes.
+# /2 = 76800 shows something on display and then hangs the board
+# /2 = 38400 works and pretty high framerate but camera gets ESP_FAIL
+# /2 = 19200 works, including camera at 9FPS
+# 28800 is between the two and still works with camera!
+# 30720 is /5 and is already too much
+#_BUFFER_SIZE = const(28800)
 buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
+# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
@@ -73,21 +82,26 @@ ADC_KEY_MAP = [
     {'key': 'LEFT', 'unit': 1, 'channel': 0, 'min': 0, 'max': 1024},
 ]
 
+# Initialize ADC for the two channels
 adc_up_down = ADC(Pin(3))  # ADC1_CHANNEL_2 (GPIO 33)
 adc_up_down.atten(ADC.ATTN_11DB)  # 0-3.3V range
 adc_left_right = ADC(Pin(1))  # ADC1_CHANNEL_0 (GPIO 36)
 adc_left_right.atten(ADC.ATTN_11DB)  # 0-3.3V range
 
 def read_joystick():
+    # Read ADC values
+    # Read ADC values
     val_up_down = adc_up_down.read()
     val_left_right = adc_left_right.read()
 
+    # Check each key's range
     for mapping in ADC_KEY_MAP:
         adc_val = val_up_down if mapping['channel'] == 2 else val_left_right
         if mapping['min'] <= adc_val <= mapping['max']:
             return mapping['key']
     return None  # No key triggered
 
+# Rotate: UP = 0°, RIGHT = 90°, DOWN = 180°, LEFT = 270°
 def read_joystick_angle(threshold=0.1):
     val_up_down = adc_up_down.read()
     val_left_right = adc_left_right.read()
@@ -95,24 +109,35 @@ def read_joystick_angle(threshold=0.1):
     x = (val_left_right - 2048) / 2048
     y = (val_up_down - 2048) / 2048
 
+    # Check if joystick is near center
+    #if time.time() < 60:
+    # Normalize to [-1, 1]
+    #if time.time() < 60:
     magnitude = math.sqrt(x*x + y*y)
+    #if time.time() < 60:
     if magnitude < threshold:
         return None
 
+    # Calculate angle in degrees with UP = 0°, clockwise
     angle_rad = math.atan2(x, y)
     angle_deg = math.degrees(angle_rad)
     angle_deg = (angle_deg + 360) % 360
     return angle_deg
 
+# Repeat timing for navigation actions (same as LVGL indev timing for consistency)
 LONG_PRESS_TIME = const(400)
 LONG_PRESS_REPEAT_TIME = const(100)
 _last_key = None
 _next_repeat_at = 0
 
+# Read callback
+# Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
+# that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
     global _last_key, _next_repeat_at
     current_key = None
 
+    # Check buttons
     if btn_x.value() == 0:
         current_key = lv.KEY.ESC
     elif btn_y.value() == 0:
@@ -127,6 +152,7 @@ def keypad_read_cb(indev, data):
         current_key = lv.KEY.END
     else:
         angle = read_joystick_angle(0.30)
+        # Check joystick
         if angle:
             if angle > 45 and angle < 135:
                 current_key = lv.KEY.RIGHT
@@ -181,6 +207,7 @@ def keypad_read_cb(indev, data):
 
 group = lv.group_get_default()
 
+# Create and set up the input device
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(keypad_read_cb)
@@ -198,8 +225,12 @@ mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 IRManager.txPin = Pin(10, Pin.OUT)
 IRManager.rxPin = Pin(11, Pin.IN)
 
+# Battery voltage ADC measuring
+# NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
+# BatteryManager handles this automatically: disables WiFi, reads ADC, reconnects WiFi.
 from mpos import BatteryManager
 
+# 2444 is 4.12
 def adc_to_voltage(adc_value):
     return (0.001651* adc_value + 0.08709)
 
@@ -208,6 +239,11 @@ BatteryManager.init_adc(13, adc_to_voltage)
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
 
+# I2S pin configuration for audio output (DAC) and input (microphone)
+# Note: I2S is created per-stream, not at boot (only one instance can exist)
+# The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
+# See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
+# Would be better to only add these if the communicator is connected:
 i2s_output_pins = {
     'ws': 47,
     'sck': 2,
@@ -236,6 +272,7 @@ mic_input = AudioManager.add(
     )
 )
 
+# Add this after the headset output so that it doesn't become the default:
 buzzer_output = AudioManager.add(
     AudioManager.Output(
         name="Badge Buzzer",
@@ -246,6 +283,7 @@ buzzer_output = AudioManager.add(
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
+# Create I2C bus for IMU (different pins from display)
 from machine import I2C
 imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
 from mpos import DeviceManager
@@ -254,6 +292,7 @@ SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
+# Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12)
 LightsManager.set_led_num(5)
 
@@ -297,8 +336,11 @@ import _thread
 
 def startup_wow_effect():
     try:
+        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
         startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
 
+        # Start the jingle
+        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
         player = AudioManager.player(
             rtttl=startup_jingle,
             stream_type=AudioManager.STREAM_NOTIFICATION,
@@ -307,6 +349,7 @@ def startup_wow_effect():
         )
         player.start()
 
+        # Rainbow colors for the 5 LEDs
         rainbow = [
             (255, 0, 0),    # Red
             (255, 128, 0),  # Orange
@@ -315,12 +358,15 @@ def startup_wow_effect():
             (0, 0, 255),    # Blue
         ]
 
+        # Single rainbow sweep
         for i in range(5):
+            # Light up LEDs progressively
             for j in range(i + 1):
                 LightsManager.set_led(j, *rainbow[j])
             LightsManager.write()
             time.sleep_ms(500)
 
+        # Hold white, then fade out over 4 seconds
         LightsManager.set_all(255, 255, 255)
         LightsManager.write()
         time.sleep_ms(500)

@@ -22,6 +22,7 @@ try:
         data5=46,
         data6=47,
         data7=48,
+        #reverse_color_bits=False # doesnt seem to do anything?
     )
 except Exception as e:
     logger.error("Error initializing display bus: %s", e)
@@ -37,10 +38,13 @@ import mpos.ui
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
+    # frame_buffer_2 doesn't seem to improve anything
     display_width=170,
     display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
+    # color_space=lv.COLOR_FORMAT.RGB888, # not supported on qemu
     color_byte_order=st7789.BYTE_ORDER_BGR,
+    # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
     power_pin=9, # Must set RD pin to high, otherwise blank screen as soon as LVGL's task_handler starts
     reset_pin=5,
     reset_state=st7789.STATE_LOW, # needs low: high will not enable the display
@@ -54,6 +58,7 @@ mpos.ui.main_display.init()
 mpos.ui.main_display.set_backlight(100) # works
 
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+#mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180) # doesnt suffer from the qemu full buffer issue
 mpos.ui.main_display.set_color_inversion(True)
 
 # Button handling code:
@@ -137,6 +142,7 @@ def keypad_read_cb(indev, data):
     if current_key is None:
         # No key pressed
         data.key = last_key if last_key else -1
+            # This doesn't seem to make the key navigation in on-screen keyboards work, unlike on the m5stack_fire...?
         data.state = lv.INDEV_STATE.RELEASED
         last_key = None
         last_state = lv.INDEV_STATE.RELEASED

@@ -138,6 +138,7 @@ class MposKeyboard:
     def _handle_events(self, event):
         code = event.get_code()
 
+        # DEBUG:
         if code == lv.EVENT.READY or code == lv.EVENT.CANCEL:
             self.hide_keyboard()
             return
@@ -294,6 +295,7 @@ class MposKeyboard:
         self._keyboard.set_mode(mode)
 
     def scroll_after_show(self, timer):
+        #self._textarea.scroll_to_view_recursive(True) # makes sense but doesn't work and breaks the keyboard scroll
         self._keyboard.scroll_to_view_recursive(True)
 
     def focus_on_keyboard(self, timer=None):
@@ -309,6 +311,10 @@ class MposKeyboard:
         WidgetAnimator.smooth_show(self._keyboard, duration=500)
         # Scroll to view on a timer because it will be hidden initially
         lv.timer_create(self.scroll_after_show, 250, None).set_repeat_count(1)
+        # When this is done from a timer, focus styling is not applied so the user doesn't see which button is selected.
+        # Maybe because there's no active indev anymore?
+        # Maybe it will be fixed in an update of LVGL 9.3?
+        # focus_timer = lv.timer_create(self.focus_on_keyboard,750,None).set_repeat_count(1)
         # Workaround: show the keyboard immediately and then focus on it - that works, and doesn't seem to flicker as feared:
         self._keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
         self.focus_on_keyboard()
