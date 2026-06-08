@@ -28,7 +28,7 @@ class FileManager(Activity):
         self._list = lv.list(screen)
         self._list.set_size(lv.pct(100), lv.pct(100))
 
-        self._populate_dir("/home/user/")
+        self._populate_dir(".")
         self.setContentView(screen)
 
     def onResume(self, screen):
