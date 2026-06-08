@@ -268,7 +268,7 @@ PY
 	case "$(uname -m)" in
 		x86_64|i686|i386|armv6l|riscv64) mpy_cross_arch="host" ;;
 	esac
-	[ -n "$mpy_cross_arch" ] && mpy_cross_flags="-march=$mpy_cross_arch" || mpy_cross_flags=""
+	[ -n "$mpy_cross_arch" ] && mpy_cross_flags="-O3 -march=$mpy_cross_arch" || mpy_cross_flags="-O3"
 	python3 make.py "$target" \
 		LV_CFLAGS="-g -O0 -ggdb" \
 		STRIP= \
