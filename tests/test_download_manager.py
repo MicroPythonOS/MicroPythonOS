@@ -300,10 +300,45 @@ class TestDownloadManager(unittest.TestCase):
             )
 
             self.assertIsNotNone(data)
-            self.assertEqual(
-                mock_dm.headers_received,
-                {"X-Custom-Header": "TestValue"}
+            self.assertIn("X-Custom-Header", mock_dm.headers_received)
+            self.assertEqual(mock_dm.headers_received["X-Custom-Header"], "TestValue")
+            self.assertIn("User-Agent", mock_dm.headers_received)
+            self.assertTrue(mock_dm.headers_received["User-Agent"].startswith("MicroPythonOS/"))
+
+        asyncio.run(run_test())
+
+    def test_default_user_agent_is_added_when_no_headers(self):
+        """Test that DownloadManager always adds a default User-Agent header."""
+        import asyncio
+
+        async def run_test():
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"{}")
+
+            await mock_dm.download_url("https://example.com/headers")
+
+            self.assertIsNotNone(mock_dm.headers_received)
+            self.assertIn("User-Agent", mock_dm.headers_received)
+            self.assertTrue(mock_dm.headers_received["User-Agent"].startswith("MicroPythonOS/"))
+
+        asyncio.run(run_test())
+
+    def test_existing_user_agent_is_preserved(self):
+        """Test that an explicit User-Agent header is not overwritten."""
+        import asyncio
+
+        async def run_test():
+            mock_dm = MockDownloadManager()
+            mock_dm.set_download_data(b"{}")
+
+            await mock_dm.download_url(
+                "https://example.com/headers",
+                headers={"User-Agent": "CustomAgent/1.0"}
             )
+
+            self.assertIsNotNone(mock_dm.headers_received)
+            self.assertIn("User-Agent", mock_dm.headers_received)
+            self.assertEqual(mock_dm.headers_received["User-Agent"], "CustomAgent/1.0")
 
         asyncio.run(run_test())
 
