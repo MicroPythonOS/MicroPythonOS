@@ -346,10 +346,10 @@ mpos.ui.change_task_handler = change_task_handler # make it accessible
 mpos.ui.change_task_handler()
 
 # Start launcher first so it's always at bottom of stack
+started_launcher = False
 launcher_app = AppManager.get_launcher()
 if launcher_app is None:
-    print("FATAL: No launcher app found")
-    started_launcher = False
+    print("WARNING: No launcher app found")
 else:
     started_launcher = AppManager.start_app(launcher_app.fullname)
     # Then start auto_start_app_early if configured
@@ -380,7 +380,7 @@ async def ota_rollback_cancel():
         print("main.py: warning: could not mark this update as valid:", e)
 
 if not started_launcher:
-    print(f"WARNING: launcher {launcher_app} failed to start, not cancelling OTA update rollback")
+    print(f"WARNING: launcher failed to start, not cancelling OTA update rollback")
 else:
     TaskManager.create_task(ota_rollback_cancel()) # only gets started after TaskManager.start()
 
