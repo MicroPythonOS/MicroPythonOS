@@ -2,12 +2,22 @@
 # raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
 
 import lvgl as lv
+import os
 
 import mpos
 import mpos.ui
 import mpos.ui.topmenu
 
 from mpos import AppearanceManager, AppManager, BuildInfo, DeviceInfo, DisplayMetrics, SharedPreferences, TaskManager
+
+
+def _get_boot_splash_src():
+    custom_splash = "M:data/images/boot_splash.png"
+    try:
+        os.stat("data/images/boot_splash.png")
+        return custom_splash
+    except Exception:
+        return "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png"
 
 def init_rootscreen():
     """Initialize the root screen and set display metrics."""
@@ -24,7 +34,7 @@ def init_rootscreen():
 
     # Show logo
     img = lv.image(screen)
-    img.set_src("M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png") # from the MPOS-logo repo
+    img.set_src(_get_boot_splash_src())
     if width < 296:
         img.set_scale(int(256 * width/296))
     img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)

@@ -4,6 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Board Support:
+- Fri3d 2024: cleanup key repeat workaround for old LVGL 9.2
 - Fri3d 2026: add button repeat on long press
 
 Builtin Apps:
@@ -16,6 +17,7 @@ Frameworks:
 OS:
 - aiohttp: add support for relative HTTP redirects instead of only absolute HTTP redirects
 - Drawer menu: close when home button is clicked
+- Optional override of builtin boot splash image by /data/images/boot_splash.png
 
 0.12.0
 ======
