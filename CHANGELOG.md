@@ -12,6 +12,7 @@ Builtin Apps:
 
 Frameworks:
 - DownloadManager: print stack trace in case of download error
+- DownloadManager: include User-Agent HTTP header
 - WidgetAnimator: fix animations with large values (like a large on-chain balance in LightningPiggy) not being animated
 
 OS:
