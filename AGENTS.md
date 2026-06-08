@@ -26,6 +26,7 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
 - Every code change must pass `make lint`.
+- Never add, remove or modify inline comments or docstrings on your own initiative, unless the task explicitly asks for it. Comments and docstrings preserve intent and are treated as critical documentation. Refactoring or logging-conversion tasks must target only the specific code elements they're asked about and leave all other content untouched.
 - Debug logging: use `if __debug__: logger.debug("fmt %s", var)` (one line, `ruff.toml` ignores E701). `mpy-cross -O3` eliminates these blocks entirely at compile time — strings AND bytecode gone. Use `logger.warning/error/critical` without `__debug__` guard. Always `import logging; logger = logging.getLogger(__name__)` per file. Prefer `%s` formatting over f-strings for lazy eval. 
 - Always add a timeout -s 9 30 to ./scripts/run_desktop.sh so run: timeout -s 9 30 ./scripts/run_desktop.sh
 - Write temporary files to a `tmp/` folder in the CWD, not `/` or `/tmp`, due to permissions constraints.
