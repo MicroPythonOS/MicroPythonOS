@@ -13,6 +13,7 @@ Builtin Apps:
 Frameworks:
 - DownloadManager: print stack trace in case of download error
 - DownloadManager: include User-Agent HTTP header
+- FontManager: optimize emoji PNG sizes with optipng and zopflipng to reduce build size by ~14KiB
 - WidgetAnimator: fix animations with large values (like a large on-chain balance in LightningPiggy) not being animated
 
 OS:
