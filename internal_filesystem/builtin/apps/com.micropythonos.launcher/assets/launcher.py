@@ -187,12 +187,25 @@ class Launcher(Activity):
         if start_result is False:
             lv.screen_load_anim(self._screen, lv.SCREEN_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
             self.onResume(self._screen)
+        else:
+            self._cleanup_splash_screen()
+
+    def _cleanup_splash_screen(self):
+        splash_screen = self._splash_screen
+        if splash_screen is None:
+            return
+        self._splash_screen = None
+        try:
+            if splash_screen != lv.screen_active():
+                splash_screen.delete()
+        except Exception:
+            pass
 
     def _exit_splash_mode(self, screen):
         if self._splash_fullname is None and self._splash_screen is None:
             return
         self._splash_fullname = None
-        self._splash_screen = None
+        self._cleanup_splash_screen()
         screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
 
     # ------------------------------------------------------------------
