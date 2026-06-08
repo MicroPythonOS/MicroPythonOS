@@ -2,9 +2,12 @@
 # Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling.
 # Uses synchronous playback in a separate thread for non-blocking operation.
 
+import logging
 import machine
 import os
 import time
+
+logger = logging.getLogger(__name__)
 
 
 class WAVStream:
@@ -257,12 +260,11 @@ class WAVStream:
         elif sample_rate == 22050:
             return (705600,1024)
         elif sample_rate == 32000:
-            print("Warning: sample rate 32kHz hasn't been testing, guessing!")
             return (1024000,1024)
         elif sample_rate == 44100:
             return (1411200,2048)
         else:
-            print(f"Uncommon sample rate {sample_rate} hasn't been tried, returning default sample_rate * 256 amd 50% duty cycle")
+            if __debug__: logger.debug("Uncommon sample rate %s, using default", sample_rate)
             return (sample_rate * 256, 32768)
         '''
 
@@ -306,7 +308,7 @@ class WAVStream:
             with open(self.file_path, 'rb') as f:
                 st = os.stat(self.file_path)
                 file_size = st[6]
-                print(f"WAVStream: Playing {self.file_path} ({file_size} bytes)")
+                if __debug__: logger.debug("Playing %s (%s bytes)", self.file_path, file_size)
 
                 # Parse WAV header
                 data_start, data_size, original_rate, channels, bits_per_sample = \
@@ -330,8 +332,8 @@ class WAVStream:
                 ibuf =  8192 * 4 # good balance between smooth audio and still responsive to volume changes
                 #ibuf = 8192 * 8 # 64KiB seems to help for reducing stutter while playing music + QuasiBird
 
-                print(f"WAVStream: {original_rate} Hz, {bits_per_sample}-bit, {channels}-ch")
-                print(f"WAVStream: Playback at {playback_rate} Hz (upsample factor {upsample_factor})")
+                if __debug__: logger.debug("%s Hz, %s-bit, %s-ch", original_rate, bits_per_sample, channels)
+                if __debug__: logger.debug("Playback at %s Hz (upsample factor %s)", playback_rate, upsample_factor)
 
                 if data_size > file_size - data_start:
                     data_size = file_size - data_start
@@ -341,22 +343,12 @@ class WAVStream:
                     self._total_samples = data_size // bytes_per_sample
                     self._duration_ms = int((self._total_samples / original_rate) * 1000)
 
-                print(
-                    "WAVStream: I2S init params: "
-                    f"requested_rate={self.requested_sample_rate}, "
-                    f"playback_rate={playback_rate}, original_rate={original_rate}, "
-                    f"channels={channels}, bits=16, i2s_pins={self.i2s_pins}"
-                )
+                if __debug__: logger.debug("I2S init params: requested_rate=%s, playback_rate=%s, original_rate=%s, channels=%s, bits=16, i2s_pins=%s", self.requested_sample_rate, playback_rate, original_rate, channels, self.i2s_pins)
 
                 # Initialize I2S (always 16-bit output)
                 try:
                     i2s_format = machine.I2S.MONO if channels == 1 else machine.I2S.STEREO
-                    print(
-                        "WAVStream: I2S config: "
-                        f"format={'MONO' if channels == 1 else 'STEREO'}, "
-                        f"ibuf={ibuf}, has_sck={bool(self.i2s_pins.get('sck'))}, "
-                        f"mck_pin={self.i2s_pins.get('mck')}"
-                    )
+                    if __debug__: logger.debug("I2S config: format=%s, ibuf=%s, has_sck=%s, mck_pin=%s", 'MONO' if channels == 1 else 'STEREO', ibuf, bool(self.i2s_pins.get('sck')), self.i2s_pins.get('mck'))
 
                     # Configure MCLK pin if provided (must be done before I2S init)
                     # On some MicroPython versions, machine.I2S() supports a mck argument
@@ -369,9 +361,9 @@ class WAVStream:
                             freq, duty = WAVStream._get_freq_duty(playback_rate)
                             self._mck_pwm.freq(freq)
                             self._mck_pwm.duty_u16(duty)
-                            print(f"MCLK PWM started at {freq} Hz with duty cycle {duty}/65535")
+                            if __debug__: logger.debug("MCLK PWM started at %s Hz with duty cycle %s/65535", freq, duty)
                         except Exception as e:
-                            print(f"MCLK PWM init failed: {e}")
+                            logger.error("MCLK PWM init failed: %s", e)
                             # fallback or error handling
 
                     # Notify codec/amp to prepare for playback (enable amp, unmute DAC, etc.)
@@ -379,7 +371,7 @@ class WAVStream:
                         try:
                             self.on_open()
                         except Exception as e:
-                            print(f"WAVStream: on_open failed: {e}")
+                            logger.error("on_open failed: %s", e)
 
                     if self.i2s_pins.get("sck"):
                         self._i2s = machine.I2S(
@@ -405,10 +397,10 @@ class WAVStream:
                             ibuf=ibuf
                         )
                 except Exception as e:
-                    print(f"WAVStream: I2S init failed: {e}")
+                    logger.error("I2S init failed: %s", e)
                     return
 
-                print(f"WAVStream: Playing {data_size} bytes (volume {self.volume}%)")
+                if __debug__: logger.debug("Playing %s bytes (volume %s%%)", data_size, self.volume)
                 f.seek(data_start)
 
                 # Chunk size tuning notes:
@@ -426,7 +418,7 @@ class WAVStream:
                 total_original = 0
                 while total_original < data_size:
                     if not self._keep_running:
-                        print("WAVStream: Playback stopped by user")
+                        if __debug__: logger.debug("Playback stopped by user")
                         break
 
                     # Read chunk of original data
@@ -483,14 +475,14 @@ class WAVStream:
                         if drain_ms > 0:
                             time.sleep_ms(drain_ms)
                     except Exception as e:
-                        print(f"WAVStream: drain wait failed: {e}")
+                        logger.error("Drain wait failed: %s", e)
 
-                print(f"WAVStream: Finished playing {self.file_path}")
+                if __debug__: logger.debug("Finished playing %s", self.file_path)
                 if self.on_complete:
                     self.on_complete(f"Finished: {self.file_path}")
 
         except Exception as e:
-            print(f"WAVStream: Error: {e}")
+            logger.error("Error: %s", e)
             if self.on_complete:
                 self.on_complete(f"Error: {e}")
 
@@ -500,14 +492,14 @@ class WAVStream:
                 try:
                     self.on_close()
                 except Exception as e:
-                    print(f"WAVStream: on_close failed: {e}")
+                    logger.error("on_close failed: %s", e)
             if self._i2s:
-                print("Done playing, doing i2s deinit")
+                if __debug__: logger.debug("Done playing, doing i2s deinit")
                 self._i2s.deinit() # disabling this does not fix the "play just once" issue
                 self._i2s = None
             if self._mck_pwm:
                 try:
-                    print("Done playing, stopping MCLK PWM")
+                    if __debug__: logger.debug("Done playing, stopping MCLK PWM")
                     self._mck_pwm.deinit()
                 finally:
                     self._mck_pwm = None

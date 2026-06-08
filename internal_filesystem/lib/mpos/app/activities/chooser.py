@@ -1,8 +1,11 @@
+import logging
 from ..activity import Activity
 # Chooser doesn't handle an action — it shows handlers
 # → No registration needed
 
 from ...content.app_manager import AppManager
+
+logger = logging.getLogger(__name__)
 
 class ChooserActivity(Activity):
     def __init__(self):
@@ -36,8 +39,8 @@ class ChooserActivity(Activity):
 
     def onStop(self, screen):
         if self.getIntent() and self.getIntent().getStringExtra("destination") == "ChooserActivity":
-            print("Stopped for Chooser")
+            if __debug__: logger.debug("Stopped for Chooser")
         else:
-            print("Stopped for other screen")
+            if __debug__: logger.debug("Stopped for other screen")
 
 

@@ -3,12 +3,15 @@
 
 import lvgl as lv
 import os
+import logging
 
 import mpos
 import mpos.ui
 import mpos.ui.topmenu
 
 from mpos import AppearanceManager, AppManager, BuildInfo, DeviceInfo, DisplayMetrics, SharedPreferences, TaskManager
+
+logger = logging.getLogger(__name__)
 
 
 def _get_boot_splash_src():
@@ -30,7 +33,7 @@ def init_rootscreen():
     # Initialize DisplayMetrics with actual display values
     DisplayMetrics.set_resolution(width, height)
     DisplayMetrics.set_dpi(dpi)
-    print(f"init_rootscreen set resolution to {width}x{height} at {dpi} DPI")
+    if __debug__: logger.debug("init_rootscreen set resolution to %sx%s at %s DPI", width, height, dpi)
 
     # Show logo
     img = lv.image(screen)
@@ -51,19 +54,19 @@ def single_address_i2c_scan(i2c_bus, address):
     Returns:
         True if a device responds at the specified address, False otherwise
     """
-    print(f"Attempting to write a single byte to I2C bus address 0x{address:02x}...")
+    if __debug__: logger.debug("Attempting to write a single byte to I2C bus address 0x%02x...", address)
     try:
         # Attempt to write a single byte to the address
         # This will raise an exception if no device responds
         i2c_bus.writeto(address, b"")
-        print("Write test successful")
+        if __debug__: logger.debug("Write test successful")
         return True
     except OSError as e:
-        print(f"No device at this address: {e}")
+        if __debug__: logger.debug("No device at this address: %s", e)
         return False
     except Exception as e:
         # Handle any other exceptions gracefully
-        print(f"scan error: {e}")
+        if __debug__: logger.debug("scan error: %s", e)
         return False
 
 def detect_lilygo_t_hmi():
@@ -105,7 +108,7 @@ def detect_lilygo_t_hmi():
                 irq.value(),
             )
             samples.append(vals)
-            print("T-HMI touch sample:", vals)
+            if __debug__: logger.debug("T-HMI touch sample: %s", vals)
             time.sleep_ms(20)
 
         # Observed stable idle signature on LilyGO T-HMI:
@@ -115,14 +118,14 @@ def detect_lilygo_t_hmi():
             for x, y, z, irqv in samples
         )
 
-        print(f"T-HMI signature hits: {signature_hits}/5")
+        if __debug__: logger.debug("T-HMI signature hits: %s/5", signature_hits)
 
         if signature_hits >= 4:
-            print("LilyGO T-HMI touch signature matched")
+            if __debug__: logger.debug("LilyGO T-HMI touch signature matched")
             return True
 
     except Exception as e:
-        print(f"LilyGO T-HMI detection failed: {e}")
+        if __debug__: logger.debug("LilyGO T-HMI detection failed: %s", e)
 
     finally:
         try:
@@ -139,14 +142,14 @@ def detect_lilygo_t_hmi():
 def fail_save_i2c(sda, scl):
     from machine import I2C, Pin
 
-    print(f"Try to I2C initialized on {sda=} {scl=}")
+    if __debug__: logger.debug("Try to I2C initialized on sda=%s scl=%s", sda, scl)
     try:
         i2c0 = I2C(0, sda=Pin(sda), scl=Pin(scl))
     except Exception as e:
-        print(f"fail_save_i2c failed: {e}")
+        if __debug__: logger.debug("fail_save_i2c failed: %s", e)
         return None
     else:
-        print("fail_save_i2c ok")
+        if __debug__: logger.debug("fail_save_i2c ok")
         return i2c0
 
 def restore_i2c(sda, scl):
@@ -170,22 +173,22 @@ def detect_board():
             from mpos.board import pinstates
             mpos.pinstates = pinstates.read_all_pins(skiplist = [7,8])
         except Exception as e:
-            print("pinstates: WARNING: failed to read pins:", e)
+            pass
         '''
 
         # First do unique_id-based board detections because they're fast and don't mess with actual hardware configurations
         import machine
         unique_id_prefixes = machine.unique_id()[0:3]
 
-        print("unPhone ?")
+        if __debug__: logger.debug("unPhone ?")
         if unique_id_prefixes == b'\x30\x30\xf9':
             return "unphone"
 
-        print("odroid_go ?")
+        if __debug__: logger.debug("odroid_go ?")
         if unique_id_prefixes == b'\x30\xae\xa4':
             return "odroid_go"
 
-        print("squixl ?")
+        if __debug__: logger.debug("squixl ?")
         if unique_id_prefixes == b'\xb8\xf8\x62':  # Unexpected Maker SQUiXL (MAC b8:f8:62)
             return "squixl"
 
@@ -195,37 +198,37 @@ def detect_board():
         is_esp32s3 = "S3" in sys.implementation._machine.upper()
 
         if is_esp32s3:
-            print("lilygo_t_hmi ?")
+            if __debug__: logger.debug("lilygo_t_hmi ?")
             if detect_lilygo_t_hmi():
                 return "lilygo_t_hmi"
 
             # Do I2C-based board detection
-            print("lilygo_t_watch_s3_plus ?")
+            if __debug__: logger.debug("lilygo_t_watch_s3_plus ?")
             if i2c0 := fail_save_i2c(sda=10, scl=11):
                 if single_address_i2c_scan(i2c0, 0x19): # IMU on 0x19, vibrator on 0x5A and scan also shows: [52, 81]
                     return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
                 restore_i2c(sda=10, scl=11)
 
-            print("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
+            if __debug__: logger.debug("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
             if i2c0 := fail_save_i2c(sda=39, scl=38):
                 if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
                     return "matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660"
                 restore_i2c(sda=39, scl=38) # fix pin 39 (data0) breaking lilygo_t_display_s3's display
 
-            print("waveshare_esp32_s3_touch_lcd_2 ?")
+            if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_2 ?")
             if i2c0 := fail_save_i2c(sda=48, scl=47):
                 # IO48 is floating on matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and therefore, using that for I2C will find many devices, so do this after matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660
                 if single_address_i2c_scan(i2c0, 0x15) and single_address_i2c_scan(i2c0, 0x6B): # CST816S touch screen and IMU
                     return "waveshare_esp32_s3_touch_lcd_2"
                 restore_i2c(sda=48, scl=47) # fix pin 47 (data6) and 48 (data7) breaking lilygo_t_display_s3's display
 
-            print("freenove_esp32s3_display ?")
+            if __debug__: logger.debug("freenove_esp32s3_display ?")
             if i2c0 := fail_save_i2c(sda=16, scl=15):
                 if single_address_i2c_scan(i2c0, 0x38): # FT6336G touch controller
                     return "freenove_esp32s3_display"
                 restore_i2c(sda=16, scl=15)
 
-            print("fri3d_2024 ?")
+            if __debug__: logger.debug("fri3d_2024 ?")
             if i2c0 := fail_save_i2c(sda=9, scl=18):
                 if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
                     return "fri3d_2026"
@@ -235,12 +238,12 @@ def detect_board():
 
         else: # not is_esp32s3
 
-            print("m5stack_core2 ?")
+            if __debug__: logger.debug("m5stack_core2 ?")
             if i2c0 := fail_save_i2c(sda=21, scl=22):
                 if single_address_i2c_scan(i2c0, 0x34): # AXP192 power management (Core2 has it, Fire doesn't)
                     return "m5stack_core2"
 
-            print("m5stack_fire ?")
+            if __debug__: logger.debug("m5stack_fire ?")
             if i2c0 := fail_save_i2c(sda=21, scl=22):
                 if single_address_i2c_scan(i2c0, 0x68): # IMU (MPU6886)
                     return "m5stack_fire"
@@ -250,7 +253,7 @@ def detect_board():
         from machine import Pin
 
         if is_esp32s3:
-            print("(emulated) lilygo_t_display_s3 ?")
+            if __debug__: logger.debug("(emulated) lilygo_t_display_s3 ?")
             try:
                 # 2 buttons have PCB pull-ups so they'll be high unless pressed
                 pin0 = Pin(0, Pin.IN)
@@ -258,9 +261,9 @@ def detect_board():
                 if pin0.value() == 1 and pin14.value() == 1:
                     return "lilygo_t_display_s3" # display gets confused by the i2c stuff below
             except Exception as e:
-                print(f"lilygo_t_display_s3 detection got exception: {e}")
+                if __debug__: logger.debug("lilygo_t_display_s3 detection got exception: %s", e)
         else:
-            print("(emulated) lilygo_t4 ?")
+            if __debug__: logger.debug("(emulated) lilygo_t4 ?")
             try:
                 pin37 = Pin(37, Pin.IN)
                 pin38 = Pin(38, Pin.IN)
@@ -268,19 +271,19 @@ def detect_board():
                 if pin37.value() == 1 and pin38.value() == 1 and pin39.value() == 1:
                     return "lilygo_t4"
             except Exception as e:
-                print(f"lilygo_t4 detection got exception: {e}")
+                if __debug__: logger.debug("lilygo_t4 detection got exception: %s", e)
 
-        print("Unknown board: couldn't detect known I2C devices or unique_id prefix")
+        if __debug__: logger.debug("Unknown board: couldn't detect known I2C devices or unique_id prefix")
 
 # EXECUTION STARTS HERE
-print(f"MicroPythonOS {BuildInfo.version.release} running lib/mpos/main.py")
+if __debug__: logger.debug("MicroPythonOS %s running lib/mpos/main.py", BuildInfo.version.release)
 
 # Needed to load the logo and firmware files for boards from storage:
 try:
     import freezefs_mount_builtin  # noqa E401
 except Exception as e:
     # This will throw an exception if there is already a "/builtin" folder present
-    print("main.py: WARNING: could not import/run freezefs_mount_builtin: ", e)
+    logger.warning("could not import/run freezefs_mount_builtin: %s", e)
 
 lv.init()
 focusgroup = lv.group_get_default()
@@ -290,7 +293,7 @@ if not focusgroup:
 
 board = detect_board()
 if board:
-    print(f"Detected {board} system, importing mpos.board.{board}")
+    if __debug__: logger.debug("Detected %s system, importing mpos.board.%s", board, board)
     DeviceInfo.set_hardware_id(board)
     __import__(f"mpos.board.{board}")
 else:
@@ -318,7 +321,7 @@ focusgroup.remove_all_objs() #  might be better to save and restore the group fo
 
 # Custom exception handler that does not deinit() the TaskHandler because then the UI hangs:
 def custom_exception_handler(e):
-    print(f"TaskHandler's custom_exception_handler called: {e}")
+    logger.error("TaskHandler's custom_exception_handler called: %s", e)
     import sys
     sys.print_exception(e)  # NOQA
     # No need to deinit() and re-init LVGL:
@@ -349,7 +352,7 @@ mpos.ui.change_task_handler()
 started_launcher = False
 launcher_app = AppManager.get_launcher()
 if launcher_app is None:
-    print("WARNING: No launcher app found")
+    logger.warning("No launcher app found")
 else:
     started_launcher = AppManager.start_app(launcher_app.fullname)
     # Then start auto_start_app_early if configured
@@ -357,36 +360,36 @@ else:
     if auto_start_app_early and launcher_app.fullname != auto_start_app_early:
         result = AppManager.start_app(auto_start_app_early)
         if result is not True:
-            print(f"WARNING: could not run {auto_start_app_early} app")
+            logger.warning("could not run %s app", auto_start_app_early)
     else:
         auto_start_app = prefs.get_string("auto_start_app", None)
         if auto_start_app and launcher_app.fullname != auto_start_app and auto_start_app_early != auto_start_app:
             result = AppManager.start_app(auto_start_app)
             if result is not True:
-                print(f"WARNING: could not run {auto_start_app} app")
+                logger.warning("could not run %s app", auto_start_app)
 
 # Start boot services (apps declaring boot_completed in manifest)
 try:
     import mpos.app.system_services  # noqa: F401
     AppManager.start_boot_services()
 except Exception as e:
-    print(f"Couldn't start boot services: {e}")
+    logger.error("Couldn't start boot services: %s", e)
 
 async def ota_rollback_cancel():
     try:
         from esp32 import Partition
         Partition.mark_app_valid_cancel_rollback()
     except Exception as e:
-        print("main.py: warning: could not mark this update as valid:", e)
+        logger.warning("could not mark this update as valid: %s", e)
 
 if not started_launcher:
-    print(f"WARNING: launcher failed to start, not cancelling OTA update rollback")
+    logger.warning("launcher failed to start, not cancelling OTA update rollback")
 else:
     TaskManager.create_task(ota_rollback_cancel()) # only gets started after TaskManager.start()
 
 try:
     TaskManager.start() # do this at the end because it doesn't return
 except KeyboardInterrupt as k:
-    print(f"TaskManager.start() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
+    if __debug__: logger.debug("TaskManager.start() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
 except Exception as e:
-    print(f"TaskManager.start() got exception: {e}")
+    logger.error("TaskManager.start() got exception: %s", e)

@@ -2,6 +2,9 @@
 # Provides one-shot LED control for NeoPixel RGB LEDs
 # Apps implement custom animations using the update_frame() pattern
 
+import logging
+logger = logging.getLogger(__name__)
+
 # Module-level state (singleton pattern)
 _neopixel = None
 _neopixel_pin = None
@@ -28,8 +31,8 @@ def _init_neopixel(clear_on_init):
 
         return True
     except Exception as e:
-        print(f"LightsManager: Failed to initialize LEDs: {e}")
-        print("  - LED functions will return False (no-op)")
+        logger.error("Failed to initialize LEDs: %s", e)
+        if __debug__: logger.debug("  - LED functions will return False (no-op)")
         _neopixel = None
         return False
 
@@ -47,13 +50,11 @@ def init(neopixel_pin):
 
     if _num_leds <= 0:
         _neopixel = None
-        print(
-            "LightsManager initialized: LED count not set yet (call set_led_num())"
-        )
+        if __debug__: logger.debug("Initialized: LED count not set yet (call set_led_num())")
         return
 
     if _init_neopixel(clear_on_init=True):
-        print(f"LightsManager initialized: {_num_leds} LEDs on GPIO {neopixel_pin}")
+        if __debug__: logger.debug("Initialized: %s LEDs on GPIO %s", _num_leds, neopixel_pin)
 
 
 def is_available():
@@ -89,18 +90,18 @@ def set_led_num(num_leds):
     global _num_leds
 
     if num_leds <= 0:
-        print(f"LightsManager: Invalid LED count {num_leds}")
+        logger.error("Invalid LED count %s", num_leds)
         return False
 
     _num_leds = num_leds
 
     if _neopixel_pin is None:
         _neopixel = None
-        print("LightsManager: LED pin not initialized (call init() first)")
+        logger.warning("LED pin not initialized (call init() first)")
         return False
 
     if _init_neopixel(clear_on_init=False):
-        print(f"LightsManager: LED count set to {_num_leds}")
+        if __debug__: logger.debug("LED count set to %s", _num_leds)
         return True
 
     return False
@@ -123,7 +124,7 @@ def set_led(index, r, g, b):
         return False
 
     if index < 0 or index >= _num_leds:
-        print(f"LightsManager: Invalid LED index {index} (valid range: 0-{_num_leds-1})")
+        logger.error("Invalid LED index %s (valid range: 0-%s)", index, _num_leds - 1)
         return False
 
     _neopixel[index] = (r, g, b)
@@ -197,8 +198,8 @@ def set_notification_color(color_name):
 
     color = colors.get(color_name.lower())
     if not color:
-        print(f"LightsManager: Unknown color '{color_name}'")
-        print(f"  - Available colors: {', '.join(colors.keys())}")
+        logger.error("Unknown color '%s'", color_name)
+        if __debug__: logger.debug("Available colors: %s", ', '.join(colors.keys()))
         return False
 
     return set_all(*color) and write()

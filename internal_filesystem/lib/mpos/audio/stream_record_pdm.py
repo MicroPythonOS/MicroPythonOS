@@ -1,10 +1,13 @@
 # PDMRecordStream - WAV File Recording Stream for PDM microphones
 # Records 16-bit mono PCM audio from PDM microphone to WAV file
 
+import logging
 import sys
 import time
 
 from mpos.audio.audiomanager import AudioManager
+
+logger = logging.getLogger(__name__)
 
 # Try to import PDM mic module (not available on desktop)
 try:
@@ -57,12 +60,12 @@ class PDMRecordStream:
         )
 
     def record(self):
-        print("PDMRecordStream.record() called")
-        print(f"  file_path: {self.file_path}")
-        print(f"  duration_ms: {self.duration_ms}")
-        print(f"  sample_rate: {self.sample_rate}")
-        print(f"  pdm_pins: {self.pdm_pins}")
-        print(f"  _HAS_PDM: {_HAS_PDM}")
+        if __debug__: logger.debug("record() called")
+        if __debug__: logger.debug("  file_path: %s", self.file_path)
+        if __debug__: logger.debug("  duration_ms: %s", self.duration_ms)
+        if __debug__: logger.debug("  sample_rate: %s", self.sample_rate)
+        if __debug__: logger.debug("  pdm_pins: %s", self.pdm_pins)
+        if __debug__: logger.debug("  _HAS_PDM: %s", _HAS_PDM)
 
         self._is_recording = True
         self._bytes_recorded = 0
@@ -73,7 +76,7 @@ class PDMRecordStream:
             if dir_path:
                 AudioManager._record_makedirs(dir_path)
 
-            print("PDMRecordStream: Creating WAV file with header")
+            if __debug__: logger.debug("Creating WAV file with header")
             with open(self.file_path, "wb") as f:
                 header = AudioManager._record_create_wav_header(
                     self.sample_rate,
@@ -83,7 +86,7 @@ class PDMRecordStream:
                 )
                 f.write(header)
 
-            print(f"PDMRecordStream: Recording to {self.file_path}")
+            if __debug__: logger.debug("Recording to %s", self.file_path)
 
             use_simulation = not _HAS_PDM
 
@@ -97,13 +100,13 @@ class PDMRecordStream:
                         bufsize=self.DEFAULT_BUFSIZE,
                     )
                     self._mic.start()
-                    print("PDMRecordStream: PDM mic initialized")
+                    if __debug__: logger.debug("PDM mic initialized")
                 except Exception as e:
-                    print(f"PDMRecordStream: PDM init failed: {e}")
+                    logger.error("PDM init failed: %s", e)
                     use_simulation = True
 
             if use_simulation:
-                print("PDMRecordStream: Using desktop simulation (sine wave)")
+                if __debug__: logger.debug("Using desktop simulation (sine wave)")
 
             max_bytes = int((self.duration_ms / 1000) * self.sample_rate * 2)
             chunk_size = self.DEFAULT_BUFSIZE
@@ -114,7 +117,7 @@ class PDMRecordStream:
                 while self._keep_running and self._bytes_recorded < max_bytes:
                     elapsed = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
                     if elapsed >= self.duration_ms:
-                        print("PDMRecordStream: Duration limit reached")
+                        if __debug__: logger.debug("Duration limit reached")
                         break
 
                     if use_simulation:
@@ -130,7 +133,7 @@ class PDMRecordStream:
                         try:
                             num_read = self._mic.readinto(buf)
                         except Exception as e:
-                            print(f"PDMRecordStream: Read error: {e}")
+                            logger.error("Read error: %s", e)
                             break
 
                     if num_read > 0:
@@ -147,7 +150,7 @@ class PDMRecordStream:
                     self._mic = None
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
-            print(f"PDMRecordStream: Finished recording {self._bytes_recorded} bytes ({elapsed_ms}ms)")
+            if __debug__: logger.debug("Finished recording %s bytes (%sms)", self._bytes_recorded, elapsed_ms)
 
             if self.on_complete:
                 self.on_complete(f"Recorded: {self.file_path}")
@@ -159,4 +162,4 @@ class PDMRecordStream:
 
         finally:
             self._is_recording = False
-            print("PDMRecordStream: Recording thread finished")
+            if __debug__: logger.debug("Recording thread finished")

@@ -1,3 +1,4 @@
+import logging
 import lvgl as lv
 from lvgl import LvReferenceError
 from .widget_animator import WidgetAnimator
@@ -5,6 +6,8 @@ from .view import back_screen
 from mpos.ui import topmenu as topmenu
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
+
+logger = logging.getLogger(__name__)
 
 downbutton = None
 backbutton = None
@@ -21,15 +24,13 @@ def is_short_movement(dx, dy):
 
 def _passthrough_click(x, y, indev):
     obj = lv.indev_search_obj(lv.screen_active(), lv.point_t({'x': x, 'y': y}))
-    # print(f"Found object: {obj}")
     if obj:
         try:
-            # print(f"Simulating press/click/release on {obj}")
             obj.send_event(lv.EVENT.PRESSED, indev)
             obj.send_event(lv.EVENT.CLICKED, indev)
             obj.send_event(lv.EVENT.RELEASED, indev) # gets lost
         except LvReferenceError as e:
-            print(f"Object to click is gone: {e}")
+            logger.error("Object to click is gone: %s", e)
 
 def _back_swipe_cb(event):
     global backbutton, back_start_y, back_start_x, backbutton_visible
@@ -43,7 +44,6 @@ def _back_swipe_cb(event):
     y = point.y
     dx = abs(x - back_start_x)
     dy = abs(y - back_start_y)
-    #print(f"visual_back_swipe_cb event_code={event_code} and event_name={name} and pos: {x}, {y}")
     if event_code == lv.EVENT.PRESSED:
         back_start_y = y
         back_start_x = x
@@ -60,12 +60,11 @@ def _back_swipe_cb(event):
         if x > DisplayMetrics.width() / 5:
             back_screen()
         elif is_short_movement(dx, dy):
-            # print("Short movement - treating as tap")
             _passthrough_click(x, y, indev)
 
 def _top_swipe_cb(event):
     if topmenu.drawer_open:
-        print("ignoring top swipe gesture because drawer is open")
+        if __debug__: logger.debug("ignoring top swipe gesture because drawer is open")
         return
 
     global downbutton, down_start_x, down_start_y, downbutton_visible
@@ -80,7 +79,6 @@ def _top_swipe_cb(event):
     dx = abs(x - down_start_x)
     dy = abs(y - down_start_y)
     dy_signed = y - down_start_y
-    # print(f"visual_back_swipe_cb event_code={event_code} and event_name={name} and pos: {x}, {y}")
     if event_code == lv.EVENT.PRESSED:
         down_start_x = x
         down_start_y = y
@@ -102,7 +100,6 @@ def _top_swipe_cb(event):
         elif y > DisplayMetrics.height() / 5:
             topmenu.open_drawer()
         elif is_short_movement(dx, dy):
-            # print("Short movement - treating as tap")
             _passthrough_click(x, y, indev)
 
 def handle_back_swipe():
@@ -133,14 +130,6 @@ def handle_back_swipe():
     backbutton.add_flag(lv.obj.FLAG.HIDDEN)
     backbutton.add_state(lv.STATE.DISABLED)
     backlabel = lv.label(backbutton)
-    # lv.SYMBOL.NEW_LINE (FontAwesome U+F149, "↵") instead of
-    # lv.SYMBOL.LEFT (chevron-left "‹"). Same FontAwesome font range,
-    # which MPOS already relies on via `keyboard.py`'s Enter key, so
-    # availability is guaranteed — but the return-arrow shape maps to
-    # the universal "back" / "go back" / "return" affordance from
-    # physical-keyboard convention more directly than the chevron does.
-    # Renders as a hooked left-pointing arrow at the existing 18 pt
-    # weight that matches the surrounding chrome.
     backlabel.set_text(lv.SYMBOL.NEW_LINE)
     backlabel.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
     backlabel.center()

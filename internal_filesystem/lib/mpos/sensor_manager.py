@@ -18,6 +18,9 @@ MIT License
 Copyright (c) 2024 MicroPythonOS contributors
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
 try:
     import _thread  # noqa: F401
 
@@ -205,7 +208,7 @@ class SensorManager:
             import sys
 
             sys.print_exception(e)
-            print(f"[SensorManager] Calibration error: {e}")
+            logger.error("Calibration error: %s", e)
             return None
         finally:
             if _lock:

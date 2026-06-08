@@ -15,11 +15,14 @@ Usage:
 
 """
 
+import logging
 import lvgl as lv
 
 from .appearance_manager import AppearanceManager
 from .font_manager import FontManager
 from .widget_animator import WidgetAnimator
+
+logger = logging.getLogger(__name__)
 
 class MposKeyboard:
     """
@@ -35,7 +38,7 @@ class MposKeyboard:
 
     # Keyboard layout labels
     LABEL_NUMBERS_SPECIALS = "?123"
-    LABEL_SPECIALS = "=\<"
+    LABEL_SPECIALS = "=\\<"
     LABEL_LETTERS = "Abc"
     LABEL_SPACE = " "
 
@@ -135,13 +138,6 @@ class MposKeyboard:
     def _handle_events(self, event):
         code = event.get_code()
 
-        '''
-        # DEBUG:
-        from .event import get_event_name
-        name = get_event_name(code)
-        print(f"keyboard event code = {code} is {name}")
-        '''
-
         if code == lv.EVENT.READY or code == lv.EVENT.CANCEL:
             self.hide_keyboard()
             return
@@ -157,7 +153,6 @@ class MposKeyboard:
         if button is None:
             return
         text = target_obj.get_button_text(button)
-        #print(f"[KBD] btn={button}, mode={self._current_mode}, text='{text}'")
 
         # Ignore if no valid button text (can happen during mode switching)
         if text is None:
@@ -293,14 +288,12 @@ class MposKeyboard:
         return self._textarea
 
     def set_mode(self, mode):
-        #print(f"[kbc] setting mode to {mode}")
         self._current_mode = mode
         key_map, ctrl_map = self.mode_info[mode]
         self._keyboard.set_map(mode, key_map, ctrl_map)
         self._keyboard.set_mode(mode)
 
     def scroll_after_show(self, timer):
-        #self._textarea.scroll_to_view_recursive(True) # makes sense but doesn't work and breaks the keyboard scroll
         self._keyboard.scroll_to_view_recursive(True)
 
     def focus_on_keyboard(self, timer=None):
@@ -316,10 +309,6 @@ class MposKeyboard:
         WidgetAnimator.smooth_show(self._keyboard, duration=500)
         # Scroll to view on a timer because it will be hidden initially
         lv.timer_create(self.scroll_after_show, 250, None).set_repeat_count(1)
-        # When this is done from a timer, focus styling is not applied so the user doesn't see which button is selected.
-        # Maybe because there's no active indev anymore?
-        # Maybe it will be fixed in an update of LVGL 9.3?
-        # focus_timer = lv.timer_create(self.focus_on_keyboard,750,None).set_repeat_count(1)
         # Workaround: show the keyboard immediately and then focus on it - that works, and doesn't seem to flicker as feared:
         self._keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
         self.focus_on_keyboard()
@@ -331,7 +320,6 @@ class MposKeyboard:
 
     # Python magic method for automatic method forwarding
     def __getattr__(self, name):
-        #print(f"[kbd] __getattr__ {name}")
         """
         Forward any undefined method/attribute to the underlying LVGL keyboard.
 

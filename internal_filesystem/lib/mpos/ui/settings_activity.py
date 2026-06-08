@@ -1,8 +1,11 @@
+import logging
 import lvgl as lv
 
 from ..app.activity import Activity
 from .setting_activity import SettingActivity
 import mpos.ui
+
+logger = logging.getLogger(__name__)
 
 
 def _value_label_for(setting, stored_value):
@@ -36,11 +39,11 @@ class SettingsActivity(Activity):
         self.prefs = extras.get("prefs")
         self.settings = extras.get("settings") or ()
         if not self.prefs:
-            print("ERROR: SettingsActivity missing 'prefs' in Intent extras")
+            logger.error("SettingsActivity missing 'prefs' in Intent extras")
         if not self.settings:
-            print("WARNING: SettingsActivity has no settings to display")
+            logger.warning("SettingsActivity has no settings to display")
 
-        print("creating SettingsActivity ui...")
+        if __debug__: logger.debug("creating SettingsActivity ui...")
         screen = lv.obj()
         screen.set_style_pad_all(mpos.ui.DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -51,7 +54,7 @@ class SettingsActivity(Activity):
         # Create settings entries
         screen.clean()
         if not self.prefs:
-            print("ERROR: SettingsActivity cannot render without prefs")
+            logger.error("SettingsActivity cannot render without prefs")
             return
         # Get the group for focusable objects
         focusgroup = lv.group_get_default()
@@ -110,13 +113,11 @@ class SettingsActivity(Activity):
             focusgroup.add_obj(setting_cont)
 
     def focus_container(self, container):
-        #print(f"container {container} focused, setting border...")
         container.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
         container.set_style_border_width(1, lv.PART.MAIN)
         container.scroll_to_view(True) # scroll to bring it into view
 
     def defocus_container(self, container):
-        #print(f"container {container} defocused, unsetting border...")
         container.set_style_border_width(0, lv.PART.MAIN)
 
     def startSettingActivity(self, setting):
@@ -125,7 +126,7 @@ class SettingsActivity(Activity):
         if setting.get("ui") == "activity":
             activity_class = setting.get("activity_class")
             if not activity_class:
-                print("ERROR: Setting is defined as 'activity' ui without 'activity_class', aborting...")
+                logger.error("Setting is defined as 'activity' ui without 'activity_class', aborting...")
 
         intent = Intent(activity_class=activity_class)
         intent.putExtra("setting", setting)

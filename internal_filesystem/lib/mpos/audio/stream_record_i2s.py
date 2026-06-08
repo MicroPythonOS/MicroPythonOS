@@ -3,9 +3,12 @@
 # Uses synchronous recording in a separate thread for non-blocking operation
 # On desktop (no I2S hardware), generates a 440Hz sine wave for testing
 
+import logging
 import time
 
 from mpos.audio.audiomanager import AudioManager
+
+logger = logging.getLogger(__name__)
 
 # Try to import machine module (not available on desktop)
 try:
@@ -101,12 +104,12 @@ class RecordStream:
     # ----------------------------------------------------------------------
     def record(self):
         """Main synchronous recording routine (runs in separate thread)."""
-        print(f"RecordStream.record() called")
-        print(f"  file_path: {self.file_path}")
-        print(f"  duration_ms: {self.duration_ms}")
-        print(f"  sample_rate: {self.sample_rate}")
-        print(f"  i2s_pins: {self.i2s_pins}")
-        print(f"  _HAS_MACHINE: {_HAS_MACHINE}")
+        if __debug__: logger.debug("record() called")
+        if __debug__: logger.debug("  file_path: %s", self.file_path)
+        if __debug__: logger.debug("  duration_ms: %s", self.duration_ms)
+        if __debug__: logger.debug("  sample_rate: %s", self.sample_rate)
+        if __debug__: logger.debug("  i2s_pins: %s", self.i2s_pins)
+        if __debug__: logger.debug("  _HAS_MACHINE: %s", _HAS_MACHINE)
 
         self._is_recording = True
         self._bytes_recorded = 0
@@ -115,13 +118,13 @@ class RecordStream:
         try:
             # Ensure directory exists
             dir_path = '/'.join(self.file_path.split('/')[:-1])
-            print(f"RecordStream: Creating directory: {dir_path}")
+            if __debug__: logger.debug("Creating directory: %s", dir_path)
             if dir_path:
                 AudioManager._record_makedirs(dir_path)
-                print(f"RecordStream: Directory created/verified")
+                if __debug__: logger.debug("Directory created/verified")
 
             # Create file with placeholder header
-            print(f"RecordStream: Creating WAV file with header")
+            if __debug__: logger.debug("Creating WAV file with header")
             with open(self.file_path, 'wb') as f:
                 # Write placeholder header (will be updated at end)
                 header = self._create_wav_header(
@@ -131,11 +134,11 @@ class RecordStream:
                     data_size=self.DEFAULT_FILESIZE,
                 )
                 f.write(header)
-                print(f"RecordStream: Header written ({len(header)} bytes)")
+                if __debug__: logger.debug("Header written (%s bytes)", len(header))
 
-            print(f"RecordStream: Recording to {self.file_path}")
-            print(f"RecordStream: {self.sample_rate} Hz, 16-bit, mono")
-            print(f"RecordStream: Max duration {self.duration_ms}ms")
+            if __debug__: logger.debug("Recording to %s", self.file_path)
+            if __debug__: logger.debug("%s Hz, 16-bit, mono", self.sample_rate)
+            if __debug__: logger.debug("Max duration %sms", self.duration_ms)
 
             # Check if we have real I2S hardware or need to simulate
             use_simulation = not _HAS_MACHINE
@@ -152,20 +155,20 @@ class RecordStream:
                             mck_freq = self.sample_rate * 256
                             self._mck_pwm.freq(mck_freq)
                             self._mck_pwm.duty_u16(32768)  # 50% duty cycle
-                            print(f"RecordStream: MCLK PWM started at {mck_freq} Hz")
+                            if __debug__: logger.debug("MCLK PWM started at %s Hz", mck_freq)
                         except Exception as e:
-                            print(f"RecordStream: MCLK PWM init failed: {e}")
+                            logger.error("MCLK PWM init failed: %s", e)
 
                     # Notify codec to prepare for recording (e.g. mute DAC, configure ADC)
                     if self.on_open:
                         try:
                             self.on_open()
                         except Exception as e:
-                            print(f"RecordStream: on_open failed: {e}")
+                            logger.error("on_open failed: %s", e)
 
                     # Use sck_in if available (separate clock for mic), otherwise fall back to sck
                     sck_pin = self.i2s_pins.get('sck_in', self.i2s_pins.get('sck'))
-                    print(f"RecordStream: Initializing I2S RX with sck={sck_pin}, ws={self.i2s_pins['ws']}, sd={self.i2s_pins['sd_in']}")
+                    if __debug__: logger.debug("Initializing I2S RX with sck=%s, ws=%s, sd=%s", sck_pin, self.i2s_pins['ws'], self.i2s_pins['sd_in'])
 
                     self._i2s = machine.I2S(
                         0,
@@ -178,14 +181,14 @@ class RecordStream:
                         rate=self.sample_rate,
                         ibuf=8000  # 8KB input buffer
                     )
-                    print(f"RecordStream: I2S initialized successfully")
+                    if __debug__: logger.debug("I2S initialized successfully")
                 except Exception as e:
-                    print(f"RecordStream: I2S init failed: {e}")
-                    print(f"RecordStream: Falling back to simulation mode")
+                    logger.error("I2S init failed: %s", e)
+                    logger.warning("Falling back to simulation mode")
                     use_simulation = True
 
             if use_simulation:
-                print(f"RecordStream: Using desktop simulation (440Hz sine wave)")
+                if __debug__: logger.debug("Using desktop simulation (440Hz sine wave)")
 
             # Calculate recording parameters
             chunk_size = 1024  # Read 1KB at a time
@@ -199,13 +202,13 @@ class RecordStream:
             bytes_since_flush = 0
             last_flush_time = start_time
 
-            print(f"RecordStream: max_bytes={max_bytes}, chunk_size={chunk_size}, flush_interval={flush_interval_bytes}")
+            if __debug__: logger.debug("max_bytes=%s, chunk_size=%s, flush_interval=%s", max_bytes, chunk_size, flush_interval_bytes)
 
             # Open file for appending audio data (append mode to avoid seek issues)
-            print(f"RecordStream: Opening file for audio data...")
+            if __debug__: logger.debug("Opening file for audio data...")
             t0 = time.ticks_ms()
             f = open(self.file_path, 'ab')
-            print(f"RecordStream: File opened in {time.ticks_diff(time.ticks_ms(), t0)}ms")
+            if __debug__: logger.debug("File opened in %sms", time.ticks_diff(time.ticks_ms(), t0))
 
             buf = bytearray(chunk_size)
 
@@ -214,7 +217,7 @@ class RecordStream:
                     # Check elapsed time
                     elapsed = time.ticks_diff(time.ticks_ms(), start_time)
                     if elapsed >= self.duration_ms:
-                        print(f"RecordStream: Duration limit reached ({elapsed}ms)")
+                        if __debug__: logger.debug("Duration limit reached (%sms)", elapsed)
                         break
 
                     if use_simulation:
@@ -230,7 +233,7 @@ class RecordStream:
                         try:
                             num_read = self._i2s.readinto(buf)
                         except Exception as e:
-                            print(f"RecordStream: Read error: {e}")
+                            logger.error("Read error: %s", e)
                             break
 
                     if num_read > 0:
@@ -243,28 +246,28 @@ class RecordStream:
                             t0 = time.ticks_ms()
                             f.flush()
                             flush_time = time.ticks_diff(time.ticks_ms(), t0)
-                            print(f"RecordStream: Flushed {bytes_since_flush} bytes in {flush_time}ms")
+                            if __debug__: logger.debug("Flushed %s bytes in %sms", bytes_since_flush, flush_time)
                             bytes_since_flush = 0
                             last_flush_time = time.ticks_ms()
             finally:
                 # Explicitly close the file and measure time
-                print(f"RecordStream: Closing audio data file (remaining {bytes_since_flush} bytes)...")
+                if __debug__: logger.debug("Closing audio data file (remaining %s bytes)...", bytes_since_flush)
                 t0 = time.ticks_ms()
                 f.close()
-                print(f"RecordStream: File closed in {time.ticks_diff(time.ticks_ms(), t0)}ms")
+                if __debug__: logger.debug("File closed in %sms", time.ticks_diff(time.ticks_ms(), t0))
 
             # Disabled because seeking takes too long on LittleFS2:
             #self._update_wav_header(self.file_path, self._bytes_recorded)
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), start_time)
-            print(f"RecordStream: Finished recording {self._bytes_recorded} bytes ({elapsed_ms}ms)")
+            if __debug__: logger.debug("Finished recording %s bytes (%sms)", self._bytes_recorded, elapsed_ms)
 
             if self.on_complete:
                 self.on_complete(f"Recorded: {self.file_path}")
 
         except Exception as e:
             import sys
-            print(f"RecordStream: Error: {e}")
+            logger.error("Error: %s", e)
             sys.print_exception(e)
             if self.on_complete:
                 self.on_complete(f"Error: {e}")
@@ -275,7 +278,7 @@ class RecordStream:
                 try:
                     self.on_close()
                 except Exception as e:
-                    print(f"RecordStream: on_close failed: {e}")
+                    logger.error("on_close failed: %s", e)
             if self._i2s:
                 self._i2s.deinit()
                 self._i2s = None
@@ -285,7 +288,7 @@ class RecordStream:
                 except Exception:
                     pass
                 self._mck_pwm = None
-            print(f"RecordStream: Recording thread finished")
+            if __debug__: logger.debug("Recording thread finished")
 
     def get_duration_ms(self):
         if self._start_time_ms <= 0:

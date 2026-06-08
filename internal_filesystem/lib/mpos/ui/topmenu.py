@@ -1,3 +1,4 @@
+import logging
 import lvgl as lv
 
 import mpos.time
@@ -9,6 +10,8 @@ from .input_manager import InputManager
 from .widget_animator import SlidePanel
 from mpos.content.app_manager import AppManager
 from mpos.notification_manager import NotificationManager
+
+logger = logging.getLogger(__name__)
 
 CLOCK_UPDATE_INTERVAL = 1000 # 10 or even 1 ms doesn't seem to change the framerate but 100ms is enough
 WIFI_ICON_UPDATE_INTERVAL = 1500
@@ -129,7 +132,6 @@ def _build_drawer_notification_item(parent, notification):
     card.set_style_pad_column(5, lv.PART.MAIN)
     card.set_layout(lv.LAYOUT.FLEX)
     card.set_flex_flow(lv.FLEX_FLOW.ROW)
-    #card.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START)
 
     card.add_flag(lv.obj.FLAG.CLICKABLE)
     card.add_event_cb(
@@ -172,7 +174,6 @@ def _build_drawer_notification_item(parent, notification):
     content_col.set_style_pad_row(2, lv.PART.MAIN)
     content_col.set_layout(lv.LAYOUT.FLEX)
     content_col.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-    #content_col.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
     content_col.set_flex_grow(1)
 
     title_label = lv.label(content_col)
@@ -270,9 +271,9 @@ def close_drawer(to_launcher=False):
     from mpos.activity_navigator import get_foreground_app
     drawer_open = False
     fg = get_foreground_app()
-    print(f"topmenu.py foreground app: {fg}")
+    if __debug__: logger.debug("foreground app: %s", fg)
     if not to_launcher and fg is not None and "launcher" not in fg:
-        print(f"close_drawer: also closing bar because to_launcher is {to_launcher} and foreground_app_name is {fg}")
+        if __debug__: logger.debug("close_drawer: also closing bar because to_launcher is %s and foreground_app_name is %s", to_launcher, fg)
         close_bar(animate=False)
     _drawer_panel.hide()
     _remove_focusables_from_group(_drawer_focusables)
@@ -287,9 +288,9 @@ def close_drawer(to_launcher=False):
 
 def open_bar():
     global bar_open
-    print("opening bar...")
+    if __debug__: logger.debug("opening bar...")
     if _bar_panel is None or bar_open:
-        print("bar already open")
+        if __debug__: logger.debug("bar already open")
         return
     bar_open = True
     _bar_panel.show()
@@ -338,14 +339,6 @@ def create_notification_bar():
         memfree_label = lv.label(notification_bar)
         memfree_label.set_text("")
         memfree_label.align_to(temp_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(7), 0)
-    #style = lv.style_t()
-    #style.init()
-    #style.set_text_font(lv.font_montserrat_8)  # tiny font
-    #memfree_label.add_style(style, 0)
-    # Notification icon (bell)
-    #notif_icon = lv.label(notification_bar)
-    #notif_icon.set_text(lv.SYMBOL.BELL)
-    #notif_icon.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, PADDING_TINY, 0)
 
     # WiFi icon
     wifi_icon = lv.label(notification_bar)
@@ -355,14 +348,9 @@ def create_notification_bar():
 
     # Battery percentage
     if BatteryManager.has_battery():
-        #battery_label = lv.label(notification_bar)
-        #battery_label.set_text("100%")
-        #battery_label.align(lv.ALIGN.RIGHT_MID, 0, 0)
-        #battery_label.add_flag(lv.obj.FLAG.HIDDEN)
         # Battery icon
         battery_icon = lv.label(notification_bar)
         battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
-        #battery_icon.align_to(battery_label, lv.ALIGN.OUT_LEFT_MID, 0, 0)
         battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
         wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
         battery_icon.add_flag(lv.obj.FLAG.HIDDEN) # keep it hidden until it has a correct value
@@ -370,7 +358,7 @@ def create_notification_bar():
             try:
                 percent = BatteryManager.get_battery_percentage()
             except Exception as e:
-                print(f"BatteryManager.get_battery_percentage got exception, not updating battery_icon: {e}")
+                logger.error("BatteryManager.get_battery_percentage got exception, not updating battery_icon: %s", e)
                 return
             if percent > 80:
                 battery_icon.set_text(lv.SYMBOL.BATTERY_FULL)
@@ -385,9 +373,6 @@ def create_notification_bar():
             battery_icon.align(lv.ALIGN.RIGHT_MID, -DisplayMetrics.pct_of_width(10), 0)
             wifi_icon.align_to(battery_icon, lv.ALIGN.OUT_LEFT_MID, -DisplayMetrics.pct_of_width(1), 0)
             battery_icon.remove_flag(lv.obj.FLAG.HIDDEN)
-            # Percentage is not shown for now:
-            #battery_label.set_text(f"{round(percent)}%")
-            #battery_label.remove_flag(lv.obj.FLAG.HIDDEN)
         update_battery_icon() # run it immediately instead of waiting for the timer
         lv.timer_create(update_battery_icon, BATTERY_ICON_UPDATE_INTERVAL, None)
 
@@ -426,7 +411,6 @@ def create_notification_bar():
     
     lv.timer_create(update_time, CLOCK_UPDATE_INTERVAL, None)
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
-    #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
     lv.timer_create(update_wifi_icon, WIFI_ICON_UPDATE_INTERVAL, None)
 
     _register_notifications_listener()
@@ -534,7 +518,6 @@ def create_drawer():
     icon_row = lv.obj(top_group)
     icon_row.set_width(lv.pct(100))
     icon_row.set_height(lv.SIZE_CONTENT)
-    #icon_row.set_style_pad_all(0, lv.PART.MAIN)
     icon_row.set_style_pad_row(5, lv.PART.MAIN)
     icon_row.set_style_pad_column(5, lv.PART.MAIN)
     icon_row.set_style_border_width(0, lv.PART.MAIN)
@@ -583,7 +566,7 @@ def create_drawer():
     launcher_label.set_text(lv.SYMBOL.HOME)
     launcher_label.center()
     def launcher_event(e):
-        print("Launch button pressed!")
+        if __debug__: logger.debug("Launch button pressed!")
         def _on_drawer_hidden():
             _drawer_panel.on_hidden = None
             AppManager.refresh_apps()
@@ -610,7 +593,7 @@ def create_drawer():
         elif hasattr(machine, 'soft_reset'):
             machine.soft_reset()
         else:
-            print("Warning: machine has no reset or soft_reset method available")
+            logger.warning("machine has no reset or soft_reset method available")
     restart_btn.add_event_cb(reset_cb, lv.EVENT.CLICKED, None)
     _register_focus_callbacks(restart_btn)
     _drawer_focusables.append(restart_btn)
@@ -623,13 +606,13 @@ def create_drawer():
     poweroff_label.set_text(lv.SYMBOL.POWER)
     poweroff_label.center()
     def poweroff_cb(e):
-        print("Power off action...")
+        if __debug__: logger.debug("Power off action...")
         from .view import remove_and_stop_current_activity
         remove_and_stop_current_activity()
         import sys
         if sys.platform == "esp32":
             import machine
-            print("Entering deep sleep...")
+            if __debug__: logger.debug("Entering deep sleep...")
             machine.deepsleep()
         else:
             import mpos ; mpos.TaskManager.stop()
@@ -641,7 +624,6 @@ def create_drawer():
     _drawer_focusables.append(poweroff_btn)
 
     # ── Notifications section ────────────────────────────────────────────────
-    # notif_section is a flex child of outer, so it stacks automatically below top_group
     notif_section = lv.obj(outer)
     notif_section.set_width(lv.pct(100))
     notif_section.set_height(lv.SIZE_CONTENT)
@@ -687,14 +669,10 @@ def drawer_scroll_callback(event):
     global scroll_start_y
     event_code=event.get_code()
     x, y = InputManager.pointer_xy()
-    #name = mpos.ui.get_event_name(event_code)
-    #print(f"drawer_scroll: code={event_code}, name={name}, ({x},{y})")
     if event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y == None:
         scroll_start_y = y
-        #print(f"scroll_starts at: {x},{y}")
     elif event_code == lv.EVENT.SCROLL and scroll_start_y != None:
         diff = y - scroll_start_y
-        #print(f"scroll distance: {diff}")
         if diff < -AppearanceManager.NOTIFICATION_BAR_HEIGHT:
             close_drawer()
     elif event_code == lv.EVENT.SCROLL_END:

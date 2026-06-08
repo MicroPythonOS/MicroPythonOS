@@ -14,6 +14,9 @@ Features:
 - Network error detection utilities
 """
 
+import logging
+logger = logging.getLogger(__name__)
+
 # Constants
 _DEFAULT_CHUNK_SIZE = 4 * 1024
 _DEFAULT_TOTAL_SIZE = 100 * 1024  # 100KB default if Content-Length missing
@@ -187,7 +190,7 @@ class DownloadManager:
             sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             sslctx.verify_mode = ssl.CERT_OPTIONAL # CERT_REQUIRED might fail because MBEDTLS_ERR_SSL_CA_CHAIN_REQUIRED
 
-        print(f"DownloadManager: Downloading {log_url}")
+        if __debug__: logger.debug("Downloading %s", log_url)
         
         fd = None
         try:
@@ -195,7 +198,7 @@ class DownloadManager:
             
             async with session.get(url, headers=headers, ssl=sslctx, timeout=_CHUNK_TIMEOUT_SECONDS) as response:
                 if response.status < 200 or response.status >= 400:
-                    print(f"DownloadManager: HTTP error {response.status}")
+                    logger.error("HTTP error %s", response.status)
                     raise RuntimeError(f"HTTP {response.status}")
                 
                 # Figure out total size and starting offset (for resume support)
@@ -203,9 +206,9 @@ class DownloadManager:
                 # headers can include `set-cookie`, `cf-ray` and other tokens
                 # that correlate to the request's secret-bearing URL.
                 if redact_url:
-                    print("DownloadManager: Response headers: <redacted>")
+                    if __debug__: logger.debug("Response headers: <redacted>")
                 else:
-                    print("DownloadManager: Response headers:", response.headers)
+                    if __debug__: logger.debug("Response headers: %s", response.headers)
                 resume_offset = 0  # Starting byte offset (0 for new downloads, >0 for resumed)
                 
                 if total_size is None:
@@ -226,26 +229,26 @@ class DownloadManager:
                                     resume_offset = int(range_part.split('-')[0])
                                     # Extract total size
                                     total_size = int(content_range.split('/')[-1])
-                                    print(f"DownloadManager: Resuming from byte {resume_offset}, total size: {total_size}")
+                                    if __debug__: logger.debug("Resuming from byte %s, total size: %s", resume_offset, total_size)
                             
                             # Fall back to Content-Length if Content-Range not present
                             if total_size is None:
                                 content_length = response.headers.get('Content-Length')
                                 if content_length:
                                     total_size = int(content_length)
-                                    print(f"DownloadManager: Using Content-Length: {total_size}")
+                                    if __debug__: logger.debug("Using Content-Length: %s", total_size)
                     except (AttributeError, TypeError, ValueError, IndexError) as e:
-                        print(f"DownloadManager: Could not parse Content-Range/Content-Length: {e}")
+                        logger.error("Could not parse Content-Range/Content-Length: %s", e)
                     
                     if total_size is None:
-                        print(f"DownloadManager: WARNING: Unable to determine total_size, assuming {_DEFAULT_TOTAL_SIZE} bytes")
+                        logger.warning("Unable to determine total_size, assuming %s bytes", _DEFAULT_TOTAL_SIZE)
                         total_size = _DEFAULT_TOTAL_SIZE
                 
                 # Setup output
                 if outfile:
                     fd = open(outfile, 'wb')
                     if not fd:
-                        print(f"DownloadManager: WARNING: could not open {outfile} for writing!")
+                        logger.warning("Could not open %s for writing!", outfile)
                         return False
                 
                 chunks = []
@@ -264,7 +267,7 @@ class DownloadManager:
                 except ImportError:
                     pass  # time module not available
                 
-                print(f"DownloadManager: {'Writing to ' + outfile if outfile else 'Downloading'} {total_size} bytes in chunks of size {chunk_size}")
+                if __debug__: logger.debug("Downloading %s bytes in chunks of size %s", total_size, chunk_size)
                 
                 # Download loop with retry logic
                 while True:
@@ -280,17 +283,16 @@ class DownloadManager:
                             )
                             break
                         except Exception as e:
-                            print(f"DownloadManager: Chunk read error: {e}")
+                            logger.error("Chunk read error: %s", e)
                             tries_left -= 1
                     
                     if tries_left == 0:
-                        print("DownloadManager: ERROR: failed to download chunk after retries!")
+                        logger.error("Failed to download chunk after retries")
                         if fd:
                             fd.close()
                         raise OSError(-110, "Failed to download chunk after retries")
                     
                     if chunk_data:
-                        #print("Chunk: ", chunk_data) # for debugging
                         # Output chunk
                         if fd:
                             fd.write(chunk_data)
@@ -308,7 +310,7 @@ class DownloadManager:
                         # Only call callback if progress changed by at least 0.01%
                         progress_pct = round((partial_size * 100) / int(total_size), 2)
                         if progress_callback and progress_pct != last_progress_pct:
-                            print(f"DownloadManager: Progress: {partial_size} / {total_size} bytes = {progress_pct:.2f}%")
+                            if __debug__: logger.debug("Progress: %s / %s bytes = %s%%", partial_size, total_size, progress_pct)
                             await progress_callback(progress_pct)
                             last_progress_pct = progress_pct
                         
@@ -320,14 +322,14 @@ class DownloadManager:
                             if elapsed_ms >= _SPEED_UPDATE_INTERVAL_MS:
                                 # Calculate bytes per second
                                 bytes_per_second = (speed_bytes_since_last_update * 1000) / elapsed_ms
-                                print(f"DownloadManager: Speed: {bytes_per_second} bytes / second")
+                                if __debug__: logger.debug("Speed: %s B/s", bytes_per_second)
                                 await speed_callback(bytes_per_second)
                                 # Reset for next interval
                                 speed_bytes_since_last_update = 0
                                 speed_last_update_time = current_time
                     else:
                         # Chunk is None, download complete
-                        print(f"DownloadManager: Finished downloading {log_url}")
+                        if __debug__: logger.debug("Finished downloading %s", log_url)
                         if fd:
                             fd.close()
                             fd = None
@@ -343,7 +345,7 @@ class DownloadManager:
             err_str = str(e)
             if redact_url and url in err_str:
                 err_str = err_str.replace(url, log_url)
-            print(f"DownloadManager: Exception during download: {err_str}")
+            logger.error("Exception during download: %s", err_str)
             import sys
             sys.print_exception(e)
             if fd:

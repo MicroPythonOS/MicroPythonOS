@@ -1,4 +1,7 @@
+import logging
 import lvgl as lv
+
+logger = logging.getLogger(__name__)
 
 copied = None
 
@@ -9,7 +12,7 @@ def get():
     return copied
 
 def paste_text(text): # called when CTRL-V is pressed on the keyboard
-    print(f"mpos.ui.clipboard.py paste_text adding {text}")
+    if __debug__: logger.debug("paste_text adding %s", text)
     focusgroup = lv.group_get_default()
     if not focusgroup:
         return

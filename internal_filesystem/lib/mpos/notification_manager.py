@@ -1,7 +1,10 @@
+import logging
 import time
 
 from .config import SharedPreferences
 from .content.intent import Intent
+
+logger = logging.getLogger(__name__)
 
 _DEBOUNCE_MS = 500
 
@@ -223,7 +226,7 @@ class NotificationManager:
             try:
                 callback()
             except Exception as e:
-                print("NotificationManager listener callback failed:", e)
+                logger.error("Listener callback failed: %s", e)
 
     @classmethod
     def register_listener(cls, callback, notify_immediately=True):
@@ -234,7 +237,7 @@ class NotificationManager:
             try:
                 callback()
             except Exception as e:
-                print("NotificationManager initial callback failed:", e)
+                logger.error("Initial callback failed: %s", e)
 
     @classmethod
     def unregister_listener(cls, callback):
@@ -307,7 +310,7 @@ class NotificationManager:
                     ActivityNavigator.startActivity(intent)
                     return True
                 except Exception as e:
-                    print("NotificationManager failed to start activity intent:", e)
+                    logger.error("Failed to start activity intent: %s", e)
             # intent exists but has no activity_class/action — use app_fullname fallback
             target_app = intent.app_fullname
 
@@ -316,7 +319,7 @@ class NotificationManager:
                 from .content.app_manager import AppManager
                 return bool(AppManager.start_app(target_app))
             except Exception as e:
-                print("NotificationManager failed to start app:", e)
+                logger.error("Failed to start app: %s", e)
         return False
 
     @classmethod

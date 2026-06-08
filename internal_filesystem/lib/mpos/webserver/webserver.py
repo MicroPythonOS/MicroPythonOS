@@ -1,5 +1,8 @@
 """WebServer control for MicroPythonOS."""
 
+import logging
+logger = logging.getLogger(__name__)
+
 from ..config import SharedPreferences
 from .webrepl_http import accept_handler
 
@@ -73,12 +76,12 @@ class WebServer:
             webrepl.start(port=cls._port, password=cls._password, accept_handler=accept_handler)
             cls._started = True
             cls._last_error = None
-            print(f"WebServer started on port {cls._port}")
+            if __debug__: logger.debug("Started on port %s", cls._port)
             return True
         except Exception as exc:
             cls._last_error = exc
             cls._started = False
-            print(f"WebServer start failed: {exc}")
+            logger.error("Start failed: %s", exc)
             return False
 
     @classmethod
@@ -90,11 +93,11 @@ class WebServer:
                 webrepl.stop()
             cls._started = False
             cls._last_error = None
-            print("WebServer stopped")
+            if __debug__: logger.debug("Stopped")
             return True
         except Exception as exc:
             cls._last_error = exc
-            print(f"WebServer stop failed: {exc}")
+            logger.error("Stop failed: %s", exc)
             return False
 
     @classmethod
@@ -111,5 +114,5 @@ class WebServer:
         cls.load_settings()
         if cls._autostart:
             return cls.start()
-        print("WebServer autostart disabled")
+        if __debug__: logger.debug("Autostart disabled")
         return False

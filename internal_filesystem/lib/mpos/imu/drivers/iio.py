@@ -1,6 +1,9 @@
 import os
+import logging
 
 from mpos.imu.drivers.base import IMUDriverBase
+
+logger = logging.getLogger(__name__)
 
 
 class IIODriver(IMUDriverBase):
@@ -23,7 +26,7 @@ class IIODriver(IMUDriverBase):
         self.available = any((self.accel_path, self.mag_path, self.gyro_path))
 
         if not self.available:
-            print("IIO: no IIO sensors detected")
+            if __debug__: logger.debug("no IIO sensors detected")
             return
 
         if self.accel_path:
@@ -61,15 +64,15 @@ class IIODriver(IMUDriverBase):
         Returns None if not found.
         """
 
-        print("Is dir? ", self._is_dir(base_dir), base_dir)
+        if __debug__: logger.debug("Is dir? %s %s", self._is_dir(base_dir), base_dir)
         try:
             entries = os.listdir(base_dir)
         except OSError:
-            print("Error listing dir")
+            logger.error("Error listing dir")
             return None
 
         for entry in entries:
-            print("Entry:", entry)
+            if __debug__: logger.debug("Entry: %s", entry)
             if not entry.startswith("iio:device"):
                 continue
 
@@ -84,7 +87,7 @@ class IIODriver(IMUDriverBase):
 
     def _read_text(self, name: str) -> str:
         if False:
-            print("Read: ", name)
+            if __debug__: logger.debug("Read: %s", name)
         f = open(name, "r")
         try:
             return f.readline().strip()
@@ -152,7 +155,7 @@ class IIODriver(IMUDriverBase):
 
         # already max (tolerate float fuzz)
         if abs(cur - maxf) < 1e-6:
-            print("Already at max frequency")
+            if __debug__: logger.debug("Already at max frequency")
             return (False, maxf, cur)
 
         max_str = self._format_freq_for_sysfs(maxf)
@@ -160,7 +163,7 @@ class IIODriver(IMUDriverBase):
         # Fallback: sudo tee
         ok = self._try_set_via_sudo_tee(sf, max_str)
         if not ok:
-            print("Can't switch to max frequency")
+            logger.warning("Can't switch to max frequency")
             return (False, maxf, cur)
 
         new_cur = float(self._read_text(sf))

@@ -1,4 +1,7 @@
+import logging
 import lvgl as lv
+
+logger = logging.getLogger(__name__)
 
 class Activity:
 
@@ -42,7 +45,7 @@ class Activity:
         ActivityNavigator.startActivityForResult(intent, result_callback)
 
     def initError(self, e):
-        print(f"WARNING: You might have inherited from Activity with a custom __init__() without calling super().__init__(). Got AttributeError: {e}")
+        logger.warning("You might have inherited from Activity with a custom __init__() without calling super().__init__(). Got AttributeError: %s", e)
 
     def getIntent(self):
         try:
@@ -75,13 +78,11 @@ class Activity:
     # Execute a function if the Activity is in the foreground
     def if_foreground(self, func, *args, event=None, **kwargs):
         if self._has_foreground:
-            #print(f"executing {func} with args {args} and kwargs {kwargs}")
             result = func(*args, **kwargs)
             if event:
                 event.set()
             return result
         else:
-            #print(f"[if_foreground] Skipped {func} because _has_foreground=False")
             return None
 
     # Update the UI in a threadsafe way if the Activity is in the foreground

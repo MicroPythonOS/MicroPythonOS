@@ -1,8 +1,9 @@
-print("lilygo_t_hmi.py initialization")
 # Manufacturer: https://lilygo.cc/en-us/products/t-hmi
 # Hardware reference: https://www.tinytronics.nl/en/development-boards/microcontroller-boards/with-wi-fi/lilygo-t-hmi-esp32-s3-2.8-inch-ips-tft-display-met-touchscreen
 # Vendor repository: https://github.com/Xinyuan-LilyGO/T-HMI
 
+import logging
+logger = logging.getLogger(__name__)
 
 # --- POWER HOLD ---
 from machine import Pin
@@ -104,13 +105,13 @@ mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._0) # must be done after i
 
 lv.init()
 
-print("lilygo_t_hmi.py SDCard initialization...")
+if __debug__: logger.debug("SDCard initialization...")
 
 # Initialize SD card in SDIO mode
 from mpos import sdcard
 sdcard.init(cmd_pin=11,clk_pin=12,d0_pin=13)
 
-print("lilygo_t_hmi.py Battery initialization...")
+if __debug__: logger.debug("Battery initialization...")
 
 
 def adc_to_voltage(raw_adc_value):
@@ -129,4 +130,4 @@ def adc_to_voltage(raw_adc_value):
 
 BatteryManager.init_adc(_BATTERY_PIN, adc_to_voltage)
 
-print("lilygo_t_hmi.py finished")
+if __debug__: logger.debug("finished")

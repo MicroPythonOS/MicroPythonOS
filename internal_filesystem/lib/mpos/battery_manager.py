@@ -5,7 +5,10 @@ Provides direct query access to battery voltage, charge percentage, and raw ADC 
 Handles ADC1/ADC2 pin differences on ESP32-S3 with adaptive caching to minimize WiFi interference.
 """
 
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 MIN_VOLTAGE = 3.15
 MAX_VOLTAGE = 4.15
@@ -55,17 +58,17 @@ class BatteryManager:
         _adc_pin = pinnr
 
         try:
-            print(f"Initializing ADC pin {pinnr} with conversion function")
+            if __debug__: logger.debug("Initializing ADC pin %s with conversion function", pinnr)
             if _is_adc2_pin(pinnr):
-                print(f"  WARNING: GPIO{pinnr} is on ADC2 - WiFi will be disabled during readings")
+                logger.warning("GPIO %s is on ADC2 - WiFi will be disabled during readings", pinnr)
             from machine import ADC, Pin
             _adc = ADC(Pin(pinnr))
             _adc.atten(ADC.ATTN_11DB)  # 0-3.3V range
         except Exception as e:
-            print(f"Info: this platform has no ADC for measuring battery voltage: {e}")
+            logger.error("Info: this platform has no ADC for measuring battery voltage: %s", e)
 
         initial_adc_value = BatteryManager.read_raw_adc()
-        print(f"Reading ADC at init to fill cache: {initial_adc_value} => {BatteryManager.read_battery_voltage(raw_adc_value=initial_adc_value)}V => {BatteryManager.get_battery_percentage(raw_adc_value=initial_adc_value)}%")
+        if __debug__: logger.debug("Reading ADC at init to fill cache: %s => %sV => %s%%", initial_adc_value, BatteryManager.read_battery_voltage(raw_adc_value=initial_adc_value), BatteryManager.get_battery_percentage(raw_adc_value=initial_adc_value))
 
     @staticmethod
     def has_battery():

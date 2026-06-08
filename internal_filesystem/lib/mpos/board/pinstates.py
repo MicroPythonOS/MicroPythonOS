@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 import sys
 
 import machine
@@ -54,7 +57,7 @@ def _restore_pin(snapshot):
         if value is not None and mode in (machine.Pin.OUT, getattr(machine.Pin, "OPEN_DRAIN", None)):
             pin.value(value)
     except Exception as exc:
-        print("pinstates: WARNING: failed to restore GPIO%02d: %r" % (pin.id(), exc))
+        logger.warning("failed to restore GPIO%02d: %r", pin.id(), exc)
 
 
 def _detect_board():
@@ -89,10 +92,9 @@ def read_all_pins(skiplist=None):
             results["errors"]["digital"][p] = repr(snapshot_error)
             continue
         try:
-            print("Reading digital GPIO%02d..." % p)
+            if __debug__: logger.debug("Reading digital GPIO%02d...", p)
             pin = machine.Pin(p, machine.Pin.IN)
             results["digital"][p] = pin.value()
-            #time.sleep(1)
         except Exception as exc:
             results["errors"]["digital"][p] = repr(exc)
         finally:
@@ -100,17 +102,16 @@ def read_all_pins(skiplist=None):
                 _restore_pin(pin_snapshot)
             except Exception as exc:
                 results["errors"]["digital"][p] = repr(exc)
-    
+
     for p in pins:
         pin_snapshot, snapshot_error = _try_pin_snapshot(p)
         if snapshot_error is not None:
             results["errors"]["analog"][p] = repr(snapshot_error)
             continue
         try:
-            print("Reading analog GPIO%02d..." % p)
+            if __debug__: logger.debug("Reading analog GPIO%02d...", p)
             adc = machine.ADC(machine.Pin(p))
             results["analog"][p] = _adc_read(adc)
-            #time.sleep(1)
         except Exception as exc:
             results["errors"]["analog"][p] = repr(exc)
         finally:
@@ -118,21 +119,21 @@ def read_all_pins(skiplist=None):
                 _restore_pin(pin_snapshot)
             except Exception as exc:
                 results["errors"]["analog"][p] = repr(exc)
-    
-    print("=== Pin State Readout ===")
-    print("Board:", board)
-    print("=== Digital Reads ===")
+
+    if __debug__: logger.debug("=== Pin State Readout ===")
+    if __debug__: logger.debug("Board: %s", board)
+    if __debug__: logger.debug("=== Digital Reads ===")
     for p in pins:
         if p in results["digital"]:
-            print("GPIO%02d:" % p, results["digital"][p])
+            if __debug__: logger.debug("GPIO%02d: %s", p, results["digital"][p])
         else:
-            print("GPIO%02d:" % p, "ERR", results["errors"]["digital"].get(p))
+            if __debug__: logger.debug("GPIO%02d: ERR %s", p, results["errors"]["digital"].get(p))
 
-    print("=== Analog Reads ===")
+    if __debug__: logger.debug("=== Analog Reads ===")
     for p in pins:
         if p in results["analog"]:
-            print("GPIO%02d:" % p, results["analog"][p])
+            if __debug__: logger.debug("GPIO%02d: %s", p, results["analog"][p])
         else:
-            print("GPIO%02d:" % p, "ERR", results["errors"]["analog"].get(p))
+            if __debug__: logger.debug("GPIO%02d: ERR %s", p, results["errors"]["analog"].get(p))
 
     return results

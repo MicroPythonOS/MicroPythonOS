@@ -1,6 +1,9 @@
 # Hardware initialization for ESP32 M5Stack-Fire board
 # Manufacturer's website at https://https://docs.m5stack.com/en/core/fire_v2.7
 # Original author: https://github.com/ancebfer
+import logging
+logger = logging.getLogger(__name__)
+
 import time
 
 import drivers.display.ili9341 as ili9341
@@ -46,7 +49,7 @@ MPU6886_I2C_SDA = const(21)
 MPU6886_I2C_FREQ = const(400000)
 
 
-print("m5stack_fire.py init buzzer")
+if __debug__: logger.debug("init buzzer")
 buzzer = PWM(Pin(BUZZER_PIN, Pin.OUT, value=1), duty=5)
 AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=BUZZER_PIN))
 AudioManager.set_volume(40)
@@ -60,7 +63,7 @@ while player.is_playing():
     time.sleep(0.1)
 
 
-print("m5stack_fire.py init IMU")
+if __debug__: logger.debug("init IMU")
 i2c_bus = I2C(0, scl=Pin(MPU6886_I2C_SCL), sda=Pin(MPU6886_I2C_SDA), freq=MPU6886_I2C_FREQ)
 SensorManager.init(
     i2c_bus=i2c_bus,
@@ -69,12 +72,12 @@ SensorManager.init(
 )
 
 
-print("m5stack_fire.py machine.SPI.Bus() initialization")
+if __debug__: logger.debug("machine.SPI.Bus() initialization")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_BUS, mosi=LCD_MOSI, sck=LCD_SCLK)
 except Exception as e:
-    print(f"Error initializing SPI bus: {e}")
-    print("Attempting hard reset in 3sec...")
+    logger.error("Error initializing SPI bus: %s", e)
+    logger.error("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -196,4 +199,4 @@ indev.set_display(disp)  # different from display
 indev.enable(True)  # NOQA
 InputManager.register_indev(indev)
 
-print("m5stack_fire.py finished")
+if __debug__: logger.debug("finished")

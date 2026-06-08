@@ -1,5 +1,8 @@
+import logging
 import lvgl as lv
 import os
+
+logger = logging.getLogger(__name__)
 
 
 CP_VARIATION_SELECTOR_TEXT = 0xFE0E
@@ -243,7 +246,7 @@ droplet_sweat,💧
     @classmethod
     def _debug(cls, message):
         if cls._DEBUG:
-            print("font_manager: " + message)
+            logger.debug(message)
 
     @classmethod
     def _get_ttf_font(cls, ttf_path, size):
@@ -349,7 +352,7 @@ droplet_sweat,💧
                 cwd = os.getcwd()
             except Exception:
                 cwd = "?"
-            print("font_manager: could not list emoji dir '{}' (cwd={})".format(_EMOJI_DIR_PATH, cwd))
+            logger.warning("could not list emoji dir '%s' (cwd=%s)", _EMOJI_DIR_PATH, cwd)
             return emoji_map
 
         for name in entries:
@@ -366,7 +369,7 @@ droplet_sweat,💧
                     valid = False
                     break
             if not valid:
-                print("font_manager: skip non-hex emoji file: " + name)
+                logger.warning("skip non-hex emoji file: %s", name)
                 continue
 
             base_key = segments[0].upper()
@@ -380,7 +383,7 @@ droplet_sweat,💧
             if base_key not in emoji_map:
                 emoji_map[base_key] = _EMOJI_SRC_PREFIX + name
 
-        print("font_manager: loaded {} emoji png mappings from {}".format(len(emoji_map), _EMOJI_DIR_PATH))
+        if __debug__: logger.debug("loaded %s emoji png mappings from %s", len(emoji_map), _EMOJI_DIR_PATH)
         return emoji_map
 
     @classmethod
@@ -696,13 +699,13 @@ droplet_sweat,💧
             lv.snapshot_take_to_buf(container, lv.COLOR_FORMAT.ARGB8888, dsc, buf, buflen)
 
             if int(dsc.header.w) <= 0 or int(dsc.header.h) <= 0:
-                print("returning none!")
+                logger.error("returning none!")
                 return None, None
 
             return dsc, buf
         except Exception as e:
             # This doesn't seem to get caught, instead if fails silently, probably because it's LVGL C code calling this...
-            print("Font Manager _render_scaled_image_src got exception: ", e)
+            logger.error("_render_scaled_image_src got exception: %s", e)
         finally:
             renderer.delete()
             container.delete()

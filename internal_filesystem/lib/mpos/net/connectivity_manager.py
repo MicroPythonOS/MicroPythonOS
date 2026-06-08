@@ -1,7 +1,10 @@
 # connectivity.py — Universal ConnectivityManager for MicroPythonOS
 # Works on ESP32, ESP8266, Unix/Desktop, and anything else
 
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 try:
     import network  # noqa: F401
@@ -13,7 +16,6 @@ class ConnectivityManager:
     _instance = None
 
     def __init__(self):
-        #print("connectivity_manager.py init")
         if ConnectivityManager._instance:
             return
         ConnectivityManager._instance = self
@@ -41,13 +43,11 @@ class ConnectivityManager:
         self._check_timer.init(period=8000, mode=Timer.PERIODIC, callback=self._periodic_check_connected)
 
         self._periodic_check_connected(notify=False)
-        #print("init done")
 
     @classmethod
     def get(cls):
         if cls._instance is None:
             cls._instance = cls()
-        #print("returning...")
         return cls._instance
 
     def register_callback(self, callback):
@@ -62,10 +62,9 @@ class ConnectivityManager:
             try:
                 cb(now_online)
             except Exception as e:
-                print("[Connectivity] Callback error:", e)
+                logger.error("Callback error: %s", e)
 
     def _periodic_check_connected(self, notify=True):
-        #print("_periodic_check_connected")
         was_online = self._is_online
         if not self.can_check_network:
             self._is_online = True
@@ -82,7 +81,7 @@ class ConnectivityManager:
 
         if self._is_online != was_online:
             status = "ONLINE" if self._is_online else "OFFLINE"
-            print(f"[Connectivity] Internet => {status}")
+            if __debug__: logger.debug("Internet => %s", status)
             if notify:
                 self._notify(self._is_online)
 
@@ -93,7 +92,7 @@ class ConnectivityManager:
             if WifiService.wifi_busy:
                 return
             self._reconnect_in_progress = True
-            print(f"[Connectivity] WiFi offline for ~{self._offline_checks * 8}s, attempting reconnect...")
+            if __debug__: logger.debug("WiFi offline for ~%ss, attempting reconnect...", self._offline_checks * 8)
             import _thread
             def reconnect_thread():
                 try:
@@ -102,7 +101,7 @@ class ConnectivityManager:
                     self._reconnect_in_progress = False
             _thread.start_new_thread(reconnect_thread, ())
         except Exception as e:
-            print(f"[Connectivity] Reconnect failed: {e}")
+            logger.error("Reconnect failed: %s", e)
             self._reconnect_in_progress = False
 
     # === Public Android-like API ===

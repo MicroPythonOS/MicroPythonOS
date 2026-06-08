@@ -26,7 +26,10 @@ Example:
     AppearanceManager.init(prefs)
 """
 
+import logging
 import lvgl as lv
+
+logger = logging.getLogger(__name__)
 
 
 class AppearanceManager:
@@ -116,11 +119,11 @@ class AppearanceManager:
         try:
             color_string = color_string.replace("0x", "").replace("#", "").strip().lower()
             color_int = int(color_string, 16)
-            print(f"[AppearanceManager] Setting primary color: {color_int}")
+            if __debug__: logger.debug("Setting primary color: %s", color_int)
             primary_color = lv.color_hex(color_int)
             cls._primary_color = primary_color
         except Exception as e:
-            print(f"[AppearanceManager] Converting color setting '{color_string}' failed: {e}")
+            logger.error("Converting color setting '%s' failed: %s", color_string, e)
 
         # Initialize LVGL theme with loaded settings
         # Get the display driver from the active screen
@@ -136,7 +139,7 @@ class AppearanceManager:
         # Reset keyboard button fix style so it's recreated with new theme colors
         cls._keyboard_button_fix_style = None
         
-        print(f"[AppearanceManager] Initialized: light_mode={cls._is_light_mode}, primary_color={primary_color}")
+        if __debug__: logger.debug("Initialized: light_mode=%s, primary_color=%s", cls._is_light_mode, primary_color)
     
     # ========== Light/Dark Mode ==========
     
@@ -184,7 +187,7 @@ class AppearanceManager:
             editor.commit()
             cls.init(prefs)
 
-        print(f"[AppearanceManager] Light mode set to: {is_light}")
+        if __debug__: logger.debug("Light mode set to: %s", is_light)
     
     @classmethod
     def set_theme(cls, prefs):
@@ -251,7 +254,7 @@ class AppearanceManager:
             editor.commit()
             cls.init(prefs)
 
-        print(f"[AppearanceManager] Primary color set to: {color}")
+        if __debug__: logger.debug("Primary color set to: %s", color)
     
     # ========== UI Dimensions ==========
     
@@ -338,4 +341,4 @@ class AppearanceManager:
         style = cls.get_keyboard_button_fix_style()
         if style:
             keyboard.add_style(style, lv.PART.ITEMS)
-            print(f"[AppearanceManager] Applied keyboard button fix for light mode")
+            if __debug__: logger.debug("Applied keyboard button fix for light mode")

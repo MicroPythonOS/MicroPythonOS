@@ -1,6 +1,7 @@
 # This module should be imported from REPL, not run from command line.
 import binascii
 import hashlib
+import logging
 from micropython import const
 try:
     import network
@@ -13,6 +14,8 @@ import sys
 import websocket
 import _webrepl
 from mpos import TaskManager
+
+logger = logging.getLogger(__name__)
 
 listen_s = None
 client_s = None
@@ -45,7 +48,7 @@ def server_handshake(cl):
             sys.stdout.write(l)
         h, v = [x.strip() for x in l.split(b":", 1)]
         if DEBUG:
-            print((h, v))
+            if __debug__: logger.debug("%s %s", h, v)
         if h == b"Sec-WebSocket-Key":
             webkey = v
         elif h == b"Connection" and b"Upgrade" in v:
@@ -57,14 +60,14 @@ def server_handshake(cl):
         return False
 
     if DEBUG:
-        print("Sec-WebSocket-Key:", webkey, len(webkey))
+        if __debug__: logger.debug("Sec-WebSocket-Key: %s %s", webkey, len(webkey))
 
     d = hashlib.sha1(webkey)
     d.update(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
     respkey = d.digest()
     respkey = binascii.b2a_base64(respkey)[:-1]
     if DEBUG:
-        print("respkey:", respkey)
+        if __debug__: logger.debug("respkey: %s", respkey)
 
     cl.send(
         b"""\
@@ -121,7 +124,7 @@ def setup_conn(port, accept_handler):
         for i in (network.WLAN.IF_AP, network.WLAN.IF_STA):
             iface = network.WLAN(i)
             if iface.active():
-                print("WebREPL server started on http://%s:%d/" % (iface.ifconfig()[0], port))
+                if __debug__: logger.debug("WebREPL server started on http://%s:%d/", iface.ifconfig()[0], port)
     return listen_s, accept_installed
 
 
@@ -136,10 +139,10 @@ def accept_conn(listen_sock):
     prev = os.dupterm(None)
     os.dupterm(prev)
     if prev:
-        print("\nConcurrent WebREPL connection from", remote_addr, "rejected")
+        logger.warning("Concurrent WebREPL connection from %s rejected", remote_addr)
         cl.close()
         return False
-    print("\nWebREPL connection from:", remote_addr)
+    if __debug__: logger.debug("WebREPL connection from: %s", remote_addr)
     client_s = cl
 
     ws = websocket.websocket(cl, True)
@@ -200,13 +203,13 @@ def start(port=8266, password=None, accept_handler=accept_conn):
             if hasattr(webrepl_cfg, "BASE"):
                 static_host = webrepl_cfg.BASE
         except:
-            print("WebREPL is not configured, run 'import webrepl_setup'")
+            logger.warning("WebREPL is not configured, run 'import webrepl_setup'")
 
     _webrepl.password(webrepl_pass)
     s, accept_installed = setup_conn(port, accept_handler)
 
     if accept_handler is None:
-        print("Starting webrepl in foreground mode")
+        if __debug__: logger.debug("Starting webrepl in foreground mode")
         # Run accept_conn to serve HTML until we get a websocket connection.
         while not accept_conn(s):
             pass
@@ -215,13 +218,13 @@ def start(port=8266, password=None, accept_handler=accept_conn):
         # platform cannot install an accept_handler via socket options (Unix/macOS).
         TaskManager.create_task(_accept_loop(s, accept_handler))
         if password is None:
-            print("Started webrepl in normal mode")
+            if __debug__: logger.debug("Started webrepl in normal mode")
         else:
-            print("Started webrepl in manual override mode")
+            if __debug__: logger.debug("Started webrepl in manual override mode")
     elif password is None:
-        print("Started webrepl in normal mode")
+        if __debug__: logger.debug("Started webrepl in normal mode")
     else:
-        print("Started webrepl in manual override mode")
+        if __debug__: logger.debug("Started webrepl in manual override mode")
 
 
 def start_foreground(port=8266, password=None):

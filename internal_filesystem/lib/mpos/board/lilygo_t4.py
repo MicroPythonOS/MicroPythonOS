@@ -5,7 +5,8 @@
 # Speaker: PWM
 # SD Card: SPI
 
-print("lilygo_t4.py running")
+import logging
+logger = logging.getLogger(__name__)
 
 import time
 
@@ -54,16 +55,16 @@ ADC_IN = const(35)
 SPEAKER_PWD = const(19)
 SPEAKER_OUT = const(25)
 
-print("lilygo_t4.py init buzzer")
+if __debug__: logger.debug("init buzzer")
 buzzer_pwd = Pin(SPEAKER_PWD, Pin.OUT, value=1)
 buzzer_output = AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=SPEAKER_OUT))
 
-print("lilygo_t4.py init SPI display")
+if __debug__: logger.debug("init SPI display")
 try:
     display_spi_bus = machine.SPI.Bus(host=LCD_SPI_BUS, sck=LCD_SCLK, mosi=LCD_MOSI, miso=LCD_MISO)
 except Exception as e:
-    print(f"Error initializing display SPI bus: {e}")
-    print("Attempting hard reset in 3sec...")
+    logger.error("Error initializing display SPI bus: %s", e)
+    logger.error("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -87,7 +88,7 @@ mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_backlight(25)
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90)
 
-print("lilygo_t4.py init battery monitoring")
+if __debug__: logger.debug("init battery monitoring")
 VOLTAGE_REF = 3.6
 DIVIDER_RATIO = 2.0
 
@@ -103,12 +104,12 @@ def adc_to_voltage(adc_value):
 
 BatteryManager.init_adc(ADC_IN, adc_to_voltage)
 
-print("lilygo_t4.py init SPI sdcard")
+if __debug__: logger.debug("init SPI sdcard")
 try:
     sdcard_spi_bus = machine.SPI.Bus(host=SD_SPI_BUS, sck=SD_SCLK, mosi=SD_MOSI, miso=SD_MISO)
     mpos.sdcard.init(spi_bus=sdcard_spi_bus, cs_pin=SD_CS)
 except Exception as e:
-    print(f"Error initializing sdcard SPI bus: {e}")
+    logger.error("Error initializing sdcard SPI bus: %s", e)
 
 # Button handling code
 btn_a = Pin(BUTTON_A, Pin.IN, Pin.PULL_UP)
@@ -315,11 +316,11 @@ def startup_music():
         player = AudioManager.player(rtttl=startup_jingle, stream_type=AudioManager.STREAM_NOTIFICATION, volume=80, output=buzzer_output)
         player.start()
     except Exception as e:
-        print(f"Startup music error: {e}")
+        logger.error("Startup music error: %s", e)
 
 import _thread
 from mpos import TaskManager
 _thread.stack_size(TaskManager.good_stack_size())
 _thread.start_new_thread(startup_music, ())
 
-print("lilygo_t4.py finished")
+if __debug__: logger.debug("finished")

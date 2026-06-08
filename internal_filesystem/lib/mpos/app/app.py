@@ -1,5 +1,8 @@
+import logging
 import os
 import ujson
+
+logger = logging.getLogger(__name__)
 
 class App:
     def __init__(
@@ -33,7 +36,6 @@ class App:
         self.installed_path = installed_path
 
         self.icon_path = self._find_icon_path()
-        #print(f"App constructor got icon_path: {self.icon_path}")
         if self.icon_path:
             self.icon_data = self._load_icon_data(self.icon_path)
         else:
@@ -44,22 +46,17 @@ class App:
         return f"App({self.name}, version {self.version}, {self.category})"
 
     def _load_icon_data(self, icon_path):
-        #print(f"App _load_icon_data for {icon_path}")
         try:
             f =  open(icon_path, 'rb')
             return f.read()
-        except Exception as e:
-            #print(f"open {icon_path} got error: {e}")
+        except Exception:
             pass
 
     def _check_icon_path(self, tocheck):
         try:
-            #print(f"checking {tocheck}")
             st = os.stat(tocheck)
-            #print(f"_find_icon_path for {tocheck} found {st}")
             return tocheck
-        except Exception as e:
-            #print(f"No app icon found in {tocheck}: {e}")
+        except Exception:
             return None
 
     def _find_icon_path(self):

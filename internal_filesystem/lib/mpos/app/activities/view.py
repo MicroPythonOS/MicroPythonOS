@@ -1,5 +1,8 @@
+import logging
 from ..activity import Activity
 from ...content.app_manager import AppManager
+
+logger = logging.getLogger(__name__)
 
 class ViewActivity(Activity):
     def __init__(self):
@@ -23,9 +26,9 @@ class ViewActivity(Activity):
 
     def onStop(self, screen):
         if self.getIntent() and self.getIntent().getStringExtra("destination") == "ViewActivity":
-            print("Stopped for View")
+            if __debug__: logger.debug("Stopped for View")
         else:
-            print("Stopped for other screen")
+            if __debug__: logger.debug("Stopped for other screen")
 
 # Register this activity for "view" intents
 AppManager.register_activity("view", ViewActivity)

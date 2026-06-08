@@ -1,13 +1,14 @@
 # LilyGo T-Display non-touch edition
 
-print("lilygo_t_display_s3.py running")
+import logging
+logger = logging.getLogger(__name__)
 
 import lcd_bus
 import lvgl as lv
 import machine
 import time
 
-print("lilygo_t_display_s3.py display bus initialization")
+if __debug__: logger.debug("display bus initialization")
 try:
     display_bus = lcd_bus.I80Bus(
         dc=7,
@@ -21,11 +22,10 @@ try:
         data5=46,
         data6=47,
         data7=48,
-        #reverse_color_bits=False # doesnt seem to do anything?
     )
 except Exception as e:
-    print(f"Error initializing display bus: {e}")
-    print("Attempting hard reset in 3sec...")
+    logger.error("Error initializing display bus: %s", e)
+    logger.error("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
@@ -37,13 +37,10 @@ import mpos.ui
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
-    # frame_buffer_2 doesn't seem to improve anything
     display_width=170,
     display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
-    # color_space=lv.COLOR_FORMAT.RGB888, # not supported on qemu
     color_byte_order=st7789.BYTE_ORDER_BGR,
-    # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
     power_pin=9, # Must set RD pin to high, otherwise blank screen as soon as LVGL's task_handler starts
     reset_pin=5,
     reset_state=st7789.STATE_LOW, # needs low: high will not enable the display
@@ -57,7 +54,6 @@ mpos.ui.main_display.init()
 mpos.ui.main_display.set_backlight(100) # works
 
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
-#mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180) # doesnt suffer from the qemu full buffer issue
 mpos.ui.main_display.set_color_inversion(True)
 
 # Button handling code:
@@ -114,17 +110,11 @@ def keypad_read_cb(indev, data):
         elif btn_b_pressed and time.ticks_diff(current_time, last_b_down_time) < COMBO_GRACE_MS:
             single_press_wait = True
 
-    if near_simul or single_press_wait:
-        dt_a = time.ticks_diff(current_time, last_a_down_time) if last_a_down_time else None
-        dt_b = time.ticks_diff(current_time, last_b_down_time) if last_b_down_time else None
-        #print(f"combo guard: a={btn_a_pressed} b={btn_b_pressed} near={near_simul} wait={single_press_wait} dt_a={dt_a} dt_b={dt_b}")
-
     # While in an on-screen keyboard, PREV button is LEFT and NEXT button is RIGHT
     focus_group = lv.group_get_default()
     focus_keyboard = False
     current_focused = focus_group.get_focused()
     if isinstance(current_focused, lv.keyboard):
-        #print("focus is on a keyboard")
         focus_keyboard = True
 
     if near_simul:
@@ -153,7 +143,6 @@ def keypad_read_cb(indev, data):
         key_press_start = 0
         last_repeat_time = 0
     elif last_key is None or current_key != last_key:
-        #print(f"New key press: {current_key}")
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED
         last_key = current_key
@@ -161,33 +150,27 @@ def keypad_read_cb(indev, data):
         key_press_start = current_time
         last_repeat_time = current_time
     else:
-        #print(f"key repeat because current_key {current_key} == last_key {last_key}")
         elapsed = time.ticks_diff(current_time, key_press_start)
         since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
         if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
             next_state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
             if current_key == lv.KEY.PREV:
-                #print("Repeated PREV does not do anything, instead it triggers ESC (back) if long enough")
                 if since_last_repeat > REPEAT_PREV_BECOMES_BACK:
-                    print("Long press on PREV triggered back button")
+                    if __debug__: logger.debug("Long press on PREV triggered back button")
                     data.key = lv.KEY.ESC
                     data.state = next_state
                     last_key = current_key
                     last_state = data.state
                     last_repeat_time = current_time
                 else:
-                    #print("repeat PREV ignored because not pressed long enough")
                     pass
             else:
-                #print("Send a new PRESSED/RELEASED pair for repeat")
                 data.key = current_key
                 data.state = next_state
                 last_key = current_key
                 last_state = data.state
                 last_repeat_time = current_time
         else:
-            # This doesn't seem to make the key navigation in on-screen keyboards work, unlike on the m5stack_fire...?
-            #print("No repeat yet, send RELEASED to avoid PRESSING, which breaks keyboard navigation...")
             data.state = lv.INDEV_STATE.RELEASED
             last_state = lv.INDEV_STATE.RELEASED
 
@@ -207,4 +190,4 @@ indev.enable(True)  # NOQA
 from mpos import InputManager
 InputManager.register_indev(indev)
 
-print("lilygo_t_display_s3.py finished")
+if __debug__: logger.debug("finished")

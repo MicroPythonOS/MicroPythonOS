@@ -7,7 +7,10 @@ focus management, and input device registration.
 All methods are class methods, so no instance creation is needed.
 """
 
+import logging
 import lvgl as lv
+
+logger = logging.getLogger(__name__)
 
 
 class InputManager:
@@ -86,7 +89,7 @@ class InputManager:
                 if indev.get_type() == lv.INDEV_TYPE.POINTER and hasattr(indev, "add_event_cb"):
                     indev.add_event_cb(cb, lv.EVENT.CLICKED, None)
             except Exception as e:
-                print("InputManager.set_touch_feedback_cb:", e)
+                logger.error("set_touch_feedback_cb: %s", e)
 
     @classmethod
     def pointer_xy(cls):
@@ -106,13 +109,12 @@ class InputManager:
         Use lv.group_focus_obj(target) directly.
         """
         if not target:
-            print("emulate_focus_obj needs a target, returning...")
+            logger.warning("emulate_focus_obj needs a target, returning...")
             return
 
-        print(
-            "WARNING: InputManager.emulate_focus_obj() is deprecated and unnecessary. "
+        logger.warning(
+            "emulate_focus_obj() is deprecated and unnecessary. "
             "Use lv.group_focus_obj(target) directly."
         )
 
         lv.group_focus_obj(target)
-

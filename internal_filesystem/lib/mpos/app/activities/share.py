@@ -1,5 +1,8 @@
+import logging
 from ..activity import Activity
 from ...content.app_manager import AppManager
+
+logger = logging.getLogger(__name__)
 
 class ShareActivity(Activity):
     def __init__(self):
@@ -24,15 +27,15 @@ class ShareActivity(Activity):
 
     def _share_content(self, text):
         # Dispatch to another app (e.g., MessagingActivity) or simulate sharing
-        print(f"Sharing: {text}")  # Placeholder for actual sharing
+        if __debug__: logger.debug("Sharing: %s", text)
         # Example: Launch another share handler
         navigator.startActivity(Intent(action="share", data=text))
         navigator.finish()  # Close ShareActivity
 
     def onStop(self, screen):
         if self.getIntent() and self.getIntent().getStringExtra("destination") == "ShareActivity":
-            print("Stopped for Share")
+            if __debug__: logger.debug("Stopped for Share")
         else:
-            print("Stopped for other screen")
+            if __debug__: logger.debug("Stopped for other screen")
 
 AppManager.register_activity("share", ShareActivity)

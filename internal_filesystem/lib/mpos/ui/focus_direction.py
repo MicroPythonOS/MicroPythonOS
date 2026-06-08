@@ -1,5 +1,8 @@
+import logging
 import lvgl as lv
 import mpos.util
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +260,7 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     Returns the winning object, or None.
     """
     if not current_focused:
-        print("find_closest_obj_in_direction: no focused object")
+        logger.warning("find_closest_obj_in_direction: no focused object")
         return None
 
     direction = direction_degrees  # alias for readability
@@ -282,8 +285,7 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     best_obj = None
 
     if debug:
-        print("find_closest_obj_in_direction: src=" + str(src) + " dir=" + str(direction)
-              + " top_layer_active=" + str(top_layer_active))
+        if __debug__: logger.debug("find_closest_obj_in_direction: src=%s dir=%s top_layer_active=%s", src, direction, top_layer_active)
 
     def process_object(obj):
         nonlocal best_rect, best_obj
@@ -301,7 +303,7 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
                 best_rect = dest
                 best_obj = obj
                 if debug:
-                    print("  new best: " + str(dest))
+                    if __debug__: logger.debug("  new best: %s", dest)
                     mpos.util.print_lvgl_widget(obj)
 
         for i in range(obj.get_child_count()):
@@ -320,21 +322,21 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
 def move_focus_direction(angle):
     focus_group = lv.group_get_default()
     if not focus_group:
-        print("move_focus_direction: no default focus_group found, returning...")
+        logger.warning("move_focus_direction: no default focus_group found, returning...")
         return
     current_focused = focus_group.get_focused()
     if not current_focused:
-        print("move_focus_direction: nothing is focused, choosing the next thing")
+        if __debug__: logger.debug("move_focus_direction: nothing is focused, choosing the next thing")
         focus_group.focus_next()
         current_focused = focus_group.get_focused()
     if not current_focused:
-        print("move_focus_direction: could not focus on anything, returning...")
+        logger.warning("move_focus_direction: could not focus on anything, returning...")
         return
     if isinstance(current_focused, lv.keyboard):
-        print("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
+        if __debug__: logger.debug("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
         return
     if isinstance(current_focused, lv.dropdown) and current_focused.is_open():
-        print("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")
+        if __debug__: logger.debug("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")
         return
 
     # Modal-overlay handling: if layer_top has any focusable content (e.g. a
@@ -346,13 +348,13 @@ def move_focus_direction(angle):
     top_layer_active = first_on_top is not None
 
     if top_layer_active and not _is_on_layer_top(current_focused):
-        print("move_focus_direction: modal overlay present — redirecting focus to layer_top")
+        if __debug__: logger.debug("move_focus_direction: modal overlay present — redirecting focus to layer_top")
         lv.group_focus_obj(first_on_top)
         return
 
     o = find_closest_obj_in_direction(focus_group, current_focused, angle,
                                       top_layer_active=top_layer_active)
     if o:
-        print("move_focus_direction: moving focus to:")
+        if __debug__: logger.debug("move_focus_direction: moving focus to:")
         mpos.util.print_lvgl_widget(o)
         lv.group_focus_obj(o)

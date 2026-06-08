@@ -1,4 +1,5 @@
 import time
+import logging
 
 from mpos.imu.constants import (
     TYPE_ACCELEROMETER,
@@ -18,6 +19,8 @@ from mpos.imu.drivers.qmi8658 import QMI8658Driver
 from mpos.imu.drivers.wsen_isds import WsenISDSDriver
 from mpos.imu.drivers.mpu6886 import MPU6886Driver
 from mpos.imu.drivers.bma423 import BMA423Driver
+
+logger = logging.getLogger(__name__)
 
 
 class ImuManager:
@@ -107,56 +110,56 @@ class ImuManager:
 
         if self._i2c_bus:
             try:
-                print("Try QMI8658 first (Waveshare board)")
+                if __debug__: logger.debug("Try QMI8658 first (Waveshare board)")
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]
-                print(f"{chip_id=:#04x}")
+                if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x05:
                     self._imu_driver = QMI8658Driver(self._i2c_bus, self._i2c_address)
                     self._register_qmi8658_sensors()
                     self._load_calibration()
-                    print("Use QMI8658, ok")
+                    if __debug__: logger.debug("Use QMI8658, ok")
                     return True
             except Exception as exc:
-                print("No QMI8658:", exc)
+                if __debug__: logger.debug("No QMI8658: %s", exc)
 
             try:
-                print("Try WSEN_ISDS (fri3d_2024) or LSM6DSO (fri3d_2026)")
+                if __debug__: logger.debug("Try WSEN_ISDS (fri3d_2024) or LSM6DSO (fri3d_2026)")
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x0F, 1)[0]
-                print(f"{chip_id=:#04x}")
+                if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x6A or chip_id == 0x6C:
                     self._imu_driver = WsenISDSDriver(self._i2c_bus, self._i2c_address)
                     self._register_wsen_isds_sensors()
                     self._load_calibration()
-                    print("Use WSEN_ISDS/LSM6DSO, ok")
+                    if __debug__: logger.debug("Use WSEN_ISDS/LSM6DSO, ok")
                     return True
             except Exception as exc:
-                print("No WSEN_ISDS or LSM6DSO:", exc)
+                if __debug__: logger.debug("No WSEN_ISDS or LSM6DSO: %s", exc)
 
             try:
-                print("Try BMA423 (LilyGo T-Watch S3 Plus)")
+                if __debug__: logger.debug("Try BMA423 (LilyGo T-Watch S3 Plus)")
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]
-                print(f"{chip_id=:#04x}")
+                if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x13:
                     self._imu_driver = BMA423Driver(self._i2c_bus, self._i2c_address)
                     self._register_bma423_sensors()
                     self._load_calibration()
-                    print("Use BMA423, ok")
+                    if __debug__: logger.debug("Use BMA423, ok")
                     return True
             except Exception as exc:
-                print("No BMA423:", exc)
+                if __debug__: logger.debug("No BMA423: %s", exc)
 
             try:
-                print("Try MPU6886 (M5Stack FIRE)")
+                if __debug__: logger.debug("Try MPU6886 (M5Stack FIRE)")
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x75, 1)[0]
-                print(f"{chip_id=:#04x}")
+                if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x19:
                     self._imu_driver = MPU6886Driver(self._i2c_bus, self._i2c_address)
                     self._register_mpu6886_sensors()
                     self._load_calibration()
-                    print("Use MPU6886, ok")
+                    if __debug__: logger.debug("Use MPU6886, ok")
                     return True
             except Exception as exc:
-                print("No MPU6886:", exc)
+                if __debug__: logger.debug("No MPU6886: %s", exc)
 
         return False
 
@@ -229,7 +232,7 @@ class ImuManager:
                 if "data not ready" in error_msg and attempt < max_retries - 1:
                     time.sleep_ms(retry_delay_ms)
                     continue
-                print("Exception reading sensor:", error_msg)
+                logger.error("Exception reading sensor: %s", error_msg)
                 return None
 
         return None
@@ -350,7 +353,7 @@ class ImuManager:
             }
 
         except Exception as exc:
-            print(f"[SensorManager] Error checking calibration quality: {exc}")
+            logger.error("Error checking calibration quality: %s", exc)
             return None
 
     def check_stationarity(
@@ -419,7 +422,7 @@ class ImuManager:
             }
 
         except Exception as exc:
-            print(f"[SensorManager] Error checking stationarity: {exc}")
+            logger.error("Error checking stationarity: %s", exc)
             return None
 
     def _register_qmi8658_sensors(self):

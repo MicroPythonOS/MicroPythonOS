@@ -1,4 +1,3 @@
-print("squixl.py initialization")
 """
 Hardware initialization for the SQUiXL device by "Unexpected Maker"
 https://squixl.io
@@ -45,6 +44,9 @@ The LCA9555 is register-compatible with the TCA9555.
 
 Original author: https://github.com/jedie
 """
+
+import logging
+logger = logging.getLogger(__name__)
 
 """
 | ESP32-S3 | GENERAl IO    |
@@ -143,7 +145,7 @@ I2S_SCK_PIN = const(46)
 I2S_WS_PIN = const(42)
 I2S_SD_PIN = const(45)
 
-TOUCH_INTERRUPT_PIN = const(3)  # GT911 interrupt (native GPIO)
+TOUCH_INTERRUPT_PIN = const(3)
 
 LCD_BUS_DE = const(38)
 LCD_BUS_PCLK = const(39)
@@ -153,7 +155,7 @@ LCD_BUS_FREQ_HZ = const(6_500_000)
 LCD_WIDTH = const(480)
 LCD_HEIGHT = const(480)
 
-BACKLIGHT_PWM_PIN = const(40)  # backlight PWM (active-low: 0 duty = full bright)
+BACKLIGHT_PWM_PIN = const(40)
 BACKLIGHT_PWM_FREQ_HZ = const(20_000)
 BACKLIGHT_PWM_DUTY_MAX = const(65535)
 BACKLIGHT_MIN_PERCENT = const(0)
@@ -174,9 +176,8 @@ SD_MOSI_PIN = const(46)
 SD_MISO_PIN = const(41)
 SD_CS_PIN = const(42)
 
-# TCA9555 expander
 TCA9555_ADDR = const(0x20)
-TCA_EXP = const(0x40)  # 0x40 marker -> routed to the expander
+TCA_EXP = const(0x40)
 TCA_BL_EN = const(TCA_EXP | 0)
 TCA_LCD_RST = const(TCA_EXP | 1)
 TCA_LCD_MOSI = const(TCA_EXP | 2)
@@ -184,31 +185,24 @@ TCA_LCD_CLK = const(TCA_EXP | 3)
 TCA_LCD_CS = const(TCA_EXP | 4)
 TCA_TOUCH_RESET_PIN = const(TCA_EXP | 5)
 
-TCA_SD_DETECT = const(TCA_EXP | 7)  # uSD card-detect (board pin table: IO7)
-TCA_MUX_SEL = const(TCA_EXP | 8)  # IOMUX select: HIGH=I2S, LOW=SD
-TCA_MUX_EN = const(TCA_EXP | 9)  # IOMUX enable (active-low)
-TCA_HAPTICS_EN = const(TCA_EXP | 10)  # haptic motor supply enable
-TCA_VBUS_SENSE = const(TCA_EXP | 11)  # USB VBUS present (input)
+TCA_SD_DETECT = const(TCA_EXP | 7)
+TCA_MUX_SEL = const(TCA_EXP | 8)
+TCA_MUX_EN = const(TCA_EXP | 9)
+TCA_HAPTICS_EN = const(TCA_EXP | 10)
+TCA_VBUS_SENSE = const(TCA_EXP | 11)
 
-# native GPIO
-FG_INT = const(43)  # MAX17048 alert (active-low)
-RTC_INT = const(44)  # RV-3028 interrupt (active-low)
-BOOT_BTN = const(0)  # BOOT strapping pin, usable as a runtime input
+FG_INT = const(43)
+RTC_INT = const(44)
+BOOT_BTN = const(0)
 
-# TMUX1574 IO-MUX: SD and I2S share GPIO41/42/45/46 (mutually exclusive)
 IOMUX_OFF = const(0)
 IOMUX_SD = const(1)
 IOMUX_I2S = const(2)
 
-AMP_SD = const(41)  # MAX98357A SD_MODE (mux D1): drive HIGH to un-mute the amp
+AMP_SD = const(41)
 
-
-# RGB data GPIOs in LVGL RGB565 bit order: data0=B-LSB .. data15=R-MSB
-# i.e. B0..B4, G0..G5, R0..R4 by GPIO. This is not DevOS's UM_GFX data_gpio
-# scramble, which matches UM_GFX's own framebuffer packing, not LVGL's standard RGB565.
 RGB_DATA = (21, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4)
 
-# 1) I2C bus (shared: expander @0x20, GT911, RTC, fuel-gauge)
 try:
     i2c_bus = i2c.I2C.Bus(
         host=I2C_HOST,
@@ -218,28 +212,25 @@ try:
         use_locks=False,
     )
 except Exception as e:
-    print("squixl.py I2C bus init failed:")
+    logger.error("I2C bus init failed:")
     sys.print_exception(e)
-    print("Attempting hard reset in 3sec...")
+    logger.error("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
 tca = TCA9555(i2c_bus, dev_id=TCA9555_ADDR)
 
-# 2) LCD hardware reset (expander) + backlight enable (expander) + PWM (GPIO40, active-low)
 tca.digital_write(TCA_LCD_RST, 0)
 time.sleep_ms(20)
 tca.digital_write(TCA_LCD_RST, 1)
 time.sleep_ms(120)
 tca.digital_write(TCA_BL_EN, 1)
 
-# 3) 3-wire SPI init channel over the expander
 spi_3wire = ExpanderSpi3Wire(
     tca, cs_pin=TCA_LCD_CS, clk_pin=TCA_LCD_CLK, mosi_pin=TCA_LCD_MOSI
 )
 
 
-# 4) RGB pixel bus, all 16 data pins in RGB565 bit order, DevOS timings, 6.5 MHz pclk
 display_bus = lcd_bus.RGBBus(
     hsync=LCD_BUS_HSYNC,
     vsync=LCD_BUS_VSYNC,
@@ -274,10 +265,7 @@ display_bus = lcd_bus.RGBBus(
     pclk_active_low=True,
 )
 
-# Two FULL-size framebuffers in PSRAM -> FULL double-buffered render mode so LVGL
-# draws to a back buffer and swaps on vsync (tear-free). Without this the framework
-# auto-allocates a 1/10-screen PARTIAL buffer, which tears on full-screen animations.
-_FB_SIZE = const(LCD_WIDTH * LCD_HEIGHT * 2)  # 2 Bytes per RGB565 pixel
+_FB_SIZE = const(LCD_WIDTH * LCD_HEIGHT * 2)
 frame_buffer1 = display_bus.allocate_framebuffer(
     _FB_SIZE, lcd_bus.MEMORY_SPIRAM | lcd_bus.MEMORY_DMA
 )
@@ -285,7 +273,6 @@ frame_buffer2 = display_bus.allocate_framebuffer(
     _FB_SIZE, lcd_bus.MEMORY_SPIRAM | lcd_bus.MEMORY_DMA
 )
 
-# 5) Driver: register-init (via spi_3wire) runs BEFORE the RGB bus (_init_bus=False)
 mpos.ui.main_display = ST7701S(
     data_bus=display_bus,
     spi_3wire=spi_3wire,
@@ -293,123 +280,103 @@ mpos.ui.main_display = ST7701S(
     frame_buffer2=frame_buffer2,
     display_width=LCD_WIDTH,
     display_height=LCD_HEIGHT,
-    color_space=lv.COLOR_FORMAT.RGB565,  # 16 data lines map to RGB565. Panel-specific, adjust if the image looks wrong
+    color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=ST7701S.BYTE_ORDER_RGB,
-    rgb565_byte_swap=False,  # panel-specific, set True if R and B are swapped
-    bus_shared_pins=False,  # 3-wire lines are on the expander, independent
-)  # triggers lv.init()
-mpos.ui.main_display.init()  # spi_3wire.init -> _spi_3wire_init -> _init_bus
+    rgb565_byte_swap=False,
+    bus_shared_pins=False,
+)
+mpos.ui.main_display.init()
 
-# full brightness at boot
-backlight_pwm = machine.PWM(  # 0 duty = full bright (active-low)
+backlight_pwm = machine.PWM(
     machine.Pin(BACKLIGHT_PWM_PIN),
     freq=BACKLIGHT_PWM_FREQ_HZ,
     duty_u16=BACKLIGHT_FULL_BRIGHT_DUTY,
 )
 mpos.ui.main_display.set_backlight(100)
 
-# This panel needs color inversion ON: without it every color renders as its
-# complement. The init seq sends INVON then a trailing INVOFF, so re-enable it here.
 mpos.ui.main_display.set_color_inversion(True)
 
-# 6) GT911 touch (reset on expander, interrupt on native GPIO3)
 try:
     touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=gt911.I2C_ADDR, reg_bits=gt911.BITS)
     indev = gt911.GT911(
         touch_dev,
         reset_pin=TCA9555Pin(
             tca, TCA_TOUCH_RESET_PIN
-        ),  # duck-typed expander pin (callable)
-        interrupt_pin=TOUCH_INTERRUPT_PIN,  # native GPIO int (required by driver)
+        ),
+        interrupt_pin=TOUCH_INTERRUPT_PIN,
         startup_rotation=lv.DISPLAY_ROTATION._0,
     )
     InputManager.register_indev(indev)
 except Exception as e:
-    print("squixl.py touch init failed:")
+    logger.error("touch init failed:")
     sys.print_exception(e)
-    print("Attempting hard reset in 3sec...")
+    logger.error("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
-# 7) rotation AFTER init + touch creation
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._0)
 
-# Onboard peripherals: haptic, battery gauge, RTC, VBUS, BOOT button.
-#
-# Every I2C chip shares `i2c_bus` (the i2c.I2C.Bus created above for the expander
-# and touch). i2c.I2C.Bus wraps machine.I2C and exposes readfrom_mem/writeto_mem,
-# which is all these drivers need. Do NOT open a second machine.I2C on controller 0:
-# it re-installs the IDF driver and kills the live expander/touch/backlight.
-
-
-# haptic (DRV2605L @ 0x5A)
-tca.digital_write(TCA_HAPTICS_EN, 1)  # power the haptic motor (expander P10)
+tca.digital_write(TCA_HAPTICS_EN, 1)
 time.sleep_ms(10)
 try:
-    haptic = drv2605.DRV2605(i2c_bus)  # i2c.I2C.Bus -> machine.I2C-style mem API
-    haptic.sequence[0] = drv2605.Effect(1)  # 1 = strong click (default)
+    haptic = drv2605.DRV2605(i2c_bus)
+    haptic.sequence[0] = drv2605.Effect(1)
 
     def vibrate(effect=1):
         haptic.sequence[0] = drv2605.Effect(effect)
         haptic.play()
 except Exception as e:
-    print("squixl: haptic init failed:", e)
+    logger.error("haptic init failed: %s", e)
     haptic = None
 
     def vibrate(effect=1):
         pass
 
 
-# battery (MAX17048 @ 0x36) -> BatteryManager
 try:
     gauge = max17048.MAX17048(i2c_bus)
-    # BatteryManager methods are @staticmethod (called with no self) -> variadic lambdas
     BatteryManager.has_battery = lambda *a, **k: True
     BatteryManager.get_battery_percentage = lambda *a, **k: gauge.state_of_charge
     BatteryManager.read_battery_voltage = lambda *a, **k: gauge.cell_voltage
     BatteryManager.read_raw_adc = lambda *a, **k: 0
     BatteryManager.gauge = gauge
 except Exception as e:
-    print("squixl: fuel gauge init failed:", e)
+    logger.error("fuel gauge init failed: %s", e)
     gauge = None
 
-# FG_INT (GPIO43) empty-battery alert
 if gauge:
     try:
-        gauge.set_empty_alert_threshold(10)  # alert at <=10% SOC
+        gauge.set_empty_alert_threshold(10)
         gauge.clear_alert()
         _fg_int = machine.Pin(FG_INT, machine.Pin.IN, machine.Pin.PULL_UP)
 
-        def _fg_alert(pin):  # Pin.irq is soft-scheduled -> I2C ok here
+        def _fg_alert(pin):
             try:
                 pct = gauge.state_of_charge
-                print("squixl: battery alert, SOC=%.0f%%" % pct)
+                logger.warning("battery alert, SOC=%.0f%%", pct)
                 gauge.clear_alert()
                 if pct <= 10 and haptic:
                     vibrate(1)
             except Exception as e:
-                print("squixl: fg alert handler:", e)
+                logger.error("fg alert handler: %s", e)
 
         _fg_int.irq(trigger=machine.Pin.IRQ_FALLING, handler=_fg_alert)
     except Exception as e:
-        print("squixl: FG_INT setup failed:", e)
+        logger.error("FG_INT setup failed: %s", e)
 
-# RTC (RV-3028 @ 0x52) -> machine.RTC + TimeZone.rtc
 try:
     rtc = rv3028.RV3028(i2c_bus)
     rtc.enable_backup()
 
-    # machine.RTC().datetime() requires an 8-tuple (append subsec=0)
     dt = rtc.datetime()
     year, month, day, weekday, hour, minute, second = dt
     machine.RTC().datetime((year, month, day, weekday, hour, minute, second, 0))
 
-    TimeZone.rtc = rtc  # OS NTP sync writes back via rtc.datetime()
+    TimeZone.rtc = rtc
 except Exception as e:
-    print("squixl: RTC init failed:", e)
+    logger.error("RTC init failed: %s", e)
     rtc = None
 
-# RTC_INT (GPIO44) daily alarm
 _rtc_alarm_cb = None
 
 
@@ -433,22 +400,18 @@ if rtc:
                     if _rtc_alarm_cb:
                         _rtc_alarm_cb()
             except Exception as e:
-                print("squixl: rtc irq:", e)
+                logger.error("rtc irq: %s", e)
 
         _rtc_int.irq(trigger=machine.Pin.IRQ_FALLING, handler=_rtc_irq)
     except Exception as e:
-        print("squixl: RTC_INT setup failed:", e)
-
-
-# VBUS sense (expander P11)
+        logger.error("RTC_INT setup failed: %s", e)
 
 
 def vbus_present():
     return tca.digital_read(TCA_VBUS_SENSE) == 1
 
 
-# BOOT button (GPIO0) as a KEYPAD indev (press -> ESC/back navigation)
-_boot_btn = machine.Pin(BOOT_BTN, machine.Pin.IN, machine.Pin.PULL_UP)  # active-low
+_boot_btn = machine.Pin(BOOT_BTN, machine.Pin.IN, machine.Pin.PULL_UP)
 _boot_last = False
 
 
@@ -459,11 +422,11 @@ def _boot_read_cb(indev, data):
     if pressed:
         data.state = lv.INDEV_STATE.PRESSED
         data.key = lv.KEY.ESC
-        if not _boot_last:  # on the press edge: trigger back-nav (ESC alone doesn't)
+        if not _boot_last:
             try:
                 mpos.ui.back_screen()
             except Exception as e:
-                print("squixl: boot back_screen:", e)
+                logger.error("boot back_screen: %s", e)
     else:
         data.state = lv.INDEV_STATE.RELEASED
     _boot_last = pressed
@@ -478,9 +441,8 @@ try:
     _kp.enable(True)
     InputManager.register_indev(_kp)
 except Exception as e:
-    print("squixl: BOOT keypad init failed:", e)
+    logger.error("BOOT keypad init failed: %s", e)
 
-# TMUX1574 IO-MUX
 _iomux_state = IOMUX_OFF
 
 
@@ -489,17 +451,16 @@ def set_iomux(state):
     if state == _iomux_state:
         return
     if state == IOMUX_OFF:
-        tca.digital_write(TCA_MUX_EN, 1)  # active-low: HIGH disables the mux
+        tca.digital_write(TCA_MUX_EN, 1)
     elif state == IOMUX_SD:
-        tca.digital_write(TCA_MUX_SEL, 0)  # LOW selects SD
+        tca.digital_write(TCA_MUX_SEL, 0)
         tca.digital_write(TCA_MUX_EN, 0)
     elif state == IOMUX_I2S:
-        tca.digital_write(TCA_MUX_SEL, 1)  # HIGH selects I2S
+        tca.digital_write(TCA_MUX_SEL, 1)
         tca.digital_write(TCA_MUX_EN, 0)
     _iomux_state = state
 
 
-# SD card (SPI on the mux SD-side: SCK45 MISO41 MOSI46, CS42)
 _sd_spi = None
 
 
@@ -507,21 +468,19 @@ def card_present():
     try:
         return (
             tca.digital_read(TCA_SD_DETECT) == 0
-        )  # active-low when a card is inserted
+        )
     except Exception:
         return False
 
 
 def _sd_mount():
     try:
-        os.mount(mpos.sdcard.get()._sdcard, "/sdcard")  # plain mount, never auto-format
+        os.mount(mpos.sdcard.get()._sdcard, "/sdcard")
     except Exception as e:
-        print("squixl: sd mount:", e)
+        logger.error("sd mount: %s", e)
 
 
 def sd_init():
-    # Boot bring-up: mux to SD, create the SPI bus, register the card with mpos.sdcard
-    # (which owns the manager singleton), and mount it.
     global _sd_spi
     set_iomux(IOMUX_SD)
     _sd_spi = machine.SPI.Bus(
@@ -535,28 +494,12 @@ def sd_init():
 
 
 try:
-    sd_init()  # resting state: SD owns the shared pins
+    sd_init()
 except Exception as e:
-    print("squixl: sd_init failed:", e)
-
-# audio (MAX98357A on I2S: sck46 ws42 sd45) + SD<->I2S mux arbiter
-#
-# SD and I2S share GPIO41/42/45/46 through the TMUX1574 and cannot be live at once, so audio
-# borrows the pins via the AudioManager Output's on_open/on_close hooks:
-#   on_open  (before machine.I2S() binds the pins): release SD -> mux to I2S -> un-mute amp
-#   on_close (before I2S.deinit()):                  mute amp -> mux back to SD
-#
-# LIMITATION: SD is NOT auto-restored after audio. Once I2S has run, the SD card will not
-# re-detect when the freed SPI host is re-initialized. This is an ESP32-S3 SPI/I2S GDMA
-# interaction that is not fixable in board code. No-DMA breaks SD block reads, a GPIO pad
-# reset does not help, and the host number is irrelevant. A fresh host init survives I2S but
-# a re-init does not. So after playing audio, /sdcard stays unmounted until the next reboot.
-# Workloads that need both SD and audio should treat them as mutually exclusive across a
-# reboot. If a future MicroPython/IDF fix lets the SPI re-init survive I2S, restoring SD
-# becomes a few lines in on_close: re-create the SPI.Bus + SDCard and remount.
+    logger.error("sd_init failed: %s", e)
 
 
-def _audio_acquire():  # AudioManager Output.on_open
+def _audio_acquire():
     try:
         os.umount("/sdcard")
     except Exception:
@@ -564,19 +507,19 @@ def _audio_acquire():  # AudioManager Output.on_open
     try:
         mgr = mpos.sdcard.get()
         if mgr and mgr._sdcard:
-            mgr._sdcard.deinit()  # frees the SPI bus + releases the shared pins
+            mgr._sdcard.deinit()
     except Exception as e:
-        print("squixl: audio acquire:", e)
-    set_iomux(IOMUX_I2S)  # before machine.I2S() binds 46/42/45
+        logger.error("audio acquire: %s", e)
+    set_iomux(IOMUX_I2S)
     machine.Pin(AMP_SD, machine.Pin.OUT).value(1)
 
 
-def _audio_release():  # AudioManager Output.on_close (fires before I2S.deinit())
+def _audio_release():
     try:
-        machine.Pin(AMP_SD, machine.Pin.OUT).value(0)  # mute the amp
+        machine.Pin(AMP_SD, machine.Pin.OUT).value(0)
     except Exception:
         pass
-    set_iomux(IOMUX_SD)  # restore the mux (SD stays unmounted, see above)
+    set_iomux(IOMUX_SD)
 
 
 try:
@@ -590,21 +533,16 @@ try:
         )
     )
 except Exception as e:
-    print("squixl: audio output init failed:", e)
+    logger.error("audio output init failed: %s", e)
     speaker_output = None
-
-# SOC temperature (ESP32-S3 internal) -> top-bar temperature readout
-# Without a registered temp sensor the top bar shows a hardcoded "42°C" placeholder. This
-# registers the MCU/SOC sensor (esp32.mcu_temperature()). No IMU on this board, so pass None.
 
 
 try:
     SensorManager.init(None)
 except Exception as e:
-    print("squixl: sensor init failed:", e)
+    logger.error("sensor init failed: %s", e)
 
 
-# opt-in haptic touch feedback (generic InputManager hook, reads the Settings pref live)
 def _haptic_feedback_cb(event=None):
     try:
         if (
@@ -621,4 +559,4 @@ def _haptic_feedback_cb(event=None):
 
 InputManager.set_touch_feedback_cb(_haptic_feedback_cb)
 
-print("squixl.py finished")
+if __debug__: logger.debug("finished")

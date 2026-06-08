@@ -2,8 +2,11 @@
 # Ring Tone Text Transfer Language parser and player
 # Uses synchronous playback in a separate thread for non-blocking operation
 
+import logging
 import math
 import time
+
+logger = logging.getLogger(__name__)
 
 
 class RTTTLStream:
@@ -198,12 +201,12 @@ class RTTTLStream:
                  (math.exp(10) - math.exp(0.1)) * (32768 - 4)) + 4
             )
 
-        print(f"RTTTLStream: Playing '{self.name}' (volume {self.volume}%)")
+        if __debug__: logger.debug("Playing '%s' (volume %s%%)", self.name, self.volume)
 
         try:
             for freq, msec in self._notes():
                 if not self._keep_running:
-                    print("RTTTLStream: Playback stopped by user")
+                    if __debug__: logger.debug("Playback stopped by user")
                     break
 
                 # Play tone
@@ -217,12 +220,12 @@ class RTTTLStream:
                 self.buzzer.duty_u16(0)
                 time.sleep_ms(int(msec * 0.1))
 
-            print(f"RTTTLStream: Finished playing '{self.name}'")
+            if __debug__: logger.debug("Finished playing '%s'", self.name)
             if self.on_complete:
                 self.on_complete(f"Finished: {self.name}")
 
         except Exception as e:
-            print(f"RTTTLStream: Error: {e}")
+            logger.error("Error: %s", e)
             if self.on_complete:
                 self.on_complete(f"Error: {e}")
 

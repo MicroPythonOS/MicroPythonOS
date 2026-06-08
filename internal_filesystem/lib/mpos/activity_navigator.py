@@ -1,8 +1,11 @@
+import logging
 import sys
 
 import utime
 
 import mpos.ui
+
+logger = logging.getLogger(__name__)
 from mpos.ui.view import screen_stack
 
 from .content.app_manager import AppManager
@@ -26,7 +29,7 @@ class ActivityNavigator:
         if intent.action:  # Implicit intent: resolve handlers
             handlers = AppManager.resolve_activity(intent)
             if not handlers:
-                print("No handler for action:", intent.action)
+                if __debug__: logger.debug("No handler for action: %s", intent.action)
                 return
             if len(handlers) == 1:
                 intent.activity_class = handlers[0]
@@ -44,7 +47,7 @@ class ActivityNavigator:
         if intent.action:  # Implicit intent: resolve handlers
             handlers = AppManager.resolve_activity(intent)
             if not handlers:
-                print("No handler for action:", intent.action)
+                if __debug__: logger.debug("No handler for action: %s", intent.action)
                 return
             if len(handlers) == 1:
                 intent.activity_class = handlers[0]
@@ -72,14 +75,14 @@ class ActivityNavigator:
         try:
             activity.onCreate()
         except Exception as e:
-            print(f"activity.onCreate caught exception:")
+            logger.error("activity.onCreate caught exception:")
             sys.print_exception(e)
             from mpos.ui.errordialog import show_app_error_dialog
             show_app_error_dialog(
                 activity.appFullName, e, is_lifecycle=True
             )
         end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-        print(f"apps.py _launch_activity: activity.onCreate took {end_time}ms")
+        if __debug__: logger.debug("activity.onCreate took %sms", end_time)
         return activity
 
     @staticmethod

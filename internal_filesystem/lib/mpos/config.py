@@ -1,5 +1,8 @@
+import logging
 import ujson
 import os
+
+logger = logging.getLogger(__name__)
 
 class SharedPreferences:
     def __init__(self, appname, filename="config.json", defaults=None):
@@ -42,10 +45,10 @@ class SharedPreferences:
     def make_folder_structure(self):
         """Create directory structure if it doesn't exist."""
         if not self._path_exists("data"):
-            print("Creating data/ directory")
+            if __debug__: logger.debug("Creating data/ directory")
             os.mkdir("data")
         if not self._path_exists(self.appdir):
-            print(f"Creating {self.appdir} directory")
+            if __debug__: logger.debug("Creating %s directory", self.appdir)
             os.mkdir(self.appdir)
 
     def _remove_empty_preference_dirs(self):
@@ -65,9 +68,9 @@ class SharedPreferences:
                 # to serial/REPL every time any app loaded its prefs. An
                 # app that wants rich debug output can opt in by logging
                 # selected keys itself.
-                print(f"load: Loaded preferences from {self.filepath} ({len(self.data)} keys)")
+                if __debug__: logger.debug("load: Loaded preferences from %s (%s keys)", self.filepath, len(self.data))
         except Exception as e:
-            print(f"SharedPreferences.load didn't find preferences: {e}")
+            if __debug__: logger.debug("SharedPreferences.load didn't find preferences: %s", e)
             self.data = {}
 
     def get_string(self, key, default=None):
@@ -157,18 +160,18 @@ class SharedPreferences:
         if not self.data:
             removed_file = self._remove_if_exists(self.filepath)
             if removed_file:
-                print(f"save_config: Removed empty preferences file {self.filepath}")
+                if __debug__: logger.debug("save_config: Removed empty preferences file %s", self.filepath)
             self._remove_empty_preference_dirs()
             return
 
         self.make_folder_structure()
-        print(f"save_config: Saving preferences to {self.filepath}")
+        if __debug__: logger.debug("save_config: Saving preferences to %s", self.filepath)
         try:
             with open(self.filepath, 'w') as f:
                 ujson.dump(self.data, f)
-            print("save_config: Saved")
+            if __debug__: logger.debug("save_config: Saved")
         except Exception as e:
-            print(f"save_config: Got exception {e}")
+            logger.error("save_config: Got exception %s", e)
 
     # Methods for list-based structures
     def get_list_item(self, list_key, index, item_key, default=None):
@@ -315,7 +318,7 @@ class Editor:
         # legacy empty file to clean up, avoid touching the filesystem.
         if filtered_data == self.preferences.data:
             if filtered_data or not self.preferences._file_exists():
-                print("save_config: Skipping no-op apply")
+                if __debug__: logger.debug("save_config: Skipping no-op apply")
                 self.preferences.data = filtered_data
                 return
 
@@ -330,7 +333,7 @@ class Editor:
         # legacy empty file to clean up, avoid touching the filesystem.
         if filtered_data == self.preferences.data:
             if filtered_data or not self.preferences._file_exists():
-                print("save_config: Skipping no-op commit")
+                if __debug__: logger.debug("save_config: Skipping no-op commit")
                 self.preferences.data = filtered_data
                 return True
 
@@ -354,18 +357,18 @@ def main():
     editor.apply()
 
     # Read back the settings
-    print("Simple settings:")
-    print("someconfig:", prefs.get_string("someconfig", "default_value"))
-    print("othervalue:", prefs.get_int("othervalue", 0))
+    if __debug__: logger.debug("Simple settings:")
+    if __debug__: logger.debug("someconfig: %s", prefs.get_string("someconfig", "default_value"))
+    if __debug__: logger.debug("othervalue: %s", prefs.get_int("othervalue", 0))
 
-    print("\nAccess points (dictionary-based):")
+    if __debug__: logger.debug("Access points (dictionary-based):")
     ssids = prefs.get_dict_keys("access_points")
     for ssid in ssids:
-        print(f"Access Point SSID: {ssid}")
-        print(f"  Password: {prefs.get_dict_item_field('access_points', ssid, 'password', 'N/A')}")
-        print(f"  Detail: {prefs.get_dict_item_field('access_points', ssid, 'detail', 'N/A')}")
-        print(f"  Numerical Conf: {prefs.get_dict_item_field('access_points', ssid, 'numericalconf', 0)}")
-        print(f"  Full config: {prefs.get_dict_item('access_points', ssid)}")
+        if __debug__: logger.debug("Access Point SSID: %s", ssid)
+        if __debug__: logger.debug("  Password: %s", prefs.get_dict_item_field('access_points', ssid, 'password', 'N/A'))
+        if __debug__: logger.debug("  Detail: %s", prefs.get_dict_item_field('access_points', ssid, 'detail', 'N/A'))
+        if __debug__: logger.debug("  Numerical Conf: %s", prefs.get_dict_item_field('access_points', ssid, 'numericalconf', 0))
+        if __debug__: logger.debug("  Full config: %s", prefs.get_dict_item('access_points', ssid))
 
     # Add a new access point
     editor = prefs.edit()
@@ -391,10 +394,10 @@ def main():
     editor.commit()
 
     # Read updated access points
-    print("\nUpdated access points (dictionary-based):")
+    if __debug__: logger.debug("Updated access points (dictionary-based):")
     ssids = prefs.get_dict_keys("access_points")
     for ssid in ssids:
-        print(f"Access Point SSID: {ssid}: {prefs.get_dict_item('access_points', ssid)}")
+        if __debug__: logger.debug("Access Point SSID: %s: %s", ssid, prefs.get_dict_item('access_points', ssid))
 
     # Demonstrate compatibility with list-based configs
     editor = prefs.edit()
@@ -404,12 +407,12 @@ def main():
     ])
     editor.apply()
 
-    print("\List-based config:")
+    if __debug__: logger.debug("List-based config:")
     somelist = prefs.get_list("somelist")
     for i, ap in enumerate(somelist):
-        print(f"List item {i}:")
-        print(f"  a: {prefs.get_list_item('somelist', i, 'a', 'N/A')}")
-        print(f"  Full dict: {prefs.get_list_item_dict('somelist', i)}")
+        if __debug__: logger.debug("List item %s:", i)
+        if __debug__: logger.debug("  a: %s", prefs.get_list_item('somelist', i, 'a', 'N/A'))
+        if __debug__: logger.debug("  Full dict: %s", prefs.get_list_item_dict('somelist', i))
 
 if __name__ == '__main__':
     main()

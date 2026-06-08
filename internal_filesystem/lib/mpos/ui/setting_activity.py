@@ -1,3 +1,4 @@
+import logging
 import lvgl as lv
 
 from ..app.activity import Activity
@@ -5,6 +6,8 @@ from .camera_activity import CameraActivity
 from .display_metrics import DisplayMetrics
 from .widget_animator import WidgetAnimator
 from ..camera_manager import CameraManager
+
+logger = logging.getLogger(__name__)
 
 """
 SettingActivity is used to edit one setting.
@@ -25,7 +28,7 @@ class SettingActivity(Activity):
     def onCreate(self):
         self.prefs = self.getIntent().extras.get("prefs")
         setting = self.getIntent().extras.get("setting")
-        print(setting)
+        if __debug__: logger.debug("%s", setting)
 
         settings_screen_detail = lv.obj()
         settings_screen_detail.set_style_pad_all(0, lv.PART.MAIN)
@@ -181,13 +184,13 @@ class SettingActivity(Activity):
             WidgetAnimator.smooth_hide(self.keyboard)
 
     def radio_event_handler(self, event):
-        print("radio_event_handler called")
+        if __debug__: logger.debug("radio_event_handler called")
         target_obj = event.get_target_obj()
         target_obj_state = target_obj.get_state()
-        print(f"target_obj state {target_obj.get_text()} is {target_obj_state}")
+        if __debug__: logger.debug("target_obj state %s is %s", target_obj.get_text(), target_obj_state)
         checked = target_obj_state & lv.STATE.CHECKED
         current_checkbox_index = target_obj.get_index()
-        print(f"current_checkbox_index: {current_checkbox_index}")
+        if __debug__: logger.debug("current_checkbox_index: %s", current_checkbox_index)
         if not checked:
             # Radio-button convention: clicking the already-selected option
             # must NOT un-select it. Exactly one option is always selected
@@ -204,10 +207,10 @@ class SettingActivity(Activity):
             # the currently-active app.
             if self.active_radio_index == current_checkbox_index:
                 if getattr(self, '_radio_allow_deselect', False):
-                    print(f"radio: un-check of active option {current_checkbox_index} (allow_deselect=True)")
+                    if __debug__: logger.debug("radio: un-check of active option %s (allow_deselect=True)", current_checkbox_index)
                     self.active_radio_index = -1
                 else:
-                    print(f"radio: ignoring un-check of active option {current_checkbox_index} (radios require exactly one)")
+                    logger.warning("radio: ignoring un-check of active option %s (radios require exactly one)", current_checkbox_index)
                     target_obj.add_state(lv.STATE.CHECKED)
             return
         else:
@@ -234,15 +237,15 @@ class SettingActivity(Activity):
         return cb
 
     def gotqr_result_callback(self, result):
-        print(f"QR capture finished, result: {result}")
+        if __debug__: logger.debug("QR capture finished, result: %s", result)
         if result.get("result_code"):
             data = result.get("data")
-            print(f"Setting textarea data: {data}")
+            if __debug__: logger.debug("Setting textarea data: %s", data)
             self.textarea.set_text(data)
 
     def cambutton_cb(self, event):
         from ..content.intent import Intent
-        print("cambutton clicked!")
+        if __debug__: logger.debug("cambutton clicked!")
         self.startActivityForResult(Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True), self.gotqr_result_callback)
 
     def save_setting(self, setting):
@@ -255,7 +258,7 @@ class SettingActivity(Activity):
                 new_value = ui_options[selected_idx][1]
         elif ui and ui == "dropdown" and ui_options:
             selected_index = self.dropdown.get_selected()
-            print(f"selected item: {selected_index}")
+            if __debug__: logger.debug("selected item: %s", selected_index)
             new_value = ui_options[selected_index][1]
         elif ui and ui == "slider":
             new_value = str(self.slider.get_value())
@@ -296,5 +299,5 @@ class SettingActivity(Activity):
         # Call changed_callback if set
         changed_callback = setting.get("changed_callback")
         if changed_callback and old_value != new_value:
-            print(f"Setting {setting['key']} changed from {old_value} to {new_value}, calling changed_callback...")
+            if __debug__: logger.debug("Setting %s changed from %s to %s, calling changed_callback...", setting['key'], old_value, new_value)
             changed_callback(new_value)

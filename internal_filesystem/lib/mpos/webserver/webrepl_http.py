@@ -8,6 +8,9 @@ from . import webrepl
 import websocket
 import lvgl as lv
 
+import logging
+logger = logging.getLogger(__name__)
+
 from mpos.ui.display_metrics import DisplayMetrics
 from mpos.ui.testing import capture_screenshot
 
@@ -131,7 +134,7 @@ def _send_file_response(cl, path, content_type, extra_headers=None):
 
 
 def _start_webrepl_session(cl, remote_addr):
-    print("\nWebREPL connection from:", remote_addr)
+    if __debug__: logger.debug("WebREPL connection from: %s", remote_addr)
     webrepl.client_s = cl
 
     ws = websocket.websocket(cl, True)
@@ -146,7 +149,7 @@ def _start_webrepl_session(cl, remote_addr):
 
 def accept_handler(listen_sock):
     cl, remote_addr = listen_sock.accept()
-    print("\webrepl_http connection from:", remote_addr)
+    if __debug__: logger.debug("Connection from: %s", remote_addr)
     try:
         path, headers, raw_request = _read_http_request(cl)
         if not path:
@@ -179,7 +182,7 @@ def accept_handler(listen_sock):
         _send_response(cl, b"404 Not Found", b"text/plain", b"Not Found")
         return False
     except Exception as exc:
-        print("webrepl_http: error handling connection:", exc)
+        logger.error("Error handling connection: %s", exc)
         try:
             cl.close()
         except Exception:

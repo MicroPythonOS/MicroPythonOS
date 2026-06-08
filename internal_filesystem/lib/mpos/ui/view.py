@@ -1,7 +1,10 @@
+import logging
 import lvgl as lv
 import sys
 
 from .topmenu import open_bar, close_drawer
+
+logger = logging.getLogger(__name__)
 
 screen_stack = []
 
@@ -25,12 +28,12 @@ def setContentView(new_activity, new_screen):
         try:
             current_activity.onPause(current_screen)
         except Exception as e:
-            print(f"onPause caught exception:")
+            logger.error("onPause caught exception:")
             sys.print_exception(e)
         try:
             current_activity.onStop(current_screen)
         except Exception as e:
-            print(f"onStop caught exception:")
+            logger.error("onStop caught exception:")
             sys.print_exception(e)
 
     close_top_layer_msgboxes()
@@ -41,7 +44,7 @@ def setContentView(new_activity, new_screen):
         try:
             new_activity.onStart(new_screen)
         except Exception as e:
-            print(f"onStart caught exception:")
+            logger.error("onStart caught exception:")
             sys.print_exception(e)
             from mpos.ui.errordialog import show_app_error_dialog
             show_app_error_dialog(
@@ -52,7 +55,7 @@ def setContentView(new_activity, new_screen):
         try:
             new_activity.onResume(new_screen)
         except Exception as e:
-            print(f"onResume caught exception:")
+            logger.error("onResume caught exception:")
             sys.print_exception(e)
             from mpos.ui.errordialog import show_app_error_dialog
             show_app_error_dialog(
@@ -70,17 +73,17 @@ def remove_and_stop_current_activity():
         try:
             current_activity.onPause(current_screen)
         except Exception as e:
-            print(f"onPause caught exception:")
+            logger.error("onPause caught exception:")
             sys.print_exception(e)
         try:
             current_activity.onStop(current_screen)
         except Exception as e:
-            print(f"onStop caught exception:")
+            logger.error("onStop caught exception:")
             sys.print_exception(e)
         try:
             current_activity.onDestroy(current_screen)
         except Exception as e:
-            print(f"onDestroy caught exception:")
+            logger.error("onDestroy caught exception:")
             sys.print_exception(e)
         if current_screen:
             current_screen.clean()
@@ -94,7 +97,7 @@ def back_screen():
         return True
 
     if len(screen_stack) <= 1:
-        print("Warning: can't go back — stack empty")
+        logger.warning("Can't go back — stack empty")
         return False
 
     close_top_layer_msgboxes()
@@ -103,7 +106,7 @@ def back_screen():
 
     # Load previous
     prev_activity, prev_screen, prev_focusgroup, prev_focused = screen_stack[-1]
-    print(f"back_screen got {prev_activity}, {prev_screen}, {prev_focusgroup}, {prev_focused}")
+    if __debug__: logger.debug("back_screen got %s, %s, %s, %s", prev_activity, prev_screen, prev_focusgroup, prev_focused)
     lv.screen_load_anim(prev_screen, lv.SCREEN_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
 
     default_group = lv.group_get_default()

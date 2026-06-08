@@ -1,4 +1,7 @@
 # Hardware initialization for Unix and MacOS systems
+import logging
+logger = logging.getLogger(__name__)
+
 import lcd_bus
 import lvgl as lv
 import sdl_display
@@ -57,14 +60,8 @@ InputManager.register_indev(mouse)
 
 def catch_escape_key(indev, indev_data):
     global sdlkeyboard
-    #print(f"keypad_cb {indev} {indev_data}")
-    #key = indev.get_key() # always 0
-    #print(f"key {key}")
-    #key = indev_data.key
-    #state = indev_data.state
-    #print(f"indev_data: {state} and {key}") # this catches the previous key release instead of the next key press
     pressed, code = sdlkeyboard._get_key() # get the current key and state
-    print(f"catch_escape_key caught: {pressed}, {code}")
+    if __debug__: logger.debug("catch_escape_key caught: %s, %s", pressed, code)
     if pressed == 1 and code == 27: # ESCAPE
         mpos.ui.back_screen()
     elif pressed == 1 and code == 2: # HOME
@@ -87,14 +84,7 @@ InputManager.register_indev(sdlkeyboard)
 try:
     sdlkeyboard.set_paste_text_callback(mpos.clipboard.paste_text)
 except Exception as e:
-    print("Warning: could not set paste_text callback for sdlkeyboard, copy-paste won't work")
-
-
-#def keyboard_cb(event):
- #   global canvas
-  #  event_code=event.get_code()
-   # print(f"boot_unix: code={event_code}") # target={event.get_target()}, user_data={event.get_user_data()}, param={event.get_param()}
-#keyboard.add_event_cb(keyboard_cb, lv.EVENT.ALL, None)
+    logger.warning("could not set paste_text callback for sdlkeyboard, copy-paste won't work")
 
 
 # Simulated battery voltage ADC measuring
@@ -144,7 +134,7 @@ def init_cam(width, height, colormode):
         import webcam
         return webcam.init("/dev/video0", width=width, height=height)
     except Exception as e:
-        print(f"Info: webcam initialization failed, camera will not be available: {e}")
+        if __debug__: logger.debug("webcam initialization failed, camera will not be available: %s", e)
 
 def deinit_cam(cam_obj):
     import webcam
@@ -155,7 +145,7 @@ def capture_cam(cam_obj, colormode):
     return webcam.capture_frame(cam_obj, "rgb565" if colormode else "grayscale")
 
 def apply_cam_settings(cam_obj, prefs):
-    print("V4L Camera doesn't support settings for now, skipping...")
+    if __debug__: logger.debug("V4L Camera doesn't support settings for now, skipping...")
 
 from mpos import CameraManager
 CameraManager.add_camera(CameraManager.Camera(
@@ -169,7 +159,4 @@ CameraManager.add_camera(CameraManager.Camera(
 ))
 
 
-print("linux.py finished")
-
-
-
+if __debug__: logger.debug("finished")

@@ -41,9 +41,12 @@ Usage in apps:
         simulate_click(area.x1 + 10, area.y1 + 10)
 """
 
+import logging
 import lvgl as lv
 import sys
 import time
+
+logger = logging.getLogger(__name__)
 
 try:
     import unittest  # noqa: F401
@@ -355,7 +358,7 @@ def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COL
         capture_screenshot("tests/screenshots/home.raw")
     """
     if filepath:
-        print(f"capture_screenshot writing to {filepath}")
+        if __debug__: logger.debug("capture_screenshot writing to %s", filepath)
 
     # Calculate buffer size based on color format
     if color_format == lv.COLOR_FORMAT.RGB565:
@@ -745,10 +748,10 @@ def print_screen_labels(obj):
         #   4: WiFi (hex: 57694669)
     """
     texts = get_screen_text_content(obj)
-    print(f"Found {len(texts)} text widgets on screen:")
+    if __debug__: logger.debug("Found %s text widgets on screen:", len(texts))
     for i, text in enumerate(texts):
         hex_repr = text_to_hex(text)
-        print(f"  {i}: {text} (hex: {hex_repr})")
+        if __debug__: logger.debug("  %s: %s (hex: %s)", i, text, hex_repr)
 
 
 def get_widget_coords(widget):
@@ -1069,7 +1072,7 @@ def _ensure_touch_indev():
         _touch_indev = lv.indev_create()
         _touch_indev.set_type(lv.INDEV_TYPE.POINTER)
         _touch_indev.set_read_cb(_touch_read_cb)
-        print("Created simulated touch input device")
+        if __debug__: logger.debug("Created simulated touch input device")
 
 
 def simulate_click(x, y, press_duration_ms=100):
@@ -1244,7 +1247,7 @@ def click_button(button_text, timeout=5, use_send_event=True):
         if button:
             coords = get_widget_coords(button)
             if coords:
-                print(f"Clicking button '{button_text}' at ({coords['center_x']}, {coords['center_y']})")
+                if __debug__: logger.debug("Clicking button '%s' at (%s, %s)", button_text, coords['center_x'], coords['center_y'])
                 if use_send_event:
                     # Use send_event for more reliable button triggering
                     button.send_event(lv.EVENT.CLICKED, None)
@@ -1254,7 +1257,7 @@ def click_button(button_text, timeout=5, use_send_event=True):
                 wait_for_render(iterations=20)
                 return True
         wait_for_render(iterations=5)
-    print(f"ERROR: Button '{button_text}' not found after {timeout}s")
+    logger.error("Button '%s' not found after %ss", button_text, timeout)
     return False
 
 def click_label(label_text, timeout=5, use_send_event=True):
@@ -1286,7 +1289,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
             # Try scrolling multiple times to ensure label is fully visible
             max_scroll_attempts = 5
             for scroll_attempt in range(max_scroll_attempts):
-                print(f"Scrolling label to view (attempt {scroll_attempt + 1}/{max_scroll_attempts})...")
+                if __debug__: logger.debug("Scrolling label to view (attempt %s/%s)...", scroll_attempt + 1, max_scroll_attempts)
                 label.scroll_to_view_recursive(True)
                 wait_for_render(iterations=50)  # needs quite a bit of time for scroll animation
 
@@ -1310,7 +1313,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                               viewport_top <= center_y <= viewport_bottom)
 
                 if is_visible:
-                    print(f"Label '{label_text}' is visible at ({center_x}, {center_y})")
+                    if __debug__: logger.debug("Label '%s' is visible at (%s, %s)", label_text, center_x, center_y)
 
                     # Try to find a clickable parent (container) - many UIs have clickable containers
                     # with non-clickable labels inside. We'll click on the label's position but
@@ -1325,7 +1328,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                             clickable_parent = parent
                             parent_coords = get_widget_coords(parent)
                             if parent_coords:
-                                print(f"Found clickable parent container: ({parent_coords['x1']}, {parent_coords['y1']}) to ({parent_coords['x2']}, {parent_coords['y2']})")
+                                if __debug__: logger.debug("Found clickable parent container: (%s, %s) to (%s, %s)", parent_coords['x1'], parent_coords['y1'], parent_coords['x2'], parent_coords['y2'])
                                 # Use label's x but ensure y is within parent bounds
                                 click_x = center_x
                                 click_y = center_y
@@ -1336,12 +1339,12 @@ def click_label(label_text, timeout=5, use_send_event=True):
                                     click_y = parent_coords['y2'] - 5
                                 click_coords = {'center_x': click_x, 'center_y': click_y}
                     except Exception as e:
-                        print(f"Could not check parent clickability: {e}")
+                        logger.error("Could not check parent clickability: %s", e)
 
-                    print(f"Clicking label '{label_text}' at ({click_coords['center_x']}, {click_coords['center_y']})")
+                    if __debug__: logger.debug("Clicking label '%s' at (%s, %s)", label_text, click_coords['center_x'], click_coords['center_y'])
                     if use_send_event and clickable_parent:
                         # Use send_event on the clickable parent for more reliable triggering
-                        print(f"Using send_event on clickable parent")
+                        if __debug__: logger.debug("Using send_event on clickable parent")
                         clickable_parent.send_event(lv.EVENT.CLICKED, None)
                     else:
                         # Use simulate_click for actual touch simulation
@@ -1349,8 +1352,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                     wait_for_render(iterations=20)
                     return True
                 else:
-                    print(f"Label '{label_text}' at ({center_x}, {center_y}) not fully visible "
-                          f"(viewport: y={viewport_top}-{viewport_bottom}), scrolling more...")
+                    if __debug__: logger.debug("Label '%s' at (%s, %s) not fully visible (viewport: y=%s-%s), scrolling more...", label_text, center_x, center_y, viewport_top, viewport_bottom)
                     # Additional scroll - try scrolling the parent container
                     try:
                         parent = label.get_parent()
@@ -1375,7 +1377,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                                 scrollable.scroll_to_y(max(0, current_scroll - 60), True)
                             wait_for_render(iterations=30)
                     except Exception as e:
-                        print(f"Additional scroll failed: {e}")
+                        logger.error("Additional scroll failed: %s", e)
 
             # If we exhausted scroll attempts, try clicking anyway
             coords = get_widget_coords(label)
@@ -1388,16 +1390,16 @@ def click_label(label_text, timeout=5, use_send_event=True):
                         parent_coords = get_widget_coords(parent)
                         if parent_coords:
                             click_coords = parent_coords
-                            print(f"Using clickable parent for fallback click")
+                            if __debug__: logger.debug("Using clickable parent for fallback click")
                 except:
                     pass
 
-                print(f"Clicking at ({click_coords['center_x']}, {click_coords['center_y']}) after max scroll attempts")
+                if __debug__: logger.debug("Clicking at (%s, %s) after max scroll attempts", click_coords['center_x'], click_coords['center_y'])
                 # Try to use send_event if we have a clickable parent
                 try:
                     parent = label.get_parent()
                     if use_send_event and parent and parent.has_flag(lv.obj.FLAG.CLICKABLE):
-                        print(f"Using send_event on clickable parent for fallback")
+                        if __debug__: logger.debug("Using send_event on clickable parent for fallback")
                         parent.send_event(lv.EVENT.CLICKED, None)
                     else:
                         simulate_click(click_coords['center_x'], click_coords['center_y'])
@@ -1407,7 +1409,7 @@ def click_label(label_text, timeout=5, use_send_event=True):
                 return True
 
         wait_for_render(iterations=5)
-    print(f"ERROR: Label '{label_text}' not found after {timeout}s")
+    logger.error("Label '%s' not found after %ss", label_text, timeout)
     return False
 
 def find_text_on_screen(text):
@@ -1648,7 +1650,7 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
             break  # No more buttons
 
     if button_idx is None:
-        print(f"click_keyboard_button: Button '{button_text}' not found on keyboard")
+        logger.warning("click_keyboard_button: Button '%s' not found on keyboard", button_text)
         return False
 
     if use_direct and is_mpos_keyboard:
@@ -1681,16 +1683,16 @@ def click_keyboard_button(keyboard, button_text, use_direct=True):
         event = _SyntheticKeyboardEvent(target)
         keyboard._handle_events(event)
         wait_for_render(10)
-        print(f"click_keyboard_button: Clicked '{button_text}' at index {button_idx} using direct handler simulation")
+        if __debug__: logger.debug("click_keyboard_button: Clicked '%s' at index %s using direct handler simulation", button_text, button_idx)
     else:
         # Use coordinate-based clicking
         coords = get_keyboard_button_coords(keyboard, button_text)
         if coords:
             simulate_click(coords['center_x'], coords['center_y'])
             wait_for_render(20)  # More time for event processing
-            print(f"click_keyboard_button: Clicked '{button_text}' at ({coords['center_x']}, {coords['center_y']}) using simulate_click")
+            if __debug__: logger.debug("click_keyboard_button: Clicked '%s' at (%s, %s) using simulate_click", button_text, coords['center_x'], coords['center_y'])
         else:
-            print(f"click_keyboard_button: Could not get coordinates for '{button_text}'")
+            logger.warning("click_keyboard_button: Could not get coordinates for '%s'", button_text)
             return False
 
     return True
@@ -1749,7 +1751,7 @@ def wait_for_text(text, timeout=10, interval=0.1):
             return True
         wait_for_render(5)
         time.sleep(interval)
-    print(f"wait_for_text: '{text}' not found after {timeout}s")
+    logger.warning("wait_for_text: '%s' not found after %ss", text, timeout)
     return False
 
 
@@ -1780,5 +1782,5 @@ def wait_for_widget(find_func, timeout=10, interval=0.1):
             return result
         wait_for_render(5)
         time.sleep(interval)
-    print(f"wait_for_widget: condition not met after {timeout}s")
+    logger.warning("wait_for_widget: condition not met after %ss", timeout)
     return None

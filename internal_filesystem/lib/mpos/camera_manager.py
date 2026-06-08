@@ -16,11 +16,14 @@ Example usage:
     # In app:
     cam_list = CameraManager.get_cameras()
     if len(cam_list) > 0:
-        print("we have a camera!")
+        if __debug__: logger.debug("we have a camera!")
 
 MIT License
 Copyright (c) 2024 MicroPythonOS contributors
 """
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # Camera lens facing constants (matching Android Camera2 API)
@@ -154,17 +157,17 @@ class CameraManager:
             bool: True if camera added successfully
         """
         if not isinstance(camera, Camera):
-            print(f"[CameraManager] Error: add_camera() requires Camera object, got {type(camera)}")
+            logger.error("add_camera() requires Camera object, got %s", type(camera))
             return False
 
         # Check if camera with same facing already exists
         for existing in CameraManager._cameras:
             if existing.lens_facing == camera.lens_facing:
-                print(f"[CameraManager] Warning: Camera with facing {camera.lens_facing} already registered")
+                logger.warning("Camera with facing %s already registered", camera.lens_facing)
                 # Still add it (allow multiple cameras with same facing)
         
         CameraManager._cameras.append(camera)
-        print(f"[CameraManager] Registered camera: {camera}")
+        if __debug__: logger.debug("Registered camera: %s", camera)
         return True
     
     def get_cameras(self):
@@ -219,7 +222,7 @@ class CameraManager:
         try:
             from camera import FrameSize
         except ImportError:
-            print("Warning: camera module not available")
+            logger.warning("Camera module not available")
             return None
         
         # Format: (width, height): FrameSize
@@ -256,7 +259,7 @@ class CameraManager:
     @staticmethod
     def ov_apply_camera_settings(cam, prefs):
         if not cam or not prefs:
-            print("ov_apply_camera_settings: Skipping because invalid prefs or cam object")
+            if __debug__: logger.debug("ov_apply_camera_settings: Skipping because invalid prefs or cam object")
             return
     
         try:
@@ -366,7 +369,7 @@ class CameraManager:
             # Mode-specific default comes from constructor
             raw_gma = prefs.get_bool("raw_gma")
             if raw_gma is not None:
-                print(f"applying raw_gma: {raw_gma}")
+                if __debug__: logger.debug("applying raw_gma: %s", raw_gma)
                 cam.set_raw_gma(raw_gma)
 
             lenc = prefs.get_bool("lenc")
@@ -381,10 +384,10 @@ class CameraManager:
             #except:
             #    pass  # Not in JPEG mode
     
-            print("Camera settings applied successfully")
+            if __debug__: logger.debug("Camera settings applied successfully")
     
         except Exception as e:
-            print(f"Error applying camera settings: {e}")
+            logger.error("Error applying camera settings: %s", e)
 
 
 # ============================================================================

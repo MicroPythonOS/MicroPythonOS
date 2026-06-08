@@ -1,5 +1,8 @@
+import logging
 import lvgl as lv
 import os
+
+logger = logging.getLogger(__name__)
 
 def urldecode(s):
     result = ""
@@ -27,11 +30,11 @@ def print_lvgl_widget(obj, depth=0):
         if isinstance(obj,lv.label):
             label = f" with label '{obj.get_text()}'"
         padding = "  " * depth
-        print(f"{padding}{obj} pos:{obj_area.x1}x{obj_area.y1} size:{obj_area.get_width()}x{obj_area.get_height()} {hidden}{editable} {label}")
+        if __debug__: logger.debug("%s%s pos:%sx%s size:%sx%s %s%s %s", padding, obj, obj_area.x1, obj_area.y1, obj_area.get_width(), obj_area.get_height(), hidden, editable, label)
         for childnr in range(obj.get_child_count()):
             print_lvgl_widget(obj.get_child(childnr), depth+1)
     else:
-        print("print_lvgl_widget called on 'None'")
+        logger.error("print_lvgl_widget called on 'None'")
 
 
 def mkdir_parents(path):

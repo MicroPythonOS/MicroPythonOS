@@ -3,10 +3,13 @@
 # Uses timer-based sampling with double buffering in C for high performance
 # Maintains compatibility with AudioManager and existing recording framework
 
+import logging
 import sys
 import time
 
 from mpos.audio.audiomanager import AudioManager
+
+logger = logging.getLogger(__name__)
 
 # Try to import machine module (not available on desktop)
 try:
@@ -119,12 +122,12 @@ class ADCRecordStream:
     # -----------------------------------------------------------------------
     def record(self):
         """Main synchronous recording routine (runs in separate thread)."""
-        print(f"ADCRecordStream.record() called")
-        print(f"  file_path: {self.file_path}")
-        print(f"  duration_ms: {self.duration_ms}")
-        print(f"  sample_rate: {self.sample_rate}")
-        print(f"  adc_pin: {self.adc_pin} (Unit {self.adc_unit}, Channel {self.adc_channel})")
-        print(f"  _HAS_HARDWARE: {_HAS_HARDWARE}")
+        if __debug__: logger.debug("record() called")
+        if __debug__: logger.debug("  file_path: %s", self.file_path)
+        if __debug__: logger.debug("  duration_ms: %s", self.duration_ms)
+        if __debug__: logger.debug("  sample_rate: %s", self.sample_rate)
+        if __debug__: logger.debug("  adc_pin: %s (Unit %s, Channel %s)", self.adc_pin, self.adc_unit, self.adc_channel)
+        if __debug__: logger.debug("  _HAS_HARDWARE: %s", _HAS_HARDWARE)
 
         self._is_recording = True
         self._bytes_recorded = 0
@@ -137,7 +140,7 @@ class ADCRecordStream:
                 AudioManager._record_makedirs(dir_path)
 
             # Create file with placeholder header
-            print(f"ADCRecordStream: Creating WAV file with header")
+            if __debug__: logger.debug("Creating WAV file with header")
             with open(self.file_path, 'wb') as f:
                 # Write placeholder header (will be updated at end)
                 header = self._create_wav_header(
@@ -148,13 +151,13 @@ class ADCRecordStream:
                 )
                 f.write(header)
 
-            print(f"ADCRecordStream: Recording to {self.file_path}")
+            if __debug__: logger.debug("Recording to %s", self.file_path)
 
             # Check if we have real hardware or need to simulate
             use_simulation = not _HAS_HARDWARE
 
             if not use_simulation:
-                print(f"ADCRecordStream: Using hardware ADC")
+                if __debug__: logger.debug("Using hardware ADC")
                 # No explicit init needed for adc_mic.read() as it handles it internally per call
                 # But we might want to do some setup if the C module required it.
                 # The current C module implementation does setup/teardown inside read()
@@ -163,7 +166,7 @@ class ADCRecordStream:
                 pass
 
             if use_simulation:
-                print(f"ADCRecordStream: Using desktop simulation (sine wave)")
+                if __debug__: logger.debug("Using desktop simulation (sine wave)")
 
             # Calculate recording parameters
             max_bytes = int((self.duration_ms / 1000) * self.sample_rate * 2)
@@ -183,12 +186,12 @@ class ADCRecordStream:
                     # Check elapsed time
                     elapsed = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
                     if elapsed >= self.duration_ms:
-                        print(f"ADCRecordStream: Duration limit reached")
+                        if __debug__: logger.debug("Duration limit reached")
                         break
 
                     # Check byte limit
                     if self._bytes_recorded >= max_bytes:
-                        print(f"ADCRecordStream: Byte limit reached")
+                        if __debug__: logger.debug("Byte limit reached")
                         break
 
                     if use_simulation:
@@ -238,10 +241,10 @@ class ADCRecordStream:
                     if self._bytes_recorded > 0:
                         self._update_wav_header(self.file_path, self._bytes_recorded)
                 except Exception as e:
-                    print(f"ADCRecordStream: Error updating header: {e}")
+                    logger.error("Error updating header: %s", e)
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
-            print(f"ADCRecordStream: Finished recording {self._bytes_recorded} bytes ({elapsed_ms}ms)")
+            if __debug__: logger.debug("Finished recording %s bytes (%sms)", self._bytes_recorded, elapsed_ms)
 
             if self.on_complete:
                 self.on_complete(f"Recorded: {self.file_path}")
@@ -253,7 +256,7 @@ class ADCRecordStream:
 
         finally:
             self._is_recording = False
-            print(f"ADCRecordStream: Recording thread finished")
+            if __debug__: logger.debug("Recording thread finished")
 
     def get_duration_ms(self):
         if self._start_time_ms <= 0:

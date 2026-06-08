@@ -2,9 +2,11 @@
 # Copyright (c) 2024 - 2025 Kevin G. Schlosser
 # Added directory support, upstreamed at https://github.com/lvgl-micropython/lvgl_micropython/issues/398
 
-
+import logging
 import lvgl as lv
 import struct
+
+logger = logging.getLogger(__name__)
 
 
 def _fs_open_cb(drv, path, mode):
@@ -76,25 +78,22 @@ def _fs_write_cb(drv, fs_file, buf, btw, bw):
     return lv.FS_RES.OK
 
 def _fs_dir_open_cb(drv, path):
-    #print(f"_fs_dir_open_cb for path '{path}'")
     try:
         import os # for ilistdir()
         if path != "/":
             path = path.rstrip('/') # LittleFS handles trailing flashes fine, but vfs.VfsFat returns an [Errno 22] EINVAL
         return {'iterator' : os.ilistdir(path)}
     except Exception as e:
-        print(f"_fs_dir_open_cb exception for path {path}: {e}")
+        logger.error("_fs_dir_open_cb exception for path %s: %s", path, e)
         return None
 
 def _fs_dir_read_cb(drv, lv_fs_dir_t, buf, btr):
     try:
         iterator = lv_fs_dir_t.__cast__()['iterator']
         nextfile = iterator.__next__()
-        #print(f"nextfile: {nextfile}")
         filename = nextfile[0]
         entry_type = nextfile[1]  # Type field
         if entry_type == 0x4000:
-            #print(f"{filename} is a directory")
             filename = f"/{filename}"
         # Convert filename to bytes with null terminator
         tmp_data_bytes = filename.encode() + b'\x00'
@@ -105,11 +104,10 @@ def _fs_dir_read_cb(drv, lv_fs_dir_t, buf, btr):
         buf.__dereference__(btr)[0:1] = b'\x00'  # Empty string (null byte)
         return lv.FS_RES.NOT_EX  # Next entry "does not exist"
     except Exception as e:
-        print(f"_fs_dir_read_cb exception: {e}")
+        logger.error("_fs_dir_read_cb exception: %s", e)
         return lv.FS_RES.UNKNOWN
 
 def _fs_dir_close_cb(drv, lv_fs_dir_t):
-    #print(f"_fs_dir_close_cb called")
     # No need to cleanup the iterator so nothing to do
     return lv.FS_RES.OK
 

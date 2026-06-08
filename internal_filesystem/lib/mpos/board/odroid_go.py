@@ -1,4 +1,5 @@
-print("odroid_go.py initialization")
+import logging
+logger = logging.getLogger(__name__)
 
 # Hardware initialization for Hardkernel ODROID-Go
 # https://github.com/hardkernel/ODROID-GO/
@@ -56,11 +57,11 @@ BUZZER_DAC_PIN = const(25)
 BUZZER_TONE_CHANNEL = const(0)
 
 
-print("odroid_go.py turn on blue LED")
+if __debug__: logger.debug("turn on blue LED")
 blue_led = machine.Pin(LED_BLUE, machine.Pin.OUT)
 blue_led.on()
 
-print("odroid_go.py init buzzer")
+if __debug__: logger.debug("init buzzer")
 
 
 class BuzzerCallbacks:
@@ -70,11 +71,11 @@ class BuzzerCallbacks:
         self.dac_pin = Pin(BUZZER_DAC_PIN, Pin.OUT, value=1)
 
     def unmute(self):
-        print("Unmute buzzer")
+        if __debug__: logger.debug("Unmute buzzer")
         self.dac_pin.value(1)  # Unmute
 
-    def mute(self, unused=None): # This is used as rtttl's on_complete function, which passes a string message argument
-        print("Mute buzzer")
+    def mute(self, unused=None):
+        if __debug__: logger.debug("Mute buzzer")
         self.dac_pin.value(0)  # Mute
 
 
@@ -98,19 +99,19 @@ player.start()
 while player.is_playing():
     time.sleep(0.1)
 
-print("odroid_go.py machine.SPI.Bus() initialization")
+if __debug__: logger.debug("machine.SPI.Bus() initialization")
 try:
     spi_bus = machine.SPI.Bus(host=SPI_HOST, mosi=LCD_MOSI, sck=LCD_SCLK)
 except Exception as e:
-    print(f"Error initializing SPI bus: {e}")
-    print("Attempting hard reset in 3sec...")
+    logger.error("Error initializing SPI bus: %s", e)
+    logger.error("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
-print("odroid_go.py lcd_bus.SPIBus() initialization")
+if __debug__: logger.debug("lcd_bus.SPIBus() initialization")
 display_bus = lcd_bus.SPIBus(spi_bus=spi_bus, freq=SPI_FREQ, dc=LCD_DC, cs=LCD_CS)
 
-print("odroid_go.py ili9341.ILI9341() initialization")
+if __debug__: logger.debug("ili9341.ILI9341() initialization")
 try:
     mpos.ui.main_display = ili9341.ILI9341(
         data_bus=display_bus,
@@ -125,39 +126,26 @@ try:
         backlight_on_state=ili9341.STATE_PWM,
     )
 except Exception as e:
-    print(f"Error initializing ILI9341: {e}")
-    print("Attempting hard reset in 3sec...")
+    logger.error("Error initializing ILI9341: %s", e)
+    logger.error("Attempting hard reset in 3sec...")
     time.sleep(3)
     machine.reset()
 
-print("odroid_go.py display.init()")
+if __debug__: logger.debug("display.init()")
 mpos.ui.main_display.init(type=LCD_TYPE)
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 mpos.ui.main_display.set_power(True)
 mpos.ui.main_display.set_color_inversion(False)
 mpos.ui.main_display.set_backlight(25)
 
-print("odroid_go.py lv.init() initialization")
+if __debug__: logger.debug("lv.init() initialization")
 lv.init()
 
 
-print("odroid_go.py Battery initialization...")
+if __debug__: logger.debug("Battery initialization...")
 
 
 def adc_to_voltage(raw_adc_value):
-    """
-    The percentage calculation uses MIN_VOLTAGE = 3.15 and MAX_VOLTAGE = 4.15
-    0% at 3.15V -> raw_adc_value = 210
-    100% at 4.15V -> raw_adc_value = 310
-
-    4.15 - 3.15 = 1V
-    310 - 210 = 100 raw ADC steps
-
-    So each raw ADC step is 1V / 100 = 0.01V
-    Offset calculation:
-    210 * 0.01 = 2.1V. but we want it to be 3.15V
-    So the offset is 3.15V - 2.1V = 1.05V
-    """
     voltage = raw_adc_value * 0.01 + 1.05
     return voltage
 
@@ -165,21 +153,18 @@ def adc_to_voltage(raw_adc_value):
 BatteryManager.init_adc(BATTERY_PIN, adc_to_voltage)
 
 
-print("odroid_go.py button initialization...")
+if __debug__: logger.debug("button initialization...")
 
 button_menu = Pin(BUTTON_MENU, Pin.IN, Pin.PULL_UP)
 button_volume = Pin(BUTTON_VOLUME, Pin.IN, Pin.PULL_UP)
 button_select = Pin(BUTTON_SELECT, Pin.IN, Pin.PULL_UP)
 button_start = Pin(BUTTON_START, Pin.IN, Pin.PULL_UP)  # -> ENTER
 
-# PREV <- B | A -> NEXT
 button_b = Pin(BUTTON_B, Pin.IN, Pin.PULL_UP)
 button_a = Pin(BUTTON_A, Pin.IN, Pin.PULL_UP)
 
 
 class CrossbarHandler:
-    # ADC values are around low: ~236 and high ~511
-    # So the mid value is around (236+511)/2 = 373.5
     CROSSBAR_MIN_ADC_LOW = const(100)
     CROSSBAR_MIN_ADC_MID = const(370)
 
@@ -210,18 +195,13 @@ class Crossbar:
         return crossbar_pressed
 
 
-# see: internal_filesystem/lib/drivers/indev/sdl_keyboard.py
-#         lv.KEY.UP
-# lv.KEY.LEFT - lv.KEY.RIGHT
-#         lv.KEY.DOWN
-#
 crossbar = Crossbar(
     up=lv.KEY.UP, down=lv.KEY.DOWN, left=lv.KEY.LEFT, right=lv.KEY.RIGHT
 )
 
 REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
 REPEAT_RATE_MS = 100  # Interval between repeats
-next_repeat = None  # Used for auto-repeat key handling
+next_repeat = None
 
 
 def input_callback(indev, data):
@@ -235,7 +215,7 @@ def input_callback(indev, data):
     elif button_menu.value() == 0:
         current_key = lv.KEY.ESC
     elif button_volume.value() == 0:
-        print("Volume button pressed -> reset")
+        if __debug__: logger.debug("Volume button pressed -> reset")
         blue_led.on()
         player = AudioManager.player(
             rtttl="Outro:o=5,d=32,b=160,b=160:c6,b,a,g,f,e,d,c",
@@ -259,28 +239,24 @@ def input_callback(indev, data):
     elif button_a.value() == 0:
         current_key = lv.KEY.NEXT
     else:
-        # No crossbar/buttons pressed
-        if data.key:  # A key was previously pressed and now released
-            # print(f"Key {data.key=} released")
+        if data.key:
             data.key = 0
             data.state = lv.INDEV_STATE.RELEASED
             next_repeat = None
             blue_led.off()
         return
 
-    # A key is currently pressed
-
-    blue_led.on()  # Blink on key press and auto repeat for feedback
+    blue_led.on()
 
     current_time = time.ticks_ms()
-    repeat = current_time > next_repeat if next_repeat else False  # Auto repeat?
+    repeat = current_time > next_repeat if next_repeat else False
     if repeat or current_key != data.key:
-        print(f"Key {current_key} pressed {repeat=}")
+        if __debug__: logger.debug("Key %s pressed repeat=%s", current_key, repeat)
 
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED
 
-        if current_key == lv.KEY.ESC:  # Handle ESC for back navigation
+        if current_key == lv.KEY.ESC:
             mpos.ui.back_screen()
         elif current_key == lv.KEY.RIGHT:
             mpos.ui.focus_direction.move_focus_direction(90)
@@ -292,26 +268,21 @@ def input_callback(indev, data):
             mpos.ui.focus_direction.move_focus_direction(180)
 
         if not repeat:
-            # Initial press: Delay before first repeat
             next_repeat = current_time + REPEAT_INITIAL_DELAY_MS
         else:
-            # Faster auto repeat after initial press
             next_repeat = current_time + REPEAT_RATE_MS
-            blue_led.off()  # Blink the LED, too
+            blue_led.off()
 
 
 group = lv.group_get_default()
 
-# Create and set up the input device
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(input_callback)
-indev.set_group(
-    group
-)  # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
+indev.set_group(group)
 disp = lv.display_get_default()  # NOQA
-indev.set_display(disp)  # different from display
+indev.set_display(disp)
 indev.enable(True)  # NOQA
 InputManager.register_indev(indev)
 
-print("odroid_go.py finished")
+if __debug__: logger.debug("finished")

@@ -2,11 +2,14 @@
 # Registry-based audio routing with device descriptors and session control
 
 import _thread
+import logging
 import math
 import os
 
 from ..config import SharedPreferences
 from ..task_manager import TaskManager
+
+logger = logging.getLogger(__name__)
 
 
 class StereoNotSupported(Exception):
@@ -250,7 +253,7 @@ class AudioManager:
             editor.put_string(key, value)
             editor.commit()
         except Exception as exc:
-            print(f"AudioManager: could not persist {key}: {exc}")
+            logger.error("Could not persist %s: %s", key, exc)
 
     def _find_output_by_name(self, name):
         for output in self._outputs:
@@ -272,10 +275,7 @@ class AudioManager:
                 self._default_output = output
                 return output
             if self._outputs:
-                print(
-                    "AudioManager: preferred output '%s' not found; using '%s'"
-                    % (stored_name, self._outputs[0].name)
-                )
+                logger.warning("Preferred output '%s' not found; using '%s'", stored_name, self._outputs[0].name)
         if self._outputs:
             self._default_output = self._outputs[0]
             return self._default_output
@@ -289,10 +289,7 @@ class AudioManager:
                 self._default_input = input_device
                 return input_device
             if self._inputs:
-                print(
-                    "AudioManager: preferred input '%s' not found; using '%s'"
-                    % (stored_name, self._inputs[0].name)
-                )
+                logger.warning("Preferred input '%s' not found; using '%s'", stored_name, self._inputs[0].name)
         if self._inputs:
             self._default_input = self._inputs[0]
             return self._default_input

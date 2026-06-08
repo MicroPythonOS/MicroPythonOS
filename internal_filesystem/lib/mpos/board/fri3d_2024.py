@@ -1,4 +1,7 @@
 # Hardware initialization for Fri3d Camp 2024 Badge
+import logging
+logger = logging.getLogger(__name__)
+
 from machine import Pin
 import lcd_bus
 import machine
@@ -26,19 +29,10 @@ display_bus = lcd_bus.SPIBus(
     cs=5
 )
 
-# lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
-# The default was /10 so 15360 bytes.
-# /2 = 76800 shows something on display and then hangs the board
-# /2 = 38400 works and pretty high framerate but camera gets ESP_FAIL
-# /2 = 19200 works, including camera at 9FPS
-# 28800 is between the two and still works with camera!
-# 30720 is /5 and is already too much
-#_BUFFER_SIZE = const(28800)
 buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
@@ -79,67 +73,46 @@ ADC_KEY_MAP = [
     {'key': 'LEFT', 'unit': 1, 'channel': 0, 'min': 0, 'max': 1024},
 ]
 
-# Initialize ADC for the two channels
 adc_up_down = ADC(Pin(3))  # ADC1_CHANNEL_2 (GPIO 33)
 adc_up_down.atten(ADC.ATTN_11DB)  # 0-3.3V range
 adc_left_right = ADC(Pin(1))  # ADC1_CHANNEL_0 (GPIO 36)
 adc_left_right.atten(ADC.ATTN_11DB)  # 0-3.3V range
 
 def read_joystick():
-    # Read ADC values
     val_up_down = adc_up_down.read()
     val_left_right = adc_left_right.read()
 
-    # Check each key's range
     for mapping in ADC_KEY_MAP:
         adc_val = val_up_down if mapping['channel'] == 2 else val_left_right
         if mapping['min'] <= adc_val <= mapping['max']:
             return mapping['key']
     return None  # No key triggered
 
-# Rotate: UP = 0°, RIGHT = 90°, DOWN = 180°, LEFT = 270°
 def read_joystick_angle(threshold=0.1):
-    # Read ADC values
     val_up_down = adc_up_down.read()
     val_left_right = adc_left_right.read()
 
-    #if time.time() < 60:
-    #    print(f"val_up_down: {val_up_down}")
-    #    print(f"val_left_right: {val_left_right}")
+    x = (val_left_right - 2048) / 2048
+    y = (val_up_down - 2048) / 2048
 
-    # Normalize to [-1, 1]
-    x = (val_left_right - 2048) / 2048  # Positive x = RIGHT
-    y = (val_up_down - 2048) / 2048    # Positive y = UP
-    #if time.time() < 60:
-    #    print(f"x,y = {x},{y}")
-
-    # Check if joystick is near center
     magnitude = math.sqrt(x*x + y*y)
-    #if time.time() < 60:
-    #    print(f"magnitude: {magnitude}")
     if magnitude < threshold:
-        return None  # Neutral position
+        return None
 
-    # Calculate angle in degrees with UP = 0°, clockwise
     angle_rad = math.atan2(x, y)
     angle_deg = math.degrees(angle_rad)
-    angle_deg = (angle_deg + 360) % 360  # Normalize to [0, 360)
+    angle_deg = (angle_deg + 360) % 360
     return angle_deg
 
-# Repeat timing for navigation actions (same as LVGL indev timing for consistency)
 LONG_PRESS_TIME = const(400)
 LONG_PRESS_REPEAT_TIME = const(100)
 _last_key = None
 _next_repeat_at = 0
 
-# Read callback
-# Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
-# that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
     global _last_key, _next_repeat_at
     current_key = None
 
-    # Check buttons
     if btn_x.value() == 0:
         current_key = lv.KEY.ESC
     elif btn_y.value() == 0:
@@ -153,8 +126,7 @@ def keypad_read_cb(indev, data):
     elif btn_start.value() == 0:
         current_key = lv.KEY.END
     else:
-        # Check joystick
-        angle = read_joystick_angle(0.30) # 0.25-0.27 is right on the edge so 0.30 should be good
+        angle = read_joystick_angle(0.30)
         if angle:
             if angle > 45 and angle < 135:
                 current_key = lv.KEY.RIGHT
@@ -165,7 +137,7 @@ def keypad_read_cb(indev, data):
             elif angle < 45 or angle > 315:
                 current_key = lv.KEY.UP
             else:
-                print(f"WARNING: unhandled joystick angle {angle}") # maybe we could also handle diagonals?
+                logger.warning("Unhandled joystick angle %s", angle)
 
     data.continue_reading = False
 
@@ -185,7 +157,7 @@ def keypad_read_cb(indev, data):
             should_act = False
 
         if should_act:
-            print(f"key: {current_key}")
+            if __debug__: logger.debug("key: %s", current_key)
             if current_key == lv.KEY.ESC:
                 mpos.ui.back_screen()
             elif current_key == lv.KEY.HOME:
@@ -209,13 +181,12 @@ def keypad_read_cb(indev, data):
 
 group = lv.group_get_default()
 
-# Create and set up the input device
 indev = lv.indev_create()
 indev.set_type(lv.INDEV_TYPE.KEYPAD)
 indev.set_read_cb(keypad_read_cb)
-indev.set_group(group) # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
+indev.set_group(group)
 disp = lv.display_get_default()
-indev.set_display(disp)  # different from display
+indev.set_display(disp)
 indev.enable(True)
 indev.set_long_press_time(LONG_PRESS_TIME)
 indev.set_long_press_repeat_time(LONG_PRESS_REPEAT_TIME)
@@ -227,31 +198,9 @@ mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 IRManager.txPin = Pin(10, Pin.OUT)
 IRManager.rxPin = Pin(11, Pin.IN)
 
-# Battery voltage ADC measuring
-# NOTE: GPIO13 is on ADC2, which requires WiFi to be disabled during reading on ESP32-S3.
-# BatteryManager handles this automatically: disables WiFi, reads ADC, reconnects WiFi.
 from mpos import BatteryManager
-"""
-best fit on battery power:
-2482 is 4.180
-2470 is 4.170
-2457 is 4.147
-# 2444 is 4.12
-2433 is 4.109
-2429 is 4.102
-2393 is 4.044
-2369 is 4.000
-2343 is 3.957
-2319 is 3.916
-2269 is 3.831
-2227 is 3.769
-"""
+
 def adc_to_voltage(adc_value):
-    """
-    Convert raw ADC value to battery voltage using calibrated linear function.
-    Calibration data shows linear relationship: voltage = -0.0016237 * adc + 8.2035
-    This is ~10x more accurate than simple scaling (error ~0.01V vs ~0.1V).
-    """
     return (0.001651* adc_value + 0.08709)
 
 BatteryManager.init_adc(13, adc_to_voltage)
@@ -259,22 +208,16 @@ BatteryManager.init_adc(13, adc_to_voltage)
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
 
-# Would be better to only add these if the communicator is connected:
-
-# I2S pin configuration for audio output (DAC) and input (microphone)
-# Note: I2S is created per-stream, not at boot (only one instance can exist)
-# The DAC uses BCK (bit clock) on GPIO 2, while the microphone uses SCLK on GPIO 17
-# See schematics: DAC has BCK=2, WS=47, SD=16; Microphone has SCLK=17, WS=47, DIN=15
 i2s_output_pins = {
-    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
-    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory)
-    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'ws': 47,
+    'sck': 2,
+    'sd': 16,
 }
 
 i2s_input_pins = {
-    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
-    'sck_in': 17,   # SCLK - Serial Clock for microphone input
-    'sd_in': 15,    # DIN - Serial Data IN (microphone)
+    'ws': 47,
+    'sck_in': 17,
+    'sd_in': 15,
 }
 
 speaker_output = AudioManager.add(
@@ -293,7 +236,6 @@ mic_input = AudioManager.add(
     )
 )
 
-# Add this after the headset output so that it doesn't become the default:
 buzzer_output = AudioManager.add(
     AudioManager.Output(
         name="Badge Buzzer",
@@ -304,22 +246,20 @@ buzzer_output = AudioManager.add(
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
-# Create I2C bus for IMU (different pins from display)
 from machine import I2C
 imu_i2c = I2C(0, sda=Pin(9), scl=Pin(18))
 from mpos import DeviceManager
-DeviceManager.registerBus(i2c_bus=imu_i2c) # register because Communicator needs it
+DeviceManager.registerBus(i2c_bus=imu_i2c)
 SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 # === LED HARDWARE ===
 import mpos.lights as LightsManager
-# Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12)
 LightsManager.set_led_num(5)
 
 # Communicator add-on keyboard input (UART HID reports -> LVGL keypad indev)
 try:
-    print("Checking for 2024 or 2026 Communicator Add-On over I2C")
+    if __debug__: logger.debug("Checking for 2024 or 2026 Communicator Add-On over I2C")
     from machine import UART
 
     COMMUNICATOR_2024_ADDR = const(0x38)
@@ -339,17 +279,17 @@ try:
         communicator = Communicator2024(i2c_bus=comm_i2c_bus,uart_bus=comm_uart,use_irq=False)
 
     if communicator is not None:
-        print("Disabling UART REPL because it receives data from the Communicator Add-On. Use esp.uart_repl(True) to re-enable.")
+        if __debug__: logger.debug("Disabling UART REPL because it receives data from the Communicator Add-On. Use esp.uart_repl(True) to re-enable.")
         import esp
         esp.uart_repl(False)
-        print("Initializing Fri3dCommunicatorKeyboard and registering as indev")
+        if __debug__: logger.debug("Initializing Fri3dCommunicatorKeyboard and registering as indev")
         from drivers.indev.fri3d_communicator_keyboard import Fri3dCommunicatorKeyboard
         communicator_indev = Fri3dCommunicatorKeyboard(communicator)
         communicator_indev.set_group(group)
         communicator_indev.enable(True)
         InputManager.register_indev(communicator_indev)
 except Exception as e:
-    print(f"communicator keyboard init got exception: {e}")
+    logger.error("communicator keyboard init got exception: %s", e)
 
 # === STARTUP "WOW" EFFECT ===
 import time
@@ -357,11 +297,8 @@ import _thread
 
 def startup_wow_effect():
     try:
-        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
         startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
-        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
 
-        # Start the jingle
         player = AudioManager.player(
             rtttl=startup_jingle,
             stream_type=AudioManager.STREAM_NOTIFICATION,
@@ -370,7 +307,6 @@ def startup_wow_effect():
         )
         player.start()
 
-        # Rainbow colors for the 5 LEDs
         rainbow = [
             (255, 0, 0),    # Red
             (255, 128, 0),  # Orange
@@ -379,15 +315,12 @@ def startup_wow_effect():
             (0, 0, 255),    # Blue
         ]
 
-        # Single rainbow sweep
         for i in range(5):
-            # Light up LEDs progressively
             for j in range(i + 1):
                 LightsManager.set_led(j, *rainbow[j])
             LightsManager.write()
             time.sleep_ms(500)
 
-        # Hold white, then fade out over 4 seconds
         LightsManager.set_all(255, 255, 255)
         LightsManager.write()
         time.sleep_ms(500)
@@ -400,10 +333,10 @@ def startup_wow_effect():
             time.sleep_ms(25)
 
     except Exception as e:
-        print(f"Startup effect error: {e}")
+        logger.error("Startup effect error: %s", e)
 
 from mpos import TaskManager
-_thread.stack_size(TaskManager.good_stack_size()) # default stack size won't work, crashes!
+_thread.stack_size(TaskManager.good_stack_size())
 _thread.start_new_thread(startup_wow_effect, ())
 
-print("fri3d_2024.py finished")
+if __debug__: logger.debug("finished")
