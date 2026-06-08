@@ -12,6 +12,7 @@ Builtin Apps:
 - Use logger/logging with `__debug__` guard for smaller build size
 
 Frameworks:
+- CameraActivity: use QR symbol for QR decoding
 - DownloadManager: print stack trace in case of download error
 - DownloadManager: include User-Agent HTTP header
 - FontManager: optimize emoji PNG sizes with optipng and zopflipng to reduce build size by ~14KiB

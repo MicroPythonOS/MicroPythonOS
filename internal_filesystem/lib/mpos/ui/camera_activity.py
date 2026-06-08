@@ -326,7 +326,7 @@ class CameraActivity(Activity):
     def stop_qr_decoding(self, activate_non_qr_mode=True):
         if __debug__: logger.debug("Deactivating live QR decoding...")
         self.scanqr_mode = False
-        self.qr_label.set_text(lv.SYMBOL.EYE_OPEN)
+        self.qr_label.set_text(mpos_ui.QR_SYMBOL)
         status_label_text = self.status_label.get_text()
         if status_label_text in (self.STATUS_NO_CAMERA, self.STATUS_SEARCHING_QR, self.STATUS_FOUND_QR): # if it found a QR code, leave it
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
