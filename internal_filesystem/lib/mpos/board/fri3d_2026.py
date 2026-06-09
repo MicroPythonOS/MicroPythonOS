@@ -238,6 +238,14 @@ IRManager.rxPin = Pin(11, Pin.IN)
 # === AUDIO HARDWARE ===
 from mpos import AudioManager
 
+# By default, sending audio to the headset will be heard on both.
+# And sending audio to the communicator will be heard only on the communicator, as then mck won't be active.
+#
+# It's possible to send only to the headset (and silence the communicator) by simply setting sck to a "wrong" pin like IO10 (badge link).
+# That could be useful sometimes, to use the communicator for easy typing while having the communicator's speaker silent.
+#
+# But the communicator's DAC is already much more quiet than the headset's, so very low volume on the headset will approximate a "silent" communicator already.
+# And the default "send to both" behavior is very user friendly, as it means the user doesn't have to switch or set anything.
 headset_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
