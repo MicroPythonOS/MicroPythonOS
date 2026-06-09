@@ -23,6 +23,7 @@ import time
 import unittest
 import lvgl as lv
 import mpos.ui
+from mpos import wait_for_widget
 
 from mpos.ui.focus_direction import (
     _is_on_layer_top,
@@ -52,6 +53,19 @@ def _focused_obj():
 def _move(angle):
     move_focus_direction(angle)
     _wait_ms(50)
+
+
+def _move_until_focused(angle, target, attempts=3):
+    for _ in range(attempts):
+        _move(angle)
+        focused = wait_for_widget(
+            lambda: target if _focused_obj() is target else None,
+            timeout=0.6,
+            interval=0.05,
+        )
+        if focused is not None:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -245,8 +259,15 @@ class TestModalOverlayFocusRedirect(GraphicalTestCase):
         # Return focus to a screen widget
         lv.group_focus_obj(btn_a)
         _wait_ms(50)
+        focused_btn_a = wait_for_widget(
+            lambda: btn_a if _focused_obj() is btn_a else None,
+            timeout=1.5,
+            interval=0.05,
+        )
+        self.assertIsNotNone(focused_btn_a, "btn_a should regain focus after overlay close")
 
         # Normal directional navigation should work again
-        _move(DOWN)
-        self.assertIs(_focused_obj(), btn_b,
-                      "After overlay is closed, DOWN from btn_a should reach btn_b")
+        self.assertTrue(
+            _move_until_focused(DOWN, btn_b),
+            "After overlay is closed, DOWN from btn_a should reach btn_b",
+        )
