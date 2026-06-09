@@ -26,6 +26,8 @@ import mpos.ui
 from mpos import (
     App,
     AppManager,
+    retry_action_until,
+    wait_for_focus,
     wait_for_text,
 )
 from mpos.ui import focus_direction
@@ -102,10 +104,10 @@ class TestAppStoreFocus(unittest.TestCase):
         settings_btn = activity.settings_button
 
         lv.group_focus_obj(settings_btn)
-        _wait_ms(50)
-
-        self.assertIs(_focused_obj(), settings_btn,
-                      "settings_button should be focused after group_focus_obj")
+        self.assertIsNotNone(
+            wait_for_focus(settings_btn, timeout=0.5),
+            "settings_button should be focused after group_focus_obj",
+        )
 
     def test_settings_button_reachable_from_list_item_via_up(self):
         """Pressing UP from a list item must reach the settings_button.
@@ -143,22 +145,22 @@ class TestAppStoreFocus(unittest.TestCase):
                              "No non-settings focusable object found after injecting fake apps")
 
         lv.group_focus_obj(candidate)
-        _wait_ms(50)
-        self.assertIs(_focused_obj(), candidate, "Could not focus candidate list item")
+        self.assertIsNotNone(
+            wait_for_focus(candidate, timeout=0.5),
+            "Could not focus candidate list item",
+        )
 
-        # Press UP up to 5 times — settings_button is directly above
-        reached = False
-        for _ in range(5):
-            _move(UP)
-            if _focused_obj() is settings_btn:
-                reached = True
-                break
-
-        self.assertTrue(
-            reached,
+        # Press UP repeatedly — settings_button is directly above
+        self.assertIsNotNone(
+            retry_action_until(
+                lambda: _move(UP),
+                lambda: settings_btn if _focused_obj() is settings_btn else None,
+                attempts=5,
+                timeout=0.5,
+            ),
             "settings_button was not reachable by pressing UP from a list item.\n"
             "Expected the Android FocusFinder beam-priority algorithm to route UP\n"
-            "to the small corner button even though its center is far to the left."
+            "to the small corner button even though its center is far to the left.",
         )
 
     def test_update_all_button_reachable_when_visible(self):
@@ -185,16 +187,17 @@ class TestAppStoreFocus(unittest.TestCase):
         update_btn = activity.update_all_button
 
         lv.group_focus_obj(settings_btn)
-        _wait_ms(50)
+        self.assertIsNotNone(
+            wait_for_focus(settings_btn, timeout=0.5),
+            "settings_button should be focused before moving DOWN",
+        )
 
-        reached = False
-        for _ in range(3):
-            _move(DOWN)
-            if _focused_obj() is update_btn:
-                reached = True
-                break
-
-        self.assertTrue(
-            reached,
-            "Update All button was not reachable by pressing DOWN from settings_button."
+        self.assertIsNotNone(
+            retry_action_until(
+                lambda: _move(DOWN),
+                lambda: update_btn if _focused_obj() is update_btn else None,
+                attempts=3,
+                timeout=0.5,
+            ),
+            "Update All button was not reachable by pressing DOWN from settings_button.",
         )

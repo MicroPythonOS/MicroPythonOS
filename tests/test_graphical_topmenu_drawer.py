@@ -22,6 +22,7 @@ from mpos import (
     Notification,
     NotificationManager,
     get_widget_coords,
+    wait_for_focus,
     wait_for_widget,
 )
 from mpos.ui import topmenu
@@ -178,13 +179,10 @@ class TestDrawerFocusOnOpen(unittest.TestCase):
 
         topmenu.open_drawer()
         _wait_drawer_open(timeout=8)
-        _wait_ms(100)  # let LVGL settle focus
 
-        focused = _focused_obj()
-        self.assertIsNotNone(focused, "No focused object after open_drawer()")
-        self.assertIs(
-            focused, slider,
-            f"Expected slider to be focused after open_drawer(), got {focused}",
+        self.assertIsNotNone(
+            wait_for_focus(slider, timeout=1.0),
+            "Slider should be focused after open_drawer()",
         )
 
     def test_static_buttons_in_focus_group_when_open(self):
@@ -251,13 +249,10 @@ class TestDrawerFocusRestore(unittest.TestCase):
 
         topmenu.close_drawer()
         _wait_drawer_closed(timeout=8)
-        _wait_ms(100)
 
-        post_focused = _focused_obj()
-        self.assertIs(
-            post_focused, pre_focused,
-            f"Focus was not restored to pre-drawer widget after close_drawer(). "
-            f"pre={pre_focused}, post={post_focused}",
+        self.assertIsNotNone(
+            wait_for_focus(pre_focused, timeout=1.0),
+            "Focus was not restored to pre-drawer widget after close_drawer()",
         )
 
     def test_focus_restore_survives_repeated_open_close(self):
@@ -272,9 +267,8 @@ class TestDrawerFocusRestore(unittest.TestCase):
             _wait_drawer_closed(timeout=8)
             _wait_ms(100)
 
-        post_focused = _focused_obj()
-        self.assertIs(
-            post_focused, pre_focused,
+        self.assertIsNotNone(
+            wait_for_focus(pre_focused, timeout=1.0),
             "Focus not restored correctly after repeated open/close cycles",
         )
 
