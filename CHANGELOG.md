@@ -6,6 +6,7 @@ Put unreleased changes here!
 Board Support:
 - Fri3d 2024: cleanup key repeat workaround for old LVGL 9.2
 - Fri3d 2026: add button repeat on long press
+- Fri3d 2026: switch audio to final pin assigments (keep IO0/START pressed to use old prototype pin assigments)
 
 Builtin Apps:
 - Launcher: fix splash screen remaining visible when app fails to start

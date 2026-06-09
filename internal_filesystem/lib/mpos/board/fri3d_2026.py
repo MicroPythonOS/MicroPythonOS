@@ -241,9 +241,33 @@ from mpos import AudioManager
 headset_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
-    'sck': 10,      # SCLK aka BCLK is optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin so set it to IO10 (badge link) for now. It's 17 on the prototype and 2 in final device.
-    'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator. Not driving it will disable the chip. Will change to 17 in final device.
+    'sck': 2,       # SCLK aka BCLK is optional for CJC4344 DAC hardware (but MicroPython I2S needs a valid pin, could also be set to something random like IO10 badge link)
+    'mck': 17,      # MCLK (mandatory) - not driving it will disable the chip.
 }
+
+communicator_i2s_output_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory). Not driving it will disable the chip.
+}
+
+communicator_i2s_input_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck_in': 17,   # SCLK - Serial Clock for microphone input
+    'sd_in': 15,    # DIN - Serial Data IN (microphone)
+}
+
+# Check if BOOT/START button is held during startup
+if btn_start.value() == 0:
+    time.sleep_ms(400)
+    if btn_start.value() == 0:
+        logger.warning("BOOT button is held down during startup, doing prototype audio initialization")
+        headset_i2s_output_pins = {
+            'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+            'sd': 16,       # Serial Data OUT (speaker/DAC)
+            'sck': 10,      # SCLK aka BCLK is optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin so set it to IO10 (badge link) for now. It's 17 on the prototype and 2 in final device.
+            'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator. Not driving it will disable the chip. Will change to 17 in final device.
+        }
 
 AudioManager.add(
     AudioManager.Output(
@@ -271,18 +295,6 @@ buzzer_output = AudioManager.add(
 )
 
 # Would be better to only add these if the communicator is connected:
-communicator_i2s_output_pins = {
-    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
-    'sd': 16,       # Serial Data OUT (speaker/DAC)
-    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory). Not driving it will disable the chip.
-}
-
-communicator_i2s_input_pins = {
-    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
-    'sck_in': 17,   # SCLK - Serial Clock for microphone input
-    'sd_in': 15,    # DIN - Serial Data IN (microphone)
-}
-
 speaker_output = AudioManager.add(
     AudioManager.Output(
         name="Communicator Output",
@@ -290,7 +302,6 @@ speaker_output = AudioManager.add(
         i2s_pins=communicator_i2s_output_pins,
     )
 )
-
 mic_input = AudioManager.add(
     AudioManager.Input(
         name="Communicator Input",
