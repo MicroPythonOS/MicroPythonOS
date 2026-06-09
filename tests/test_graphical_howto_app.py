@@ -18,7 +18,7 @@ import mpos.ui
 from mpos import (
     AppManager,
     wait_for_text,
-    wait_for_widget,
+    retry_action_until,
     find_label_with_text,
     find_button_with_text,
     simulate_click,
@@ -66,18 +66,14 @@ def _checkbox_checked_state(checkbox):
 
 
 def _toggle_checkbox_with_retries(checkbox, expected_checked, attempts=3):
-    for _ in range(attempts):
-        lv.group_focus_obj(checkbox)
-        _wait_ms(50)
-        _click_focused()
-        reached = wait_for_widget(
-            lambda: checkbox if _checkbox_checked_state(checkbox) == expected_checked else None,
-            timeout=1.5,
-            interval=0.05,
-        )
-        if reached is not None:
-            return True
-    return False
+    result = retry_action_until(
+        lambda: (lv.group_focus_obj(checkbox), _wait_ms(50), _click_focused()),
+        lambda: checkbox if _checkbox_checked_state(checkbox) == expected_checked else None,
+        attempts=attempts,
+        timeout=1.5,
+        interval=0.05,
+    )
+    return result is not None
 
 
 def _find_checkbox(screen):

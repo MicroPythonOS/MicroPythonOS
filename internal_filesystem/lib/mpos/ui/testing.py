@@ -1784,3 +1784,20 @@ def wait_for_widget(find_func, timeout=10, interval=0.1):
         time.sleep(interval)
     logger.warning("wait_for_widget: condition not met after %ss", timeout)
     return None
+
+
+def retry_action_until(action_func, find_func, attempts=3, timeout=1.0, interval=0.05):
+    for _ in range(attempts):
+        action_func()
+        result = wait_for_widget(find_func, timeout=timeout, interval=interval)
+        if result is not None:
+            return result
+    return None
+
+
+def wait_for_focus(target, timeout=1.0, interval=0.05):
+    return wait_for_widget(
+        lambda: target if lv.group_get_default() and lv.group_get_default().get_focused() is target else None,
+        timeout=timeout,
+        interval=interval,
+    )
