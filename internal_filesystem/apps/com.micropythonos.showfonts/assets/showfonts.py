@@ -83,7 +83,7 @@ class ShowFonts(Activity):
 
         resume_start = self._now_ms()
 
-        text = "☺️ 😊" # basic smile 263A-FE0F, modern smile
+        text = "😊 ☺️ 🥰 😍" # modern smile, basic smile 263A-FE0F, face with hearts around it, face with heart eyes
         text += "👍 👍🏻 / " # neutral thumbs up, light thumbs up
         text += "👌 👌🏻 / " # neutral OK symbol which should fall back to similarity group for thumbs up + light OK symbol
         text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️" # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
@@ -111,7 +111,7 @@ class ShowFonts(Activity):
         import sys
         if sys.platform in ("linux", "darwin", "win32"):
             import time
-            time.sleep(3) # simulate slowness on desktop for testing
+            time.sleep(1) # simulate slowness on desktop for testing
 
     def onPause(self, screen): # Activity goes background
         #lv.log_register_print_cb(None)
