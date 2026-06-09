@@ -78,7 +78,9 @@ PY
         echo "Clearing auto_start_app_early and auto_start_app in config file"
         set_autostart_config "clear" ""
     fi
-    "$binary" -X heapsize=$HEAPSIZE -v -i -m main # internal_filesystem/main.py is frozen in and can't be changed at runtime
+    "$binary" -X heapsize=$HEAPSIZE -v -i -m main # internal_filesystem/main.py is frozen in and can't be changed after compilation
+    # Useful for testing a slow device:
+    # cpulimit -l 1 "$binary" -- -X heapsize=$HEAPSIZE -v -i -m main # internal_filesystem/main.py is frozen in and can't be changed after compilation
 fi
 
 popd
