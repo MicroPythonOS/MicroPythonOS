@@ -137,8 +137,8 @@ class Settings(SettingsActivity):
             return
         if bdev.info()[4] == "vfs":
             if __debug__: logger.debug("formatting %s as LittleFS2", bdev)
-            vfs.VfsLfs2.mkfs(bdev)
-            fs = vfs.VfsLfs2(bdev)
+            vfs.VfsLfs2.mkfs(bdev, readsize=256, progsize=256)
+            fs = vfs.VfsLfs2(bdev, readsize=256, progsize=256)
         elif bdev.info()[4] == "ffat":
             if __debug__: logger.debug("formatting %s as FAT", bdev)
             vfs.VfsFat.mkfs(bdev)

@@ -3,6 +3,10 @@ Future release (next version)
 
 Put unreleased changes here!
 
+OS:
+- Mount LittleFS2 internal filesystem progsize=256 to match the ESP32 SPI flash hardware page, avoiding read-modify-write cycles.
+- Mount LittleFS2 internal filesystem with readsize=256 to align flash reads for better efficiency.
+
 0.12.1
 ======
 

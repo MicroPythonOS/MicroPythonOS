@@ -139,6 +139,8 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
 	pushd "$codebasedir"/lvgl_micropython/lib/micropython
 	patch -p1 --forward < ../../esp32_inisetup_warn_and_format.patch || true
+	echo "Applying lvgl_micropython esp32 inisetup readsize/progsize patch..."
+	patch -p1 --forward < ../../esp32_inisetup_readsize_progsize.patch || true
 	popd
 
 	partition_size="4194304"
