@@ -313,8 +313,8 @@ class MposKeyboard:
         lv.timer_create(self.scroll_after_show, 250, None).set_repeat_count(1)
         # When this is done from a timer, focus styling is not applied so the user doesn't see which button is selected.
         # Maybe because there's no active indev anymore?
-        # Maybe it will be fixed in an update of LVGL 9.3?
-        # focus_timer = lv.timer_create(self.focus_on_keyboard,750,None).set_repeat_count(1)
+        # Maybe it will be fixed in an update of LVGL 9.4 to a later version?
+        # lv.timer_create(self.focus_on_keyboard,750,None).set_repeat_count(1)
         # Workaround: show the keyboard immediately and then focus on it - that works, and doesn't seem to flicker as feared:
         self._keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
         self.focus_on_keyboard()
