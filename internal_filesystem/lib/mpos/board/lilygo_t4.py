@@ -5,11 +5,11 @@
 # Speaker: PWM
 # SD Card: SPI
 
-if __debug__: logger.debug("lilygo_t4.py running")
-
 import logging
 
 logger = logging.getLogger(__name__)
+
+if __debug__: logger.debug("lilygo_t4.py running")
 
 import time
 

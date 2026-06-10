@@ -1,13 +1,13 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 if __debug__: logger.debug("odroid_go.py initialization")
 
 # Hardware initialization for Hardkernel ODROID-Go
 # https://github.com/hardkernel/ODROID-GO/
 # https://wiki.odroid.com/odroid_go/odroid_go
 # Original author: https://github.com/jedie
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 import time
 

@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 if __debug__: logger.debug("unphone.py initialization")
 """
 Hardware initialization for the unPhone 9
@@ -14,10 +18,6 @@ https://github.com/meshtastic/device-ui/blob/master/include/graphics/LGFX/LGFX_U
 
 Original author: https://github.com/jedie
 """
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 import struct
 import sys

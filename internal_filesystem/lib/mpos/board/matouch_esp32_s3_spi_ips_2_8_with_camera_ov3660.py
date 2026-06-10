@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 if __debug__: logger.debug("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660.py initialization")
 # Hardware initialization for Makerfabs MaTouch ESP32-S3 SPI 2.8" with Camera
 # Manufacturer's website: https://www.makerfabs.com/matouch-esp32-s3-spi-ips-2-8-with-camera-ov3660.html
@@ -9,10 +13,6 @@ if __debug__: logger.debug("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660.py i
 # - No IMU sensor (unlike Fri3d and Waveshare boards)
 # - No NeoPixel LEDs
 # - No buzzer or I2S audio
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 from micropython import const
 import drivers.display.st7789 as st7789

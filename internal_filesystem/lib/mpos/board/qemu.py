@@ -1,8 +1,8 @@
-if __debug__: logger.debug("qemu.py running")
-
 import logging
 
 logger = logging.getLogger(__name__)
+
+if __debug__: logger.debug("qemu.py running")
 
 import lcd_bus
 import lvgl as lv

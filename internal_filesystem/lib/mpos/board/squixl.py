@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 if __debug__: logger.debug("squixl.py initialization")
 """
 Hardware initialization for the SQUiXL device by "Unexpected Maker"
@@ -107,10 +111,6 @@ Original author: https://github.com/jedie
 | IO47           | VSYNC |
 | IO48           | HSYNC |
 """
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 import os
 import sys

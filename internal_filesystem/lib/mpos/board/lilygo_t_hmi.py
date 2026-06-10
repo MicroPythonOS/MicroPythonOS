@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 if __debug__: logger.debug("lilygo_t_hmi.py initialization")
 # Manufacturer: https://lilygo.cc/en-us/products/t-hmi
 # Hardware reference: https://www.tinytronics.nl/en/development-boards/microcontroller-boards/with-wi-fi/lilygo-t-hmi-esp32-s3-2.8-inch-ips-tft-display-met-touchscreen
@@ -5,9 +9,6 @@ if __debug__: logger.debug("lilygo_t_hmi.py initialization")
 
 
 # --- POWER HOLD ---
-import logging
-
-logger = logging.getLogger(__name__)
 
 from machine import Pin
 

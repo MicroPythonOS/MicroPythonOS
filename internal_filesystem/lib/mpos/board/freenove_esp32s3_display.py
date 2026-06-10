@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 if __debug__: logger.debug("freenove_esp32s3_display.py initialization")
 # Hardware initialization for Freenove ESP32-S3 Display (FNK0104)
 # Manufacturer's website: https://github.com/Freenove/Freenove_ESP32_S3_Display
@@ -13,10 +17,6 @@ if __debug__: logger.debug("freenove_esp32s3_display.py initialization")
 # - Audio: ES8311 codec (I2C SDA=16/SCL=15, I2S MCK=4/BCK=5/DOUT=8/DIN=6/WS=7)
 #          FM8002E amplifier (enable pin GPIO 1, LOW=enabled)
 # - No IMU
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 import time
 

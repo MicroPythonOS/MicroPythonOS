@@ -1,10 +1,10 @@
 # LilyGo T-Display non-touch edition
 
-if __debug__: logger.debug("lilygo_t_display_s3.py running")
-
 import logging
 
 logger = logging.getLogger(__name__)
+
+if __debug__: logger.debug("lilygo_t_display_s3.py running")
 
 import lcd_bus
 import lvgl as lv

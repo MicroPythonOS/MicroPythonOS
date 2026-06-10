@@ -1,10 +1,10 @@
-if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_2.py initialization")
-# Hardware initialization for ESP32-S3-Touch-LCD-2
-# Manufacturer's website at https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2
-
 import logging
 
 logger = logging.getLogger(__name__)
+
+if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_2.py initialization")
+# Hardware initialization for ESP32-S3-Touch-LCD-2
+# Manufacturer's website at https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-2
 
 import time
 
