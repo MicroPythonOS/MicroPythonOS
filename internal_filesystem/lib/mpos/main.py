@@ -1,6 +1,11 @@
 # Uncomment this line if you want to be dropped to a REPL shell without loading any MicroPythonOS code:
 # raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
 
+if __debug__:
+    print("__debug__ is set so code compiled with opt_level 0")
+else:
+    print("__debug__ is not set so code compiled with opt_level > 0")
+
 import lvgl as lv
 import os
 import logging
