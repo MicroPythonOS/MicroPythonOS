@@ -293,7 +293,7 @@ if not focusgroup:
 
 board = detect_board()
 if board:
-    if __debug__: logger.debug("Detected %s system, importing mpos.board.%s", board, board)
+    if __debug__: logger.warning("Detected %s system, importing mpos.board.%s", board, board)
     DeviceInfo.set_hardware_id(board)
     __import__(f"mpos.board.{board}")
 else:
