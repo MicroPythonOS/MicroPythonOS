@@ -1,8 +1,3 @@
-# print_error.py Error print for IR receiver
-
-# Author: Peter Hinch
-# Copyright Peter Hinch 2020 Released under the MIT license
-
 from . import IR_RX
 
 _errors = {IR_RX.BADSTART : 'Invalid start pulse',
