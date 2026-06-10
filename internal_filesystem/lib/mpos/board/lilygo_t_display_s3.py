@@ -1,5 +1,3 @@
-# LilyGo T-Display non-touch edition
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,12 +39,12 @@ import mpos.ui
 mpos.ui.main_display = st7789.ST7789(
     data_bus=display_bus,
     frame_buffer1=fb1,
-    # frame_buffer_2 doesn't seem to improve anything
+    # frame_buffer2 doesn't seem to improve anything
     display_width=170,
     display_height=320,
     color_space=lv.COLOR_FORMAT.RGB565,
     # color_space=lv.COLOR_FORMAT.RGB888, # not supported on qemu
-    color_byte_order=st7789.BYTE_ORDER_BGR,
+    color_byte_order=st7789.BYTE_ORDER_BGR, # QEMU needs RGB?!
     # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
     power_pin=9, # Must set RD pin to high, otherwise blank screen as soon as LVGL's task_handler starts
     reset_pin=5,
@@ -69,30 +67,23 @@ from machine import Pin
 btn_a = Pin(0, Pin.IN, Pin.PULL_UP)
 btn_b = Pin(14, Pin.IN, Pin.PULL_UP)
 
-# Key repeat configuration
-# This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
-# the lv_keyboard widget doesn't handle PRESSING (long presses) properly, it loses focus.
-REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
-REPEAT_RATE_MS = 100  # Interval between repeats
-REPEAT_PREV_BECOMES_BACK = 700 # Long previous press becomes back button
 COMBO_GRACE_MS = 90  # Accept near-simultaneous A+B as ENTER
+REPEAT_PREV_BECOMES_BACK = 700  # Long previous press becomes back button
 last_key = None
-last_state = lv.INDEV_STATE.RELEASED
-key_press_start = 0  # Time when key was first pressed
-last_repeat_time = 0  # Time of last repeat event
+key_press_start = 0
 last_a_down_time = 0
 last_b_down_time = 0
 last_a_pressed = False
 last_b_pressed = False
+back_fired = False
 
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
-    global last_key, last_state, key_press_start, last_repeat_time, last_a_down_time, last_b_down_time
-    global last_a_pressed, last_b_pressed
+    global last_key, key_press_start, last_a_down_time, last_b_down_time
+    global last_a_pressed, last_b_pressed, back_fired
 
-    # Check buttons
     current_time = time.ticks_ms()
     btn_a_pressed = btn_a.value() == 0
     btn_b_pressed = btn_b.value() == 0
@@ -118,15 +109,9 @@ def keypad_read_cb(indev, data):
         elif btn_b_pressed and time.ticks_diff(current_time, last_b_down_time) < COMBO_GRACE_MS:
             single_press_wait = True
 
-    if near_simul or single_press_wait:
-        dt_a = time.ticks_diff(current_time, last_a_down_time) if last_a_down_time else None
-        dt_b = time.ticks_diff(current_time, last_b_down_time) if last_b_down_time else None
-
     # While in an on-screen keyboard, PREV button is LEFT and NEXT button is RIGHT
-    focus_group = lv.group_get_default()
     focus_keyboard = False
-    current_focused = focus_group.get_focused()
-    if isinstance(current_focused, lv.keyboard):
+    if isinstance(lv.group_get_default().get_focused(), lv.keyboard):
         focus_keyboard = True
 
     if near_simul:
@@ -134,60 +119,35 @@ def keypad_read_cb(indev, data):
     elif single_press_wait:
         current_key = None
     elif btn_a_pressed:
-        if focus_keyboard:
-            current_key = lv.KEY.LEFT
-        else:
-            current_key = lv.KEY.PREV
+        current_key = lv.KEY.LEFT if focus_keyboard else lv.KEY.PREV
     elif btn_b_pressed:
-        if focus_keyboard:
-            current_key = lv.KEY.RIGHT
-        else:
-            current_key = lv.KEY.NEXT
+        current_key = lv.KEY.RIGHT if focus_keyboard else lv.KEY.NEXT
     else:
         current_key = None
 
     if current_key is None:
-        # No key pressed
         data.key = last_key if last_key else -1
         data.state = lv.INDEV_STATE.RELEASED
         last_key = None
-        last_state = lv.INDEV_STATE.RELEASED
         key_press_start = 0
-        last_repeat_time = 0
+        back_fired = False
     elif last_key is None or current_key != last_key:
         data.key = current_key
         data.state = lv.INDEV_STATE.PRESSED
         last_key = current_key
-        last_state = lv.INDEV_STATE.PRESSED
         key_press_start = current_time
-        last_repeat_time = current_time
+        back_fired = False
     else:
-        elapsed = time.ticks_diff(current_time, key_press_start)
-        since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
-        if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
-            next_state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
-            if current_key == lv.KEY.PREV:
-                if since_last_repeat > REPEAT_PREV_BECOMES_BACK:
-                    if __debug__: logger.debug("Long press on PREV triggered back button")
-                    data.key = lv.KEY.ESC
-                    data.state = next_state
-                    last_key = current_key
-                    last_state = data.state
-                    last_repeat_time = current_time
-                else:
-                    pass
-            else:
-                data.key = current_key
-                data.state = next_state
-                last_key = current_key
-                last_state = data.state
-                last_repeat_time = current_time
-        else:
-            # This doesn't seem to make the key navigation in on-screen keyboards work, unlike on the m5stack_fire...?
-            data.state = lv.INDEV_STATE.RELEASED
-            last_state = lv.INDEV_STATE.RELEASED
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        # Long PREV press becomes ESC (back)
+        if current_key == lv.KEY.PREV and not back_fired:
+            elapsed = time.ticks_diff(current_time, key_press_start)
+            if elapsed >= REPEAT_PREV_BECOMES_BACK:
+                data.key = lv.KEY.ESC
+                back_fired = True
 
-    # Handle ESC for back navigation (only on initial PRESSED)
+    # Handle ESC for back navigation
     if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:
         mpos.ui.back_screen()
 
