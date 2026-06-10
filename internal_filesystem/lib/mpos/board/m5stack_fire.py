@@ -120,73 +120,48 @@ btn_a = Pin(BUTTON_A, Pin.IN, Pin.PULL_UP)  # A
 btn_b = Pin(BUTTON_B, Pin.IN, Pin.PULL_UP)  # B
 btn_c = Pin(BUTTON_C, Pin.IN, Pin.PULL_UP)  # C
 
-# Key repeat configuration
-# This whole debounce logic is only necessary because LVGL 9.2.2 seems to have an issue where
-# the lv_keyboard widget doesn't handle PRESSING (long presses) properly, it loses focus.
-REPEAT_INITIAL_DELAY_MS = 300  # Delay before first repeat
-REPEAT_RATE_MS = 100  # Interval between repeats
 last_key = None
-last_state = lv.INDEV_STATE.RELEASED
-key_press_start = 0  # Time when key was first pressed
-last_repeat_time = 0  # Time of last repeat event
+key_press_start = 0
 
 # Read callback
 # Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
 # that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
 def keypad_read_cb(indev, data):
-    global last_key, last_state, key_press_start, last_repeat_time
-    since_last_repeat = 0
+    global last_key, key_press_start
 
-    # Check buttons
-    current_key = None
+    btn_a_pressed = btn_a.value() == 0
+    btn_b_pressed = btn_b.value() == 0
+    btn_c_pressed = btn_c.value() == 0
     current_time = time.ticks_ms()
-    if btn_a.value() == 0:
-        current_key = lv.KEY.PREV
-    elif btn_b.value() == 0:
-        current_key = lv.KEY.ENTER
-    elif btn_c.value() == 0:
-        current_key = lv.KEY.NEXT
 
-    if (btn_a.value() == 0) and (btn_c.value() == 0):
+    if btn_a_pressed and btn_c_pressed:
         current_key = lv.KEY.ESC
-
-    # Key repeat logic
-    if current_key:
-        if current_key != last_key:
-            # New key press
-            data.key = current_key
-            data.state = lv.INDEV_STATE.PRESSED
-            last_key = current_key
-            last_state = lv.INDEV_STATE.PRESSED
-            key_press_start = current_time
-            last_repeat_time = current_time
-        else: # same key
-            # Key held: Check for repeat
-            elapsed = time.ticks_diff(current_time, key_press_start)
-            since_last_repeat = time.ticks_diff(current_time, last_repeat_time)
-            if elapsed >= REPEAT_INITIAL_DELAY_MS and since_last_repeat >= REPEAT_RATE_MS:
-                # Send a new PRESSED/RELEASED pair for repeat
-                data.key = current_key
-                data.state = lv.INDEV_STATE.PRESSED if last_state == lv.INDEV_STATE.RELEASED else lv.INDEV_STATE.RELEASED
-                last_state = data.state
-                last_repeat_time = current_time
-            else:
-                # No repeat yet, send RELEASED to avoid PRESSING
-                data.state = lv.INDEV_STATE.RELEASED
-                last_state = lv.INDEV_STATE.RELEASED
+    elif btn_a_pressed:
+        current_key = lv.KEY.PREV
+    elif btn_b_pressed:
+        current_key = lv.KEY.ENTER
+    elif btn_c_pressed:
+        current_key = lv.KEY.NEXT
     else:
-        # No key pressed
+        current_key = None
+
+    if current_key is None:
         data.key = last_key if last_key else lv.KEY.ENTER
         data.state = lv.INDEV_STATE.RELEASED
         last_key = None
-        last_state = lv.INDEV_STATE.RELEASED
         key_press_start = 0
-        last_repeat_time = 0
+    elif last_key is None or current_key != last_key:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        last_key = current_key
+        key_press_start = current_time
+    else:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
 
     # Handle ESC for back navigation (only on initial PRESSED)
-    if last_state == lv.INDEV_STATE.PRESSED:
-        if current_key == lv.KEY.ESC and since_last_repeat == 0:
-            mpos.ui.back_screen()
+    if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:
+        mpos.ui.back_screen()
 
 group = lv.group_get_default()
 
