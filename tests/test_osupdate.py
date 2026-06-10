@@ -621,19 +621,19 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
     def test_update_install_button_newer(self):
         self.app._update_install_button("newer")
         label = self.mock_button.get_child(0)
-        self.assertEqual(label.get_text(), "Install\nnew\nversion")
+        self.assertEqual(label.get_text(), "Install new version")
         self.assertFalse(self.mock_button.is_disabled())
 
     def test_update_install_button_same(self):
         self.app._update_install_button("same")
         label = self.mock_button.get_child(0)
-        self.assertEqual(label.get_text(), "Reinstall\nsame\nversion")
+        self.assertEqual(label.get_text(), "Install same version")
         self.assertFalse(self.mock_button.is_disabled())
 
     def test_update_install_button_older(self):
         self.app._update_install_button("older")
         label = self.mock_button.get_child(0)
-        self.assertEqual(label.get_text(), "Install\nold\nversion")
+        self.assertEqual(label.get_text(), "Install old version")
         self.assertFalse(self.mock_button.is_disabled())
 
     def test_sync_ui_update_available(self):
@@ -645,7 +645,7 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
         }
         self.app._sync_ui(UpdateState.UPDATE_AVAILABLE)
         label = self.mock_button.get_child(0)
-        self.assertEqual(label.get_text(), "Install\nnew\nversion")
+        self.assertEqual(label.get_text(), "Install new version")
         self.assertFalse(self.mock_button.is_disabled())
 
     def test_sync_ui_no_update(self):
@@ -657,7 +657,7 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
         }
         self.app._sync_ui(UpdateState.NO_UPDATE)
         label = self.mock_button.get_child(0)
-        self.assertEqual(label.get_text(), "Reinstall\nsame\nversion")
+        self.assertEqual(label.get_text(), "Install same version")
         self.assertFalse(self.mock_button.is_disabled())
 
     def test_sync_ui_waiting_wifi(self):

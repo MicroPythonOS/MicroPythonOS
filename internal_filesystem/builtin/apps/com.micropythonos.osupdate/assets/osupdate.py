@@ -34,25 +34,30 @@ class OSUpdate(Activity):
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
 
-        lv.group_get_default().add_obj(self.main_screen)
-
         self.current_version_label = lv.label(self.main_screen)
         self.current_version_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
         self.current_version_label.set_text(f"Installed OS version: {BuildInfo.version.release}")
         self.current_version_label.set_width(lv.pct(75))
         self.current_version_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.install_button = lv.button(self.main_screen)
-        self.install_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
+
+        button_row = lv.obj(self.main_screen)
+        button_row.set_width(lv.pct(100))
+        button_row.set_height(lv.SIZE_CONTENT)
+        button_row.set_style_border_width(0, lv.PART.MAIN)
+        button_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        button_row.set_style_pad_all(5, lv.PART.MAIN)
+        button_row.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(1))
+
+        self.install_button = lv.button(button_row)
         self.install_button.add_state(lv.STATE.DISABLED)
-        self.install_button.set_size(lv.SIZE_CONTENT, lv.pct(25))
+        self.install_button.set_flex_grow(3)
         self.install_button.add_event_cb(lambda e: self.install_button_click(), lv.EVENT.CLICKED, None)
         install_label = lv.label(self.install_button)
-        install_label.set_text("No\nUpdate")
+        install_label.set_text("No update")
         install_label.center()
 
-        self.check_again_button = lv.button(self.main_screen)
-        self.check_again_button.align(lv.ALIGN.BOTTOM_MID, 0, -10)
-        self.check_again_button.set_size(lv.SIZE_CONTENT, lv.pct(15))
+        self.check_again_button = lv.button(button_row)
+        self.check_again_button.set_flex_grow(1)
         self.check_again_button.add_event_cb(lambda e: self.check_again_click(), lv.EVENT.CLICKED, None)
         self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         check_again_label = lv.label(self.check_again_button)
@@ -60,19 +65,20 @@ class OSUpdate(Activity):
         check_again_label.center()
 
         self.status_label = lv.label(self.main_screen)
-        self.status_label.align_to(self.current_version_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(5))
+        self.status_label.set_text("")
+        self.status_label.set_width(lv.pct(100))
+        self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.status_label.align_to(button_row, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(2))
         self.setContentView(self.main_screen)
 
     def onResume(self, screen):
-        from osupdate_core import UpdateState
-
         super().onResume(screen)
+        from osupdate_core import UpdateState
         self._ensure_update_manager()
         self._um.set_state_callback(self._on_um_state_change)
         self._um.suppress_notifications = True
         current_state = self._um.get_state()
         self._sync_ui(current_state)
-
         if current_state == UpdateState.IDLE:
             self._um.check_for_update_now()
 
@@ -129,15 +135,16 @@ class OSUpdate(Activity):
             self.status_label.set_text("Download paused - waiting for WiFi...")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         elif state == UpdateState.ERROR:
+            self.status_label.set_text("Failed to check for updates. Check your connection and tap 'Check Again' to retry.")
             self.check_again_button.remove_flag(lv.obj.FLAG.HIDDEN)
 
     def _update_install_button(self, comparison):
         if comparison == "newer":
-            text = "Install\nnew\nversion"
+            text = "Install new version"
         elif comparison == "older":
-            text = "Install\nold\nversion"
+            text = "Install old version"
         else:
-            text = "Reinstall\nsame\nversion"
+            text = "Install same version"
         install_label = self.install_button.get_child(0)
         install_label.set_text(text)
         install_label.center()
