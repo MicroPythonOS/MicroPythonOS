@@ -136,6 +136,10 @@ echo "Refreshing freezefs..."
 "$codebasedir"/scripts/freezefs_mount_builtin.sh
 
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
+	# Cleanup compiled .py files, otherwise if one from lib/ gets delected, the old .mpy might be used
+	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/frozen_mpy 2>/dev/null
+	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/frozen_mpy 2>/dev/null
+
 	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
 	pushd "$codebasedir"/lvgl_micropython/lib/micropython
 	patch -p1 --forward < ../../esp32_inisetup_warn_and_format.patch || true
@@ -215,6 +219,9 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
     set +x
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
+	# Cleanup compiled .py files, otherwise if one from lib/ gets delected, the old .mpy might be used
+	rm -r ./lvgl_micropython/lib/micropython/ports/unix/build-standard/frozen_mpy 2>/dev/null
+
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
 

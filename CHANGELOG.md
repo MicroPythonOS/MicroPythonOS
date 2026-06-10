@@ -13,6 +13,7 @@ Builtin Apps:
 OS:
 - Mount LittleFS2 internal filesystem progsize=256 to match the ESP32 SPI flash hardware page, avoiding read-modify-write cycles.
 - Mount LittleFS2 internal filesystem with readsize=256 to align flash reads for better efficiency.
+- Move Nostr userlist from internal_filesystem/lib/userlist.py micropython-nostr/userlist.py
 
 0.12.1
 ======
