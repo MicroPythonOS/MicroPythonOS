@@ -2,6 +2,8 @@ import ssl
 import json
 import time
 
+from wallet import ensure_lightning_prefix
+
 from mpos import Service, TaskManager
 
 from nostr.relay_manager import RelayManager
@@ -32,7 +34,7 @@ def format_timestamp(timestamp):
             time_tuple[0], time_tuple[1], time_tuple[2],
             time_tuple[3], time_tuple[4]
         )
-    except:
+    except Exception:
         return str(timestamp)
 
 
@@ -143,6 +145,12 @@ class NostrManager:
         self._polls_since_last_event = 0
         self._last_nwc_poll = 0
         self._relays_configured = False
+        # How many transactions list_transactions requests. Kept in sync
+        # with the wallet's PAYMENTS_TO_SHOW (the per-slot "Transactions
+        # Shown" slider, 1..21) via NWCWallet's PAYMENTS_TO_SHOW property —
+        # without that link, NWC would always fetch the class default while
+        # LNBits (limit=) and on-chain (pageSize=) honour the user setting.
+        self._nwc_list_limit = 6
 
         # Nostr app state
         self.events = []
@@ -230,6 +238,15 @@ class NostrManager:
         self._nwc_payments_cb = payments_cb
         self._nwc_notification_cb = notification_cb
 
+    def set_nwc_list_limit(self, n):
+        """Set how many transactions list_transactions requests. Clamped
+        defensively to 1..100 (matches the on-chain wallet's pageSize
+        guard); the Settings slider only produces 1..21."""
+        try:
+            self._nwc_list_limit = max(1, min(int(n), 100))
+        except (TypeError, ValueError):
+            pass
+
     def set_events_updated_callback(self, cb):
         self._events_updated_cb = cb
 
@@ -255,8 +272,15 @@ class NostrManager:
 
     def configure_nwc(self, nwc_url):
         """Configure and start NWC subscriptions."""
+        from mpos.util import urldecode
 
         if self._nwc_nwc_url == nwc_url:
+            # Same URL — config unchanged, but the main task may have been
+            # torn down by a stop()/start() cycle in between (e.g.
+            # NostrClientService.onDestroy). Without this, reconfiguring
+            # with an identical URL after a manager restart would leave NWC
+            # permanently dead: no main task, nothing polling.
+            self._ensure_main_task()
             return
 
         relays, wallet_pubkey, secret, lud16 = self._parse_nwc_url(nwc_url)
@@ -329,9 +353,11 @@ class NostrManager:
                     self._relays_configured = True
             if not self.keep_running:
                 return
-            for relay in (self._nostr_relay or []):
-                if relay:
-                    self.relay_manager.add_relay(relay)
+            # _nostr_relay is a single URL string, not a list — iterating
+            # it (as this code once did) would add each CHARACTER as a
+            # relay. Mirror the add at the top of _run().
+            if self._nostr_configured and self._nostr_relay:
+                self.relay_manager.add_relay(self._nostr_relay)
             for relay in self._nwc_relays:
                 self.relay_manager.add_relay(relay)
             if not self.relay_manager.relays:
@@ -388,7 +414,7 @@ class NostrManager:
             self.relay_manager.publish_message(json.dumps(req))
             print("NostrManager: subscribed to NWC responses")
             if self._nwc_lud16:
-                self._handle_nwc_static_receive_code(self._nwc_lud16)
+                self._handle_nwc_static_receive_code(ensure_lightning_prefix(self._nwc_lud16))
 
         self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
 
@@ -579,7 +605,7 @@ class NostrManager:
             return
         list_transactions = {
             "method": "list_transactions",
-            "params": {"limit": 6}
+            "params": {"limit": self._nwc_list_limit}
         }
         dm = EncryptedDirectMessage(
             recipient_pubkey=self._nwc_wallet_pubkey,

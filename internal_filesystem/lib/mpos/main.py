@@ -2,6 +2,7 @@
 # raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
 
 if __debug__:
+    # Weird, this is always set, even when doing a normal "production" build?
     print("__debug__ is set so code compiled with opt_level 0")
 else:
     print("__debug__ is not set so code compiled with opt_level > 0")
