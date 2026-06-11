@@ -45,14 +45,13 @@ class Confetti:
         self.spawn_timer = 0
         self.spawn_interval = 0.15  # seconds
         self.animation_start = 0
-
         
         # Pre-create LVGL image objects
         self._init_images()
     
     def _init_images(self):
-        """Pre-create LVGL image objects for confetti using random emoji images."""
-        emoji_files = []
+        """Pre-create LVGL image objects for confetti."""
+        asset_files = []
         dir_path = self.asset_path
         if dir_path.startswith("M:"):
             dir_path = dir_path[2:]
@@ -60,20 +59,20 @@ class Confetti:
             for entry in os.listdir(dir_path):
                 name = entry[0] if isinstance(entry, tuple) else entry
                 if name.lower().endswith(".png"):
-                    emoji_files.append(name)
+                    asset_files.append(name)
         except OSError:
             pass
 
-        iconimages = 2
-        for _ in range(iconimages):
-            img = lv.image(lv.layer_top())
-            img.set_src(f"{self.icon_path}icon_64x64.png")
-            img.add_flag(lv.obj.FLAG.HIDDEN)
-            self.confetti_images.append(img)
+        # One icon image
+        img = lv.image(lv.layer_top())
+        img.set_src(f"{self.icon_path}icon_64x64.png")
+        img.add_flag(lv.obj.FLAG.HIDDEN)
+        self.confetti_images.append(img)
 
-        for i in range(self.max_confetti - iconimages):
+        # Rest are random images from asset_path
+        for _ in range(self.max_confetti - 1):
             img = lv.image(lv.layer_top())
-            src = f"{self.asset_path}{random.choice(emoji_files)}" if emoji_files else self.asset_path
+            src = f"{self.asset_path}{random.choice(asset_files)}" if asset_files else self.asset_path
             img.set_src(src)
             img.add_flag(lv.obj.FLAG.HIDDEN)
             self.confetti_images.append(img)
@@ -96,7 +95,10 @@ class Confetti:
             self._spawn_one()
         
         self.update_timer = lv.timer_create(self._update_frame, 16, None) # max 60 fps = 16ms/frame
-    
+
+        # Stop spawning after duration
+        lv.timer_create(self.stop, self.duration, None).set_repeat_count(1)
+
     def stop(self, timer=None):
         """Stop the confetti animation."""
         self.is_running = False

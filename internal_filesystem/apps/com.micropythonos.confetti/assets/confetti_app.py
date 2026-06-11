@@ -8,13 +8,13 @@ class ConfettiApp(Activity):
 
     ASSET_PATH = "M:builtin/res/emojis/32x32/"
     ICON_PATH = "M:apps/com.micropythonos.confetti/res/mipmap-mdpi/"
-    confetti_duration = 60 * 1000
 
     confetti = None
 
     def onCreate(self):
         main_screen = lv.obj()
-        self.confetti = Confetti(main_screen, self.ICON_PATH, self.ASSET_PATH, self.confetti_duration)
+        import sys
+        self.confetti = Confetti(main_screen, self.ICON_PATH, self.ASSET_PATH, sys.maxsize)
         print("created ", self.confetti)
         self.setContentView(main_screen)
 
