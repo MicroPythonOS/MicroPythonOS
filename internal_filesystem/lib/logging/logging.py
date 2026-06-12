@@ -23,7 +23,7 @@ _level_dict = {
 
 _loggers = {}
 _stream = sys.stderr
-_default_fmt = "%(levelname)s:%(name)s:%(message)s"
+_default_fmt = "%(asctime)s:%(levelname)s:%(name)s:%(message)s"
 _default_datefmt = "%Y-%m-%d %H:%M:%S"
 
 
@@ -91,7 +91,7 @@ class Formatter:
     def formatTime(self, datefmt, record):
         if hasattr(time, "strftime"):
             return time.strftime(datefmt, time.localtime(record.ct))
-        return None
+        return time.ticks_ms() # if there's no time format, then just return raw ms since uptime
 
     def format(self, record):
         if self.usesTime():
