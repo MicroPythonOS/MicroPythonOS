@@ -272,8 +272,6 @@ class NostrManager:
 
     def configure_nwc(self, nwc_url):
         """Configure and start NWC subscriptions."""
-        from mpos.util import urldecode
-
         if self._nwc_nwc_url == nwc_url:
             # Same URL — config unchanged, but the main task may have been
             # torn down by a stop()/start() cycle in between (e.g.
