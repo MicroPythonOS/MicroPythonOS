@@ -12,6 +12,7 @@ Builtin Apps:
 - HowTo: fix checkbox being persisted unnecessarily
 
 OS:
+- Print warning about limited aiorepl and how to enable full REPL shell
 - Mount LittleFS2 internal filesystem progsize=256 to match the ESP32 SPI flash hardware page, avoiding read-modify-write cycles.
 - Mount LittleFS2 internal filesystem with readsize=256 to align flash reads for better efficiency.
 - Move Nostr userlist from internal_filesystem/lib/userlist.py micropython-nostr/userlist.py
