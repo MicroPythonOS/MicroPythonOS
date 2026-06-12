@@ -8,11 +8,14 @@ Board Support:
 - m5stack_fire.py: remove old LVGL 9.2 workaround for button repeat handling
 
 Builtin Apps:
+- AppStore: wait at least 2 minutes before checking for app updates
 - HowTo: fix checkbox being persisted unnecessarily
 - Launcher: speed up by removing icon image hasing
 - OSUpdate: improve layout, focus handling, UI
+- OSUpdate: wait at least 2 minutes before checking for app updates
 
 OS:
+- Increase LV_IMAGE_HEADER_CACHE_DEF_CNT from 24 to 64 to fit enough app icons
 - Logging: add timestamp (milliseconds since startup) for improved performance debugging
 - Mount LittleFS2 internal filesystem progsize=256 to match the ESP32 SPI flash hardware page, avoiding read-modify-write cycles.
 - Mount LittleFS2 internal filesystem with readsize=256 to align flash reads for better efficiency.
