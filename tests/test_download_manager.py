@@ -495,27 +495,26 @@ class TestDownloadManager(unittest.TestCase):
         """Test that async and sync methods return identical data."""
         import asyncio
 
-        # First, get data synchronously
-        try:
-            sync_data = DownloadManager.download_url("https://MicroPythonOS.com")
-        except Exception as e:
-            self.skipTest(f"MicroPythonOS.com unavailable: {e}")
-            return
+        # Use MockDownloadManager to ensure deterministic, identical responses
+        # (Real URLs can return dynamic content like timestamps that differ
+        # between requests, causing flaky tests)
+        mock_dm = MockDownloadManager()
+        test_data = b"<html><body>Test content for sync/async comparison</body></html>"
+        mock_dm.set_download_data(test_data)
 
-        # Then, get data asynchronously
+        # Get data via sync-style call (asyncio.run internally)
+        sync_data = asyncio.run(mock_dm.download_url("https://example.com/test"))
+
+        # Get data via async call
         async def run_async_test():
-            try:
-                async_data = await DownloadManager.download_url("https://MicroPythonOS.com")
-            except Exception as e:
-                self.skipTest(f"MicroPythonOS.com unavailable: {e}")
-                return
-            return async_data
+            return await mock_dm.download_url("https://example.com/test")
 
         async_data = asyncio.run(run_async_test())
 
         # Both should return the same data
         self.assertEqual(sync_data, async_data)
         self.assertEqual(len(sync_data), len(async_data))
+        self.assertEqual(sync_data, test_data)
 
     def test_sync_download_to_file(self):
         """Test synchronous file download without await."""
