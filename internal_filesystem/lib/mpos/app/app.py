@@ -34,34 +34,32 @@ class App:
         self.activities = activities or []
         self.services = services or []
         self.installed_path = installed_path
-
-        self.icon_path = self._find_icon_path()
-        if self.icon_path:
-            self.icon_data = self._load_icon_data(self.icon_path)
-        else:
-            self.icon_data = None
         self.main_launcher_activity = self._find_main_launcher_activity()
+        if self.fullname != "Unknown":
+            self._load_icon_data()
 
     def __str__(self):
         return f"App({self.name}, version {self.version}, {self.category})"
 
-    def _load_icon_data(self, icon_path):
-        try:
-            f =  open(icon_path, 'rb')
-            return f.read()
-        except Exception:
-            pass
-
-    def _check_icon_path(self, tocheck):
-        try:
-            st = os.stat(tocheck)
-            return tocheck
-        except Exception:
-            return None
-
-    def _find_icon_path(self):
+    def _load_icon_data(self):
         fullpath = "apps/" + self.fullname + "/res/mipmap-mdpi/icon_64x64.png"
-        return self._check_icon_path(fullpath) or self._check_icon_path("builtin/" + fullpath)
+        # For speed, ESP32 internal LittleFS is slowest so first look where we expect to find those:
+        self.icon_path, self.icon_data = App._try_load_icon_data(fullpath)
+        if self.icon_path:
+            return
+        # Then builtin relative path, works both on ESP32 as desktop (relative)
+        self.icon_path, self.icon_data = App._try_load_icon_data("builtin/" + fullpath)
+        if self.icon_path:
+            return
+        # Desktop builds with only frozen apps:
+        self.icon_path, self.icon_data = App._try_load_icon_data("/builtin/" + fullpath)
+        if self.icon_path:
+            return
+        # Currently no use case for this, so skip it for speed:
+        #self.icon_path, self.icon_data = App._try_load_icon_data("/" + fullpath)
+        #if self.icon_path:
+        #    return
+        logger.warning(f"Could not find icon for {self.fullname}")
 
     def _find_main_launcher_activity(self):
         for act in self.activities:
@@ -99,4 +97,12 @@ class App:
             services=data.get("services", default.services),
             installed_path=appdir,
         )
+
+    @classmethod
+    def _try_load_icon_data(self, icon_path):
+        try:
+            with open(icon_path, 'rb') as f:
+                return icon_path, f.read()
+        except Exception:
+            return None, None
 

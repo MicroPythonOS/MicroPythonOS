@@ -18,6 +18,9 @@ Builtin Apps:
 - OSUpdate: improve layout, focus handling, UI
 - OSUpdate: wait at least 2 minutes before checking for app updates
 
+Frameworks:
+- AppManager: look for apps with both absolute and relative paths
+
 OS:
 - Increase LV_IMAGE_HEADER_CACHE_DEF_CNT from 24 to 64 to fit enough app icons
 - fs_driver.py: fix one failed M:/ load from breaking all future M: loads
@@ -26,6 +29,7 @@ OS:
 - Mount LittleFS2 internal filesystem with readsize=256 to align flash reads for better efficiency.
 - Move Nostr userlist from internal_filesystem/lib/userlist.py micropython-nostr/userlist.py
 - Print warning about limited aiorepl and how to enable full REPL shell
+- macOS/unix builds: auto import main (like on ESP32) so it works without any internal_filesystem directory
 
 0.12.1
 ======

@@ -104,9 +104,11 @@ class AppManager:
         cls.clear()                     # <-- this guarantees both containers are empty
         seen = set()                     # avoid processing the same fullname twice
         apps_dir         = "apps"
-        apps_dir_builtin = "builtin/apps"
-
-        for base in (apps_dir, apps_dir_builtin): # added apps override builtin apps
+        apps_dir_builtin = "builtin/" + apps_dir
+        # relative paths are here for local-file desktop runs and also ESP32 builds
+        # "/" + apps_dir_builtin is here for frozen-only desktop runs (no local files)
+        # "/" + apps_dir_builtin is not here because there's no use case for it currently
+        for base in (apps_dir, apps_dir_builtin, "/" + apps_dir_builtin):
             try:
                 # ---- does the directory exist? --------------------------------
                 st = os.stat(base)
