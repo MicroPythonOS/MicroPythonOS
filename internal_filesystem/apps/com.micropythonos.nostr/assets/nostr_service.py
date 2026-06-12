@@ -2,8 +2,6 @@ import ssl
 import json
 import time
 
-from wallet import ensure_lightning_prefix
-
 from mpos import Service, TaskManager
 
 from nostr.relay_manager import RelayManager
