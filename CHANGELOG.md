@@ -11,6 +11,7 @@ Board Support:
 - m5stack_fire.py: remove old LVGL 9.2 workaround for button repeat handling
 
 Builtin Apps:
+- AppStore: fix focus border around action button
 - AppStore: wait at least 2 minutes before checking for app updates
 - HowTo: fix checkbox being persisted unnecessarily
 - Launcher: speed up by removing icon image hasing

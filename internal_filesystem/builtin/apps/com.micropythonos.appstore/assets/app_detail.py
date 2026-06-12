@@ -170,6 +170,7 @@ class AppDetail(Activity):
         buttoncont.clean()
         if __debug__: logger.debug("adding (un)install button for url: %s", self.app.download_url)
         self.install_button = lv.button(buttoncont)
+        self.install_button.set_style_margin_all(5, lv.PART.MAIN) # without margin, the focus board isnt visible
         self.install_button.add_event_cb(lambda e, a=self.app: self.toggle_install(a), lv.EVENT.CLICKED, None)
         self.install_button.set_size(lv.pct(100), 40)
         self.install_label = lv.label(self.install_button)
