@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.12.2
+======
+
 Board Support:
 - lilygo_t_display_s3.py: remove old LVGL 9.2 workaround for button repeat handling
 - m5stack_fire.py: remove old LVGL 9.2 workaround for button repeat handling
