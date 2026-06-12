@@ -31,7 +31,7 @@ class AIOReplService(Service):
         from ..task_manager import TaskManager
 
         async def asyncio_repl():
-            if __debug__: logger.debug("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
+            logger.warning("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
             await aiorepl.task(g={"lv": lv, "mpos": mpos}, prompt=">>> ")
         TaskManager.create_task(asyncio_repl())
 
