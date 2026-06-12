@@ -4,6 +4,7 @@ from mpos import Activity, SharedPreferences, DisplayMetrics
 import lvgl as lv
 
 logger = logging.getLogger(__name__)
+#logger.setLevel(logging.DEBUG)
 
 class HowTo(Activity):
 
@@ -92,13 +93,14 @@ class HowTo(Activity):
             self.dontshow_checkbox.add_state(lv.STATE.CHECKED)
 
     def onPause(self, screen):
+        if __debug__: logger.debug("howto app onPause called")
         checked = self.dontshow_checkbox.get_state() & lv.STATE.CHECKED
         if checked:
             new_value = "" # None might result in the OS starting it, empty string means explictly don't start it
         else:
             new_value = self.appname
 
-        old_value = self.prefs.get_string("auto_start_app_early")
+        old_value = self.prefs.get_string("auto_start_app_early", "com.micropythonos.howto") # same default as lib/mpos/main.py
         if old_value == new_value:
             return
 

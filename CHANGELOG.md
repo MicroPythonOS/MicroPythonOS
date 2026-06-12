@@ -9,6 +9,7 @@ Board Support:
 
 Builtin Apps:
 - OSUpdate: improve layout, focus handling, UI
+- HowTo: fix checkbox being persisted unnecessarily
 
 OS:
 - Mount LittleFS2 internal filesystem progsize=256 to match the ESP32 SPI flash hardware page, avoiding read-modify-write cycles.
