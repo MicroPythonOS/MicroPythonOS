@@ -10,12 +10,8 @@ error instead.
 Key behaviors tested:
 1. Valid images load successfully
 2. Invalid images fail gracefully (0x0 dimensions)
-3. After an invalid image load fails, NEW widgets can still load valid images
-4. The fs_driver logs errors but doesn't raise exceptions
-
-Known LVGL limitation: A single image widget that fails to load an invalid
-image may not recover when given a valid image path later. The workaround
-is to delete and recreate the widget.
+3. After an invalid image load fails, the SAME widget can load a valid image
+4. Multiple invalid loads don't corrupt the driver for new widgets
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_fs_driver_invalid_image.py
@@ -33,18 +29,21 @@ class TestFsDriverInvalidImage(GraphicalTestCase):
 
     # Known working image path in the filesystem
     VALID_IMAGE_PATH = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png"
+    # Fixed invalid path
+    INVALID_IMAGE_PATH = "M:/path/to/nonexistent_image.png"
 
-    @staticmethod
-    def _unique_invalid_path():
-        """Generate a unique invalid path to avoid any caching issues."""
-        return f"M:/nonexistent/{time.ticks_ms()}.png"
+    def _wait_ui(self, seconds=0.5):
+        """Wait for UI to fully update - combines render cycles with real time."""
+        self.wait_for_render(20)
+        time.sleep(seconds)
+        self.wait_for_render(20)
 
     def test_01_valid_image_loads(self):
         """Verify that a valid image loads successfully."""
         img = lv.image(self.screen)
         img.set_src(self.VALID_IMAGE_PATH)
         img.center()
-        self.wait_for_render(20)
+        self._wait_ui()
 
         w = img.get_width()
         h = img.get_height()
@@ -56,57 +55,125 @@ class TestFsDriverInvalidImage(GraphicalTestCase):
         """Confirm that loading an invalid image path fails gracefully."""
         img = lv.image(self.screen)
 
-        invalid_path = self._unique_invalid_path()
-        print(f"Attempting to load invalid image: {invalid_path}")
-        img.set_src(invalid_path)
+        print(f"Attempting to load invalid image: {self.INVALID_IMAGE_PATH}")
+        img.set_src(self.INVALID_IMAGE_PATH)
         img.center()
-        self.wait_for_render(20)
+        self._wait_ui()
 
         w = img.get_width()
         h = img.get_height()
         print(f"Invalid image dimensions: {w}x{h}")
-        # Image should have zero dimensions since it failed to load
         self.assertEqual(w, 0, "Invalid image should have width == 0")
         self.assertEqual(h, 0, "Invalid image should have height == 0")
 
-    def test_03_new_widget_loads_valid_after_invalid(self):
+    def test_03_same_widget_invalid_then_valid(self):
         """
-        Verify that a NEW widget can load a valid image after another widget
-        failed to load an invalid image.
+        Test that the SAME widget can load a valid image after failing to load
+        an invalid image.
 
-        This is the key test for the fs_driver fix - it ensures that a failed
-        load doesn't corrupt global state and prevent subsequent valid loads.
+        This is the key test for the fs_driver fix. When _fs_open_cb raised
+        RuntimeError, it could corrupt internal state and prevent the same
+        widget from loading valid images afterwards. With the fix (returning
+        None instead of raising), recovery should work.
         """
-        # First, create a widget and try to load an INVALID path
-        img_bad = lv.image(self.screen)
-        invalid_path = self._unique_invalid_path()
-        print(f"Step 1: Loading INVALID image: {invalid_path}")
-        img_bad.set_src(invalid_path)
-        img_bad.align(lv.ALIGN.TOP_MID, 0, 10)
-        self.wait_for_render(20)
+        img = lv.image(self.screen)
+        img.center()
 
-        bad_w = img_bad.get_width()
-        bad_h = img_bad.get_height()
-        print(f"Invalid image dimensions: {bad_w}x{bad_h}")
-        self.assertEqual(bad_w, 0, "Invalid image should fail with width == 0")
+        # First, try to load an INVALID image
+        print(f"Step 1: Loading INVALID image: {self.INVALID_IMAGE_PATH}")
+        img.set_src(self.INVALID_IMAGE_PATH)
+        self._wait_ui()
 
-        # Now, create a SECOND widget and load a VALID path
-        # This should succeed - the fix ensures invalid loads don't break the driver
-        img_good = lv.image(self.screen)
-        print(f"Step 2: Loading VALID image on new widget: {self.VALID_IMAGE_PATH}")
-        img_good.set_src(self.VALID_IMAGE_PATH)
-        img_good.align(lv.ALIGN.BOTTOM_MID, 0, -10)
-        self.wait_for_render(20)
+        w1 = img.get_width()
+        h1 = img.get_height()
+        print(f"After invalid: {w1}x{h1}")
+        self.assertEqual(w1, 0, "Invalid image should have width == 0")
 
-        good_w = img_good.get_width()
-        good_h = img_good.get_height()
-        print(f"Valid image dimensions on new widget: {good_w}x{good_h}")
+        # Now try to load a VALID image on the SAME widget
+        print(f"Step 2: Loading VALID image on same widget: {self.VALID_IMAGE_PATH}")
+        img.set_src(self.VALID_IMAGE_PATH)
+        self._wait_ui()
+
+        w2 = img.get_width()
+        h2 = img.get_height()
+        print(f"After valid: {w2}x{h2}")
 
         self.assertTrue(
-            good_w > 0,
-            f"New widget should load valid image after another widget failed, but got width={good_w}",
+            w2 > 0,
+            f"Same widget should load valid image after invalid failed, but got width={w2}",
         )
+
+    def test_04_multiple_invalid_then_new_widget_valid(self):
+        """
+        Test that after multiple invalid image loads, a NEW widget can still
+        load valid images.
+
+        This tests whether the fs_driver global state gets corrupted by
+        repeated errors.
+        """
+        # Load several invalid images on different widgets
+        print("Loading multiple invalid images...")
+        for i in range(5):
+            img = lv.image(self.screen)
+            invalid_path = f"M:/nonexistent/image_{i}.png"
+            print(f"  Loading invalid: {invalid_path}")
+            img.set_src(invalid_path)
+            img.align(lv.ALIGN.TOP_LEFT, i * 50, 10)
+            self._wait_ui(0.2)
+
+        # Give extra time for any async processing
+        self._wait_ui(1.0)
+
+        # Now create a NEW widget and try to load a valid image
+        img_valid = lv.image(self.screen)
+        print(f"Loading valid image on new widget: {self.VALID_IMAGE_PATH}")
+        img_valid.set_src(self.VALID_IMAGE_PATH)
+        img_valid.align(lv.ALIGN.BOTTOM_MID, 0, -10)
+        self._wait_ui()
+
+        w = img_valid.get_width()
+        h = img_valid.get_height()
+        print(f"Valid image dimensions on new widget: {w}x{h}")
+
         self.assertTrue(
-            good_h > 0,
-            f"New widget should load valid image after another widget failed, but got height={good_h}",
+            w > 0,
+            f"New widget should load valid image after multiple invalid loads, but got width={w}",
         )
+
+    def test_05_interleaved_invalid_valid_loads(self):
+        """
+        Test interleaving invalid and valid image loads.
+
+        This simulates a more realistic scenario where valid and invalid
+        loads might happen in unpredictable order.
+        """
+        results = []
+
+        # Interleave invalid and valid loads
+        for i in range(3):
+            # Load invalid
+            img_bad = lv.image(self.screen)
+            invalid_path = f"M:/bad/path_{i}.png"
+            print(f"Round {i+1}: Loading invalid: {invalid_path}")
+            img_bad.set_src(invalid_path)
+            img_bad.align(lv.ALIGN.TOP_LEFT, i * 100, 10)
+            self._wait_ui(0.3)
+
+            # Load valid on a new widget
+            img_good = lv.image(self.screen)
+            print(f"Round {i+1}: Loading valid: {self.VALID_IMAGE_PATH}")
+            img_good.set_src(self.VALID_IMAGE_PATH)
+            img_good.align(lv.ALIGN.TOP_LEFT, i * 100, 80)
+            self._wait_ui(0.3)
+
+            w = img_good.get_width()
+            h = img_good.get_height()
+            print(f"Round {i+1}: Valid image dimensions: {w}x{h}")
+            results.append((w, h))
+
+        # All valid images should have loaded successfully
+        for i, (w, h) in enumerate(results):
+            self.assertTrue(
+                w > 0,
+                f"Round {i+1}: Valid image should have loaded, but got width={w}",
+            )
