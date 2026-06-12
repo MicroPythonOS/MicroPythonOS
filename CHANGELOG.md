@@ -71,7 +71,7 @@ Builtin Apps:
 - AppStore: add 'Update All' functionality, redesign with split between UI and Service logic
 - Launcher: show splash screen (app icon centered) while starting an app
 - OSUpdate: redesign with split between UI and Service logic
-- Settings: new "Haptic feedback" enable/disable setting
+- Settings: new 'Haptic feedback' enable/disable setting
 
 Frameworks:
 - Add Services with intent filter boot_completed
