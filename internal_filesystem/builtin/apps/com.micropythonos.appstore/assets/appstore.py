@@ -360,6 +360,7 @@ class AppStore(Activity):
                 if __debug__: logger.debug("app stopping, aborting icon downloads")
                 break
             if not app.icon_data:
+                logger.warning("downloading icon for %s from %s", app.fullname, app.icon_url)
                 try:
                     app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
                 except Exception as e:
