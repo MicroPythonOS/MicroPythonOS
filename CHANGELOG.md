@@ -9,6 +9,7 @@ Put unreleased changes here!
 Board Support:
 - lilygo_t_display_s3.py: remove old LVGL 9.2 workaround for button repeat handling
 - m5stack_fire.py: remove old LVGL 9.2 workaround for button repeat handling
+- esp32-small: reduce app partition size from 3.9M to 3.7M
 
 Builtin Apps:
 - AppStore: fix focus border around action button
