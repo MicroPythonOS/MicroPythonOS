@@ -2,8 +2,6 @@ import logging
 import lvgl as lv
 import math
 import time
-import uhashlib
-import ubinascii
 
 from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics
 
@@ -13,13 +11,11 @@ logger = logging.getLogger(__name__)
 # Potential settings menu:
 # - background image
 # - show splash icon or not when starting an app
-# - always refresh icons (hash them)
 
 class Launcher(Activity):
     def __init__(self):
         super().__init__()
-        # Cache of the last app list + a quick hash of the icons
-        self._last_app_list = None          # list of tuples (name, path, icon_hash)
+        self._last_app_list = None          # list of tuples (name, path)
         self._last_ui_built = False         # was UI built at least once?
         self._last_started_fullname = None  # fullname of the last app the user launched
         self._app_cont_map = {}             # fullname -> app_cont widget
@@ -40,46 +36,23 @@ class Launcher(Activity):
         self._screen = main_screen
         self.setContentView(main_screen)
 
-    # ------------------------------------------------------------------
-    # Helper: compute a cheap hash of a file (or return None if missing)
-    @staticmethod
-    def _hash_file(path):
-        if __debug__: logger.debug(f"hasing file {path}")
-        try:
-            with open(path, "rb") as f:
-                h = uhashlib.sha1()
-                while True:
-                    data = f.read(1024)
-                    if not data:
-                        break
-                    h.update(data)
-                return ubinascii.hexlify(h.digest()).decode()
-        except Exception:
-            return None
-
-    # ------------------------------------------------------------------
     def onResume(self, screen):
         # If we were showing a splash, force a full rebuild to clean up
         self._exit_splash_mode(screen)
 
-        # ------------------------------------------------------------------
-        # 1. Build a *compact* representation of the current app list
         current_apps = []
         for app in AppManager.get_app_list():
             if app.category == "launcher":
                 continue
-            #icon_hash = Launcher._hash_file(app.icon_path)   # cheap SHA-1 of the icon file
-            icon_hash = "disabled" # quite slow and not really needed
-            current_apps.append((app.name, app.installed_path, icon_hash))
+            current_apps.append((app.name, app.installed_path))
 
-        # ------------------------------------------------------------------
-        # 2. Compare with the cached list – if identical we skip UI rebuild
+        # Compare with the cached list – if identical we skip UI rebuild
         start = time.ticks_ms()
         rebuild_needed = True
 
         if (self._last_app_list is not None and
             len(self._last_app_list) == len(current_apps)):
-            # element-wise compare (name, path, icon_hash)
+            # element-wise compare (name, path)
             if all(a == b for a, b in zip(self._last_app_list, current_apps)):
                 rebuild_needed = False
 
@@ -91,8 +64,7 @@ class Launcher(Activity):
         else:
             if __debug__: logger.debug("rebuild needed of launcher")
 
-        # ------------------------------------------------------------------
-        # 3. UI needs (re)building – clear screen and create widgets
+        # UI needs (re)building – clear screen and create widgets
         screen.clean()
         self._app_cont_map = {}
 
@@ -150,8 +122,7 @@ class Launcher(Activity):
             focusgroup.add_obj(app_cont)
             self._app_cont_map[app.fullname] = app_cont
 
-        # ------------------------------------------------------------------
-        # 4. Store the new representation for the next resume
+        # Store the new representation for the next resume
         self._last_app_list = current_apps
         self._last_ui_built = True
 
@@ -160,7 +131,6 @@ class Launcher(Activity):
 
         self._focus_last_or_first()
 
-    # ------------------------------------------------------------------
     def _launch_app(self, fullname):
         """Record which app was launched, show splash screen, then start it."""
         self._last_started_fullname = fullname
@@ -222,7 +192,6 @@ class Launcher(Activity):
         self._cleanup_splash_screen()
         screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
 
-    # ------------------------------------------------------------------
     def _focus_last_or_first(self):
         """Focus the last launched app tile, or the first tile if none was launched yet."""
         focusgroup = lv.group_get_default()
@@ -234,7 +203,6 @@ class Launcher(Activity):
         else:
             focusgroup.focus_next()
 
-    # ------------------------------------------------------------------
     @staticmethod
     def create_icon_dsc(icon_path):
         with open(icon_path, 'rb') as f:
@@ -245,7 +213,6 @@ class Launcher(Activity):
             })
         return image_dsc
 
-    # ------------------------------------------------------------------
     def focus_app_cont(self, app_cont):
         app_cont.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
         app_cont.set_style_border_width(1, lv.PART.MAIN)
