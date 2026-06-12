@@ -158,13 +158,13 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
         # No PSRAM, so do not set SPIRAM-specific options
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=
-		partition_size="3900000"
+		partition_size="3700000"
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
 	elif [ "$target" == "lilygo_t4" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
-		partition_size="3900000"
+		partition_size="3700000"
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
 	else # esp32s3 or unphone
