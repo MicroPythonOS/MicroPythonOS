@@ -1,5 +1,4 @@
 import logging
-import os
 import ujson
 
 logger = logging.getLogger(__name__)
