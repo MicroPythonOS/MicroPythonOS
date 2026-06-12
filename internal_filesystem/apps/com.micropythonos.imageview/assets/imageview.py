@@ -266,6 +266,7 @@ class ImageView(Activity):
         image_w = header.w
         image_h = header.h
         if image_w == 0 or image_h == 0:
+            print("WARNING: original image has width or height 0, returning!")
             return
         print(f"the real image has size: {header.w}x{header.h}")
         scale_factor_w = round(lvgl_w * 256 / image_w)

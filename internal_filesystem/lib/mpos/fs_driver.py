@@ -18,13 +18,15 @@ def _fs_open_cb(drv, path, mode):
     elif mode == lv.FS_MODE.WR | lv.FS_MODE.RD:
         p_mode = 'rb+'
     else:
-        raise RuntimeError("fs_open_callback() - open mode error, %s is invalid mode" % mode)
+        logger.error("fs_open_callback() - open mode error, %s is invalid mode", mode)
+        return None
 
     try:
         f = open(path, p_mode)
 
     except OSError as e:
-        raise RuntimeError("fs_open_callback(%s) exception: %s" % (path, e))
+        logger.error("fs_open_callback(%s) exception: %s", path, e)
+        return None
 
     return {'file' : f, 'path': path}
 
@@ -33,7 +35,8 @@ def _fs_close_cb(drv, fs_file):
     try:
         fs_file.__cast__()['file'].close()
     except OSError as e:
-        raise RuntimeError("fs_close_callback(%s) exception: %s" % (fs_file.__cast__()['path'], e))
+        logger.error("fs_close_callback(%s) exception: %s", fs_file.__cast__()['path'], e)
+        return lv.FS_RES.UNKNOWN
 
     return lv.FS_RES.OK
 
@@ -44,7 +47,8 @@ def _fs_read_cb(drv, fs_file, buf, btr, br):
         buf.__dereference__(btr)[0:len(tmp_data)] = tmp_data
         br.__dereference__(4)[0:4] = struct.pack("<L", len(tmp_data))
     except OSError as e:
-        raise RuntimeError("fs_read_callback(%s) exception %s" % (fs_file.__cast__()['path'], e))
+        logger.error("fs_read_callback(%s) exception: %s", fs_file.__cast__()['path'], e)
+        return lv.FS_RES.UNKNOWN
 
     return lv.FS_RES.OK
 
@@ -53,7 +57,8 @@ def _fs_seek_cb(drv, fs_file, pos, whence):
     try:
         fs_file.__cast__()['file'].seek(pos, whence)
     except OSError as e:
-        raise RuntimeError("fs_seek_callback(%s) exception %s" % (fs_file.__cast__()['path'], e))
+        logger.error("fs_seek_callback(%s) exception: %s", fs_file.__cast__()['path'], e)
+        return lv.FS_RES.UNKNOWN
 
     return lv.FS_RES.OK
 
@@ -63,7 +68,8 @@ def _fs_tell_cb(drv, fs_file, pos):
         tpos = fs_file.__cast__()['file'].tell()
         pos.__dereference__(4)[0:4] = struct.pack("<L", tpos)
     except OSError as e:
-        raise RuntimeError("fs_tell_callback(%s) exception %s" % (fs_file.__cast__()['path'], e))
+        logger.error("fs_tell_callback(%s) exception: %s", fs_file.__cast__()['path'], e)
+        return lv.FS_RES.UNKNOWN
 
     return lv.FS_RES.OK
 
@@ -73,7 +79,8 @@ def _fs_write_cb(drv, fs_file, buf, btw, bw):
         wr = fs_file.__cast__()['file'].write(buf.__dereference__(btw)[0:btw])
         bw.__dereference__(4)[0:4] = struct.pack("<L", wr)
     except OSError as e:
-        raise RuntimeError("fs_write_callback(%s) exception %s" % (fs_file.__cast__()['path'], e))
+        logger.error("fs_write_callback(%s) exception: %s", fs_file.__cast__()['path'], e)
+        return lv.FS_RES.UNKNOWN
 
     return lv.FS_RES.OK
 

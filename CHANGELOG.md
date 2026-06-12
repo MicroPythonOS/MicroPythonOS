@@ -19,6 +19,7 @@ Builtin Apps:
 
 OS:
 - Increase LV_IMAGE_HEADER_CACHE_DEF_CNT from 24 to 64 to fit enough app icons
+- fs_driver.py: fix one failed M:/ load from breaking all future M: loads
 - Logging: add timestamp (milliseconds since startup) for improved performance debugging
 - Mount LittleFS2 internal filesystem progsize=256 to match the ESP32 SPI flash hardware page, avoiding read-modify-write cycles.
 - Mount LittleFS2 internal filesystem with readsize=256 to align flash reads for better efficiency.
