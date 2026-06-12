@@ -8,8 +8,9 @@ Board Support:
 - m5stack_fire.py: remove old LVGL 9.2 workaround for button repeat handling
 
 Builtin Apps:
-- OSUpdate: improve layout, focus handling, UI
 - HowTo: fix checkbox being persisted unnecessarily
+- Launcher: speed up by removing icon image hasing
+- OSUpdate: improve layout, focus handling, UI
 
 OS:
 - Logging: add timestamp (milliseconds since startup) for improved performance debugging

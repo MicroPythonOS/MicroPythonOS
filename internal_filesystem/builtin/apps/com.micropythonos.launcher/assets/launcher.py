@@ -8,6 +8,12 @@ import ubinascii
 from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics
 
 logger = logging.getLogger(__name__)
+#logger.setLevel(logging.DEBUG)
+
+# Potential settings menu:
+# - background image
+# - show splash icon or not when starting an app
+# - always refresh icons (hash them)
 
 class Launcher(Activity):
     def __init__(self):
@@ -23,6 +29,7 @@ class Launcher(Activity):
 
     def onCreate(self):
         if __debug__: logger.debug("onCreate")
+
         main_screen = lv.obj()
         main_screen.set_style_border_width(0, lv.PART.MAIN)
         main_screen.set_style_radius(0, lv.PART.MAIN)
@@ -37,6 +44,7 @@ class Launcher(Activity):
     # Helper: compute a cheap hash of a file (or return None if missing)
     @staticmethod
     def _hash_file(path):
+        if __debug__: logger.debug(f"hasing file {path}")
         try:
             with open(path, "rb") as f:
                 h = uhashlib.sha1()
@@ -60,7 +68,8 @@ class Launcher(Activity):
         for app in AppManager.get_app_list():
             if app.category == "launcher":
                 continue
-            icon_hash = Launcher._hash_file(app.icon_path)   # cheap SHA-1 of the icon file
+            #icon_hash = Launcher._hash_file(app.icon_path)   # cheap SHA-1 of the icon file
+            icon_hash = "disabled" # quite slow and not really needed
             current_apps.append((app.name, app.installed_path, icon_hash))
 
         # ------------------------------------------------------------------
@@ -79,6 +88,8 @@ class Launcher(Activity):
             if __debug__: logger.debug("redraw took %dms (cached)", end - start)
             self._focus_last_or_first()
             return
+        else:
+            if __debug__: logger.debug("rebuild needed of launcher")
 
         # ------------------------------------------------------------------
         # 3. UI needs (re)building – clear screen and create widgets
@@ -145,7 +156,7 @@ class Launcher(Activity):
         self._last_ui_built = True
 
         end = time.ticks_ms()
-        if __debug__: logger.debug("redraw took %dms (full rebuild)", end - start)
+        if __debug__: logger.debug("launcher rebuild took %dms (full rebuild)", end - start)
 
         self._focus_last_or_first()
 
@@ -153,6 +164,10 @@ class Launcher(Activity):
     def _launch_app(self, fullname):
         """Record which app was launched, show splash screen, then start it."""
         self._last_started_fullname = fullname
+
+        # Uncomment to disable the splash screen display when starting an app:
+        #AppManager.start_app(fullname)
+        #return
         self._splash_fullname = fullname
 
         splash_screen = lv.obj()
@@ -174,8 +189,7 @@ class Launcher(Activity):
         lv.screen_load_anim(splash_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, animation_time, 0, False)
 
         # Wait until after the animation so LVGL renders the splash before the app starts
-        timer = lv.timer_create(lambda t: self._do_start_app(t, fullname), 2*animation_time, None)
-        timer.set_repeat_count(1)
+        timer = lv.timer_create(lambda t: self._do_start_app(t, fullname), 2*animation_time, None).set_repeat_count(1)
 
     def _do_start_app(self, timer, fullname):
         start_result = AppManager.start_app(fullname)
@@ -239,3 +253,4 @@ class Launcher(Activity):
 
     def defocus_app_cont(self, app_cont):
         app_cont.set_style_border_width(0, lv.PART.MAIN)
+
