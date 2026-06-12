@@ -219,8 +219,13 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
     set +x
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
-	# Cleanup compiled .py files, otherwise if one from lib/ gets delected, the old .mpy might be used
-	rm -r ./lvgl_micropython/lib/micropython/ports/unix/build-standard/frozen_mpy 2>/dev/null
+	# Full cleanup: old .o from upstream MicroPython builds would cause link errors
+	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
+
+	echo "Applying unix auto-import main patch..."
+	pushd "$codebasedir"/lvgl_micropython/lib/micropython
+	patch -p1 --forward < ../../unix_autoimport_main.patch || true
+	popd
 
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
