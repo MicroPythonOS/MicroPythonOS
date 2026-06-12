@@ -411,8 +411,9 @@ class NostrManager:
             req.extend(nwc_filters.to_json_array())
             self.relay_manager.publish_message(json.dumps(req))
             print("NostrManager: subscribed to NWC responses")
-            if self._nwc_lud16:
-                self._handle_nwc_static_receive_code(ensure_lightning_prefix(self._nwc_lud16))
+            if self._nwc_lud16 and "@" in self._nwc_lud16:
+                # Don't use permissive ensure_lightning_prefix, only allow LUD-16
+                self._handle_nwc_static_receive_code((self._nwc_lud16))
 
         self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
 
