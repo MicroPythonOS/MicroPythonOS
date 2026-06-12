@@ -86,6 +86,7 @@ MicroPython compatibility:
 - Some builds ship a minimal `random` module without `random.Random` or `random.shuffle`. For shuffling, implement Fisher-Yates manually with `random.randint`.
 - For deterministic jitter in apps, prefer a tiny local LCG (linear congruential generator) instead of `random.Random`.
 - MicroPython's `logging.Logger.log()` (and by extension `error()`, `warning()`, etc.) formats messages via `msg % args`. Passing a variable to a format string without a `%s` placeholder raises `TypeError`. Always include a `%s` in the format string: `logger.error("msg: %s", e)`.
+- MicroPython's `unittest` module lacks `assertGreater`, `assertGreaterEqual`, `assertLess`, `assertLessEqual`. Use `assertTrue(a > b, msg)` instead of `assertGreater(a, b, msg)`.
 
 MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
