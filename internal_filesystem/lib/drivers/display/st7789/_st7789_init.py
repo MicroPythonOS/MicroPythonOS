@@ -93,7 +93,7 @@ def init(self):
     param_buf[0] = 0x35
     self.set_params(_GCTRL, param_mv[:1])
 
-    param_buf[0] = 0x28
+    param_buf[0] = 0x32 # 1.35 (0x32) instead of the old 1.1V (0x28)
     self.set_params(_VCOMS, param_mv[:1])
 
     param_buf[0] = 0x0C
@@ -102,13 +102,13 @@ def init(self):
     param_buf[0] = 0x01
     self.set_params(_VDVVRHEN, param_mv[:1])
 
-    param_buf[0] = 0x13
+    param_buf[0] = 0x15 # 4.6+( vcom+vcom offset+0.5vdv) (0x15) instead of the old 4.5+( vcom+vcom offset+0.5vdv) (0x13)
     self.set_params(_VRHS, param_mv[:1])
 
     param_buf[0] = 0x20
     self.set_params(_VDVSET, param_mv[:1])
 
-    param_buf[0] = 0x0F
+    param_buf[0] = 0x05 # 90 FPS (0x05) instead of the old 90 FPS (0x0F)
     self.set_params(_FRCTR2, param_mv[:1])
 
     param_buf[0] = 0xA4
@@ -116,35 +116,35 @@ def init(self):
     self.set_params(_PWCTRL1, param_mv[:2])
 
     param_buf[0] = 0xD0
-    param_buf[1] = 0x00
-    param_buf[2] = 0x02
-    param_buf[3] = 0x07
-    param_buf[4] = 0x0A
-    param_buf[5] = 0x28
-    param_buf[6] = 0x32
-    param_buf[7] = 0x44
-    param_buf[8] = 0x42
-    param_buf[9] = 0x06
-    param_buf[10] = 0x0E
-    param_buf[11] = 0x12
-    param_buf[12] = 0x14
-    param_buf[13] = 0x17
+    param_buf[1] = 0x08
+    param_buf[2] = 0x0E
+    param_buf[3] = 0x09
+    param_buf[4] = 0x09
+    param_buf[5] = 0x05
+    param_buf[6] = 0x31
+    param_buf[7] = 0x33
+    param_buf[8] = 0x48
+    param_buf[9] = 0x17
+    param_buf[10] = 0x14
+    param_buf[11] = 0x15
+    param_buf[12] = 0x31
+    param_buf[13] = 0x34
     self.set_params(_PGC, param_mv[:14])
 
     param_buf[0] = 0xD0
-    param_buf[1] = 0x00
-    param_buf[2] = 0x02
-    param_buf[3] = 0x07
-    param_buf[4] = 0x0A
-    param_buf[5] = 0x28
+    param_buf[1] = 0x08
+    param_buf[2] = 0x0E
+    param_buf[3] = 0x09
+    param_buf[4] = 0x09
+    param_buf[5] = 0x15
     param_buf[6] = 0x31
-    param_buf[7] = 0x54
-    param_buf[8] = 0x47
-    param_buf[9] = 0x0E
-    param_buf[10] = 0x1C
-    param_buf[11] = 0x17
-    param_buf[12] = 0x1B
-    param_buf[13] = 0x1E
+    param_buf[7] = 0x33
+    param_buf[8] = 0x48
+    param_buf[9] = 0x17
+    param_buf[10] = 0x14
+    param_buf[11] = 0x15
+    param_buf[12] = 0x31
+    param_buf[13] = 0x34
     self.set_params(_NGC, param_mv[:14])
 
     self.set_params(_INVON)

@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Drivers:
+- ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
+
 0.12.2
 ======
 
