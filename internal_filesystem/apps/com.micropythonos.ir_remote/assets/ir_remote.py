@@ -6,6 +6,7 @@ from mpos.ui.display_metrics import DisplayMetrics
 
 from learn_ir import LearnIR
 from learn_nec_ir import LearnNECIR
+from learn_blaster_ir import LearnBlasterIR
 
 try:
     from machine import Pin
@@ -145,6 +146,14 @@ class IRRemote(Activity):
                 "ui": "activity",
                 "activity_class": LearnNECIR,
                 "placeholder": "Receive and decode NEC IR signals (needs receiver diode)",
+                },
+                {
+                "title": "Decode and print Blaster IR",
+                "key": "learn_blaster_ir",
+                "dont_persist": True,
+                "ui": "activity",
+                "activity_class": LearnBlasterIR,
+                "placeholder": "Receive and decode Blaster IR signals (needs receiver diode)",
                 },
             ],
         )
