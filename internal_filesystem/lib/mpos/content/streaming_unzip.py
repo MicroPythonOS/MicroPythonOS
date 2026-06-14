@@ -33,8 +33,11 @@ Usage:
 """
 
 import io
+import logging
 import os
 import struct
+
+logger = logging.getLogger(__name__)
 
 # Local file header constants
 _LOCAL_HEADER_MAGIC = b"PK\x03\x04"
@@ -171,6 +174,10 @@ class StreamingUnzip:
         central directory or end-of-CD marker).
         """
         if self._file_fd is not None:
+            logger.warning(
+                "finish() called with file still open: %s (truncated download?)",
+                self._current_header["filename"] if self._current_header else "<unknown>",
+            )
             try:
                 self._file_fd.close()
             except OSError:
@@ -196,6 +203,11 @@ class StreamingUnzip:
                     if len(self._buf) > 3:
                         self._buf = self._buf[-3:]
                     return False
+                logger.warning(
+                    "skipping %d unexpected bytes before next local header in %s",
+                    idx,
+                    self.expected_app_name,
+                )
                 self._buf = self._buf[idx:]
                 continue
 
@@ -291,6 +303,9 @@ class StreamingUnzip:
         method = info["method"]
 
         if method == ZIP_STORED:
+            if total_data == 0:
+                self._finish_file()
+                return True
             available = min(len(self._buf), total_data)
             if available == 0:
                 return False
@@ -308,6 +323,9 @@ class StreamingUnzip:
             return True
 
         if method == ZIP_DEFLATED:
+            if total_data == 0:
+                self._finish_file()
+                return True
             available = min(len(self._buf), total_data)
             if available == 0:
                 return False
@@ -350,6 +368,12 @@ class StreamingUnzip:
             expected = info["crc"] & 0xFFFFFFFF
             got = self._crc & 0xFFFFFFFF
             if expected != got:
+                logger.warning(
+                    "CRC mismatch for %s: expected %08x got %08x",
+                    info["filename"],
+                    expected,
+                    got,
+                )
                 raise RuntimeError(
                     "CRC mismatch for %s: expected %08x got %08x"
                     % (info["filename"], expected, got)

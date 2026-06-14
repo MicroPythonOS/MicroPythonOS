@@ -6,6 +6,9 @@ Put unreleased changes here!
 Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
 
+Frameworks:
+- AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
+
 0.12.2
 ======
 

@@ -171,6 +171,51 @@ class TestStreamingUnzip(unittest.TestCase):
             extractor.finish()
         self.assertIn("Custom space check", str(ctx.exception))
 
+    # ---- zero-size file regression ------------------------------------
+
+    def test_extracts_files_after_zero_size_file(self):
+        """Files after a zero-size file entry must all be extracted.
+
+        Regression test for a bug where a zero-size stored file caused
+        _consume_data to return False immediately (available == 0) without
+        calling _finish_file, leaving the state machine stuck in 'data' state
+        and silently dropping all subsequent entries.
+
+        Fixture: com.micropythonos.ziptest_zerosize.mpk
+          com.micropythonos.ziptest/assets/hello.py      (232 bytes)
+          com.micropythonos.ziptest/assets/__init__.py   (  0 bytes)  <- zero-size
+          com.micropythonos.ziptest/assets/world.py      ( 80 bytes)  <- dropped before fix
+          com.micropythonos.ziptest/META-INF/MANIFEST.JSON (16 bytes) <- dropped before fix
+        """
+        with open("../tests/com.micropythonos.ziptest_zerosize.mpk", "rb") as f:
+            data = f.read()
+
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
+        for i in range(0, len(data), 512):
+            extractor.feed(data[i : i + 512])
+        extractor.finish()
+
+        self._assert_dir(self.DEST)
+        self._assert_dir(f"{self.DEST}/assets")
+        self._assert_file_size(f"{self.DEST}/assets/hello.py", 232)
+        self._assert_file_size(f"{self.DEST}/assets/__init__.py", 0)
+        self._assert_file_size(f"{self.DEST}/assets/world.py", 80)
+        self._assert_dir(f"{self.DEST}/META-INF")
+        self._assert_file_size(f"{self.DEST}/META-INF/MANIFEST.JSON", 16)
+
+    def test_extracts_files_after_zero_size_file_single_chunk(self):
+        """Same regression with the whole archive in a single feed() call."""
+        with open("../tests/com.micropythonos.ziptest_zerosize.mpk", "rb") as f:
+            data = f.read()
+
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.micropythonos.ziptest")
+        extractor.feed(data)
+        extractor.finish()
+
+        self._assert_file_size(f"{self.DEST}/assets/__init__.py", 0)
+        self._assert_file_size(f"{self.DEST}/assets/world.py", 80)
+        self._assert_file_size(f"{self.DEST}/META-INF/MANIFEST.JSON", 16)
+
 
 if __name__ == "__main__":
     unittest.main()
