@@ -14,27 +14,25 @@ except Exception as e:
     IR_GET = None
 
 
-def _decode_nec16(burst):
-    """Decode a raw NEC/Blaster burst (variable edge count) into (cmd, addr).
+def _decode_blaster(burst):
+    """Decode a raw NEC-timing IR burst into a 16-bit code.
 
-    NEC extended (16-bit addr): header mark ~9ms, header space ~4.5ms,
-    then 32 data bits encoded as ~562us mark + short/long space (0/1).
-    Returns (cmd, addr) on success or raises ValueError with a reason string.
+    This protocol uses NEC-style pulse-distance encoding:
+      header mark ~8.5-9ms, header space >3ms,
+      data bits encoded as ~560us mark + short (~470us=0) or long (~1530us=1) space.
+    The frame is 16 bits with no checksum (unlike standard 32-bit NEC).
+    Returns (code, nbits) on success or raises ValueError with a reason string.
     """
     if len(burst) < 4:
         raise ValueError("burst too short")
 
-    # Header: mark ~9000, space ~4500 (Samsung-style leader ~4500/4500 also ok)
-    def near(v, target, pct=0.25):
-        return target * (1 - pct) < v < target * (1 + pct)
-
-    if not near(burst[0], 9000) and not near(burst[0], 8500):
+    if not (burst[0] > 6000):
         raise ValueError(f"bad header mark {burst[0]}")
     if not (burst[1] > 3000):
         raise ValueError(f"bad header space {burst[1]}")
 
-    # Collect bit spaces (every other value starting at index 3)
-    # burst layout: [mark, space, bit0_mark, bit0_space, bit1_mark, bit1_space, ...]
+    # Collect bits from spaces; skip the optional trailing stop-mark (odd tail)
+    # burst layout: [hdr_mark, hdr_space, bit0_mark, bit0_space, ..., stop_mark?]
     bits = []
     i = 2
     while i + 1 < len(burst):
@@ -42,22 +40,16 @@ def _decode_nec16(burst):
         bits.append(1 if space > 1120 else 0)
         i += 2
 
-    if len(bits) < 16:
-        raise ValueError(f"too few bits: {len(bits)}")
+    nbits = len(bits)
+    if nbits < 8:
+        raise ValueError(f"too few bits: {nbits}")
 
-    # Build 32-bit value (LSB first per NEC)
+    # Build value LSB first (standard NEC bit order)
     val = 0
-    for b in reversed(bits[:32]):
+    for b in reversed(bits):
         val = (val << 1) | b
 
-    addr = val & 0xffff
-    cmd = (val >> 16) & 0xff
-    cmd_inv = (val >> 24) & 0xff
-
-    if (cmd ^ cmd_inv) != 0xff:
-        raise ValueError(f"cmd checksum fail: cmd=0x{cmd:02x} inv=0x{cmd_inv:02x}")
-
-    return cmd, addr
+    return val, nbits
 
 
 class LearnBlasterIR(Activity):
@@ -109,8 +101,10 @@ class LearnBlasterIR(Activity):
         self.ir.data = None
         print(f"burst: {burst}")
         try:
-            cmd, addr = _decode_nec16(burst)
-            line = f"Cmd 0x{cmd:02x} Addr 0x{addr:04x}"
+            val, nbits = _decode_blaster(burst)
+            lo = val & 0xff
+            hi = (val >> 8) & 0xff
+            line = f"0x{val:04x} ({nbits}bit) lo=0x{lo:02x} hi=0x{hi:02x}"
         except ValueError as e:
             line = f"Decode error: {e}"
         print(line)
