@@ -7,6 +7,7 @@ from mpos.ui.display_metrics import DisplayMetrics
 from learn_ir import LearnIR
 from learn_nec_ir import LearnNECIR
 from learn_blaster_ir import LearnBlasterIR
+from learn_tcl_ir import LearnTCLIR
 
 try:
     from machine import Pin
@@ -154,6 +155,14 @@ class IRRemote(Activity):
                 "ui": "activity",
                 "activity_class": LearnBlasterIR,
                 "placeholder": "Receive and decode Blaster IR signals (needs receiver diode)",
+                },
+                {
+                "title": "Decode and print TCL IR",
+                "key": "learn_tcl_ir",
+                "dont_persist": True,
+                "ui": "activity",
+                "activity_class": LearnTCLIR,
+                "placeholder": "Receive and decode TCL TV IR signals (needs receiver diode)",
                 },
             ],
         )
