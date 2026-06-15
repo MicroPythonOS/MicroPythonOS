@@ -150,9 +150,9 @@ class AppUpdateManager:
     # ------------------------------------------------------------------
 
     async def check_for_updates(self, index_url=None):
-        """Download the GitHub app index and compare versions against installed apps.
+        """Download the app index and compare versions against installed apps.
 
-        ``index_url`` defaults to the GitHub production index.  The AppStore UI
+        ``index_url`` defaults to the production index.  The AppStore UI
         may pass its own backend URL when the user has changed the backend setting.
         """
         if self._check_in_progress:

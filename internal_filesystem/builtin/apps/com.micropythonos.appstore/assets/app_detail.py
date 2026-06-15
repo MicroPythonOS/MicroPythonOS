@@ -164,7 +164,7 @@ class AppDetail(Activity):
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
         else:
-            if __debug__: logger.debug("no need to fetch app details (GitHub index already complete)")
+            if __debug__: logger.debug("no need to fetch app details (index already complete)")
 
     def add_action_buttons(self, buttoncont, app):
         buttoncont.clean()

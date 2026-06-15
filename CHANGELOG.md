@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Builtin Apps:
+- AppStore: remove GitHub mention since the free GitHub pages is no longer used for hosting
+
 Board Support:
 - Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
 
