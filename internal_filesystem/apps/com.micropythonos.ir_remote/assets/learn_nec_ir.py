@@ -1,6 +1,7 @@
 import lvgl as lv
 
 from mpos import Activity, IRManager
+from learn_blaster_ir import LearnBlasterIR  # noqa: F401
 
 try:
     from machine import Pin

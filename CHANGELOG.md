@@ -4,8 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Board Support:
-- Fri3d 2024: correct IR TX pin for SAO IO13 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
-- Fri3d 2026: correct IR TX pin for SAO IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
+- Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
 
 Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors

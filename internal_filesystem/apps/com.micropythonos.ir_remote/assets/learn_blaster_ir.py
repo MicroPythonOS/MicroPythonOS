@@ -4,59 +4,70 @@ from mpos import Activity, IRManager
 
 try:
     from machine import Pin
-    from ir.ir_rx.acquire import IR_GET
+    from utime import ticks_diff
+    from ir.ir_rx import IR_RX
 
     simulation_mode = False
 except Exception as e:
-    print(f"Activating simulation mode because could not import Pin/IR_GET: {e}")
+    print(f"Activating simulation mode because could not import Pin/IR_RX: {e}")
     simulation_mode = True
     Pin = None
-    IR_GET = None
+    IR_RX = object  # fallback so class definition doesn't fail
 
 
-def _decode_blaster(burst):
-    """Decode a raw NEC-timing IR burst into a 16-bit code.
+class NEC_16_RAW(IR_RX):
+    """NEC-timing receiver sized for 16-bit (no-checksum) frames.
 
-    This protocol uses NEC-style pulse-distance encoding:
-      header mark ~8.5-9ms, header space >3ms,
-      data bits encoded as ~560us mark + short (~470us=0) or long (~1530us=1) space.
-    The frame is 16 bits with no checksum (unlike standard 32-bit NEC).
-    Returns (code, nbits) on success or raises ValueError with a reason string.
+    Standard NEC_16 waits for 68 edges; this device sends only ~35
+    (2 header + 16 bits × 2 + 1 stop).  nedges=40 captures the full
+    frame and lets the block timer fire normally.
+    Delivers (val & 0xff, (val >> 8) & 0xff, nbits) to the callback,
+    matching the (cmd, addr, ext) convention of the other IR_RX decoders.
     """
-    if len(burst) < 4:
-        raise ValueError("burst too short")
 
-    if not (burst[0] > 6000):
-        raise ValueError(f"bad header mark {burst[0]}")
-    if not (burst[1] > 3000):
-        raise ValueError(f"bad header space {burst[1]}")
+    def __init__(self, pin, callback, *args):
+        super().__init__(pin, 40, 80, callback, *args)
 
-    # Collect bits from spaces; skip the optional trailing stop-mark (odd tail)
-    # burst layout: [hdr_mark, hdr_space, bit0_mark, bit0_space, ..., stop_mark?]
-    bits = []
-    i = 2
-    while i + 1 < len(burst):
-        space = burst[i + 1]
-        bits.append(1 if space > 1120 else 0)
-        i += 2
+    def decode(self, _):
+        try:
+            lb = self.edge - 1
+            if lb < 4:
+                raise ValueError("burst too short")
 
-    nbits = len(bits)
-    if nbits < 8:
-        raise ValueError(f"too few bits: {nbits}")
+            hdr_mark = ticks_diff(self._times[1], self._times[0])
+            hdr_space = ticks_diff(self._times[2], self._times[1])
+            if hdr_mark < 6000:
+                raise ValueError(f"bad header mark {hdr_mark}")
+            if hdr_space < 3000:
+                raise ValueError(f"bad header space {hdr_space}")
 
-    # Build value LSB first (standard NEC bit order)
-    val = 0
-    for b in reversed(bits):
-        val = (val << 1) | b
+            bits = []
+            for x in range(2, lb - 1, 2):
+                space = ticks_diff(self._times[x + 2], self._times[x + 1])
+                bits.append(1 if space > 1120 else 0)
 
-    return val, nbits
+            nbits = len(bits)
+            if nbits < 8:
+                raise ValueError(f"too few bits: {nbits}")
+
+            val = 0
+            for b in reversed(bits):
+                val = (val << 1) | b
+
+            cmd = val & 0xff
+            addr = (val >> 8) & 0xff
+        except (ValueError, IndexError) as e:
+            print(f"NEC_16_RAW decode error: {e}")
+            self.do_callback(IR_RX.BADDATA, 0, 0)
+            return
+
+        self.do_callback(cmd, addr, nbits)
 
 
 class LearnBlasterIR(Activity):
 
     status = None
     screen = None
-    check_timer = None
 
     def onCreate(self):
         self.screen = lv.obj()
@@ -74,16 +85,12 @@ class LearnBlasterIR(Activity):
             self.ir = None
             return
         try:
-            self.ir = IR_GET(IRManager.rxPin, display=False)
+            self.ir = NEC_16_RAW(IRManager.rxPin, self._on_ir)
         except Exception as e:
             print(f"Failed to init IR receiver: {e}")
             self.ir = None
-        self.check_timer = lv.timer_create(self.check_data, 1000, None)
 
     def onPause(self, screen):
-        if self.check_timer is not None:
-            self.check_timer.delete()
-            self.check_timer = None
         if getattr(self, "ir", None):
             try:
                 self.ir.close()
@@ -94,19 +101,12 @@ class LearnBlasterIR(Activity):
 
         mpos.ui.change_task_handler()
 
-    def check_data(self, args):
-        if self.ir is None or self.ir.data is None:
-            return
-        burst = self.ir.data
-        self.ir.data = None
-        print(f"burst: {burst}")
-        try:
-            val, nbits = _decode_blaster(burst)
-            lo = val & 0xff
-            hi = (val >> 8) & 0xff
-            line = f"0x{val:04x} ({nbits}bit) lo=0x{lo:02x} hi=0x{hi:02x}"
-        except ValueError as e:
-            line = f"Decode error: {e}"
+    def _on_ir(self, cmd, addr, nbits):
+        if cmd < 0:
+            line = "Decode error."
+        else:
+            val = cmd | (addr << 8)
+            line = f"0x{val:04x} ({nbits}bit) lo=0x{cmd:02x} hi=0x{addr:02x}"
         print(line)
         self._add_line(line)
 
