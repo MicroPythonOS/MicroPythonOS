@@ -59,6 +59,15 @@ class IRRemote(Activity):
             "power": [0xAB],
             "vol_up": [0xAB],
             "vol_down": [0xAB],
+            "freq": 38000,
+        },
+        "TCL36": {
+            "protocol": "tcl",
+            "addr": 0x054F,
+            "power": [0xAB],
+            "vol_up": [0xAB],
+            "vol_down": [0xAB],
+            "freq": 36000,
         },
     }
 
@@ -210,8 +219,13 @@ class IRRemote(Activity):
                 if self.sony:
                     self._deinit_ir(self.sony)
                     self.sony = None
+                freq = profile.get("freq", 38000)
+                if self.tcl and getattr(self.tcl, "_freq", None) != freq:
+                    self._deinit_ir(self.tcl)
+                    self.tcl = None
                 if not self.tcl:
-                    self.tcl = TCL(self.ir_pin)
+                    self.tcl = TCL(self.ir_pin, freq=freq)
+                    self.tcl._freq = freq
             else:
                 if self.sony:
                     self._deinit_ir(self.sony)
