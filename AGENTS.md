@@ -41,6 +41,15 @@ Guidelines for writing or updating tests:
 - When adding graphical tests, follow the helpers and conventions described in tests/README.md.
 - To capture logger output in tests: the logging module's `StreamHandler` stores `sys.stderr` at import time in `_stream`. Replacing `sys.stderr` at runtime does NOT redirect existing loggers. Instead, add a custom handler to the specific logger: `logging.getLogger("mpos.net.download_manager").addHandler(handler)`. In the handler's `emit()`, access the formatted message via `record.message` (not `self.format(record)`, which requires a formatter to be set). Restore the original handlers list in `finally:`.
 
+ESP32 hardware tips:
+- ESP32 GPIO matrix: `Pin.init(Pin.OUT)` reconfigures the GPIO matrix to route CPU/software GPIO to a pin, which **overrides** any peripheral (RMT, SPI, I2C, etc.) routing previously established. If a pin was claimed by a peripheral (e.g. `RMT(0, pin=pin, ...)`), calling `pin.init(Pin.OUT)` afterward disconnects the peripheral silently — no error, but no output. The peripheral appears to work (no exception, correct timing) but produces nothing. The fix is to deinit and re-create the peripheral driver after re-asserting the pin direction, so the peripheral re-acquires the GPIO matrix routing.
+- ESP32 RMT + shared pins: if a pin is shared between an RMT TX driver and another peripheral (e.g. battery ADC on the Fri3d 2024 badge, GPIO 13), the correct recovery after the ADC reconfigures the pin is to deinit the RMT driver and re-create it — NOT to call `pin.init(Pin.OUT)` alone. Re-creating the driver calls `RMT(0, pin=pin, ...)` which re-establishes the GPIO matrix routing correctly.
+- `sys.platform` on all ESP32 variants (including S3, C3, etc.) returns `'esp32'` in MicroPython, not `'esp32s3'` etc.
+
+Debugging tips:
+- When a user says "it worked at commit X but broke at commit Y", do `git diff X..Y --name-only` first, then `git diff X..Y -- <relevant files>` to read every changed line. Do NOT assume the bug is in the most recently touched file — trace the exact execution path through all changed files. A one-line addition in an unrelated-looking file can break something silently (e.g. `pin.init(Pin.OUT)` added for one board breaking RMT on all boards).
+- Silent failures with no exception and correct-looking log output (e.g. "transmit done" in expected time) usually mean the operation ran but its output was routed/discarded somewhere. For hardware peripherals: check GPIO matrix routing, DMA channel conflicts, and whether a pin was reclaimed by another peripheral since the driver was initialized.
+
 LVGL tips:
 - `lv.OPA` enum only has values at steps of 10: `TRANSP` (0), `_10`, `_20`, ..., `_100`, and `COVER` (255). Values like `_5` do NOT exist — use the nearest step or a raw integer (0–255).
 - import lvgl as `lv` and use `lv.` to access it
