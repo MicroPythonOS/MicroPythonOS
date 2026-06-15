@@ -355,31 +355,42 @@ class AppStore(Activity):
 
     async def download_icons(self):
         if __debug__: logger.debug("downloading icons")
+        # First pass: show already-cached icons immediately
+        for app in self.apps:
+            if not self.has_foreground():
+                if __debug__: logger.debug("app stopping, aborting icon downloads")
+                return
+            if app.icon_data:
+                self._set_icon_widget(app)
+        # Second pass: download missing icons
         for app in self.apps:
             if not self.has_foreground():
                 if __debug__: logger.debug("app stopping, aborting icon downloads")
                 break
-            if not app.icon_data:
-                logger.warning("downloading icon for %s from %s", app.fullname, app.icon_url)
-                try:
-                    app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
-                except Exception as e:
-                    if __debug__: logger.debug("download of %s failed: %s", app.icon_url, e)
-                    continue
             if app.icon_data:
-                #print("download_icons has icon_data, showing it...")
-                image_icon_widget = None
-                try:
-                    image_icon_widget = app.image_icon_widget
-                except Exception as e:
-                    logger.warning("image_icon_widget error: %s", e)
-                if image_icon_widget:
-                    image_dsc = lv.image_dsc_t({
-                        'data_size': len(app.icon_data),
-                        'data': app.icon_data
-                    })
-                    image_icon_widget.set_src(image_dsc)
+                continue
+            logger.warning("downloading icon for %s from %s", app.fullname, app.icon_url)
+            try:
+                app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
+            except Exception as e:
+                if __debug__: logger.debug("download of %s failed: %s", app.icon_url, e)
+                continue
+            if app.icon_data:
+                self._set_icon_widget(app)
         if __debug__: logger.debug("finished downloading icons")
+
+    def _set_icon_widget(self, app):
+        image_icon_widget = None
+        try:
+            image_icon_widget = app.image_icon_widget
+        except Exception as e:
+            logger.warning("image_icon_widget error: %s", e)
+        if image_icon_widget:
+            image_dsc = lv.image_dsc_t({
+                'data_size': len(app.icon_data),
+                'data': app.icon_data
+            })
+            image_icon_widget.set_src(image_dsc)
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
