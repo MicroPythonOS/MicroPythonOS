@@ -212,10 +212,6 @@ class IRRemote(Activity):
             return
 
         try:
-            if __debug__: logger.debug("_apply_profile: calling ir_pin.init(Pin.OUT) on %s", self.ir_pin)
-            self.ir_pin.init(Pin.OUT)
-            if __debug__: logger.debug("_apply_profile: ir_pin.init done, pin value=%s", self.ir_pin.value())
-
             if profile["protocol"] == "sony":
                 if self.nec:
                     self._deinit_ir(self.nec)
@@ -306,10 +302,20 @@ class IRRemote(Activity):
             logger.warning("_transmit: no driver available (simulation=%s nec=%s sony=%s tcl=%s)", simulation_mode, self.nec, self.sony, self.tcl)
             return
 
-        if self.ir_pin:
-            if __debug__: logger.debug("_transmit: re-asserting pin %s as OUT", self.ir_pin)
-            self.ir_pin.init(Pin.OUT)
-            if __debug__: logger.debug("_transmit: pin value after init=%s", self.ir_pin.value())
+        # On some boards (e.g. Fri3d 2024) the TX pin is shared with the battery
+        # ADC, which reconfigures the GPIO as an ADC input after every reading.
+        # Calling pin.init(Pin.OUT) alone is NOT enough: it reasserts CPU GPIO
+        # routing in the GPIO matrix, which overrides the RMT routing set up when
+        # the driver was constructed. The correct fix is to deinit and re-create
+        # the driver so RMT re-acquires the pin via the GPIO matrix.
+        if __debug__: logger.debug("_transmit: re-creating driver to re-acquire pin %s for RMT", self.ir_pin)
+        self._deinit_ir(self.nec or self.sony or self.tcl)
+        self.nec = self.sony = self.tcl = None
+        self._apply_profile()
+        if __debug__: logger.debug("_transmit: driver re-created nec=%s sony=%s tcl=%s", self.nec, self.sony, self.tcl)
+        if not self.nec and not self.sony and not self.tcl:
+            logger.warning("_transmit: driver re-creation failed, aborting transmit")
+            return
 
         try:
             if profile["protocol"] == "sony":
