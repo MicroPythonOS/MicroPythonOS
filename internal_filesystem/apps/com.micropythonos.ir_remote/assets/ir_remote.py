@@ -13,14 +13,16 @@ try:
     from machine import Pin
     from ir.ir_tx.nec import NEC
     from ir.ir_tx.sony import SONY_12
+    from ir.ir_tx.tcl import TCL
 
     simulation_mode = False
 except Exception as e:
-    print(f"Activating simulation mode because could not import Pin/NEC/SONY: {e}")
+    print(f"Activating simulation mode because could not import Pin/NEC/SONY/TCL: {e}")
     simulation_mode = True
     Pin = None
     NEC = None
     SONY_12 = None
+    TCL = None
 
 
 class IRRemote(Activity):
@@ -51,12 +53,20 @@ class IRRemote(Activity):
             "vol_up": [18],
             "vol_down": [19],
         },
+        "TCL": {
+            "protocol": "tcl",
+            "addr": 0x054F,
+            "power": [0xAB],
+            "vol_up": [0xAB],
+            "vol_down": [0xAB],
+        },
     }
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
         self.nec = None
         self.sony = None
+        self.tcl = None
         self.ir_pin = None
 
         if not simulation_mode:
@@ -188,12 +198,27 @@ class IRRemote(Activity):
                 if self.nec:
                     self._deinit_ir(self.nec)
                     self.nec = None
+                if self.tcl:
+                    self._deinit_ir(self.tcl)
+                    self.tcl = None
                 if not self.sony:
                     self.sony = SONY_12(self.ir_pin)
+            elif profile["protocol"] == "tcl":
+                if self.nec:
+                    self._deinit_ir(self.nec)
+                    self.nec = None
+                if self.sony:
+                    self._deinit_ir(self.sony)
+                    self.sony = None
+                if not self.tcl:
+                    self.tcl = TCL(self.ir_pin)
             else:
                 if self.sony:
                     self._deinit_ir(self.sony)
                     self.sony = None
+                if self.tcl:
+                    self._deinit_ir(self.tcl)
+                    self.tcl = None
                 if not self.nec:
                     self.nec = NEC(self.ir_pin)
                 self.nec.samsung = profile.get("samsung", False)
@@ -201,6 +226,7 @@ class IRRemote(Activity):
             print(f"Failed to init IR protocol, switching to simulation mode: {e}")
             self.nec = None
             self.sony = None
+            self.tcl = None
 
     def _deinit_ir(self, driver):
         try:
@@ -232,7 +258,7 @@ class IRRemote(Activity):
         profile = self.PROFILES.get(self._profile_name(), self.PROFILES[self.DEFAULT_PROFILE])
         addr = profile["addr"]
 
-        if simulation_mode or (not self.nec and not self.sony):
+        if simulation_mode or (not self.nec and not self.sony and not self.tcl):
             print(
                 f"Simulation mode: would transmit protocol={profile['protocol']} addr=0x{addr:02x} data=0x{data:02x}"
             )
@@ -240,6 +266,8 @@ class IRRemote(Activity):
 
         if profile["protocol"] == "sony":
             self.sony.transmit(addr, data)
+        elif profile["protocol"] == "tcl":
+            self.tcl.transmit(addr, data)
         else:
             self.nec.transmit(addr, data)
 

@@ -115,6 +115,8 @@ class AppStore(Activity):
 
         if not self._data_loaded:
             self.refresh_list()
+        elif self.apps and any(not getattr(app, "icon_data", None) for app in self.apps):
+            TaskManager.create_task(self.download_icons())
 
     def onPause(self, screen):
         try:
