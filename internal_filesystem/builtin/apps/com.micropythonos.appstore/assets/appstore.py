@@ -254,7 +254,11 @@ class AppStore(Activity):
 
         # Phase 1: always show installed apps first (no network needed)
         self.apps.clear()
+        self._builtin_fullnames = set()
         for installed_app in AppManager.get_app_list():
+            if installed_app.installed_path and "builtin" in installed_app.installed_path:
+                self._builtin_fullnames.add(installed_app.fullname)
+                continue
             self.apps.append(installed_app)
         self._data_loaded = True
         self.create_apps_list()
@@ -280,9 +284,13 @@ class AppStore(Activity):
                 if backend_type == self._BACKEND_API_BADGEHUB:
                     if app_data.get("slug") in installed_by_fullname:
                         continue
+                    if app_data.get("slug") in self._builtin_fullnames:
+                        continue
                     self.apps.append(AppStore.badgehub_app_to_mpos_app(app_data))
                 else:
                     fullname = app_data["fullname"]
+                    if fullname in self._builtin_fullnames:
+                        continue
                     if fullname in installed_by_fullname:
                         existing = installed_by_fullname[fullname]
                         existing.icon_url = app_data["icon_url"]

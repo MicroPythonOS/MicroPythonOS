@@ -8,6 +8,7 @@ Builtin Apps:
 - AppStore: prioritize display of known icons
 - AppStore: show installed apps first (no network needed), then merge store apps from network; remove WiFi gate
 - AppStore: update icon_url/download_url on installed app objects from store index for install/update actions
+- AppStore: filter out builtin/ apps from the list
 
 Board Support:
 - Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
