@@ -1,11 +1,14 @@
 """
-test_appstore_async_refresh.py - Verify AppStore refresh_list is non-blocking
-and that update flows trigger AppManager.refresh_apps before rechecking.
+test_appstore_async_refresh.py - Verify AppStore refresh_list, two-phase
+data flow, _data_loaded gating, and update recheck behavior.
 
 Regression tests:
-- refresh_list() must return immediately (not await the download itself).
-- refresh_list() must spawn an async task via TaskManager when online.
-- refresh_list() must NOT spawn a task when WiFi is disconnected.
+- refresh_list() must return immediately and always spawn an async task.
+- refresh_list() must skip when a refresh is already in progress.
+- download_app_index() Phase 1 builds from installed apps (no network).
+- download_app_index() Phase 2 merges store apps and patches installed ones.
+- _data_loaded flag gates onResume from re-downloading.
+- onResume re-triggers icon downloads when some icons are missing.
 - _run_update_all must call AppManager.refresh_apps before AppUpdateManager recheck.
 - _trigger_update_recheck must refresh apps before scheduling recheck.
 
@@ -13,6 +16,7 @@ Usage:
     Desktop: ./tests/unittest.sh tests/test_appstore_async_refresh.py
 """
 
+import json
 import unittest
 import sys
 
@@ -162,24 +166,24 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
             "TaskManager.create_task should receive a coroutine (awaitable)",
         )
 
-    def test_refresh_list_skips_when_offline(self):
-        """When WiFi is not connected refresh_list() must show an error and NOT create a task."""
+    def test_refresh_list_works_when_offline(self):
+        """refresh_list() must create a task even when WiFi is not connected (shows installed apps)."""
         inject_mocks({"network": MockNetwork(connected=False)})
         store = self._make_store()
         store.refresh_list()
 
-        # Error label should be visible
-        self.assertIn(
-            "not connected",
-            store.please_wait_label._text.lower(),
-            "please_wait_label should show an offline error",
+        # Should NOT show "not connected" error
+        self.assertNotEqual(
+            store.please_wait_label._text.lower().find("not connected"),
+            0,
+            "please_wait_label should NOT show an offline error",
         )
 
-        # No async task should have been created
-        self.assertEqual(
+        # An async task should still be created (Phase 1 builds from installed apps)
+        self.assertGreaterEqual(
             len(self.tasks_created),
-            0,
-            "refresh_list() must NOT spawn a download task when offline",
+            1,
+            "refresh_list() must spawn a download task even when offline",
         )
 
     def test_refresh_list_skips_duplicate(self):
@@ -310,6 +314,175 @@ class TestAppStoreUpdateAllRecheck(unittest.TestCase):
         )
         self.assertEqual(len(self.refresh_calls), 1)
         self.assertEqual(instance.check_calls.count("check_for_updates_now"), 1)
+
+
+class TestAppStoreDataFlow(unittest.TestCase):
+    """Test the two-phase download_app_index and _data_loaded gating."""
+
+    def setUp(self):
+        import asyncio
+        import mpos
+
+        asyncio.new_event_loop()
+
+        self.tasks_created = []
+        self._orig_create_task = mpos.TaskManager.create_task
+
+        def _capture_task(coro):
+            self.tasks_created.append(coro)
+            return self._orig_create_task(coro)
+
+        mpos.TaskManager.create_task = _capture_task
+
+    def tearDown(self):
+        import mpos
+        mpos.TaskManager.create_task = self._orig_create_task
+
+    def _make_store(self):
+        from appstore import AppStore
+
+        store = AppStore()
+        store.prefs = MockPrefs()
+        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
+        store.please_wait_label = MockLabel()
+        store._refresh_in_progress = False
+        store._data_loaded = False
+        store.update_all_button = MockLabel()
+        store.main_screen = MockLabel()
+        # Bypass LVGL UI creation — these tests verify data flow, not rendering
+        store.create_apps_list = lambda: None
+        return store
+
+    # ------------------------------------------------------------------
+
+    def test_phase1_builds_from_installed_apps(self):
+        """Phase 1 populates self.apps from AppManager even when offline."""
+        from mpos import App, AppManager
+        import asyncio
+
+        installed = App("TestApp", "Pub", "desc", "", "", "",
+                        "com.test.installed", "1.0")
+        orig_list = AppManager._app_list
+        AppManager._app_list = [installed]
+        try:
+            store = self._make_store()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("http://offline/index.json")
+            )
+            self.assertTrue(store._data_loaded)
+            self.assertEqual(len(store.apps), 1)
+            self.assertEqual(store.apps[0].fullname, "com.test.installed")
+        finally:
+            AppManager._app_list = orig_list
+
+    def test_phase2_merges_store_only_apps(self):
+        """Phase 2 appends store-only apps and patches icon_url/download_url on installed ones."""
+        from mpos import App, AppManager
+        import asyncio
+        import mpos.net.download_manager as dm
+
+        installed = App("ExistingApp", "Pub", "desc", "", "", "",
+                        "com.test.existing", "1.0")
+        orig_list = AppManager._app_list
+        AppManager._app_list = [installed]
+
+        json_data = json.dumps([
+            {
+                "name": "ExistingApp", "publisher": "Pub",
+                "short_description": "desc", "long_description": "",
+                "icon_url": "http://i.png", "download_url": "http://a.zip",
+                "fullname": "com.test.existing", "version": "2.0",
+                "category": "test", "activities": [],
+            },
+            {
+                "name": "NewApp", "publisher": "Pub2",
+                "short_description": "new", "long_description": "",
+                "icon_url": "http://i2.png", "download_url": "http://a2.zip",
+                "fullname": "com.test.new", "version": "1.0",
+                "category": "test", "activities": [],
+            },
+        ])
+
+        async def _fake_download(url):
+            return json_data
+
+        orig_dl = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_fake_download)
+        try:
+            store = self._make_store()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("http://example.com/index.json")
+            )
+            # Both apps should be present
+            self.assertEqual(len(store.apps), 2)
+            # Existing app should have icon_url and download_url patched
+            existing = [a for a in store.apps
+                        if a.fullname == "com.test.existing"][0]
+            self.assertEqual(existing.icon_url, "http://i.png")
+            self.assertEqual(existing.download_url, "http://a.zip")
+            # New store-only app should be present
+            new = [a for a in store.apps
+                   if a.fullname == "com.test.new"][0]
+            self.assertIsNotNone(new)
+            self.assertEqual(new.icon_url, "http://i2.png")
+        finally:
+            dm.DownloadManager.download_url = orig_dl
+            AppManager._app_list = orig_list
+
+    def test_phase2_offline_graceful(self):
+        """When the store download fails, Phase 1's installed list remains intact."""
+        from mpos import App, AppManager
+        import asyncio
+
+        installed = App("TestApp", "Pub", "desc", "", "", "",
+                        "com.test.installed", "1.0")
+        orig_list = AppManager._app_list
+        AppManager._app_list = [installed]
+        try:
+            store = self._make_store()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("http://offline/index.json")
+            )
+            self.assertEqual(len(store.apps), 1)
+            self.assertEqual(store.apps[0].fullname, "com.test.installed")
+            self.assertTrue(store._data_loaded)
+        finally:
+            AppManager._app_list = orig_list
+
+    def test_data_loaded_gates_refresh_on_resume(self):
+        """onResume must not call refresh_list when _data_loaded is True."""
+        store = self._make_store()
+        store._data_loaded = True
+        store.apps = []
+        store.onResume(MockLabel())
+        # No tasks should have been created (Phase 1 skipped)
+        self.assertEqual(
+            len(self.tasks_created),
+            0,
+            "onResume must NOT start refresh_list when _data_loaded is True",
+        )
+
+    def test_on_resume_resumes_missing_icons(self):
+        """onResume re-triggers icon downloads when some apps lack icon_data."""
+        from mpos import App
+
+        store = self._make_store()
+        store._data_loaded = True
+        app_missing_icon = App("Test", "Pub", "", "", "http://i.png", "",
+                               "com.test.missing", "1.0")
+        app_missing_icon.icon_data = None
+        store.apps = [app_missing_icon]
+
+        store.onResume(MockLabel())
+
+        self.assertGreaterEqual(
+            len(self.tasks_created),
+            1,
+            "onResume must re-trigger download_icons when icons are missing",
+        )
 
 
 class TestAppDetailUpdateRecheck(unittest.TestCase):

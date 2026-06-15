@@ -3,7 +3,7 @@ import logging
 
 import lvgl as lv
 
-from mpos import Activity, App, BuildInfo, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
+from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
 
 from app_detail import AppDetail
 
@@ -177,7 +177,6 @@ class AppStore(Activity):
 
     async def _run_update_all(self, updatable_app_data_list):
         """Sequentially download-and-install every app that has an update."""
-        from mpos import AppManager
         self.update_all_button.add_state(lv.STATE.DISABLED)
 
         for app_data in updatable_app_data_list:
@@ -218,14 +217,6 @@ class AppStore(Activity):
         if self._refresh_in_progress:
             if __debug__: logger.debug("refresh already in progress, skipping")
             return
-        try:
-            import network
-            if not network.WLAN(network.STA_IF).isconnected():
-                self.please_wait_label.remove_flag(lv.obj.FLAG.HIDDEN)
-                self.please_wait_label.set_text("Error: WiFi is not connected.")
-                return
-        except Exception as e:
-            if __debug__: logger.debug("can't check network state, assuming online (%s)", e)
         self._refresh_in_progress = True
         TaskManager.create_task(self._download_app_index_wrapper(self.get_backend_list_url_from_settings()))
 
@@ -260,43 +251,55 @@ class AppStore(Activity):
 
     async def download_app_index(self, json_url):
         await TaskManager.sleep(0)
+
+        # Phase 1: always show installed apps first (no network needed)
+        self.apps.clear()
+        for installed_app in AppManager.get_app_list():
+            self.apps.append(installed_app)
+        self._data_loaded = True
+        self.create_apps_list()
+        await TaskManager.sleep(0.1)
+        TaskManager.create_task(self.download_icons())
+
+        # Phase 2: download store index and merge in new apps
         try:
             response = await DownloadManager.download_url(json_url)
         except Exception as e:
-            logger.error("failed to download app index: %s", e)
-            if DownloadManager.is_network_error(e):
-                self.please_wait_label.set_text(f"Network error - check your WiFi connection\nand try again.")
-            else:
-                self.please_wait_label.set_text(f"Could not download app index from\n{json_url}\nError: {e}")
+            if __debug__: logger.debug("store index unavailable (%s), showing installed apps only", e)
             return
-        if __debug__: logger.debug("got response text: %s", response[:20])
         try:
             parsed = json.loads(response)
-            self.apps.clear()
-            for app in parsed:
-                try:
-                    backend_type = self.get_backend_type_from_settings()
-                    if backend_type == self._BACKEND_API_BADGEHUB:
-                        self.apps.append(AppStore.badgehub_app_to_mpos_app(app))
-                    else:
-                        self.apps.append(App(app["name"], app["publisher"], app["short_description"], app["long_description"], app["icon_url"], app["download_url"], app["fullname"], app["version"], app["category"], app["activities"]))
-                except Exception as e:
-                    logger.warning("could not add app from %s: %s", json_url, e)
         except Exception as e:
-            self.please_wait_label.set_text(f"ERROR: could not parse reponse.text JSON: {e}")
+            logger.warning("could not parse store index: %s", e)
             return
-        self._data_loaded = True
-        self.please_wait_label.set_text(f"Download successful, building list...")
-        await TaskManager.sleep(0.1)
-        if __debug__: logger.debug("removing duplicates by app.name")
-        seen = set()
-        self.apps = [app for app in self.apps if not (app.fullname in seen or seen.add(app.fullname))]
-        if __debug__: logger.debug("sorting apps by name")
+
+        backend_type = self.get_backend_type_from_settings()
+        installed_by_fullname = {app.fullname: app for app in self.apps}
+        for app_data in parsed:
+            try:
+                if backend_type == self._BACKEND_API_BADGEHUB:
+                    if app_data.get("slug") in installed_by_fullname:
+                        continue
+                    self.apps.append(AppStore.badgehub_app_to_mpos_app(app_data))
+                else:
+                    fullname = app_data["fullname"]
+                    if fullname in installed_by_fullname:
+                        existing = installed_by_fullname[fullname]
+                        existing.icon_url = app_data["icon_url"]
+                        existing.download_url = app_data["download_url"]
+                    else:
+                        self.apps.append(App(
+                            app_data["name"], app_data["publisher"],
+                            app_data["short_description"], app_data["long_description"],
+                            app_data["icon_url"], app_data["download_url"],
+                            fullname, app_data["version"],
+                            app_data["category"], app_data["activities"],
+                        ))
+            except Exception as e:
+                logger.warning("could not process store app %s: %s", app_data.get("fullname", "?"), e)
+
         self.apps.sort(key=lambda x: x.name.lower())
-        if __debug__: logger.debug("creating apps list")
         self.create_apps_list()
-        await TaskManager.sleep(0.1)
-        if __debug__: logger.debug("starting icon downloads")
         TaskManager.create_task(self.download_icons())
 
     def create_apps_list(self):
