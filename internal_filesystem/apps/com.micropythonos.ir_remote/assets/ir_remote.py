@@ -1,4 +1,5 @@
 import gc
+import logging
 import lvgl as lv
 
 from mpos import Activity, Intent, SharedPreferences, SettingsActivity, IRManager
@@ -9,6 +10,9 @@ from learn_nec_ir import LearnNECIR
 from learn_blaster_ir import LearnBlasterIR
 from learn_tcl_ir import LearnTCLIR
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 try:
     from machine import Pin
     from ir.ir_tx.nec import NEC
@@ -16,8 +20,9 @@ try:
     from ir.ir_tx.tcl import TCL
 
     simulation_mode = False
+    if __debug__: logger.debug("IR TX imports OK: Pin=%s NEC=%s SONY_12=%s TCL=%s", Pin, NEC, SONY_12, TCL)
 except Exception as e:
-    print(f"Activating simulation mode because could not import Pin/NEC/SONY/TCL: {e}")
+    logger.error("Activating simulation mode because could not import Pin/NEC/SONY/TCL: %s", e)
     simulation_mode = True
     Pin = None
     NEC = None
@@ -72,6 +77,7 @@ class IRRemote(Activity):
     }
 
     def onCreate(self):
+        if __debug__: logger.debug("onCreate: simulation_mode=%s", simulation_mode)
         self.prefs = SharedPreferences(self.appFullName)
         self.nec = None
         self.sony = None
@@ -81,9 +87,11 @@ class IRRemote(Activity):
         if not simulation_mode:
             try:
                 self.ir_pin = IRManager.txPin
+                if __debug__: logger.debug("onCreate: IRManager.txPin=%s", self.ir_pin)
             except Exception as e:
-                print(f"Failed to init IR pin, switching to simulation mode: {e}")
+                logger.error("Failed to init IR pin, switching to simulation mode: %s", e)
                 self.ir_pin = None
+        if __debug__: logger.debug("onCreate: ir_pin=%s", self.ir_pin)
 
         self.screen = lv.obj()
         self.screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -197,13 +205,16 @@ class IRRemote(Activity):
     def _apply_profile(self):
         name = self._profile_name()
         profile = self.PROFILES.get(name, self.PROFILES[self.DEFAULT_PROFILE])
+        if __debug__: logger.debug("_apply_profile: name=%s protocol=%s simulation=%s ir_pin=%s", name, profile.get("protocol"), simulation_mode, self.ir_pin)
 
         if simulation_mode or not self.ir_pin:
-            print("IR TX pin not configured; skipping IR profile apply.")
+            logger.warning("_apply_profile: IR TX pin not configured; skipping (simulation=%s ir_pin=%s)", simulation_mode, self.ir_pin)
             return
 
         try:
+            if __debug__: logger.debug("_apply_profile: calling ir_pin.init(Pin.OUT) on %s", self.ir_pin)
             self.ir_pin.init(Pin.OUT)
+            if __debug__: logger.debug("_apply_profile: ir_pin.init done, pin value=%s", self.ir_pin.value())
 
             if profile["protocol"] == "sony":
                 if self.nec:
@@ -213,7 +224,9 @@ class IRRemote(Activity):
                     self._deinit_ir(self.tcl)
                     self.tcl = None
                 if not self.sony:
+                    if __debug__: logger.debug("_apply_profile: creating SONY_12 on pin %s", self.ir_pin)
                     self.sony = SONY_12(self.ir_pin)
+                    if __debug__: logger.debug("_apply_profile: SONY_12 created: %s", self.sony)
             elif profile["protocol"] == "tcl":
                 if self.nec:
                     self._deinit_ir(self.nec)
@@ -222,12 +235,18 @@ class IRRemote(Activity):
                     self._deinit_ir(self.sony)
                     self.sony = None
                 freq = profile.get("freq", 38000)
+                if __debug__: logger.debug("_apply_profile: TCL freq=%s existing tcl=%s existing _freq=%s", freq, self.tcl, getattr(self.tcl, "_freq", None))
                 if self.tcl and getattr(self.tcl, "_freq", None) != freq:
+                    if __debug__: logger.debug("_apply_profile: freq changed, deiniting existing TCL")
                     self._deinit_ir(self.tcl)
                     self.tcl = None
                 if not self.tcl:
+                    if __debug__: logger.debug("_apply_profile: creating TCL(pin=%s, freq=%s)", self.ir_pin, freq)
                     self.tcl = TCL(self.ir_pin, freq=freq)
                     self.tcl._freq = freq
+                    if __debug__: logger.debug("_apply_profile: TCL created: %s rmt=%s", self.tcl, getattr(self.tcl, "_rmt", None))
+                else:
+                    if __debug__: logger.debug("_apply_profile: reusing existing TCL driver")
             else:
                 if self.sony:
                     self._deinit_ir(self.sony)
@@ -236,21 +255,29 @@ class IRRemote(Activity):
                     self._deinit_ir(self.tcl)
                     self.tcl = None
                 if not self.nec:
+                    if __debug__: logger.debug("_apply_profile: creating NEC on pin %s", self.ir_pin)
                     self.nec = NEC(self.ir_pin)
+                    if __debug__: logger.debug("_apply_profile: NEC created: %s rmt=%s", self.nec, getattr(self.nec, "_rmt", None))
                 self.nec.samsung = profile.get("samsung", False)
+                if __debug__: logger.debug("_apply_profile: NEC samsung=%s", self.nec.samsung)
         except Exception as e:
-            print(f"Failed to init IR protocol, switching to simulation mode: {e}")
+            logger.error("_apply_profile: Failed to init IR protocol: %s", e)
+            import sys
+            sys.print_exception(e)
             self.nec = None
             self.sony = None
             self.tcl = None
 
     def _deinit_ir(self, driver):
+        if __debug__: logger.debug("_deinit_ir: driver=%s", driver)
         try:
             rmt = getattr(driver, "_rmt", None)
+            if __debug__: logger.debug("_deinit_ir: rmt=%s", rmt)
             if rmt and hasattr(rmt, "deinit"):
                 rmt.deinit()
+                if __debug__: logger.debug("_deinit_ir: rmt.deinit() done")
         except Exception as e:
-            print(f"Failed to deinit IR driver: {e}")
+            logger.error("_deinit_ir: Failed to deinit IR driver: %s", e)
         gc.collect()
 
     def _header_height(self, pad):
@@ -273,34 +300,46 @@ class IRRemote(Activity):
     def _transmit(self, data):
         profile = self.PROFILES.get(self._profile_name(), self.PROFILES[self.DEFAULT_PROFILE])
         addr = profile["addr"]
+        if __debug__: logger.debug("_transmit: protocol=%s addr=0x%x data=0x%x nec=%s sony=%s tcl=%s ir_pin=%s", profile["protocol"], addr, data, self.nec, self.sony, self.tcl, self.ir_pin)
 
         if simulation_mode or (not self.nec and not self.sony and not self.tcl):
-            print(
-                f"Simulation mode: would transmit protocol={profile['protocol']} addr=0x{addr:02x} data=0x{data:02x}"
-            )
+            logger.warning("_transmit: no driver available (simulation=%s nec=%s sony=%s tcl=%s)", simulation_mode, self.nec, self.sony, self.tcl)
             return
 
         if self.ir_pin:
+            if __debug__: logger.debug("_transmit: re-asserting pin %s as OUT", self.ir_pin)
             self.ir_pin.init(Pin.OUT)
+            if __debug__: logger.debug("_transmit: pin value after init=%s", self.ir_pin.value())
 
-        if profile["protocol"] == "sony":
-            self.sony.transmit(addr, data)
-        elif profile["protocol"] == "tcl":
-            self.tcl.transmit(addr, data)
-        else:
-            self.nec.transmit(addr, data)
+        try:
+            if profile["protocol"] == "sony":
+                if __debug__: logger.debug("_transmit: calling sony.transmit(0x%x, 0x%x)", addr, data)
+                self.sony.transmit(addr, data)
+                if __debug__: logger.debug("_transmit: sony.transmit done")
+            elif profile["protocol"] == "tcl":
+                if __debug__: logger.debug("_transmit: calling tcl.transmit(0x%x, 0x%x) rmt=%s", addr, data, getattr(self.tcl, "_rmt", None))
+                self.tcl.transmit(addr, data)
+                if __debug__: logger.debug("_transmit: tcl.transmit done")
+            else:
+                if __debug__: logger.debug("_transmit: calling nec.transmit(0x%x, 0x%x) samsung=%s rmt=%s", addr, data, getattr(self.nec, "samsung", None), getattr(self.nec, "_rmt", None))
+                self.nec.transmit(addr, data)
+                if __debug__: logger.debug("_transmit: nec.transmit done")
+        except Exception as e:
+            logger.error("_transmit: transmit failed: %s", e)
+            import sys
+            sys.print_exception(e)
 
     def _send_vol_up(self):
-        print("Sending volume up")
+        if __debug__: logger.debug("_send_vol_up: profile=%s", self._profile_name())
         for code in self.PROFILES[self._profile_name()]["vol_up"]:
             self._transmit(code)
 
     def _send_vol_down(self):
-        print("Sending volume down")
+        if __debug__: logger.debug("_send_vol_down: profile=%s", self._profile_name())
         for code in self.PROFILES[self._profile_name()]["vol_down"]:
             self._transmit(code)
 
     def _send_power(self):
-        print("Sending on/off")
+        if __debug__: logger.debug("_send_power: profile=%s", self._profile_name())
         for code in self.PROFILES[self._profile_name()]["power"]:
             self._transmit(code)
