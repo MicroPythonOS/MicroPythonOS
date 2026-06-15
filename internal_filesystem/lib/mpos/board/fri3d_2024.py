@@ -224,7 +224,7 @@ InputManager.register_indev(indev)
 import mpos.sdcard
 mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
 
-IRManager.txPin = Pin(10, Pin.OUT)
+IRManager.txPin = Pin(13, Pin.OUT) # IO10 is "blaster" but this doesn't control the IR LED directly, it takes "Link Packets"
 IRManager.rxPin = Pin(11, Pin.IN)
 
 # Battery voltage ADC measuring
