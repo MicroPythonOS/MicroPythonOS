@@ -58,6 +58,7 @@ class AppStore(Activity):
         self._migrate_backend_pref()
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self._refresh_in_progress = False
+        self._data_loaded = False
         self.main_screen = lv.obj()
 
         # ---- top bar ----
@@ -109,11 +110,10 @@ class AppStore(Activity):
             um.set_state_callback(self._on_update_state_change)
             um.suppress_notifications = True
             self._sync_update_banner(um.current_state, um.updatable_apps)
-            um.check_for_updates_now(self.get_backend_list_url_from_settings())
         except Exception as e:
             logger.warning("could not attach to AppUpdateManager: %s", e)
 
-        if not len(self.apps):
+        if not self._data_loaded:
             self.refresh_list()
 
     def onPause(self, screen):
@@ -283,6 +283,7 @@ class AppStore(Activity):
         except Exception as e:
             self.please_wait_label.set_text(f"ERROR: could not parse reponse.text JSON: {e}")
             return
+        self._data_loaded = True
         self.please_wait_label.set_text(f"Download successful, building list...")
         await TaskManager.sleep(0.1)
         if __debug__: logger.debug("removing duplicates by app.name")
