@@ -203,6 +203,8 @@ class IRRemote(Activity):
             return
 
         try:
+            self.ir_pin.init(Pin.OUT)
+
             if profile["protocol"] == "sony":
                 if self.nec:
                     self._deinit_ir(self.nec)
@@ -277,6 +279,9 @@ class IRRemote(Activity):
                 f"Simulation mode: would transmit protocol={profile['protocol']} addr=0x{addr:02x} data=0x{data:02x}"
             )
             return
+
+        if self.ir_pin:
+            self.ir_pin.init(Pin.OUT)
 
         if profile["protocol"] == "sony":
             self.sony.transmit(addr, data)
