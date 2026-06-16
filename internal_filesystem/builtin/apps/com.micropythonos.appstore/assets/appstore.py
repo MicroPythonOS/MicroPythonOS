@@ -342,7 +342,14 @@ class AppStore(Activity):
             self._add_click_handler(cont, self.show_app_detail, app)
             icon_spacer = lv.image(cont)
             icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
-            icon_spacer.set_src(lv.SYMBOL.REFRESH)
+            if app.icon_data:
+                image_dsc = lv.image_dsc_t({
+                    'data_size': len(app.icon_data),
+                    'data': app.icon_data
+                })
+                icon_spacer.set_src(image_dsc)
+            else:
+                icon_spacer.set_src(lv.SYMBOL.REFRESH)
             self._add_click_handler(icon_spacer, self.show_app_detail, app)
             app.image_icon_widget = icon_spacer
             label_cont = lv.obj(cont)
