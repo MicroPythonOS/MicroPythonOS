@@ -185,6 +185,7 @@ def build_commands(target, extra_args, script_dir, lv_cflags, board):
                   '-sINITIAL_MEMORY=268435456 -sMAXIMUM_MEMORY=2147483648 ' \
                   '-sSTACK_SIZE=8388608 -sSTACK_OVERFLOW_CHECK=2 '        \
                   '-sFORCE_FILESYSTEM=1 -sEXIT_RUNTIME=0 '                \
+                  '-lidbfs.js '                                          \
                   '-sASYNCIFY=1 -sASYNCIFY_STACK_SIZE=32768 '            \
                   '-sASSERTIONS=2 --profiling-funcs '                     \
                   '-Wl,--allow-multiple-definition '

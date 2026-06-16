@@ -66,6 +66,69 @@
       logEl.scrollTop = logEl.scrollHeight;
     }
 
+    // --- Persistent filesystem helpers (IDBFS / IndexedDB) -----------------
+    // /data and /apps are mounted from IndexedDB so app preferences and
+    // user-installed apps survive page reloads. The functions below run inside
+    // the Emscripten runtime once `FS` exists (preRun / onRuntimeInitialized).
+
+    function copyRecursive(src, dst) {
+      var entries = FS.readdir(src);
+      for (var i = 0; i < entries.length; i++) {
+        var name = entries[i];
+        if (name === "." || name === "..") continue;
+        var s = src + "/" + name;
+        var d = dst + "/" + name;
+        var mode;
+        try {
+          mode = FS.stat(s).mode;
+        } catch (e) {
+          continue;
+        }
+        if (FS.isDir(mode)) {
+          try { FS.mkdir(d); } catch (e) {}
+          copyRecursive(s, d);
+        } else {
+          // Regular files (and any symlink resolved by readFile).
+          try {
+            FS.writeFile(d, FS.readFile(s));
+          } catch (e) {
+            console.error("seed copy failed for " + s + ":", e);
+          }
+        }
+      }
+    }
+
+    // Copy the bundled demo apps into the persistent /apps store, but only
+    // once. The marker file makes user uninstalls of bundled apps stick across
+    // reloads instead of being re-seeded every boot.
+    function seedBundledApps() {
+      var marker = "/apps/.seeded";
+      try { FS.stat(marker); return; } catch (e) {}
+      try { FS.stat("/.bundled_apps"); } catch (e) { return; }
+      copyRecursive("/.bundled_apps", "/apps");
+      try { FS.writeFile(marker, "1"); } catch (e) {}
+      flushPersist();
+    }
+
+    var _persistInFlight = false;
+    var _persistTimer = null;
+    function flushPersist() {
+      if (_persistInFlight) return;
+      _persistInFlight = true;
+      FS.syncfs(false, function (err) {
+        _persistInFlight = false;
+        if (err) console.error("IDBFS flush failed:", err);
+      });
+    }
+    function startPersistFlush() {
+      if (_persistTimer) return;
+      _persistTimer = setInterval(flushPersist, 4000);
+      window.addEventListener("pagehide", flushPersist);
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") flushPersist();
+      });
+    }
+
     var Module = {
       canvas: canvas,
       // Run MicroPythonOS: import the frozen main module. No -i so the
@@ -81,11 +144,31 @@
         function () {
           // Keep keyboard focus on the canvas for SDL keyboard events.
           canvas.addEventListener("click", () => canvas.focus());
+
+          // Mount the persistent filesystem (IndexedDB) before the runtime
+          // starts. /data holds app preferences/config and /apps holds
+          // user-installed apps; both are kept disjoint from the read-only
+          // preload package so they survive reloads. The boot is gated on the
+          // initial syncfs so Python sees the persisted contents.
+          var IDB = FS.filesystems.IDBFS;
+          try { FS.mkdir("/data"); } catch (e) {}
+          try { FS.mkdir("/apps"); } catch (e) {}
+          FS.mount(IDB, {}, "/data");
+          FS.mount(IDB, {}, "/apps");
+          addRunDependency("idbfs-load");
+          FS.syncfs(true, function (err) {
+            if (err) console.error("IDBFS initial load failed:", err);
+            removeRunDependency("idbfs-load");
+          });
         }
       ],
       onRuntimeInitialized: function () {
         statusEl.textContent = "";
         canvas.focus();
+        // Seed bundled apps into /apps on first run (after preload + syncfs),
+        // then start flushing writes back to IndexedDB periodically.
+        try { seedBundledApps(); } catch (e) { console.error("seedBundledApps failed:", e); }
+        startPersistFlush();
       }
     };
   </script>

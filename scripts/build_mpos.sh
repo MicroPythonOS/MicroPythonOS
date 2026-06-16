@@ -376,6 +376,25 @@ elif [ "$target" == "web" ]; then
 		find "$staged_fs" -type l ! -exec test -e {} \; -delete
 	fi
 
+	# Persistence split for the browser build (IDBFS / IndexedDB):
+	#   - /data and /apps are mounted from IndexedDB at boot (see web/shell.html)
+	#     so app preferences and user-installed apps survive page reloads.
+	#   - Those two paths therefore must NOT be baked into the read-only preload
+	#     package, or the preload would shadow/conflict with the IDBFS mounts.
+	#   - The bundled demo apps still need to ship with the image, so they are
+	#     packaged separately at /.bundled_apps and copied into the persistent
+	#     /apps store once, on first boot (seedBundledApps() in shell.html).
+	staged_bundled_apps="$codebasedir"/web/.preload_bundled_apps
+	rm -rf "$staged_bundled_apps"
+	if [ -d "$staged_fs"/apps ]; then
+		mv "$staged_fs"/apps "$staged_bundled_apps"
+	else
+		mkdir -p "$staged_bundled_apps"
+	fi
+	# /data is recreated empty by IDBFS at boot; drop the preloaded copy so it
+	# does not collide with the persistent mount.
+	rm -rf "$staged_fs"/data
+
 	# The browser build disables native threading (MICROPY_PY_THREAD=0), so the
 	# C builtin `_thread` module is absent. MicroPythonOS imports `_thread`
 	# widely (TaskManager, threading.py, audio, wifi). Provide a web-only
@@ -1141,7 +1160,10 @@ PYEOF
 	# filesystem is the root). MicroPythonOS' frozen main.py does
 	# `sys.path.insert(0, "lib")` and apps use root-relative paths like /apps and
 	# /builtin, so the staged tree must live at the root for those to resolve.
-	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --shell-file $shell_file"
+	# The bundled demo apps are packaged separately at /.bundled_apps because
+	# /apps is a persistent IDBFS mount (see web/shell.html); they are seeded
+	# into /apps on first boot.
+	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --shell-file $shell_file"
 
 	pushd "$codebasedir"/lvgl_micropython/
 	set -x

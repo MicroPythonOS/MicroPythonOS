@@ -287,12 +287,59 @@ message as bytes), `ws_send_text(h, str)`, `ws_send_bytes(h, bytes)`,
 
 ---
 
+## Persistence (writable FS via IndexedDB / IDBFS)
+
+The bulk of the filesystem (`/lib`, `/builtin`, `main.py`) is baked read-only
+into `micropython.data` at link time. Two paths are instead mounted from the
+browser's IndexedDB so writes survive a page reload:
+
+| Path | Backing | Contents |
+| --- | --- | --- |
+| `/data` | IDBFS (IndexedDB) | App preferences / config (`SharedPreferences` writes `data/<app>/config.json`). |
+| `/apps` | IDBFS (IndexedDB) | User-installed apps (`AppManager` installs to `apps/<fullname>`) and a one-time copy of the bundled demo apps. |
+
+How it is wired up:
+
+- **Link flag:** `-lidbfs.js` is added to `web_ldflags` in
+  `scripts/web_port/web.py` so the IDBFS backend is available.
+- **Mount + load (boot):** `web/shell.html`'s `Module.preRun` mounts IDBFS at
+  `/data` and `/apps`, then gates the runtime start on
+  `FS.syncfs(true, …)` (wrapped in `addRunDependency`/`removeRunDependency`) so
+  Python only starts once the persisted contents are loaded from IndexedDB.
+- **Why those two paths are excluded from the preload:** `FS.syncfs(true)`
+  reconciles the in-memory FS to match the IndexedDB store, so a mount point must
+  not also be a `--preload-file` target — otherwise the first boot (empty store)
+  would wipe the preloaded files. `build_mpos.sh` therefore stages the tree
+  **without** `apps/` and `data/`: the bundled demo apps are packaged separately
+  at `/.bundled_apps` (`--preload-file …@/.bundled_apps`) and `data/` is dropped
+  (IDBFS recreates it empty).
+- **Seeding bundled apps:** on first run `seedBundledApps()` copies
+  `/.bundled_apps` into `/apps` once and writes a `/apps/.seeded` marker, so the
+  bundled apps appear via the normal `AppManager` scan. The marker means a user
+  uninstalling a bundled app makes the removal stick across reloads instead of
+  being re-seeded every boot.
+- **Flushing writes:** `startPersistFlush()` periodically calls
+  `FS.syncfs(false, …)` (every few seconds, plus on `pagehide` and when the tab
+  is hidden) to push writes back to IndexedDB.
+
+Notes / limitations:
+
+- Persistence is per-origin and subject to the browser's IndexedDB storage quota
+  and eviction policy (clearing site data wipes it).
+- No device-side code changed: `AppManager` install/uninstall and
+  `SharedPreferences` use their normal relative paths (`apps/…`, `data/…`), which
+  resolve to the IDBFS mounts because the working directory is `/`.
+
+---
+
 ## Making changes — common scenarios
 
 - **Change MPOS Python code / apps:** edit under `internal_filesystem/` as usual,
   then rebuild (`scripts/build_mpos_web.sh`). The staged FS is rebuilt every
-  time, so changes are picked up. (The FS is baked into `micropython.data` at
-  link time; a rebuild is required — there is no live file mount.)
+  time, so changes are picked up. (Most of the FS is baked into
+  `micropython.data` at link time; a rebuild is required — there is no live file
+  mount. `/data` and `/apps` are the exception: they persist in IndexedDB across
+  reloads — see "Persistence".)
 - **Change the HTML/JS shell:** edit `web/shell.html`, rebuild. `index.html` and
   `mpos.html` are regenerated from it.
 - **Change build/link flags:** edit `scripts/web_port/web.py`, rebuild.
