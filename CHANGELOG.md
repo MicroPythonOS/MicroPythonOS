@@ -1,7 +1,8 @@
 Future release (next version)
 =====
 
-Put unreleased changes here!
+Frameworks:
+- FontManager: add emojis to the built-in pack (Noto, 32×32) — racing car 🏎️, corn 🌽, pizza 🍕, dashing-away 💨, collision 💥, toilet 🚽, face with medical mask 😷, raised fist ✊, heart hands 🫶, orange heart 🧡, purple heart 💜, bird 🐦, and the El Salvador flag 🇸🇻. The man-shrugging sequence 🤷‍♂️ now renders via the existing neutral shrug
 
 0.12.1
 ======
