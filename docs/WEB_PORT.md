@@ -321,3 +321,28 @@ A **fatal** problem would instead show `memory access out of bounds`,
 - Remove the debug flags `-sASSERTIONS=2 --profiling-funcs` from
   `web_ldflags` in `scripts/web_port/web.py`.
 - Rebuild and serve the contents of `web/` from any static host.
+
+---
+
+## Deploying to GitHub Pages
+
+[`scripts/deploy_web_pages.sh`](../scripts/deploy_web_pages.sh) builds the web
+export and force-pushes the contents of `web/` as a single commit to a
+`gh-pages` branch. It is a plain command (no GitHub Action / CI), so you run it
+whenever you want to update the live site.
+
+```bash
+scripts/deploy_web_pages.sh                 # build, then deploy to remote `fork`
+scripts/deploy_web_pages.sh --no-build      # deploy the existing web/ as-is
+REMOTE=origin scripts/deploy_web_pages.sh   # deploy to a different remote
+BRANCH=gh-pages scripts/deploy_web_pages.sh # use a different branch
+```
+
+One-time setup on GitHub: **Settings → Pages → Build and deployment → Source:
+"Deploy from a branch", Branch: `gh-pages` / `(root)`**. The site is then served
+at `https://<owner>.github.io/<repo>/`.
+
+The script adds a `.nojekyll` file so Pages serves the underscore-prefixed
+`.preload_internal_filesystem/` directory verbatim (Jekyll would otherwise skip
+it). The `gh-pages` branch holds only generated artifacts and is overwritten on
+every deploy.
