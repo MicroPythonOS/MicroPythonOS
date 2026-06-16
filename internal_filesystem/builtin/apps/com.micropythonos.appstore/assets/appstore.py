@@ -279,6 +279,7 @@ class AppStore(Activity):
 
         backend_type = self.get_backend_type_from_settings()
         installed_by_fullname = {app.fullname: app for app in self.apps}
+        new_apps = []
         for app_data in parsed:
             try:
                 if backend_type == self._BACKEND_API_BADGEHUB:
@@ -286,7 +287,7 @@ class AppStore(Activity):
                         continue
                     if app_data.get("slug") in self._builtin_fullnames:
                         continue
-                    self.apps.append(AppStore.badgehub_app_to_mpos_app(app_data))
+                    new_apps.append(AppStore.badgehub_app_to_mpos_app(app_data))
                 else:
                     fullname = app_data["fullname"]
                     if fullname in self._builtin_fullnames:
@@ -296,7 +297,7 @@ class AppStore(Activity):
                         existing.icon_url = app_data["icon_url"]
                         existing.download_url = app_data["download_url"]
                     else:
-                        self.apps.append(App(
+                        new_apps.append(App(
                             app_data["name"], app_data["publisher"],
                             app_data["short_description"], app_data["long_description"],
                             app_data["icon_url"], app_data["download_url"],
@@ -306,9 +307,13 @@ class AppStore(Activity):
             except Exception as e:
                 logger.warning("could not process store app %s: %s", app_data.get("fullname", "?"), e)
 
-        self.apps.sort(key=lambda x: x.name.lower())
-        self.create_apps_list()
-        TaskManager.create_task(self.download_icons())
+        # Insert new apps at their sorted positions (avoids rebuilding entire list)
+        for app in new_apps:
+            idx = self._find_sorted_insert_index(app)
+            self.apps.insert(idx, app)
+            self._insert_app_list_item(app, idx)
+        if new_apps:
+            TaskManager.create_task(self.download_icons())
 
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
@@ -373,6 +378,64 @@ class AppStore(Activity):
             update_label.add_flag(lv.obj.FLAG.HIDDEN)
             self._update_labels[app.fullname] = update_label
         if __debug__: logger.debug("create_apps_list done")
+
+    def _find_sorted_insert_index(self, app):
+        """Find the index where app should be inserted to maintain alphabetical order."""
+        app_key = app.name.lower()
+        for i, existing in enumerate(self.apps):
+            if app_key < existing.name.lower():
+                return i
+        return len(self.apps)
+
+    def _insert_app_list_item(self, app, index):
+        """Create LVGL widgets for an app and insert at the given index in the list."""
+        if not hasattr(self, "apps_list") or not self.apps_list:
+            return
+        item = self.apps_list.add_button(None, "")
+        item.set_style_pad_all(0, lv.PART.MAIN)
+        item.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        self._add_click_handler(item, self.show_app_detail, app)
+        cont = lv.obj(item)
+        cont.set_style_pad_all(0, lv.PART.MAIN)
+        cont.set_flex_flow(lv.FLEX_FLOW.ROW)
+        cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+        self._apply_default_styles(cont)
+        self._add_click_handler(cont, self.show_app_detail, app)
+        icon_spacer = lv.image(cont)
+        icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
+        if app.icon_data:
+            image_dsc = lv.image_dsc_t({
+                'data_size': len(app.icon_data),
+                'data': app.icon_data
+            })
+            icon_spacer.set_src(image_dsc)
+        else:
+            icon_spacer.set_src(lv.SYMBOL.REFRESH)
+        self._add_click_handler(icon_spacer, self.show_app_detail, app)
+        app.image_icon_widget = icon_spacer
+        label_cont = lv.obj(cont)
+        self._apply_default_styles(label_cont)
+        label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        label_cont.set_style_pad_ver(10, lv.PART.MAIN)
+        label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
+        self._add_click_handler(label_cont, self.show_app_detail, app)
+        name_label = lv.label(label_cont)
+        name_label.set_text(app.name)
+        name_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        self._add_click_handler(name_label, self.show_app_detail, app)
+        desc_label = lv.label(label_cont)
+        desc_label.set_text(app.short_description)
+        desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+        self._add_click_handler(desc_label, self.show_app_detail, app)
+        update_label = lv.label(label_cont)
+        update_label.set_text("Update available")
+        update_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+        update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
+        update_label.add_flag(lv.obj.FLAG.HIDDEN)
+        self._update_labels[app.fullname] = update_label
+        # Move to correct sorted position
+        item.move_to_index(index)
 
     async def download_icons(self):
         if __debug__: logger.debug("downloading icons")
