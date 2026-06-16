@@ -10,9 +10,9 @@
 #   Branch: gh-pages / (root).
 #
 # Usage:
-#   scripts/deploy_web_pages.sh                 # build, then deploy to `fork`
+#   scripts/deploy_web_pages.sh                 # build, then deploy to `origin` remote's `gh-pages` branch
 #   scripts/deploy_web_pages.sh --no-build      # deploy the existing web/ as-is
-#   REMOTE=origin scripts/deploy_web_pages.sh   # deploy to a different remote
+#   REMOTE=other-origin scripts/deploy_web_pages.sh   # deploy to a different remote
 #   BRANCH=gh-pages scripts/deploy_web_pages.sh # use a different Pages branch
 
 set -euo pipefail
@@ -20,7 +20,7 @@ set -euo pipefail
 mydir=$(cd "$(dirname "$0")" && pwd -P)
 codebasedir=$(cd "$mydir/.." && pwd -P)
 
-remote="${REMOTE:-fork}"
+remote="${REMOTE:-origin}"
 branch="${BRANCH:-gh-pages}"
 webdir="$codebasedir/web"
 

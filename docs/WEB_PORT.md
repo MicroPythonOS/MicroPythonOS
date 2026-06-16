@@ -259,12 +259,18 @@ a small native module plus an `aiohttp` shim:
 
 | Piece | Location | Role |
 | --- | --- | --- |
-| `_webnet` native module | `scripts/web_port/ext_mod/_webnet/webnet.c` (+ `micropython.mk`) | C/`EM_JS` bridge to `fetch()`. Non-blocking, poll-based so the asyncio/UI loop keeps running. Built only for web (`MPOS_WEB=1`); copied into `lvgl_micropython/ext_mod/_webnet/` by `build_mpos.sh`. |
-| `aiohttp` shim | staged `lib/aiohttp/__init__.py` (heredoc in `build_mpos.sh`) | Re-implements `ClientSession.get/post/put/...` on top of `_webnet`, polling with `await asyncio.sleep_ms(...)`. Re-exports the WebSocket names (`WSMsgType`, `WebSocketClient`, `ClientWebSocketResponse`) from the device `aiohttp_ws.py` so imports resolve. |
+| `_webnet` native module | `scripts/web_port/ext_mod/_webnet/webnet.c` (+ `micropython.mk`) | C/`EM_JS` bridge to the browser `fetch()` and `WebSocket` APIs. Non-blocking, poll-based so the asyncio/UI loop keeps running. Built only for web (`MPOS_WEB=1`); copied into `lvgl_micropython/ext_mod/_webnet/` by `build_mpos.sh`. |
+| `aiohttp` shim | staged `lib/aiohttp/__init__.py` (heredoc in `build_mpos.sh`) | Re-implements `ClientSession.get/post/put/...` on top of `_webnet`'s fetch bridge, and `ClientSession.ws_connect()` on top of `_webnet`'s WebSocket bridge, polling with `await asyncio.sleep_ms(...)`. Imports `WSMsgType` from the device `aiohttp_ws.py`. |
 
-`_webnet` API: `fetch_start(method, url, headers_json, body)` returns an int
+`_webnet` HTTP API: `fetch_start(method, url, headers_json, body)` returns an int
 handle; then `poll(h)` (0 pending / 1 done / -1 error), `status(h)`,
 `headers(h)`, `body(h)`, `error(h)`, and `free(h)`.
+
+`_webnet` WebSocket API: `ws_open(url, protocols_json)` returns a handle;
+`ws_state(h)` (0 connecting / 1 open / 2 closing / 3 closed), `ws_peek_type(h)`
+(0 none / 1 text / 2 binary), `ws_peek_len(h)`, `ws_read(h)` (pops the front
+message as bytes), `ws_send_text(h, str)`, `ws_send_bytes(h, bytes)`,
+`ws_close(h)`, `ws_error(h)`, and `ws_free(h)`.
 
 **Limitations:**
 
@@ -273,8 +279,11 @@ handle; then `poll(h)` (0 pending / 1 done / -1 error), `status(h)`,
   downloads fail in the browser with `fetch failed: TypeError: Failed to fetch` —
   this is a server-side policy, not a port bug. Same-origin or CORS-enabled
   endpoints work.
-- **WebSockets not yet wired.** `ws_connect()` raises `NotImplementedError`; the
-  WS symbols exist only so module imports (e.g. the Nostr service) succeed.
+- **WebSockets work**, via the browser `WebSocket` API (`ClientSession.ws_connect`).
+  Unlike `fetch()`, cross-origin WebSockets are not blocked by CORS (the server
+  decides via the `Origin` header), so e.g. Nostr relays connect. Limitation:
+  the browser WebSocket API cannot set custom request headers, so any `headers`
+  passed to `ws_connect`/`ClientSession` are ignored for the WS handshake.
 
 ---
 

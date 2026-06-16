@@ -545,15 +545,9 @@ import json as _json
 import time
 import _webnet
 
-# Re-export the WebSocket names from the (import-clean) device aiohttp_ws module
-# so `from aiohttp import WSMsgType` etc. keep working. The WS transport itself
-# is socket-based and does not function in the browser yet; ws_connect() below
-# raises a clear NotImplementedError. (HTTP over fetch() does work.)
-from .aiohttp_ws import (  # noqa: F401
-    ClientWebSocketResponse,
-    WebSocketClient,
-    WSMsgType,
-)
+# WSMsgType comes from the (import-clean) device aiohttp_ws module; the browser
+# WebSocket transport is implemented below on top of the _webnet native bridge.
+from .aiohttp_ws import WSMsgType  # noqa: F401
 
 HttpVersion10 = "HTTP/1.0"
 HttpVersion11 = "HTTP/1.1"
@@ -655,6 +649,141 @@ class _RequestContextManager:
         return self._coro.__await__()
 
 
+# --- WebSocket support (browser WebSocket via the _webnet bridge) -----------
+
+_WS_TEXT = 1
+_WS_BINARY = 2
+_WS_CLOSE = 8
+
+
+class _WSMessage:
+    def __init__(self, type, data):
+        self.type = type
+        self.data = data
+
+
+class WebSocketClient:
+    # Browser-backed WebSocket. Provides the small surface MPOS reads via
+    # `ws.ws` (the .closed flag and the TEXT/BINARY/CLOSE opcodes) plus the
+    # receive()/send()/close() coroutines used by ClientWebSocketResponse.
+    CLOSE = _WS_CLOSE
+    TEXT = _WS_TEXT
+    BINARY = _WS_BINARY
+
+    def __init__(self, handle):
+        self._handle = handle
+        self.closed = False
+
+    async def receive(self):
+        # Drain any queued message first, then report closure. Non-blocking:
+        # yields to the asyncio loop so the UI keeps running.
+        while True:
+            t = _webnet.ws_peek_type(self._handle)
+            if t:
+                data = _webnet.ws_read(self._handle)
+                if t == _WS_TEXT:
+                    data = str(data, "utf-8")
+                return t, data
+            if _webnet.ws_state(self._handle) == 3:  # CLOSED
+                self.closed = True
+                return self.CLOSE, b""
+            await asyncio.sleep_ms(_POLL_MS)
+
+    async def send(self, data, opcode=None):
+        if isinstance(data, str):
+            _webnet.ws_send_text(self._handle, data)
+        else:
+            _webnet.ws_send_bytes(self._handle, data)
+
+    async def close(self):
+        if not self.closed:
+            self.closed = True
+            _webnet.ws_close(self._handle)
+
+
+class ClientWebSocketResponse:
+    def __init__(self, wsclient):
+        self.ws = wsclient
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        t, data = await self.ws.receive()
+        if (not data and t == self.ws.CLOSE) or self.ws.closed:
+            raise StopAsyncIteration
+        return _WSMessage(t, data)
+
+    async def receive(self):
+        t, data = await self.ws.receive()
+        return _WSMessage(t, data)
+
+    async def close(self):
+        await self.ws.close()
+
+    async def send_str(self, data):
+        if not isinstance(data, str):
+            raise TypeError("data argument must be str (%r)" % type(data))
+        await self.ws.send(data)
+
+    async def send_bytes(self, data):
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError("data argument must be byte-ish (%r)" % type(data))
+        await self.ws.send(data)
+
+    async def send_json(self, data):
+        await self.send_str(_json.dumps(data))
+
+    async def receive_str(self):
+        msg = await self.receive()
+        if msg.type != self.ws.TEXT:
+            raise TypeError("Received message %s:%r is not str" % (msg.type, msg.data))
+        return msg.data
+
+    async def receive_bytes(self):
+        msg = await self.receive()
+        if msg.type != self.ws.BINARY:
+            raise TypeError("Received message %s:%r is not bytes" % (msg.type, msg.data))
+        return msg.data
+
+    async def receive_json(self):
+        return _json.loads(await self.receive_str())
+
+
+class _WSRequestContextManager:
+    def __init__(self, url, protocols):
+        self._url = url
+        self._protocols = protocols
+        self._resp = None
+
+    async def _connect(self):
+        handle = _webnet.ws_open(self._url, _json.dumps(self._protocols or []))
+        # Wait for the socket to open (or fail), yielding to the asyncio loop.
+        while True:
+            state = _webnet.ws_state(handle)
+            if state == 1:  # OPEN
+                break
+            if state == 3:  # CLOSED before opening => failed
+                err = _webnet.ws_error(handle) or "websocket connection failed"
+                _webnet.ws_free(handle)
+                raise OSError("ws_connect failed: " + err)
+            await asyncio.sleep_ms(_POLL_MS)
+        self._resp = ClientWebSocketResponse(WebSocketClient(handle))
+        return self._resp
+
+    async def __aenter__(self):
+        return await self._connect()
+
+    async def __aexit__(self, *args):
+        if self._resp is not None:
+            await self._resp.close()
+            _webnet.ws_free(self._resp.ws._handle)
+        return False
+
+    def __await__(self):
+        return self._connect().__await__()
+
+
 class ClientSession:
     def __init__(self, base_url="", headers=None, **kwargs):
         self._base_url = base_url or ""
@@ -729,10 +858,11 @@ class ClientSession:
     def delete(self, url, **kwargs):
         return self.request("DELETE", url, **kwargs)
 
-    def ws_connect(self, url, **kwargs):
-        raise NotImplementedError(
-            "aiohttp WebSocket (ws_connect) is not yet supported in the web build"
-        )
+    def ws_connect(self, url, *, protocols=(), headers=None, ssl=None, **kwargs):
+        # Browser WebSocket. Note: the browser WebSocket API cannot set custom
+        # request headers, so `headers` (and the session headers) are ignored;
+        # `ssl` is handled automatically for wss:// URLs.
+        return _WSRequestContextManager(url, list(protocols))
 PYEOF
 
 	# Web-only replacement for the frozen `task_handler` driver. The stock
