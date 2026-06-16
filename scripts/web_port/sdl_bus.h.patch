@@ -1,0 +1,13 @@
+diff --git a/ext_mod/lcd_bus/sdl_bus/sdl_bus.h b/ext_mod/lcd_bus/sdl_bus/sdl_bus.h
+index 5347667..c7f91f2 100644
+--- a/ext_mod/lcd_bus/sdl_bus/sdl_bus.h
++++ b/ext_mod/lcd_bus/sdl_bus/sdl_bus.h
+@@ -37,6 +37,8 @@
+             void *buf1;
+             void *buf2;
+ 
++            uint32_t buffer_flags;
++
+             bool trans_done;
+             bool rgb565_byte_swap;
+ 

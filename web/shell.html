@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>MicroPythonOS Web</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #111;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+    }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    canvas {
+      image-rendering: pixelated;
+      background: black;
+      outline: none;
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
+    }
+    #status {
+      color: #9ad;
+      font-size: 12px;
+      min-height: 14px;
+    }
+    #log {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 28vh;
+      margin: 0;
+      overflow: auto;
+      color: #ddd;
+      background: rgba(0, 0, 0, 0.78);
+      font: 12px/1.4 ui-monospace, monospace;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="status">Loading MicroPythonOS…</div>
+    <!-- LVGL display size; MicroPythonOS default profile is 320x240. -->
+    <canvas id="canvas" width="320" height="240" tabindex="0"
+            oncontextmenu="event.preventDefault()"></canvas>
+  </div>
+  <pre id="log"></pre>
+
+  <script>
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+    const canvas = document.getElementById("canvas");
+
+    function appendLog(text, isErr) {
+      logEl.textContent += (isErr ? "[err] " : "") + text + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    var Module = {
+      canvas: canvas,
+      // Run MicroPythonOS: import the frozen main module. No -i so the
+      // browser is not blocked on an interactive REPL read.
+      arguments: ["-X", "heapsize=16M", "-m", "main"],
+      print: (text) => { console.log(text); appendLog(text, false); },
+      printErr: (text) => { console.error(text); appendLog(text, true); },
+      setStatus: (text) => {
+        if (statusEl) statusEl.textContent = text;
+        if (text === "") statusEl.style.display = "none";
+      },
+      preRun: [
+        function () {
+          // Keep keyboard focus on the canvas for SDL keyboard events.
+          canvas.addEventListener("click", () => canvas.focus());
+        }
+      ],
+      onRuntimeInitialized: function () {
+        statusEl.textContent = "";
+        canvas.focus();
+      }
+    };
+  </script>
+
+  {{{ SCRIPT }}}
+</body>
+</html>

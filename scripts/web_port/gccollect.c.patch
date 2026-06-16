@@ -1,0 +1,46 @@
+diff --git a/ports/unix/gccollect.c b/ports/unix/gccollect.c
+index 8f0f5a676..064fc7cbd 100644
+--- a/ports/unix/gccollect.c
++++ b/ports/unix/gccollect.c
+@@ -33,6 +33,34 @@
+ 
+ #if MICROPY_ENABLE_GC
+ 
++#ifdef __EMSCRIPTEN__
++
++// On wasm the conservative setjmp-based register capture used by
++// gc_helper_collect_regs_and_stack() cannot see live object pointers held in
++// wasm locals (they do not live in linear memory and so are invisible to a
++// memory scan).  Collecting under those conditions frees objects that are
++// still referenced, leading to use-after-free crashes ("memory access out of
++// bounds").  Emscripten provides emscripten_scan_stack()/scan_registers()
++// which spill and scan both the C stack and the wasm registers, exactly like
++// the upstream MicroPython webassembly port does.
++#include "emscripten.h"
++
++static void gc_scan_func(void *begin, void *end) {
++    gc_collect_root((void **)begin, (void **)end - (void **)begin + 1);
++}
++
++void gc_collect(void) {
++    gc_collect_start();
++    emscripten_scan_stack(gc_scan_func);
++    emscripten_scan_registers(gc_scan_func);
++    #if MICROPY_PY_THREAD
++    mp_thread_gc_others();
++    #endif
++    gc_collect_end();
++}
++
++#else
++
+ void gc_collect(void) {
+     gc_collect_start();
+     gc_helper_collect_regs_and_stack();
+@@ -42,4 +70,6 @@ void gc_collect(void) {
+     gc_collect_end();
+ }
+ 
++#endif // __EMSCRIPTEN__
++
+ #endif // MICROPY_ENABLE_GC

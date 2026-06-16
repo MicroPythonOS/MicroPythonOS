@@ -1,0 +1,238 @@
+// _webnet — browser networking bridge for the MicroPythonOS WebAssembly build.
+//
+// Exposes the browser fetch() API to MicroPython as a small, NON-BLOCKING,
+// poll-based module so HTTP(S) works in the browser (where raw TCP sockets are
+// unavailable and MICROPY_PY_SOCKET is disabled).
+//
+// Design: fetch_start() kicks off a fetch() and returns immediately with an
+// integer handle; the request runs on the browser event loop. Python then
+// polls poll(handle) (yielding to the asyncio loop via asyncio.sleep between
+// polls) so the LVGL/UI task handler keeps running during downloads. When the
+// body has fully arrived, status()/headers()/body() return the result.
+//
+// This file is only compiled for the Emscripten/web target (guarded by
+// __EMSCRIPTEN__ and gated to MPOS_WEB=1 in micropython.mk); on every other
+// port it compiles to nothing.
+
+#include <stdlib.h>
+
+#include "py/runtime.h"
+#include "py/obj.h"
+#include "py/mperrno.h"
+
+#if defined(__EMSCRIPTEN__)
+
+#include <emscripten.h>
+
+// ---------------------------------------------------------------------------
+// JS side: a per-handle record { state, status, headers, body, err } kept on
+// Module.__webnet.map. state: 0 = pending, 1 = done, -1 = error.
+// ---------------------------------------------------------------------------
+
+EM_JS(int, webnet_js_start,
+      (const char *method, const char *url, const char *headers_json,
+       const char *body, int body_len), {
+    var H = Module.__webnet || (Module.__webnet = { next: 1, map: {} });
+    var handle = H.next++;
+    var rec = { state: 0, status: 0, headers: "{}", body: null, err: "" };
+    H.map[handle] = rec;
+    try {
+        var m = UTF8ToString(method);
+        var u = UTF8ToString(url);
+        var hs = UTF8ToString(headers_json);
+        var hdrs = {};
+        try { hdrs = JSON.parse(hs); } catch (e) {}
+        var opts = { method: m, headers: hdrs };
+        if (body_len > 0) {
+            // Copy the request body out of the wasm heap before it can move.
+            opts.body = HEAPU8.slice(body, body + body_len);
+        }
+        fetch(u, opts).then(function (resp) {
+            rec.status = resp.status;
+            var ho = {};
+            resp.headers.forEach(function (v, k) { ho[k] = v; });
+            rec.headers = JSON.stringify(ho);
+            return resp.arrayBuffer();
+        }).then(function (ab) {
+            rec.body = new Uint8Array(ab);
+            rec.state = 1;
+        }).catch(function (e) {
+            rec.err = "" + e;
+            rec.state = -1;
+        });
+    } catch (e) {
+        rec.err = "" + e;
+        rec.state = -1;
+    }
+    return handle;
+});
+
+EM_JS(int, webnet_js_poll, (int handle), {
+    var H = Module.__webnet; if (!H) return -1;
+    var rec = H.map[handle]; if (!rec) return -1;
+    return rec.state;
+});
+
+EM_JS(int, webnet_js_status, (int handle), {
+    var H = Module.__webnet; if (!H) return 0;
+    var rec = H.map[handle]; if (!rec) return 0;
+    return rec.status;
+});
+
+EM_JS(int, webnet_js_headers_len, (int handle), {
+    var H = Module.__webnet; if (!H) return 0;
+    var rec = H.map[handle]; if (!rec) return 0;
+    return lengthBytesUTF8(rec.headers);
+});
+
+EM_JS(void, webnet_js_headers_copy, (int handle, char *buf, int len), {
+    var H = Module.__webnet; if (!H) return;
+    var rec = H.map[handle]; if (!rec) return;
+    stringToUTF8(rec.headers, buf, len + 1);
+});
+
+EM_JS(int, webnet_js_error_len, (int handle), {
+    var H = Module.__webnet; if (!H) return 0;
+    var rec = H.map[handle]; if (!rec) return 0;
+    return lengthBytesUTF8(rec.err);
+});
+
+EM_JS(void, webnet_js_error_copy, (int handle, char *buf, int len), {
+    var H = Module.__webnet; if (!H) return;
+    var rec = H.map[handle]; if (!rec) return;
+    stringToUTF8(rec.err, buf, len + 1);
+});
+
+EM_JS(int, webnet_js_body_len, (int handle), {
+    var H = Module.__webnet; if (!H) return 0;
+    var rec = H.map[handle]; if (!rec || !rec.body) return 0;
+    return rec.body.length;
+});
+
+EM_JS(void, webnet_js_body_copy, (int handle, char *buf, int len), {
+    var H = Module.__webnet; if (!H) return;
+    var rec = H.map[handle]; if (!rec || !rec.body) return;
+    HEAPU8.set(rec.body.subarray(0, len), buf);
+});
+
+EM_JS(void, webnet_js_free, (int handle), {
+    var H = Module.__webnet; if (!H) return;
+    delete H.map[handle];
+});
+
+// ---------------------------------------------------------------------------
+// MicroPython bindings
+// ---------------------------------------------------------------------------
+
+// fetch_start(method:str, url:str, headers_json:str, body:bytes|None) -> int
+static mp_obj_t webnet_fetch_start(size_t n_args, const mp_obj_t *args) {
+    const char *method = mp_obj_str_get_str(args[0]);
+    const char *url = mp_obj_str_get_str(args[1]);
+    const char *headers = mp_obj_str_get_str(args[2]);
+    const char *body = NULL;
+    int body_len = 0;
+    if (n_args > 3 && args[3] != mp_const_none) {
+        mp_buffer_info_t bufinfo;
+        mp_get_buffer_raise(args[3], &bufinfo, MP_BUFFER_READ);
+        body = (const char *)bufinfo.buf;
+        body_len = (int)bufinfo.len;
+    }
+    return mp_obj_new_int(webnet_js_start(method, url, headers, body, body_len));
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(webnet_fetch_start_obj, 3, 4, webnet_fetch_start);
+
+// poll(handle:int) -> int  (0 pending, 1 done, -1 error)
+static mp_obj_t webnet_poll(mp_obj_t handle_in) {
+    return mp_obj_new_int(webnet_js_poll(mp_obj_get_int(handle_in)));
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(webnet_poll_obj, webnet_poll);
+
+// status(handle:int) -> int
+static mp_obj_t webnet_status(mp_obj_t handle_in) {
+    return mp_obj_new_int(webnet_js_status(mp_obj_get_int(handle_in)));
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(webnet_status_obj, webnet_status);
+
+// headers(handle:int) -> str  (JSON object of response headers)
+static mp_obj_t webnet_headers(mp_obj_t handle_in) {
+    int handle = mp_obj_get_int(handle_in);
+    int len = webnet_js_headers_len(handle);
+    if (len <= 0) {
+        return mp_obj_new_str("{}", 2);
+    }
+    char *buf = malloc((size_t)len + 1);
+    if (buf == NULL) {
+        mp_raise_OSError(MP_ENOMEM);
+    }
+    webnet_js_headers_copy(handle, buf, len);
+    buf[len] = '\0';
+    mp_obj_t result = mp_obj_new_str(buf, len);
+    free(buf);
+    return result;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(webnet_headers_obj, webnet_headers);
+
+// error(handle:int) -> str
+static mp_obj_t webnet_error(mp_obj_t handle_in) {
+    int handle = mp_obj_get_int(handle_in);
+    int len = webnet_js_error_len(handle);
+    if (len <= 0) {
+        return mp_obj_new_str("", 0);
+    }
+    char *buf = malloc((size_t)len + 1);
+    if (buf == NULL) {
+        mp_raise_OSError(MP_ENOMEM);
+    }
+    webnet_js_error_copy(handle, buf, len);
+    buf[len] = '\0';
+    mp_obj_t result = mp_obj_new_str(buf, len);
+    free(buf);
+    return result;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(webnet_error_obj, webnet_error);
+
+// body(handle:int) -> bytes  (full response body)
+static mp_obj_t webnet_body(mp_obj_t handle_in) {
+    int handle = mp_obj_get_int(handle_in);
+    int len = webnet_js_body_len(handle);
+    if (len <= 0) {
+        return mp_obj_new_bytes((const byte *)"", 0);
+    }
+    char *buf = malloc((size_t)len);
+    if (buf == NULL) {
+        mp_raise_OSError(MP_ENOMEM);
+    }
+    webnet_js_body_copy(handle, buf, len);
+    mp_obj_t result = mp_obj_new_bytes((const byte *)buf, len);
+    free(buf);
+    return result;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(webnet_body_obj, webnet_body);
+
+// free(handle:int) -> None
+static mp_obj_t webnet_free(mp_obj_t handle_in) {
+    webnet_js_free(mp_obj_get_int(handle_in));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(webnet_free_obj, webnet_free);
+
+static const mp_rom_map_elem_t webnet_module_globals_table[] = {
+    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__webnet) },
+    { MP_ROM_QSTR(MP_QSTR_fetch_start), MP_ROM_PTR(&webnet_fetch_start_obj) },
+    { MP_ROM_QSTR(MP_QSTR_poll), MP_ROM_PTR(&webnet_poll_obj) },
+    { MP_ROM_QSTR(MP_QSTR_status), MP_ROM_PTR(&webnet_status_obj) },
+    { MP_ROM_QSTR(MP_QSTR_headers), MP_ROM_PTR(&webnet_headers_obj) },
+    { MP_ROM_QSTR(MP_QSTR_error), MP_ROM_PTR(&webnet_error_obj) },
+    { MP_ROM_QSTR(MP_QSTR_body), MP_ROM_PTR(&webnet_body_obj) },
+    { MP_ROM_QSTR(MP_QSTR_free), MP_ROM_PTR(&webnet_free_obj) },
+};
+static MP_DEFINE_CONST_DICT(webnet_module_globals, webnet_module_globals_table);
+
+const mp_obj_module_t webnet_user_cmodule = {
+    .base = { &mp_type_module },
+    .globals = (mp_obj_dict_t *)&webnet_module_globals,
+};
+
+MP_REGISTER_MODULE(MP_QSTR__webnet, webnet_user_cmodule);
+
+#endif // __EMSCRIPTEN__
