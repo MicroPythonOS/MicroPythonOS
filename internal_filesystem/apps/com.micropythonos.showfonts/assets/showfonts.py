@@ -87,7 +87,7 @@ class ShowFonts(Activity):
         text += "👍 👍🏻 / " # neutral thumbs up, light thumbs up
         text += "👌 👌🏻 / " # neutral OK symbol which should fall back to similarity group for thumbs up + light OK symbol
         text += "🤦 🤦🏻 🤦‍♀️ 🤦🏻‍♀️ / " # neutral facepalm, light facepalm, neutral woman facepalm, light woman facepalm
-        text += "🏎️ 🌽 🍕 💨 💥 🚽 😷 ✊ 🫶 🧡 💜 🐦 🇸🇻 🤷‍♂️" # newly added: racing car, corn, pizza, dash, collision, toilet, mask, raised fist, heart hands, orange/purple heart, bird, El Salvador flag, man shrug (-> neutral shrug fallback)
+        text += "🏎️ 🌽 🍕 💨 💥 ✊ 🫶 🧡 💜 🐦 🇸🇻 🤷‍♂️" # newly added: racing car, corn, pizza, dash, collision, raised fist, heart hands, orange/purple heart, bird, El Salvador flag, man shrug (-> neutral shrug fallback)
 
         emojilabel = lv.label(screen)
         emojifont = FontManager.getFont(size=12, emoji=True)
