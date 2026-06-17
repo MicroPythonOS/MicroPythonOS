@@ -2,7 +2,9 @@
 
 dir="$1"
 if [ -z "$dir" ]; then
-	dir="internal_filesystem/"
+	#dir="internal_filesystem/"
+	echo "Usage: $0 dir/"
+	exit 1
 fi
 
 cd "$dir"
