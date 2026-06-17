@@ -1,1 +1,0 @@
-{"name":"Doom","publisher":"MicroPythonOS","short_description":"Legendary 3D shooter","long_description":"Plays Doom","fullname":"com.micropythonos.doom","version":"0.2.0","category":"games","activities":[{"entrypoint":"assets/doom.py","classname":"Main","intent_filters":[{"action":"main","category":"launcher"}]}]}

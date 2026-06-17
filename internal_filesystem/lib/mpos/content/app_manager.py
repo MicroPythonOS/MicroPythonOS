@@ -372,9 +372,12 @@ class AppManager:
         try:
             if os.stat(dir_path)[0] & 0x4000:
                 if __debug__: logger.debug("is_installed_by_path: %s found, checking manifest...", dir_path)
-                manifest = f"{dir_path}/META-INF/MANIFEST.JSON"
-                if os.stat(manifest)[0] & 0x8000:
-                    return True
+                for manifest in (f"{dir_path}/MANIFEST.JSON", f"{dir_path}/META-INF/MANIFEST.JSON"):
+                    try:
+                        if os.stat(manifest)[0] & 0x8000:
+                            return True
+                    except OSError:
+                        continue
         except OSError:
             if __debug__: logger.debug("is_installed_by_path got OSError for %s", dir_path)
             pass # Skip if directory or manifest doesn't exist
@@ -476,17 +479,18 @@ class AppManager:
         app = AppManager.get(fullname)
         if not app:
             logger.warning("start_app can't find app %s", fullname)
-            return
+            return False
         if not app.installed_path:
             logger.warning("start_app can't start %s because no it doesn't have an installed_path", fullname)
-            return
-        entrypoint = "assets/main.py"
-        classname = "Main"
+            return False
         if not app.main_launcher_activity:
-            logger.warning("app %s doesn't have a main_launcher_activity, defaulting to class %s in %s", fullname, classname, entrypoint)
-        else:
-            entrypoint = app.main_launcher_activity.get('entrypoint')
-            classname = app.main_launcher_activity.get("classname")
+            logger.error("app %s has no main_launcher_activity in manifest; cannot start", fullname)
+            return False
+        entrypoint = app.main_launcher_activity.get('entrypoint')
+        classname = app.main_launcher_activity.get("classname")
+        if not entrypoint or not classname:
+            logger.error("app %s main_launcher_activity is missing entrypoint or classname", fullname)
+            return False
         entrypoint_path = app.installed_path + "/" + entrypoint
         entrypoint_dir = app.installed_path
         if "/" in entrypoint:

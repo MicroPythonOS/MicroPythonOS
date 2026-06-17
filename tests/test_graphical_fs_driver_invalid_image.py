@@ -28,7 +28,7 @@ class TestFsDriverInvalidImage(GraphicalTestCase):
     """Test fs_driver error handling for invalid image paths."""
 
     # Known working image path in the filesystem
-    VALID_IMAGE_PATH = "M:builtin/res/mipmap-mdpi/MicroPythonOS-logo-white-long-w296.png"
+    VALID_IMAGE_PATH = "M:builtin/MicroPythonOS-logo-white-long-w296.png"
     # Fixed invalid path
     INVALID_IMAGE_PATH = "M:/path/to/nonexistent_image.png"
 

@@ -1,1 +1,0 @@
-{"name":"HelloWorld","publisher":"MicroPythonOS","short_description":"Minimal app","long_description":"Demonstrates the simplest app.","fullname":"com.micropythonos.helloworld","version":"0.1.6","category":"development","activities":[{"entrypoint":"assets/hello.py","classname":"Hello","intent_filters":[{"action":"main","category":"launcher"}]}]}

@@ -1,9 +1,20 @@
+import logging
 import os
 import shutil
 import unittest
 import asyncio
 
 from mpos.content.app_manager import AppManager
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.records = []
+
+    def emit(self, record):
+        # MicroPython reuses the LogRecord object, so snapshot the message now.
+        self.records.append(record.message)
 
 
 class TestAppManagerStreamingInstall(unittest.TestCase):
@@ -40,12 +51,19 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         st = os.stat(path)
         self.assertTrue(st[0] & 0x4000)
 
+    def _assert_not_exists(self, path):
+        try:
+            os.stat(path)
+            self.assertTrue(False)
+        except OSError:
+            pass
+
     def _assert_file_size(self, path, expected_size):
         st = os.stat(path)
         self.assertTrue(st[0] & 0x8000)
         self.assertEqual(st[6], expected_size)
 
-    def _assert_app_tree(self, root):
+    def _assert_app_tree_old(self, root):
         self._assert_dir(root)
         self._assert_dir(f"{root}/assets")
         self._assert_dir(f"{root}/META-INF")
@@ -54,6 +72,28 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         self._assert_file_size(f"{root}/assets/hello.py", 232)
         self._assert_file_size(f"{root}/META-INF/MANIFEST.JSON", 406)
         self._assert_file_size(f"{root}/res/mipmap-mdpi/icon_64x64.png", 5499)
+
+    def _assert_app_tree_flat(self, root):
+        self._assert_dir(root)
+        self._assert_dir(f"{root}/assets")
+        self._assert_file_size(f"{root}/assets/hello.py", 232)
+        self._assert_file_size(f"{root}/MANIFEST.JSON", 406)
+        self._assert_file_size(f"{root}/icon_64x64.png", 5499)
+        self._assert_not_exists(f"{root}/META-INF")
+        self._assert_not_exists(f"{root}/res")
+        self._assert_not_exists(f"{root}/res/mipmap-mdpi")
+
+    def _capture_app_logs(self):
+        handler = _ListHandler()
+        logger = logging.getLogger("mpos.app.app")
+        logger.handlers.append(handler)
+        return handler, logger
+
+    def _detach_app_logs(self, handler, logger):
+        try:
+            logger.handlers.remove(handler)
+        except ValueError:
+            pass
 
     def _run_streaming_install(self, source_mpk):
         """Mock download by streaming chunks into the extractor (real streaming)."""
@@ -83,15 +123,15 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         finally:
             DownloadManager.download_url = orig_download
 
-    # ---- happy path -------------------------------------------------
+    # ---- happy path (new flat layout) --------------------------------
 
     def test_streaming_flat(self):
-        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat.mpk")
-        self._assert_app_tree(self.DEST)
+        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat_new.mpk")
+        self._assert_app_tree_flat(self.DEST)
 
     def test_streaming_deflated(self):
-        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat_deflated.mpk")
-        self._assert_app_tree(self.DEST)
+        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat_new_deflated.mpk")
+        self._assert_app_tree_flat(self.DEST)
 
     def test_streaming_largefirst(self):
         self._run_streaming_install("../tests/com.micropythonos.ziptest_flat_largefirst.mpk")
@@ -100,7 +140,24 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         self._assert_dir(f"{self.DEST}/META-INF")
         self._assert_dir(f"{self.DEST}/res")
 
-    # ---- error path -------------------------------------------------
+    # ---- backward compatibility (old nested layout) -------------------
+
+    def test_streaming_old_flat(self):
+        handler, logger = self._capture_app_logs()
+        try:
+            self._run_streaming_install("../tests/com.micropythonos.ziptest_flat.mpk")
+            AppManager.refresh_apps()
+            self._assert_app_tree_old(self.DEST)
+            self.assertTrue(any("Deprecated manifest path" in t for t in handler.records), handler.records)
+            self.assertTrue(any("Deprecated icon path" in t for t in handler.records), handler.records)
+        finally:
+            self._detach_app_logs(handler, logger)
+
+    def test_streaming_old_deflated(self):
+        self._run_streaming_install("../tests/com.micropythonos.ziptest_flat_deflated.mpk")
+        self._assert_app_tree_old(self.DEST)
+
+    # ---- error path --------------------------------------------------
 
     def test_rejects_flat_first_file_not_dir(self):
         """Package whose first entry is a file (not a directory) is refused."""
@@ -174,7 +231,7 @@ class TestAppManagerStreamingInstall(unittest.TestCase):
         async def fake_download(url, outfile=None, total_size=None,
                                 progress_callback=None, chunk_callback=None,
                                 headers=None, speed_callback=None, redact_url=False):
-            with open("../tests/com.micropythonos.ziptest_flat.mpk", "rb") as f:
+            with open("../tests/com.micropythonos.ziptest_flat_new.mpk", "rb") as f:
                 while True:
                     data = f.read(512)
                     if not data:

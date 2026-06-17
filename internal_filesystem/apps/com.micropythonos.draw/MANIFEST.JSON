@@ -1,0 +1,1 @@
+{"name": "Draw", "publisher": "MicroPythonOS", "short_description": "Simple drawing app", "long_description": "Draw simple shapes on the screen.", "fullname": "com.micropythonos.draw", "version": "0.3.0", "category": "graphics", "activities": [{"entrypoint": "assets/draw.py", "classname": "Draw", "intent_filters": [{"action": "main", "category": "launcher"}]}]}

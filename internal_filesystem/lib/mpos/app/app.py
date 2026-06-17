@@ -18,7 +18,7 @@ class App:
         activities=None,
         services=None,
         installed_path=None,
-        icon_path="builtin/res/mipmap-mdpi/default_icon_64x64.png",
+        icon_path="builtin/default_icon_64x64.png",
         icon_data=None,
     ):
         self.name = name
@@ -41,24 +41,34 @@ class App:
         return f"App({self.name}, version {self.version}, {self.category})"
 
     def _load_icon_data(self):
-        fullpath = "apps/" + self.fullname + "/res/mipmap-mdpi/icon_64x64.png"
-        # For speed, ESP32 internal LittleFS is slowest so first look where we expect to find those:
-        self.icon_path, self.icon_data = App._try_load_icon_data(fullpath)
-        if self.icon_path:
-            return
-        # Then builtin relative path, works both on ESP32 as desktop (relative)
-        self.icon_path, self.icon_data = App._try_load_icon_data("builtin/" + fullpath)
-        if self.icon_path:
-            return
-        # Desktop builds with only frozen apps:
-        self.icon_path, self.icon_data = App._try_load_icon_data("/builtin/" + fullpath)
-        if self.icon_path:
-            return
-        # Currently no use case for this, so skip it for speed:
-        #self.icon_path, self.icon_data = App._try_load_icon_data("/" + fullpath)
-        #if self.icon_path:
-        #    return
-        logger.warning(f"Could not find icon for {self.fullname}")
+        icon_name = "icon_64x64.png"
+        flat_paths = [
+            f"apps/{self.fullname}/{icon_name}",
+            f"builtin/apps/{self.fullname}/{icon_name}",
+            f"/builtin/apps/{self.fullname}/{icon_name}",
+        ]
+        for path in flat_paths:
+            self.icon_path, self.icon_data = App._try_load_icon_data(path)
+            if self.icon_path:
+                return
+
+        # Backward compatibility with the old nested icon layout.
+        deprecated_paths = [
+            f"apps/{self.fullname}/res/mipmap-mdpi/{icon_name}",
+            f"builtin/apps/{self.fullname}/res/mipmap-mdpi/{icon_name}",
+            f"/builtin/apps/{self.fullname}/res/mipmap-mdpi/{icon_name}",
+        ]
+        for path in deprecated_paths:
+            self.icon_path, self.icon_data = App._try_load_icon_data(path)
+            if self.icon_path:
+                logger.warning(
+                    "Deprecated icon path: use %s instead of %s",
+                    f"apps/{self.fullname}/{icon_name}",
+                    path,
+                )
+                return
+
+        logger.warning("Could not find icon for %s", self.fullname)
 
     def _find_main_launcher_activity(self):
         for act in self.activities:
@@ -74,13 +84,24 @@ class App:
 
     @classmethod
     def from_manifest(cls, appdir):
-        manifest_path = f"{appdir}/META-INF/MANIFEST.JSON"
+        manifest_path = f"{appdir}/MANIFEST.JSON"
+        deprecated_path = f"{appdir}/META-INF/MANIFEST.JSON"
         default = cls(installed_path=appdir)
+
         try:
             with open(manifest_path, "r") as f:
                 data = ujson.load(f)
         except OSError:
-            return default
+            try:
+                with open(deprecated_path, "r") as f:
+                    data = ujson.load(f)
+            except OSError:
+                return default
+            logger.warning(
+                "Deprecated manifest path: use %s instead of %s",
+                manifest_path,
+                deprecated_path,
+            )
 
         return cls(
             name=data.get("name", default.name),
@@ -104,4 +125,3 @@ class App:
                 return icon_path, f.read()
         except Exception:
             return None, None
-

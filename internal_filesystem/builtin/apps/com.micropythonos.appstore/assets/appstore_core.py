@@ -40,7 +40,7 @@ class AppUpdateManager:
     WIFI_CHECK_INTERVAL = 5
 
     NOTIFICATION_ID = "appstore.updates_available"
-    ICON_PATH = "M:builtin/apps/com.micropythonos.appstore/res/mipmap-mdpi/icon_64x64.png"
+    ICON_PATH = "M:builtin/apps/com.micropythonos.appstore/icon_64x64.png"
 
     _GITHUB_PROD_BASE_URL = "https://apps.micropythonos.com"
     _GITHUB_LIST = "/app_index.json"

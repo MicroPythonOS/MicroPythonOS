@@ -7,7 +7,7 @@ from confetti import Confetti
 class ConfettiApp(Activity):
 
     ASSET_PATH = "M:builtin/res/emojis/32x32/"
-    ICON_PATH = "M:apps/com.micropythonos.confetti/res/mipmap-mdpi/"
+    ICON_PATH = "M:apps/com.micropythonos.confetti/"
 
     confetti = None
 

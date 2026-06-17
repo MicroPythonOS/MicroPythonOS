@@ -1,1 +1,0 @@
-{"name":"Launcher","publisher":"MicroPythonOS","short_description":"Simple launcher to start apps.","long_description":"","fullname":"com.micropythonos.launcher","version":"0.2.7","category":"launcher","activities":[{"entrypoint":"assets/launcher.py","classname":"Launcher","intent_filters":[{"action":"main","category":"launcher"}]}]}

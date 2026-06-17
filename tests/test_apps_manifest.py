@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import unittest
 from pathlib import Path
@@ -7,6 +8,16 @@ try:
     APPS_BASE_PATH = Path(__file__).parent.parent / "internal_filesystem" / "apps"
 except NameError:
     APPS_BASE_PATH = Path("apps")
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.records = []
+
+    def emit(self, record):
+        # MicroPython reuses the LogRecord object, so snapshot the message now.
+        self.records.append(record.message)
 
 
 def iter_app_path():
@@ -22,93 +33,113 @@ def iter_app_path():
 
 class TestAppsManifest(unittest.TestCase):
     def test_all_apps_manifest(self):
-        for app_path in iter_app_path():
-            with self.subTest(app=app_path.name):
-                manifest = app_path / "META-INF" / "MANIFEST.JSON"
-                self.assertTrue(manifest.is_file(), f"Missing {manifest=}")
-                try:
-                    with manifest.open("r", encoding="utf-8") as f:
-                        data = json.load(f)
-                except Exception as e:
-                    self.fail(f"Invalid JSON in {manifest=}: {e}")
+        logger = logging.getLogger("mpos.app.app")
+        handler = _ListHandler()
+        logger.handlers.append(handler)
+        try:
+            for app_path in iter_app_path():
+                with self.subTest(app=app_path.name):
+                    manifest_root = app_path / "MANIFEST.JSON"
+                    manifest_old = app_path / "META-INF" / "MANIFEST.JSON"
+                    if manifest_root.is_file():
+                        manifest = manifest_root
+                    elif manifest_old.is_file():
+                        manifest = manifest_old
+                        warnings = [
+                            r for r in handler.records
+                            if "Deprecated manifest path" in r
+                            and str(manifest_old) in r
+                        ]
+                        self.assertTrue(
+                            warnings,
+                            f"Old manifest path {manifest_old} used without deprecation warning",
+                        )
+                    else:
+                        self.fail(f"Missing MANIFEST.JSON in {app_path}")
 
-                fullname = app_path.name
-                self.assertEqual(data.get("fullname"), fullname)
+                    try:
+                        with manifest.open("r", encoding="utf-8") as f:
+                            data = json.load(f)
+                    except Exception as e:
+                        self.fail(f"Invalid JSON in {manifest=}: {e}")
 
-                # Check name:
-                name = data.get("name")
-                self.assertTrue(name, f"Missing name in {manifest=}")
+                    fullname = app_path.name
+                    self.assertEqual(data.get("fullname"), fullname)
 
-                # Check version is a valid Version
-                version = data.get("version")
-                self.assertTrue(version, f"Missing version in {manifest=}")
-                try:
-                    # Until we can use packaging.version.Version check canonical version manually:
-                    version_tuple = tuple(int(x) for x in version.split("."))
-                    version_str = ".".join(str(x) for x in version_tuple)
-                except Exception as e:
-                    self.fail(f"Invalid version {version=} in {manifest=}: {e}")
-                self.assertEqual(
-                    version_str,
-                    version,
-                    f"{version=} in {manifest=} is not in canonical form",
-                )
+                    name = data.get("name")
+                    self.assertTrue(name, f"Missing name in {manifest=}")
 
-                # Test activities.entrypoint
-                activities = data.get("activities", [])
-                for act in activities:
-                    entrypoint = act.get("entrypoint")
-                    self.assertTrue(
-                        entrypoint, f"Missing entrypoint in activity of {manifest=}"
-                    )
-                    self.assertTrue(
-                        entrypoint.endswith(".py"),
-                        f"Invalid entrypoint in activity of {manifest=}: {entrypoint}",
-                    )
-                    entrypoint_path = app_path / entrypoint
-                    self.assertTrue(
-                        entrypoint_path.is_file(),
-                        f"{entrypoint=} in {manifest=} does not exist as file",
-                    )
-
-                    classname = act.get("classname")
-                    self.assertTrue(
-                        classname, f"Missing classname in activity of {manifest=}"
-                    )
-                    entrypoint_code = entrypoint_path.read_text()
-                    self.assertIn(
-                        classname,
-                        entrypoint_code,
-                        f"{classname=} not found in {entrypoint=} of {manifest=}",
+                    version = data.get("version")
+                    self.assertTrue(version, f"Missing version in {manifest=}")
+                    try:
+                        version_tuple = tuple(int(x) for x in version.split("."))
+                        version_str = ".".join(str(x) for x in version_tuple)
+                    except Exception as e:
+                        self.fail(f"Invalid version {version=} in {manifest=}: {e}")
+                    self.assertEqual(
+                        version_str,
+                        version,
+                        f"{version=} in {manifest=} is not in canonical form",
                     )
 
-                # Test services.entrypoint
-                services = data.get("services", [])
-                for svc in services:
-                    entrypoint = svc.get("entrypoint")
-                    self.assertTrue(
-                        entrypoint, f"Missing entrypoint in service of {manifest=}"
-                    )
-                    self.assertTrue(
-                        entrypoint.endswith(".py"),
-                        f"Invalid entrypoint in service of {manifest=}: {entrypoint}",
-                    )
-                    entrypoint_path = app_path / entrypoint
-                    self.assertTrue(
-                        entrypoint_path.is_file(),
-                        f"{entrypoint=} in {manifest=} does not exist as file",
-                    )
+                    activities = data.get("activities", [])
+                    for act in activities:
+                        entrypoint = act.get("entrypoint")
+                        self.assertTrue(
+                            entrypoint, f"Missing entrypoint in activity of {manifest=}"
+                        )
+                        self.assertTrue(
+                            entrypoint.endswith(".py"),
+                            f"Invalid entrypoint in activity of {manifest=}: {entrypoint}",
+                        )
+                        entrypoint_path = app_path / entrypoint
+                        self.assertTrue(
+                            entrypoint_path.is_file(),
+                            f"{entrypoint=} in {manifest=} does not exist as file",
+                        )
 
-                    classname = svc.get("classname")
-                    self.assertTrue(
-                        classname, f"Missing classname in service of {manifest=}"
-                    )
-                    entrypoint_code = entrypoint_path.read_text()
-                    self.assertIn(
-                        classname,
-                        entrypoint_code,
-                        f"{classname=} not found in {entrypoint=} of {manifest=}",
-                    )
+                        classname = act.get("classname")
+                        self.assertTrue(
+                            classname, f"Missing classname in activity of {manifest=}"
+                        )
+                        entrypoint_code = entrypoint_path.read_text()
+                        self.assertIn(
+                            classname,
+                            entrypoint_code,
+                            f"{classname=} not found in {entrypoint=} of {manifest=}",
+                        )
+
+                    services = data.get("services", [])
+                    for svc in services:
+                        entrypoint = svc.get("entrypoint")
+                        self.assertTrue(
+                            entrypoint, f"Missing entrypoint in service of {manifest=}"
+                        )
+                        self.assertTrue(
+                            entrypoint.endswith(".py"),
+                            f"Invalid entrypoint in service of {manifest=}: {entrypoint}",
+                        )
+                        entrypoint_path = app_path / entrypoint
+                        self.assertTrue(
+                            entrypoint_path.is_file(),
+                            f"{entrypoint=} in {manifest=} does not exist as file",
+                        )
+
+                        classname = svc.get("classname")
+                        self.assertTrue(
+                            classname, f"Missing classname in service of {manifest=}"
+                        )
+                        entrypoint_code = entrypoint_path.read_text()
+                        self.assertIn(
+                            classname,
+                            entrypoint_code,
+                            f"{classname=} not found in {entrypoint=} of {manifest=}",
+                        )
+        finally:
+            try:
+                logger.handlers.remove(handler)
+            except ValueError:
+                pass
 
 
 if __name__ == "__main__":

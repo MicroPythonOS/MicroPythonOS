@@ -362,7 +362,7 @@ class UpdateManager:
         NotificationManager.notify(
             Notification(
                 notification_id="osupdate.update_available",
-                icon="M:builtin/apps/com.micropythonos.osupdate/res/mipmap-mdpi/icon_64x64.png",
+                icon="M:builtin/apps/com.micropythonos.osupdate/icon_64x64.png",
                 title="OS update available",
                 text=details,
                 priority=Notification.PRIORITY_HIGH,
