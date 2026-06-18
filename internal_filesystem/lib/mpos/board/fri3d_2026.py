@@ -120,7 +120,7 @@ expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 expander = Expander(i2c_bus=expander_i2c)
 expander.wait_for_normal_mode(min_uptime_ms=1000)
 if expander.install_firmware_if_needed(
-        "/builtin/firmware/fri3d_2026/coprocessor_1.2.2.fw", (1, 2, 2), progress_cb=progress,
+        "/builtin/firmware/fri3d_2026/coprocessor_2.0.0.fw", (2, 0, 0), progress_cb=progress,
         success_cb=lambda: (LightsManager.set_all(21, 96, 67), LightsManager.write()),
         warning_cb=warning, failure_cb=failure):
     if __debug__: logger.debug("Re-initializing expander_i2c")
@@ -136,14 +136,14 @@ import mpos
 mpos.io_expander = expander
 
 from mpos import BatteryManager
-BatteryManager.read_raw_adc = lambda *args: mpos.io_expander.analog[2]
+BatteryManager.read_raw_adc = lambda *args: mpos.io_expander.analog[1]
 BatteryManager.has_battery = lambda *args: True
-BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (0.001857993861607339 * mpos.io_expander.analog[2] - 0.9965856090206169)
+BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (0.001857993861607339 * mpos.io_expander.analog[1] - 0.9965856090206169)
 
-# LCD reset using the CH32 microcontroller
-expander.config = 0x01 # 3v3 aux on + LCD off
+# LCD and Lora reset using the CH32 microcontroller
+expander.config = 0x01 # 3v3 aux on + LCD off + Lora Off
 time.sleep_ms(100)
-expander.config = 0x03 # 3v3 aux + LCD on
+expander.config = 0x13 # 3v3 aux + LCD on + Lora on
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
