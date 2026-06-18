@@ -4,6 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Builtin Apps:
+- Add File Manager to builtin apps, with support for dispatching an implicit "view" intent to open files
 - AppStore: remove GitHub mention since the free GitHub pages is no longer used for hosting
 - AppStore: prioritize display of known icons
 - AppStore: show installed apps first (no network needed), then merge store apps from network; remove WiFi gate
@@ -20,6 +21,7 @@ Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
 
 Frameworks:
+- Add new builtin File Explorer Activity with picker
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
 - AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
 - AppManager/Intent: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
@@ -29,7 +31,6 @@ Frameworks:
 - AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 
 Apps:
-- File Manager: clicking a file dispatches an implicit "view" intent to open it with a supporting app
 - Music Player: declare support for .wav files and open them directly when launched via "Open With"
 - Image View: declare support for .png, .jpg, .jpeg, and .raw images and open a single image when launched via "Open With"
 
