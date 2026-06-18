@@ -15,6 +15,13 @@ class MusicPlayer(Activity):
         # the user might have recently plugged in the sd card so try to mount it
         sdcard.mount_with_optional_format('/sdcard')
 
+        # If we were launched via "Open With", jump straight to the player.
+        incoming_filename = self.getIntent().extras.get("filename") or self.getIntent().data
+        if incoming_filename:
+            self.setContentView(screen)
+            self.startActivity(Intent(activity_class=FullscreenPlayer).putExtra("filename", incoming_filename))
+            return
+
         # Settings button (top-right)
         self._settings_button = lv.button(screen)
         self._settings_button.set_size(60, 42)

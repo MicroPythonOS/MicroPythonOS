@@ -1,8 +1,12 @@
 import logging
+
+import lvgl as lv
+
 from ..activity import Activity
 from ...content.app_manager import AppManager
 
 logger = logging.getLogger(__name__)
+
 
 class ShareActivity(Activity):
     def __init__(self):
@@ -10,32 +14,32 @@ class ShareActivity(Activity):
 
     def onCreate(self):
         screen = lv.obj()
+        screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        screen.set_flex_align(lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+        screen.set_style_pad_all(10, lv.PART.MAIN)
+
         # Get text from intent (prefer extras.text, fallback to data)
         text = self.getIntent().extras.get("text", self.getIntent().data or "No text")
-        label = lv.label(screen)
-        label.set_user_data("share_label")
-        label.set_text(f"Share: {text}")
-        label.set_pos(10, 10)
 
-        btn = lv.btn(screen)
-        btn.set_user_data("share_btn")
+        label = lv.label(screen)
+        label.set_text("Share:\n{}".format(text))
+        label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        label.set_width(lv.pct(90))
+
+        btn = lv.button(screen)
         btn_label = lv.label(btn)
         btn_label.set_text("Share")
-        btn.set_pos(10, 50)
-        btn.add_event_cb(lambda e: self._share_content(text), lv.EVENT.CLICKED)
+        btn_label.center()
+        btn.add_event_cb(lambda e: self._share_content(text), lv.EVENT.CLICKED, None)
+
         self.setContentView(screen)
 
     def _share_content(self, text):
-        # Dispatch to another app (e.g., MessagingActivity) or simulate sharing
         if __debug__: logger.debug("Sharing: %s", text)
-        # Example: Launch another share handler
-        navigator.startActivity(Intent(action="share", data=text))
-        navigator.finish()  # Close ShareActivity
+        self.finish()
 
     def onStop(self, screen):
-        if self.getIntent() and self.getIntent().getStringExtra("destination") == "ShareActivity":
-            if __debug__: logger.debug("Stopped for Share")
-        else:
-            if __debug__: logger.debug("Stopped for other screen")
+        if __debug__: logger.debug("ShareActivity stopped")
+
 
 AppManager.register_activity("share", ShareActivity)

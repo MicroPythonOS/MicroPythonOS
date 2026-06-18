@@ -10,7 +10,7 @@ Builtin Apps:
 - AppStore: update icon_url/download_url on installed app objects from store index for install/update actions
 - AppStore: filter out builtin/ apps from the list
 - AppStore: set icons immediately when creating list if icon_data is already loaded
-- AppStore: insert new store apps at sorted position instead of rebuilding entire list
+- AppStore: insert new apps at sorted position instead of rebuilding entire list
 
 Board Support:
 - Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
@@ -21,7 +21,15 @@ Drivers:
 Frameworks:
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
 - AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
+- AppManager/Intent: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
+- ActivityNavigator: dispatch implicit file intents to installed apps with proper app context and status-bar handling
+- Fix ChooserActivity, ViewActivity, and ShareActivity for LVGL 9.x and remove undefined references
 - AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
+
+Apps:
+- File Manager: clicking a file dispatches an implicit "view" intent to open it with a supporting app
+- Music Player: declare support for .wav files and open them directly when launched via "Open With"
+- Image View: declare support for .png, .jpg, .jpeg, and .raw images and open a single image when launched via "Open With"
 
 0.12.2
 ======

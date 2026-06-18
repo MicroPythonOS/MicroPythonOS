@@ -66,6 +66,16 @@ class ImageView(Activity):
     def onResume(self, screen):
         self.stopping = False
         self.images.clear()
+
+        # If we were launched via "Open With", display just that one file.
+        incoming_filename = self.getIntent().extras.get("filename") or self.getIntent().data
+        if incoming_filename:
+            self.label.set_text(incoming_filename)
+            self.images = [incoming_filename]
+            self.image_nr = None
+            self.show_next_image()
+            return
+
         try:
             for item in os.listdir(self.imagedir):
                 print(item)

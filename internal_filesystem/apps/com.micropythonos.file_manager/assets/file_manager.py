@@ -110,7 +110,8 @@ class FileManager(Activity):
             print(f"FileManager: CLICKED -> navigating into {path}")
             self._populate_dir(path)
         else:
-            print(f"FileManager: CLICKED on file {path} (no action)")
+            print(f"FileManager: CLICKED on file {path} (dispatching view intent)")
+            self.startActivity(Intent(action="view", data=path))
 
     def _focus_action_bar(self):
         if not self._cancel_btn:

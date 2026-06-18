@@ -1,5 +1,9 @@
 import logging
+
+import lvgl as lv
+
 from ..activity import Activity
+
 # Chooser doesn't handle an action — it shows handlers
 # → No registration needed
 
@@ -7,40 +11,47 @@ from ...content.app_manager import AppManager
 
 logger = logging.getLogger(__name__)
 
+
 class ChooserActivity(Activity):
     def __init__(self):
         super().__init__()
 
     def onCreate(self):
         screen = lv.obj()
+        screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        screen.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+        screen.set_style_pad_all(10, lv.PART.MAIN)
+
         # Get handlers from intent extras
         original_intent = self.getIntent().extras.get("original_intent")
         handlers = self.getIntent().extras.get("handlers", [])
-        label = lv.label(screen)
-        label.set_text("Choose an app")
-        label.set_pos(10, 10)
 
-        for i, handler_name in enumerate(handlers):
-            btn = lv.btn(screen)
-            btn.set_user_data(f"handler_{i}")
+        title = lv.label(screen)
+        title.set_text("Open with")
+        title.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
+        title.set_style_pad_bottom(10, lv.PART.MAIN)
+
+        for handler_info in handlers:
+            display_name = AppManager.get_handler_display_name(handler_info.activity_class)
+            btn = lv.button(screen)
+            btn.set_width(lv.pct(90))
+            btn.set_style_pad_all(8, lv.PART.MAIN)
+            btn.add_event_cb(
+                lambda e, hi=handler_info: self._select_handler(hi, original_intent),
+                lv.EVENT.CLICKED,
+                None,
+            )
             btn_label = lv.label(btn)
-            btn_label.set_text(handler_name)
-            btn.set_pos(10, 50 * (i + 1) + 10)
-            btn.add_event_cb(lambda e, h=handler_name, oi=original_intent: self._select_handler(h, oi), lv.EVENT.CLICKED)
+            btn_label.set_text(display_name)
+            btn_label.center()
+
         self.setContentView(screen)
 
-    def _select_handler(self, handler_name, original_intent):
-        for handler in AppManager.APP_REGISTRY.get(original_intent.action, []):
-            if handler.__name__ == handler_name:
-                original_intent.activity_class = handler
-                navigator.startActivity(original_intent)
-                break
-        navigator.finish()  # Close chooser
+    def _select_handler(self, handler_info, original_intent):
+        from ...activity_navigator import ActivityNavigator
+
+        ActivityNavigator._dispatch(original_intent, handler_info)
+        self.finish()
 
     def onStop(self, screen):
-        if self.getIntent() and self.getIntent().getStringExtra("destination") == "ChooserActivity":
-            if __debug__: logger.debug("Stopped for Chooser")
-        else:
-            if __debug__: logger.debug("Stopped for other screen")
-
-
+        if __debug__: logger.debug("ChooserActivity stopped")

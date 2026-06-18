@@ -1,34 +1,40 @@
 import logging
+
+import lvgl as lv
+
 from ..activity import Activity
 from ...content.app_manager import AppManager
 
 logger = logging.getLogger(__name__)
 
+
 class ViewActivity(Activity):
     def __init__(self):
         super().__init__()
+        self._content_label = None
 
     def onCreate(self):
         screen = lv.obj()
+        screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        screen.set_flex_align(lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+        screen.set_style_pad_all(10, lv.PART.MAIN)
+
         # Get content from intent (prefer extras.url, fallback to data)
         content = self.getIntent().extras.get("url", self.getIntent().data or "No content")
-        label = lv.label(screen)
-        label.set_user_data("content_label")
-        label.set_text(f"Viewing: {content}")
-        label.center()
+
+        self._content_label = lv.label(screen)
+        self._content_label.set_text("Viewing:\n{}".format(content))
+        self._content_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self._content_label.set_width(lv.pct(90))
         self.setContentView(screen)
 
     def onStart(self, screen):
         content = self.getIntent().extras.get("url", self.getIntent().data or "No content")
-        for i in range(screen.get_child_cnt()):
-            if screen.get_child(i).get_user_data() == "content_label":
-                screen.get_child(i).set_text(f"Viewing: {content}")
+        if self._content_label:
+            self._content_label.set_text("Viewing:\n{}".format(content))
 
     def onStop(self, screen):
-        if self.getIntent() and self.getIntent().getStringExtra("destination") == "ViewActivity":
-            if __debug__: logger.debug("Stopped for View")
-        else:
-            if __debug__: logger.debug("Stopped for other screen")
+        if __debug__: logger.debug("ViewActivity stopped")
 
-# Register this activity for "view" intents
+
 AppManager.register_activity("view", ViewActivity)

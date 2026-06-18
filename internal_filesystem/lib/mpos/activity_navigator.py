@@ -32,9 +32,8 @@ class ActivityNavigator:
                 if __debug__: logger.debug("No handler for action: %s", intent.action)
                 return
             if len(handlers) == 1:
-                intent.activity_class = handlers[0]
-                ActivityNavigator._launch_activity(intent)
-            elif handlers:
+                ActivityNavigator._dispatch(intent, handlers[0])
+            else:
                 ActivityNavigator._show_chooser(intent, handlers)
         else:
             ActivityNavigator._launch_activity(intent)
@@ -50,13 +49,26 @@ class ActivityNavigator:
                 if __debug__: logger.debug("No handler for action: %s", intent.action)
                 return
             if len(handlers) == 1:
-                intent.activity_class = handlers[0]
-                return ActivityNavigator._launch_activity(intent, result_callback)
+                return ActivityNavigator._dispatch(intent, handlers[0])
             elif handlers:
                 ActivityNavigator._show_chooser(intent, handlers)
                 return None  # Chooser handles result forwarding
         else:
             return ActivityNavigator._launch_activity(intent, result_callback)
+
+    @staticmethod
+    def _dispatch(intent, handler_info):
+        """Launch a resolved handler.
+
+        Installed apps are launched via ``AppManager.start_app`` so they receive
+        the correct app context and status-bar handling. Framework handlers
+        (e.g. ViewActivity) are launched directly.
+        """
+        if handler_info.app_fullname:
+            return AppManager.start_app(handler_info.app_fullname, intent=intent)
+
+        intent.activity_class = handler_info.activity_class
+        return ActivityNavigator._launch_activity(intent)
 
     @staticmethod
     def _launch_activity(intent, result_callback=None):
@@ -87,7 +99,11 @@ class ActivityNavigator:
 
     @staticmethod
     def _show_chooser(intent, handlers):
-        chooser_intent = Intent(ChooserActivity, extras={"original_intent": intent, "handlers": [h.__name__ for h in handlers]})
+        from .app.activities.chooser import ChooserActivity
+
+        chooser_intent = Intent(
+            ChooserActivity,
+            extras={"original_intent": intent, "handlers": handlers},
+        )
         chooser_intent.app_fullname = intent.app_fullname
         ActivityNavigator._launch_activity(chooser_intent)
-
