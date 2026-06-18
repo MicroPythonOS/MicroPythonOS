@@ -266,7 +266,7 @@ class OSUpdate(Activity):
     async def async_progress_callback(self, percent):
         if self.has_foreground() and self.progress_bar:
             self.progress_bar.set_value(int(percent), True)
-            self.progress_label.set_text(f"OTA Update: {percent:.2f}%")
+            self.progress_label.set_text(f"OS Update: {percent:.2f}%")
         await TaskManager.sleep_ms(50)
 
     async def async_speed_callback(self, bytes_per_second):

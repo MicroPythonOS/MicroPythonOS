@@ -36,6 +36,8 @@ from .app.activities.share import ShareActivity
 from .ui.setting_activity import SettingActivity
 from .ui.settings_activity import SettingsActivity
 from .ui.camera_activity import CameraActivity
+from .ui.file_explorer_activity import FileExplorerActivity
+from .ui.rename_activity import RenameActivity
 from .ui.keyboard import MposKeyboard
 from .ui.testing import (
     wait_for_render, capture_screenshot, simulate_click, simulate_drag, get_widget_coords,
@@ -88,6 +90,7 @@ __all__ = (
     # Common activities
     "ChooserActivity", "ViewActivity", "ShareActivity",
     "SettingActivity", "SettingsActivity", "CameraActivity",
+    "FileExplorerActivity", "RenameActivity",
     # UI components
     "MposKeyboard",
     # UI utility - DisplayMetrics, InputManager and AppearanceManager

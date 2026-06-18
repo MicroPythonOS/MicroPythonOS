@@ -49,15 +49,15 @@ class ActivityNavigator:
                 if __debug__: logger.debug("No handler for action: %s", intent.action)
                 return
             if len(handlers) == 1:
-                return ActivityNavigator._dispatch(intent, handlers[0])
+                return ActivityNavigator._dispatch(intent, handlers[0], result_callback)
             elif handlers:
-                ActivityNavigator._show_chooser(intent, handlers)
+                ActivityNavigator._show_chooser(intent, handlers, result_callback)
                 return None  # Chooser handles result forwarding
         else:
             return ActivityNavigator._launch_activity(intent, result_callback)
 
     @staticmethod
-    def _dispatch(intent, handler_info):
+    def _dispatch(intent, handler_info, result_callback=None):
         """Launch a resolved handler.
 
         Installed apps are launched via ``AppManager.start_app`` so they receive
@@ -68,7 +68,7 @@ class ActivityNavigator:
             return AppManager.start_app(handler_info.app_fullname, intent=intent)
 
         intent.activity_class = handler_info.activity_class
-        return ActivityNavigator._launch_activity(intent)
+        return ActivityNavigator._launch_activity(intent, result_callback)
 
     @staticmethod
     def _launch_activity(intent, result_callback=None):
@@ -98,12 +98,12 @@ class ActivityNavigator:
         return activity
 
     @staticmethod
-    def _show_chooser(intent, handlers):
+    def _show_chooser(intent, handlers, result_callback=None):
         from .app.activities.chooser import ChooserActivity
 
         chooser_intent = Intent(
             ChooserActivity,
-            extras={"original_intent": intent, "handlers": handlers},
+            extras={"original_intent": intent, "handlers": handlers, "result_callback": result_callback},
         )
         chooser_intent.app_fullname = intent.app_fullname
         ActivityNavigator._launch_activity(chooser_intent)

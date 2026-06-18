@@ -1,6 +1,12 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 import lvgl as lv
 import os
-from mpos import Activity, MposKeyboard
+
+from ..app.activity import Activity
+from .keyboard import MposKeyboard
 
 
 class RenameActivity(Activity):
@@ -21,7 +27,6 @@ class RenameActivity(Activity):
 
         self._keyboard = MposKeyboard(screen)
         self._keyboard.set_style_pad_all(0, 0)
-        #self._keyboard.set_style_pad_gap(0, 0)
         self._keyboard.set_textarea(self._ta)
         self._keyboard.add_event_cb(lambda e: self._do_rename(), lv.EVENT.READY, None)
 
@@ -48,12 +53,12 @@ class RenameActivity(Activity):
         if not new_name:
             return
         dir_part = "/".join(self._path.rstrip("/").split("/")[:-1])
-        new_path = f"{dir_part}/{new_name}"
+        new_path = "{}/{}".format(dir_part, new_name)
         try:
             os.rename(self._path, new_path)
-            print(f"RenameActivity: renamed {self._path} -> {new_path}")
+            if __debug__: logger.debug("RenameActivity: renamed %s -> %s", self._path, new_path)
             self.setResult(True, {"new_path": new_path})
         except OSError as e:
-            print(f"RenameActivity: rename error {self._path} -> {new_path}: {e}")
+            logger.error("RenameActivity: rename error %s -> %s: %s", self._path, new_path, e)
             self.setResult(False, {"error": str(e)})
         self.finish()

@@ -25,6 +25,7 @@ class ChooserActivity(Activity):
         # Get handlers from intent extras
         original_intent = self.getIntent().extras.get("original_intent")
         handlers = self.getIntent().extras.get("handlers", [])
+        self._result_callback = self.getIntent().extras.get("result_callback")
 
         title = lv.label(screen)
         title.set_text("Open with")
@@ -50,7 +51,7 @@ class ChooserActivity(Activity):
     def _select_handler(self, handler_info, original_intent):
         from ...activity_navigator import ActivityNavigator
 
-        ActivityNavigator._dispatch(original_intent, handler_info)
+        ActivityNavigator._dispatch(original_intent, handler_info, self._result_callback)
         self.finish()
 
     def onStop(self, screen):

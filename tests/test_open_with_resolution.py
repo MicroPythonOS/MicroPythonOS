@@ -3,6 +3,7 @@ import unittest
 from mpos import Intent
 from mpos.content.app_manager import AppManager
 from mpos.app.activity import Activity
+from mpos.ui.file_explorer_activity import FileExplorerActivity
 
 
 class _FakeMusicPlayer(Activity):
@@ -152,6 +153,16 @@ class TestFileTypeResolution(unittest.TestCase):
             "com.micropythonos.imageview",
         )
         self.assertEqual(AppManager.get_handler_display_name(_FakeImageView), "Image View")
+
+    def test_pick_file_resolves_to_file_explorer_activity(self):
+        """A pick_file intent should resolve to the framework FileExplorerActivity."""
+        AppManager.register_activity("pick_file", FileExplorerActivity)
+
+        handlers = AppManager.resolve_activity(Intent(action="pick_file"))
+
+        self.assertEqual(len(handlers), 1)
+        self.assertEqual(handlers[0].activity_class, FileExplorerActivity)
+        self.assertIsNone(handlers[0].app_fullname)
 
 
 if __name__ == "__main__":
