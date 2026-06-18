@@ -15,13 +15,13 @@ class TestSysPathRestore(unittest.TestCase):
         original_length = len(sys.path)
 
         # Create a test directory path that would be added
-        test_cwd = "builtin/apps/com.micropythonos.launcher/assets/"
+        test_cwd = "builtin/apps/com.micropythonos.launcher/"
 
         # Verify the test path is not already in sys.path
         self.assertFalse(test_cwd in original_path,
                         f"Test path {test_cwd} should not be in sys.path initially")
 
-        test_script = "builtin/apps/com.micropythonos.launcher/assets/launcher.py"
+        test_script = "builtin/apps/com.micropythonos.launcher/launcher.py"
 
         # Call execute_script with cwd parameter
         result = AppManager.execute_script(
@@ -55,7 +55,7 @@ class TestSysPathRestore(unittest.TestCase):
         # Capture original sys.path
         original_path = sys.path[:]
 
-        test_script = "builtin/apps/com.micropythonos.launcher/assets/launcher.py"
+        test_script = "builtin/apps/com.micropythonos.launcher/launcher.py"
 
         # Call without cwd parameter
         result = AppManager.execute_script(
