@@ -109,8 +109,8 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
             "Fallback ViewActivity did not show the file path",
         )
         self.assertTrue(
-            wait_for_text("Viewing:", timeout=10),
-            "Fallback ViewActivity label not shown",
+            wait_for_text("dummy", timeout=10),
+            "Fallback ViewActivity did not show the file contents",
         )
 
 

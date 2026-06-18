@@ -24,6 +24,7 @@ Frameworks:
 - AppManager/Intent: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
 - ActivityNavigator: dispatch implicit file intents to installed apps with proper app context and status-bar handling
 - Fix ChooserActivity, ViewActivity, and ShareActivity for LVGL 9.x and remove undefined references
+- ViewActivity fallback now displays the filename plus the first 512 bytes of the file's contents
 - AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 
 Apps:
