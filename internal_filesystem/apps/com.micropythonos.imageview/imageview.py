@@ -2,7 +2,7 @@ import gc
 import os
 import lvgl as lv
 
-from mpos import Activity, WidgetAnimator, DisplayMetrics
+from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent
 
 class ImageView(Activity):
 
@@ -16,6 +16,7 @@ class ImageView(Activity):
     # Widgets
     image = None
     current_image_dsc = None  # Track current image descriptor
+    open_button = None
 
     def onCreate(self):
         screen = lv.obj()
@@ -26,8 +27,17 @@ class ImageView(Activity):
         self.image.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
         self.label = lv.label(screen)
         self.label.set_text(f"Loading images from\n{self.imagedir}")
-        self.label.align(lv.ALIGN.TOP_MID,0,0)
+        self.label.align(lv.ALIGN.TOP_MID,0,48)
         self.label.set_width(lv.pct(80))
+
+        self.open_button = lv.button(screen)
+        self.open_button.set_size(100, 42)
+        self.open_button.align(lv.ALIGN.TOP_RIGHT, -4, 4)
+        self.open_button.add_event_cb(self._open_file_clicked, lv.EVENT.CLICKED, None)
+        open_label = lv.label(self.open_button)
+        open_label.set_text("Open file...")
+        open_label.center()
+
         self.prev_button = lv.button(screen)
         self.prev_button.align(lv.ALIGN.BOTTOM_LEFT,0,0)
         self.prev_button.add_event_cb(lambda e: self.show_prev_image_if_fullscreen(),lv.EVENT.FOCUSED,None)
@@ -76,29 +86,13 @@ class ImageView(Activity):
             self.show_next_image()
             return
 
-        try:
-            for item in os.listdir(self.imagedir):
-                print(item)
-                lowercase = item.lower()
-                if not (lowercase.endswith(".jpg") or lowercase.endswith(".jpeg") or lowercase.endswith(".png") or lowercase.endswith(".raw")):
-                    continue
-                fullname = f"{self.imagedir}/{item}"
-                size = os.stat(fullname)[6]
-                print(f"size: {size}")
-                if size > 10 * 1024*1024:
-                    print(f"Skipping file of size {size}")
-                    continue
-                self.images.append(fullname)
-
-            self.images.sort()
-            if len(self.images) == 0:
-                self.no_image_mode()
-            else:
-                # Begin with one image:
-                self.show_next_image()
-                self.stop_fullscreen()
-        except Exception as e:
-            print(f"ImageView encountered exception for {self.imagedir}: {e}")
+        self.images = self._collect_images_from_dir(self.imagedir)
+        if len(self.images) == 0:
+            self.no_image_mode()
+        else:
+            # Begin with one image:
+            self.show_next_image()
+            self.stop_fullscreen()
 
     def onStop(self, screen):
         print("ImageView stopping")
@@ -112,6 +106,65 @@ class ImageView(Activity):
         WidgetAnimator.smooth_hide(self.prev_button)
         WidgetAnimator.smooth_hide(self.delete_button)
         WidgetAnimator.smooth_hide(self.next_button)
+
+    def _open_file_clicked(self, event):
+        intent = Intent(
+            action="pick_file",
+            extras={"start_dir": self.imagedir, "path_pattern": [".jpg", ".jpeg", ".png", ".raw"]},
+        )
+        self.startActivityForResult(intent, self._on_file_picked)
+
+    def _on_file_picked(self, result):
+        if not result or not result.get("result_code"):
+            return
+        paths = result.get("data", {}).get("paths", [])
+        images = []
+        for path in paths:
+            if path.endswith("/"):
+                images.extend(self._collect_images_from_dir(path))
+            else:
+                try:
+                    size = os.stat(path)[6]
+                    if size > 10 * 1024 * 1024:
+                        print(f"Skipping file of size {size}")
+                        continue
+                except OSError:
+                    pass
+                if self._is_image_file(path):
+                    images.append(path)
+        if images:
+            self.images = images
+            self.image_nr = None
+            self.show_next_image()
+            self.stop_fullscreen()
+
+    def _is_image_file(self, filename):
+        lowercase = filename.lower()
+        return (
+            lowercase.endswith(".jpg")
+            or lowercase.endswith(".jpeg")
+            or lowercase.endswith(".png")
+            or lowercase.endswith(".raw")
+        )
+
+    def _collect_images_from_dir(self, path):
+        images = []
+        try:
+            for item in os.listdir(path):
+                print(item)
+                if not self._is_image_file(item):
+                    continue
+                fullname = path.rstrip("/") + "/" + item
+                size = os.stat(fullname)[6]
+                print(f"size: {size}")
+                if size > 10 * 1024 * 1024:
+                    print(f"Skipping file of size {size}")
+                    continue
+                images.append(fullname)
+        except Exception as e:
+            print(f"ImageView encountered exception for {path}: {e}")
+        images.sort()
+        return images
 
     def show_prev_image(self, event=None):
         print("showing previous image...")
@@ -139,6 +192,7 @@ class ImageView(Activity):
     def stop_fullscreen(self):
         print("stopping fullscreen")
         WidgetAnimator.smooth_show(self.label)
+        WidgetAnimator.smooth_show(self.open_button)
         WidgetAnimator.smooth_show(self.prev_button)
         WidgetAnimator.smooth_show(self.delete_button)
         #WidgetAnimator.smooth_show(self.play_button)
@@ -148,6 +202,7 @@ class ImageView(Activity):
     def start_fullscreen(self):
         print("starting fullscreen")
         WidgetAnimator.smooth_hide(self.label)
+        WidgetAnimator.smooth_hide(self.open_button)
         WidgetAnimator.smooth_hide(self.prev_button, hide=False)
         WidgetAnimator.smooth_hide(self.delete_button, hide=False)
         #WidgetAnimator.smooth_hide(self.play_button, hide=False)
