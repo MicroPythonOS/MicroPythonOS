@@ -33,22 +33,31 @@ class MusicPlayer(Activity):
         self._filename = self.getIntent().extras.get("filename") or self.getIntent().data
         self._playback_attempted_for = None
 
-        # Settings button (top-right)
+        # Settings button (top-left)
         self._settings_button = lv.button(screen)
         self._settings_button.set_size(60, 42)
-        self._settings_button.align(lv.ALIGN.TOP_LEFT, 4, 20)
+        self._settings_button.align(lv.ALIGN.TOP_LEFT, 4, 4)
         self._settings_button.add_event_cb(lambda *args: AppManager.start_app("com.micropythonos.settings.audio"), lv.EVENT.CLICKED, None)
         settings_label = lv.label(self._settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
 
+        # Open file button (top-right)
+        self._open_button = lv.button(screen)
+        self._open_button.set_size(100, 42)
+        self._open_button.align(lv.ALIGN.TOP_RIGHT, -4, 4)
+        self._open_button.add_event_cb(self._open_file_clicked, lv.EVENT.CLICKED, None)
+        open_label = lv.label(self._open_button)
+        open_label.set_text("Open file...")
+        open_label.center()
+
         audio_volume = AudioManager.get_volume()
         slider_volume = int(round(audio_volume * slider_max / 100))
 
         self._slider_label = lv.label(screen)
         self._slider_label.set_text("Volume: {}%".format(audio_volume))
-        self._slider_label.align(lv.ALIGN.TOP_MID, 0, lv.pct(4))
+        self._slider_label.align(lv.ALIGN.TOP_MID, 0, 56)
         self._slider = lv.slider(screen)
         self._slider.set_range(0, slider_max)
         self._slider.set_value(slider_volume, False)
@@ -68,13 +77,7 @@ class MusicPlayer(Activity):
         self._filename_label.set_width(lv.pct(90))
         self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.focus_obj(obj), lv.EVENT.FOCUSED, None)
         self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.defocus_obj(obj), lv.EVENT.DEFOCUSED, None)
-        self._filename_label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
-
-        self._open_button = lv.button(screen)
-        self._open_button.align(lv.ALIGN.BOTTOM_MID, 0, -40)
-        self._open_button.add_event_cb(self._open_file_clicked, lv.EVENT.CLICKED, None)
-        open_label = lv.label(self._open_button)
-        open_label.set_text("Open file...")
+        self._filename_label.set_long_mode(lv.label.LONG_MODE.WRAP)
 
         self._stop_button = lv.button(screen)
         self._stop_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
