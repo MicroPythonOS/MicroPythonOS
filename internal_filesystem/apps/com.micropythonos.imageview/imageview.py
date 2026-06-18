@@ -25,6 +25,8 @@ class ImageView(Activity):
         self.image.center()
         self.image.add_flag(lv.obj.FLAG.CLICKABLE)
         self.image.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
+        self.image.add_event_cb(self.focus_image, lv.EVENT.FOCUSED, None)
+        self.image.add_event_cb(self.defocus_image, lv.EVENT.DEFOCUSED, None)
         self.label = lv.label(screen)
         self.label.set_text(f"Loading images from\n{self.imagedir}")
         self.label.align(lv.ALIGN.TOP_LEFT, 4, 4)
@@ -74,7 +76,11 @@ class ImageView(Activity):
         next_label = lv.label(self.next_button)
         next_label.set_text(lv.SYMBOL.RIGHT)
         next_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-        #screen.add_event_cb(self.print_events, lv.EVENT.ALL, None)
+
+        focusgroup = lv.group_get_default()
+        if focusgroup:
+            focusgroup.add_obj(self.image)
+
         self.setContentView(screen)
 
     def onResume(self, screen):
@@ -169,6 +175,15 @@ class ImageView(Activity):
             print(f"ImageView encountered exception for {path}: {e}")
         images.sort()
         return images
+
+    def focus_image(self, event):
+        target = event.get_target_obj()
+        target.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+        target.set_style_border_width(2, lv.PART.MAIN)
+
+    def defocus_image(self, event):
+        target = event.get_target_obj()
+        target.set_style_border_width(0, lv.PART.MAIN)
 
     def show_prev_image(self, event=None):
         print("showing previous image...")
