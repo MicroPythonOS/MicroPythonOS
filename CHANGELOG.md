@@ -20,6 +20,7 @@ Drivers:
 
 Frameworks:
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
+- AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
 - AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 
 0.12.2
