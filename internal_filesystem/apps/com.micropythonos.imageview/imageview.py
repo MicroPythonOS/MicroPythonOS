@@ -27,8 +27,12 @@ class ImageView(Activity):
         self.image.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
         self.label = lv.label(screen)
         self.label.set_text(f"Loading images from\n{self.imagedir}")
-        self.label.align(lv.ALIGN.TOP_MID,0,48)
-        self.label.set_width(lv.pct(80))
+        self.label.align(lv.ALIGN.TOP_LEFT, 4, 4)
+        screen_width = DisplayMetrics.width()
+        if screen_width:
+            self.label.set_width(screen_width - 112)
+        else:
+            self.label.set_width(lv.pct(60))
 
         self.open_button = lv.button(screen)
         self.open_button.set_size(100, 42)
