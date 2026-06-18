@@ -10,9 +10,9 @@ from .device import Device
 # registers
 _EXPANDER_REG_INPUTS = const(0x04)
 _EXPANDER_REG_ANALOG = const(0x06)
-_EXPANDER_REG_LCD_BRIGHTNESS = const(0x12)
-_EXPANDER_REG_DEBUG_LED = const(0x14)
-_EXPANDER_REG_CONFIG = const(0x16)
+_EXPANDER_REG_LCD_BRIGHTNESS = const(0x10)
+_EXPANDER_REG_DEBUG_LED = const(0x12)
+_EXPANDER_REG_CONFIG = const(0x14)
 
 _EXPANDER_I2CADDR_DEFAULT = const(0x50)
 
@@ -41,9 +41,9 @@ class Expander(Device):
         self.i2c.readfrom_mem_into(self.address, _EXPANDER_REG_INPUTS, self._rx_mv)
 
     @property
-    def analog(self) -> tuple[int, int, int, int, int, int]:
-        """Read the analog inputs: ain1, ain0, battery_monitor, usb_monitor, joystick_y, joystick_x"""
-        return self._read("<HHHHHH", _EXPANDER_REG_ANALOG, 12)
+    def analog(self) -> tuple[int, int, int, int, int]:
+        """Read the analog inputs: ain0, battery_monitor, usb_monitor, joystick_y, joystick_x"""
+        return self._read("<HHHHH", _EXPANDER_REG_ANALOG, 10)
 
     @property
     def digital(
@@ -79,21 +79,21 @@ class Expander(Device):
             self._write(_EXPANDER_REG_DEBUG_LED, struct.pack("<H", value))
 
     @property
-    def config(self) -> tuple[bool, bool, bool]:
-        """Read the configuration bits: reboot, lcd_reset, aux_power"""
+    def config(self) -> tuple[bool, bool, bool, bool, bool]:
+        """Read the configuration bits: lora reset, remap, reboot, lcd_reset, aux_power"""
         config = self._read("B", _EXPANDER_REG_CONFIG, 1)[0]
-        return tuple([bool(int(digit)) for digit in "{:08b}".format(config)[5:]])
+        return tuple([bool(int(digit)) for digit in "{:08b}".format(config)[3:]])
 
     @config.setter
     def config(self, value: int):
         """set the configuration byte"""
-        if value >= 0 and value <= 0xFF:
+        if value >= 0 and value <= 0x1F:
             self._write(_EXPANDER_REG_CONFIG, struct.pack("B", value))
 
     def install_firmware(self, filename: str, progress_cb):
         print("Installing latest CH32 firmware")
         try:
-            self.config = 0x0B # trigger SWD enable
+            self.config = 0x1B # trigger SWD enable
         except Exception as e:
             print(f"Expander SWD enable got exception, ignoring it: {e}") # could be normal, if the expander is empty
         time.sleep(0.2)
