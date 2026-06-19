@@ -34,6 +34,7 @@ Guidelines:
 - Always add a timeout -s 9 30 to ./scripts/run_desktop.sh so run: timeout -s 9 30 ./scripts/run_desktop.sh
 - Write temporary files to a `tmp/` folder in the CWD, not `/` or `/tmp`, due to permissions constraints.
 - To kill processes, use `killall <name>` instead of `pkill -f <pattern>` — `pkill -f` matches the pkill command's own argv and can kill itself.
+- When using `MPOSController(backend='process')`, the `__exit__`/`stop()` method terminates the child process but cannot clean up if the controller script itself is killed or exits via SIGKILL/SIGINT/timeout before `stop()` runs. Always pre-emptively kill stale binaries before starting a new controller session: run `os.system('killall -9 lvgl_micropy_unix run_desktop.sh 2>/dev/null')` before instantiating `MPOSController()`, or use `subprocess.run(['killall','-9','lvgl_micropy_unix','run_desktop.sh'])`.
 - When using mpos-controller for debugging, write all scripts to `tmp/` in the project root (not `/tmp`). Run them with `python3 tmp/script.py`.
 
 Guidelines for writing or updating tests:
