@@ -8,6 +8,7 @@ from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
 from .input_manager import InputManager
 from .widget_animator import SlidePanel
+from .focus import add_focus_border
 from mpos.content.app_manager import AppManager
 from mpos.notification_manager import NotificationManager
 
@@ -47,26 +48,12 @@ _drawer_notif_focusables = []  # notification item_buttons; synced with focus gr
 _pre_drawer_focused = None     # widget that had focus before the drawer was opened
 
 
-def _focus_topmenu_obj(event):
-    """Visual feedback: draw a 1-px primary-colour border on focus."""
-    target = event.get_target_obj()
-    target.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
-    target.set_style_border_width(1, lv.PART.MAIN)
-
-
-def _defocus_topmenu_obj(event):
-    """Remove the focus border on defocus."""
-    target = event.get_target_obj()
-    target.set_style_border_width(0, lv.PART.MAIN)
-
-
 def _register_focus_callbacks(widget):
     """
     Register focus/defocus visual-feedback callbacks on *widget*.
     Returns the widget for convenience.
     """
-    widget.add_event_cb(_focus_topmenu_obj, lv.EVENT.FOCUSED, None)
-    widget.add_event_cb(_defocus_topmenu_obj, lv.EVENT.DEFOCUSED, None)
+    add_focus_border(widget)
     return widget
 
 

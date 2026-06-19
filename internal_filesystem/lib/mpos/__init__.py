@@ -57,7 +57,7 @@ from .ui.appearance_manager import AppearanceManager
 from .ui.event import get_event_name, print_event
 from .ui.view import setContentView, back_screen
 from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
-from .ui.focus import save_and_clear_current_focusgroup
+from .ui.focus import save_and_clear_current_focusgroup, add_focus_border
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.widget_animator import WidgetAnimator
 from .ui.font_manager import FontManager
@@ -101,7 +101,7 @@ __all__ = (
     "get_event_name", "print_event",
     "setContentView", "back_screen",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
-    "save_and_clear_current_focusgroup",
+    "save_and_clear_current_focusgroup", "add_focus_border",
     "handle_back_swipe", "handle_top_swipe",
     "get_foreground_app",
     "WidgetAnimator",

@@ -3,7 +3,7 @@ import lvgl as lv
 import math
 import time
 
-from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics
+from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics, add_focus_border
 
 logger = logging.getLogger(__name__)
 #logger.setLevel(logging.DEBUG)
@@ -116,8 +116,7 @@ class Launcher(Activity):
 
             # ----- events --------------------------------------------------
             app_cont.add_event_cb(lambda e, fullname=app.fullname: self._launch_app(fullname), lv.EVENT.CLICKED, None)
-            app_cont.add_event_cb(lambda e, cont=app_cont: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
-            app_cont.add_event_cb(lambda e, cont=app_cont: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
+            add_focus_border(app_cont)
 
             focusgroup.add_obj(app_cont)
             self._app_cont_map[app.fullname] = app_cont
@@ -213,11 +212,4 @@ class Launcher(Activity):
             })
         return image_dsc
 
-    def focus_app_cont(self, app_cont):
-        app_cont.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
-        app_cont.set_style_border_width(1, lv.PART.MAIN)
-        app_cont.scroll_to_view(True)
-
-    def defocus_app_cont(self, app_cont):
-        app_cont.set_style_border_width(0, lv.PART.MAIN)
 

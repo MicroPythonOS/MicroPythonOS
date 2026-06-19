@@ -3,7 +3,7 @@ import logging
 import lvgl as lv
 import _thread
 
-from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager
+from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager, add_focus_border
 
 logger = logging.getLogger(__name__)
 
@@ -295,11 +295,10 @@ class EditNetwork(Activity):
         label.align_to(self.hidden_cb, lv.ALIGN.OUT_RIGHT_MID, 0, 0)
         label.add_event_cb(self.hidden_clicked,lv.EVENT.CLICKED,None)
         label.add_flag(lv.obj.FLAG.CLICKABLE)
-        label.add_event_cb(lambda e, cont=label: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
-        #label.add_event_cb(lambda e, cont=self.hidden_cb: self.focus_app_cont(cont),lv.EVENT.FOCUSED, None)
-        label.add_event_cb(lambda e, cont=label: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
-        #label.add_event_cb(lambda e, cont=self.hidden_cb: self.defocus_app_cont(cont),lv.EVENT.DEFOCUSED, None)
+        label.set_style_pad_all(2, lv.PART.MAIN)
+        add_focus_border(label, width=2, opacity=lv.OPA._50, radius=5)
         lv.group_get_default().add_obj(label)
+
         if known_hidden:
             self.hidden_cb.set_state(lv.STATE.CHECKED, True)
 
@@ -341,17 +340,6 @@ class EditNetwork(Activity):
         label.center()
 
         self.setContentView(password_page)
-
-    def focus_app_cont(self, app_cont):
-        app_cont.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
-        app_cont.set_style_border_width(2, lv.PART.MAIN)
-        app_cont.set_style_border_opa(lv.OPA._50, lv.PART.MAIN)
-        app_cont.set_style_radius(5, lv.PART.MAIN)
-        app_cont.scroll_to_view(True)
-        app_cont.set_style_pad_all(2, lv.PART.MAIN)
-
-    def defocus_app_cont(self, app_cont):
-        app_cont.set_style_border_width(0, lv.PART.MAIN)
 
     def hidden_clicked(self, event):
         if __debug__: logger.debug("hidden clicked")

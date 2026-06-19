@@ -1,6 +1,6 @@
 import logging
 
-from mpos import Activity, SharedPreferences, DisplayMetrics
+from mpos import Activity, SharedPreferences, DisplayMetrics, add_focus_border
 import lvgl as lv
 
 logger = logging.getLogger(__name__)
@@ -51,25 +51,12 @@ class HowTo(Activity):
 
         self.setContentView(screen)
 
-    @staticmethod
-    def _focus_obj(event):
-        target = event.get_target_obj()
-        target.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
-        target.set_style_border_width(1, lv.PART.MAIN)
-        target.scroll_to_view(True)
-
-    @staticmethod
-    def _defocus_obj(event):
-        target = event.get_target_obj()
-        target.set_style_border_width(0, lv.PART.MAIN)
-
     def _add_label(self, parent, text, is_header=False):
         label = lv.label(parent)
         label.set_width(lv.pct(100))
         label.set_text(text)
         label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
-        label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
+        add_focus_border(label)
         lv.group_get_default().add_obj(label)
         if is_header:
             label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)

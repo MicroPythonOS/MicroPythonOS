@@ -21,6 +21,7 @@ Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
 
 Frameworks:
+- Add new `add_focus_border` utility and migrate all duplicated focus/defocus border handlers (ImageView, MusicPlayer, ShowFonts, About, HowTo, Launcher, WiFi Settings, Connect4, SettingsActivity, topmenu) to use it
 - Add new builtin File Explorer Activity with picker
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
 - AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
@@ -33,6 +34,7 @@ Frameworks:
 Apps:
 - Music Player: declare support for .wav files and open them directly when launched via "Open With"
 - Image View: declare support for .png, .jpg, .jpeg, and .raw images and open a single image when launched via "Open With"
+- Image View: add "Open File..." button using the File Explorer Activity picker; position filename label in the top-left corner; add focus border to the image
 
 0.12.2
 ======

@@ -1,7 +1,7 @@
 import time
 import random
 
-from mpos import Activity
+from mpos import Activity, add_focus_border
 
 try:
     import lvgl as lv
@@ -139,8 +139,7 @@ class Connect4(Activity):
             btn.set_style_border_width(0, lv.PART.MAIN)
             btn.add_flag(lv.obj.FLAG.CLICKABLE)
             btn.add_event_cb(lambda e, c=col: self.on_column_click(c), lv.EVENT.CLICKED, None)
-            btn.add_event_cb(lambda e, b=btn: self.focus_column(b), lv.EVENT.FOCUSED, None)
-            btn.add_event_cb(lambda e, b=btn: self.defocus_column(b), lv.EVENT.DEFOCUSED, None)
+            add_focus_border(btn, width=3, color=lv.color_hex(0xFFFFFF))
 
             focusgroup.add_obj(btn)
 
@@ -150,16 +149,6 @@ class Connect4(Activity):
 
     def onResume(self, screen):
         self.last_time = time.ticks_ms()
-
-    def focus_column(self, column_btn):
-        """Highlight column when focused"""
-        # Use white for focus border to contrast with blue board
-        column_btn.set_style_border_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
-        column_btn.set_style_border_width(3, lv.PART.MAIN)
-
-    def defocus_column(self, column_btn):
-        """Remove highlight when unfocused"""
-        column_btn.set_style_border_width(0, lv.PART.MAIN)
 
     def cycle_difficulty(self, event):
         if self.animating:

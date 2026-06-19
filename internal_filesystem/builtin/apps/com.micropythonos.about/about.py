@@ -4,7 +4,7 @@ import time
 
 import lvgl as lv
 
-from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo, FontManager
+from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo, FontManager, add_focus_border
 import mpos
 
 class About(Activity):
@@ -211,26 +211,13 @@ class About(Activity):
         if self._uptime_label is not None:
             self._uptime_label.set_text(f"Uptime: {self._get_uptime_str()}")
 
-    @staticmethod
-    def _focus_obj(event):
-        target = event.get_target_obj()
-        target.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
-        target.set_style_border_width(1, lv.PART.MAIN)
-        target.scroll_to_view(True)
-
-    @staticmethod
-    def _defocus_obj(event):
-        target = event.get_target_obj()
-        target.set_style_border_width(0, lv.PART.MAIN)
-
     def _add_label(self, parent, text, is_header=False, margin_top=DisplayMetrics.pct_of_height(5)):
         """Helper to create and add a label with text."""
         label = lv.label(parent)
         label.set_text(text)
         label.set_width(lv.pct(98))
         # Make labels focusable to allow scroll on devices without touch screen
-        label.add_event_cb(self._focus_obj, lv.EVENT.FOCUSED, None)
-        label.add_event_cb(self._defocus_obj, lv.EVENT.DEFOCUSED, None)
+        add_focus_border(label)
         lv.group_get_default().add_obj(label)
         if is_header:
             primary_color = lv.theme_get_color_primary(None)

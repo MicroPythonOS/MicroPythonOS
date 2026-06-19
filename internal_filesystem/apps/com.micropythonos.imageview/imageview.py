@@ -2,7 +2,7 @@ import gc
 import os
 import lvgl as lv
 
-from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent
+from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent, add_focus_border
 
 class ImageView(Activity):
 
@@ -25,8 +25,7 @@ class ImageView(Activity):
         self.image.center()
         self.image.add_flag(lv.obj.FLAG.CLICKABLE)
         self.image.add_event_cb(lambda e: self.toggle_fullscreen(),lv.EVENT.CLICKED,None)
-        self.image.add_event_cb(self.focus_image, lv.EVENT.FOCUSED, None)
-        self.image.add_event_cb(self.defocus_image, lv.EVENT.DEFOCUSED, None)
+        add_focus_border(self.image, 2)
         self.label = lv.label(screen)
         self.label.set_text(f"Loading images from\n{self.imagedir}")
         self.label.align(lv.ALIGN.TOP_LEFT, 4, 4)
@@ -175,15 +174,6 @@ class ImageView(Activity):
             print(f"ImageView encountered exception for {path}: {e}")
         images.sort()
         return images
-
-    def focus_image(self, event):
-        target = event.get_target_obj()
-        target.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
-        target.set_style_border_width(2, lv.PART.MAIN)
-
-    def defocus_image(self, event):
-        target = event.get_target_obj()
-        target.set_style_border_width(0, lv.PART.MAIN)
 
     def show_prev_image(self, event=None):
         print("showing previous image...")

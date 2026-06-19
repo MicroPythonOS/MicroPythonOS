@@ -6,7 +6,7 @@ import lvgl as lv
 
 logger = logging.getLogger(__name__)
 
-from mpos import Activity, AppManager, Intent, sdcard, AudioManager
+from mpos import Activity, AppManager, Intent, sdcard, AudioManager, add_focus_border
 
 slider_max = 16
 
@@ -75,8 +75,7 @@ class MusicPlayer(Activity):
         self._filename_label = lv.label(screen)
         self._filename_label.align(lv.ALIGN.CENTER, 0, 0)
         self._filename_label.set_width(lv.pct(90))
-        self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.focus_obj(obj), lv.EVENT.FOCUSED, None)
-        self._filename_label.add_event_cb(lambda e, obj=self._filename_label: self.defocus_obj(obj), lv.EVENT.DEFOCUSED, None)
+        add_focus_border(self._filename_label)
         self._filename_label.set_long_mode(lv.label.LONG_MODE.WRAP)
 
         self._stop_button = lv.button(screen)
@@ -177,13 +176,6 @@ class MusicPlayer(Activity):
             elif path.lower().endswith(".wav"):
                 return path
         return None
-
-    def focus_obj(self, obj):
-        obj.set_style_border_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
-        obj.set_style_border_width(1, lv.PART.MAIN)
-
-    def defocus_obj(self, obj):
-        obj.set_style_border_width(0, lv.PART.MAIN)
 
     def stop_button_clicked(self, event):
         AudioManager.stop()

@@ -108,17 +108,8 @@ class SettingsActivity(Activity):
             value.set_pos(0, 20)
             setting["value_label"] = value  # Store reference for updating
             setting_cont.add_event_cb(lambda e, s=setting: self.startSettingActivity(s), lv.EVENT.CLICKED, None)
-            setting_cont.add_event_cb(lambda e, container=setting_cont: self.focus_container(container),lv.EVENT.FOCUSED,None)
-            setting_cont.add_event_cb(lambda e, container=setting_cont: self.defocus_container(container),lv.EVENT.DEFOCUSED,None)
+            mpos.ui.add_focus_border(setting_cont)
             focusgroup.add_obj(setting_cont)
-
-    def focus_container(self, container):
-        container.set_style_border_color(lv.theme_get_color_primary(None),lv.PART.MAIN)
-        container.set_style_border_width(1, lv.PART.MAIN)
-        container.scroll_to_view(True) # scroll to bring it into view
-
-    def defocus_container(self, container):
-        container.set_style_border_width(0, lv.PART.MAIN)
 
     def startSettingActivity(self, setting):
         from ..content.intent import Intent
