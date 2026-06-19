@@ -54,7 +54,7 @@ class MposKeyboard:
         "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "\n",
         "a", "s", "d", "f", "g", "h", "j", "k", "l", "\n",
         lv.SYMBOL.UP, "z", "x", "c", "v", "b", "n", "m", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, None
+        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
     ]
     _lowercase_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_lowercase_map)
     _lowercase_ctrl[29] = lv.buttonmatrix.CTRL.WIDTH_5 # comma
@@ -66,7 +66,7 @@ class MposKeyboard:
         "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "\n",
         "A", "S", "D", "F", "G", "H", "J", "K", "L", "\n",
         lv.SYMBOL.DOWN, "Z", "X", "C", "V", "B", "N", "M", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, None
+        LABEL_NUMBERS_SPECIALS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
     ]
     _uppercase_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_uppercase_map)
     _uppercase_ctrl[29] = lv.buttonmatrix.CTRL.WIDTH_5 # comma
@@ -78,7 +78,7 @@ class MposKeyboard:
         "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
         "@", "#", "$", "_", "&", "-", "+", "(", ")", "/", "\n",
         LABEL_SPECIALS, "*", "\"", "'", ":", ";", "!", "?", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_LETTERS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, None
+        LABEL_LETTERS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
     ]
     _numbers_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_numbers_map)
     _numbers_ctrl[30] = lv.buttonmatrix.CTRL.WIDTH_5 # comma
@@ -90,7 +90,7 @@ class MposKeyboard:
         "~", "`", "|", "•", "🙂", "😉", "😆", "\n",
         "😒", "😭", "^", "°", "=", "{", "}", "\\", "\n",
         LABEL_NUMBERS_SPECIALS, "%", "😱", "😋", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_LETTERS, "<", LABEL_SPACE, ">", lv.SYMBOL.OK, None
+        LABEL_LETTERS, "<", LABEL_SPACE, ">", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
     ]
     _specials_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_specials_map)
     _specials_ctrl[15] = lv.buttonmatrix.CTRL.WIDTH_15 # LABEL_NUMBERS_SPECIALS is pretty wide

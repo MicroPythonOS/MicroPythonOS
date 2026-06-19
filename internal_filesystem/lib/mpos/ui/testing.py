@@ -997,10 +997,10 @@ def get_keyboard_button_coords(keyboard, button_text):
     # Row 0: 10 buttons (q w e r t y u i o p)
     # Row 1: 9 buttons (a s d f g h j k l)
     # Row 2: 9 buttons (shift z x c v b n m backspace)
-    # Row 3: 5 buttons (?123, comma, space, dot, enter)
+    # Row 3: 6 buttons (?123, comma, space, dot, OK, newline)
 
     # Define row lengths for standard keyboard
-    row_lengths = [10, 9, 9, 5]
+    row_lengths = [10, 9, 9, 6]
 
     # Find which row our button is in
     row = 0

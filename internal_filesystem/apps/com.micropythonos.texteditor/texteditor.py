@@ -3,7 +3,7 @@ import os
 
 import lvgl as lv
 
-from mpos import Activity, Intent
+from mpos import Activity, Intent, MposKeyboard
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,6 @@ class TextEditor(Activity):
 
     _filename = None
     _saved_content = ""
-    _dirty = False
     _loading = False
 
     _top_bar = None
@@ -63,16 +62,19 @@ class TextEditor(Activity):
         open_label.set_text("Open file...")
         open_label.center()
 
+        self._filename_label = lv.label(self._top_bar)
+        self._filename_label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
+        self._filename_label.set_flex_grow(1)
+        self._filename_label.set_style_text_align(lv.TEXT_ALIGN.LEFT, lv.PART.MAIN)
+        self._filename_label.set_style_pad_left(6, lv.PART.MAIN)
+        self._filename_label.set_style_pad_right(6, lv.PART.MAIN)
+
         self._save_button = lv.button(self._top_bar)
         self._save_button.set_size(100, 42)
         self._save_button.add_event_cb(self._save_file_clicked, lv.EVENT.CLICKED, None)
         save_label = lv.label(self._save_button)
         save_label.set_text("Save file")
         save_label.center()
-
-        self._filename_label = lv.label(self._top_bar)
-        self._filename_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self._filename_label.set_width(lv.pct(100))
 
         self._textarea = lv.textarea(screen)
         self._textarea.set_text("")
@@ -82,7 +84,7 @@ class TextEditor(Activity):
         self._textarea.add_event_cb(self._on_text_changed, lv.EVENT.VALUE_CHANGED, None)
         self._textarea.add_event_cb(self._show_keyboard, lv.EVENT.CLICKED, None)
 
-        self._keyboard = lv.keyboard(screen)
+        self._keyboard = MposKeyboard(screen)
         self._keyboard.set_textarea(self._textarea)
         self._keyboard.set_size(lv.pct(100), lv.pct(35))
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
@@ -172,12 +174,13 @@ class TextEditor(Activity):
             return
         self._update_title()
 
-    def _show_keyboard(self, event):
-        self._keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
-        self._keyboard.set_textarea(self._textarea)
+    def _show_keyboard(self, event=None, textarea=None):
+        ta = textarea or self._textarea
+        self._keyboard.set_textarea(ta)
+        self._keyboard.show_keyboard()
 
     def _hide_keyboard(self):
-        self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self._keyboard.hide_keyboard()
 
     def _on_keyboard_ready(self, event):
         self._hide_keyboard()
@@ -262,7 +265,7 @@ class TextEditor(Activity):
         name_ta.set_width(lv.pct(100))
         name_ta.set_placeholder_text("filename.txt")
         name_ta.set_text("")
-        name_ta.add_event_cb(self._show_keyboard, lv.EVENT.CLICKED, None)
+        name_ta.add_event_cb(lambda e: self._show_keyboard(textarea=name_ta), lv.EVENT.CLICKED, None)
 
         btn_row = lv.obj(container)
         btn_row.set_size(lv.pct(100), lv.SIZE_CONTENT)
@@ -287,8 +290,7 @@ class TextEditor(Activity):
 
         self._save_as_overlay = overlay
         self._save_as_textarea = name_ta
-        self._keyboard.set_textarea(name_ta)
-        self._keyboard.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._show_keyboard(textarea=name_ta)
         lv.group_focus_obj(name_ta)
 
     def _on_save_as_confirm(self, name_ta, overlay):
