@@ -129,16 +129,12 @@ python3 tmp/my_debug_script.py
 ```
 Template:
 ```python
-import sys, time
+import sys
 sys.path.insert(0, '.')
 from scripts.mpos_controller import MPOSController
 
 with MPOSController(backend='process') as mpos:
-    mpos.start()
-    time.sleep(10)  # wait for boot
-    mpos.dismiss_onboarding()
-    mpos.startapp('com.micropythonos.showfonts')
-    time.sleep(4)
+    mpos.run_app('com.micropythonos.showfonts')
     ss = mpos.screenshot()
     with open('tmp/screenshot.bmp', 'wb') as f:
         f.write(ss)

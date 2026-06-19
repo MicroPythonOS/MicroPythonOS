@@ -282,8 +282,8 @@ l.align(lv.ALIGN.CENTER, 0, 0)
 
     tree_before = mpos.get_widget_tree()
 
-    out = mpos.startapp("com.micropythonos.about")
-    check(b"Warning" not in out, "startapp launched without warning")
+    result = mpos.startapp("com.micropythonos.about")
+    check(result is True, "startapp launched successfully")
     time.sleep(0.5)
     tree_app = mpos.get_widget_tree()
     check(tree_app != tree_before, "widget tree changed after startapp")

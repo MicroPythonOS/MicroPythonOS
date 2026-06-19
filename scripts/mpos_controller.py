@@ -255,6 +255,7 @@ class ProcessBackend:
         self.proc = None
         self.master_fd = None
         self.repl = None
+        self._watchdog = None
         self._width = 320
         self._height = 240
 
@@ -325,6 +326,39 @@ class ProcessBackend:
         self.stop()
         sys.exit(128 + signum)
 
+    @staticmethod
+    def _start_watchdog(parent_pid, child_pid):
+        """Spawn a tiny watcher that kills the child if the controller dies."""
+        code = (
+            "import os, signal, sys, time\n"
+            "parent = int(sys.argv[1])\n"
+            "child = int(sys.argv[2])\n"
+            "while True:\n"
+            "    try:\n"
+            "        os.kill(parent, 0)\n"
+            "    except OSError:\n"
+            "        break\n"
+            "    try:\n"
+            "        os.kill(child, 0)\n"
+            "    except OSError:\n"
+            "        sys.exit(0)\n"
+            "    time.sleep(0.2)\n"
+            "try:\n"
+            "    os.killpg(os.getpgid(child), signal.SIGKILL)\n"
+            "except Exception:\n"
+            "    pass\n"
+            "try:\n"
+            "    os.kill(child, signal.SIGKILL)\n"
+            "except Exception:\n"
+            "    pass\n"
+        )
+        return subprocess.Popen(
+            [sys.executable, "-c", code, str(parent_pid), str(child_pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+
     def start(self):
         # Kill any leftover lvgl_micropy_unix processes from previous runs
         self._kill_stale_processes(self.binary)
@@ -356,6 +390,7 @@ class ProcessBackend:
         )
         os.close(slave_fd)
         self.master_fd = master_fd
+        self._watchdog = self._start_watchdog(os.getpid(), self.proc.pid)
         atexit.register(self.stop)
         try:
             signal.signal(signal.SIGTERM, self._signal_handler)
@@ -392,6 +427,13 @@ class ProcessBackend:
                 except Exception:
                     pass
             self.proc = None
+        if self._watchdog:
+            try:
+                self._watchdog.kill()
+                self._watchdog.wait(timeout=2)
+            except Exception:
+                pass
+            self._watchdog = None
         if self.master_fd is not None:
             try:
                 os.close(self.master_fd)
@@ -838,10 +880,30 @@ class MPOSController:
     def check_free_space(self):
         return self._backend.check_free_space()
 
-    def startapp(self, appname):
-        return self.exec(
-            "from mpos import AppManager ; AppManager.start_app({!r})".format(appname)
+    def startapp(self, appname, dismiss_onboarding=True, wait_render=True):
+        """Launch an installed app by package name. Returns True on success."""
+        if dismiss_onboarding:
+            self.dismiss_onboarding()
+        out = self.exec(
+            "from mpos import AppManager; print(repr(AppManager.start_app({!r})))".format(
+                appname
+            )
         )
+        if wait_render:
+            time.sleep(0.5)
+        text = out.decode("utf-8", errors="replace").strip()
+        for line in reversed(text.splitlines()):
+            line = line.strip()
+            if line in ("True", "False"):
+                return line == "True"
+        return False
+
+    def run_app(self, appname, boot_wait=10, wait_render=2):
+        """Start the controller, boot, dismiss onboarding, and launch an app."""
+        self.start()
+        time.sleep(boot_wait)
+        self.dismiss_onboarding()
+        return self.startapp(appname, dismiss_onboarding=False, wait_render=wait_render)
 
     def backscreen(self):
         return self.exec("import mpos.ui ; mpos.ui.back_screen()")
