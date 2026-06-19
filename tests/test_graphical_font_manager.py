@@ -370,6 +370,78 @@ class TestFontManagerVariantFallback(GraphicalTestCase):
         self.assertIsInstance(src, lv.image_dsc_t)
 
 
+class TestFontManagerFlagEmoji(GraphicalTestCase):
+    """Tests for regional-indicator flag emoji handling."""
+
+    def setUp(self):
+        super().setUp()
+        _reset_font_manager()
+
+    def _fake_offset_y_ptr(self):
+        class _FakePtr:
+            def __init__(self):
+                self.value = None
+
+            def __dereference__(self, value=None):
+                if value is None:
+                    return self.value
+                self.value = value
+
+        return _FakePtr()
+
+    def test_is_regional_indicator(self):
+        """Regional indicator codepoints are recognized."""
+        self.assertTrue(FontManager._is_regional_indicator(0x1F1F8))
+        self.assertTrue(FontManager._is_regional_indicator(0x1F1FB))
+        self.assertFalse(FontManager._is_regional_indicator(0x1F600))
+        self.assertFalse(FontManager._is_regional_indicator(0))
+
+    def test_imgfont_flag_pair_renders(self):
+        """A paired regional indicator sequence is resolved to a flag image."""
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+        ptr = self._fake_offset_y_ptr()
+        src = FontManager._imgfont_path_cb(
+            font, 0x1F1F8, 0x1F1FB, ptr, None
+        )
+        self.assertIsNotNone(src)
+        self.assertIsInstance(src, lv.image_dsc_t)
+        # The scaled flag descriptor should be roughly square and larger than
+        # the 1xheight placeholder used for standalone regional indicators.
+        width = int(src.header.w)
+        height = int(src.header.h)
+        self.assertTrue(width > 1, "flag descriptor width should be greater than 1, got {}".format(width))
+        self.assertTrue(height > 1, "flag descriptor height should be greater than 1, got {}".format(height))
+
+    def test_imgfont_unpaired_regional_indicator_is_empty(self):
+        """A standalone regional indicator returns an empty image source."""
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+        ptr = self._fake_offset_y_ptr()
+        src = FontManager._imgfont_path_cb(
+            font, 0x1F1F8, 0, ptr, None
+        )
+        self.assertIsNotNone(src)
+        self.assertIsInstance(src, lv.image_dsc_t)
+        self.assertEqual(int(src.header.w), 1)
+
+    def test_el_salvador_flag_renders_in_label(self):
+        """A label containing the El Salvador flag renders without crashing."""
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+        label = lv.label(self.screen)
+        label.set_width(lv.pct(100))
+        label.set_style_text_font(font, lv.PART.MAIN)
+        label.set_text("El Salvador flag: \U0001F1F8\U0001F1FB")
+        self.wait_for_render()
+
+    def test_all_added_new_emojis_render_in_label(self):
+        """The newly added emoji set renders without crashing."""
+        font = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+        label = lv.label(self.screen)
+        label.set_width(lv.pct(100))
+        label.set_style_text_font(font, lv.PART.MAIN)
+        label.set_text("\U0001F3CE\uFE0F \U0001F33D \U0001F355 \U0001F4A8 \U0001F4A5 \u270A \U0001FAF6 \U0001F9E1 \U0001F49C \U0001F426 \U0001F1F8\U0001F1FB \U0001F937\u200D\u2642\uFE0F")
+        self.wait_for_render()
+
+
 class TestFontManagerNormalizeEmojiText(unittest.TestCase):
     """Tests for FontManager.normalizeEmojiText()."""
 

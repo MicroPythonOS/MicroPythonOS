@@ -516,11 +516,36 @@ droplet_sweat,💧
         )
 
     @classmethod
+    def _is_regional_indicator(cls, codepoint):
+        if codepoint is None or codepoint == 0:
+            return False
+        return 0x1F1E6 <= codepoint <= 0x1F1FF
+
+    @classmethod
     def _imgfont_path_cb(cls, font, unicode_cp, unicode_next, offset_y, user_data):
         baseline = cls._font_base_line(font)
         if unicode_cp == CP_VARIATION_SELECTOR_TEXT or unicode_cp == CP_VARIATION_SELECTOR_EMOJI:
             offset_y.__dereference__(-baseline)
             return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
+
+        # Regional indicators form a flag only when paired with another
+        # regional indicator. Handle that before the general modifier early
+        # return because a regional indicator is itself classified as a modifier.
+        if cls._is_regional_indicator(unicode_cp):
+            target_height = cls._font_pixel_height(font)
+            if cls._is_regional_indicator(unicode_next):
+                candidate_key = "{:X}-{:X}".format(int(unicode_cp), int(unicode_next))
+                if candidate_key in cls._emoji_sequence_lookup_cache:
+                    src = cls._emoji_sequence_lookup_cache[candidate_key]
+                else:
+                    src = cls._lookup_emoji_src_by_key(candidate_key)
+                    cls._emoji_sequence_lookup_cache[candidate_key] = src
+
+                if src is not None:
+                    offset_y.__dereference__(-baseline)
+                    return cls._get_scaled_imgfont_src(src, target_height)
+            offset_y.__dereference__(-baseline)
+            return cls._get_empty_imgfont_src(target_height)
 
         # Emoji modifiers / continuation codepoints should not render as separate glyphs
         if cls._is_emoji_modifier(unicode_cp):
