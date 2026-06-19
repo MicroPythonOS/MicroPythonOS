@@ -15,9 +15,17 @@ jobs:
 
     steps:
       - name: Checkout repository with submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@main
         with:
           submodules: recursive
+
+      - name: Cache apt package indexes and archives
+        uses: actions/cache@main
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: cache-${{ runner.os }}
 
       - name: Install lvgl_micropython dependencies
         run: |
@@ -73,7 +81,7 @@ jobs:
           cp lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_arm64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@main
         with:
           name: MicroPythonOS_arm64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
           path: lvgl_micropython/build/MicroPythonOS_arm64_linux_${{ steps.version.outputs.OS_VERSION }}.elf

@@ -11,13 +11,21 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository with submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@main
         with:
           submodules: recursive
+
+      - name: Cache apt package indexes and archives
+        uses: actions/cache@main
+        with:
+          path: |
+            /var/cache/apt/archives
+            /var/lib/apt/lists
+          key: cache-${{ runner.os }}
 
       - name: Install lvgl_micropython dependencies
         run: |
@@ -74,14 +82,14 @@ jobs:
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@main
         with:
           name: MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@main
         with:
           name: MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC/MicroPythonOS_esp32-small_${{ steps.version.outputs.OS_VERSION }}.ota
@@ -94,14 +102,14 @@ jobs:
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@main
         with:
           name: MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@main
         with:
           name: MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3-unphone_${{ steps.version.outputs.OS_VERSION }}.ota
