@@ -13,6 +13,7 @@ Usage:
 """
 
 import ast
+import atexit
 import os
 import pty
 import select
@@ -257,16 +258,76 @@ class ProcessBackend:
         self._width = 320
         self._height = 240
 
+    @staticmethod
+    def _is_alive(pid):
+        try:
+            os.kill(int(pid), 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
+    @staticmethod
+    def _kill_orphaned(name):
+        """Kill processes called `name` whose parent no longer exists (Linux)."""
+        if not os.path.isdir("/proc"):
+            # Non-Linux fallback: kill by name
+            try:
+                subprocess.run(
+                    ["killall", "-9", name],
+                    capture_output=True, timeout=5,
+                )
+            except Exception:
+                pass
+            return
+        own_pid = os.getpid()
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            pid = int(entry)
+            if pid == own_pid:
+                continue
+            try:
+                with open("/proc/{}/comm".format(pid), "r") as f:
+                    comm = f.read().strip()
+            except Exception:
+                continue
+            if comm != name:
+                continue
+            try:
+                ppid = None
+                with open("/proc/{}/status".format(pid), "r") as f:
+                    for line in f:
+                        if line.startswith("PPid:"):
+                            ppid = int(line.split()[1])
+                            break
+            except Exception:
+                continue
+            if ppid == 1 or not ProcessBackend._is_alive(ppid):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except Exception:
+                    pass
+
+    @staticmethod
+    def _kill_stale_processes(binary_path=None):
+        """Kill orphaned MPOS desktop processes from previous runs."""
+        names = ["lvgl_micropy_unix", "lvgl_micropy_macOS", "run_desktop.sh"]
+        if binary_path:
+            basename = os.path.basename(binary_path)
+            if basename and basename not in names:
+                names.insert(0, basename)
+        for name in names:
+            ProcessBackend._kill_orphaned(name)
+        time.sleep(0.2)
+
+    def _signal_handler(self, signum, frame):
+        """Clean up the child process when the controller receives SIGINT/SIGTERM."""
+        self.stop()
+        sys.exit(128 + signum)
+
     def start(self):
         # Kill any leftover lvgl_micropy_unix processes from previous runs
-        proc_name = os.path.basename(self.binary)
-        try:
-            subprocess.run(
-                ["pkill", "-9", "-x", proc_name],
-                capture_output=True, timeout=5,
-            )
-        except Exception:
-            pass
+        self._kill_stale_processes(self.binary)
         time.sleep(0.3)
         master_fd, slave_fd = pty.openpty()
         # Set master side to raw mode so control chars (Ctrl-C, Ctrl-D, Ctrl-E)
@@ -295,6 +356,12 @@ class ProcessBackend:
         )
         os.close(slave_fd)
         self.master_fd = master_fd
+        atexit.register(self.stop)
+        try:
+            signal.signal(signal.SIGTERM, self._signal_handler)
+            signal.signal(signal.SIGINT, self._signal_handler)
+        except Exception:
+            pass
         self.repl = AIOREPLClient(_PTYStream(master_fd))
         self.repl.wait_for_boot()
         self._cache_display_resolution()
@@ -778,6 +845,21 @@ class MPOSController:
 
     def backscreen(self):
         return self.exec("import mpos.ui ; mpos.ui.back_screen()")
+
+    def dismiss_onboarding(self, timeout=15):
+        """Close the first-run 'How to Navigate' tutorial overlay if present."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                text = self.get_visible_text()
+                if "How to Navigate" in text or "Close" in text:
+                    self.exec("import mpos.ui.testing as t ; t.click_button('Close')")
+                    time.sleep(0.5)
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.25)
+        return False
 
     def press(self, x, y):
         self._backend.press(x, y)
