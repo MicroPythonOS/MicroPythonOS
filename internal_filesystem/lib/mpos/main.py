@@ -215,6 +215,12 @@ def detect_board():
                     return "lilygo_t_watch_s3_plus" # example MAC address: D0:CF:13:33:36:306
                 restore_i2c(sda=10, scl=11)
 
+            if __debug__: logger.debug("unihiker_k10 ?")
+            if i2c0 := fail_save_i2c(sda=47, scl=48):
+                if single_address_i2c_scan(i2c0, 0x20): # XL9535 GPIO expander present only on UniHiker K10
+                    return "unihiker_k10"
+                restore_i2c(sda=47, scl=48)
+
             if __debug__: logger.debug("matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 ?")
             if i2c0 := fail_save_i2c(sda=39, scl=38):
                 if single_address_i2c_scan(i2c0, 0x14) or single_address_i2c_scan(i2c0, 0x5D): # "ghost" or real GT911 touch screen
