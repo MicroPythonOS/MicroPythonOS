@@ -30,9 +30,8 @@ class AppStore(Activity):
 
     # Hardcoded list for now:
     backends = [
+        ("BadgeHub.eu", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
         ("Apps.MicroPythonOS.com", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
-        ("BadgeHub.eu (beta)", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
-        ("BadgeHub.p1m.nl Testing (unstable)", _BACKEND_API_BADGEHUB, _BADGEHUB_TEST_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
     ]
 
     apps = []
@@ -55,7 +54,6 @@ class AppStore(Activity):
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
-        self._migrate_backend_pref()
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self._refresh_in_progress = False
         self._data_loaded = False
@@ -234,14 +232,6 @@ class AppStore(Activity):
     def backend_changed(self, new_value):
         if __debug__: logger.debug("backend changed to %s", new_value)
         self.refresh_list()
-
-    def _migrate_backend_pref(self):
-        old_pref = "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=fri3d_2024,https://badgehub.eu/api/v3/projects"
-        new_pref = f"badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_{BuildInfo.version.api_level},https://badgehub.eu/api/v3/projects"
-        current_pref = self.prefs.get_string("backend")
-        if current_pref == old_pref:
-            if __debug__: logger.debug("migrating backend preference to mpos_api_%s", BuildInfo.version.api_level)
-            self.prefs.edit().put_string("backend", new_pref).commit()
 
     async def _download_app_index_wrapper(self, json_url):
         try:

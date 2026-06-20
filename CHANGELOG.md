@@ -5,6 +5,8 @@ Put unreleased changes here!
 
 Builtin Apps:
 - Add File Manager to builtin apps, with support for dispatching an implicit "view" intent to open files
+- AppStore: make BadgeHub.eu the default backend, drop the "beta" label, list Apps.MicroPythonOS.com second, and remove the BadgeHub.p1m.nl test option
+- AppStore: remove obsolete backend preference migration for the old fri3d_2024 BadgeHub URL
 - AppStore: remove GitHub mention since the free GitHub pages is no longer used for hosting
 - AppStore: prioritize display of known icons
 - AppStore: show installed apps first (no network needed), then merge store apps from network; remove WiFi gate
