@@ -88,16 +88,15 @@ def remove_and_stop_current_activity():
         if current_screen:
             current_screen.clean()
 
-def back_screen():
+def finish_current_activity():
+    """Remove the current activity and resume the one below it.
+
+    This is the direct "finish" path; it does not ask onBackPressed().
+    """
     global screen_stack
 
-    from . import topmenu
-    if topmenu.drawer_open:
-        close_drawer()
-        return True
-
     if len(screen_stack) <= 1:
-        logger.warning("Can't go back — stack empty")
+        logger.warning("Can't finish — stack empty")
         return False
 
     close_top_layer_msgboxes()
@@ -106,7 +105,7 @@ def back_screen():
 
     # Load previous
     prev_activity, prev_screen, prev_focusgroup, prev_focused = screen_stack[-1]
-    if __debug__: logger.debug("back_screen got %s, %s, %s, %s", prev_activity, prev_screen, prev_focusgroup, prev_focused)
+    if __debug__: logger.debug("finish_current_activity got %s, %s, %s, %s", prev_activity, prev_screen, prev_focusgroup, prev_focused)
     lv.screen_load_anim(prev_screen, lv.SCREEN_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
 
     default_group = lv.group_get_default()
@@ -122,3 +121,22 @@ def back_screen():
         open_bar()
 
     return True
+
+
+def back_screen():
+    global screen_stack
+
+    from . import topmenu
+    if topmenu.drawer_open:
+        close_drawer()
+        return True
+
+    if len(screen_stack) <= 1:
+        logger.warning("Can't go back — stack empty")
+        return False
+
+    current_activity, current_screen, _, _ = screen_stack[-1]
+    if current_activity and current_activity.onBackPressed(current_screen):
+        return True
+
+    return finish_current_activity()

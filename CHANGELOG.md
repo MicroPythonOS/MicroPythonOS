@@ -32,11 +32,14 @@ Frameworks:
 - ActivityNavigator: dispatch implicit file intents to installed apps with proper app context and status-bar handling
 - Fix ChooserActivity, ViewActivity, and ShareActivity for LVGL 9.x and remove undefined references
 - ViewActivity fallback now displays the filename plus the first 512 bytes of the file's contents
+- Activity: add `onBackPressed()` hook so an activity can intercept the back/close gesture and stay foreground until it decides to close
+- View: split the explicit `finish_current_activity()` path from `back_screen()` so `Activity.finish()` no longer re-triggers `onBackPressed()`
 
 Apps:
 - Music Player: declare support for .wav files and open them directly when launched via "Open With"
 - Image View: declare support for .png, .jpg, .jpeg, and .raw images and open a single image when launched via "Open With"
 - Image View: add "Open File..." button using the File Explorer Activity picker; position filename label in the top-left corner; add focus border to the image
+- TextEditor: fix closing with unsaved changes destroying the UI before the save prompt could be answered; now prompts Yes/No/Cancel via `onBackPressed()` and only closes after the user decides
 
 0.12.2
 ======

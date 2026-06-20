@@ -5,6 +5,7 @@ Covers:
 - getFont(): builtin families, size snapping, emoji=True/False, TTF loading, caching
 - listFonts(): structure, completeness, renderability
 - getEmojiCodepoints(): non-empty, sorted, emoji tier loaded
+- getEmojiStrings(): complete emoji strings including flag sequences
 - normalizeEmojiText(): variation-selector stripping
 - End-to-end rendering: labels using composed emoji fonts render without crashing
 
@@ -27,6 +28,7 @@ def _reset_font_manager():
     FontManager._composed_font_cache.clear()
     FontManager._ttf_font_cache.clear()
     FontManager._emoji_map = None
+    FontManager._emoji_strings = None
     FontManager._emoji_src_lookup_cache.clear()
     FontManager._emoji_sequence_lookup_cache.clear()
     FontManager._imgfont_scaled_src_cache.clear()
@@ -292,6 +294,36 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         self.assertEqual(FontManager._emoji_src_lookup_cache, {})
 
 
+class TestFontManagerEmojiStrings(GraphicalTestCase):
+    """Tests for FontManager.getEmojiStrings()."""
+
+    def setUp(self):
+        super().setUp()
+        _reset_font_manager()
+
+    def test_getemoji_strings_nonempty(self):
+        """getEmojiStrings() returns a non-empty list."""
+        strings = FontManager.getEmojiStrings()
+        self.assertIsInstance(strings, list)
+        self.assertTrue(len(strings) > 0)
+
+    def test_getemoji_strings_all_strings(self):
+        """All items returned by getEmojiStrings() are non-empty strings."""
+        for s in FontManager.getEmojiStrings():
+            self.assertIsInstance(s, str)
+            self.assertTrue(len(s) > 0)
+
+    def test_getemoji_strings_sorted(self):
+        """getEmojiStrings() returns strings in ascending order."""
+        strings = FontManager.getEmojiStrings()
+        self.assertEqual(strings, sorted(strings))
+
+    def test_getemoji_strings_includes_elsalvador_flag(self):
+        """getEmojiStrings() includes the full El Salvador flag sequence."""
+        strings = FontManager.getEmojiStrings()
+        self.assertIn("\U0001F1F8\U0001F1FB", strings)
+
+
 class TestFontManagerVariantFallback(GraphicalTestCase):
     """Tests for variant fallback (stripping trailing modifiers)."""
 
@@ -506,11 +538,11 @@ class TestFontManagerRendering(GraphicalTestCase):
         label.set_text("Hello ❤️ 😀")
         self.wait_for_render()
 
-    def test_label_with_all_emoji_codepoints_renders(self):
-        """A label containing all available emoji codepoints renders without crashing."""
+    def test_label_with_all_emoji_strings_renders(self):
+        """A label containing all available emoji strings renders without crashing."""
         font = FontManager.getFont(size=16, family="Montserrat")
-        cps = FontManager.getEmojiCodepoints()
-        text = " ".join(chr(cp) for cp in cps)
+        strings = FontManager.getEmojiStrings()
+        text = " ".join(strings)
         label = lv.label(self.screen)
         label.set_width(lv.pct(100))
         label.set_style_text_font(font, lv.PART.MAIN)

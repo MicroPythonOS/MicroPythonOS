@@ -53,9 +53,9 @@ class ShowFonts(Activity):
 
         if emoji:
             emoji_start = self._now_ms()
-            emoji_cps = FontManager.getEmojiCodepoints()
-            for cp in emoji_cps:
-                parts.append(chr(cp))
+            emoji_strings = FontManager.getEmojiStrings()
+            for s in emoji_strings:
+                parts.append(s)
             self._log_timing("addAllGlyphs/emoji append", emoji_start)
 
         join_start = self._now_ms()

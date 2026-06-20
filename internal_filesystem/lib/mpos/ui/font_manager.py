@@ -21,6 +21,7 @@ class FontManager:
     # expensive, so we avoid repeated filesystem scans, repeated image decode
     # probes, and repeated per-codepoint fallback walks.
     _emoji_map = None  # dict of hex-key -> src path, populated on first use
+    _emoji_strings = None  # list of complete emoji strings, populated on first use
     _builtin_font_records = None
     _composed_font_cache = {}
     _ttf_font_cache = {}
@@ -282,6 +283,11 @@ droplet_sweat,💧
         return sorted(all_cps)
 
     @classmethod
+    def getEmojiStrings(cls):
+        cls._ensure_emoji_map()
+        return list(cls._emoji_strings or [])
+
+    @classmethod
     def _create_emoji_font(cls, size):
         size = max(1, int(size))
         cls._ensure_emoji_map()
@@ -345,6 +351,7 @@ droplet_sweat,💧
     @classmethod
     def _build_emoji_map(cls):
         emoji_map = {}
+        emoji_strings = set()
 
         entries = cls._list_dir_names(_EMOJI_DIR_PATH)
         if entries is None:
@@ -353,6 +360,7 @@ droplet_sweat,💧
             except Exception:
                 cwd = "?"
             logger.warning("could not list emoji dir '%s' (cwd=%s)", _EMOJI_DIR_PATH, cwd)
+            cls._emoji_strings = []
             return emoji_map
 
         for name in entries:
@@ -372,6 +380,13 @@ droplet_sweat,💧
                 logger.warning("skip non-hex emoji file: %s", name)
                 continue
 
+            # Build the full renderable emoji string (e.g. flag sequences, variation selectors).
+            try:
+                emoji_string = "".join(chr(int(seg, 16)) for seg in segments)
+                emoji_strings.add(emoji_string)
+            except Exception:
+                pass
+
             base_key = segments[0].upper()
             full_key = name_without_ext.upper()
 
@@ -384,6 +399,7 @@ droplet_sweat,💧
                 emoji_map[base_key] = _EMOJI_SRC_PREFIX + name
 
         if __debug__: logger.debug("loaded %s emoji png mappings from %s", len(emoji_map), _EMOJI_DIR_PATH)
+        cls._emoji_strings = sorted(emoji_strings)
         return emoji_map
 
     @classmethod

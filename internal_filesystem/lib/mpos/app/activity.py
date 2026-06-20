@@ -23,6 +23,15 @@ class Activity:
     def onPause(self, screen): # app goes to background
         self._has_foreground = False
 
+    def onBackPressed(self, screen):
+        """Intercept the back/close gesture before the activity is paused.
+
+        Return True to consume the event (the activity stays foreground and
+        must call finish() itself when it is ready to close). Return False to
+        let the framework finish the activity normally.
+        """
+        return False
+
     def onStop(self, screen):
         pass
     def onDestroy(self, screen):
@@ -61,9 +70,9 @@ class Activity:
             self.initError(e)
 
     def finish(self):
-        import mpos.ui
+        from mpos.ui.view import finish_current_activity
 
-        mpos.ui.back_screen()
+        finish_current_activity()
         try:
             if self._result_callback and self.result:
                 self._result_callback(self.result)

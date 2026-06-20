@@ -36,8 +36,8 @@ class TextEditor(Activity):
 
     _save_as_overlay = None
     _save_as_textarea = None
-    _pause_overlay = None
-    _expecting_pause = False
+    _exit_overlay = None
+    _close_after_save = False
 
     def onCreate(self):
         self._ensure_dir(self._DEFAULT_DIR)
@@ -105,7 +105,6 @@ class TextEditor(Activity):
 
     def onResume(self, screen):
         super().onResume(screen)
-        self._expecting_pause = False
 
         path = self.getIntent().extras.get("filename") or self.getIntent().data
         if path:
@@ -116,20 +115,18 @@ class TextEditor(Activity):
 
     def onPause(self, screen):
         super().onPause(screen)
-        try:
-            overlay_open = (
-                self._pause_overlay is not None or self._save_as_overlay is not None
-            )
-        except Exception:
-            self._pause_overlay = None
-            self._save_as_overlay = None
-            self._save_as_textarea = None
-            overlay_open = False
-        if overlay_open:
-            return
-        if self._has_unsaved_changes() and not self._expecting_pause:
-            self._hide_keyboard()
-            self._show_pause_confirm()
+
+    def onBackPressed(self, screen):
+        if self._exit_overlay:
+            self._on_exit_cancel(self._exit_overlay)
+            return True
+        if self._save_as_overlay:
+            self._on_save_as_cancel(self._save_as_overlay)
+            return True
+        if self._has_unsaved_changes():
+            self._show_exit_confirm()
+            return True
+        return False
 
     def _ensure_dir(self, path):
         path = path.rstrip("/")
@@ -200,7 +197,6 @@ class TextEditor(Activity):
         self._hide_keyboard()
 
     def _open_file_clicked(self, event):
-        self._expecting_pause = True
         intent = Intent(
             action="pick_file",
             extras={
@@ -211,7 +207,6 @@ class TextEditor(Activity):
         self.startActivityForResult(intent, self._on_file_picked)
 
     def _on_file_picked(self, result):
-        self._expecting_pause = False
         if not result or not result.get("result_code"):
             return
         paths = result.get("data", {}).get("paths", [])
@@ -294,8 +289,11 @@ class TextEditor(Activity):
         if "." not in name:
             name = name + ".txt"
         path = self._DEFAULT_DIR + "/" + name
+        close_after = self._close_after_save
         self._close_save_as_dialog(mbox)
         self._perform_save(path)
+        if close_after:
+            self.finish()
 
     def _on_save_as_cancel(self, mbox):
         self._close_save_as_dialog(mbox)
@@ -307,33 +305,53 @@ class TextEditor(Activity):
             pass
         self._save_as_overlay = None
         self._save_as_textarea = None
+        self._close_after_save = False
         self._keyboard.set_textarea(self._textarea)
         self._hide_keyboard()
         self._update_title()
 
-    def _show_pause_confirm(self):
+    def _show_exit_confirm(self):
         mbox = lv.msgbox()
         mbox.set_width(DisplayMetrics.pct_of_width(75))
         mbox.add_text("Save file?")
 
         yes_btn = mbox.add_footer_button("Yes")
-        yes_btn.add_event_cb(lambda e: self._on_pause_yes(mbox), lv.EVENT.CLICKED, None)
+        yes_btn.add_event_cb(lambda e: self._on_exit_yes(mbox), lv.EVENT.CLICKED, None)
         no_btn = mbox.add_footer_button("No")
-        no_btn.add_event_cb(lambda e: self._on_pause_no(mbox), lv.EVENT.CLICKED, None)
+        no_btn.add_event_cb(lambda e: self._on_exit_no(mbox), lv.EVENT.CLICKED, None)
+        cancel_btn = mbox.add_footer_button("Cancel")
+        cancel_btn.add_event_cb(
+            lambda e: self._on_exit_cancel(mbox), lv.EVENT.CLICKED, None
+        )
 
         group = lv.group_get_default()
         if group:
             group.add_obj(yes_btn)
             group.add_obj(no_btn)
+            group.add_obj(cancel_btn)
 
-        self._pause_overlay = mbox
+        self._exit_overlay = mbox
         lv.group_focus_obj(yes_btn)
 
-    def _on_pause_yes(self, mbox):
+    def _on_exit_yes(self, mbox):
         mbox.close()
-        self._pause_overlay = None
-        self._save_file()
+        self._exit_overlay = None
+        if self._filename:
+            self._save_file()
+            self.finish()
+        else:
+            self._close_after_save = True
+            self._show_save_as_dialog()
 
-    def _on_pause_no(self, mbox):
+    def _on_exit_no(self, mbox):
         mbox.close()
-        self._pause_overlay = None
+        self._exit_overlay = None
+        self.finish()
+
+    def _on_exit_cancel(self, mbox):
+        if mbox:
+            try:
+                mbox.close()
+            except Exception:
+                pass
+        self._exit_overlay = None
