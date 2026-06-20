@@ -167,41 +167,19 @@ class LightsOut(Activity):
         if saved_level == 0 and saved_score == 0:
             return
 
-        self.popup_modal = lv.obj(lv.layer_top())
-        self.popup_modal.set_size(DisplayMetrics.width(), DisplayMetrics.height())
-        self.popup_modal.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        self.popup_modal.set_style_bg_opa(150, lv.PART.MAIN)
-        self.popup_modal.set_style_border_width(0, lv.PART.MAIN)
-        self.popup_modal.set_pos(0, 0)
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(75))
+        mbox.add_text(f"Load best game:\nlevel {saved_level}, score {saved_score}?")
 
-        popup = lv.obj(self.popup_modal)
-        popup.set_size(220, 140)
-        popup.set_style_bg_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
-        popup.set_style_border_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        popup.set_style_border_width(3, lv.PART.MAIN)
-        popup.set_style_radius(10, lv.PART.MAIN)
-        popup.center()
-
-        question = lv.label(popup)
-        question.set_text(f"Load best game:\nlevel {saved_level}, score {saved_score}?")
-        question.set_style_text_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        question.align(lv.ALIGN.TOP_MID, 0, 10)
-
-        yes_btn = lv.button(popup)
-        yes_btn.set_size(75, 35)
-        yes_btn.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
-        yes_btn.add_event_cb(lambda e: self._do_load(e, saved_level, saved_score, saved_levels), lv.EVENT.CLICKED, None)
-        yes_label = lv.label(yes_btn)
-        yes_label.set_text("Yes")
-        yes_label.center()
-
-        no_btn = lv.button(popup)
-        no_btn.set_size(75, 35)
-        no_btn.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        yes_btn = mbox.add_footer_button("Yes")
+        yes_btn.add_event_cb(
+            lambda e: self._do_load(e, saved_level, saved_score, saved_levels),
+            lv.EVENT.CLICKED, None
+        )
+        no_btn = mbox.add_footer_button("No")
         no_btn.add_event_cb(self._on_autoload_no, lv.EVENT.CLICKED, None)
-        no_label = lv.label(no_btn)
-        no_label.set_text("No")
-        no_label.center()
+
+        self.popup_modal = mbox
 
     def _do_load(self, event, saved_level, saved_score, saved_levels):
         self._close_popup()
@@ -220,45 +198,24 @@ class LightsOut(Activity):
 
     def _show_confirm_popup(self, message, yes_cb, no_cb):
         self._close_popup()
-        self.popup_modal = lv.obj(lv.layer_top())
-        self.popup_modal.set_size(DisplayMetrics.width(), DisplayMetrics.height())
-        self.popup_modal.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        self.popup_modal.set_style_bg_opa(150, lv.PART.MAIN)
-        self.popup_modal.set_style_border_width(0, lv.PART.MAIN)
-        self.popup_modal.set_pos(0, 0)
 
-        popup = lv.obj(self.popup_modal)
-        popup.set_size(200, 120)
-        popup.set_style_bg_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
-        popup.set_style_border_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        popup.set_style_border_width(3, lv.PART.MAIN)
-        popup.set_style_radius(10, lv.PART.MAIN)
-        popup.center()
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(75))
+        mbox.add_text(message)
 
-        question = lv.label(popup)
-        question.set_text(message)
-        question.set_style_text_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        question.align(lv.ALIGN.TOP_MID, 0, 15)
-
-        yes_btn = lv.button(popup)
-        yes_btn.set_size(75, 35)
-        yes_btn.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        yes_btn = mbox.add_footer_button("Yes")
         yes_btn.add_event_cb(yes_cb, lv.EVENT.CLICKED, None)
-        yes_label = lv.label(yes_btn)
-        yes_label.set_text("Yes")
-        yes_label.center()
-
-        no_btn = lv.button(popup)
-        no_btn.set_size(75, 35)
-        no_btn.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        no_btn = mbox.add_footer_button("No")
         no_btn.add_event_cb(no_cb, lv.EVENT.CLICKED, None)
-        no_label = lv.label(no_btn)
-        no_label.set_text("No")
-        no_label.center()
+
+        self.popup_modal = mbox
 
     def _close_popup(self, event=None):
         if self.popup_modal:
-            self.popup_modal.delete()
+            try:
+                self.popup_modal.close()
+            except Exception:
+                pass
             self.popup_modal = None
 
     def _on_reset_highscore_yes(self, event):

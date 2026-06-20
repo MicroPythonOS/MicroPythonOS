@@ -116,7 +116,16 @@ class TextEditor(Activity):
 
     def onPause(self, screen):
         super().onPause(screen)
-        if self._pause_overlay is not None or self._save_as_overlay is not None:
+        try:
+            overlay_open = (
+                self._pause_overlay is not None or self._save_as_overlay is not None
+            )
+        except Exception:
+            self._pause_overlay = None
+            self._save_as_overlay = None
+            self._save_as_textarea = None
+            overlay_open = False
+        if overlay_open:
             return
         if self._has_unsaved_changes() and not self._expecting_pause:
             self._hide_keyboard()
@@ -244,48 +253,28 @@ class TextEditor(Activity):
             return
         self._hide_keyboard()
 
-        overlay = lv.obj(self._top_bar.get_parent())
-        overlay.remove_flag(lv.obj.FLAG.SCROLLABLE)
-        overlay.set_size(lv.pct(100), lv.pct(100))
-        overlay.add_flag(lv.obj.FLAG.FLOATING)
-        overlay.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        overlay.set_style_bg_opa(lv.OPA._50, lv.PART.MAIN)
-        overlay.add_flag(lv.obj.FLAG.CLICKABLE)
-        overlay.align(lv.ALIGN.CENTER, 0, 0)
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(75))
+        mbox.add_text("Enter filename:")
 
-        container = lv.obj(overlay)
-        container.set_size(lv.pct(90), lv.SIZE_CONTENT)
-        container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        container.set_style_pad_all(10, lv.PART.MAIN)
-        container.set_style_pad_gap(8, 0)
-        container.set_style_bg_color(lv.color_hex(0x333333), lv.PART.MAIN)
-        container.center()
-
-        prompt_label = lv.label(container)
-        prompt_label.set_text("Enter filename:")
-        prompt_label.set_width(lv.pct(100))
-
-        name_ta = lv.textarea(container)
+        content = mbox.get_content()
+        name_ta = lv.textarea(content)
         name_ta.set_one_line(True)
         name_ta.set_width(lv.pct(100))
         name_ta.set_placeholder_text("filename.txt")
         name_ta.set_text("")
-        name_ta.add_event_cb(lambda e: self._show_keyboard(textarea=name_ta), lv.EVENT.CLICKED, None)
-
-        btn_row = lv.obj(container)
-        btn_row.set_size(lv.pct(100), lv.SIZE_CONTENT)
-        btn_row.set_flex_flow(lv.FLEX_FLOW.ROW)
-        btn_row.set_flex_align(
-            lv.FLEX_ALIGN.SPACE_EVENLY, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER
+        name_ta.add_event_cb(
+            lambda e: self._show_keyboard(textarea=name_ta), lv.EVENT.CLICKED, None
         )
 
-        ok_btn = lv.button(btn_row)
-        lv.label(ok_btn).set_text("OK")
-        ok_btn.add_event_cb(lambda e: self._on_save_as_confirm(name_ta, overlay), lv.EVENT.CLICKED, None)
-
-        cancel_btn = lv.button(btn_row)
-        lv.label(cancel_btn).set_text("Cancel")
-        cancel_btn.add_event_cb(lambda e: self._on_save_as_cancel(overlay), lv.EVENT.CLICKED, None)
+        ok_btn = mbox.add_footer_button("OK")
+        ok_btn.add_event_cb(
+            lambda e: self._on_save_as_confirm(name_ta, mbox), lv.EVENT.CLICKED, None
+        )
+        cancel_btn = mbox.add_footer_button("Cancel")
+        cancel_btn.add_event_cb(
+            lambda e: self._on_save_as_cancel(mbox), lv.EVENT.CLICKED, None
+        )
 
         group = lv.group_get_default()
         if group:
@@ -293,26 +282,29 @@ class TextEditor(Activity):
             group.add_obj(ok_btn)
             group.add_obj(cancel_btn)
 
-        self._save_as_overlay = overlay
+        self._save_as_overlay = mbox
         self._save_as_textarea = name_ta
         self._show_keyboard(textarea=name_ta)
         lv.group_focus_obj(name_ta)
 
-    def _on_save_as_confirm(self, name_ta, overlay):
+    def _on_save_as_confirm(self, name_ta, mbox):
         name = name_ta.get_text().strip()
         if not name:
             return
         if "." not in name:
             name = name + ".txt"
         path = self._DEFAULT_DIR + "/" + name
-        self._close_save_as_dialog(overlay)
+        self._close_save_as_dialog(mbox)
         self._perform_save(path)
 
-    def _on_save_as_cancel(self, overlay):
-        self._close_save_as_dialog(overlay)
+    def _on_save_as_cancel(self, mbox):
+        self._close_save_as_dialog(mbox)
 
-    def _close_save_as_dialog(self, overlay):
-        overlay.delete()
+    def _close_save_as_dialog(self, mbox):
+        try:
+            mbox.close()
+        except Exception:
+            pass
         self._save_as_overlay = None
         self._save_as_textarea = None
         self._keyboard.set_textarea(self._textarea)
@@ -320,54 +312,28 @@ class TextEditor(Activity):
         self._update_title()
 
     def _show_pause_confirm(self):
-        overlay = lv.obj(lv.layer_top())
-        overlay.remove_flag(lv.obj.FLAG.SCROLLABLE)
-        overlay.set_size(lv.pct(100), lv.pct(100))
-        overlay.set_style_bg_color(lv.color_hex(0x000000), lv.PART.MAIN)
-        overlay.set_style_bg_opa(lv.OPA._50, lv.PART.MAIN)
-        overlay.add_flag(lv.obj.FLAG.CLICKABLE)
-        overlay.align(lv.ALIGN.CENTER, 0, 0)
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(75))
+        mbox.add_text("Save file?")
 
-        container = lv.obj(overlay)
-        container.set_size(lv.pct(80), lv.SIZE_CONTENT)
-        container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        container.set_style_pad_all(12, lv.PART.MAIN)
-        container.set_style_pad_gap(10, 0)
-        container.set_style_bg_color(lv.color_hex(0x333333), lv.PART.MAIN)
-        container.center()
-
-        prompt = lv.label(container)
-        prompt.set_text("Save file?")
-        prompt.set_width(lv.pct(100))
-
-        btn_row = lv.obj(container)
-        btn_row.set_size(lv.pct(100), lv.SIZE_CONTENT)
-        btn_row.set_flex_flow(lv.FLEX_FLOW.ROW)
-        btn_row.set_flex_align(
-            lv.FLEX_ALIGN.SPACE_EVENLY, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER
-        )
-
-        yes_btn = lv.button(btn_row)
-        lv.label(yes_btn).set_text("Yes")
-        yes_btn.add_event_cb(lambda e: self._on_pause_yes(overlay), lv.EVENT.CLICKED, None)
-
-        no_btn = lv.button(btn_row)
-        lv.label(no_btn).set_text("No")
-        no_btn.add_event_cb(lambda e: self._on_pause_no(overlay), lv.EVENT.CLICKED, None)
+        yes_btn = mbox.add_footer_button("Yes")
+        yes_btn.add_event_cb(lambda e: self._on_pause_yes(mbox), lv.EVENT.CLICKED, None)
+        no_btn = mbox.add_footer_button("No")
+        no_btn.add_event_cb(lambda e: self._on_pause_no(mbox), lv.EVENT.CLICKED, None)
 
         group = lv.group_get_default()
         if group:
             group.add_obj(yes_btn)
             group.add_obj(no_btn)
 
-        self._pause_overlay = overlay
+        self._pause_overlay = mbox
         lv.group_focus_obj(yes_btn)
 
-    def _on_pause_yes(self, overlay):
-        overlay.delete()
+    def _on_pause_yes(self, mbox):
+        mbox.close()
         self._pause_overlay = None
         self._save_file()
 
-    def _on_pause_no(self, overlay):
-        overlay.delete()
+    def _on_pause_no(self, mbox):
+        mbox.close()
         self._pause_overlay = None

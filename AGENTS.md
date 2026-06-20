@@ -52,6 +52,7 @@ Debugging tips:
 - Silent failures with no exception and correct-looking log output (e.g. "transmit done" in expected time) usually mean the operation ran but its output was routed/discarded somewhere. For hardware peripherals: check GPIO matrix routing, DMA channel conflicts, and whether a pin was reclaimed by another peripheral since the driver was initialized.
 
 LVGL tips:
+- the LVGL docs are available in lvgl_micropython/lib/lvgl/docs/ for example lvgl_micropython/lib/lvgl/docs/src/details/widgets/msgbox.rst
 - `lv.OPA` enum only has values at steps of 10: `TRANSP` (0), `_10`, `_20`, ..., `_100`, and `COVER` (255). Values like `_5` do NOT exist — use the nearest step or a raw integer (0–255).
 - import lvgl as `lv` and use `lv.` to access it
 - `lv.screen_active()` (not `lv.scr_act()`)
@@ -169,3 +170,9 @@ with MPOSController(backend='process') as mpos:
   dsc.header.h = target_height
   dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
   ```
+
+### Popup / msgbox tips
+- Use `lv.msgbox()` with **no parent** for a true modal dialog. Passing a parent such as `lv.layer_top()` creates a non-modal msgbox and skips the dimming backdrop that blocks input to the rest of the screen.
+- Add custom input widgets (e.g. `lv.textarea`) to the content container returned by `mbox.get_content()`.
+- Default `mpos.screenshot()` and `capture_screenshot()` do **not** include `lv.layer_top()` overlays. Pass `all_layers=True` to capture popups/notifications in screenshots — it's slower but necessary for verifying dialog appearance.
+- If screenshots or MPOSController behave oddly after hard-killing debug scripts (e.g. `timeout -s 9 ...`), check for stale `lvgl_micropy_unix`/`run_desktop.sh` processes with `ps aux | grep lvgl_micropy_unix`. Clean them up with `killall -9 lvgl_micropy_unix run_desktop.sh`.
