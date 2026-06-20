@@ -21,15 +21,15 @@ Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
 
 Frameworks:
-- Add new `add_focus_border` utility and migrate all duplicated focus/defocus border handlers (ImageView, MusicPlayer, ShowFonts, About, HowTo, Launcher, WiFi Settings, Connect4, SettingsActivity, topmenu) to use it
+- Add new `add_focus_border` utility and migrate all focus/defocus border handlers (ImageView, MusicPlayer, ShowFonts, About, HowTo, Launcher, WiFi Settings, Connect4, SettingsActivity, topmenu) to use it
 - Add new builtin File Explorer Activity with picker
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
 - AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
 - AppManager/Intent: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
+- AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 - ActivityNavigator: dispatch implicit file intents to installed apps with proper app context and status-bar handling
 - Fix ChooserActivity, ViewActivity, and ShareActivity for LVGL 9.x and remove undefined references
 - ViewActivity fallback now displays the filename plus the first 512 bytes of the file's contents
-- AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 
 Apps:
 - Music Player: declare support for .wav files and open them directly when launched via "Open With"

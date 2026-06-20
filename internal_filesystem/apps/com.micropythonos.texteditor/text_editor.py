@@ -56,10 +56,10 @@ class TextEditor(Activity):
         )
 
         self._open_button = lv.button(self._top_bar)
-        self._open_button.set_size(100, 42)
+        self._open_button.set_size(75, 32)
         self._open_button.add_event_cb(self._open_file_clicked, lv.EVENT.CLICKED, None)
         open_label = lv.label(self._open_button)
-        open_label.set_text("Open file...")
+        open_label.set_text("Open")
         open_label.center()
 
         self._filename_label = lv.label(self._top_bar)
@@ -70,10 +70,10 @@ class TextEditor(Activity):
         self._filename_label.set_style_pad_right(6, lv.PART.MAIN)
 
         self._save_button = lv.button(self._top_bar)
-        self._save_button.set_size(100, 42)
+        self._save_button.set_size(75, 32)
         self._save_button.add_event_cb(self._save_file_clicked, lv.EVENT.CLICKED, None)
         save_label = lv.label(self._save_button)
-        save_label.set_text("Save file")
+        save_label.set_text("Save")
         save_label.center()
 
         self._textarea = lv.textarea(screen)
@@ -86,7 +86,8 @@ class TextEditor(Activity):
 
         self._keyboard = MposKeyboard(screen)
         self._keyboard.set_textarea(self._textarea)
-        self._keyboard.set_size(lv.pct(100), lv.pct(35))
+        self._keyboard.set_style_min_height(0, lv.PART.MAIN)
+        self._keyboard.set_size(lv.pct(100), self._keyboard_height())
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
         self._keyboard.add_event_cb(self._on_keyboard_ready, lv.EVENT.READY, None)
 
@@ -116,6 +117,12 @@ class TextEditor(Activity):
         if self._has_unsaved_changes() and not self._expecting_pause:
             self._hide_keyboard()
             self._show_pause_confirm()
+
+    def _keyboard_height(self):
+        disp = lv.display_get_default()
+        if disp is None:
+            return 120
+        return min(150, max(100, disp.get_vertical_resolution() // 3))
 
     def _ensure_dir(self, path):
         path = path.rstrip("/")
