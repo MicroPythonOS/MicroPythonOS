@@ -64,6 +64,7 @@ LVGL tips:
 - event handlers need 3 arguments: `button.add_event_cb(button_cb, lv.EVENT.CLICKED, None)`
 - if you pass a method as an event callback, it must accept the event argument: `def callback(self, event)`. Using the same method as both a direct call and an event callback requires a default: `def method(self, event=None)`.
 - don't hard-code display resolution; use `lv.pct(100)` or other techniques to scale the interface
+- use `DisplayMetrics` (`from mpos import DisplayMetrics`) for widget sizes and spacing; avoid hard-coding pixel values greater than 5. Prefer `DisplayMetrics.pct_of_width(...)`, `DisplayMetrics.pct_of_height(...)`, `DisplayMetrics.width()`, etc.
 - `DRAW_PART_BEGIN` does not exist anymore
 - don't use `get_child_by_type()`; use a global variable with the child you want instead
 - msgbox: `msgbox = lv.msgbox()` then `msgbox.add_title("title")`
@@ -98,6 +99,7 @@ MicroPython compatibility:
 - For deterministic jitter in apps, prefer a tiny local LCG (linear congruential generator) instead of `random.Random`.
 - MicroPython's `logging.Logger.log()` (and by extension `error()`, `warning()`, etc.) formats messages via `msg % args`. Passing a variable to a format string without a `%s` placeholder raises `TypeError`. Always include a `%s` in the format string: `logger.error("msg: %s", e)`.
 - MicroPython's `unittest` module lacks `assertGreater`, `assertGreaterEqual`, `assertLess`, `assertLessEqual`. Use `assertTrue(a > b, msg)` instead of `assertGreater(a, b, msg)`.
+- MicroPython's `_thread` module is cooperative: a tight loop in a secondary thread can prevent the main thread (and therefore LVGL's `lv_timer_handler`) from running. Long-running secondary-thread loops should yield occasionally, e.g. `time.sleep_ms(1)`. Do not use `time.sleep_us()` for this — it busy-waits and does not yield.
 
 MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
