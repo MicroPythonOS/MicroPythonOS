@@ -249,6 +249,12 @@ class RecordStream:
                             if __debug__: logger.debug("Flushed %s bytes in %sms", bytes_since_flush, flush_time)
                             bytes_since_flush = 0
                             last_flush_time = time.ticks_ms()
+
+                        # Yield briefly so the UI / main thread is not starved.
+                        # The I2S recording loop used to be implicitly throttled by
+                        # heavy print() diagnostics; now it can monopolize the GIL
+                        # and cause the UI to hang.
+                        time.sleep_ms(1)
             finally:
                 # Explicitly close the file and measure time
                 if __debug__: logger.debug("Closing audio data file (remaining %s bytes)...", bytes_since_flush)
