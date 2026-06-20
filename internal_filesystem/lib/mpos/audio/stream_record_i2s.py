@@ -250,10 +250,9 @@ class RecordStream:
                             bytes_since_flush = 0
                             last_flush_time = time.ticks_ms()
 
-                        # Yield briefly so the UI / main thread is not starved.
-                        # The I2S recording loop used to be implicitly throttled by
-                        # heavy print() diagnostics; now it can monopolize the GIL
-                        # and cause the UI to hang.
+                        # MicroPython threads are cooperative, so a tight loop in
+                        # this secondary thread can starve the main (UI/LVGL) task.
+                        # Yield a little after each chunk to keep the screen alive.
                         time.sleep_ms(1)
             finally:
                 # Explicitly close the file and measure time
