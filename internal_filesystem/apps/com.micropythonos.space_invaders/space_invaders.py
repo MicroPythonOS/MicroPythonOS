@@ -126,6 +126,7 @@ class SpaceInvaders(Activity):
 
         self.update_timer = None
         self.last_time = 0
+        self._cover_overlay = None
         self._popup_modal = None
 
         prefs = SharedPreferences(self.appFullName)
@@ -178,6 +179,8 @@ class SpaceInvaders(Activity):
             self._show_start_screen()
 
     def on_key(self, event):
+        if self.game_state == "level_complete":
+            return
         key = event.get_key()
         if self.game_state != "playing":
             if key in (lv.KEY.ENTER, lv.KEY.UP, 0x20):
@@ -200,6 +203,8 @@ class SpaceInvaders(Activity):
             self._fire_player_bullet()
 
     def on_tap(self, event):
+        if self.game_state == "level_complete":
+            return
         code = event.get_code()
         if code == lv.EVENT.PRESSED:
             if self.game_state != "playing":
@@ -374,7 +379,7 @@ class SpaceInvaders(Activity):
         self._create_cover_overlay(txt, "start")
 
     def _create_cover_overlay(self, text, state):
-        self._close_popup()
+        self._close_cover_overlay()
         modal = lv.obj(self.game_area)
         modal.set_size(self.ga_w, self.ga_h)
         modal.set_pos(0, 0)
@@ -392,15 +397,26 @@ class SpaceInvaders(Activity):
         label.set_size(self.ga_w - 20, self.ga_h - 20)
         label.center()
 
-        self._popup_modal = modal
+        self._cover_overlay = modal
+
+    def _close_cover_overlay(self, event=None):
+        if self._cover_overlay:
+            try:
+                self._cover_overlay.delete()
+            except Exception:
+                pass
+            self._cover_overlay = None
 
     def _close_popup(self, event=None):
         if self._popup_modal:
-            self._popup_modal.delete()
+            try:
+                self._popup_modal.close()
+            except Exception:
+                pass
             self._popup_modal = None
 
     def _start_game(self):
-        self._close_popup()
+        self._close_cover_overlay()
         self._delete_autosave()
         self.score = 0
         self.level = 1
@@ -410,6 +426,7 @@ class SpaceInvaders(Activity):
         self._update_labels()
 
     def _start_level(self):
+        self.game_state = "playing"
         rows = min(3 + self.level - 1, 5)
 
         self.invaders = []
@@ -537,6 +554,7 @@ class SpaceInvaders(Activity):
             self.update_timer.delete()
             self.update_timer = None
         self._save_highscore()
+        self._close_cover_overlay()
         self._close_popup()
 
     def _update_frame(self, timer):
@@ -703,6 +721,7 @@ class SpaceInvaders(Activity):
             return
         alive = [i for i in self.invaders if i["alive"]]
         if not alive:
+            self.game_state = "level_complete"
             self.level += 1
             lv.timer_create(self._start_level_delayed, 500, None).set_repeat_count(1)
 
@@ -721,7 +740,7 @@ class SpaceInvaders(Activity):
     def _on_game_over(self):
         self._save_highscore()
         self.player_canvas.add_flag(lv.obj.FLAG.HIDDEN)
-        self._close_popup()
+        self._close_cover_overlay()
         self._create_cover_overlay(
             " GAME OVER\n\nScore: "
             + str(self.score)
@@ -733,46 +752,17 @@ class SpaceInvaders(Activity):
 
     def _on_highscore_tap(self, event):
         self._close_popup()
-        modal = lv.obj(lv.layer_top())
-        modal.set_size(DisplayMetrics.width(), DisplayMetrics.height())
-        modal.set_pos(0, 0)
-        modal.set_style_bg_color(lv.color_hex(0x000000), 0)
-        modal.set_style_bg_opa(160, 0)
-        modal.set_style_border_width(0, 0)
 
-        popup = lv.obj(modal)
-        popup.set_size(200, 130)
-        popup.set_style_bg_color(lv.color_hex(0x222222), 0)
-        popup.set_style_border_color(_G, 0)
-        popup.set_style_border_width(2, 0)
-        popup.set_style_radius(10, 0)
-        popup.center()
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(75))
+        mbox.add_text("Reset high score?")
 
-        q = lv.label(popup)
-        q.set_text("Reset high score?")
-        q.set_style_text_color(_W, 0)
-        q.align(lv.ALIGN.TOP_MID, 0, 15)
-
-        yes_btn = lv.button(popup)
-        yes_btn.set_size(75, 35)
-        yes_btn.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        yes_btn = mbox.add_footer_button("Yes")
         yes_btn.add_event_cb(self._on_reset_hs_yes, lv.EVENT.CLICKED, None)
-        yes_lbl = lv.label(yes_btn)
-        yes_lbl.set_text("Yes")
-        yes_lbl.center()
+        no_btn = mbox.add_footer_button("No")
+        no_btn.add_event_cb(self._close_popup, lv.EVENT.CLICKED, None)
 
-        no_btn = lv.button(popup)
-        no_btn.set_size(75, 35)
-        no_btn.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
-        no_btn.add_event_cb(self._close_modal, lv.EVENT.CLICKED, None)
-        no_lbl = lv.label(no_btn)
-        no_lbl.set_text("No")
-        no_lbl.center()
-
-        self._popup_modal = modal
-
-    def _close_modal(self, event=None):
-        self._close_popup()
+        self._popup_modal = mbox
 
     def _on_reset_hs_yes(self, event):
         self.highscore = 0
@@ -814,54 +804,26 @@ class SpaceInvaders(Activity):
             return
 
         self._close_popup()
-        modal = lv.obj(lv.layer_top())
-        modal.set_size(DisplayMetrics.width(), DisplayMetrics.height())
-        modal.set_pos(0, 0)
-        modal.set_style_bg_color(lv.color_hex(0x000000), 0)
-        modal.set_style_bg_opa(160, 0)
-        modal.set_style_border_width(0, 0)
 
-        popup = lv.obj(modal)
-        popup.set_size(220, 140)
-        popup.set_style_bg_color(lv.color_hex(0x222222), 0)
-        popup.set_style_border_color(_G, 0)
-        popup.set_style_border_width(2, 0)
-        popup.set_style_radius(10, 0)
-        popup.center()
-
-        q = lv.label(popup)
-        q.set_text(
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(75))
+        mbox.add_text(
             "Continue saved game?\nLevel "
             + str(saved_level)
             + ", Score "
             + str(saved_score)
         )
-        q.set_style_text_color(_W, 0)
-        q.set_long_mode(lv.label.LONG_MODE.WRAP)
-        q.set_size(200, 80)
-        q.align(lv.ALIGN.TOP_MID, 0, 10)
 
-        yes_btn = lv.button(popup)
-        yes_btn.set_size(75, 35)
-        yes_btn.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        yes_btn = mbox.add_footer_button("Yes")
         yes_btn.add_event_cb(
             lambda e: self._do_autoload(e, saved_level, saved_score, saved_lives),
             lv.EVENT.CLICKED,
             None,
         )
-        yes_lbl = lv.label(yes_btn)
-        yes_lbl.set_text("Yes")
-        yes_lbl.center()
-
-        no_btn = lv.button(popup)
-        no_btn.set_size(75, 35)
-        no_btn.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        no_btn = mbox.add_footer_button("No")
         no_btn.add_event_cb(self._on_autoload_no, lv.EVENT.CLICKED, None)
-        no_lbl = lv.label(no_btn)
-        no_lbl.set_text("No")
-        no_lbl.center()
 
-        self._popup_modal = modal
+        self._popup_modal = mbox
 
     def _on_autoload_no(self, event):
         self._close_popup()
@@ -869,6 +831,7 @@ class SpaceInvaders(Activity):
 
     def _do_autoload(self, event, saved_level, saved_score, saved_lives):
         self._close_popup()
+        self._close_cover_overlay()
         self.score = saved_score
         self.level = saved_level
         self.lives = saved_lives
