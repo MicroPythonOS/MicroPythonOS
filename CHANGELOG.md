@@ -23,6 +23,7 @@ Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
 
 Frameworks:
+- FontManager: add `getEmojiStrings()` to return complete emoji sequences (e.g. flag pairs like 🇸🇻) for visual emoji lists
 - Add new `add_focus_border` utility and migrate all focus/defocus border handlers (ImageView, MusicPlayer, ShowFonts, About, HowTo, Launcher, WiFi Settings, Connect4, SettingsActivity, topmenu) to use it
 - Add new builtin File Explorer Activity with picker
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
@@ -36,6 +37,7 @@ Frameworks:
 - View: split the explicit `finish_current_activity()` path from `back_screen()` so `Activity.finish()` no longer re-triggers `onBackPressed()`
 
 Apps:
+- ShowFonts: include multi-codepoint emoji (including the El Salvador flag 🇸🇻) in the all-glyphs list by using `FontManager.getEmojiStrings()`
 - Music Player: declare support for .wav files and open them directly when launched via "Open With"
 - Image View: declare support for .png, .jpg, .jpeg, and .raw images and open a single image when launched via "Open With"
 - Image View: add "Open File..." button using the File Explorer Activity picker; position filename label in the top-left corner; add focus border to the image
