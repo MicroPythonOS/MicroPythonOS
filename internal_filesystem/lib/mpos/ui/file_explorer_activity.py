@@ -9,6 +9,8 @@ from .. import sdcard
 from ..content.app_manager import AppManager
 from ..content.intent import Intent
 from ..app.activity import Activity
+from .display_metrics import DisplayMetrics
+from .keyboard import MposKeyboard
 from .rename_activity import RenameActivity
 
 
@@ -24,6 +26,12 @@ class FileExplorerActivity(Activity):
     _bottom_bar = None
     _cancel_btn = None
     _confirm_btn = None
+    _new_file_btn = None
+    _new_folder_btn = None
+    _create_overlay = None
+    _create_textarea = None
+    _create_kind = None
+    _create_keyboard = None
 
     # State
     _current_path = None
@@ -52,9 +60,37 @@ class FileExplorerActivity(Activity):
         screen = lv.obj()
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
-        self._path_label = lv.label(screen)
-        self._path_label.set_width(lv.pct(100))
+        header = lv.obj(screen)
+        header.set_width(lv.pct(100))
+        header.set_height(lv.SIZE_CONTENT)
+        header.set_flex_flow(lv.FLEX_FLOW.ROW)
+        header.set_flex_align(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+        header.set_style_pad_all(4, lv.PART.MAIN)
+
+        self._path_label = lv.label(header)
+        self._path_label.set_flex_grow(1)
         self._path_label.set_style_pad_all(6, lv.PART.MAIN)
+        self._path_label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
+
+        btn_size = DisplayMetrics.pct_of_width(10)
+
+        self._new_file_btn = lv.button(header)
+        self._new_file_btn.set_size(btn_size, btn_size)
+        file_lbl = lv.label(self._new_file_btn)
+        file_lbl.set_text(lv.SYMBOL.FILE)
+        file_lbl.center()
+        self._new_file_btn.add_event_cb(lambda e: self._show_create_dialog("file"), lv.EVENT.CLICKED, None)
+
+        self._new_folder_btn = lv.button(header)
+        self._new_folder_btn.set_size(btn_size, btn_size)
+        folder_lbl = lv.label(self._new_folder_btn)
+        folder_lbl.set_text(lv.SYMBOL.DIRECTORY)
+        folder_lbl.center()
+        self._new_folder_btn.add_event_cb(lambda e: self._show_create_dialog("folder"), lv.EVENT.CLICKED, None)
+
+        if self._mode == self.MODE_PICK:
+            self._new_file_btn.add_flag(lv.obj.FLAG.HIDDEN)
+            self._new_folder_btn.add_flag(lv.obj.FLAG.HIDDEN)
 
         self._list = lv.list(screen)
         self._list.set_width(lv.pct(100))
@@ -336,6 +372,98 @@ class FileExplorerActivity(Activity):
         else:
             if __debug__: logger.debug("FileExplorer: rename cancelled or failed")
         self._populate_dir(self._current_path)
+
+    def _show_create_dialog(self, kind):
+        if self._create_overlay:
+            return
+        self._dismiss_action_bar()
+        self._create_kind = kind
+        title_text = "Create File" if kind == "file" else "Create Folder"
+
+        panel = lv.obj(lv.screen_active())
+        panel.add_flag(lv.obj.FLAG.FLOATING)
+        panel.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        panel.set_size(DisplayMetrics.pct_of_width(80), lv.SIZE_CONTENT)
+        panel.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        panel.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+        panel.align(lv.ALIGN.TOP_MID, 0, DisplayMetrics.pct_of_height(5))
+        panel.set_style_pad_all(8, lv.PART.MAIN)
+        panel.set_style_pad_gap(8, lv.PART.MAIN)
+
+        title = lv.label(panel)
+        title.set_text(title_text)
+
+        ta = lv.textarea(panel)
+        ta.set_text("")
+        ta.set_one_line(True)
+        ta.set_width(lv.pct(100))
+
+        keyboard = MposKeyboard(panel)
+        keyboard.set_style_min_height(0, lv.PART.MAIN)
+        keyboard.set_size(lv.pct(100), DisplayMetrics.pct_of_height(28))
+        keyboard.set_textarea(ta)
+        keyboard.add_event_cb(lambda e: self._do_create(), lv.EVENT.READY, None)
+
+        btn_row = lv.obj(panel)
+        btn_row.set_width(lv.pct(100))
+        btn_row.set_height(lv.SIZE_CONTENT)
+        btn_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        btn_row.set_flex_align(lv.FLEX_ALIGN.SPACE_EVENLY, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
+
+        cancel_btn = lv.button(btn_row)
+        lv.label(cancel_btn).set_text("Cancel")
+        cancel_btn.add_event_cb(lambda e: self._close_create_dialog(), lv.EVENT.CLICKED, None)
+
+        ok_btn = lv.button(btn_row)
+        lv.label(ok_btn).set_text("OK")
+        ok_btn.add_event_cb(lambda e: self._do_create(), lv.EVENT.CLICKED, None)
+
+        group = lv.group_get_default()
+        if group:
+            group.add_obj(ta)
+            group.add_obj(cancel_btn)
+            group.add_obj(ok_btn)
+            lv.group_focus_obj(ta)
+
+        self._create_overlay = panel
+        self._create_textarea = ta
+        self._create_keyboard = keyboard
+
+    def _do_create(self):
+        if not self._create_textarea:
+            return
+        name = self._create_textarea.get_text().strip()
+        if not name:
+            return
+        full = self._current_path + name
+        try:
+            if self._create_kind == "folder":
+                os.mkdir(full)
+            else:
+                open(full, "w").close()
+            if __debug__: logger.debug("FileExplorer: created %s %s", self._create_kind, full)
+        except OSError as e:
+            logger.error("FileExplorer: create %s error %s: %s", self._create_kind, full, e)
+            return
+        self._close_create_dialog()
+        self._populate_dir(self._current_path)
+
+    def _close_create_dialog(self):
+        if self._create_overlay:
+            self._create_overlay.delete()
+        self._create_overlay = None
+        self._create_textarea = None
+        self._create_kind = None
+        self._create_keyboard = None
+
+    def onBackPressed(self, screen):
+        if self._create_overlay:
+            self._close_create_dialog()
+            return True
+        if self._action_bar:
+            self._dismiss_action_bar()
+            return True
+        return False
 
 
 AppManager.register_activity("pick_file", FileExplorerActivity)
