@@ -20,12 +20,12 @@ Usage:
 import unittest
 import lvgl as lv
 
-from mpos.ui.setting_activity import SettingActivity
+from mpos.ui.input_activity import InputActivity
 from mpos import wait_for_render
 
 
 class _FakeEvent:
-    """Minimal stand-in for an LVGL event — SettingActivity.radio_event_handler
+    """Minimal stand-in for an LVGL event — InputActivity.radio_event_handler
     only calls event.get_target_obj()."""
     def __init__(self, target):
         self._target = target
@@ -34,7 +34,7 @@ class _FakeEvent:
 
 
 class _RadioHandlerFixture:
-    """Holds the same attributes SettingActivity.radio_event_handler reads on
+    """Holds the same attributes InputActivity.radio_event_handler reads on
     `self`. Avoids instantiating the full Activity (which needs a running
     AppManager) just to exercise one callback."""
     def __init__(self, container, active_index, allow_deselect=False):
@@ -72,7 +72,7 @@ class TestSettingActivityRadioInvariant(unittest.TestCase):
         reads on `self`."""
         fixture = _RadioHandlerFixture(
             self.container, active_index, allow_deselect=allow_deselect)
-        SettingActivity.radio_event_handler(fixture, _FakeEvent(target))
+        InputActivity.radio_event_handler(fixture, _FakeEvent(target))
         return fixture
 
     def test_click_active_option_keeps_it_selected(self):

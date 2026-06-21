@@ -9,6 +9,7 @@ from .topmenu import open_bar, close_bar, open_drawer, drawer_open
 from .focus import save_and_clear_current_focusgroup, add_focus_border
 from .display_metrics import DisplayMetrics
 from .event import get_event_name, print_event
+from .input_activity import InputActivity
 from .setting_activity import SettingActivity
 from .settings_activity import SettingsActivity
 from .widget_animator import WidgetAnimator
@@ -56,6 +57,7 @@ __all__ = [
     "DisplayMetrics",
     "get_event_name", "print_event",
     "get_foreground_app",
+    "InputActivity",
     "SettingActivity",
     "SettingsActivity",
     "WidgetAnimator",

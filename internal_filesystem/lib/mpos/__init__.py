@@ -33,6 +33,7 @@ from .app.activities.chooser import ChooserActivity
 from .app.activities.view import ViewActivity
 from .app.activities.share import ShareActivity
 
+from .ui.input_activity import InputActivity
 from .ui.setting_activity import SettingActivity
 from .ui.settings_activity import SettingsActivity
 from .ui.camera_activity import CameraActivity
@@ -89,7 +90,7 @@ __all__ = (
     "DeviceInfo", "BuildInfo",
     # Common activities
     "ChooserActivity", "ViewActivity", "ShareActivity",
-    "SettingActivity", "SettingsActivity", "CameraActivity",
+    "InputActivity", "SettingActivity", "SettingsActivity", "CameraActivity",
     "FileExplorerActivity", "RenameActivity",
     # UI components
     "MposKeyboard",
