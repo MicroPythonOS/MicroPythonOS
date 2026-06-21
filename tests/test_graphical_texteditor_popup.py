@@ -1,9 +1,9 @@
 """
-Test that the TextEditor uses lv.msgbox() for its save-as popup.
+Test that the TextEditor Save As flow launches InputActivity.
 
-This test verifies that pressing Save on an untitled file opens a popup
-with the prompt "Enter filename:" and OK/Cancel buttons, implemented as
-an lv.msgbox() on the top layer.
+This test verifies that pressing Save on an untitled file opens the
+InputActivity save-as screen with a "Save As" title and Save/Cancel
+buttons.
 
 Usage:
     Desktop: ./tests/unittest.sh tests/test_graphical_texteditor_popup.py
@@ -14,12 +14,13 @@ import unittest
 
 import lvgl as lv
 
-from mpos import AppManager, wait_for_render
+from mpos import AppManager, InputActivity, wait_for_render
 from mpos.ui.testing import click_button, find_label_with_text
+from mpos.ui.view import screen_stack
 
 
-class TestTextEditorSaveAsPopup(unittest.TestCase):
-    """Verify the TextEditor save-as popup uses lv.msgbox()."""
+class TestTextEditorSaveAsInput(unittest.TestCase):
+    """Verify the TextEditor save-as flow uses InputActivity."""
 
     def setUp(self):
         """Return to launcher before each test."""
@@ -36,8 +37,8 @@ class TestTextEditorSaveAsPopup(unittest.TestCase):
         except Exception:
             pass
 
-    def test_save_as_opens_msgbox(self):
-        """Clicking Save on an untitled file opens a save-as msgbox."""
+    def test_save_as_opens_input_activity(self):
+        """Clicking Save on an untitled file opens InputActivity."""
         result = AppManager.start_app("com.micropythonos.texteditor")
         self.assertTrue(result, "TextEditor should start")
         wait_for_render(10)
@@ -45,11 +46,13 @@ class TestTextEditorSaveAsPopup(unittest.TestCase):
         click_button("Save")
         wait_for_render(10)
 
-        label = find_label_with_text(lv.layer_top(), "Enter filename:")
+        self.assertIsInstance(screen_stack[-1][0], InputActivity)
+
+        label = find_label_with_text(lv.screen_active(), "Save As")
         self.assertIsNotNone(label)
 
-        self.assertIsNotNone(find_label_with_text(lv.layer_top(), "OK"))
-        self.assertIsNotNone(find_label_with_text(lv.layer_top(), "Cancel"))
+        self.assertIsNotNone(find_label_with_text(lv.screen_active(), "Save"))
+        self.assertIsNotNone(find_label_with_text(lv.screen_active(), "Cancel"))
 
 
 if __name__ == "__main__":
