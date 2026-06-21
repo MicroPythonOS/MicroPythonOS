@@ -11,7 +11,6 @@ from ..content.intent import Intent
 from ..app.activity import Activity
 from .display_metrics import DisplayMetrics
 from .input_activity import InputActivity
-from .rename_activity import RenameActivity
 
 
 class FileExplorerActivity(Activity):
@@ -29,6 +28,7 @@ class FileExplorerActivity(Activity):
     _new_file_btn = None
     _new_folder_btn = None
     _pending_create_kind = None
+    _pending_rename_path = None
 
     # State
     _current_path = None
@@ -308,7 +308,7 @@ class FileExplorerActivity(Activity):
 
         rename_btn = lv.button(bar)
         lv.label(rename_btn).set_text("Rename")
-        rename_btn.add_event_cb(lambda e: self._show_rename_screen(), lv.EVENT.CLICKED, None)
+        rename_btn.add_event_cb(lambda e: self._prompt_rename(), lv.EVENT.CLICKED, None)
 
         cancel_btn = lv.button(bar)
         lv.label(cancel_btn).set_text("Cancel")
@@ -358,16 +358,39 @@ class FileExplorerActivity(Activity):
         if __debug__: logger.debug("FileExplorer: deleted %s", path)
         self._populate_dir(self._current_path)
 
-    def _show_rename_screen(self):
+    def _prompt_rename(self):
         self._dismiss_action_bar()
-        intent = Intent(RenameActivity, extras={"path": self._selected_path})
+        self._pending_rename_path = self._selected_path
+        old_name = self._selected_path.rstrip("/").split("/")[-1]
+        setting = {
+            "key": "name",
+            "title": "Rename",
+            "ui": "textarea",
+            "placeholder": old_name,
+        }
+        intent = Intent(activity_class=InputActivity, extras={"setting": setting, "value": old_name})
         self.startActivityForResult(intent, self._on_rename_result)
 
     def _on_rename_result(self, result):
-        if result and result.get("result_code"):
-            if __debug__: logger.debug("FileExplorer: rename succeeded: %s", result.get("data", {}))
+        old_path = self._pending_rename_path
+        self._pending_rename_path = None
+        if not result or not result.get("result_code"):
+            if __debug__: logger.debug("FileExplorer: rename cancelled")
+            return
+        new_name = result.get("data", {}).get("value", "").strip()
+        if not new_name:
+            return
+        parts = old_path.rstrip("/").split("/")
+        if len(parts) > 1:
+            new_path = "/".join(parts[:-1]) + "/" + new_name
         else:
-            if __debug__: logger.debug("FileExplorer: rename cancelled or failed")
+            new_path = new_name
+        try:
+            os.rename(old_path, new_path)
+            if __debug__: logger.debug("FileExplorer: renamed %s -> %s", old_path, new_path)
+        except OSError as e:
+            logger.error("FileExplorer: rename error %s -> %s: %s", old_path, new_path, e)
+            return
         self._populate_dir(self._current_path)
 
     def _prompt_create_name(self, kind):
