@@ -119,7 +119,7 @@ class ImageView(Activity):
     def _open_file_clicked(self, event):
         intent = Intent(
             action="pick_file",
-            extras={"start_dir": self.imagedir, "path_pattern": [".jpg", ".jpeg", ".png", ".raw"]},
+            extras={"start_dir": self.imagedir, "path_pattern": [".jpg", ".jpeg", ".png", ".raw", ".bmp"]},
         )
         self.startActivityForResult(intent, self._on_file_picked)
 
@@ -154,6 +154,7 @@ class ImageView(Activity):
             or lowercase.endswith(".jpeg")
             or lowercase.endswith(".png")
             or lowercase.endswith(".raw")
+            or lowercase.endswith(".bmp")
         )
 
     def _collect_images_from_dir(self, path):
