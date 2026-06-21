@@ -37,6 +37,9 @@ Apps:
 - Image View: add "Open File..." button using the File Explorer Activity picker; position filename label in the top-left corner; add focus border to the image
 - TextEditor: fix closing with unsaved changes destroying the UI before the save prompt could be answered; now prompts Yes/No/Cancel via `onBackPressed()` and only closes after the user decides
 
+OS:
+- Add BMP bitmap image support (with fix for LVGL 9.4 bmp scaling)
+
 0.12.2
 ======
 
