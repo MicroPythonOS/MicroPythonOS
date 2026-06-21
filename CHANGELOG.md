@@ -16,6 +16,7 @@ Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
 
 Frameworks:
+- Add generic `InputActivity` for reusable single-value input UI; `SettingActivity` is now a thin wrapper that launches `InputActivity` and persists the result
 - FontManager: add `getEmojiStrings()` to return complete emoji sequences (e.g. flag pairs like 🇸🇻) for visual emoji lists
 - Add new `add_focus_border` utility and migrate all focus/defocus border handlers (ImageView, MusicPlayer, ShowFonts, About, HowTo, Launcher, WiFi Settings, Connect4, SettingsActivity, topmenu) to use it
 - Add new builtin File Explorer Activity with picker

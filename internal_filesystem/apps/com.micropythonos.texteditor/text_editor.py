@@ -3,7 +3,7 @@ import os
 
 import lvgl as lv
 
-from mpos import Activity, DisplayMetrics, Intent, MposKeyboard
+from mpos import Activity, DisplayMetrics, InputActivity, Intent, MposKeyboard
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,6 @@ class TextEditor(Activity):
     _textarea = None
     _keyboard = None
 
-    _save_as_overlay = None
-    _save_as_textarea = None
     _exit_overlay = None
     _close_after_save = False
 
@@ -110,7 +108,8 @@ class TextEditor(Activity):
         if path:
             self._load_file(path)
         elif self._filename is None:
-            self._new_file()
+            if self._textarea.get_text() == "" and self._saved_content == "":
+                self._new_file()
         self._update_title()
 
     def onPause(self, screen):
@@ -119,9 +118,6 @@ class TextEditor(Activity):
     def onBackPressed(self, screen):
         if self._exit_overlay:
             self._on_exit_cancel(self._exit_overlay)
-            return True
-        if self._save_as_overlay:
-            self._on_save_as_cancel(self._save_as_overlay)
             return True
         if self._has_unsaved_changes():
             self._show_exit_confirm()
@@ -244,71 +240,30 @@ class TextEditor(Activity):
         return "/".join(path.rstrip("/").split("/")[:-1])
 
     def _show_save_as_dialog(self):
-        if self._save_as_overlay:
-            return
         self._hide_keyboard()
+        setting = {
+            "key": "filename",
+            "title": "Save As",
+            "ui": "textarea",
+            "placeholder": "filename.txt",
+        }
+        intent = Intent(activity_class=InputActivity, extras={"setting": setting})
+        self.startActivityForResult(intent, self._on_save_as_result)
 
-        mbox = lv.msgbox()
-        mbox.set_width(DisplayMetrics.pct_of_width(75))
-        mbox.add_text("Enter filename:")
-
-        content = mbox.get_content()
-        name_ta = lv.textarea(content)
-        name_ta.set_one_line(True)
-        name_ta.set_width(lv.pct(100))
-        name_ta.set_placeholder_text("filename.txt")
-        name_ta.set_text("")
-        name_ta.add_event_cb(
-            lambda e: self._show_keyboard(textarea=name_ta), lv.EVENT.CLICKED, None
-        )
-
-        ok_btn = mbox.add_footer_button("OK")
-        ok_btn.add_event_cb(
-            lambda e: self._on_save_as_confirm(name_ta, mbox), lv.EVENT.CLICKED, None
-        )
-        cancel_btn = mbox.add_footer_button("Cancel")
-        cancel_btn.add_event_cb(
-            lambda e: self._on_save_as_cancel(mbox), lv.EVENT.CLICKED, None
-        )
-
-        group = lv.group_get_default()
-        if group:
-            group.add_obj(name_ta)
-            group.add_obj(ok_btn)
-            group.add_obj(cancel_btn)
-
-        self._save_as_overlay = mbox
-        self._save_as_textarea = name_ta
-        self._show_keyboard(textarea=name_ta)
-        lv.group_focus_obj(name_ta)
-
-    def _on_save_as_confirm(self, name_ta, mbox):
-        name = name_ta.get_text().strip()
-        if not name:
+    def _on_save_as_result(self, result):
+        if not result or not result.get("result_code"):
+            self._close_after_save = False
             return
-        if "." not in name:
-            name = name + ".txt"
+        name = result.get("data", {}).get("value", "").strip()
+        if not name:
+            self._close_after_save = False
+            return
         path = self._DEFAULT_DIR + "/" + name
         close_after = self._close_after_save
-        self._close_save_as_dialog(mbox)
+        self._close_after_save = False
         self._perform_save(path)
         if close_after:
             self.finish()
-
-    def _on_save_as_cancel(self, mbox):
-        self._close_save_as_dialog(mbox)
-
-    def _close_save_as_dialog(self, mbox):
-        try:
-            mbox.close()
-        except Exception:
-            pass
-        self._save_as_overlay = None
-        self._save_as_textarea = None
-        self._close_after_save = False
-        self._keyboard.set_textarea(self._textarea)
-        self._hide_keyboard()
-        self._update_title()
 
     def _show_exit_confirm(self):
         mbox = lv.msgbox()
