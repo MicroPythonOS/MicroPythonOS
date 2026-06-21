@@ -56,8 +56,6 @@ class SettingsActivity(Activity):
         if not self.prefs:
             logger.error("SettingsActivity cannot render without prefs")
             return
-        # Get the group for focusable objects
-        focusgroup = lv.group_get_default()
 
         for setting in self.settings:
             # Check if it should be shown:
@@ -109,7 +107,6 @@ class SettingsActivity(Activity):
             setting["value_label"] = value  # Store reference for updating
             setting_cont.add_event_cb(lambda e, s=setting: self.startSettingActivity(s), lv.EVENT.CLICKED, None)
             mpos.ui.add_focus_border(setting_cont)
-            focusgroup.add_obj(setting_cont)
 
     def startSettingActivity(self, setting):
         from ..content.intent import Intent

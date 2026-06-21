@@ -95,12 +95,6 @@ class TextEditor(Activity):
 
         self.setContentView(screen)
 
-        group = lv.group_get_default()
-        if group:
-            group.add_obj(self._open_button)
-            group.add_obj(self._save_button)
-            group.add_obj(self._textarea)
-
     def onResume(self, screen):
         super().onResume(screen)
 
@@ -278,12 +272,6 @@ class TextEditor(Activity):
         cancel_btn.add_event_cb(
             lambda e: self._on_exit_cancel(mbox), lv.EVENT.CLICKED, None
         )
-
-        group = lv.group_get_default()
-        if group:
-            group.add_obj(yes_btn)
-            group.add_obj(no_btn)
-            group.add_obj(cancel_btn)
 
         self._exit_overlay = mbox
         lv.group_focus_obj(yes_btn)

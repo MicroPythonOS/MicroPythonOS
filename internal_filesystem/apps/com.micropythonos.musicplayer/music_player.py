@@ -84,11 +84,6 @@ class MusicPlayer(Activity):
         self._stop_button_label = lv.label(self._stop_button)
         self._stop_button_label.set_text("Stop")
 
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(screen)
-            focusgroup.add_obj(self._filename_label)
-
         self.setContentView(screen)
 
     def onResume(self, screen):

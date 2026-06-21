@@ -72,7 +72,6 @@ class ShowFonts(Activity):
     def onCreate(self):
         screen = lv.obj()
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
-        #screen.set_style_margin_all(DisplayMetrics.pct_of_width(1), lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
         self.setContentView(screen)
@@ -94,12 +93,14 @@ class ShowFonts(Activity):
         emojilabel.set_style_text_font(emojifont, lv.PART.MAIN)
         emojilabel.set_text(f"fontSize 12, fontHeight {emojifont.get_line_height()}: " + text)
         emojilabel.set_width(lv.pct(99))
+        add_focus_border(emojilabel)
 
         emojilabel2 = lv.label(screen)
         emojifont2 = FontManager.getFont(size=28, emoji=True) # 32 givs height 33 is the maximum because Montserrat 28 is the maximum (TTF can go bigger)
         emojilabel2.set_style_text_font(emojifont2, lv.PART.MAIN)
         emojilabel2.set_text(f"fontSize 28, fontHeight {emojifont2.get_line_height()}: " + text)
         emojilabel2.set_width(lv.pct(99))
+        add_focus_border(emojilabel2)
 
         self.addAllFontsTitles(screen)
         self._log_timing("addAllFontsTitles", resume_start)
@@ -127,7 +128,7 @@ class ShowFonts(Activity):
         print("_ttf_font height: ", self._ttf_font.get_line_height())
         #self._log_timing("addAllFontsTitles/getFont TTF", ttf_start)
         title = lv.label(screen)
-        self.labelSelectable(title)
+        add_focus_border(title)
         title.set_width(lv.pct(100))
         title.set_style_text_font(self._ttf_font, lv.PART.MAIN)
         title.set_text(f"Rancourt ttf size height {self._ttf_font.get_line_height()} 👍 😊 ❤️")
@@ -145,7 +146,7 @@ class ShowFonts(Activity):
                 font = font_info["font"]
                 name = font_info["name"]
             title = lv.label(screen)
-            self.labelSelectable(title)
+            add_focus_border(title)
             title.set_width(lv.pct(99))
             title.set_style_text_font(font, lv.PART.MAIN)
             bitcoin_symbol = "\uf15a"
@@ -192,12 +193,8 @@ class ShowFonts(Activity):
         set_text_start = self._now_ms()
         lbl.set_text(alltext)
         self._log_timing("addAllGlyphs/set_text", set_text_start)
-        self.labelSelectable(lbl)
+        add_focus_border(lbl)
         self._log_timing("addAllGlyphs total", section_start)
-
-    def labelSelectable(self, label):
-        add_focus_border(label)
-        lv.group_get_default().add_obj(label)
 
     @staticmethod
     # Custom log callback to capture FPS

@@ -95,29 +95,12 @@ class Breakout(Activity):
         breakout.move_paddle(self.paddle_move_step)
 
     def move_left_unfocus(self):
-        self.unfocus()
+        lv.group_focus_obj(self.play_button)
         breakout.move_paddle(-self.paddle_move_step)
 
     def move_right_unfocus(self):
-        self.unfocus()
+        lv.group_focus_obj(self.play_button)
         breakout.move_paddle(self.paddle_move_step)
-
-    # This only works with the PREV/pageup and NEXT/pagedown buttons,
-    # because the focus_direction handling of the arrow keys uses a trick to move focus (focus_next)
-    # which conflicts with the focus_next below...
-    def unfocus(self):
-        focusgroup = lv.group_get_default()
-        if not focusgroup:
-            print("WARNING: imageview.py could not get default focus group")
-            return
-        focused = focusgroup.get_focused()
-        if focused:
-            if focused == self.rightbutton:
-                focusgroup.focus_prev()
-            elif focused == self.leftbutton:
-                focusgroup.focus_next()
-            else:
-                print("focus isn't on next or previous, leaving it...")
 
     def flush_ready_cb(self, arg1=None, arg2=None):
         # This is called in IRQ (interrupt) context so it can't allocate memory

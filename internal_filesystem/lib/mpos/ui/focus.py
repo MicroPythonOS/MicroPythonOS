@@ -27,6 +27,9 @@ def add_focus_border(widget, width=1, color=None, opacity=None, radius=None):
         None,
     )
     widget.add_event_cb(_defocus_border_handler, lv.EVENT.DEFOCUSED, None)
+    focusgroup = lv.group_get_default()
+    if focusgroup:
+        focusgroup.add_obj(widget)
 
 
 def move_focusgroup_objects(fromgroup, togroup):

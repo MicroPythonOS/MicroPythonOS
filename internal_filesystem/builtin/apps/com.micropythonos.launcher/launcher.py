@@ -68,8 +68,6 @@ class Launcher(Activity):
         screen.clean()
         self._app_cont_map = {}
 
-        focusgroup = lv.group_get_default()
-
         # Grid parameters
         icon_size = 64
         label_height = 24
@@ -118,7 +116,6 @@ class Launcher(Activity):
             app_cont.add_event_cb(lambda e, fullname=app.fullname: self._launch_app(fullname), lv.EVENT.CLICKED, None)
             add_focus_border(app_cont)
 
-            focusgroup.add_obj(app_cont)
             self._app_cont_map[app.fullname] = app_cont
 
         # Store the new representation for the next resume
@@ -192,15 +189,10 @@ class Launcher(Activity):
         screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
 
     def _focus_last_or_first(self):
-        """Focus the last launched app tile, or the first tile if none was launched yet."""
-        focusgroup = lv.group_get_default()
-        if not focusgroup:
-            return
+        """Focus the last launched app tile if any."""
         target = self._app_cont_map.get(self._last_started_fullname)
         if target:
             lv.group_focus_obj(target)
-        else:
-            focusgroup.focus_next()
 
     @staticmethod
     def create_icon_dsc(icon_path):

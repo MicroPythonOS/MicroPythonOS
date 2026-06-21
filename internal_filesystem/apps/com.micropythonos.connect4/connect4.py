@@ -128,8 +128,6 @@ class Connect4(Activity):
             self.pieces.append(piece_row)
 
         # Create column buttons (invisible clickable areas)
-        focusgroup = lv.group_get_default()
-
         for col in range(self.COLS):
             btn = lv.obj(self.screen)
             btn.set_size(self.CELL_SIZE, self.ROWS * self.CELL_SIZE)
@@ -140,9 +138,6 @@ class Connect4(Activity):
             btn.add_flag(lv.obj.FLAG.CLICKABLE)
             btn.add_event_cb(lambda e, c=col: self.on_column_click(c), lv.EVENT.CLICKED, None)
             add_focus_border(btn, width=3, color=lv.color_hex(0xFFFFFF))
-
-            focusgroup.add_obj(btn)
-
             self.column_buttons.append(btn)
 
         self.setContentView(self.screen)

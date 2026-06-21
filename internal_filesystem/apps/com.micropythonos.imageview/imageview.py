@@ -51,34 +51,20 @@ class ImageView(Activity):
         prev_label.set_text(lv.SYMBOL.LEFT)
         prev_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
 
-        # Invisible button, just for defocusing the prev and next buttons:
-        self.play_button = lv.button(screen)
-        self.play_button.align(lv.ALIGN.BOTTOM_MID,0,0)
-        self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
-        #self.play_button.add_flag(lv.obj.FLAG.HIDDEN)
-        #self.play_button.add_event_cb(lambda e: self.unfocus_if_not_fullscreen(),lv.EVENT.FOCUSED,None)
-        #self.play_button.set_style_shadow_opa(lv.OPA.TRANSP, lv.PART.MAIN)
-        #self.play_button.add_event_cb(lambda e: self.play(),lv.EVENT.CLICKED,None)
-        #play_label = lv.label(self.play_button)
-        #play_label.set_text(lv.SYMBOL.PLAY)
         self.delete_button = lv.button(screen)
         self.delete_button.align(lv.ALIGN.BOTTOM_MID,0,0)
         self.delete_button.add_event_cb(lambda e: self.delete_image(),lv.EVENT.CLICKED,None)
         delete_label = lv.label(self.delete_button)
         delete_label.set_text(lv.SYMBOL.TRASH)
         delete_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+
         self.next_button = lv.button(screen)
         self.next_button.align(lv.ALIGN.BOTTOM_RIGHT,0,0)
-        #self.next_button.add_event_cb(self.print_events, lv.EVENT.ALL, None)
         self.next_button.add_event_cb(lambda e: self.show_next_image_if_fullscreen(),lv.EVENT.FOCUSED,None)
         self.next_button.add_event_cb(lambda e: self.show_next_image(),lv.EVENT.CLICKED,None)
         next_label = lv.label(self.next_button)
         next_label.set_text(lv.SYMBOL.RIGHT)
         next_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-
-        focusgroup = lv.group_get_default()
-        if focusgroup:
-            focusgroup.add_obj(self.image)
 
         self.setContentView(screen)
 
@@ -205,8 +191,6 @@ class ImageView(Activity):
         WidgetAnimator.smooth_show(self.open_button)
         WidgetAnimator.smooth_show(self.prev_button)
         WidgetAnimator.smooth_show(self.delete_button)
-        #WidgetAnimator.smooth_show(self.play_button)
-        self.play_button.add_flag(lv.obj.FLAG.HIDDEN) # make it not accepting focus
         WidgetAnimator.smooth_show(self.next_button)
 
     def start_fullscreen(self):
@@ -215,10 +199,8 @@ class ImageView(Activity):
         WidgetAnimator.smooth_hide(self.open_button)
         WidgetAnimator.smooth_hide(self.prev_button, hide=False)
         WidgetAnimator.smooth_hide(self.delete_button, hide=False)
-        #WidgetAnimator.smooth_hide(self.play_button, hide=False)
-        self.play_button.remove_flag(lv.obj.FLAG.HIDDEN) # make it accepting focus
         WidgetAnimator.smooth_hide(self.next_button, hide=False)
-        self.unfocus() # focus on the invisible center button, not previous or next
+        self.unfocus() # focus on the delete button, not previous or next
 
     def show_prev_image_if_fullscreen(self, event=None):
         if self.stopping: # closing the window results in a focus shift, which can trigger the next action in fullscreen
@@ -235,23 +217,7 @@ class ImageView(Activity):
             self.show_next_image()
 
     def unfocus(self):
-        focusgroup = lv.group_get_default()
-        if not focusgroup:
-            print("WARNING: imageview.py could not get default focus group")
-            return
-        focused = focusgroup.get_focused()
-        if focused:
-            print(f"got focus button: {focused}")
-            #focused.remove_state(lv.STATE.FOCUSED) # this doesn't seem to work to remove focus
-            print("checking which button is focused")
-            if focused == self.next_button:
-                print("next is focused")
-                focusgroup.focus_prev()
-            elif focused == self.prev_button:
-                print("prev is focused")
-                focusgroup.focus_next()
-            else:
-                print("focus isn't on next or previous, leaving it...")
+        lv.group_focus_obj(self.delete_button)
 
     def show_next_image(self, event=None):
         print("showing next image...")
