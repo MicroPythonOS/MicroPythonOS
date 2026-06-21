@@ -79,7 +79,7 @@ class Breakout(Activity):
         self.setContentView(self.screen)
 
     def onResume(self, screen):
-        lv.log_register_print_cb(self.log_callback)
+        #lv.log_register_print_cb(self.log_callback)
         breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
         mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
         mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)

@@ -232,8 +232,8 @@ static mp_obj_t render(size_t n_args, const mp_obj_t *args) {
         const uint32_t now_ms = ticks_ms();
         const uint32_t elapsed_ms = now_ms - g_fps_last_ms;
         if (elapsed_ms >= 1000) {
-            const uint32_t fps = (g_fps_frames * 1000) / elapsed_ms;
-            mp_printf(&mp_plat_print, "breakout.c fps: %lu\n", (unsigned long)fps);
+            // const uint32_t fps = (g_fps_frames * 1000) / elapsed_ms;
+            // mp_printf(&mp_plat_print, "breakout.c fps: %lu\n", (unsigned long)fps); // shows very high values (184-192) on desktop
             g_fps_last_ms = now_ms;
             g_fps_frames = 0;
         }
