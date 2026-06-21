@@ -68,6 +68,7 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
         "sessions": test_multiple_sessions,
         "navigation": test_app_navigation,
         "appmanagement": test_app_management,
+        "helpers": test_controller_helpers,
     }
     if only:
         names = [s.strip() for s in only.split(",")]
@@ -298,6 +299,51 @@ l.align(lv.ALIGN.CENTER, 0, 0)
     check(isinstance(free, int) and free > 0, f"free space: {free} bytes")
 
 
+def test_controller_helpers(mpos, is_serial=False, cli_binary=None, serial_port=None):
+    section("New controller helpers")
+
+    mpos.exec("""
+import lvgl as lv
+scr = lv.obj()
+lv.screen_load(scr)
+scr.set_style_bg_color(lv.color_hex(0xFFFFFF), 0)
+btn = lv.button(scr)
+btn.set_size(120, 50)
+btn.align(lv.ALIGN.CENTER, 0, 0)
+lv.label(btn).set_text("Helper Button")
+status = lv.label(scr)
+status.set_text("idle")
+status.align(lv.ALIGN.TOP_MID, 0, 10)
+def cb(e):
+    status.set_text("helper clicked")
+btn.add_event_cb(cb, lv.EVENT.CLICKED, None)
+""")
+    time.sleep(0.3)
+
+    check(mpos.wait_for_text("Helper Button", timeout=5), "wait_for_text finds label")
+    mpos.expect_text("idle")
+
+    found = mpos.find_widget(type="button")
+    check(found is not None and found.get("type") == "button", "find_widget finds button by type")
+
+    mpos.click_button("Helper Button")
+    time.sleep(0.3)
+    check(mpos.wait_for_text("helper clicked", timeout=5), "click_button triggers callback")
+
+    mpos.save_screenshot("tmp/_mpos_controller_test_helper.bmp")
+    check(os.path.exists("tmp/_mpos_controller_test_helper.bmp"), "save_screenshot writes file")
+
+    w, h, pixels = mpos.screenshot_pixels()
+    check(w == 320 and h == 240 and len(pixels) == w * h * 3, "screenshot_pixels returns correct dimensions")
+
+    try:
+        from PIL import Image
+        im = mpos.screenshot_image()
+        check(im.size == (w, h) and im.mode == "RGB", "screenshot_image returns PIL Image")
+    except ImportError:
+        check(True, "screenshot_image skipped (pillow not installed)")
+
+
 def test_app_management(mpos, is_serial=False, cli_binary=None, serial_port=None):
     section("App management (install / list / remove)")
     if not is_serial:
@@ -348,7 +394,7 @@ for a in AppManager.get_app_list():
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 
