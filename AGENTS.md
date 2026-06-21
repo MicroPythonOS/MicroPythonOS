@@ -106,7 +106,7 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
 - **`MPOSController()` does NOT auto-start a subprocess.** Call `mpos.start()` to launch `run_desktop.sh`, then wait at least `~8s` for boot before calling `startapp()` or any other method. Without `.start()` the internal `repl` is `None` and you get `AttributeError: 'NoneType' object has no attribute 'exec'`.
 - Two backends: `MPOSController()` for local desktop process, `MPOSController(backend="serial", port="/dev/ttyACM0")` for physical device.
-- Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
+- Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.save_screenshot(path)`, `mpos.screenshot_pixels()`, `mpos.screenshot_image()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.click_button("text")`, `mpos.find_widget(type=..., text=...)`, `mpos.press_widget(type=..., text=...)`, `mpos.wait_for_text("text")`, `mpos.expect_text("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
 - `exec()` and `exec_multiline()` both use **paste mode** (Ctrl-E / Ctrl-D) internally — multi-line code, quotes, and special chars need no escaping. They're equivalent; use whichever is convenient.
 - `get_visible_text()` uses `exec_multiline()` iterating individual `repr()` prints — critical for serial where `print(repr(big_list))` corrupts for large lists with escape sequences.
 - `exec()` auto-drains input buffer before sending then enters paste mode (Ctrl-E).
@@ -119,6 +119,11 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - `_read_remote_file` / `write_remote_file`: ProcessBackend uses base64 (works over PTY), SerialBackend uses `mpremote cp` (reliable over USB).
 - `mpos.screenshot()` captures via `capture_screenshot()` on device, then reads raw file and converts to BMP via `_build_bmp()`. Over serial (`/dev/ttyACM0`) this takes ~40s total (~6s connect, ~34s transfer).
 - The notification bar (top status bar) is NOT always present. It's controlled by the `bar_open` global in `internal_filesystem/lib/mpos/ui/topmenu.py`. Check it with `mpos.eval("mpos.ui.topmenu.bar_open")` (the module is already imported by `main.py`). When open, its height is `AppearanceManager.NOTIFICATION_BAR_HEIGHT` (24px).
+- `mpos.startapp(appname)` launches an installed app; pass `intent={"data": filename, "action": ..., "extras": {...}}` to start an app with an `mpos.Intent` (e.g. opening a specific file in ImageView).
+- `mpos.run_app_with_file(appname, filename)` boots and launches *appname* pre-populated with a file intent — convenient for testing "Open With" flows.
+- `mpos.click_button("text")` finds a clickable widget whose own text or child-label text matches and clicks its center, avoiding manual coordinate math. For buttons, use this instead of `find_widget` because button text lives on a child label.
+- `mpos.wait_for_text("text", timeout=10)` polls the screen until the text appears (or `disappear=True`); `mpos.expect_text("text")` raises if it doesn't appear.
+- `mpos.screenshot_image()` returns a PIL `Image` (requires `pillow`), and `mpos.screenshot_pixels()` returns `(width, height, rgb888_bytes)` for direct pixel checks.
 - The CLI also supports `startapp <appname>` (launches an app) and `checkfreespace` (reports free disk space and whether a screenshot fits).
 - All tests pass covering exec, eval, screenshot, input simulation, screen introspection, file I/O, and physical device control.
 - Host-side controller tests in `tests/cpython_mpos_controller.py` run via `python3 tests/cpython_mpos_controller.py` (desktop) or `python3 tests/cpython_mpos_controller.py --serial /dev/ttyACM0` (device); they are NOT run by `unittest.sh` (which targets MicroPython-side tests).
@@ -137,10 +142,9 @@ sys.path.insert(0, '.')
 from scripts.mpos_controller import MPOSController
 
 with MPOSController(backend='process') as mpos:
-    mpos.run_app('com.micropythonos.showfonts')
-    ss = mpos.screenshot()
-    with open('tmp/screenshot.bmp', 'wb') as f:
-        f.write(ss)
+    mpos.run_app_with_file('com.micropythonos.imageview', 'data/images/test.bmp')
+    mpos.save_screenshot('tmp/screenshot.bmp')
+    pixels = mpos.screenshot_pixels()  # (width, height, rgb888_bytes)
 ```
 
 ### Analyzing screenshots (preferred techniques)

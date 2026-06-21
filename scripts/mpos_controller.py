@@ -81,6 +81,52 @@ def _build_bmp(width, height, rgb888_pixels):
     return bytes(bmp)
 
 
+def _parse_bmp(bmp_bytes):
+    """Parse a BMP produced by _build_bmp and return (width, height, rgb888_bytes)."""
+    if len(bmp_bytes) < 54 or bmp_bytes[0:2] != b"BM":
+        raise ValueError("Invalid BMP data")
+    width = struct.unpack("<I", bmp_bytes[18:22])[0]
+    height = struct.unpack("<i", bmp_bytes[22:26])[0]
+    if height < 0:
+        height = -height
+        top_down = True
+    else:
+        top_down = False
+    row_stride = (width * 3 + 3) // 4 * 4
+    pixel_data = bmp_bytes[54:]
+    if row_stride == width * 3 and top_down:
+        return width, height, pixel_data
+    rows = []
+    for y in range(height):
+        src_y = y if top_down else (height - 1 - y)
+        offset = src_y * row_stride
+        rows.append(pixel_data[offset:offset + width * 3])
+    return width, height, b"".join(rows)
+
+
+def _find_widgets(tree, predicate, parent=None):
+    """Recursively yield (widget, parent) pairs matching predicate(widget)."""
+    if not isinstance(tree, list):
+        return
+    for widget in tree:
+        if predicate(widget):
+            yield widget, parent
+        children = widget.get("children")
+        if children:
+            yield from _find_widgets(children, predicate, parent=widget)
+
+
+def _widget_matches(widget, type=None, text=None, clickable=None):
+    """Check if a widget matches the given criteria."""
+    if type is not None and widget.get("type") != type:
+        return False
+    if text is not None and widget.get("text") != text:
+        return False
+    if clickable is not None and widget.get("clickable") != clickable:
+        return False
+    return True
+
+
 # ── Stream ──────────────────────────────────────────────────────────
 
 class _PTYStream:
@@ -502,6 +548,26 @@ class ProcessBackend:
             except Exception:
                 pass
 
+    def save_screenshot(self, path):
+        """Capture a screenshot and write it to *path* (BMP format)."""
+        bmp = self.screenshot()
+        with open(path, "wb") as f:
+            f.write(bmp)
+        return path
+
+    def screenshot_pixels(self):
+        """Return (width, height, rgb888_bytes) for the current screen."""
+        return _parse_bmp(self.screenshot())
+
+    def screenshot_image(self):
+        """Return the screenshot as a PIL Image (RGB)."""
+        try:
+            from PIL import Image
+        except ImportError as e:
+            raise ImportError("PIL is required for screenshot_image(); install pillow") from e
+        width, height, pixels = self.screenshot_pixels()
+        return Image.frombytes("RGB", (width, height), pixels)
+
     def _read_remote_file(self, path):
         with open(path, "rb") as f:
             return f.read()
@@ -555,6 +621,64 @@ for i in range(steps + 1):
             "click_button('{}'); "
             "wait_for_render()".format(key)
         )
+
+    def click_button(self, text):
+        """Click the center of a button (or other clickable widget) labelled *text*."""
+        tree = self.get_widget_tree()
+        button = self._find_button_by_text(tree, text)
+        if button is None:
+            raise RuntimeError("No clickable widget with text {!r} found".format(text))
+        self.press(button["center_x"], button["center_y"])
+
+    def find_widget(self, type=None, text=None, clickable=None):
+        """Return the first widget matching the given criteria, or None."""
+        for widget, _parent in _find_widgets(
+            self.get_widget_tree(),
+            lambda w: _widget_matches(w, type=type, text=text, clickable=clickable),
+        ):
+            return widget
+        return None
+
+    def press_widget(self, type=None, text=None):
+        """Click the center of the first widget matching *type* and/or *text*."""
+        widget = self.find_widget(type=type, text=text, clickable=True)
+        if widget is None:
+            widget = self.find_widget(type=type, text=text)
+        if widget is None:
+            raise RuntimeError(
+                "No widget found with type={!r}, text={!r}".format(type, text)
+            )
+        self.press(widget["center_x"], widget["center_y"])
+
+    def _find_button_by_text(self, tree, text):
+        """Find a clickable widget whose own text or child label text matches."""
+        for widget, _parent in _find_widgets(
+            tree, lambda w: _widget_matches(w, clickable=True)
+        ):
+            if widget.get("text") == text:
+                return widget
+            for child, _p in _find_widgets(
+                widget.get("children", []), lambda w: w.get("text") == text
+            ):
+                return widget
+        return None
+
+    def wait_for_text(self, text, timeout=10, disappear=False):
+        """Wait until *text* appears (or disappears) on screen. Returns True on success."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            found = self.find_text(text)
+            if disappear and not found:
+                return True
+            if not disappear and found:
+                return True
+            time.sleep(0.25)
+        return False
+
+    def expect_text(self, text, timeout=10):
+        """Raise RuntimeError if *text* is not visible within *timeout* seconds."""
+        if not self.wait_for_text(text, timeout=timeout):
+            raise RuntimeError("Expected text {!r} not found on screen".format(text))
 
     # -- screen introspection -------------------------------------------
 
@@ -709,6 +833,26 @@ class SerialBackend:
             except Exception:
                 pass
 
+    def save_screenshot(self, path):
+        """Capture a screenshot and write it to *path* (BMP format)."""
+        bmp = self.screenshot()
+        with open(path, "wb") as f:
+            f.write(bmp)
+        return path
+
+    def screenshot_pixels(self):
+        """Return (width, height, rgb888_bytes) for the current screen."""
+        return _parse_bmp(self.screenshot())
+
+    def screenshot_image(self):
+        """Return the screenshot as a PIL Image (RGB)."""
+        try:
+            from PIL import Image
+        except ImportError as e:
+            raise ImportError("PIL is required for screenshot_image(); install pillow") from e
+        width, height, pixels = self.screenshot_pixels()
+        return Image.frombytes("RGB", (width, height), pixels)
+
     def _read_remote_file(self, path):
         import subprocess, tempfile, os as _os
         with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
@@ -787,6 +931,64 @@ class SerialBackend:
             "click_button('{}'); "
             "wait_for_render()".format(key)
         )
+
+    def click_button(self, text):
+        """Click the center of a button (or other clickable widget) labelled *text*."""
+        tree = self.get_widget_tree()
+        button = self._find_button_by_text(tree, text)
+        if button is None:
+            raise RuntimeError("No clickable widget with text {!r} found".format(text))
+        self.press(button["center_x"], button["center_y"])
+
+    def find_widget(self, type=None, text=None, clickable=None):
+        """Return the first widget matching the given criteria, or None."""
+        for widget, _parent in _find_widgets(
+            self.get_widget_tree(),
+            lambda w: _widget_matches(w, type=type, text=text, clickable=clickable),
+        ):
+            return widget
+        return None
+
+    def press_widget(self, type=None, text=None):
+        """Click the center of the first widget matching *type* and/or *text*."""
+        widget = self.find_widget(type=type, text=text, clickable=True)
+        if widget is None:
+            widget = self.find_widget(type=type, text=text)
+        if widget is None:
+            raise RuntimeError(
+                "No widget found with type={!r}, text={!r}".format(type, text)
+            )
+        self.press(widget["center_x"], widget["center_y"])
+
+    def _find_button_by_text(self, tree, text):
+        """Find a clickable widget whose own text or child label text matches."""
+        for widget, _parent in _find_widgets(
+            tree, lambda w: _widget_matches(w, clickable=True)
+        ):
+            if widget.get("text") == text:
+                return widget
+            for child, _p in _find_widgets(
+                widget.get("children", []), lambda w: w.get("text") == text
+            ):
+                return widget
+        return None
+
+    def wait_for_text(self, text, timeout=10, disappear=False):
+        """Wait until *text* appears (or disappears) on screen. Returns True on success."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            found = self.find_text(text)
+            if disappear and not found:
+                return True
+            if not disappear and found:
+                return True
+            time.sleep(0.25)
+        return False
+
+    def expect_text(self, text, timeout=10):
+        """Raise RuntimeError if *text* is not visible within *timeout* seconds."""
+        if not self.wait_for_text(text, timeout=timeout):
+            raise RuntimeError("Expected text {!r} not found on screen".format(text))
 
     def get_widget_tree(self):
         # Write JSON to device file (more reliable than printing large JSON over serial)
@@ -877,18 +1079,44 @@ class MPOSController:
     def screenshot(self):
         return self._backend.screenshot()
 
+    def save_screenshot(self, path):
+        return self._backend.save_screenshot(path)
+
+    def screenshot_pixels(self):
+        return self._backend.screenshot_pixels()
+
+    def screenshot_image(self):
+        return self._backend.screenshot_image()
+
     def check_free_space(self):
         return self._backend.check_free_space()
 
-    def startapp(self, appname, dismiss_onboarding=True, wait_render=True):
-        """Launch an installed app by package name. Returns True on success."""
+    def startapp(self, appname, intent=None, dismiss_onboarding=True, wait_render=True):
+        """Launch an installed app by package name. Returns True on success.
+
+        *intent* is an optional dict with keys ``action``, ``data``, and/or
+        ``extras`` and is forwarded to ``mpos.Intent``.
+        """
         if dismiss_onboarding:
             self.dismiss_onboarding()
-        out = self.exec(
-            "from mpos import AppManager; print(repr(AppManager.start_app({!r})))".format(
-                appname
+        if intent is None:
+            code = (
+                "from mpos import AppManager; "
+                "print(repr(AppManager.start_app({!r})))".format(appname)
             )
-        )
+        else:
+            lines = ["from mpos import AppManager, Intent", "intent = Intent()"]
+            if intent.get("action") is not None:
+                lines.append("intent.action = {!r}".format(intent["action"]))
+            if intent.get("data") is not None:
+                lines.append("intent.data = {!r}".format(intent["data"]))
+            if intent.get("extras") is not None:
+                lines.append("intent.extras = {!r}".format(intent["extras"]))
+            lines.append(
+                "print(repr(AppManager.start_app({!r}, intent)))".format(appname)
+            )
+            code = "\n".join(lines)
+        out = self.exec(code)
         if wait_render:
             time.sleep(0.5)
         text = out.decode("utf-8", errors="replace").strip()
@@ -904,6 +1132,18 @@ class MPOSController:
         time.sleep(boot_wait)
         self.dismiss_onboarding()
         return self.startapp(appname, dismiss_onboarding=False, wait_render=wait_render)
+
+    def run_app_with_file(self, appname, filename, boot_wait=10, wait_render=2):
+        """Boot, dismiss onboarding, and launch *appname* with a file intent."""
+        self.start()
+        time.sleep(boot_wait)
+        self.dismiss_onboarding()
+        return self.startapp(
+            appname,
+            intent={"data": filename},
+            dismiss_onboarding=False,
+            wait_render=wait_render,
+        )
 
     def backscreen(self):
         return self.exec("import mpos.ui ; mpos.ui.back_screen()")
@@ -934,6 +1174,21 @@ class MPOSController:
 
     def press_key(self, key):
         self._backend.press_key(key)
+
+    def click_button(self, text):
+        self._backend.click_button(text)
+
+    def find_widget(self, type=None, text=None, clickable=None):
+        return self._backend.find_widget(type=type, text=text, clickable=clickable)
+
+    def press_widget(self, type=None, text=None):
+        self._backend.press_widget(type=type, text=text)
+
+    def wait_for_text(self, text, timeout=10, disappear=False):
+        return self._backend.wait_for_text(text, timeout=timeout, disappear=disappear)
+
+    def expect_text(self, text, timeout=10):
+        self._backend.expect_text(text, timeout=timeout)
 
     def read_file(self, path):
         return self._backend._read_remote_file(path)

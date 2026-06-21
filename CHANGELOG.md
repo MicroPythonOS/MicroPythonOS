@@ -22,7 +22,7 @@ Frameworks:
 - Add new builtin File Explorer Activity with picker
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
 - AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
-- AppManager/Intent: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
+- AppManager: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
 - AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 - ActivityNavigator: dispatch implicit file intents to installed apps with proper app context and status-bar handling
 - Fix ChooserActivity, ViewActivity, and ShareActivity for LVGL 9.x and remove undefined references
