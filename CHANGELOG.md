@@ -42,6 +42,7 @@ Apps:
 OS:
 - Add BMP bitmap image support (with fix for LVGL 9.4 bmp scaling)
 - Fix tjpgd JPEG scaling in LVGL
+- Move MicroPythonOS-logo-white-long-w296.png to /builtin/res/
 
 0.12.2
 ======

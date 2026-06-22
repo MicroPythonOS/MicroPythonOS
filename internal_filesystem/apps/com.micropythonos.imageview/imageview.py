@@ -12,9 +12,7 @@ class ImageView(Activity):
     imagedir = "data/images"
     images = []
     image_nr = None
-    image_timer = None
     fullscreen = False
-    stopping = False
 
     # Widgets
     image = None
@@ -39,8 +37,8 @@ class ImageView(Activity):
             self.label.set_width(lv.pct(60))
 
         self.open_button = lv.button(screen)
-        self.open_button.set_size(100, 42)
-        self.open_button.align(lv.ALIGN.TOP_RIGHT, -4, 4)
+        self.open_button.set_size(DisplayMetrics.pct_of_width(25), DisplayMetrics.pct_of_height(15))
+        self.open_button.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         self.open_button.add_event_cb(self._open_file_clicked, lv.EVENT.CLICKED, None)
         open_label = lv.label(self.open_button)
         open_label.set_text("Open file...")
@@ -72,7 +70,6 @@ class ImageView(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
-        self.stopping = False
         self.images.clear()
 
         # If we were launched via "Open With", display just that one file.
@@ -91,13 +88,6 @@ class ImageView(Activity):
             # Begin with one image:
             self.show_next_image()
             self.stop_fullscreen()
-
-    def onStop(self, screen):
-        print("ImageView stopping")
-        self.stopping = True
-        if self.image_timer:
-            print("ImageView: deleting image_timer")
-            self.image_timer.delete()
 
     def no_image_mode(self):
         self.label.set_text(f"No images found in {self.imagedir}...")
@@ -179,48 +169,42 @@ class ImageView(Activity):
         self.show_image(name)
 
     def toggle_fullscreen(self, event=None):
-        print("playing...")
         if self.fullscreen:
-            self.fullscreen = False
             self.stop_fullscreen()
         else:
-            self.fullscreen = True
             self.start_fullscreen()
-        self.scale_image()
 
     def stop_fullscreen(self):
+        self.fullscreen = False
         print("stopping fullscreen")
         WidgetAnimator.smooth_show(self.label)
         WidgetAnimator.smooth_show(self.open_button)
         WidgetAnimator.smooth_show(self.prev_button)
         WidgetAnimator.smooth_show(self.delete_button)
         WidgetAnimator.smooth_show(self.next_button)
+        self.scale_image()
+        lv.group_focus_obj(self.image) # especially focus on the delete button
 
     def start_fullscreen(self):
         print("starting fullscreen")
+        self.fullscreen = True
         WidgetAnimator.smooth_hide(self.label)
         WidgetAnimator.smooth_hide(self.open_button)
         WidgetAnimator.smooth_hide(self.prev_button, hide=False)
         WidgetAnimator.smooth_hide(self.delete_button, hide=False)
         WidgetAnimator.smooth_hide(self.next_button, hide=False)
-        self.unfocus() # focus on the delete button, not previous or next
+        self.scale_image()
+        lv.group_focus_obj(self.delete_button)
 
     def show_prev_image_if_fullscreen(self, event=None):
-        if self.stopping: # closing the window results in a focus shift, which can trigger the next action in fullscreen
-            return
         if self.fullscreen:
-            self.unfocus()
+            lv.group_focus_obj(self.delete_button)
             self.show_prev_image()
 
     def show_next_image_if_fullscreen(self, event=None):
-        if self.stopping: # closing the window results in a focus shift, which can trigger the next action in fullscreen
-            return
         if self.fullscreen:
-            self.unfocus()
+            lv.group_focus_obj(self.delete_button)
             self.show_next_image()
-
-    def unfocus(self):
-        lv.group_focus_obj(self.delete_button)
 
     def show_next_image(self, event=None):
         print("showing next image...")
@@ -237,7 +221,7 @@ class ImageView(Activity):
 
     def delete_image(self, event=None):
         if self.fullscreen:
-            logger.info("Not deleting while in fullscreen")
+            self.stop_fullscreen()
             return
         filename = self.images[self.image_nr]
         try:
