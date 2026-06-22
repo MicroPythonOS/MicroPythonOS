@@ -292,6 +292,8 @@ except Exception as e:
     logger.warning("could not import/run freezefs_mount_builtin: %s", e)
 
 lv.init()
+
+# Create a focusgroup if none exists yet
 focusgroup = lv.group_get_default()
 if not focusgroup:
     focusgroup = lv.group_create()
