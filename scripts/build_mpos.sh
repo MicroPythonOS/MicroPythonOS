@@ -4,6 +4,18 @@ mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
 codebasedir=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
+disable_native_viper() {
+	echo "Temporarily disabling @micropython.native/@micropython.viper decorators for $target build..."
+	find "$1" -name '*.py' -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/'
+	find "$1" -name '*.py.bak' -delete
+}
+
+restore_native_viper() {
+	echo "Restoring @micropython.native/@micropython.viper decorators..."
+	find "$1" -name '*.py' -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)#(@micropython\.(native|viper)[[:space:]]*)$/\1\2/'
+	find "$1" -name '*.py.bak' -delete
+}
+
 target="$1"
 buildtype="$2"
 
@@ -229,6 +241,12 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
     set +x
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
+	# Native/viper decorators generate Mach-O sections that break frozen bytecode
+	# on macOS (and are unnecessary on desktop), so disable them temporarily and
+	# restore the source tree when the build finishes.
+	disable_native_viper "$codebasedir/internal_filesystem"
+	trap 'restore_native_viper "$codebasedir/internal_filesystem"' INT TERM EXIT
+
 	# Full cleanup: old .o from upstream MicroPython builds would cause link errors
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
 
