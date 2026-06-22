@@ -35,7 +35,7 @@ if [ -f "$script" ]; then
     echo "Running script $script"
     "$binary" -v -i "$script"
 else
-    CONFIG_FILE="data/com.micropythonos.settings/config.json"
+    CONFIG_FILE="data/prefs/com.micropythonos.settings/config.json"
     set_autostart_config() {
         local mode="$1"
         local early_value="$2"

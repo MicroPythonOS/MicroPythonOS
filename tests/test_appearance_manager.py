@@ -20,7 +20,7 @@ from mpos import AppearanceManager, SharedPreferences
 class TestAppearanceManagerPrefs(unittest.TestCase):
 
     APP_ID = "com.test.appearance_manager"
-    FILEPATH = "data/com.test.appearance_manager/config.json"
+    FILEPATH = "data/prefs/com.test.appearance_manager/config.json"
 
     def setUp(self):
         # Scrub any leftover prefs from previous runs so get_string()

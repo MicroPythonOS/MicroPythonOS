@@ -42,7 +42,7 @@ binary=$(readlink -f "$binary")
 chmod +x "$binary"
 
 # make sure no autostart is configured:
-rm "$scriptdir"/../internal_filesystem/data/com.micropythonos.settings/config.json
+rm -f "$scriptdir"/../internal_filesystem/data/prefs/com.micropythonos.settings/config.json
 
 one_test() {
 	file="$1"

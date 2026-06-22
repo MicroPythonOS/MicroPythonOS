@@ -30,6 +30,7 @@ Frameworks:
 - ViewActivity fallback now displays the filename plus the first 512 bytes of the file's contents
 - Activity: add `onBackPressed()` hook so an activity can intercept the back/close gesture and stay foreground until it decides to close
 - View: split the explicit `finish_current_activity()` path from `back_screen()` so `Activity.finish()` no longer re-triggers `onBackPressed()`
+- SharedPreferences: migrate and store preferences to /data/prefs/<appname> instead of /data/<appname>
 
 Apps:
 - ShowFonts: include multi-codepoint emoji (including the El Salvador flag 🇸🇻) in the all-glyphs list by using `FontManager.getEmojiStrings()`

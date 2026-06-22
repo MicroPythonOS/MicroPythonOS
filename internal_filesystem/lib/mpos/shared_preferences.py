@@ -4,14 +4,21 @@ import os
 
 logger = logging.getLogger(__name__)
 
+_PREFS_DIR = "data/prefs"
+_LEGACY_PREFS_DIR = "data"
+
+
 class SharedPreferences:
+    # Track appnames already checked for legacy migration this process.
+    _migrated_appnames = set()
+
     def __init__(self, appname, filename="config.json", defaults=None):
         """Initialize with appname, filename, and optional defaults for preferences."""
         self.appname = appname
         self.filename = filename
         self.defaults = defaults if defaults is not None else {}
-        self.filepath = f"data/{self.appname}/{self.filename}"
-        self.appdir = f"data/{self.appname}"
+        self.appdir = f"{_PREFS_DIR}/{self.appname}"
+        self.filepath = f"{self.appdir}/{self.filename}"
         self.data = {}
         self.load()
 
@@ -42,11 +49,18 @@ class SharedPreferences:
         except OSError:
             return False
 
-    def make_folder_structure(self):
-        """Create directory structure if it doesn't exist."""
+    def _ensure_prefs_dir(self):
+        """Create data/ and data/prefs/ directories if they don't exist."""
         if not self._path_exists("data"):
             if __debug__: logger.debug("Creating data/ directory")
             os.mkdir("data")
+        if not self._path_exists(_PREFS_DIR):
+            if __debug__: logger.debug("Creating %s directory", _PREFS_DIR)
+            os.mkdir(_PREFS_DIR)
+
+    def make_folder_structure(self):
+        """Create directory structure if it doesn't exist."""
+        self._ensure_prefs_dir()
         if not self._path_exists(self.appdir):
             if __debug__: logger.debug("Creating %s directory", self.appdir)
             os.mkdir(self.appdir)
@@ -54,12 +68,13 @@ class SharedPreferences:
     def _remove_empty_preference_dirs(self):
         """Remove app/data directories if they became empty."""
         self._remove_dir_if_empty(self.appdir)
+        self._remove_dir_if_empty(_PREFS_DIR)
         self._remove_dir_if_empty("data")
 
-    def load(self):
-        """Load preferences from the JSON file."""
+    def _load_file(self, path):
+        """Load preferences from the given JSON file path."""
         try:
-            with open(self.filepath, 'r') as f:
+            with open(path, 'r') as f:
                 self.data = ujson.load(f)
                 # Deliberately log only the filepath and key count, NOT the
                 # values. Prefs often hold secrets (WiFi passwords in
@@ -68,9 +83,61 @@ class SharedPreferences:
                 # to serial/REPL every time any app loaded its prefs. An
                 # app that wants rich debug output can opt in by logging
                 # selected keys itself.
-                if __debug__: logger.debug("load: Loaded preferences from %s (%s keys)", self.filepath, len(self.data))
+                if __debug__: logger.debug("load: Loaded preferences from %s (%s keys)", path, len(self.data))
         except Exception as e:
             if __debug__: logger.debug("SharedPreferences.load didn't find preferences: %s", e)
+            self.data = {}
+
+    def _migrate_legacy(self):
+        """Move preferences from the legacy path to the new path, once per appname."""
+        legacy_appdir = f"{_LEGACY_PREFS_DIR}/{self.appname}"
+        legacy_filepath = f"{legacy_appdir}/{self.filename}"
+
+        if not self._path_exists(legacy_filepath):
+            return
+
+        if __debug__:
+            logger.debug("Migrating legacy preferences for %s from %s to %s", self.appname, legacy_filepath, self.filepath)
+
+        self._ensure_prefs_dir()
+
+        # Fast path: move the whole legacy app directory in one shot.
+        if not self._path_exists(self.appdir):
+            try:
+                os.rename(legacy_appdir, self.appdir)
+                self._remove_empty_legacy_dirs()
+                return
+            except OSError:
+                # Target may already exist or rename not supported; fall back to file move.
+                pass
+
+        # Slow path: ensure appdir exists and move only this file.
+        self.make_folder_structure()
+        try:
+            os.rename(legacy_filepath, self.filepath)
+            self._remove_empty_legacy_dirs()
+        except OSError:
+            pass
+
+    def _remove_empty_legacy_dirs(self):
+        """Remove legacy app/data directories if they became empty."""
+        self._remove_dir_if_empty(f"{_LEGACY_PREFS_DIR}/{self.appname}")
+        self._remove_dir_if_empty(_LEGACY_PREFS_DIR)
+
+    def load(self):
+        """Load preferences from the JSON file, migrating legacy data if needed."""
+        if self._path_exists(self.filepath):
+            self._load_file(self.filepath)
+            return
+
+        if self.appname not in SharedPreferences._migrated_appnames:
+            SharedPreferences._migrated_appnames.add(self.appname)
+            self._migrate_legacy()
+
+        if self._path_exists(self.filepath):
+            self._load_file(self.filepath)
+        else:
+            if __debug__: logger.debug("SharedPreferences.load didn't find preferences for %s", self.appname)
             self.data = {}
 
     def get_string(self, key, default=None):
