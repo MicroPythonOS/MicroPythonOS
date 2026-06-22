@@ -292,6 +292,8 @@ class RetroGoLauncher(Activity):
         except Exception as e:
             print(f"Warning: could not unmount internal filesystem from /: {e}")
 
+        '''
+        # This is no longer needed but leave it here just in case:
         try:
             from esp32 import NVS
             nvs = NVS("fri3d.sys")
@@ -315,6 +317,7 @@ class RetroGoLauncher(Activity):
                 print("No need to update boot_partition")
         except Exception as e:
             print(f"Warning: could not write currently booted partition to boot_partition in fri3d.sys of NVS: {e}")
+        '''
 
         # Wait a few seconds so the user has time to switch off the device in the "boot to retro-go" state
         # This is useful to capture debug logging, as this triggers a re-init of the USB-to-serial.
