@@ -21,8 +21,8 @@ _BINARY_HINTS = {
         "This is an image file.\nInstall an image viewer to open it.",
     (".raw"):
         "This might be an image file.\Try an image viewer to open it.",
-    (".wav",):
-        "This is an audio file.\nInstall a music/audio player to open it.",
+        (".wav",):
+            "This is an audio file.\nInstall a music or audio player to open it.",
 }
 
 _BINARY_HINT_BY_EXT = {}
