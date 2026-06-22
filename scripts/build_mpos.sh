@@ -112,6 +112,11 @@ pushd "$codebasedir"/lvgl_micropython/lib/lvgl
 patch -p1 --forward < ../../lib_lvgl_lv_bmp.c.patch || true
 popd
 
+echo "Applying lvgl_micropython/lib/lvgl/src/libs/tjpgd scaling fix patch..."
+pushd "$codebasedir"/lvgl_micropython/lib/lvgl
+patch -p1 --forward < ../../lib_lvgl_src_libs_tjpgd_fix_scaling.patch || true
+popd
+
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
 # Pre-existence check so MPOS still builds against older pinned

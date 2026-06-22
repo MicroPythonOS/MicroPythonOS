@@ -1,8 +1,11 @@
+import logging
 import gc
 import os
 import lvgl as lv
 
 from mpos import Activity, WidgetAnimator, DisplayMetrics, Intent, add_focus_border
+
+logger = logging.getLogger(__name__)
 
 class ImageView(Activity):
 
@@ -233,6 +236,9 @@ class ImageView(Activity):
         self.show_image(name)
 
     def delete_image(self, event=None):
+        if self.fullscreen:
+            logger.info("Not deleting while in fullscreen")
+            return
         filename = self.images[self.image_nr]
         try:
             os.remove(filename)

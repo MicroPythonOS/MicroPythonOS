@@ -39,6 +39,7 @@ Apps:
 
 OS:
 - Add BMP bitmap image support (with fix for LVGL 9.4 bmp scaling)
+- Fix tjpgd JPEG scaling in LVGL
 
 0.12.2
 ======
