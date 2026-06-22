@@ -1,5 +1,7 @@
 # IMA ADPCM decoder for MicroPython
 
+import micropython
+
 _STEP_TABLE = (
     7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31,
     34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143,
@@ -12,6 +14,7 @@ _STEP_TABLE = (
 _INDEX_TABLE = (-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8)
 
 
+@micropython.native
 def _expand(predictor, step_index, nibble):
     step = _STEP_TABLE[step_index]
     diff = ((nibble & 7) * 2 + 1) * step >> 3
@@ -25,10 +28,12 @@ def _expand(predictor, step_index, nibble):
     return predictor, step_index
 
 
-def samples_per_block(block_align, channels):
+@micropython.viper
+def samples_per_block(block_align: int, channels: int) -> int:
     return 1 + (block_align - 4 * channels) * 2 // channels
 
 
+@micropython.native
 def _read_s16_le(buf, off):
     raw = int.from_bytes(buf[off:off + 2], "little")
     if raw >= 0x8000:
@@ -36,11 +41,13 @@ def _read_s16_le(buf, off):
     return raw
 
 
+@micropython.native
 def _write_s16_le(buf, off, val):
     buf[off] = val & 0xFF
     buf[off + 1] = (val >> 8) & 0xFF
 
 
+@micropython.native
 def decode_block(data, channels, block_align):
     ns_per_ch = samples_per_block(block_align, channels)
     out = bytearray(ns_per_ch * channels * 2)

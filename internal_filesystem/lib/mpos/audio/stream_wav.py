@@ -4,6 +4,7 @@
 
 import logging
 import machine
+import micropython
 import os
 import time
 from mpos.audio import adpcm_ima
@@ -226,6 +227,7 @@ class WAVStream:
     #  Bit depth conversion functions
     # ----------------------------------------------------------------------
     @staticmethod
+    @micropython.native
     def _convert_8_to_16(buf):
         """Convert 8-bit unsigned PCM to 16-bit signed PCM."""
         out = bytearray(len(buf) * 2)
@@ -239,6 +241,7 @@ class WAVStream:
         return out
 
     @staticmethod
+    @micropython.native
     def _convert_24_to_16(buf):
         """Convert 24-bit PCM to 16-bit PCM."""
         samples = len(buf) // 3
@@ -258,6 +261,7 @@ class WAVStream:
         return out
 
     @staticmethod
+    @micropython.native
     def _convert_32_to_16(buf):
         """Convert 32-bit PCM to 16-bit PCM."""
         samples = len(buf) // 4
@@ -303,6 +307,7 @@ class WAVStream:
     #  Upsampling (zero-order-hold)
     # ----------------------------------------------------------------------
     @staticmethod
+    @micropython.native
     def _upsample_buffer(raw, factor):
         """Upsample 16-bit buffer by repeating samples."""
         if factor == 1:
@@ -320,6 +325,7 @@ class WAVStream:
         return upsampled
 
     @staticmethod
+    @micropython.native
     def _volume_percent_to_shift(volume):
         """Convert 0-100 volume percent to a 0-16 right-shift amount."""
         if volume <= 0:
@@ -438,16 +444,27 @@ class WAVStream:
 
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
                     spb = adpcm_ima.samples_per_block(block_align, channels)
+
+                    # Decode enough blocks per chunk for ~100 ms of output audio
+                    target_decoded_bytes = max(
+                        playback_rate * 2 * channels // 10,
+                        spb * 2 * channels,
+                    )
+                    blocks_per_chunk = max(1, target_decoded_bytes // (spb * 2 * channels))
+
                     frames_so_far = 0
                     while frames_so_far < total_samples_frames:
                         if not self._keep_running:
                             if __debug__: logger.debug("Playback stopped by user")
                             break
 
-                        # Read one or more complete blocks
-                        max_blocks = max(1, (total_samples_frames - frames_so_far + spb - 1) // spb)
-                        to_read = min(max_blocks * block_align, int(data_size - (f.tell() - data_start)))
-                        to_read -= to_read % block_align
+                        remaining_compressed = data_size - (f.tell() - data_start)
+                        remaining_compressed -= remaining_compressed % block_align
+                        if remaining_compressed <= 0:
+                            break
+
+                        max_blocks = min(blocks_per_chunk, remaining_compressed // block_align)
+                        to_read = max_blocks * block_align
                         if to_read <= 0:
                             break
 
@@ -487,6 +504,10 @@ class WAVStream:
 
                         frames_so_far += frames
                         self._progress_samples = frames_so_far
+
+                        # Yield so the UI thread gets a chance to run
+                        if self._keep_running:
+                            time.sleep_ms(1)
 
                 else:
                     # Chunk size tuning notes:
@@ -552,6 +573,10 @@ class WAVStream:
 
                         total_original += to_read
                         self._progress_samples = total_original // bytes_per_sample
+
+                        # Yield so the UI thread gets a chance to run
+                        if self._keep_running:
+                            time.sleep_ms(1)
 
                 if self._i2s and self._keep_running:
                     try:
