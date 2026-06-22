@@ -40,6 +40,7 @@ uint32_t g_fps_frames;
 
 #define BRICK_ROWS 12
 #define BRICK_COLS 8
+#define BALL_SIZE 3
 uint8_t g_bricks[BRICK_ROWS][BRICK_COLS];
 
 static uint32_t ticks_ms(void) {
@@ -61,25 +62,6 @@ static inline int clamp_int(int value, int min_value, int max_value) {
 
 static inline size_t framebuffer_max_pixels(void) {
     return g_framebuffer_max_pixels;
-}
-
-static void draw_pixel(int x, int y, uint16_t color) {
-    if (x < 0 || y < 0) {
-        return;
-    }
-    if ((size_t)x >= g_framebuffer_width || (size_t)y >= g_framebuffer_height) {
-        return;
-    }
-    if ((size_t)y < g_render_y_offset || (size_t)y >= (g_render_y_offset + g_render_height)) {
-        return;
-    }
-    const size_t local_y = (size_t)y - g_render_y_offset;
-    const size_t idx = local_y * g_framebuffer_width + (size_t)x;
-    const size_t max_pixels = framebuffer_max_pixels();
-    if (idx >= max_pixels) {
-        return;
-    }
-    g_framebuffer[idx] = color;
 }
 
 static void draw_rect(int x, int y, int w, int h, uint16_t color) {
@@ -335,7 +317,9 @@ static mp_obj_t render(size_t n_args, const mp_obj_t *args) {
 
     // Draw paddle and ball.
     draw_rect(g_paddle_x, paddle_y, g_paddle_width, g_paddle_height, 0xFFFF); // RGB565 white
-    draw_pixel((int)g_ball_x, (int)g_ball_y, 0xFFFF);
+    const int ball_draw_x = (int)g_ball_x - (BALL_SIZE / 2);
+    const int ball_draw_y = (int)g_ball_y - (BALL_SIZE / 2);
+    draw_rect(ball_draw_x, ball_draw_y, BALL_SIZE, BALL_SIZE, 0xFFFF);
 
     return mp_const_none;
 }
