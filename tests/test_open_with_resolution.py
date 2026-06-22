@@ -164,6 +164,22 @@ class TestFileTypeResolution(unittest.TestCase):
         self.assertEqual(handlers[0].activity_class, FileExplorerActivity)
         self.assertIsNone(handlers[0].app_fullname)
 
+    def test_file_type_resolution_is_case_insensitive(self):
+        """Uppercase extensions should resolve the same handler as lowercase ones."""
+        self._register_file_handler(
+            "view", "com.micropythonos.texteditor", "text_editor.py", "TextEditor",
+            _FakeFallback, path_pattern=[".txt", ".json", ".md"],
+        )
+
+        for ext in (".json", ".JSON", ".Json", ".txt", ".TXT"):
+            with self.subTest(ext=ext):
+                handlers = AppManager.resolve_activity(
+                    Intent(action="view", data="/sdcard/document" + ext)
+                )
+                self.assertEqual(len(handlers), 1)
+                self.assertEqual(handlers[0].activity_class, _FakeFallback)
+                self.assertEqual(handlers[0].app_fullname, "com.micropythonos.texteditor")
+
 
 if __name__ == "__main__":
     unittest.main()
