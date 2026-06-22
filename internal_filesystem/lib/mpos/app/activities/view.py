@@ -10,6 +10,26 @@ logger = logging.getLogger(__name__)
 # Number of bytes to show from the beginning of a file.
 _MAX_PREVIEW_BYTES = 512
 
+# Threshold (in percent) of non-whitespace control characters used to
+# classify unknown data as binary.
+_BINARY_CONTROL_THRESHOLD = 8
+
+# Friendly hints for files that end up in the generic viewer only because
+# no file-type-specific handler is installed for them.
+_BINARY_HINTS = {
+    (".png", ".jpg", ".jpeg", ".raw", ".bmp"):
+        "This is an image file.\nInstall an image viewer to open it.",
+    (".raw"):
+        "This might be an image file.\Try an image viewer to open it.",
+    (".wav",):
+        "This is an audio file.\nInstall a music/audio player to open it.",
+}
+
+_BINARY_HINT_BY_EXT = {}
+for _exts, _msg in _BINARY_HINTS.items():
+    for _ext in _exts:
+        _BINARY_HINT_BY_EXT[_ext] = _msg
+
 
 class ViewActivity(Activity):
     def __init__(self):
@@ -18,14 +38,53 @@ class ViewActivity(Activity):
         self._content_label = None
 
     def _read_preview(self, path):
-        """Read the first bytes of a file and return them as a printable string."""
+        """Read the first bytes of a file and return a printable preview or hint."""
         try:
             with open(path, "rb") as f:
                 data = f.read(_MAX_PREVIEW_BYTES)
-            return data.decode("utf-8", "replace")
         except Exception as e:
             if __debug__: logger.debug("ViewActivity could not read %s: %s", path, e)
-            return "(could not read file: %s)" % e
+            return "(could not read file: %s)" % repr(e)
+
+        if self._path_has_binary_extension(path) or self._is_binary(data):
+            return self._binary_hint_for_path(path)
+
+        try:
+            return data.decode("utf-8", "replace")
+        except Exception as e:
+            if __debug__: logger.debug("ViewActivity could not decode %s: %s", path, e)
+            return self._binary_hint_for_path(path)
+
+    @staticmethod
+    def _is_binary(data):
+        """Return True if data looks like binary rather than text."""
+        if not data:
+            return False
+        if b"\x00" in data:
+            return True
+        non_text = 0
+        for byte in data:
+            if byte < 32 and byte not in (9, 10, 13):
+                non_text += 1
+        return (non_text * 100) // len(data) > _BINARY_CONTROL_THRESHOLD
+
+    @staticmethod
+    def _path_has_binary_extension(path):
+        """Return True if the path ends with a known binary extension."""
+        lower_path = path.lower()
+        for ext in _BINARY_HINT_BY_EXT:
+            if lower_path.endswith(ext):
+                return True
+        return False
+
+    @staticmethod
+    def _binary_hint_for_path(path):
+        """Return a human-friendly hint for a binary file path."""
+        lower_path = path.lower()
+        for ext, msg in _BINARY_HINT_BY_EXT.items():
+            if lower_path.endswith(ext):
+                return msg
+        return "This is a binary file.\nIt cannot be previewed."
 
     def _build_screen(self):
         screen = lv.obj()
