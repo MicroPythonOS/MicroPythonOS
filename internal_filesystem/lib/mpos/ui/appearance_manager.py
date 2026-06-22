@@ -102,9 +102,9 @@ class AppearanceManager:
         
         Example:
             from mpos import AppearanceManager
-            import mpos.config
-            
-            prefs = mpos.config.get_shared_preferences()
+            from mpos import SharedPreferences
+
+            prefs = SharedPreferences("theme_settings")
             AppearanceManager.init(prefs)
         """
         # Load light/dark mode preference
@@ -202,9 +202,9 @@ class AppearanceManager:
         
         Example:
             from mpos import AppearanceManager
-            import mpos.config
+            import mpos.shared_preferences
             
-            prefs = mpos.config.SharedPreferences("theme_settings")
+            prefs = mpos.shared_preferences.SharedPreferences("theme_settings")
             AppearanceManager.set_theme(prefs)
         """
         cls.init(prefs)

@@ -1008,9 +1008,9 @@ class MockEditor:
 
 
 class MockMpos:
-    """Mock mpos module with config and time."""
+    """Mock mpos module with shared_preferences and time."""
 
-    class config:
+    class shared_preferences:
         @staticmethod
         def SharedPreferences(app_id):
             return MockSharedPreferences(app_id)
@@ -1318,5 +1318,5 @@ def make_usocket_module(socket_cls):
     return MockUsocket
 
 
-def make_config_module(shared_prefs_cls):
+def make_shared_preferences_module(shared_prefs_cls):
     return type("module", (), {"SharedPreferences": shared_prefs_cls})()

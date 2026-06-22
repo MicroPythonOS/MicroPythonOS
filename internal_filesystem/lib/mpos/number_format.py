@@ -1,4 +1,4 @@
-from . import config
+from . import shared_preferences
 
 
 NUMBER_FORMAT_MAP = {
@@ -22,7 +22,7 @@ class NumberFormat:
     @staticmethod
     def refresh_preference():
         """Refresh the number format preference from SharedPreferences."""
-        NumberFormat.number_format_preference = config.SharedPreferences(
+        NumberFormat.number_format_preference = shared_preferences.SharedPreferences(
             "com.micropythonos.settings"
         ).get_string("number_format")
         if not NumberFormat.number_format_preference:

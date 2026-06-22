@@ -1,5 +1,5 @@
 from .time_zones import TIME_ZONE_MAP
-from . import config
+from . import shared_preferences
 
 
 class TimeZone:
@@ -37,6 +37,6 @@ class TimeZone:
         """
         Refresh the timezone preference from SharedPreferences.
         """
-        TimeZone.timezone_preference = config.SharedPreferences("com.micropythonos.settings").get_string("timezone")
+        TimeZone.timezone_preference = shared_preferences.SharedPreferences("com.micropythonos.settings").get_string("timezone")
         if not TimeZone.timezone_preference:
             TimeZone.timezone_preference = "Etc/GMT" # Use a default value so that it doesn't refresh every time the time is requested

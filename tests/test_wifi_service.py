@@ -11,7 +11,7 @@ from mpos.testing.mocks import HotspotMockNetwork, MockMpos, MockSharedPreferenc
 
 # Inject mocks before importing WifiService
 sys.modules["mpos"] = MockMpos
-sys.modules["mpos.config"] = MockMpos.config
+sys.modules["mpos.shared_preferences"] = MockMpos.shared_preferences
 sys.modules["mpos.time"] = MockMpos.time
 
 # Add path to wifi_service.py

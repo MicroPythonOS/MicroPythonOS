@@ -2,7 +2,7 @@ import logging
 import lvgl as lv
 
 import mpos.time
-import mpos.config
+import mpos.shared_preferences
 from ..battery_manager import BatteryManager
 from .display_metrics import DisplayMetrics
 from .appearance_manager import AppearanceManager
@@ -485,7 +485,7 @@ def create_drawer():
     brightness_row.set_flex_flow(lv.FLEX_FLOW.COLUMN)
     brightness_row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
 
-    prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
+    prefs = mpos.shared_preferences.SharedPreferences("com.micropythonos.settings")
     brightness_int = prefs.get_int("display_brightness", 100)
     if mpos.ui.main_display:
         mpos.ui.main_display.set_backlight(brightness_int)
@@ -507,7 +507,7 @@ def create_drawer():
             mpos.ui.main_display.set_backlight(brightness_int)
     def brightness_slider_released(e):
         brightness_int = slider.get_value()
-        prefs = mpos.config.SharedPreferences("com.micropythonos.settings")
+        prefs = mpos.shared_preferences.SharedPreferences("com.micropythonos.settings")
         old_brightness_int = prefs.get_int("display_brightness")
         if old_brightness_int != brightness_int:
             editor = prefs.edit()

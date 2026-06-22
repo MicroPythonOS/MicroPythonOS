@@ -6,7 +6,7 @@ from .content.intent import Intent
 from .activity_navigator import ActivityNavigator, get_foreground_app
 
 from .content.app_manager import AppManager
-from .config import SharedPreferences
+from .shared_preferences import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net.wifi_service import WifiService
 from .audio.audiomanager import AudioManager
@@ -65,7 +65,7 @@ from .ui import focus_direction
 
 # Utility modules
 from . import ui
-from . import config
+from . import shared_preferences
 from . import net
 from . import content
 from . import time
@@ -118,7 +118,7 @@ __all__ = (
     "get_all_children", "simulate_long_press", "wait_for_text", "wait_for_widget",
     "retry_action_until", "wait_for_focus",
     # Submodules
-    "ui", "config", "net", "content", "time", "sensor_manager",
+    "ui", "shared_preferences", "net", "content", "time", "sensor_manager",
     "camera_manager", "sdcard", "audio", "hardware",
     # Timezone utilities
     "TimeZone"

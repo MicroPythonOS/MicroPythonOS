@@ -1,7 +1,7 @@
 import logging
 import time
 
-from .config import SharedPreferences
+from .shared_preferences import SharedPreferences
 from .content.intent import Intent
 
 logger = logging.getLogger(__name__)

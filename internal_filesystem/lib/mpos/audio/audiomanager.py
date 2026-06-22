@@ -6,7 +6,7 @@ import logging
 import math
 import os
 
-from ..config import SharedPreferences
+from ..shared_preferences import SharedPreferences
 from ..task_manager import TaskManager
 
 logger = logging.getLogger(__name__)

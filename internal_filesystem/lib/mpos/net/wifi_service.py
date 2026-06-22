@@ -13,7 +13,7 @@ This service works alongside ConnectivityManager which monitors connection statu
 import logging
 import time
 
-import mpos.config
+import mpos.shared_preferences
 import mpos.time
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ class WifiService:
 
     @staticmethod
     def _get_hotspot_config():
-        prefs = mpos.config.SharedPreferences(HOTSPOT_PREFS_KEY)
+        prefs = mpos.shared_preferences.SharedPreferences(HOTSPOT_PREFS_KEY)
         return {
             "enabled": prefs.get_bool("enabled", False),
             "ssid": prefs.get_string("ssid", "MicroPythonOS"),
@@ -338,7 +338,7 @@ class WifiService:
             WifiService.disable_hotspot(network_module=network_module)
 
         # Load saved access points from config
-        WifiService.access_points = mpos.config.SharedPreferences(
+        WifiService.access_points = mpos.shared_preferences.SharedPreferences(
             WIFI_SERVICE_PREFS_KEY
         ).get_dict("access_points")
 
@@ -583,7 +583,7 @@ class WifiService:
     @staticmethod
     def _ensure_access_points_loaded():
         if not WifiService.access_points:
-            WifiService.access_points = mpos.config.SharedPreferences(
+            WifiService.access_points = mpos.shared_preferences.SharedPreferences(
                 WIFI_SERVICE_PREFS_KEY
             ).get_dict("access_points")
 
@@ -728,7 +728,7 @@ class WifiService:
             hidden: Whether this is a hidden network (always try connecting)
         """
         # Load current saved networks
-        prefs = mpos.config.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
+        prefs = mpos.shared_preferences.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
 
         # Build the network config
         network_config = {"password": password}
@@ -758,7 +758,7 @@ class WifiService:
             bool: True if network was found and removed, False otherwise
         """
         # Load current saved networks
-        prefs = mpos.config.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
+        prefs = mpos.shared_preferences.SharedPreferences(WIFI_SERVICE_PREFS_KEY)
 
         # Check if the network exists without mutating prefs.data
         if ssid not in prefs.get_dict("access_points"):

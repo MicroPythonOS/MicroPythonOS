@@ -144,8 +144,8 @@ class TestGraphicalMposKeyboard(unittest.TestCase):
         print("\n=== Testing keyboard visibility in light mode ===")
 
         # Set light mode (should already be default)
-        import mpos.config
-        prefs = mpos.config.SharedPreferences("theme_settings")
+        import mpos.shared_preferences
+        prefs = mpos.shared_preferences.SharedPreferences("theme_settings")
         editor = prefs.edit()
         editor.put_string("theme_light_dark", "light")
         editor.commit()

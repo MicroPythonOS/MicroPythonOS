@@ -18,7 +18,7 @@ Usage:
 import unittest
 import lvgl as lv
 import mpos.ui
-import mpos.config
+import mpos.shared_preferences
 import sys
 from mpos import (
     wait_for_render,
@@ -32,7 +32,7 @@ class TestKeyboardStyling(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         # Save current theme setting
-        prefs = mpos.config.SharedPreferences("theme_settings")
+        prefs = mpos.shared_preferences.SharedPreferences("theme_settings")
         self.original_theme = prefs.get_string("theme_light_dark", "light")
 
         print(f"\n=== Keyboard Styling Test Setup ===")
@@ -42,7 +42,7 @@ class TestKeyboardStyling(unittest.TestCase):
     def tearDown(self):
         """Clean up after each test method."""
         # Restore original theme
-        prefs = mpos.config.SharedPreferences("theme_settings")
+        prefs = mpos.shared_preferences.SharedPreferences("theme_settings")
         editor = prefs.edit()
         editor.put_string("theme_light_dark", self.original_theme)
         editor.commit()
@@ -208,7 +208,7 @@ class TestKeyboardStyling(unittest.TestCase):
         print("\n=== Testing keyboard buttons in LIGHT mode ===")
 
         # Set theme to light mode
-        prefs = mpos.config.SharedPreferences("theme_settings")
+        prefs = mpos.shared_preferences.SharedPreferences("theme_settings")
         editor = prefs.edit()
         editor.put_string("theme_light_dark", "light")
         editor.commit()
@@ -257,7 +257,7 @@ class TestKeyboardStyling(unittest.TestCase):
         print("\n=== Testing keyboard buttons in DARK mode ===")
 
         # Set theme to dark mode
-        prefs = mpos.config.SharedPreferences("theme_settings")
+        prefs = mpos.shared_preferences.SharedPreferences("theme_settings")
         editor = prefs.edit()
         editor.put_string("theme_light_dark", "dark")
         editor.commit()
@@ -305,7 +305,7 @@ class TestKeyboardStyling(unittest.TestCase):
         print("\n=== Testing that buttons are NOT pure white in light mode ===")
 
         # Set theme to light mode
-        prefs = mpos.config.SharedPreferences("theme_settings")
+        prefs = mpos.shared_preferences.SharedPreferences("theme_settings")
         editor = prefs.edit()
         editor.put_string("theme_light_dark", "light")
         editor.commit()

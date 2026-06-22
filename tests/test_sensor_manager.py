@@ -7,7 +7,7 @@ from mpos.testing.mocks import (
     MockQMI8658,
     MockSharedPreferences,
     MockWsenIsds,
-    make_config_module,
+    make_shared_preferences_module,
     make_machine_i2c_module,
 )
 
@@ -19,7 +19,7 @@ _ACCELSCALE_RANGE_8G = 0b10
 _GYROSCALE_RANGE_256DPS = 0b100
 
 
-mock_config = make_config_module(MockSharedPreferences)
+mock_shared_preferences = make_shared_preferences_module(MockSharedPreferences)
 
 # Create mock modules
 mock_machine = make_machine_i2c_module(MockI2C)
@@ -54,7 +54,7 @@ sys.modules['drivers.imu_sensor'] = type('module', (), {})()
 sys.modules['drivers.imu_sensor.qmi8658'] = mock_qmi8658
 sys.modules['drivers.imu_sensor.wsen_isds'] = mock_wsen_isds
 sys.modules['esp32'] = mock_esp32
-sys.modules['mpos.config'] = mock_config
+sys.modules['mpos.shared_preferences'] = mock_shared_preferences
 
 # Mock _thread for thread safety testing
 try:

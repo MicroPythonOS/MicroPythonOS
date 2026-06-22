@@ -558,7 +558,7 @@ class ImuManager:
             return
 
         try:
-            from mpos.config import SharedPreferences
+            from mpos.shared_preferences import SharedPreferences
 
             prefs_new = SharedPreferences(
                 "com.micropythonos.settings", filename=IMU_CALIBRATION_FILENAME
@@ -576,7 +576,7 @@ class ImuManager:
             return
 
         try:
-            from mpos.config import SharedPreferences
+            from mpos.shared_preferences import SharedPreferences
 
             prefs = SharedPreferences(
                 "com.micropythonos.settings", filename=IMU_CALIBRATION_FILENAME

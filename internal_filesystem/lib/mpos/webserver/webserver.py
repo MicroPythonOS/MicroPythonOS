@@ -3,7 +3,7 @@
 import logging
 logger = logging.getLogger(__name__)
 
-from ..config import SharedPreferences
+from ..shared_preferences import SharedPreferences
 from .webrepl_http import accept_handler
 
 

@@ -14,7 +14,7 @@ from mpos.testing.mocks import MockSharedPreferences, create_mock_module
 inject_mocks({
     "machine": MockMachine(),
     "_thread": MockThread,
-    "mpos.config": create_mock_module("mpos.config", SharedPreferences=MockSharedPreferences),
+    "mpos.shared_preferences": create_mock_module("mpos.shared_preferences", SharedPreferences=MockSharedPreferences),
 })
 
 # Now import the module to test
