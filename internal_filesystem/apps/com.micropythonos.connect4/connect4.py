@@ -55,7 +55,6 @@ class Connect4(Activity):
         self.column_buttons = []
         self.status_label = None
         self.difficulty_label = None
-        self.last_time = 0
 
     def onCreate(self):
         self.screen = lv.obj()
@@ -141,9 +140,6 @@ class Connect4(Activity):
             self.column_buttons.append(btn)
 
         self.setContentView(self.screen)
-
-    def onResume(self, screen):
-        self.last_time = time.ticks_ms()
 
     def cycle_difficulty(self, event):
         if self.animating:
