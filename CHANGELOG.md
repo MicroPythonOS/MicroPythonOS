@@ -4,10 +4,10 @@ Future release (next version)
 Put unreleased changes here!
 
 Builtin Apps:
-- Add File Manager to builtin apps, with support for dispatching an implicit "view" intent to open files
+- Add File Manager to builtin apps, with support for dispatching an implicit 'view' intent to open files
 - AppStore: make BadgeHub.eu the default backend, with Apps.MicroPythonOS.com second, cleanups
 - AppStore: prioritize display of known icons, show installed apps first (no network needed)
-- OSUpdate: show "OS Update" instead of "OTA Update" during progress
+- OSUpdate: show 'OS Update' instead of 'OTA Update' during progress
 
 Board Support:
 - Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
@@ -18,12 +18,12 @@ Drivers:
 
 Frameworks:
 - Add generic `InputActivity` for reusable single-value input UI; `SettingActivity` is now a thin wrapper that launches `InputActivity` and persists the result
-- FontManager: add `getEmojiStrings()` to return complete emoji sequences (e.g. flag pairs like 🇸🇻) for visual emoji lists
+- FontManager: add a few more emojis and have `getEmojiStrings()` return complete emoji sequences (e.g. flag pairs) for visual emoji lists
 - Add new `add_focus_border` utility and migrate all focus/defocus border handlers (ImageView, MusicPlayer, ShowFonts, About, HowTo, Launcher, WiFi Settings, Connect4, SettingsActivity, topmenu) to use it
 - Add new builtin File Explorer Activity with picker
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
-- AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
-- AppManager: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
+- AppManager: move to new 'flat' mpk structure to reduce directory overhead by LittleFS
+- AppManager: add file-type association support (mimeType/pathPattern intent filters) and an 'Open With' chooser
 - AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 - ActivityNavigator: dispatch implicit file intents to installed apps with proper app context and status-bar handling
 - Fix ChooserActivity, ViewActivity, and ShareActivity for LVGL 9.x and remove undefined references
@@ -31,13 +31,6 @@ Frameworks:
 - Activity: add `onBackPressed()` hook so an activity can intercept the back/close gesture and stay foreground until it decides to close
 - View: split the explicit `finish_current_activity()` path from `back_screen()` so `Activity.finish()` no longer re-triggers `onBackPressed()`
 - SharedPreferences: migrate and store preferences to /data/prefs/<appname> instead of /data/<appname>
-
-Apps:
-- ShowFonts: include multi-codepoint emoji (including the El Salvador flag 🇸🇻) in the all-glyphs list by using `FontManager.getEmojiStrings()`
-- Music Player: declare support for .wav files and open them directly when launched via "Open With"
-- Image View: declare support for .png, .jpg, .jpeg, and .raw images and open a single image when launched via "Open With"
-- Image View: add "Open File..." button using the File Explorer Activity picker; position filename label in the top-left corner; add focus border to the image
-- TextEditor: fix closing with unsaved changes destroying the UI before the save prompt could be answered; now prompts Yes/No/Cancel via `onBackPressed()` and only closes after the user decides
 
 OS:
 - Add BMP bitmap image support (with fix for LVGL 9.4 bmp scaling)
