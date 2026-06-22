@@ -26,7 +26,7 @@ def _get_boot_splash_src():
         os.stat("data/images/boot_splash.png")
         return custom_splash
     except Exception:
-        return "M:builtin/MicroPythonOS-logo-white-long-w296.png"
+        return "M:builtin/res/MicroPythonOS-logo-white-long-w296.png"
 
 def init_rootscreen():
     """Initialize the root screen and set display metrics."""
