@@ -243,13 +243,17 @@ from mpos import AudioManager
 #
 # It's possible to send only to the headset (and silence the communicator) by simply setting sck to a "wrong" pin like IO10 (badge link).
 # That could be useful sometimes, to use the communicator for easy typing while having the communicator's speaker silent.
-#
-# But the communicator's DAC is already much more quiet than the headset's, so very low volume on the headset will approximate a "silent" communicator already.
-# And the default "send to both" behavior is very user friendly, as it means the user doesn't have to switch or set anything.
-headset_i2s_output_pins = {
+both_i2s_output_pins = {
     'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
     'sd': 16,       # Serial Data OUT (speaker/DAC)
     'sck': 2,       # SCLK aka BCLK is optional for CJC4344 DAC hardware (but MicroPython I2S needs a valid pin, could also be set to something random like IO10 badge link)
+    'mck': 17,      # MCLK (mandatory) - not driving it will disable the chip.
+}
+
+headset_i2s_output_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'sck': 10,      # PURPOSELY WRONG OUTPUT PIN TO PREVENT ALSO DRIVING COMMUNICATOR - SCLK aka BCLK is optional for CJC4344 DAC hardware (but MicroPython I2S needs a valid pin so use rarely-used badgelink)
     'mck': 17,      # MCLK (mandatory) - not driving it will disable the chip.
 }
 
@@ -276,12 +280,13 @@ if btn_start.value() == 0:
             'sck': 10,      # SCLK aka BCLK is optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin so set it to IO10 (badge link) for now. It's 17 on the prototype and 2 in final device.
             'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator. Not driving it will disable the chip. Will change to 17 in final device.
         }
+        both_i2s_output_pins = headset_i2s_output_pins # prototype doesnt support both
 
 AudioManager.add(
     AudioManager.Output(
-        name="Headset Output",
+        name="Headset+Communicator Output",
         kind="i2s",
-        i2s_pins=headset_i2s_output_pins,
+        i2s_pins=both_i2s_output_pins,
     )
 )
 
@@ -299,6 +304,14 @@ buzzer_output = AudioManager.add(
         name="Badge Buzzer",
         kind="buzzer",
         buzzer_pin=38,
+    )
+)
+
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="Headset Output",
+        kind="i2s",
+        i2s_pins=headset_i2s_output_pins,
     )
 )
 
