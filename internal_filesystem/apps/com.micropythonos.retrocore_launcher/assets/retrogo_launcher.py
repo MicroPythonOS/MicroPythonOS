@@ -1,1 +1,0 @@
-../../com.micropythonos.doom_launcher/assets/retrogo_launcher.py
