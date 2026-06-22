@@ -72,13 +72,22 @@ class ImageView(Activity):
     def onResume(self, screen):
         self.images.clear()
 
-        # If we were launched via "Open With", display just that one file.
+        # If we were launched via "Open With", start at that file but still
+        # allow browsing the rest of the folder with next/previous.
         incoming_filename = self.getIntent().extras.get("filename") or self.getIntent().data
         if incoming_filename:
-            self.label.set_text(incoming_filename)
-            self.images = [incoming_filename]
-            self.image_nr = None
-            self.show_next_image()
+            image_dir = self.imagedir
+            slash = incoming_filename.rfind("/")
+            if slash >= 0:
+                image_dir = incoming_filename[:slash]
+            self.images = self._collect_images_from_dir(image_dir)
+            try:
+                self.image_nr = self.images.index(incoming_filename)
+            except ValueError:
+                self.images = [incoming_filename]
+                self.image_nr = 0
+            self.show_image(incoming_filename)
+            self.stop_fullscreen()
             return
 
         self.images = self._collect_images_from_dir(self.imagedir)
