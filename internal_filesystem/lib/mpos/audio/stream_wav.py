@@ -343,6 +343,7 @@ class WAVStream:
     # ----------------------------------------------------------------------
     def play(self):
         """Main synchronous playback routine (runs in separate thread)."""
+        logger.setLevel(logging.INFO)
         self._is_playing = True
 
         try:
@@ -466,8 +467,10 @@ class WAVStream:
                     f.seek(data_start)
                     self._progress_samples = 0
                     total_original = 0
+                    logger.info("stream_wav loop %s start (seek done)", self._repeat_played)
 
                     while total_original < data_size and self._keep_running:
+                        is_first_chunk = total_original == 0
                         if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
                             remaining_compressed = data_size - total_original
                             remaining_compressed -= remaining_compressed % block_align
@@ -484,8 +487,12 @@ class WAVStream:
                                 break
 
                             raw = bytearray()
+                            if is_first_chunk:
+                                logger.info("stream_wav loop %s first chunk read start", self._repeat_played)
                             for off in range(0, len(raw_compressed), block_align):
                                 raw.extend(adpcm_ima.decode_block(raw_compressed[off:off + block_align], channels, block_align))
+                            if is_first_chunk:
+                                logger.info("stream_wav loop %s first chunk decode done", self._repeat_played)
                         else:
                             # PCM: read raw bytes straight from the file.
                             # Chunk size tuning notes:
@@ -501,7 +508,11 @@ class WAVStream:
                             if to_read <= 0:
                                 break
 
+                            if is_first_chunk:
+                                logger.info("stream_wav loop %s first chunk read start", self._repeat_played)
                             raw = bytearray(f.read(to_read))
+                            if is_first_chunk:
+                                logger.info("stream_wav loop %s first chunk read done", self._repeat_played)
                             if not raw:
                                 break
 
@@ -534,6 +545,8 @@ class WAVStream:
                                     time.sleep_ms(1)
                                     continue
                                 remaining = remaining[written:]
+                            if is_first_chunk:
+                                logger.info("stream_wav loop %s first chunk write done", self._repeat_played)
                         else:
                             # Simulate playback timing if no I2S
                             num_samples = len(raw) // (2 * channels)
@@ -544,6 +557,10 @@ class WAVStream:
                             self._progress_samples = (total_original // block_align) * spb
                         else:
                             self._progress_samples = total_original // bytes_per_sample
+
+                        is_last_chunk = total_original >= data_size
+                        if is_last_chunk:
+                            logger.info("stream_wav loop %s last chunk written", self._repeat_played)
 
                         # Yield so the UI thread gets a chance to run
                         if self._keep_running:
