@@ -456,19 +456,53 @@ class WAVStream:
                     )
                     blocks_per_chunk = max(1, target_decoded_bytes // (spb * 2 * channels))
 
+                    # Pre-decode the opening chunk once. At each loop boundary we
+                    # write this lead-in immediately so I2S never runs dry before
+                    # the next file-seek/decode cycle catches up.
+                    f.seek(data_start)
+                    leadin_blocks = min(blocks_per_chunk, data_size // block_align)
+                    leadin_compressed = bytearray(f.read(leadin_blocks * block_align))
+                    leadin_buf = bytearray()
+                    if leadin_compressed:
+                        for off in range(0, len(leadin_compressed), block_align):
+                            leadin_buf.extend(adpcm_ima.decode_block(leadin_compressed[off:off + block_align], channels, block_align))
+                        if upsample_factor > 1:
+                            leadin_buf = self._upsample_buffer(leadin_buf, upsample_factor)
+                        if self.volume < 100:
+                            volume_shift = self._volume_percent_to_shift(self.volume)
+                            if self._i2s and volume_shift > 0:
+                                self._i2s.shift(buf=leadin_buf, bits=16, shift=-volume_shift)
+                    leadin_compressed_size = len(leadin_compressed)
+
                     while self._keep_running:
                         if self._repeat_played >= self.repeat_count:
                             break
                         self._repeat_played += 1
-                        f.seek(data_start)
-                        self._progress_samples = 0
-                        frames_so_far = 0
 
-                        while frames_so_far < total_samples_frames:
-                            if not self._keep_running:
-                                if __debug__: logger.debug("Playback stopped by user")
-                                break
+                        # Write the pre-decoded lead-in first, then continue with
+                        # the rest of the file. This removes seek+decode latency
+                        # from the loop boundary.
+                        if leadin_buf and self._keep_running:
+                            self._progress_samples = 0
+                            frames_so_far = 0
+                            if self._i2s:
+                                remaining = memoryview(leadin_buf)
+                                while remaining:
+                                    written = self._i2s.write(remaining)
+                                    if written is None:
+                                        written = len(remaining)
+                                    if written <= 0:
+                                        time.sleep_ms(1)
+                                        continue
+                                    remaining = remaining[written:]
+                            else:
+                                time.sleep(len(leadin_buf) / (2 * channels) / playback_rate)
+                            frames_so_far = len(leadin_buf) // (2 * channels)
+                            self._progress_samples = frames_so_far
 
+                        f.seek(data_start + leadin_compressed_size)
+
+                        while frames_so_far < total_samples_frames and self._keep_running:
                             remaining_compressed = data_size - (f.tell() - data_start)
                             remaining_compressed -= remaining_compressed % block_align
                             if remaining_compressed <= 0:
