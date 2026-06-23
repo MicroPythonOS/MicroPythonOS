@@ -282,8 +282,8 @@ class WifiService:
             wlan = WifiService._get_sta_wlan(net)
             wlan.connect(ssid, password)
 
-            # Wait up to 10 seconds for connection
-            for i in range(10):
+            # Wait up to 13 seconds for connection
+            for i in range(13):
                 if wlan.isconnected():
                     if __debug__: logger.debug("Connected to '%s' after %s seconds with IP: %s", ssid, i+1, wlan.ipconfig('addr4'))
 

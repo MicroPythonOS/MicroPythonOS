@@ -6,6 +6,9 @@ Put unreleased changes here!
 Builtin Apps:
 - About: fix logo not showing
 
+Frameworks:
+- WifiService: increase connection timeout from 10 to 13 seconds
+
 OS:
 - Increase size of esp32-small and lilygo_t4 partitions to 3800000 to accomodate esp32 builds
 
