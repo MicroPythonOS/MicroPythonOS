@@ -446,6 +446,21 @@ class WAVStream:
                             data_size,
                         )
 
+                # For gapless looping of RAM-loaded PCM content, duplicate the
+                # buffer 3x so the I2S pipeline sees one continuous stream
+                # instead of frequent loop boundaries.
+                if (
+                    raw_data is not None
+                    and format_tag == WAVStream.WAVE_FORMAT_PCM
+                    and bytes_per_sample > 0
+                    and self.repeat_count > 1
+                ):
+                    multiplier = min(3, self.repeat_count)
+                    raw_data = raw_data * multiplier
+                    data_size = len(raw_data)
+                    total_samples_frames = data_size // bytes_per_sample
+                    self.repeat_count = (self.repeat_count + multiplier - 1) // multiplier
+
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM or bytes_per_sample > 0:
                     self._total_samples = total_samples_frames
                     self._duration_ms = int((self._total_samples / original_rate) * 1000)
