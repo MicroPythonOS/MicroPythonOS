@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+OS:
+- Increase size of esp32-small and lilygo_t4 partitions to 3800000 to accomodate esp32 builds
+
 0.13.0
 ======
 
