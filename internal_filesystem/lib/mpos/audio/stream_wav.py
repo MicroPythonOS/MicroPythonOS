@@ -446,69 +446,35 @@ class WAVStream:
                 bytes_per_second_out = playback_rate * 2 * channels
                 self._repeat_played = 0
 
+                # Common upsampled 16-bit PCM buffers are processed below.
+                # For ADPCM IMA we decode file blocks into a 16-bit PCM buffer
+                # first; for PCM we read raw bytes and then convert to 16-bit.
+                # All further steps (upsample, volume shift, I2S write) are
+                # identical so loop-end timing is the same for both formats.
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
                     spb = adpcm_ima.samples_per_block(block_align, channels)
-
-                    # Decode enough blocks per chunk for ~100 ms of output audio
-                    target_decoded_bytes = max(
-                        playback_rate * 2 * channels // 10,
-                        spb * 2 * channels,
+                    decoded_bytes_per_block = spb * 2 * channels
+                    adpcm_chunk_blocks = max(
+                        1,
+                        (playback_rate * 2 * channels // 10) // decoded_bytes_per_block,
                     )
-                    blocks_per_chunk = max(1, target_decoded_bytes // (spb * 2 * channels))
 
-                    # Pre-decode the opening chunk once. At each loop boundary we
-                    # write this lead-in immediately so I2S never runs dry before
-                    # the next file-seek/decode cycle catches up.
+                while self._keep_running:
+                    if self._repeat_played >= self.repeat_count:
+                        break
+                    self._repeat_played += 1
                     f.seek(data_start)
-                    leadin_blocks = min(blocks_per_chunk, data_size // block_align)
-                    leadin_compressed = bytearray(f.read(leadin_blocks * block_align))
-                    leadin_buf = bytearray()
-                    if leadin_compressed:
-                        for off in range(0, len(leadin_compressed), block_align):
-                            leadin_buf.extend(adpcm_ima.decode_block(leadin_compressed[off:off + block_align], channels, block_align))
-                        if upsample_factor > 1:
-                            leadin_buf = self._upsample_buffer(leadin_buf, upsample_factor)
-                        if self.volume < 100:
-                            volume_shift = self._volume_percent_to_shift(self.volume)
-                            if self._i2s and volume_shift > 0:
-                                self._i2s.shift(buf=leadin_buf, bits=16, shift=-volume_shift)
-                    leadin_compressed_size = len(leadin_compressed)
+                    self._progress_samples = 0
+                    total_original = 0
 
-                    while self._keep_running:
-                        if self._repeat_played >= self.repeat_count:
-                            break
-                        self._repeat_played += 1
-
-                        # Write the pre-decoded lead-in first, then continue with
-                        # the rest of the file. This removes seek+decode latency
-                        # from the loop boundary.
-                        if leadin_buf and self._keep_running:
-                            self._progress_samples = 0
-                            frames_so_far = 0
-                            if self._i2s:
-                                remaining = memoryview(leadin_buf)
-                                while remaining:
-                                    written = self._i2s.write(remaining)
-                                    if written is None:
-                                        written = len(remaining)
-                                    if written <= 0:
-                                        time.sleep_ms(1)
-                                        continue
-                                    remaining = remaining[written:]
-                            else:
-                                time.sleep(len(leadin_buf) / (2 * channels) / playback_rate)
-                            frames_so_far = len(leadin_buf) // (2 * channels)
-                            self._progress_samples = frames_so_far
-
-                        f.seek(data_start + leadin_compressed_size)
-
-                        while frames_so_far < total_samples_frames and self._keep_running:
-                            remaining_compressed = data_size - (f.tell() - data_start)
+                    while total_original < data_size and self._keep_running:
+                        if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
+                            remaining_compressed = data_size - total_original
                             remaining_compressed -= remaining_compressed % block_align
                             if remaining_compressed <= 0:
                                 break
 
-                            max_blocks = min(blocks_per_chunk, remaining_compressed // block_align)
+                            max_blocks = min(adpcm_chunk_blocks, remaining_compressed // block_align)
                             to_read = max_blocks * block_align
                             if to_read <= 0:
                                 break
@@ -520,68 +486,18 @@ class WAVStream:
                             raw = bytearray()
                             for off in range(0, len(raw_compressed), block_align):
                                 raw.extend(adpcm_ima.decode_block(raw_compressed[off:off + block_align], channels, block_align))
+                        else:
+                            # PCM: read raw bytes straight from the file.
+                            # Chunk size tuning notes:
+                            # - Smaller chunks = more responsive to stop()
+                            # - Larger chunks = less overhead, smoother audio
+                            # - The 0.5-second (stereo) or 1 second (mono) I2S buffer handles timing smoothness
+                            bytes_per_second = original_rate * bytes_per_sample
+                            chunk_size = int(bytes_per_second / 10.7)
+                            # chunk_size of 8192 worked great with 22050hz stereo 16 bit so factor 10.7
 
-                            frames = len(raw) // (2 * channels)
-
-                            # Upsample if needed
-                            if upsample_factor > 1:
-                                raw = self._upsample_buffer(raw, upsample_factor)
-
-                            # Volume scaling via I2S native right-shift
-                            if self.volume < 100:
-                                volume_shift = self._volume_percent_to_shift(self.volume)
-                                if self._i2s and volume_shift > 0:
-                                    self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
-
-                            # Output to I2S
-                            if self._i2s:
-                                remaining = memoryview(raw)
-                                while remaining:
-                                    written = self._i2s.write(remaining)
-                                    if written is None:
-                                        written = len(remaining)
-                                    if written <= 0:
-                                        time.sleep_ms(1)
-                                        continue
-                                    remaining = remaining[written:]
-                            else:
-                                time.sleep(frames / playback_rate)
-
-                            frames_so_far += frames
-                            self._progress_samples = frames_so_far
-
-                            # Yield so the UI thread gets a chance to run
-                            if self._keep_running:
-                                time.sleep_ms(1)
-
-                else:
-                    # Chunk size tuning notes:
-                    # - Smaller chunks = more responsive to stop()
-                    # - Larger chunks = less overhead, smoother audio
-                    # - The 0.5-second (stereo) or 1 second (mono) I2S buffer handles timing smoothness
-                    bytes_per_second = original_rate * bytes_per_sample
-                    chunk_size = int(bytes_per_second / 10.7) # chunk_size of 8192 worked great with 22050hz stereo 16 bit so 88200 bytes per sample so fator 10.7
-                    #chunk_size = bytes_per_second >> 3 # 12-14 fps
-                    #chunk_size = bytes_per_second >> 4 # 16-18 fps but stutters
-                    #chunk_size = int(bytes_per_second / 12) # 18 fps for 8khz mono, 16 fps for 22khz mono, higher stutters
-                    #chunk_size = int(bytes_per_second / 11) # still jitters at 22050hz stereo in quasibird
-
-                    while self._keep_running:
-                        if self._repeat_played >= self.repeat_count:
-                            break
-                        self._repeat_played += 1
-                        f.seek(data_start)
-                        self._progress_samples = 0
-                        total_original = 0
-
-                        while total_original < data_size:
-                            if not self._keep_running:
-                                if __debug__: logger.debug("Playback stopped by user")
-                                break
-
-                            # Read chunk of original data
                             to_read = min(chunk_size, data_size - total_original)
-                            to_read -= (to_read % bytes_per_sample)
+                            to_read -= to_read % bytes_per_sample
                             if to_read <= 0:
                                 break
 
@@ -589,7 +505,7 @@ class WAVStream:
                             if not raw:
                                 break
 
-                            # 1. Convert bit-depth to 16-bit
+                            # Convert bit-depth to 16-bit
                             if bits_per_sample == 8:
                                 raw = self._convert_8_to_16(raw)
                             elif bits_per_sample == 24:
@@ -597,38 +513,41 @@ class WAVStream:
                             elif bits_per_sample == 32:
                                 raw = self._convert_32_to_16(raw)
 
-                            # 2. Upsample if needed
-                            if upsample_factor > 1:
-                                raw = self._upsample_buffer(raw, upsample_factor)
+                        # Upsample if needed
+                        if upsample_factor > 1:
+                            raw = self._upsample_buffer(raw, upsample_factor)
 
-                            # 3. Volume scaling via I2S native right-shift
-                            if self.volume < 100:
-                                volume_shift = self._volume_percent_to_shift(self.volume)
-                                if self._i2s and volume_shift > 0:
-                                    self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
+                        # Volume scaling via I2S native right-shift
+                        if self.volume < 100:
+                            volume_shift = self._volume_percent_to_shift(self.volume)
+                            if self._i2s and volume_shift > 0:
+                                self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
 
-                            # 4. Output to I2S (blocking write is OK - we're in a separate thread)
-                            if self._i2s:
-                                remaining = memoryview(raw)
-                                while remaining:
-                                    written = self._i2s.write(remaining)
-                                    if written is None:
-                                        written = len(remaining)
-                                    if written <= 0:
-                                        time.sleep_ms(1)
-                                        continue
-                                    remaining = remaining[written:]
-                            else:
-                                # Simulate playback timing if no I2S
-                                num_samples = len(raw) // (2 * channels)
-                                time.sleep(num_samples / playback_rate)
+                        # Output to I2S (blocking write is OK - we're in a separate thread)
+                        if self._i2s:
+                            remaining = memoryview(raw)
+                            while remaining:
+                                written = self._i2s.write(remaining)
+                                if written is None:
+                                    written = len(remaining)
+                                if written <= 0:
+                                    time.sleep_ms(1)
+                                    continue
+                                remaining = remaining[written:]
+                        else:
+                            # Simulate playback timing if no I2S
+                            num_samples = len(raw) // (2 * channels)
+                            time.sleep(num_samples / playback_rate)
 
-                            total_original += to_read
+                        total_original += to_read
+                        if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
+                            self._progress_samples = (total_original // block_align) * spb
+                        else:
                             self._progress_samples = total_original // bytes_per_sample
 
-                            # Yield so the UI thread gets a chance to run
-                            if self._keep_running:
-                                time.sleep_ms(1)
+                        # Yield so the UI thread gets a chance to run
+                        if self._keep_running:
+                            time.sleep_ms(1)
 
                 if self._i2s and self._keep_running:
                     try:
