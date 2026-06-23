@@ -190,7 +190,6 @@ class TextEditor(Activity):
         intent = Intent(
             action="pick_file",
             extras={
-                "mode": "pick",
                 "start_dir": self._DEFAULT_DIR,
                 "path_pattern": self._SUPPORTED_EXTENSIONS,
             },

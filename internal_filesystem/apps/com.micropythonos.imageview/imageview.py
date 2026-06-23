@@ -107,11 +107,7 @@ class ImageView(Activity):
     def _open_file_clicked(self, event):
         intent = Intent(
             action="pick_file",
-            extras={
-                "mode": "pick",
-                "start_dir": self.imagedir,
-                "path_pattern": [".jpg", ".jpeg", ".png", ".raw", ".bmp"],
-            },
+            extras={"start_dir": self.imagedir, "path_pattern": [".jpg", ".jpeg", ".png", ".raw", ".bmp"]},
         )
         self.startActivityForResult(intent, self._on_file_picked)
 
