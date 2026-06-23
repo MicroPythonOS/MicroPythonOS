@@ -463,9 +463,21 @@ class WAVStream:
                         raw_compressed = bytearray(f.read(to_read))
                         if not raw_compressed:
                             return None, 0
-                        raw = bytearray()
-                        for off in range(0, len(raw_compressed), block_align):
-                            raw.extend(adpcm_ima.decode_block(raw_compressed[off:off + block_align], channels, block_align))
+                        # Decode all blocks into one pre-allocated buffer to
+                        # avoid per-block allocations and bytearray.extend().
+                        decoded_size = max_blocks * spb * 2 * channels
+                        raw = bytearray(decoded_size)
+                        compressed_view = memoryview(raw_compressed)
+                        for block_idx in range(max_blocks):
+                            src_off = block_idx * block_align
+                            dst_off = block_idx * spb * 2 * channels
+                            adpcm_ima.decode_block_into(
+                                compressed_view[src_off:src_off + block_align],
+                                channels,
+                                block_align,
+                                raw,
+                                dst_off,
+                            )
                     else:
                         bytes_per_second = original_rate * bytes_per_sample
                         chunk_size = int(bytes_per_second / 10.7)

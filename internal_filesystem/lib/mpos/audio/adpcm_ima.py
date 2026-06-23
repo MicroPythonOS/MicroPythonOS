@@ -48,9 +48,9 @@ def _write_s16_le(buf, off, val):
 
 
 @micropython.native
-def decode_block(data, channels, block_align):
+def decode_block_into(data, channels, block_align, out, out_offset):
+    """Decode one ADPCM-IMA block into the provided bytearray at out_offset."""
     ns_per_ch = samples_per_block(block_align, channels)
-    out = bytearray(ns_per_ch * channels * 2)
 
     preds = [0] * channels
     idxs = [0] * channels
@@ -60,10 +60,10 @@ def decode_block(data, channels, block_align):
         idxs[ch] = max(0, min(88, data[off + 2]))
 
     for ch in range(channels):
-        _write_s16_le(out, ch * 2, preds[ch])
+        _write_s16_le(out, out_offset + ch * 2, preds[ch])
 
     dp = 4 * channels
-    oi = [ch * 2 + channels * 2 for ch in range(channels)]
+    oi = [out_offset + ch * 2 + channels * 2 for ch in range(channels)]
     for _ in range((ns_per_ch - 1) // 8):
         for ch in range(channels):
             blk_start = dp
@@ -75,4 +75,10 @@ def decode_block(data, channels, block_align):
                     _write_s16_le(out, oi[ch], preds[ch])
                     oi[ch] += channels * 2
 
+
+@micropython.native
+def decode_block(data, channels, block_align):
+    ns_per_ch = samples_per_block(block_align, channels)
+    out = bytearray(ns_per_ch * channels * 2)
+    decode_block_into(data, channels, block_align, out, 0)
     return out
