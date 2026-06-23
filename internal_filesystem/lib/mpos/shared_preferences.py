@@ -4,7 +4,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-_PREFS_DIR = "data/prefs"
+_PREFS_DIR = "prefs"
 _LEGACY_PREFS_DIR = "data"
 
 
@@ -50,10 +50,7 @@ class SharedPreferences:
             return False
 
     def _ensure_prefs_dir(self):
-        """Create data/ and data/prefs/ directories if they don't exist."""
-        if not self._path_exists("data"):
-            if __debug__: logger.debug("Creating data/ directory")
-            os.mkdir("data")
+        """Create prefs/ directory if it doesn't exist."""
         if not self._path_exists(_PREFS_DIR):
             if __debug__: logger.debug("Creating %s directory", _PREFS_DIR)
             os.mkdir(_PREFS_DIR)
@@ -66,10 +63,9 @@ class SharedPreferences:
             os.mkdir(self.appdir)
 
     def _remove_empty_preference_dirs(self):
-        """Remove app/data directories if they became empty."""
+        """Remove app/prefs directories if they became empty."""
         self._remove_dir_if_empty(self.appdir)
         self._remove_dir_if_empty(_PREFS_DIR)
-        self._remove_dir_if_empty("data")
 
     def _load_file(self, path):
         """Load preferences from the given JSON file path."""
@@ -120,9 +116,8 @@ class SharedPreferences:
             pass
 
     def _remove_empty_legacy_dirs(self):
-        """Remove legacy app/data directories if they became empty."""
+        """Remove legacy app/data directory if it became empty."""
         self._remove_dir_if_empty(f"{_LEGACY_PREFS_DIR}/{self.appname}")
-        self._remove_dir_if_empty(_LEGACY_PREFS_DIR)
 
     def load(self):
         """Load preferences from the JSON file, migrating legacy data if needed."""

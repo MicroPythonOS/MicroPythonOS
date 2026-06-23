@@ -11,7 +11,7 @@ class TestSharedPreferences(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         self.test_app_name = "com.test.unittest"
-        self.test_dir = f"data/prefs/{self.test_app_name}"
+        self.test_dir = f"prefs/{self.test_app_name}"
         self.test_file = f"{self.test_dir}/config.json"
         # Reset migration cache so legacy-path tests are deterministic.
         SharedPreferences._migrated_appnames.clear()
@@ -29,7 +29,7 @@ class TestSharedPreferences(unittest.TestCase):
     @staticmethod
     def _cleanup_app_dirs(app_name):
         """Remove both legacy and new preference directories for an app."""
-        for base_dir in ("data", "data/prefs"):
+        for base_dir in ("data", "prefs"):
             app_dir = f"{base_dir}/{app_name}"
             for filename in ("config.json", "custom.json"):
                 filepath = f"{app_dir}/{filename}"
@@ -44,7 +44,7 @@ class TestSharedPreferences(unittest.TestCase):
             except OSError:
                 pass
 
-        for base_dir in ("data/prefs", "data"):
+        for base_dir in ("prefs", "data"):
             try:
                 os.stat(base_dir)
                 try:
@@ -799,7 +799,7 @@ class TestSharedPreferences(unittest.TestCase):
 
 
 class TestSharedPreferencesMigration(unittest.TestCase):
-    """Test migration of legacy data/{appname} preferences to data/prefs/{appname}."""
+    """Test migration of legacy data/{appname} preferences to prefs/{appname}."""
 
     def setUp(self):
         """Clean up any leftover migration test directories."""
@@ -835,7 +835,7 @@ class TestSharedPreferencesMigration(unittest.TestCase):
             ujson.dump(data, f)
 
     def test_legacy_file_migrated(self):
-        """A legacy preferences file should be moved to data/prefs and loaded."""
+        """A legacy preferences file should be moved to prefs and loaded."""
         self._write_legacy_file("config.json", {"username": "migrated_user"})
 
         prefs = SharedPreferences(self.app_name)
@@ -844,7 +844,7 @@ class TestSharedPreferencesMigration(unittest.TestCase):
         # Legacy location should be gone (empty dir removed after migration).
         self.assertFalse(self._exists(f"data/{self.app_name}"))
         # New location should exist.
-        self.assertTrue(self._exists(f"data/prefs/{self.app_name}/config.json"))
+        self.assertTrue(self._exists(f"prefs/{self.app_name}/config.json"))
 
     def test_legacy_ignored_when_new_exists(self):
         """If new path already has prefs, old path should not be migrated."""
@@ -853,9 +853,9 @@ class TestSharedPreferencesMigration(unittest.TestCase):
 
         # New value
         self._safe_mkdir("data")
-        self._safe_mkdir("data/prefs")
-        self._safe_mkdir(f"data/prefs/{self.app_name}")
-        with open(f"data/prefs/{self.app_name}/config.json", "w") as f:
+        self._safe_mkdir("prefs")
+        self._safe_mkdir(f"prefs/{self.app_name}")
+        with open(f"prefs/{self.app_name}/config.json", "w") as f:
             ujson.dump({"username": "new_user"}, f)
 
         prefs = SharedPreferences(self.app_name)
@@ -870,7 +870,7 @@ class TestSharedPreferencesMigration(unittest.TestCase):
         prefs = SharedPreferences(self.app_name, filename="custom.json")
         self.assertEqual(prefs.get_int("score"), 1234)
         self.assertFalse(self._exists(f"data/{self.app_name}"))
-        self.assertTrue(self._exists(f"data/prefs/{self.app_name}/custom.json"))
+        self.assertTrue(self._exists(f"prefs/{self.app_name}/custom.json"))
 
     def test_migration_only_runs_once_per_appname(self):
         """After migration, repeated loads use the new path directly."""
