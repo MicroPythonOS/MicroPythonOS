@@ -40,27 +40,6 @@ jobs:
             echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
             echo "Extracted version: $OS_VERSION"
 
-      - name: Build LVGL MicroPython for macOS dev
-        run: |
-          ./scripts/build_mpos.sh macOS
-          cp lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
-
-      - name: Run syntax tests on macOS
-        run: |
-          ./tests/syntax.sh
-
-      - name: Run unit tests on macOS
-        run: |
-          ./tests/unittest.sh
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
-          retention-days: 7
-
-
       - name: Build LVGL MicroPython esp32
         run: |
           ./scripts/build_mpos.sh esp32
@@ -81,7 +60,6 @@ jobs:
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
 
-
       - name: Build LVGL MicroPython esp32s3
         run: |
           ./scripts/build_mpos.sh esp32s3
@@ -101,3 +79,23 @@ jobs:
           name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
+
+      - name: Build LVGL MicroPython for macOS dev
+        run: |
+          ./scripts/build_mpos.sh macOS
+          cp lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
+          path: lvgl_micropython/build/MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
+          retention-days: 7
+
+      - name: Run syntax tests on macOS
+        run: |
+          ./tests/syntax.sh
+
+      - name: Run unit tests on macOS
+        run: |
+          ./tests/unittest.sh

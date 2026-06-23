@@ -67,28 +67,6 @@ jobs:
             echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
             echo "Extracted version: $OS_VERSION"
 
-      - name: Build LVGL MicroPython for unix
-        run: |
-          ./scripts/build_mpos.sh unix
-          cp lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
-          path: lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
-          retention-days: 7
-
-      - name: Run syntax tests on unix
-        run: |
-          ./tests/syntax.sh
-        #continue-on-error: true
-
-      - name: Run unit tests on unix
-        run: |
-          ./tests/unittest.sh
-        #continue-on-error: true
-
       - name: Build LVGL MicroPython esp32
         run: |
           ./scripts/build_mpos.sh esp32
@@ -128,5 +106,27 @@ jobs:
           name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
+
+      - name: Build LVGL MicroPython for unix
+        run: |
+          ./scripts/build_mpos.sh unix
+          cp lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+
+      - name: Upload built binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          path: lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
+          retention-days: 7
+
+      - name: Run syntax tests on unix
+        run: |
+          ./tests/syntax.sh
+        #continue-on-error: true
+
+      - name: Run unit tests on unix
+        run: |
+          ./tests/unittest.sh
+        #continue-on-error: true
 
 
