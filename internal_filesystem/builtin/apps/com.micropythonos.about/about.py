@@ -24,7 +24,7 @@ class About(Activity):
 
         # Logo
         img = lv.image(screen)
-        img.set_src("M:builtin/MicroPythonOS-logo-white-long-w296.png") # from the MPOS-logo repo
+        img.set_src("M:builtin/res/MicroPythonOS-logo-white-long-w296.png") # from the MPOS-logo repo
         img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)
 
         # Basic OS info
