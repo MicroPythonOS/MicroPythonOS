@@ -21,6 +21,12 @@ class WAVStream:
     WAVE_FORMAT_PCM = 0x1
     WAVE_FORMAT_ADPCM = 0x0011
     WAVE_FORMAT_EXTENSIBLE = 0xFFFE # often used for 24 and 32 bits per sample
+    # Files whose data chunk is this size or smaller are loaded fully into RAM
+    # at playback start. This avoids filesystem seek latency at loop boundaries.
+    RAM_LOAD_MAX_BYTES = 256 * 1024
+    # Small ADPCM files are fully decoded to 16-bit PCM in RAM so loop playback
+    # is as gapless as PCM playback. Larger ADPCM files fall back to on-the-fly.
+    ADPCM_DECODED_RAM_MAX_BYTES = 512 * 1024
     _VOLUME_TO_SHIFT = (
         16, 7, 6, 6, 5, 5, 5, 4, 4, 4,
         4, 4, 4, 3, 3, 3, 3, 3, 3, 3,
@@ -380,7 +386,50 @@ class WAVStream:
                 if data_size > file_size - data_start:
                     data_size = file_size - data_start
 
+                # Load small WAV data chunks fully into RAM to avoid filesystem
+                # seek/read latency (especially visible at loop boundaries).
+                if data_size <= self.RAM_LOAD_MAX_BYTES:
+                    f.seek(data_start)
+                    raw_data = bytearray(f.read(data_size))
+                    logger.info("stream_wav loaded %s bytes into RAM", data_size)
+                else:
+                    raw_data = None
+
                 bytes_per_sample = (bits_per_sample // 8) * channels
+
+                # If this is a small ADPCM file, fully decode it to 16-bit PCM
+                # in RAM. Loop playback then becomes as smooth as PCM playback.
+                # Larger ADPCM files continue to be decoded on the fly.
+                if (
+                    format_tag == WAVStream.WAVE_FORMAT_ADPCM
+                    and raw_data is not None
+                ):
+                    adpcm_spb = adpcm_ima.samples_per_block(block_align, channels)
+                    num_blocks = data_size // block_align
+                    decoded_size = num_blocks * adpcm_spb * 2 * channels
+                    if decoded_size <= self.ADPCM_DECODED_RAM_MAX_BYTES:
+                        decoded_data = bytearray(decoded_size)
+                        for block_idx in range(num_blocks):
+                            src_off = block_idx * block_align
+                            dst_off = block_idx * adpcm_spb * 2 * channels
+                            adpcm_ima.decode_block_into(
+                                raw_data[src_off:src_off + block_align],
+                                channels,
+                                block_align,
+                                decoded_data,
+                                dst_off,
+                            )
+                        raw_data = decoded_data
+                        format_tag = WAVStream.WAVE_FORMAT_PCM
+                        bits_per_sample = 16
+                        bytes_per_sample = 2 * channels
+                        data_size = decoded_size
+                        total_samples_frames = num_blocks * adpcm_spb
+                        logger.info(
+                            "stream_wav decoded ADPCM to %s bytes PCM in RAM",
+                            decoded_size,
+                        )
+
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM or bytes_per_sample > 0:
                     self._total_samples = total_samples_frames
                     self._duration_ms = int((self._total_samples / original_rate) * 1000)
@@ -460,7 +509,10 @@ class WAVStream:
                         to_read = max_blocks * block_align
                         if to_read <= 0:
                             return None, 0
-                        raw_compressed = bytearray(f.read(to_read))
+                        if raw_data is not None:
+                            raw_compressed = raw_data[temp_total:temp_total + to_read]
+                        else:
+                            raw_compressed = bytearray(f.read(to_read))
                         if not raw_compressed:
                             return None, 0
                         # Decode all blocks into one pre-allocated buffer to
@@ -485,7 +537,10 @@ class WAVStream:
                         to_read -= to_read % bytes_per_sample
                         if to_read <= 0:
                             return None, 0
-                        raw = bytearray(f.read(to_read))
+                        if raw_data is not None:
+                            raw = raw_data[temp_total:temp_total + to_read]
+                        else:
+                            raw = bytearray(f.read(to_read))
                         if not raw:
                             return None, 0
                         if bits_per_sample == 8:
@@ -506,7 +561,8 @@ class WAVStream:
                         (playback_rate * 2 * channels // 10) // decoded_bytes_per_block,
                     )
 
-                f.seek(data_start)
+                if raw_data is None:
+                    f.seek(data_start)
 
                 # Pre-build a lead-in buffer of the first ~300 ms. At each loop
                 # boundary we immediately queue this buffer, giving the decoder
@@ -569,7 +625,8 @@ class WAVStream:
                             self._progress_samples = total_original // bytes_per_sample
                         logger.info("stream_wav loop %s leadin write done", self._repeat_played)
 
-                    f.seek(data_start + leadin_source_bytes)
+                    if raw_data is None:
+                        f.seek(data_start + leadin_source_bytes)
 
                     while total_original < data_size and self._keep_running:
                         chunk, to_read = _next_16bit_chunk(total_original)
