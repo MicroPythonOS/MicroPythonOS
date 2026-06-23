@@ -2,6 +2,7 @@
 # Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling.
 # Uses synchronous playback in a separate thread for non-blocking operation.
 
+import gc
 import logging
 import machine
 import micropython
@@ -407,6 +408,15 @@ class WAVStream:
                     adpcm_spb = adpcm_ima.samples_per_block(block_align, channels)
                     num_blocks = data_size // block_align
                     decoded_size = num_blocks * adpcm_spb * 2 * channels
+                    logger.info(
+                        "stream_wav ADPCM meta: data_size=%s block_align=%s spb=%s num_blocks=%s total_samples_frames=%s decoded_size=%s",
+                        data_size,
+                        block_align,
+                        adpcm_spb,
+                        num_blocks,
+                        total_samples_frames,
+                        decoded_size,
+                    )
                     if decoded_size <= self.ADPCM_DECODED_RAM_MAX_BYTES:
                         decoded_data = bytearray(decoded_size)
                         for block_idx in range(num_blocks):
@@ -419,15 +429,24 @@ class WAVStream:
                                 decoded_data,
                                 dst_off,
                             )
+                        # Trim any block-padding samples so loop boundaries
+                        # align with the real end/start of the audio.
+                        valid_bytes = total_samples_frames * 2 * channels
+                        if valid_bytes < len(decoded_data):
+                            decoded_data = decoded_data[:valid_bytes]
+                            logger.info(
+                                "stream_wav trimmed ADPCM padding: %s -> %s bytes",
+                                decoded_size,
+                                valid_bytes,
+                            )
                         raw_data = decoded_data
                         format_tag = WAVStream.WAVE_FORMAT_PCM
                         bits_per_sample = 16
                         bytes_per_sample = 2 * channels
-                        data_size = decoded_size
-                        total_samples_frames = num_blocks * adpcm_spb
+                        data_size = len(decoded_data)
                         logger.info(
                             "stream_wav decoded ADPCM to %s bytes PCM in RAM",
-                            decoded_size,
+                            data_size,
                         )
 
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM or bytes_per_sample > 0:
@@ -593,18 +612,34 @@ class WAVStream:
 
                 self._repeat_played = 0
                 total_original = 0
-                logger.info("stream_wav playback start")
+                gc.collect()
+                logger.info(
+                    "stream_wav playback start mem free=%s alloc=%s",
+                    gc.mem_free(),
+                    gc.mem_alloc(),
+                )
+                gc.disable()
+                last_chunk_ts = time.ticks_ms()
+                chunk_count = 0
 
                 while self._keep_running:
                     chunk, to_read = _next_16bit_chunk(total_original)
                     if chunk is None:
                         # End of file data reached. Wrap or stop.
+                        now = time.ticks_ms()
                         self._repeat_played += 1
                         if self._repeat_played >= self.repeat_count:
                             break
                         total_original = 0
                         self._progress_samples = 0
-                        logger.info("stream_wav loop %s wrap", self._repeat_played + 1)
+                        logger.info(
+                            "stream_wav loop %s wrap since_last_chunk=%s ms mem free=%s alloc=%s",
+                            self._repeat_played + 1,
+                            time.ticks_diff(now, last_chunk_ts),
+                            gc.mem_free(),
+                            gc.mem_alloc(),
+                        )
+                        last_chunk_ts = now
 
                         if use_leadin:
                             # Queue decoded lead-in immediately, then continue
@@ -666,6 +701,20 @@ class WAVStream:
                     else:
                         self._progress_samples = total_original // bytes_per_sample
 
+                    now = time.ticks_ms()
+                    elapsed = time.ticks_diff(now, last_chunk_ts)
+                    remaining = data_size - total_original
+                    if elapsed > 30 or remaining < (data_size // 4) or chunk_count < 3:
+                        logger.info(
+                            "stream_wav chunk %s written elapsed=%s ms remaining=%s mem free=%s",
+                            chunk_count,
+                            elapsed,
+                            remaining,
+                            gc.mem_free(),
+                        )
+                    last_chunk_ts = now
+                    chunk_count += 1
+
                     if self._keep_running:
                         time.sleep_ms(1)
 
@@ -687,6 +736,10 @@ class WAVStream:
                 self.on_complete(f"Error: {e}")
 
         finally:
+            try:
+                gc.enable()
+            except Exception:
+                pass
             self._is_playing = False
             if self.on_close:
                 try:
