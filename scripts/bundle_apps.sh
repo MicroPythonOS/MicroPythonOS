@@ -39,7 +39,7 @@ for apprepo in internal_filesystem/apps; do
         else
             echo "Bundling $apprepo/$appdir"
             appfullpath="$apprepo/$appdir"
-            manifest="$appfullpath/META-INF/MANIFEST.JSON"
+            manifest="$appfullpath/MANIFEST.JSON"
             version=$( jq -r '.version' "$manifest" )
             result=$?
             if [ $result -ne 0 ]; then
