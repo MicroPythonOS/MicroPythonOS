@@ -65,7 +65,9 @@ class ActivityNavigator:
         (e.g. ViewActivity) are launched directly.
         """
         if handler_info.app_fullname:
-            return AppManager.start_app(handler_info.app_fullname, intent=intent)
+            return AppManager.start_app(
+                handler_info.app_fullname, intent=intent, result_callback=result_callback
+            )
 
         intent.activity_class = handler_info.activity_class
         return ActivityNavigator._launch_activity(intent, result_callback)

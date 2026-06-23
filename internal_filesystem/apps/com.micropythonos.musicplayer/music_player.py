@@ -151,7 +151,7 @@ class MusicPlayer(Activity):
     def _open_file_clicked(self, event):
         intent = Intent(
             action="pick_file",
-            extras={"start_dir": "/data/audio/", "path_pattern": [".wav"]},
+            extras={"mode": "pick", "start_dir": "/data/audio/", "path_pattern": [".wav"]},
         )
         self.startActivityForResult(intent, self._on_file_picked)
 

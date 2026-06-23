@@ -46,7 +46,11 @@ class FileExplorerActivity(Activity):
 
     def onCreate(self):
         sdcard.mount_with_optional_format("/sdcard")
-        self._mode = self.getIntent().extras.get("mode", self.MODE_BROWSE)
+        explicit_mode = self.getIntent().extras.get("mode")
+        if explicit_mode is None and self.getIntent().action == "pick_file":
+            self._mode = self.MODE_PICK
+        else:
+            self._mode = explicit_mode or self.MODE_BROWSE
         self._start_dir = self.getIntent().extras.get("start_dir", ".")
         self._path_pattern = self.getIntent().extras.get("path_pattern", [])
         if isinstance(self._path_pattern, str):
@@ -431,6 +435,11 @@ class FileExplorerActivity(Activity):
     def onBackPressed(self, screen):
         if self._action_bar:
             self._dismiss_action_bar()
+            return True
+        if self._mode == self.MODE_PICK:
+            # Deliver a cancellation result when the user backs out of the picker.
+            self.setResult(False, {})
+            self.finish()
             return True
         return False
 

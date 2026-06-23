@@ -544,7 +544,7 @@ class AppManager:
         return AppManager.is_installed_by_path(f"apps/{app_fullname}") or AppManager.is_installed_by_path(f"builtin/apps/{app_fullname}")
 
     @staticmethod
-    def execute_script(script_source, classname, cwd=None, app_fullname=None, intent=None):
+    def execute_script(script_source, classname, cwd=None, app_fullname=None, intent=None, result_callback=None):
         """Run an app entrypoint file by importing its module. Returns True if successful."""
         import utime # for timing read and compile
         import _thread
@@ -563,7 +563,7 @@ class AppManager:
                     launch_intent.app_fullname = app_fullname
 
                 start_time = utime.ticks_ms()
-                ActivityNavigator._launch_activity(launch_intent)
+                ActivityNavigator._launch_activity(launch_intent, result_callback=result_callback)
                 end_time = utime.ticks_diff(utime.ticks_ms(), start_time)
                 if __debug__: logger.debug("_launch_activity took %sms (%s)", end_time, source_name)
                 return True
@@ -632,12 +632,15 @@ class AppManager:
             return False
 
     @staticmethod
-    def start_app(fullname, intent=None):
+    def start_app(fullname, intent=None, result_callback=None):
         """Start an app by fullname. Returns True if successful.
 
         If ``intent`` is provided, the app's main launcher activity receives it
         (typically via Activity.getIntent()). This is how "Open With" passes a
         file path to the target app.
+
+        If ``result_callback`` is provided, it is attached to the launched
+        activity so the app can return a result via Activity.finish().
         """
         import utime
         start_time = utime.ticks_ms()
@@ -666,6 +669,7 @@ class AppManager:
             entrypoint_dir,
             app_fullname=fullname,
             intent=intent,
+            result_callback=result_callback,
         )
         # Launchers have the bar, other apps don't have it
         import mpos.ui
