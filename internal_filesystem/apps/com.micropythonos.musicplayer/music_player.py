@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 from mpos import Activity, AppManager, Intent, sdcard, AudioManager, add_focus_border
 
 slider_max = 16
+ENDLESS_REPEAT_COUNT = 1_000_000
 
 
 class MusicPlayer(Activity):
@@ -16,6 +17,7 @@ class MusicPlayer(Activity):
     _filename_label = None
     _slider_label = None
     _slider = None
+    _repeat_checkbox = None
     _stop_button = None
     _stop_button_label = None
     _open_button = None
@@ -71,6 +73,12 @@ class MusicPlayer(Activity):
             AudioManager.set_volume(volume_int)
 
         self._slider.add_event_cb(volume_slider_changed, lv.EVENT.VALUE_CHANGED, None)
+
+        self._repeat_checkbox = lv.checkbox(screen)
+        self._repeat_checkbox.set_text("Repeat")
+        self._repeat_checkbox.add_state(lv.STATE.CHECKED)
+        self._repeat_checkbox.align_to(self._slider, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)
+        self._repeat_checkbox.add_event_cb(self._repeat_checkbox_changed, lv.EVENT.VALUE_CHANGED, None)
 
         self._filename_label = lv.label(screen)
         self._filename_label.align(lv.ALIGN.CENTER, 0, 0)
@@ -130,6 +138,7 @@ class MusicPlayer(Activity):
                 on_complete=self.player_finished,
                 output=output,
             )
+            player.set_repeat(self._get_repeat_count())
             player.start()
         except Exception as exc:
             error_msg = "Error: Audio device unavailable or busy"
@@ -171,6 +180,20 @@ class MusicPlayer(Activity):
             elif path.lower().endswith(".wav"):
                 return path
         return None
+
+    def _repeat_checkbox_changed(self, event):
+        self._apply_repeat()
+
+    def _get_repeat_count(self):
+        if self._repeat_checkbox.get_state() & lv.STATE.CHECKED:
+            return ENDLESS_REPEAT_COUNT
+        return 1
+
+    def _apply_repeat(self):
+        repeat_count = self._get_repeat_count()
+        player = AudioManager.get_active_player(stream_type=AudioManager.STREAM_MUSIC)
+        if player and player.file_path == self._filename:
+            player.set_repeat(repeat_count)
 
     def stop_button_clicked(self, event):
         AudioManager.stop()

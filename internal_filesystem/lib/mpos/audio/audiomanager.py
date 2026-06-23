@@ -637,6 +637,7 @@ class Player:
         self.output = output
         self.sample_rate = sample_rate
         self.volume = volume
+        self._repeat_count = 1
         self._stream = None
         self._buzzer = None
 
@@ -660,6 +661,17 @@ class Player:
     def resume(self):
         if self._stream and hasattr(self._stream, "resume"):
             self._stream.resume()
+
+    def set_repeat(self, count):
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            return
+        if count < 0:
+            count = 0
+        self._repeat_count = count
+        if self._stream and hasattr(self._stream, "set_repeat"):
+            self._stream.set_repeat(count)
 
     def is_active(self):
         return self.is_playing()
@@ -733,6 +745,7 @@ class Player:
             requested_sample_rate=self.sample_rate,
             on_open=getattr(self.output, "on_open", None),
             on_close=getattr(self.output, "on_close", None),
+            repeat_count=self._repeat_count,
         )
         self._stream.play()
 

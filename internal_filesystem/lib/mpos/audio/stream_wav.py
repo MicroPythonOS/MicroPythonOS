@@ -45,6 +45,7 @@ class WAVStream:
         requested_sample_rate=None,
         on_open=None,
         on_close=None,
+        repeat_count=1,
     ):
         """
         Initialize WAV stream.
@@ -58,6 +59,7 @@ class WAVStream:
             requested_sample_rate: Optional negotiated sample rate for shared clocks
             on_open: Optional callable invoked after MCLK starts, before I2S init
             on_close: Optional callable invoked before I2S deinit (after audio drains)
+            repeat_count: Total number of times to play the file (default: 1)
         """
         self.file_path = file_path
         self.stream_type = stream_type
@@ -67,6 +69,8 @@ class WAVStream:
         self.requested_sample_rate = requested_sample_rate
         self.on_open = on_open
         self.on_close = on_close
+        self.repeat_count = repeat_count if repeat_count is not None else 1
+        self._repeat_played = 0
         self._keep_running = True
         self._is_playing = False
         self._i2s = None
@@ -438,9 +442,9 @@ class WAVStream:
                     return
 
                 if __debug__: logger.debug("Playing %s bytes (volume %s%%)", data_size, self.volume)
-                f.seek(data_start)
 
                 bytes_per_second_out = playback_rate * 2 * channels
+                self._repeat_played = 0
 
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
                     spb = adpcm_ima.samples_per_block(block_align, channels)
@@ -452,62 +456,69 @@ class WAVStream:
                     )
                     blocks_per_chunk = max(1, target_decoded_bytes // (spb * 2 * channels))
 
-                    frames_so_far = 0
-                    while frames_so_far < total_samples_frames:
-                        if not self._keep_running:
-                            if __debug__: logger.debug("Playback stopped by user")
+                    while self._keep_running:
+                        if self._repeat_played >= self.repeat_count:
                             break
+                        self._repeat_played += 1
+                        f.seek(data_start)
+                        self._progress_samples = 0
+                        frames_so_far = 0
 
-                        remaining_compressed = data_size - (f.tell() - data_start)
-                        remaining_compressed -= remaining_compressed % block_align
-                        if remaining_compressed <= 0:
-                            break
+                        while frames_so_far < total_samples_frames:
+                            if not self._keep_running:
+                                if __debug__: logger.debug("Playback stopped by user")
+                                break
 
-                        max_blocks = min(blocks_per_chunk, remaining_compressed // block_align)
-                        to_read = max_blocks * block_align
-                        if to_read <= 0:
-                            break
+                            remaining_compressed = data_size - (f.tell() - data_start)
+                            remaining_compressed -= remaining_compressed % block_align
+                            if remaining_compressed <= 0:
+                                break
 
-                        raw_compressed = bytearray(f.read(to_read))
-                        if not raw_compressed:
-                            break
+                            max_blocks = min(blocks_per_chunk, remaining_compressed // block_align)
+                            to_read = max_blocks * block_align
+                            if to_read <= 0:
+                                break
 
-                        raw = bytearray()
-                        for off in range(0, len(raw_compressed), block_align):
-                            raw.extend(adpcm_ima.decode_block(raw_compressed[off:off + block_align], channels, block_align))
+                            raw_compressed = bytearray(f.read(to_read))
+                            if not raw_compressed:
+                                break
 
-                        frames = len(raw) // (2 * channels)
+                            raw = bytearray()
+                            for off in range(0, len(raw_compressed), block_align):
+                                raw.extend(adpcm_ima.decode_block(raw_compressed[off:off + block_align], channels, block_align))
 
-                        # Upsample if needed
-                        if upsample_factor > 1:
-                            raw = self._upsample_buffer(raw, upsample_factor)
+                            frames = len(raw) // (2 * channels)
 
-                        # Volume scaling via I2S native right-shift
-                        if self.volume < 100:
-                            volume_shift = self._volume_percent_to_shift(self.volume)
-                            if self._i2s and volume_shift > 0:
-                                self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
+                            # Upsample if needed
+                            if upsample_factor > 1:
+                                raw = self._upsample_buffer(raw, upsample_factor)
 
-                        # Output to I2S
-                        if self._i2s:
-                            remaining = memoryview(raw)
-                            while remaining:
-                                written = self._i2s.write(remaining)
-                                if written is None:
-                                    written = len(remaining)
-                                if written <= 0:
-                                    time.sleep_ms(1)
-                                    continue
-                                remaining = remaining[written:]
-                        else:
-                            time.sleep(frames / playback_rate)
+                            # Volume scaling via I2S native right-shift
+                            if self.volume < 100:
+                                volume_shift = self._volume_percent_to_shift(self.volume)
+                                if self._i2s and volume_shift > 0:
+                                    self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
 
-                        frames_so_far += frames
-                        self._progress_samples = frames_so_far
+                            # Output to I2S
+                            if self._i2s:
+                                remaining = memoryview(raw)
+                                while remaining:
+                                    written = self._i2s.write(remaining)
+                                    if written is None:
+                                        written = len(remaining)
+                                    if written <= 0:
+                                        time.sleep_ms(1)
+                                        continue
+                                    remaining = remaining[written:]
+                            else:
+                                time.sleep(frames / playback_rate)
 
-                        # Yield so the UI thread gets a chance to run
-                        if self._keep_running:
-                            time.sleep_ms(1)
+                            frames_so_far += frames
+                            self._progress_samples = frames_so_far
+
+                            # Yield so the UI thread gets a chance to run
+                            if self._keep_running:
+                                time.sleep_ms(1)
 
                 else:
                     # Chunk size tuning notes:
@@ -521,62 +532,69 @@ class WAVStream:
                     #chunk_size = int(bytes_per_second / 12) # 18 fps for 8khz mono, 16 fps for 22khz mono, higher stutters
                     #chunk_size = int(bytes_per_second / 11) # still jitters at 22050hz stereo in quasibird
 
-                    total_original = 0
-                    while total_original < data_size:
-                        if not self._keep_running:
-                            if __debug__: logger.debug("Playback stopped by user")
+                    while self._keep_running:
+                        if self._repeat_played >= self.repeat_count:
                             break
+                        self._repeat_played += 1
+                        f.seek(data_start)
+                        self._progress_samples = 0
+                        total_original = 0
 
-                        # Read chunk of original data
-                        to_read = min(chunk_size, data_size - total_original)
-                        to_read -= (to_read % bytes_per_sample)
-                        if to_read <= 0:
-                            break
+                        while total_original < data_size:
+                            if not self._keep_running:
+                                if __debug__: logger.debug("Playback stopped by user")
+                                break
 
-                        raw = bytearray(f.read(to_read))
-                        if not raw:
-                            break
+                            # Read chunk of original data
+                            to_read = min(chunk_size, data_size - total_original)
+                            to_read -= (to_read % bytes_per_sample)
+                            if to_read <= 0:
+                                break
 
-                        # 1. Convert bit-depth to 16-bit
-                        if bits_per_sample == 8:
-                            raw = self._convert_8_to_16(raw)
-                        elif bits_per_sample == 24:
-                            raw = self._convert_24_to_16(raw)
-                        elif bits_per_sample == 32:
-                            raw = self._convert_32_to_16(raw)
+                            raw = bytearray(f.read(to_read))
+                            if not raw:
+                                break
 
-                        # 2. Upsample if needed
-                        if upsample_factor > 1:
-                            raw = self._upsample_buffer(raw, upsample_factor)
+                            # 1. Convert bit-depth to 16-bit
+                            if bits_per_sample == 8:
+                                raw = self._convert_8_to_16(raw)
+                            elif bits_per_sample == 24:
+                                raw = self._convert_24_to_16(raw)
+                            elif bits_per_sample == 32:
+                                raw = self._convert_32_to_16(raw)
 
-                        # 3. Volume scaling via I2S native right-shift
-                        if self.volume < 100:
-                            volume_shift = self._volume_percent_to_shift(self.volume)
-                            if self._i2s and volume_shift > 0:
-                                self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
+                            # 2. Upsample if needed
+                            if upsample_factor > 1:
+                                raw = self._upsample_buffer(raw, upsample_factor)
 
-                        # 4. Output to I2S (blocking write is OK - we're in a separate thread)
-                        if self._i2s:
-                            remaining = memoryview(raw)
-                            while remaining:
-                                written = self._i2s.write(remaining)
-                                if written is None:
-                                    written = len(remaining)
-                                if written <= 0:
-                                    time.sleep_ms(1)
-                                    continue
-                                remaining = remaining[written:]
-                        else:
-                            # Simulate playback timing if no I2S
-                            num_samples = len(raw) // (2 * channels)
-                            time.sleep(num_samples / playback_rate)
+                            # 3. Volume scaling via I2S native right-shift
+                            if self.volume < 100:
+                                volume_shift = self._volume_percent_to_shift(self.volume)
+                                if self._i2s and volume_shift > 0:
+                                    self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
 
-                        total_original += to_read
-                        self._progress_samples = total_original // bytes_per_sample
+                            # 4. Output to I2S (blocking write is OK - we're in a separate thread)
+                            if self._i2s:
+                                remaining = memoryview(raw)
+                                while remaining:
+                                    written = self._i2s.write(remaining)
+                                    if written is None:
+                                        written = len(remaining)
+                                    if written <= 0:
+                                        time.sleep_ms(1)
+                                        continue
+                                    remaining = remaining[written:]
+                            else:
+                                # Simulate playback timing if no I2S
+                                num_samples = len(raw) // (2 * channels)
+                                time.sleep(num_samples / playback_rate)
 
-                        # Yield so the UI thread gets a chance to run
-                        if self._keep_running:
-                            time.sleep_ms(1)
+                            total_original += to_read
+                            self._progress_samples = total_original // bytes_per_sample
+
+                            # Yield so the UI thread gets a chance to run
+                            if self._keep_running:
+                                time.sleep_ms(1)
 
                 if self._i2s and self._keep_running:
                     try:
@@ -612,6 +630,16 @@ class WAVStream:
                     self._mck_pwm.deinit()
                 finally:
                     self._mck_pwm = None
+
+    def set_repeat(self, count):
+        """Set total number of times to play the file."""
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            return
+        if count < 0:
+            count = 0
+        self.repeat_count = count
 
     def set_volume(self, vol):
         self.volume = vol
