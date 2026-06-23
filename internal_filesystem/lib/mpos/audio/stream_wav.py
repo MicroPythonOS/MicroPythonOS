@@ -456,7 +456,10 @@ class WAVStream:
                     and self.repeat_count > 1
                 ):
                     multiplier = min(3, self.repeat_count)
-                    raw_data = raw_data * multiplier
+                    multiplied = bytearray()
+                    for _ in range(multiplier):
+                        multiplied += raw_data
+                    raw_data = multiplied
                     data_size = len(raw_data)
                     total_samples_frames = data_size // bytes_per_sample
                     self.repeat_count = (self.repeat_count + multiplier - 1) // multiplier

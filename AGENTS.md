@@ -101,6 +101,7 @@ MicroPython compatibility:
 - MicroPython's `logging.Logger.log()` (and by extension `error()`, `warning()`, etc.) formats messages via `msg % args`. Passing a variable to a format string without a `%s` placeholder raises `TypeError`. Always include a `%s` in the format string: `logger.error("msg: %s", e)`.
 - MicroPython's `unittest` module lacks `assertGreater`, `assertGreaterEqual`, `assertLess`, `assertLessEqual`. Use `assertTrue(a > b, msg)` instead of `assertGreater(a, b, msg)`.
 - MicroPython's `_thread` module is cooperative: a tight loop in a secondary thread can prevent the main thread (and therefore LVGL's `lv_timer_handler`) from running. Long-running secondary-thread loops should yield occasionally, e.g. `time.sleep_ms(1)`. Do not use `time.sleep_us()` for this — it busy-waits and does not yield.
+- MicroPython does NOT support `bytearray * int` (e.g. `b = bytearray(4); b * 3` raises `TypeError: unsupported types for __mul__`). To repeat a `bytearray`, create a new one and extend it in a loop: `out = bytearray(); [out.extend(buf) for _ in range(n)]`. (`bytes * int` works in CPython but is also not guaranteed on MicroPython; prefer an explicit loop.)
 
 MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
