@@ -6,7 +6,7 @@ import lvgl as lv
 
 logger = logging.getLogger(__name__)
 
-from mpos import Activity, AppManager, Intent, sdcard, AudioManager, add_focus_border
+from mpos import Activity, AppManager, DisplayMetrics, Intent, sdcard, AudioManager, add_focus_border
 
 slider_max = 16
 ENDLESS_REPEAT_COUNT = 1_000_000
@@ -37,7 +37,7 @@ class MusicPlayer(Activity):
 
         # Settings button (top-left)
         self._settings_button = lv.button(screen)
-        self._settings_button.set_size(60, 42)
+        self._settings_button.set_size(DisplayMetrics.pct_of_height(20), DisplayMetrics.pct_of_height(20))
         self._settings_button.align(lv.ALIGN.TOP_LEFT, 4, 4)
         self._settings_button.add_event_cb(lambda *args: AppManager.start_app("com.micropythonos.settings.audio"), lv.EVENT.CLICKED, None)
         settings_label = lv.label(self._settings_button)
@@ -47,11 +47,11 @@ class MusicPlayer(Activity):
 
         # Open file button (top-right)
         self._open_button = lv.button(screen)
-        self._open_button.set_size(100, 42)
+        self._open_button.set_size(DisplayMetrics.pct_of_width(30), DisplayMetrics.pct_of_height(20))
         self._open_button.align(lv.ALIGN.TOP_RIGHT, -4, 4)
         self._open_button.add_event_cb(self._open_file_clicked, lv.EVENT.CLICKED, None)
         open_label = lv.label(self._open_button)
-        open_label.set_text("Open file...")
+        open_label.set_text("Open...")
         open_label.center()
 
         audio_volume = AudioManager.get_volume()
@@ -59,7 +59,7 @@ class MusicPlayer(Activity):
 
         self._slider_label = lv.label(screen)
         self._slider_label.set_text("Volume: {}%".format(audio_volume))
-        self._slider_label.align(lv.ALIGN.TOP_MID, 0, 56)
+        self._slider_label.align(lv.ALIGN.TOP_MID, 0, DisplayMetrics.pct_of_height(23))
         self._slider = lv.slider(screen)
         self._slider.set_range(0, slider_max)
         self._slider.set_value(slider_volume, False)
@@ -74,23 +74,24 @@ class MusicPlayer(Activity):
 
         self._slider.add_event_cb(volume_slider_changed, lv.EVENT.VALUE_CHANGED, None)
 
-        self._repeat_checkbox = lv.checkbox(screen)
-        self._repeat_checkbox.set_text("Repeat")
-        self._repeat_checkbox.add_state(lv.STATE.CHECKED)
-        self._repeat_checkbox.align_to(self._slider, lv.ALIGN.OUT_BOTTOM_MID, 0, 24)
-        self._repeat_checkbox.add_event_cb(self._repeat_checkbox_changed, lv.EVENT.VALUE_CHANGED, None)
-
         self._filename_label = lv.label(screen)
         self._filename_label.align(lv.ALIGN.CENTER, 0, 0)
         self._filename_label.set_width(lv.pct(90))
         add_focus_border(self._filename_label)
         self._filename_label.set_long_mode(lv.label.LONG_MODE.WRAP)
 
+        self._repeat_checkbox = lv.checkbox(screen)
+        self._repeat_checkbox.set_text("Repeat")
+        self._repeat_checkbox.add_state(lv.STATE.CHECKED)
+        self._repeat_checkbox.align_to(self._filename_label, lv.ALIGN.OUT_BOTTOM_MID, 0, DisplayMetrics.pct_of_height(10))
+        self._repeat_checkbox.add_event_cb(self._repeat_checkbox_changed, lv.EVENT.VALUE_CHANGED, None)
+
         self._stop_button = lv.button(screen)
         self._stop_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
         self._stop_button.add_event_cb(self.stop_button_clicked, lv.EVENT.CLICKED, None)
         self._stop_button_label = lv.label(self._stop_button)
         self._stop_button_label.set_text("Stop")
+        self._stop_button_label.set_style_pad_all(5, lv.PART.MAIN)
 
         self.setContentView(screen)
 
