@@ -2,7 +2,6 @@
 # Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling.
 # Uses synchronous playback in a separate thread for non-blocking operation.
 
-import gc
 import logging
 import machine
 import micropython
@@ -350,7 +349,6 @@ class WAVStream:
     # ----------------------------------------------------------------------
     def play(self):
         """Main synchronous playback routine (runs in separate thread)."""
-        logger.setLevel(logging.INFO)
         self._is_playing = True
 
         try:
@@ -392,7 +390,6 @@ class WAVStream:
                 if data_size <= self.RAM_LOAD_MAX_BYTES:
                     f.seek(data_start)
                     raw_data = bytearray(f.read(data_size))
-                    logger.info("stream_wav loaded %s bytes into RAM", data_size)
                 else:
                     raw_data = None
 
@@ -598,11 +595,6 @@ class WAVStream:
                             break
                         leadin_buf += chunk
                         leadin_source_bytes += consumed
-                    logger.info(
-                        "stream_wav leadin ready: %s bytes from %s source bytes",
-                        len(leadin_buf),
-                        leadin_source_bytes,
-                    )
                 else:
                     leadin_buf = b""
                     leadin_source_bytes = 0
@@ -612,34 +604,16 @@ class WAVStream:
 
                 self._repeat_played = 0
                 total_original = 0
-                gc.collect()
-                logger.info(
-                    "stream_wav playback start mem free=%s alloc=%s",
-                    gc.mem_free(),
-                    gc.mem_alloc(),
-                )
-                gc.disable()
-                last_chunk_ts = time.ticks_ms()
-                chunk_count = 0
 
                 while self._keep_running:
                     chunk, to_read = _next_16bit_chunk(total_original)
                     if chunk is None:
                         # End of file data reached. Wrap or stop.
-                        now = time.ticks_ms()
                         self._repeat_played += 1
                         if self._repeat_played >= self.repeat_count:
                             break
                         total_original = 0
                         self._progress_samples = 0
-                        logger.info(
-                            "stream_wav loop %s wrap since_last_chunk=%s ms mem free=%s alloc=%s",
-                            self._repeat_played + 1,
-                            time.ticks_diff(now, last_chunk_ts),
-                            gc.mem_free(),
-                            gc.mem_alloc(),
-                        )
-                        last_chunk_ts = now
 
                         if use_leadin:
                             # Queue decoded lead-in immediately, then continue
@@ -667,10 +641,6 @@ class WAVStream:
                             total_original += leadin_source_bytes
                             if raw_data is None:
                                 f.seek(data_start + leadin_source_bytes)
-                            logger.info(
-                                "stream_wav loop %s leadin queued",
-                                self._repeat_played + 1,
-                            )
                         else:
                             if raw_data is None:
                                 f.seek(data_start)
@@ -701,20 +671,6 @@ class WAVStream:
                     else:
                         self._progress_samples = total_original // bytes_per_sample
 
-                    now = time.ticks_ms()
-                    elapsed = time.ticks_diff(now, last_chunk_ts)
-                    remaining = data_size - total_original
-                    if elapsed > 30 or remaining < (data_size // 4) or chunk_count < 3:
-                        logger.info(
-                            "stream_wav chunk %s written elapsed=%s ms remaining=%s mem free=%s",
-                            chunk_count,
-                            elapsed,
-                            remaining,
-                            gc.mem_free(),
-                        )
-                    last_chunk_ts = now
-                    chunk_count += 1
-
                     if self._keep_running:
                         time.sleep_ms(1)
 
@@ -736,10 +692,6 @@ class WAVStream:
                 self.on_complete(f"Error: {e}")
 
         finally:
-            try:
-                gc.enable()
-            except Exception:
-                pass
             self._is_playing = False
             if self.on_close:
                 try:
