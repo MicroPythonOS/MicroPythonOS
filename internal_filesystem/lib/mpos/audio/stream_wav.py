@@ -447,11 +447,45 @@ class WAVStream:
                 bytes_per_second_out = playback_rate * 2 * channels
                 self._repeat_played = 0
 
-                # Common upsampled 16-bit PCM buffers are processed below.
-                # For ADPCM IMA we decode file blocks into a 16-bit PCM buffer
-                # first; for PCM we read raw bytes and then convert to 16-bit.
-                # All further steps (upsample, volume shift, I2S write) are
-                # identical so loop-end timing is the same for both formats.
+                # Read/decode one source chunk to upsampled 16-bit PCM.
+                # Volume shift is NOT applied here; it is applied just before
+                # I2S write so changes to self.volume take effect per chunk.
+                def _next_16bit_chunk(temp_total):
+                    if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
+                        remaining_compressed = data_size - temp_total
+                        remaining_compressed -= remaining_compressed % block_align
+                        if remaining_compressed <= 0:
+                            return None, 0
+                        max_blocks = min(adpcm_chunk_blocks, remaining_compressed // block_align)
+                        to_read = max_blocks * block_align
+                        if to_read <= 0:
+                            return None, 0
+                        raw_compressed = bytearray(f.read(to_read))
+                        if not raw_compressed:
+                            return None, 0
+                        raw = bytearray()
+                        for off in range(0, len(raw_compressed), block_align):
+                            raw.extend(adpcm_ima.decode_block(raw_compressed[off:off + block_align], channels, block_align))
+                    else:
+                        bytes_per_second = original_rate * bytes_per_sample
+                        chunk_size = int(bytes_per_second / 10.7)
+                        to_read = min(chunk_size, data_size - temp_total)
+                        to_read -= to_read % bytes_per_sample
+                        if to_read <= 0:
+                            return None, 0
+                        raw = bytearray(f.read(to_read))
+                        if not raw:
+                            return None, 0
+                        if bits_per_sample == 8:
+                            raw = self._convert_8_to_16(raw)
+                        elif bits_per_sample == 24:
+                            raw = self._convert_24_to_16(raw)
+                        elif bits_per_sample == 32:
+                            raw = self._convert_32_to_16(raw)
+                    if upsample_factor > 1:
+                        raw = self._upsample_buffer(raw, upsample_factor)
+                    return raw, to_read
+
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
                     spb = adpcm_ima.samples_per_block(block_align, channels)
                     decoded_bytes_per_block = spb * 2 * channels
@@ -460,81 +494,49 @@ class WAVStream:
                         (playback_rate * 2 * channels // 10) // decoded_bytes_per_block,
                     )
 
+                f.seek(data_start)
+
+                # Pre-build a lead-in buffer of the first ~300 ms. At each loop
+                # boundary we immediately queue this buffer, giving the decoder
+                # time to continue with the rest of the file without letting the
+                # I2S FIFO run dry.
+                LEADIN_TARGET_MS = 300
+                leadin_target_bytes = playback_rate * 2 * channels * LEADIN_TARGET_MS // 1000
+                leadin_buf = bytearray()
+                leadin_source_bytes = 0
+                while len(leadin_buf) < leadin_target_bytes and leadin_source_bytes < data_size:
+                    chunk, consumed = _next_16bit_chunk(leadin_source_bytes)
+                    if chunk is None:
+                        break
+                    leadin_buf += chunk
+                    leadin_source_bytes += consumed
+
+                logger.info(
+                    "stream_wav leadin ready: %s bytes from %s source bytes, target %s",
+                    len(leadin_buf),
+                    leadin_source_bytes,
+                    leadin_target_bytes,
+                )
+
                 while self._keep_running:
                     if self._repeat_played >= self.repeat_count:
                         break
                     self._repeat_played += 1
-                    f.seek(data_start)
                     self._progress_samples = 0
                     total_original = 0
-                    logger.info("stream_wav loop %s start (seek done)", self._repeat_played)
+                    logger.info("stream_wav loop %s start", self._repeat_played)
 
-                    while total_original < data_size and self._keep_running:
-                        is_first_chunk = total_original == 0
-                        if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
-                            remaining_compressed = data_size - total_original
-                            remaining_compressed -= remaining_compressed % block_align
-                            if remaining_compressed <= 0:
-                                break
-
-                            max_blocks = min(adpcm_chunk_blocks, remaining_compressed // block_align)
-                            to_read = max_blocks * block_align
-                            if to_read <= 0:
-                                break
-
-                            raw_compressed = bytearray(f.read(to_read))
-                            if not raw_compressed:
-                                break
-
-                            raw = bytearray()
-                            if is_first_chunk:
-                                logger.info("stream_wav loop %s first chunk read start", self._repeat_played)
-                            for off in range(0, len(raw_compressed), block_align):
-                                raw.extend(adpcm_ima.decode_block(raw_compressed[off:off + block_align], channels, block_align))
-                            if is_first_chunk:
-                                logger.info("stream_wav loop %s first chunk decode done", self._repeat_played)
-                        else:
-                            # PCM: read raw bytes straight from the file.
-                            # Chunk size tuning notes:
-                            # - Smaller chunks = more responsive to stop()
-                            # - Larger chunks = less overhead, smoother audio
-                            # - The 0.5-second (stereo) or 1 second (mono) I2S buffer handles timing smoothness
-                            bytes_per_second = original_rate * bytes_per_sample
-                            chunk_size = int(bytes_per_second / 10.7)
-                            # chunk_size of 8192 worked great with 22050hz stereo 16 bit so factor 10.7
-
-                            to_read = min(chunk_size, data_size - total_original)
-                            to_read -= to_read % bytes_per_sample
-                            if to_read <= 0:
-                                break
-
-                            if is_first_chunk:
-                                logger.info("stream_wav loop %s first chunk read start", self._repeat_played)
-                            raw = bytearray(f.read(to_read))
-                            if is_first_chunk:
-                                logger.info("stream_wav loop %s first chunk read done", self._repeat_played)
-                            if not raw:
-                                break
-
-                            # Convert bit-depth to 16-bit
-                            if bits_per_sample == 8:
-                                raw = self._convert_8_to_16(raw)
-                            elif bits_per_sample == 24:
-                                raw = self._convert_24_to_16(raw)
-                            elif bits_per_sample == 32:
-                                raw = self._convert_32_to_16(raw)
-
-                        # Upsample if needed
-                        if upsample_factor > 1:
-                            raw = self._upsample_buffer(raw, upsample_factor)
-
-                        # Volume scaling via I2S native right-shift
+                    # Queue the pre-decoded lead-in immediately. This is what
+                    # makes loop boundaries gapless for slow formats like ADPCM.
+                    if leadin_buf and self._keep_running:
+                        logger.info("stream_wav loop %s leadin write start", self._repeat_played)
+                        raw = leadin_buf
                         if self.volume < 100:
+                            # Volume may have changed, so shift a copy.
+                            raw = bytearray(leadin_buf)
                             volume_shift = self._volume_percent_to_shift(self.volume)
                             if self._i2s and volume_shift > 0:
                                 self._i2s.shift(buf=raw, bits=16, shift=-volume_shift)
-
-                        # Output to I2S (blocking write is OK - we're in a separate thread)
                         if self._i2s:
                             remaining = memoryview(raw)
                             while remaining:
@@ -545,11 +547,40 @@ class WAVStream:
                                     time.sleep_ms(1)
                                     continue
                                 remaining = remaining[written:]
-                            if is_first_chunk:
-                                logger.info("stream_wav loop %s first chunk write done", self._repeat_played)
                         else:
-                            # Simulate playback timing if no I2S
                             num_samples = len(raw) // (2 * channels)
+                            time.sleep(num_samples / playback_rate)
+                        total_original += leadin_source_bytes
+                        if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
+                            self._progress_samples = (total_original // block_align) * spb
+                        else:
+                            self._progress_samples = total_original // bytes_per_sample
+                        logger.info("stream_wav loop %s leadin write done", self._repeat_played)
+
+                    f.seek(data_start + leadin_source_bytes)
+
+                    while total_original < data_size and self._keep_running:
+                        chunk, to_read = _next_16bit_chunk(total_original)
+                        if chunk is None:
+                            break
+
+                        if self.volume < 100:
+                            volume_shift = self._volume_percent_to_shift(self.volume)
+                            if self._i2s and volume_shift > 0:
+                                self._i2s.shift(buf=chunk, bits=16, shift=-volume_shift)
+
+                        if self._i2s:
+                            remaining = memoryview(chunk)
+                            while remaining:
+                                written = self._i2s.write(remaining)
+                                if written is None:
+                                    written = len(remaining)
+                                if written <= 0:
+                                    time.sleep_ms(1)
+                                    continue
+                                remaining = remaining[written:]
+                        else:
+                            num_samples = len(chunk) // (2 * channels)
                             time.sleep(num_samples / playback_rate)
 
                         total_original += to_read
@@ -558,13 +589,10 @@ class WAVStream:
                         else:
                             self._progress_samples = total_original // bytes_per_sample
 
-                        is_last_chunk = total_original >= data_size
-                        if is_last_chunk:
-                            logger.info("stream_wav loop %s last chunk written", self._repeat_played)
-
-                        # Yield so the UI thread gets a chance to run
                         if self._keep_running:
                             time.sleep_ms(1)
+
+                    logger.info("stream_wav loop %s end", self._repeat_played)
 
                 if self._i2s and self._keep_running:
                     try:
