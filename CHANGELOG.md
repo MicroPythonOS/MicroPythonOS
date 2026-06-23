@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.13.0
+======
+
 Builtin Apps:
 - Add File Manager to builtin apps, with support for dispatching an implicit 'view' intent to open files
 - AppStore: make BadgeHub.eu the default backend, with Apps.MicroPythonOS.com second, cleanups
@@ -11,7 +14,9 @@ Builtin Apps:
 
 Board Support:
 - Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
-- Fri3d 2026: add support for headset-only audio output (without simulteneous communicator output)
+- Fri3d 2026: add support for headset-only audio output (without simultaneous communicator output)
+- Fri3d 2026: update CH32 coprocessor firmware to 2.0.1 by @bertouttier
+- Fri3d 2026: fix battery voltage reading by @bertouttier
 
 Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
@@ -34,7 +39,7 @@ Frameworks:
 
 OS:
 - Add BMP bitmap image support (with fix for LVGL 9.4 bmp scaling)
-- Fix tjpgd JPEG scaling in LVGL
+- Fix tjpgd JPEG scaling in LVGL 9.4
 - Move MicroPythonOS-logo-white-long-w296.png to /builtin/res/
 
 0.12.2
