@@ -2,7 +2,16 @@ import lvgl as lv
 
 from mpos import Activity, Intent, ConnectivityManager, DisplayMetrics, SharedPreferences, SettingsActivity
 from fullscreen_qr import FullscreenQR
-from nostr_service import NostrManager, CHANNEL_NAME, DEFAULT_RELAY
+from nostr_service import NostrManager
+
+
+# Hard-coded FRI3D NIP-28 public channel defaults.
+# Channel creation event:
+# nevent1qqsvcrczlp9uxaaucqah67m6qp6l5kkhwfgs2j0ycq5g9wsaszlk3wcpzamhxue69uhhyetvv9ujucm0wfc82mfwvdhk6tczyqvpzdc9flnqmagk39mrz8ct73xmuj756ts276fjthlwn75p4r9a5qcyqqqqq2sfhuvhp
+CHANNEL_ID = "fccd56d3ce0b43d48c55851a8024e398b7a33b92de64976e374df69913fd482f"
+CHANNEL_NAME = "fri3d"
+CHANNEL_ABOUT = "Be excellent!"
+DEFAULT_RELAY = "wss://relay.damus.io"
 
 
 class ShowNpubQRActivity(Activity):
@@ -138,6 +147,7 @@ class NostrApp(Activity):
                 print(f"Generated random nsec: {nsec}")
             follow_npub = self.prefs.get_string("nostr_follow_npub")
             relay = self.prefs.get_string("nostr_relay") or DEFAULT_RELAY
+            channel_id = self.prefs.get_string("nostr_channel_id") or CHANNEL_ID
         except Exception as e:
             self.error_cb(f"Couldn't read prefs: {e}")
             import sys
@@ -154,14 +164,18 @@ class NostrApp(Activity):
         self._manager.set_error_callback(self.error_cb)
 
         try:
-            self._manager.configure_nostr(nsec, relay, follow_npub)
+            self._manager.configure_identity(nsec, relays=relay)
+            if follow_npub:
+                self._manager.subscribe_profile(follow_npub)
+            self._manager.subscribe_channel(channel_id)
         except Exception as e:
             self.error_cb(f"Couldn't configure Nostr client: {e}")
             import sys
             sys.print_exception(e)
             return
 
-        self.balance_label.set_text(f"Channel: #{CHANNEL_NAME}")
+        header_name = CHANNEL_NAME if channel_id == CHANNEL_ID else channel_id[:8]
+        self.balance_label.set_text(f"Channel: #{header_name}")
         self.events_label.set_text(
             "\nConnecting to relay.\n\nIf this takes too long, the relay might be down or something's wrong with the settings."
         )
@@ -202,6 +216,7 @@ class NostrApp(Activity):
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
             {"title": "Nostr Private Key (nsec)", "key": "nostr_nsec", "placeholder": "nsec1...", "should_show": self.should_show_setting},
+            {"title": "Nostr Channel ID (optional)", "key": "nostr_channel_id", "placeholder": CHANNEL_ID, "should_show": self.should_show_setting},
             {"title": "Nostr Follow Public Key (npub, optional)", "key": "nostr_follow_npub", "placeholder": "npub1...", "should_show": self.should_show_setting},
             {"title": "Nostr Relay (optional)", "key": "nostr_relay", "placeholder": DEFAULT_RELAY, "should_show": self.should_show_setting},
             {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self.should_show_setting},
