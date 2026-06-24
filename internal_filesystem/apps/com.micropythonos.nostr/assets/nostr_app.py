@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Activity, Intent, ConnectivityManager, DisplayMetrics, MposKeyboard, SharedPreferences, SettingsActivity
+from mpos import Activity, Intent, ConnectivityManager, DisplayMetrics, FontManager, MposKeyboard, SharedPreferences, SettingsActivity
 from fullscreen_qr import FullscreenQR
 from nostr_service import NostrManager
 
@@ -66,14 +66,12 @@ class ShowNpubQRActivity(Activity):
 class NostrApp(Activity):
 
     _manager = None
-    events_label_current_font = 2
-    events_label_fonts = [lv.font_montserrat_10, lv.font_unscii_8, lv.font_montserrat_16, lv.font_montserrat_24, lv.font_unscii_16, lv.font_montserrat_28]
 
     # screens:
     main_screen = None
 
     # widgets
-    balance_label = None
+    title_label = None
     events_label = None
     input_textarea = None
     keyboard = None
@@ -84,7 +82,7 @@ class NostrApp(Activity):
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(0, lv.PART.MAIN)
         self.main_screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        self.main_screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        #self.main_screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Header row
         header_row = lv.obj(self.main_screen)
@@ -95,18 +93,18 @@ class NostrApp(Activity):
         header_row.set_flex_flow(lv.FLEX_FLOW.ROW)
         header_row.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
 
-        self.balance_label = lv.label(header_row)
-        self.balance_label.set_text("")
-        self.balance_label.set_flex_grow(1)
-        self.balance_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
-        self.balance_label.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.title_label = lv.label(header_row)
+        self.title_label.set_text("")
+        self.title_label.set_flex_grow(1)
+        self.title_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        self.title_label.center()
 
         settings_button = lv.button(header_row)
         settings_button.set_size(DisplayMetrics.pct_of_width(15), lv.SIZE_CONTENT)
         settings_button.add_event_cb(self.settings_button_tap, lv.EVENT.CLICKED, None)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
-        settings_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+        settings_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
         settings_label.center()
 
         # Events label
@@ -115,9 +113,7 @@ class NostrApp(Activity):
         self.events_label.set_flex_grow(1)
         self.events_label.set_width(lv.pct(100))
         self.events_label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.update_events_label_font()
-        self.events_label.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.events_label.add_event_cb(self.events_label_clicked, lv.EVENT.CLICKED, None)
+        self.events_label.set_style_text_font(FontManager.getFont(emoji=True), lv.PART.MAIN)
 
         # Input row
         input_row = lv.obj(self.main_screen)
@@ -139,7 +135,7 @@ class NostrApp(Activity):
         send_button.add_event_cb(self.send_button_tap, lv.EVENT.CLICKED, None)
         send_label = lv.label(send_button)
         send_label.set_text(lv.SYMBOL.GPS)
-        send_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
+        send_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
         send_label.center()
 
         # On-screen keyboard (hidden until the textarea is focused)
@@ -215,7 +211,7 @@ class NostrApp(Activity):
             return
 
         header_name = CHANNEL_NAME if channel_id == CHANNEL_ID else channel_id[:8]
-        self.balance_label.set_text(f"Channel: #{header_name}")
+        self.title_label.set_text(f"Channel: #{header_name}")
         self.events_label.set_text(
             "\nConnecting to relay.\n\nIf this takes too long, the relay might be down or something's wrong with the settings."
         )
@@ -227,13 +223,6 @@ class NostrApp(Activity):
             self._manager.set_error_callback(None)
             # Don't stop the manager — it stays running and will reconnect when online
         self.events_label.set_text("WiFi is not connected, can't talk to relay...")
-
-    def update_events_label_font(self):
-        self.events_label.set_style_text_font(self.events_label_fonts[self.events_label_current_font], lv.PART.MAIN)
-
-    def events_label_clicked(self, event):
-        self.events_label_current_font = (self.events_label_current_font + 1) % len(self.events_label_fonts)
-        self.update_events_label_font()
 
     def send_button_tap(self, event):
         text = self.input_textarea.get_text().strip()
@@ -282,5 +271,5 @@ class NostrApp(Activity):
         self.startActivity(intent)
 
     def main_ui_set_defaults(self):
-        self.balance_label.set_text(f"Channel: #{CHANNEL_NAME}")
+        self.title_label.set_text(f"Channel: #{CHANNEL_NAME}")
         self.events_label.set_text(lv.SYMBOL.REFRESH)
