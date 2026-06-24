@@ -232,8 +232,19 @@ class OSUpdate(Activity):
         if result['success']:
             self.status_label.set_text("Update finished! Restarting...")
             await TaskManager.sleep(5)
-            from osupdate_core import UpdateManager
-            UpdateManager.get_instance().update_downloader.set_boot_partition_and_restart()
+            try:
+                from osupdate_core import UpdateManager
+                UpdateManager.get_instance().update_downloader.set_boot_partition_and_restart()
+            except Exception as e:
+                logger.error("Failed to set boot partition: %s", e)
+                from osupdate_core import format_set_boot_error
+                raw_error, friendly_message = format_set_boot_error(e)
+                self.status_label.set_text(
+                    f"Update failed to activate.\n\n"
+                    f"Raw error: {raw_error}\n\n"
+                    f"{friendly_message}"
+                )
+                self.install_button.remove_state(lv.STATE.DISABLED)
             return
 
         bytes_written = result.get('bytes_written', 0)

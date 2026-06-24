@@ -29,6 +29,25 @@ class UpdateState:
     ERROR = "error"
 
 
+_SET_BOOT_ERROR_MESSAGES = (
+    ("esp_err_ota_validate_failed", "Update is invalid. If it got corrupted during download, please try again."),
+    ("esp_err_ota_partition_conflict", "Cannot overwrite the running partition. Please try again."),
+    ("esp_err_ota_select_info_invalid", "Update partition information is invalid. Please try again."),
+    ("esp_err_ota_small_sec_ver", "This update's security version is too old. Please check for a newer update."),
+    ("esp_err_ota_rollback_failed", "Could not activate the update because rollback failed. Please try again."),
+    ("esp_err_ota_rollback_invalid_state", "Current update is still pending validation. Please restart and try again."),
+)
+
+
+def format_set_boot_error(e):
+    raw = str(e)
+    error_lower = raw.lower()
+    for marker, message in _SET_BOOT_ERROR_MESSAGES:
+        if marker in error_lower:
+            return raw, message
+    return raw, "Could not activate the update. Please try again."
+
+
 class UpdateDownloader:
     CHUNK_SIZE = 4096
 
