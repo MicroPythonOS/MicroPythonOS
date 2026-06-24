@@ -138,7 +138,7 @@ mpos.io_expander = expander
 from mpos import BatteryManager
 BatteryManager.read_raw_adc = lambda *args: mpos.io_expander.analog[1]
 BatteryManager.has_battery = lambda *args: True
-BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (0.001857993861607339 * mpos.io_expander.analog[1] - 0.9965856090206169)
+BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (mpos.io_expander.analog[1] * 0.00192308 - 0.28076923)
 
 # LCD and Lora reset using the CH32 microcontroller
 expander.config = 0x01 # 3v3 aux on + LCD off + Lora Off
