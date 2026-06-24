@@ -2,7 +2,7 @@ import lvgl as lv
 
 from mpos import Activity, Intent, ConnectivityManager, DisplayMetrics, SharedPreferences, SettingsActivity
 from fullscreen_qr import FullscreenQR
-from nostr_service import NostrManager
+from nostr_service import NostrManager, CHANNEL_NAME, DEFAULT_RELAY
 
 
 class ShowNpubQRActivity(Activity):
@@ -137,7 +137,7 @@ class NostrApp(Activity):
                 self.prefs.edit().put_string("nostr_nsec", nsec).commit()
                 print(f"Generated random nsec: {nsec}")
             follow_npub = self.prefs.get_string("nostr_follow_npub")
-            relay = self.prefs.get_string("nostr_relay")
+            relay = self.prefs.get_string("nostr_relay") or DEFAULT_RELAY
         except Exception as e:
             self.error_cb(f"Couldn't read prefs: {e}")
             import sys
@@ -161,8 +161,10 @@ class NostrApp(Activity):
             sys.print_exception(e)
             return
 
-        self.balance_label.set_text("Events from " + (follow_npub or "?")[:16] + "...")
-        self.events_label.set_text("\nConnecting to relay.\n\nIf this takes too long, the relay might be down or something's wrong with the settings.")
+        self.balance_label.set_text(f"Channel: #{CHANNEL_NAME}")
+        self.events_label.set_text(
+            "\nConnecting to relay.\n\nIf this takes too long, the relay might be down or something's wrong with the settings."
+        )
 
     def went_offline(self):
         if self._manager:
@@ -200,12 +202,12 @@ class NostrApp(Activity):
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
             {"title": "Nostr Private Key (nsec)", "key": "nostr_nsec", "placeholder": "nsec1...", "should_show": self.should_show_setting},
-            {"title": "Nostr Follow Public Key (npub)", "key": "nostr_follow_npub", "placeholder": "npub1...", "should_show": self.should_show_setting},
-            {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": "wss://relay.example.com", "should_show": self.should_show_setting},
+            {"title": "Nostr Follow Public Key (npub, optional)", "key": "nostr_follow_npub", "placeholder": "npub1...", "should_show": self.should_show_setting},
+            {"title": "Nostr Relay (optional)", "key": "nostr_relay", "placeholder": DEFAULT_RELAY, "should_show": self.should_show_setting},
             {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self.should_show_setting},
         ])
         self.startActivity(intent)
 
     def main_ui_set_defaults(self):
-        self.balance_label.set_text("Welcome!")
+        self.balance_label.set_text(f"Channel: #{CHANNEL_NAME}")
         self.events_label.set_text(lv.SYMBOL.REFRESH)

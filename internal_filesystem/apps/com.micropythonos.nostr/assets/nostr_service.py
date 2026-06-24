@@ -24,6 +24,16 @@ def get_kind_name(kind):
     return EVENT_KIND_NAMES.get(kind, f"UNKNOWN({kind})")
 
 
+# Hard-coded FRI3D NIP-28 public channel.
+# Channel event id and metadata from
+# nevent1qqsvcrczlp9uxaaucqah67m6qp6l5kkhwfgs2j0ycq5g9wsaszlk3wcpzamhxue69uhhyetvv9ujucm0wfc82mfwvdhk6tczyqvpzdc9flnqmagk39mrz8ct73xmuj756ts276fjthlwn75p4r9a5qcyqqqqq2sfhuvhp
+CHANNEL_ID = "fccd56d3ce0b43d48c55851a8024e398b7a33b92de64976e374df69913fd482f"
+CHANNEL_PUBKEY = "181137054fe60df5168976311f0bf44dbe4bd4d2e0af69325dfee9fa81a8cbda"
+CHANNEL_NAME = "fri3d"
+CHANNEL_ABOUT = "Be excellent!"
+DEFAULT_RELAY = "wss://relay.damus.io"
+
+
 def format_timestamp(timestamp):
     try:
         import time as time_module
@@ -92,6 +102,8 @@ class NostrEvent:
         return self.content
 
     def __str__(self):
+        if self.kind == 42:
+            return self._format_channel_message()
         kind_name = self.get_kind_name()
         timestamp = self.get_formatted_timestamp()
         tags_str = self.get_formatted_tags()
@@ -102,6 +114,12 @@ class NostrEvent:
         if tags_str:
             result += f"\n{tags_str}"
         return result
+
+    def _format_channel_message(self):
+        timestamp = self.get_formatted_timestamp()
+        pubkey = (self.public_key[:16] + "...") if self.public_key else "?"
+        content = self.get_display_content()
+        return f"[{timestamp}] {pubkey}\n{content}"
 
 
 def _make_subscription_id(prefix):
@@ -260,10 +278,13 @@ class NostrManager:
             self._nostr_private_key = PrivateKey.from_nsec(nsec)
         else:
             self._nostr_private_key = PrivateKey(bytes.fromhex(nsec))
-        follow_npub_hex = follow_npub
-        if follow_npub.startswith("npub1"):
-            from nostr.key import PublicKey
-            follow_npub_hex = PublicKey.from_npub(follow_npub).hex()
+        follow_npub_hex = None
+        if follow_npub:
+            if follow_npub.startswith("npub1"):
+                from nostr.key import PublicKey
+                follow_npub_hex = PublicKey.from_npub(follow_npub).hex()
+            else:
+                follow_npub_hex = follow_npub
         self._nostr_follow_hex = follow_npub_hex
         self._nostr_configured = True
         self._ensure_main_task()
@@ -384,17 +405,20 @@ class NostrManager:
         self.connected = True
 
         # Set up nostr app subscription
-        if self._nostr_configured and self._nostr_follow_hex:
+        if self._nostr_configured:
             self._nostr_sub_id = _make_subscription_id("micropython_nostr_")
-            filters = Filters([Filter(
-                authors=[self._nostr_follow_hex],
-            )])
+            filter_list = [Filter(kinds=[42], event_refs=[CHANNEL_ID])]
+            if self._nostr_follow_hex:
+                filter_list.append(Filter(authors=[self._nostr_follow_hex]))
+            filters = Filters(filter_list)
             self.relay_manager.add_subscription(self._nostr_sub_id, filters)
             req = [ClientMessageType.REQUEST, self._nostr_sub_id]
             req.extend(filters.to_json_array())
             self.relay_manager.publish_message(json.dumps(req))
-            print("NostrManager: subscribed to events from {}".format(
-                self._nostr_follow_hex[:16]))
+            print("NostrManager: subscribed to channel #{}".format(CHANNEL_NAME))
+            if self._nostr_follow_hex:
+                print("NostrManager: also subscribed to events from {}".format(
+                    self._nostr_follow_hex[:16]))
 
         # Set up NWC subscription
         if self._nwc_configured:
@@ -564,9 +588,12 @@ class NostrManager:
                 break
 
         # Re-subscribe
-        if self._nostr_configured and self._nostr_follow_hex:
+        if self._nostr_configured:
             self._nostr_sub_id = _make_subscription_id("micropython_nostr_")
-            filters = Filters([Filter(authors=[self._nostr_follow_hex])])
+            filter_list = [Filter(kinds=[42], event_refs=[CHANNEL_ID])]
+            if self._nostr_follow_hex:
+                filter_list.append(Filter(authors=[self._nostr_follow_hex]))
+            filters = Filters(filter_list)
             self.relay_manager.add_subscription(self._nostr_sub_id, filters)
             self.relay_manager.publish_message(json.dumps(
                 [ClientMessageType.REQUEST, self._nostr_sub_id] + filters.to_json_array()))
