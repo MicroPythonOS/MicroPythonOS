@@ -82,8 +82,9 @@ class NostrApp(Activity):
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
         self.main_screen = lv.obj()
-        self.main_screen.set_style_pad_all(10, lv.PART.MAIN)
+        self.main_screen.set_style_pad_all(0, lv.PART.MAIN)
         self.main_screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self.main_screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         # Header row
         header_row = lv.obj(self.main_screen)
@@ -97,7 +98,7 @@ class NostrApp(Activity):
         self.balance_label = lv.label(header_row)
         self.balance_label.set_text("")
         self.balance_label.set_flex_grow(1)
-        self.balance_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        self.balance_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         self.balance_label.add_flag(lv.obj.FLAG.CLICKABLE)
 
         settings_button = lv.button(header_row)
@@ -105,7 +106,7 @@ class NostrApp(Activity):
         settings_button.add_event_cb(self.settings_button_tap, lv.EVENT.CLICKED, None)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
-        settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        settings_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         settings_label.center()
 
         # Events label
@@ -117,10 +118,6 @@ class NostrApp(Activity):
         self.update_events_label_font()
         self.events_label.add_flag(lv.obj.FLAG.CLICKABLE)
         self.events_label.add_event_cb(self.events_label_clicked, lv.EVENT.CLICKED, None)
-
-        # On-screen keyboard (hidden until the textarea is focused)
-        self.keyboard = MposKeyboard(self.main_screen)
-        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
         # Input row
         input_row = lv.obj(self.main_screen)
@@ -136,15 +133,19 @@ class NostrApp(Activity):
         self.input_textarea.set_width(lv.pct(75))
         self.input_textarea.set_placeholder_text("Type a message...")
         self.input_textarea.set_max_length(280)
-        self.keyboard.set_textarea(self.input_textarea)
 
         send_button = lv.button(input_row)
-        send_button.set_size(lv.pct(20), lv.SIZE_CONTENT)
+        send_button.set_size(lv.pct(15), lv.SIZE_CONTENT)
         send_button.add_event_cb(self.send_button_tap, lv.EVENT.CLICKED, None)
         send_label = lv.label(send_button)
         send_label.set_text(lv.SYMBOL.GPS)
-        send_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        send_label.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
         send_label.center()
+
+        # On-screen keyboard (hidden until the textarea is focused)
+        self.keyboard = MposKeyboard(self.main_screen)
+        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self.keyboard.set_textarea(self.input_textarea)
 
         self.setContentView(self.main_screen)
 
