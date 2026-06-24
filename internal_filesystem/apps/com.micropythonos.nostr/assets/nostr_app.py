@@ -97,7 +97,6 @@ class NostrApp(Activity):
         self.title_label.set_text("")
         self.title_label.set_flex_grow(1)
         self.title_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-        self.title_label.center()
 
         settings_button = lv.button(header_row)
         settings_button.set_size(DisplayMetrics.pct_of_width(15), lv.SIZE_CONTENT)
@@ -170,9 +169,6 @@ class NostrApp(Activity):
             self.went_offline()
 
     def went_online(self):
-        if self._manager and self._manager.is_running() and self._manager.is_connected():
-            print("nostr manager is already running, nothing to do")
-            return
         try:
             nsec = self.prefs.get_string("nostr_nsec")
             if not nsec:
@@ -190,6 +186,20 @@ class NostrApp(Activity):
             sys.print_exception(e)
             return
 
+        header_name = CHANNEL_NAME if channel_id == CHANNEL_ID else channel_id[:8]
+        self._channel_id = channel_id
+
+        if self._manager and self._manager.is_running() and self._manager.is_connected():
+            print("nostr manager is already running, nothing to do")
+            self.title_label.set_text(f"Channel: #{header_name}")
+            # If the channel changed in settings, subscribe to the new one.
+            if self._manager.is_connected():
+                try:
+                    self._manager.subscribe_channel(channel_id, name="channel")
+                except Exception as e:
+                    print("nostr_app.py: could not switch channel: {}".format(e))
+            return
+
         if not self._manager:
             self._manager = NostrManager.get_instance()
 
@@ -203,19 +213,18 @@ class NostrApp(Activity):
             self._manager.configure_identity(nsec, relays=relay)
             if follow_npub:
                 self._manager.subscribe_profile(follow_npub)
-            self._manager.subscribe_channel(channel_id)
+            self._manager.subscribe_channel(channel_id, name="channel")
         except Exception as e:
             self.error_cb(f"Couldn't configure Nostr client: {e}")
             import sys
             sys.print_exception(e)
             return
 
-        header_name = CHANNEL_NAME if channel_id == CHANNEL_ID else channel_id[:8]
         self.title_label.set_text(f"Channel: #{header_name}")
         self.events_label.set_text(
             "\nConnecting to relay.\n\nIf this takes too long, the relay might be down or something's wrong with the settings."
         )
-        self._channel_id = channel_id
+
 
     def went_offline(self):
         if self._manager:
