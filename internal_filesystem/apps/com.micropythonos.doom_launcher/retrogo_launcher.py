@@ -3,6 +3,30 @@ import os
 from mpos import Activity, Intent, SettingsActivity, SharedPreferences, TaskManager, sdcard
 
 
+class StartingActivity(Activity):
+
+    def onCreate(self):
+        intent = self.getIntent()
+        extras = intent.extras if intent else {}
+
+        game_name = extras.get("game_name", "Game")
+        bootfile_prefix = extras.get("bootfile_prefix", "")
+        gamefile = extras.get("gamefile", "")
+        default_text = f"Launching {game_name} with file: {bootfile_prefix}{gamefile}"
+        starting_text = extras.get("starting_text", default_text)
+
+        screen = lv.obj()
+        screen.set_style_pad_all(15, lv.PART.MAIN)
+
+        label = lv.label(screen)
+        label.set_text(starting_text)
+        label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        label.set_width(lv.pct(100))
+        label.center()
+
+        self.setContentView(screen)
+
+
 class RetroGoLauncher(Activity):
 
     mountpoint_sdcard = "/sdcard"
@@ -244,7 +268,14 @@ class RetroGoLauncher(Activity):
         TaskManager.create_task(self.start_game(self.bootfile_prefix, self.bootfile_to_write, gamefile))
 
     async def start_game(self, bootfile_prefix, bootfile_to_write, gamefile):
-        self.status_label.set_text(f"Launching {self.game_name} with file: {bootfile_prefix}{gamefile}")
+        intent = Intent(activity_class=StartingActivity)
+        original_extras = self.getIntent().extras if self.getIntent() else {}
+        if original_extras and "starting_text" in original_extras:
+            intent.putExtra("starting_text", original_extras["starting_text"])
+        intent.putExtra("game_name", self.game_name)
+        intent.putExtra("bootfile_prefix", bootfile_prefix)
+        intent.putExtra("gamefile", gamefile)
+        self.startActivity(intent)
         await TaskManager.sleep(1)
 
         self.mkdir(bootfile_prefix + self.romdir)
@@ -321,7 +352,6 @@ class RetroGoLauncher(Activity):
 
         # Wait a few seconds so the user has time to switch off the device in the "boot to retro-go" state
         # This is useful to capture debug logging, as this triggers a re-init of the USB-to-serial.
-        self.status_label.set_text("Starting in 3 seconds...")
         await TaskManager.sleep(3)
 
         try:
