@@ -234,6 +234,13 @@ def detect_board():
                     return "freenove_esp32s3_display"
                 restore_i2c(sda=16, scl=15)
 
+            if __debug__: logger.debug("esp32_s3_touch_lcd_35b ?")
+            if i2c0 := fail_save_i2c(sda=8, scl=7):
+                # AXP2101 PMU at 0x34 and AXS15231B touch at 0x3B
+                if single_address_i2c_scan(i2c0, 0x3B):
+                    return "esp32_s3_touch_lcd_35b"
+                restore_i2c(sda=8, scl=7)
+
             if __debug__: logger.debug("fri3d_2024 ?")
             if i2c0 := fail_save_i2c(sda=9, scl=18):
                 if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
