@@ -73,7 +73,8 @@ class LoRaChat(Activity):
     def onPause(self, screen):
         super().onPause(screen)
         print("LoRa Chat backgrounded, putting LoRa to sleep")
-        LoRaManager.radioChip.sleep(retainConfig=False)
+        if not simulation_mode:
+            LoRaManager.radioChip.sleep(retainConfig=False)
 
     def send_callback(self, event):
         message = self.input_textarea.get_text()
