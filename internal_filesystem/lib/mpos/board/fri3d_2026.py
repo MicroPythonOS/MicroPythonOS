@@ -49,6 +49,7 @@ LightsManager.set_led_num(5)
 LightsManager.set_led(4, 21, 96, 67)
 LightsManager.write()
 
+spi_freq = const(16000000)
 spi_bus = SPI.Bus(
     host=2,
     mosi=6,
@@ -58,7 +59,7 @@ spi_bus = SPI.Bus(
 
 # Would be better to do this only when the LoRa app starts:
 try:
-    lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+    lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=spi_freq, cs=45, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
 except Exception as e:
     import sys
     sys.print_exception(e)
@@ -73,7 +74,7 @@ else:
 
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
-    freq=40000000, # 40 Mhz
+    freq=spi_freq, # 40 Mhz
     dc=4,
     cs=5
 )
@@ -230,7 +231,7 @@ except Exception as e:
     logger.error("expander init got exception: %s" % (e))
 
 import mpos.sdcard
-mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
+mpos.sdcard.init(slot=2, spi_bus=spi_bus, cs_pin=14, freq=spi_freq)
 
 IRManager.txPin = Pin(21, Pin.OUT) # mini blaster / noisycricket has an IR LED
 IRManager.rxPin = Pin(11, Pin.IN)
