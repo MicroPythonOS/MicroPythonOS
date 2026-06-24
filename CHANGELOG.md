@@ -5,6 +5,7 @@ Put unreleased changes here!
 
 Builtin Apps:
 - About: fix logo not showing
+- AppStore: download the correct .mpk from BadgeHub.eu if there are multiple versions
 
 Frameworks:
 - WifiService: increase connection timeout from 10 to 13 seconds

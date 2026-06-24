@@ -65,15 +65,77 @@ class AppDetail(Activity):
         self.progress_bar.add_flag(lv.obj.FLAG.HIDDEN)
 
     @staticmethod
-    def _find_download_file(files, preferred_exts):
-        for preferred_ext in preferred_exts:
-            for file in files:
-                if __debug__: logger.debug("parsing file: %s", file)
-                ext = file.get("ext").lower()
-                if __debug__: logger.debug("file has extension: %s", ext)
-                if ext == preferred_ext:
-                    return file
+    def _extract_main_executable(app_metadata):
+        """Return the executable filename marked as main in app_metadata.
+
+        BadgeHub may set one file as the main executable via the
+        ``application`` field.  When present, that exact file must be
+        downloaded, even if several versions are available.
+        """
+        if not isinstance(app_metadata, dict):
+            return None
+
+        application = app_metadata.get("application")
+        if isinstance(application, dict):
+            executable = application.get("executable")
+            if executable:
+                return executable
+        elif isinstance(application, list):
+            for entry in application:
+                if isinstance(entry, dict):
+                    executable = entry.get("executable")
+                    if executable:
+                        return executable
+
+        executable = app_metadata.get("executable")
+        if executable:
+            return executable
+
         return None
+
+    @staticmethod
+    def _find_download_file(files, preferred_exts, app_version=None, main_executable=None):
+        """Pick the best download file from a BadgeHub version object.
+
+        Priority:
+        1. The file explicitly named in ``main_executable``.
+        2. The ``.mpk``/``.zip`` whose basename ends with ``_<app_version>``.
+        3. The first matching file as a safe fallback.
+        """
+        candidates = []
+        for file in files:
+            if __debug__: logger.debug("parsing file: %s", file)
+            ext = file.get("ext")
+            if ext is None:
+                continue
+            ext = str(ext).lower()
+            if __debug__: logger.debug("file has extension: %s", ext)
+            if ext in preferred_exts:
+                candidates.append(file)
+
+        if not candidates:
+            return None
+
+        if main_executable:
+            main_lower = str(main_executable).lower()
+            for file in candidates:
+                full_path = file.get("full_path", "")
+                name = file.get("name", "")
+                if str(full_path).lower() == main_lower or str(name).lower() == main_lower:
+                    return file
+
+        if app_version is not None:
+            version_marker = "_{}.mpk".format(app_version)
+            version_name_marker = "_{}".format(app_version)
+            for file in candidates:
+                full_path = file.get("full_path", "")
+                name = file.get("name", "")
+                if str(full_path).lower().endswith(version_marker):
+                    return file
+                if str(name).lower().endswith(version_name_marker):
+                    return file
+
+        return candidates[0]
 
     def onCreate(self):
         if __debug__: logger.debug("creating app detail screen")
@@ -336,20 +398,39 @@ class AppDetail(Activity):
                 logger.warning("could not get version from app details: %s", e)
                 return
             if __debug__: logger.debug("got version object: %s", version)
-            # Find .mpk download URL:
-            try:
-                files = version.get("files")
-                download_file = self._find_download_file(files, [".mpk", ".zip"])
-                if download_file:
-                    app_obj.download_url = download_file.get("url")
-                    app_obj.download_url_size = download_file.get("size_of_content")
-            except Exception as e:
-                logger.warning("could not get files from version: %s", e)
+
             try:
                 app_metadata = version.get("app_metadata")
             except Exception as e:
                 logger.warning("could not get app_metadata from version: %s", e)
                 return
+
+            # version
+            try:
+                app_version = app_metadata.get("version")
+                if __debug__: logger.debug("app has app_version: %s", app_version)
+                app_obj.version = app_version
+            except Exception as e:
+                logger.warning("could not get version from app_metadata: %s", e)
+
+            # Find .mpk download URL, preferring the explicitly-marked main
+            # executable and then matching the displayed version.
+            try:
+                files = version.get("files")
+                main_executable = self._extract_main_executable(app_metadata)
+                download_file = self._find_download_file(
+                    files,
+                    [".mpk", ".zip"],
+                    app_version=app_version,
+                    main_executable=main_executable,
+                )
+                if download_file:
+                    app_obj.download_url = download_file.get("url")
+                    app_obj.download_url_size = download_file.get("size_of_content")
+                    if __debug__: logger.debug("selected download file for %s: %s", app_obj.fullname, download_file.get("full_path"))
+            except Exception as e:
+                logger.warning("could not get files from version: %s", e)
+
             # publisher / author:
             try:
                 app_obj.publisher = app_metadata.get("author")
@@ -360,13 +441,6 @@ class AppDetail(Activity):
                 app_obj.long_description = app_metadata.get("long_description")
             except Exception as e:
                 logger.warning("could not get long_description from version: %s", e)
-            # version
-            try:
-                app_version = app_metadata.get("version")
-                if __debug__: logger.debug("app has app_version: %s", app_version)
-                app_obj.version = app_version
-            except Exception as e:
-                logger.warning("could not get version from app_metadata: %s", e)
         except Exception as e:
             err = f"ERROR: could not parse app details JSON: {e}"
             logger.error(err)

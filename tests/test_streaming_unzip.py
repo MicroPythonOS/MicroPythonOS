@@ -160,6 +160,23 @@ class TestStreamingUnzip(unittest.TestCase):
             extractor.finish()
         self.assertIn("not a directory", str(ctx.exception))
 
+    def test_rejects_lightningpiggy_no_topdir(self):
+        """Regression: badgehub old MPK whose first entry is assets/confetti.py.
+
+        The original LightningPiggy 0.2.6 package has no top-level directory.
+        A mis-selected download would hit this error; the extractor must still
+        reject the malformed archive cleanly.
+        """
+        with open("../tests/com.lightningpiggy.displaywallet_badold.mpk", "rb") as f:
+            data = f.read()
+
+        extractor = StreamingUnzip(self.DEST, expected_app_name="com.lightningpiggy.displaywallet")
+        with self.assertRaises(RuntimeError) as ctx:
+            for i in range(0, len(data), 512):
+                extractor.feed(data[i:i + 512])
+            extractor.finish()
+        self.assertIn("not a directory", str(ctx.exception))
+
     def test_rejects_wrong_topdir(self):
         """Package whose top dir does not match expected_app_name is refused."""
         with open("../tests/com.micropythonos.ziptest_invalid_topdir.mpk", "rb") as f:

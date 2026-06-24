@@ -216,8 +216,9 @@ class UpdateDownloader:
             next_partition = get_next_update_partition(
                 partition_module=self.partition_module
             )
+            logger.warning("setting boot partition to: %s", next_partition)
             next_partition.set_boot()
-            if __debug__: logger.debug("boot partition set, restarting")
+            logger.warning("boot partition set, restarting")
 
             import machine
             machine.reset()

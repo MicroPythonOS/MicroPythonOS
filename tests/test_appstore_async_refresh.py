@@ -546,3 +546,157 @@ class TestAppDetailUpdateRecheck(unittest.TestCase):
             1,
             "_trigger_update_recheck must schedule check_for_updates via TaskManager.create_task",
         )
+
+
+class TestAppDetailBadgehubFileSelection(unittest.TestCase):
+    """Ensure AppDetail selects the correct .mpk when BadgeHub lists several."""
+
+    def _make_files(self):
+        return [
+            {
+                "name": "com.lightningpiggy.displaywallet_0.2.6",
+                "ext": ".mpk",
+                "full_path": "com.lightningpiggy.displaywallet_0.2.6.mpk",
+                "url": "https://badgehub.eu/rev/files/0.2.6.mpk",
+                "size_of_content": 160000,
+            },
+            {
+                "name": "com.lightningpiggy.displaywallet_0.6.0",
+                "ext": ".mpk",
+                "full_path": "com.lightningpiggy.displaywallet_0.6.0.mpk",
+                "url": "https://badgehub.eu/rev/files/0.6.0.mpk",
+                "size_of_content": 309363,
+            },
+            {
+                "name": "icon-64x64",
+                "ext": ".png",
+                "full_path": "icon-64x64.png",
+                "url": "https://badgehub.eu/rev/files/icon.png",
+                "size_of_content": 1974,
+            },
+        ]
+
+    def test_prefers_main_executable(self):
+        """The file named in app_metadata.application.executable wins."""
+        from app_detail import AppDetail
+
+        files = self._make_files()
+        app_metadata = {
+            "version": "0.6.0",
+            "application": [{"executable": "com.lightningpiggy.displaywallet_0.2.6.mpk"}],
+        }
+        main_executable = AppDetail._extract_main_executable(app_metadata)
+        chosen = AppDetail._find_download_file(
+            files,
+            [".mpk", ".zip"],
+            app_version=app_metadata["version"],
+            main_executable=main_executable,
+        )
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["url"], "https://badgehub.eu/rev/files/0.2.6.mpk")
+
+    def test_prefers_version_match_when_no_main_executable(self):
+        """When no main executable is set, the .mpk matching the version is chosen."""
+        from app_detail import AppDetail
+
+        files = self._make_files()
+        chosen = AppDetail._find_download_file(
+            files,
+            [".mpk", ".zip"],
+            app_version="0.6.0",
+            main_executable=None,
+        )
+        self.assertIsNotNone(chosen)
+        self.assertEqual(chosen["url"], "https://badgehub.eu/rev/files/0.6.0.mpk")
+
+    def test_extract_main_executable_variants(self):
+        """Main executable can live in app_metadata.application (list or dict) or top-level."""
+        from app_detail import AppDetail
+
+        self.assertEqual(
+            AppDetail._extract_main_executable({
+                "application": [{"executable": "a.mpk"}],
+            }),
+            "a.mpk",
+        )
+        self.assertEqual(
+            AppDetail._extract_main_executable({
+                "application": {"executable": "b.mpk"},
+            }),
+            "b.mpk",
+        )
+        self.assertEqual(
+            AppDetail._extract_main_executable({"executable": "c.mpk"}),
+            "c.mpk",
+        )
+        self.assertIsNone(AppDetail._extract_main_executable({}))
+        self.assertIsNone(AppDetail._extract_main_executable(None))
+
+    def test_fetch_badgehub_details_selects_version_matched_mpk(self):
+        """Integration: real BadgeHub fixture with one .mpk chooses the right file."""
+        import json
+        import os
+        import asyncio
+        import mpos.net.download_manager as dm
+        from app_detail import AppDetail
+
+        # MicroPython does not define __file__ when tests are run via -c; the
+        # runner's cwd is internal_filesystem, but also accept running from the
+        # repo root for local debugging.
+        fixture_path = None
+        for candidate in (
+            os.path.abspath(os.path.join(os.getcwd(), "..", "appstore_projects_slog.json")),
+            os.path.join(os.getcwd(), "appstore_projects_slog.json"),
+        ):
+            try:
+                with open(candidate, "r"):
+                    fixture_path = candidate
+                    break
+            except OSError:
+                pass
+        self.assertIsNotNone(fixture_path)
+        with open(fixture_path, "r") as f:
+            fixture = f.read()
+
+        app_obj = type(
+            "App",
+            (),
+            {
+                "fullname": "com.lightningpiggy.displaywallet",
+                "download_url": None,
+                "download_url_size": None,
+                "version": None,
+                "publisher": None,
+                "long_description": None,
+            },
+        )()
+
+        detail = AppDetail()
+        detail.app = app_obj
+        detail.appstore = type(
+            "AppStore",
+            (),
+            {
+                "get_backend_details_url_from_settings": lambda self: "https://badgehub.eu/api/v3/projects",
+                "_BACKEND_API_BADGEHUB": "badgehub",
+            },
+        )()
+
+        async def fake_download(url, **kwargs):
+            return fixture
+
+        orig_dl = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(fake_download)
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(detail.fetch_badgehub_app_details(app_obj))
+        finally:
+            dm.DownloadManager.download_url = orig_dl
+
+        self.assertEqual(app_obj.version, "0.6.0")
+        self.assertIsNotNone(app_obj.download_url)
+        self.assertTrue(
+            app_obj.download_url.endswith("com.lightningpiggy.displaywallet_0.6.0.mpk"),
+            app_obj.download_url,
+        )
+        self.assertEqual(app_obj.download_url_size, 309363)
