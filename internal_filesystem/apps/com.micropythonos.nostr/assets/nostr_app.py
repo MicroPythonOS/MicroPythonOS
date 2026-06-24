@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from mpos import Activity, Intent, ConnectivityManager, DisplayMetrics, SharedPreferences, SettingsActivity
+from mpos import Activity, Intent, ConnectivityManager, DisplayMetrics, MposKeyboard, SharedPreferences, SettingsActivity
 from fullscreen_qr import FullscreenQR
 from nostr_service import NostrManager
 
@@ -75,38 +75,77 @@ class NostrApp(Activity):
     # widgets
     balance_label = None
     events_label = None
+    input_textarea = None
+    keyboard = None
+    _channel_id = None
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
         self.main_screen = lv.obj()
         self.main_screen.set_style_pad_all(10, lv.PART.MAIN)
-        # Header line
-        header_line = lv.line(self.main_screen)
-        header_line.set_points([{'x':0,'y':35},{'x':200,'y':35}],2)
-        header_line.add_flag(lv.obj.FLAG.CLICKABLE)
-        # Header label showing which npub we're following
-        self.balance_label = lv.label(self.main_screen)
+        self.main_screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+
+        # Header row
+        header_row = lv.obj(self.main_screen)
+        header_row.set_width(lv.pct(100))
+        header_row.set_height(lv.SIZE_CONTENT)
+        header_row.set_style_border_width(0, lv.PART.MAIN)
+        header_row.set_style_pad_all(0, lv.PART.MAIN)
+        header_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        header_row.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
+
+        self.balance_label = lv.label(header_row)
         self.balance_label.set_text("")
-        self.balance_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        self.balance_label.set_flex_grow(1)
         self.balance_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         self.balance_label.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.balance_label.set_width(DisplayMetrics.pct_of_width(100))
-        # Events label
-        self.events_label = lv.label(self.main_screen)
-        self.events_label.set_text("")
-        self.events_label.align_to(header_line,lv.ALIGN.OUT_BOTTOM_LEFT,0,10)
-        self.update_events_label_font()
-        self.events_label.set_width(DisplayMetrics.pct_of_width(100))
-        self.events_label.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.events_label.add_event_cb(self.events_label_clicked,lv.EVENT.CLICKED,None)
-        settings_button = lv.button(self.main_screen)
-        settings_button.set_size(lv.pct(20), lv.pct(25))
-        settings_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
-        settings_button.add_event_cb(self.settings_button_tap,lv.EVENT.CLICKED,None)
+
+        settings_button = lv.button(header_row)
+        settings_button.set_size(DisplayMetrics.pct_of_width(15), lv.SIZE_CONTENT)
+        settings_button.add_event_cb(self.settings_button_tap, lv.EVENT.CLICKED, None)
         settings_label = lv.label(settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
         settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
+
+        # Events label
+        self.events_label = lv.label(self.main_screen)
+        self.events_label.set_text("")
+        self.events_label.set_flex_grow(1)
+        self.events_label.set_width(lv.pct(100))
+        self.events_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.update_events_label_font()
+        self.events_label.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.events_label.add_event_cb(self.events_label_clicked, lv.EVENT.CLICKED, None)
+
+        # On-screen keyboard (hidden until the textarea is focused)
+        self.keyboard = MposKeyboard(self.main_screen)
+        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+
+        # Input row
+        input_row = lv.obj(self.main_screen)
+        input_row.set_width(lv.pct(100))
+        input_row.set_height(lv.SIZE_CONTENT)
+        input_row.set_style_border_width(0, lv.PART.MAIN)
+        input_row.set_style_pad_all(0, lv.PART.MAIN)
+        input_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        input_row.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
+
+        self.input_textarea = lv.textarea(input_row)
+        self.input_textarea.set_one_line(True)
+        self.input_textarea.set_width(lv.pct(75))
+        self.input_textarea.set_placeholder_text("Type a message...")
+        self.input_textarea.set_max_length(280)
+        self.keyboard.set_textarea(self.input_textarea)
+
+        send_button = lv.button(input_row)
+        send_button.set_size(lv.pct(20), lv.SIZE_CONTENT)
+        send_button.add_event_cb(self.send_button_tap, lv.EVENT.CLICKED, None)
+        send_label = lv.label(send_button)
+        send_label.set_text(lv.SYMBOL.GPS)
+        send_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        send_label.center()
+
         self.setContentView(self.main_screen)
 
     def onStart(self, main_screen):
@@ -179,6 +218,7 @@ class NostrApp(Activity):
         self.events_label.set_text(
             "\nConnecting to relay.\n\nIf this takes too long, the relay might be down or something's wrong with the settings."
         )
+        self._channel_id = channel_id
 
     def went_offline(self):
         if self._manager:
@@ -193,6 +233,23 @@ class NostrApp(Activity):
     def events_label_clicked(self, event):
         self.events_label_current_font = (self.events_label_current_font + 1) % len(self.events_label_fonts)
         self.update_events_label_font()
+
+    def send_button_tap(self, event):
+        text = self.input_textarea.get_text().strip()
+        if not text:
+            return
+        if not self._channel_id:
+            self.error_cb("No channel configured")
+            return
+        try:
+            NostrManager.get_instance().publish_channel_message(self._channel_id, text)
+        except Exception as e:
+            self.error_cb(f"Couldn't send message: {e}")
+            import sys
+            sys.print_exception(e)
+            return
+        self.input_textarea.set_text("")
+        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
     def redraw_events_cb(self):
         events_text = ""

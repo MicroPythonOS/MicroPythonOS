@@ -27,6 +27,16 @@ class _FakeEvent:
         self.tags = tags or []
 
 
+class _FakeRelayManager:
+    """Captures events published by NostrManager without touching the network."""
+
+    def __init__(self):
+        self.published = []
+
+    def publish_event(self, event):
+        self.published.append(event)
+
+
 class TestNostrServiceHelpers(unittest.TestCase):
     """Low-level key/nsec/npub conversion helpers."""
 
@@ -168,6 +178,57 @@ class TestNostrManagerSubscriptions(unittest.TestCase):
         cb = lambda e: e
         self.mgr.subscribe_channel("f" * 64, callback=cb)
         self.assertEqual(self.mgr._subscriptions[0].callback, cb)
+
+
+class TestNostrManagerPublish(unittest.TestCase):
+    """Publishing NIP-28 channel messages."""
+
+    def setUp(self):
+        self.mgr = NostrManager.get_instance()
+        self.mgr._subscriptions = []
+        self.mgr._subscription_ids = {}
+        self.mgr._default_relays = []
+        self.mgr._nostr_configured = False
+        self.mgr._nostr_private_key = None
+        self.mgr.relay_manager = None
+        self.mgr.configure_identity(PrivateKey().bech32())
+        self.mgr.relay_manager = _FakeRelayManager()
+
+    def test_publish_requires_identity(self):
+        other = NostrManager()
+        other.relay_manager = _FakeRelayManager()
+        try:
+            other.publish_channel_message("f" * 64, "hello")
+        except RuntimeError:
+            return
+        self.fail("publish_channel_message should require an identity key")
+
+    def test_publish_rejects_empty_content(self):
+        try:
+            self.mgr.publish_channel_message("f" * 64, "")
+        except ValueError:
+            return
+        self.fail("publish_channel_message should reject empty content")
+
+    def test_publish_requires_relay_manager(self):
+        self.mgr.relay_manager = None
+        try:
+            self.mgr.publish_channel_message("f" * 64, "hello")
+        except RuntimeError:
+            return
+        self.fail("publish_channel_message should require a relay manager")
+
+    def test_publish_channel_message_signs_kind42_event(self):
+        channel_id = "c" * 64
+        content = "Hello channel!"
+        self.mgr.publish_channel_message(channel_id, content)
+        self.assertEqual(len(self.mgr.relay_manager.published), 1)
+        event = self.mgr.relay_manager.published[0]
+        self.assertEqual(event.kind, 42)
+        self.assertEqual(event.content, content)
+        self.assertEqual(event.public_key, self.mgr._nostr_private_key.public_key.hex())
+        self.assertTrue(len(event.signature) > 0)
+        self.assertEqual(event.tags, [["e", channel_id, "", "root"]])
 
 
 class TestNostrEventFormatting(unittest.TestCase):

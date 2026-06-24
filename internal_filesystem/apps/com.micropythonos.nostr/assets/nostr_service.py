@@ -7,7 +7,7 @@ from mpos import Service, TaskManager
 from nostr.relay_manager import RelayManager
 from nostr.message_type import ClientMessageType
 from nostr.filter import Filter, Filters
-from nostr.event import EncryptedDirectMessage
+from nostr.event import Event, EncryptedDirectMessage
 from nostr.key import PrivateKey
 
 EVENT_KIND_NAMES = {
@@ -321,6 +321,24 @@ class NostrManager:
         own_hex = self._nostr_private_key.public_key.hex()
         filters = Filters([Filter(kinds=[4], pubkey_refs=[own_hex])])
         self.add_subscription("dms", filters, callback)
+
+    def publish_channel_message(self, channel_id, content):
+        """Sign and publish a NIP-28 channel message (kind 42)."""
+        if self._nostr_private_key is None:
+            raise RuntimeError("Identity must be configured before publishing messages")
+        if not content:
+            raise ValueError("Message content cannot be empty")
+        if self.relay_manager is None:
+            raise RuntimeError("Relay manager is not ready yet")
+        event = Event(
+            content=content,
+            public_key=self._nostr_private_key.public_key.hex(),
+            kind=42,
+            tags=[["e", channel_id, "", "root"]],
+        )
+        self._nostr_private_key.sign_event(event)
+        self.relay_manager.publish_event(event)
+        print("NostrManager: published channel message to {}".format(channel_id[:16]))
 
     def add_subscription(self, name, filters, callback=None):
         """Add a generic subscription, replacing any existing one with the same name."""
