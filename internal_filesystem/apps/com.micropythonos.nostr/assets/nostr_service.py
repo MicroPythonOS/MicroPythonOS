@@ -178,7 +178,7 @@ class NostrManager:
         # Shown" slider, 1..21) via NWCWallet's PAYMENTS_TO_SHOW property —
         # without that link, NWC would always fetch the class default while
         # LNBits (limit=) and on-chain (pageSize=) honour the user setting.
-        self._nwc_list_limit = 6
+        self._nwc_list_limit = 21
 
         # Nostr app state
         self.events = []
@@ -301,12 +301,6 @@ class NostrManager:
             self._default_relays = [url for url in relays if url]
         self._nostr_configured = True
         self._ensure_main_task()
-
-    def configure_nostr(self, nsec, relay, follow_npub):
-        """Backward-compatible helper: set identity and follow a profile."""
-        self.configure_identity(nsec, relays=relay)
-        if follow_npub:
-            self.subscribe_profile(follow_npub)
 
     def subscribe_channel(self, channel_id, name=None, callback=None):
         """Subscribe to a NIP-28 public group chat channel."""
