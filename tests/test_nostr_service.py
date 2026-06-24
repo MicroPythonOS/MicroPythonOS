@@ -227,6 +227,8 @@ class TestNostrManagerPublish(unittest.TestCase):
         self.assertEqual(event.kind, 42)
         self.assertEqual(event.content, content)
         self.assertEqual(event.public_key, self.mgr._nostr_private_key.public_key.hex())
+        self.assertIsNotNone(event.created_at)
+        self.assertTrue(isinstance(event.created_at, int))
         self.assertTrue(len(event.signature) > 0)
         self.assertEqual(event.tags, [["e", channel_id, "", "root"]])
 

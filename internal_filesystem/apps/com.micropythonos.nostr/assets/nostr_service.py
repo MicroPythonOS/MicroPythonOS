@@ -336,6 +336,7 @@ class NostrManager:
             kind=42,
             tags=[["e", channel_id, "", "root"]],
         )
+        event.__post_init__()
         self._nostr_private_key.sign_event(event)
         self.relay_manager.publish_event(event)
         print("NostrManager: published channel message to {}".format(channel_id[:16]))
