@@ -48,7 +48,7 @@ class MockPartition:
 # Import the actual classes we're testing
 # Tests run from internal_filesystem/, so we add the assets directory to path
 sys.path.append('builtin/apps/com.micropythonos.osupdate/assets')
-from osupdate_core import UpdateChecker, UpdateDownloader, round_up_to_multiple, UpdateState, _get_version_comparison
+from osupdate_core import UpdateChecker, UpdateDownloader, round_up_to_multiple, UpdateState, _get_version_comparison, format_set_boot_error
 
 
 def run_async(coro):
@@ -667,3 +667,74 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
     def test_sync_ui_checking_update(self):
         self.app._sync_ui(UpdateState.CHECKING_UPDATE)
         self.assertEqual(self.app.status_label.get_text(), "Checking for OS updates...")
+
+
+class TestFormatSetBootError(unittest.TestCase):
+    """Test mapping of ESP set_boot errors to user-friendly messages."""
+
+    def test_validate_failed(self):
+        raw, friendly = format_set_boot_error(OSError(-5379, "ESP_ERR_OTA_VALIDATE_FAILED"))
+        self.assertIn("ESP_ERR_OTA_VALIDATE_FAILED", raw)
+        self.assertIn("invalid", friendly.lower())
+        self.assertIn("corrupted", friendly.lower())
+
+    def test_partition_conflict(self):
+        raw, friendly = format_set_boot_error(OSError(-5377, "ESP_ERR_OTA_PARTITION_CONFLICT"))
+        self.assertIn("ESP_ERR_OTA_PARTITION_CONFLICT", raw)
+        self.assertIn("running partition", friendly.lower())
+
+    def test_unknown_error_has_fallback(self):
+        raw, friendly = format_set_boot_error(OSError("some unexpected failure"))
+        self.assertEqual(raw, "some unexpected failure")
+        self.assertIn("try again", friendly.lower())
+
+
+class MockDownloaderUpdateManager:
+    """Minimal stand-in for UpdateManager used by _run_download tests."""
+
+    def __init__(self, start_download_result):
+        self._start_download_result = start_download_result
+
+    async def start_download(self, *args, **kwargs):
+        return self._start_download_result
+
+
+class TestOSUpdateRunDownload(unittest.TestCase):
+    """Test _run_download error handling after a successful download stream."""
+
+    def setUp(self):
+        import osupdate
+        import osupdate_core
+        self.osupdate_module = osupdate
+        self.osupdate_core_module = osupdate_core
+
+        from osupdate import OSUpdate
+        self.app = OSUpdate()
+        self.app.has_foreground = lambda: True
+        self.app.status_label = MockLVGLLabel()
+        self.app.install_button = MockLVGLButton(initial_disabled=True)
+        self.app.install_button.children = [MockLVGLLabel()]
+        self.app._um = MockDownloaderUpdateManager({"success": True, "bytes_written": 0, "total_size": 0})
+
+        self._original_sleep = osupdate.TaskManager.sleep
+        self._original_set_boot = osupdate_core.UpdateDownloader.set_boot_partition_and_restart
+
+        osupdate.TaskManager.sleep = staticmethod(lambda s: asyncio.sleep(0))
+
+    def tearDown(self):
+        self.osupdate_module.TaskManager.sleep = self._original_sleep
+        self.osupdate_core_module.UpdateDownloader.set_boot_partition_and_restart = self._original_set_boot
+
+    def test_set_boot_failure_updates_ui(self):
+        def failing_set_boot(self):
+            raise OSError(-5379, "ESP_ERR_OTA_VALIDATE_FAILED")
+
+        self.osupdate_core_module.UpdateDownloader.set_boot_partition_and_restart = failing_set_boot
+
+        run_async(self.app._run_download("http://example.com/update.bin"))
+
+        status_text = self.app.status_label.get_text()
+        self.assertIn("Update failed to activate", status_text)
+        self.assertIn("ESP_ERR_OTA_VALIDATE_FAILED", status_text)
+        self.assertIn("corrupted", status_text.lower())
+        self.assertFalse(self.app.install_button.is_disabled())

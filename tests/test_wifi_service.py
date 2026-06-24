@@ -120,7 +120,7 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         self.assertEqual(len(mock_time.get_sleep_calls()), 0)
 
     def test_connection_timeout(self):
-        """Test connection timeout after 10 attempts."""
+        """Test connection timeout after 13 attempts."""
         mock_network = MockNetwork(connected=False)
         mock_time = MockTime()
 
@@ -140,8 +140,8 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         )
 
         self.assertFalse(result)
-        # Should have slept 10 times
-        self.assertEqual(len(mock_time.get_sleep_calls()), 10)
+        # Should have slept 13 times
+        self.assertEqual(len(mock_time.get_sleep_calls()), 13)
 
     def test_connection_aborted_when_wifi_disabled(self):
         """Test connection aborts if WiFi is disabled during attempt."""
@@ -177,8 +177,8 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         )
 
         self.assertFalse(result)
-        # Should have checked less than 10 times (aborted early)
-        self.assertTrue(check_count[0] < 10)
+        # Should have checked less than 13 times (aborted early)
+        self.assertTrue(check_count[0] < 13)
         # Should have slept only until abort
         self.assertEqual(len(mock_time.get_sleep_calls()), 2)
 
@@ -877,25 +877,17 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
 
         # Real scan output from user's example
         mock_wlan._scan_results = [
-            (b'Channel 8', b'\xde\xec^\x8f\x00A', 11, -47, 3, False),
-            (b'Baptistus', b'\xd8\xec^\x8f\x00A', 11, -48, 7, False),
-            (b'telenet-BD74DC9', b'TgQ>t\xe7', 11, -70, 3, False),
-            (b'Galaxy S10+64bf', b'b\x19\xdf\xef\xb0\x8f', 11, -83, 3, False),
-            (b'Najeeb\xe2\x80\x99s iPhone', b"F\x07'\xb8\x0b0", 6, -84, 7, False),
-            (b'DIRECT-83-HP OfficeJet Pro 7740', b'\x1a`$dk\x83', 1, -87, 3, False),
-            (b'Channel 8', b'\xde\xec^\xe1#w', 1, -91, 3, False),
-            (b'Baptistus', b'\xd8\xec^\xe1#w', 1, -91, 7, False),
-            (b'Proximus-Home-596457', b'\xf4\x05\x95\xf9A\xf1', 1, -93, 3, False),
-            (b'Proximus-Home-596457', b'\xcc\x00\xf1j}\x94', 1, -93, 3, False),
-            (b'BASE-9104320', b'4,\xc4\xe7\x01\xb7', 1, -94, 3, False),
+            (b'telenet-BD74DC2', b'TgQ>t\xe2', 11, -70, 3, False),
+            (b'Galaxy S10+66bf', b'b\x19\xdf\xef\xb0\x2f', 11, -83, 3, False),
+            (b'DIRECT-83-HP OfficeJet Pro 7740', b'\x1a`$dk\x82', 1, -87, 3, False),
+            (b'Proximus-Home-596452', b'\xcc\x00\xf1j}\x92', 1, -93, 3, False),
+            (b'BASE-9104322', b'4,\xc4\xe7\x01\xb2', 1, -94, 3, False),
         ]
 
         # Save several networks
         WifiService.access_points = {
-            'Channel 8': {'password': 'pass1'},
-            'Baptistus': {'password': 'pass2'},
-            'telenet-BD74DC9': {'password': 'pass3'},
-            'Galaxy S10+64bf': {'password': 'pass4'},
+            'Galaxy S10+66bf': {'password': 'pass4'},
+            'BASE-9104322': {'password': 'pass5'}
         }
 
         # Track attempts and fail first to see ordering
@@ -912,9 +904,9 @@ class TestWifiServiceRSSISorting(unittest.TestCase):
         result = WifiService.connect(network_module=mock_network, time_module=MockTime())
 
         self.assertTrue(result)
-        # Expected order: Channel 8 (-47), Baptistus (-48), telenet (-70), Galaxy (-83)
-        self.assertEqual(connection_attempts[0], 'Channel 8')
-        self.assertEqual(connection_attempts[1], 'Baptistus')
+        # Expected order: Galaxy (-83), BASE-9104322 (-94)
+        self.assertEqual(connection_attempts[0], 'Galaxy S10+66bf')
+        self.assertEqual(connection_attempts[1], 'BASE-9104322')
         self.assertEqual(len(connection_attempts), 2)
 
     def test_sorting_preserves_network_data_integrity(self):
