@@ -3,10 +3,10 @@
 APP_FULLNAME = "com.micropythonos.nostr"
 
 # Default relays used when the user has not configured one.
+# "wss://relay.nostr.band",
+# "wss://relay.snort.social",
 DEFAULT_RELAYS = [
     "wss://nos.lol",
-    "wss://relay.snort.social",
-    "wss://relay.nostr.band",
     "wss://relay.damus.io",
     "wss://relay.primal.net"
 ]

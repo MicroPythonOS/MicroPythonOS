@@ -44,6 +44,7 @@ class ChatActivity(Activity):
     _store = None
     _prefs = None
     _handler_registered = False
+    _rendered_ids = None
 
     def onCreate(self):
         self._prefs = SharedPreferences(self.appFullName)
@@ -205,6 +206,7 @@ class ChatActivity(Activity):
 
     def _load_and_render(self):
         self._messages_container.clean()
+        self._rendered_ids = set()
         messages = self._store.load_messages(self._chat_id)
         chat = self._store.get_chat(self._chat_id)
         if chat is not None:
@@ -215,6 +217,10 @@ class ChatActivity(Activity):
         self._scroll_to_bottom()
 
     def _append_message_row(self, message):
+        if self._rendered_ids is None:
+            self._rendered_ids = set()
+        self._rendered_ids.add(message.event_id)
+
         row = lv.obj(self._messages_container)
         row.set_width(lv.pct(100))
         row.set_height(lv.SIZE_CONTENT)
@@ -328,7 +334,10 @@ class ChatActivity(Activity):
                 content=content,
                 kind=self._kind,
             )
-            if self._store.add_message(self._chat_id, message, mark_unread=False):
+            # Persist if not already stored; render regardless, because
+            # ChatListActivity may have stored this event before our handler runs.
+            self._store.add_message(self._chat_id, message, mark_unread=False)
+            if message.event_id not in self._rendered_ids:
                 self._append_message_row(message)
                 self._scroll_to_bottom()
         except Exception as e:
