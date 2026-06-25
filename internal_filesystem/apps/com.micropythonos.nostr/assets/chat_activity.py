@@ -238,9 +238,11 @@ class ChatActivity(Activity):
 
     def _scroll_to_bottom(self):
         try:
-            self._messages_container.scroll_to_y(
-                self._messages_container.get_scroll_bottom(), lv.ANIM.OFF
-            )
+            count = self._messages_container.get_child_count()
+            if count > 0:
+                self._messages_container.get_child(count - 1).scroll_to_view_recursive(
+                    lv.ANIM.OFF
+                )
         except Exception:
             pass
 

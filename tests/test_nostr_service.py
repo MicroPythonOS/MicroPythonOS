@@ -266,6 +266,55 @@ class TestNostrManagerPublish(unittest.TestCase):
         self.assertTrue(len(event.signature) > 0)
         self.assertEqual(event.tags, [["e", channel_id, "", "root"]])
 
+    def test_publish_dm_signs_kind4_encrypted_event(self):
+        recipient = PrivateKey()
+        content = "secret dm"
+        self.mgr.publish_dm(recipient.public_key.hex(), content)
+        self.assertEqual(len(self.mgr.relay_manager.published), 1)
+        event = self.mgr.relay_manager.published[0]
+        self.assertEqual(event.kind, 4)
+        self.assertEqual(event.public_key, self.mgr._nostr_private_key.public_key.hex())
+        self.assertTrue(["p", recipient.public_key.hex()] in event.tags)
+        self.assertNotEqual(event.content, content)
+        self.assertTrue(len(event.content) > 0)
+        self.assertTrue(len(event.signature) > 0)
+
+
+class TestNostrManagerNwcPublish(unittest.TestCase):
+    """Publishing NWC requests as kind 23194 encrypted DMs."""
+
+    def setUp(self):
+        self.mgr = NostrManager.get_instance()
+        self.mgr._subscriptions = []
+        self.mgr._subscription_ids = {}
+        self.mgr._default_relays = []
+        self.mgr._nostr_configured = False
+        self.mgr._nostr_private_key = None
+        self.mgr._nwc_configured = True
+        self.mgr._nwc_private_key = PrivateKey()
+        self.mgr._nwc_wallet_pubkey = "a" * 64
+        self.mgr.relay_manager = _FakeRelayManager()
+
+    def test_nwc_fetch_balance_publishes_kind23194_encrypted_request(self):
+        self.mgr.nwc_fetch_balance()
+        self.assertEqual(len(self.mgr.relay_manager.published), 1)
+        event = self.mgr.relay_manager.published[0]
+        self.assertEqual(event.kind, 23194)
+        self.assertEqual(event.public_key, self.mgr._nwc_private_key.public_key.hex())
+        self.assertTrue(["p", self.mgr._nwc_wallet_pubkey] in event.tags)
+        self.assertTrue(len(event.content) > 0)
+        self.assertTrue(len(event.signature) > 0)
+
+    def test_nwc_fetch_payments_publishes_kind23194_encrypted_request(self):
+        self.mgr.nwc_fetch_payments()
+        self.assertEqual(len(self.mgr.relay_manager.published), 1)
+        event = self.mgr.relay_manager.published[0]
+        self.assertEqual(event.kind, 23194)
+        self.assertEqual(event.public_key, self.mgr._nwc_private_key.public_key.hex())
+        self.assertTrue(["p", self.mgr._nwc_wallet_pubkey] in event.tags)
+        self.assertTrue(len(event.content) > 0)
+        self.assertTrue(len(event.signature) > 0)
+
 
 class TestNostrManagerRelaySync(unittest.TestCase):
     """Hot-adding relays configured while the manager is already running."""

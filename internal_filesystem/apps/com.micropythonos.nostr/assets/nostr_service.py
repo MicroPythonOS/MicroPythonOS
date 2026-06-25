@@ -386,6 +386,18 @@ class NostrManager:
         print("NostrManager: published channel message to {}".format(channel_id[:16]))
         return event.id
 
+    def _publish_signed_dm(self, private_key, recipient_hex, content, kind=4, reference_event_id=None):
+        """Build, sign and publish an encrypted direct message."""
+        dm = EncryptedDirectMessage(
+            recipient_pubkey=recipient_hex,
+            cleartext_content=content,
+            kind=kind,
+            reference_event_id=reference_event_id,
+        )
+        private_key.sign_event(dm)
+        self.relay_manager.publish_event(dm)
+        return dm.id
+
     def publish_dm(self, recipient_pubkey_or_npub, content, reference_event_id=None):
         """Sign and publish a NIP-04 encrypted direct message (kind 4)."""
         if self._nostr_private_key is None:
@@ -395,15 +407,14 @@ class NostrManager:
         if self.relay_manager is None:
             raise RuntimeError("Relay manager is not ready yet")
         recipient_hex = _pubkey_to_hex(recipient_pubkey_or_npub)
-        dm = EncryptedDirectMessage(
-            recipient_pubkey=recipient_hex,
-            cleartext_content=content,
+        dm_id = self._publish_signed_dm(
+            self._nostr_private_key,
+            recipient_hex,
+            content,
             reference_event_id=reference_event_id,
         )
-        self._nostr_private_key.sign_event(dm)
-        self.relay_manager.publish_event(dm)
         print("NostrManager: published DM to {}".format(recipient_hex[:16]))
-        return dm.id
+        return dm_id
 
     def get_own_pubkey_hex(self):
         """Return the configured identity's public key in hex, or None."""
@@ -863,13 +874,12 @@ class NostrManager:
         if not self._nwc_configured:
             return
         balance_request = {"method": "get_balance", "params": {}}
-        dm = EncryptedDirectMessage(
-            recipient_pubkey=self._nwc_wallet_pubkey,
-            cleartext_content=json.dumps(balance_request),
-            kind=23194
+        self._publish_signed_dm(
+            self._nwc_private_key,
+            self._nwc_wallet_pubkey,
+            json.dumps(balance_request),
+            kind=23194,
         )
-        self._nwc_private_key.sign_event(dm)
-        self.relay_manager.publish_event(dm)
 
     def nwc_fetch_payments(self):
         if not self._nwc_configured:
@@ -878,13 +888,12 @@ class NostrManager:
             "method": "list_transactions",
             "params": {"limit": self._nwc_list_limit}
         }
-        dm = EncryptedDirectMessage(
-            recipient_pubkey=self._nwc_wallet_pubkey,
-            cleartext_content=json.dumps(list_transactions),
-            kind=23194
+        self._publish_signed_dm(
+            self._nwc_private_key,
+            self._nwc_wallet_pubkey,
+            json.dumps(list_transactions),
+            kind=23194,
         )
-        self._nwc_private_key.sign_event(dm)
-        self.relay_manager.publish_event(dm)
 
 
 class NostrClientService(Service):
