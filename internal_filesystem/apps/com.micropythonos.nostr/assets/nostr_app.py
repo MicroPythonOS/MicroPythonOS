@@ -188,26 +188,28 @@ class NostrApp(Activity):
 
         header_name = CHANNEL_NAME if channel_id == CHANNEL_ID else channel_id[:8]
         self._channel_id = channel_id
-
-        if self._manager and self._manager.is_running() and self._manager.is_connected():
-            print("nostr manager is already running, nothing to do")
-            self.title_label.set_text(f"Channel: #{header_name}")
-            # If the channel changed in settings, subscribe to the new one.
-            if self._manager.is_connected():
-                try:
-                    self._manager.subscribe_channel(channel_id, name="channel")
-                except Exception as e:
-                    print("nostr_app.py: could not switch channel: {}".format(e))
-            return
+        self.title_label.set_text(f"Channel: #{header_name}")
 
         if not self._manager:
             self._manager = NostrManager.get_instance()
 
-        if not self._manager.is_running():
-            self._manager.start()
-
+        # Always re-attach our UI callbacks; onPause detaches them.
         self._manager.set_events_updated_callback(self.redraw_events_cb)
         self._manager.set_error_callback(self.error_cb)
+
+        if self._manager.is_running() and self._manager.is_connected():
+            print("nostr manager is already running, nothing to do")
+            # If the channel changed in settings, subscribe to the new one.
+            try:
+                self._manager.subscribe_channel(channel_id, name="channel")
+            except Exception as e:
+                print("nostr_app.py: could not switch channel: {}".format(e))
+            # Draw any events that arrived while we were not listening.
+            self.redraw_events_cb()
+            return
+
+        if not self._manager.is_running():
+            self._manager.start()
 
         try:
             self._manager.configure_identity(nsec, relays=relay)
@@ -220,7 +222,6 @@ class NostrApp(Activity):
             sys.print_exception(e)
             return
 
-        self.title_label.set_text(f"Channel: #{header_name}")
         self.events_label.set_text(
             "\nConnecting to relay.\n\nIf this takes too long, the relay might be down or something's wrong with the settings."
         )
