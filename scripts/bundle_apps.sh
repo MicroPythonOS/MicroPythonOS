@@ -66,7 +66,7 @@ for apprepo in internal_filesystem/apps; do
             rm -f "$mpkname"
             echo "Creating $mpkname with deterministic file order..."
             (cd "$apprepo" && (find -L "$appdir" -type d; find -L "$appdir" -type f) | grep -v ".git/" | sort | TZ=CET zip -X -r0 "$mpkname" -@)
-            cp "$appfullpath"/res/mipmap-mdpi/icon_64x64.png "$thisappdir"/icons/"$appdir"_"$version"_64x64.png
+            cp "$appfullpath"/icon_64x64.png "$thisappdir"/icons/"$appdir"_"$version"_64x64.png
         fi
     done
 done
