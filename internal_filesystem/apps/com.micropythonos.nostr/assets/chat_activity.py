@@ -12,7 +12,7 @@ from mpos import (
 
 from chat_model import KIND_CHANNEL_MESSAGE, KIND_DM, Message
 from constants import (
-    DEFAULT_RELAY,
+    DEFAULT_RELAYS,
     LOOKBACK_WINDOW_SECONDS,
     OVERLAP_SECONDS,
     SUBSCRIPTION_LIMIT_INITIAL,
@@ -165,7 +165,7 @@ class ChatActivity(Activity):
 
         nsec = self._prefs.get_string("nostr_nsec")
         if nsec:
-            relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAY
+            relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAYS
             if not self._manager._nostr_configured:
                 try:
                     self._manager.configure_identity(nsec, relays=relay)

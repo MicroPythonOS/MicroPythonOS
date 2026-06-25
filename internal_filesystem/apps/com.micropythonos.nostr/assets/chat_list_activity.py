@@ -27,6 +27,7 @@ from constants import (
     DEFAULT_CHANNEL_NAME,
     DEFAULT_MAX_MESSAGES_PER_CHAT,
     DEFAULT_RELAY,
+    DEFAULT_RELAYS,
     INDEX_FLUSH_MS,
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
@@ -186,7 +187,7 @@ class ChatListActivity(Activity):
             self._manager.start()
 
         nsec = self._ensure_identity()
-        relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAY
+        relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAYS
         if not self._manager._nostr_configured:
             try:
                 self._manager.configure_identity(nsec, relays=relay)

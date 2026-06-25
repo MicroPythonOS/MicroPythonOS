@@ -2,8 +2,15 @@
 
 APP_FULLNAME = "com.micropythonos.nostr"
 
-# Default relay used when the user has not configured one.
-DEFAULT_RELAY = "wss://relay.damus.io"
+# Default relays used when the user has not configured one.
+DEFAULT_RELAYS = [
+    "wss://nos.lol",
+    "wss://relay.snort.social",
+    "wss://relay.nostr.band",
+    "wss://relay.damus.io",
+    "wss://relay.primal.net"
+]
+DEFAULT_RELAY = DEFAULT_RELAYS[0]
 
 # Auto-joined public channel (#MicroPythonOS, NIP-28).
 DEFAULT_CHANNEL_ID = "cbf20cd9212aea3c7d399777b69cec750a0109edd831001a5011d892268a9481"
