@@ -145,7 +145,6 @@ class ChatListActivity(Activity):
             self._flush_timer = lv.timer_create(
                 lambda t: self._store.flush_index(), INDEX_FLUSH_MS, None
             )
-            self._flush_timer.set_repeat_count(0)
         except Exception as e:
             logger.warning("Could not create index flush timer: %s", e)
 
