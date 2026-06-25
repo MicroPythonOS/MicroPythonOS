@@ -302,24 +302,24 @@ class NostrManager:
         self._nostr_configured = True
         self._ensure_main_task()
 
-    def subscribe_channel(self, channel_id, name=None, callback=None):
+    def subscribe_channel(self, channel_id, name=None, callback=None, since=None, limit=None):
         """Subscribe to a NIP-28 public group chat channel."""
         sub_name = name or f"channel-{channel_id[:8]}"
-        filters = Filters([Filter(kinds=[42], event_refs=[channel_id])])
+        filters = Filters([Filter(kinds=[42], event_refs=[channel_id], since=since, limit=limit)])
         self.add_subscription(sub_name, filters, callback)
 
-    def subscribe_profile(self, pubkey_or_npub, callback=None):
+    def subscribe_profile(self, pubkey_or_npub, callback=None, since=None, limit=None):
         """Subscribe to events published by a single profile."""
         hex_pubkey = _pubkey_to_hex(pubkey_or_npub)
-        filters = Filters([Filter(authors=[hex_pubkey])])
+        filters = Filters([Filter(authors=[hex_pubkey], since=since, limit=limit)])
         self.add_subscription(f"profile-{hex_pubkey[:16]}", filters, callback)
 
-    def subscribe_dms(self, callback=None):
+    def subscribe_dms(self, callback=None, since=None, limit=None):
         """Subscribe to NIP-04 direct messages addressed to the configured identity."""
         if self._nostr_private_key is None:
             raise RuntimeError("Identity must be configured before subscribing to DMs")
         own_hex = self._nostr_private_key.public_key.hex()
-        filters = Filters([Filter(kinds=[4], pubkey_refs=[own_hex])])
+        filters = Filters([Filter(kinds=[4], pubkey_refs=[own_hex], since=since, limit=limit)])
         self.add_subscription("dms", filters, callback)
 
     def publish_channel_message(self, channel_id, content):
@@ -340,9 +340,56 @@ class NostrManager:
         self._nostr_private_key.sign_event(event)
         self.relay_manager.publish_event(event)
         print("NostrManager: published channel message to {}".format(channel_id[:16]))
+        return event.id
 
-    def add_subscription(self, name, filters, callback=None):
-        """Add a generic subscription, replacing any existing one with the same name."""
+    def publish_dm(self, recipient_pubkey_or_npub, content, reference_event_id=None):
+        """Sign and publish a NIP-04 encrypted direct message (kind 4)."""
+        if self._nostr_private_key is None:
+            raise RuntimeError("Identity must be configured before publishing messages")
+        if not content:
+            raise ValueError("Message content cannot be empty")
+        if self.relay_manager is None:
+            raise RuntimeError("Relay manager is not ready yet")
+        recipient_hex = _pubkey_to_hex(recipient_pubkey_or_npub)
+        dm = EncryptedDirectMessage(
+            recipient_pubkey=recipient_hex,
+            cleartext_content=content,
+            reference_event_id=reference_event_id,
+        )
+        self._nostr_private_key.sign_event(dm)
+        self.relay_manager.publish_event(dm)
+        print("NostrManager: published DM to {}".format(recipient_hex[:16]))
+        return dm.id
+
+    def get_own_pubkey_hex(self):
+        """Return the configured identity's public key in hex, or None."""
+        if self._nostr_private_key is None:
+            return None
+        return self._nostr_private_key.public_key.hex()
+
+    def close_subscription(self, name):
+        """Remove a named subscription and close it on relays."""
+        self._subscriptions = [s for s in self._subscriptions if s.name != name]
+        self._subscription_ids.pop(name, None)
+        if self.relay_manager is not None:
+            try:
+                self.relay_manager.close_subscription(name)
+            except Exception as e:
+                print("NostrManager: error closing subscription '{}': {}".format(name, e))
+
+    def add_subscription(self, name, filters, callback=None, since=None, limit=None):
+        """Add a generic subscription, replacing any existing one with the same name.
+
+        Optional ``since`` and ``limit`` are applied to every Filter in the
+        supplied Filters object that does not already set them. This lets the
+        client fetch only recent events instead of the full relay history.
+        """
+        if since is not None or limit is not None:
+            for f in filters.data:
+                if since is not None and f.since is None:
+                    f.since = since
+                if limit is not None and f.limit is None:
+                    f.limit = limit
         self._subscriptions = [s for s in self._subscriptions if s.name != name]
         sub = NostrSubscription(name, filters, callback)
         self._subscriptions.append(sub)
