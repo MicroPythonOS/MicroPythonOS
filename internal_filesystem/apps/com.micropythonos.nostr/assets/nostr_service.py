@@ -121,8 +121,13 @@ class NostrEvent:
         return f"[{timestamp}] {pubkey}\n{content}"
 
 
+_sub_id_counter = 0
+
+
 def _make_subscription_id(prefix):
-    return prefix + str(round(time.time()))
+    global _sub_id_counter
+    _sub_id_counter += 1
+    return prefix + str(int(time.time())) + "_" + str(_sub_id_counter)
 
 
 def _parse_nsec(nsec):
@@ -402,18 +407,15 @@ class NostrManager:
                 break
 
         if existing is not None:
-            try:
-                if existing.filters.to_json_array() == filters.to_json_array():
-                    # Update callback without re-publishing the same filter.
-                    if callback is not None:
-                        existing.callback = callback
-                    if __debug__:
-                        print("NostrManager: subscription '{}' unchanged, skipping".format(name))
-                    return
-            except Exception:
-                pass
+            if callback is not None:
+                existing.callback = callback
+            # ponytail: subscription name is the identity in this app;
+            # callers use stable names (dms, channel-<id>, dm-<pair>).
+            # Refresh the filter window for reconnect, but don't re-publish
+            # the same subscription while already connected.
+            existing.filters = filters
+            return
 
-        self._subscriptions = [s for s in self._subscriptions if s.name != name]
         sub = NostrSubscription(name, filters, callback)
         self._subscriptions.append(sub)
         if self.connected and self.relay_manager is not None:
