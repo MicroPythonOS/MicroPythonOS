@@ -215,6 +215,10 @@ class NostrManager:
         self._nwc_configured = False
         self._nwc_nwc_url = None
 
+        # Set when new relays are configured after the manager started; the
+        # main loop picks them up and hot-adds them to the running relay pool.
+        self._relays_dirty = False
+
         # Event callbacks: kind -> [callbacks]
         self._event_handlers = {}
 
@@ -339,6 +343,7 @@ class NostrManager:
         else:
             self._default_relays = [url for url in relays if url]
         self._nostr_configured = True
+        self._relays_dirty = True
         self._ensure_main_task()
 
     def subscribe_channel(self, channel_id, name=None, callback=None, since=None, limit=None):
@@ -484,6 +489,7 @@ class NostrManager:
         self._nwc_lud16 = lud16
         self._nwc_nwc_url = nwc_url
         self._nwc_configured = True
+        self._relays_dirty = True
         self._ensure_main_task()
 
     def _parse_nwc_url(self, nwc_url):
@@ -610,6 +616,14 @@ class NostrManager:
 
             if not self.keep_running:
                 break
+
+            if self._relays_dirty:
+                try:
+                    await self._sync_relays()
+                except Exception as e:
+                    print("NostrManager: relay sync error: {}".format(e))
+                    import sys
+                    sys.print_exception(e)
 
             now = time.time()
 
@@ -794,6 +808,54 @@ class NostrManager:
                 [ClientMessageType.REQUEST, self._nwc_sub_id] + nwc_filters.to_json_array()))
 
         self._polls_since_last_event = 0
+
+    async def _sync_relays(self):
+        """Hot-add relays configured after the manager started.
+
+        Existing relays stay connected; new ones are opened and all current
+        subscriptions are re-published so the new relays receive them too.
+        """
+        self._relays_dirty = False
+        if self.relay_manager is None:
+            return
+
+        new_urls = []
+        existing = set(self.relay_manager.relays.keys())
+        for url in self._default_relays + self._nwc_relays:
+            if url and url not in existing:
+                self.relay_manager.add_relay(url)
+                new_urls.append(url)
+        if not new_urls:
+            return
+
+        print("NostrManager: adding new relays: {}".format(new_urls))
+        await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
+
+        new_relays = [self.relay_manager.relays[url] for url in new_urls]
+        for _ in range(300):
+            await TaskManager.sleep(0.1)
+            if not self.keep_running:
+                return
+            if all(r.connected or r.error_counter > 0 for r in new_relays):
+                break
+
+        # Re-publish existing subscriptions so the new relays receive them.
+        for sub in self._subscriptions:
+            sub_id = self._subscription_ids.get(sub.name)
+            if sub_id is None:
+                sub_id = _make_subscription_id("mpos_sub_")
+                self._subscription_ids[sub.name] = sub_id
+            self._publish_subscription(sub, sub_id)
+
+        if self._nwc_configured and self._nwc_sub_id:
+            nwc_filters = Filters([Filter(
+                kinds=[23195, 23196],
+                authors=[self._nwc_wallet_pubkey],
+                pubkey_refs=[self._nwc_private_key.public_key.hex()]
+            )])
+            self.relay_manager.add_subscription(self._nwc_sub_id, nwc_filters)
+            self.relay_manager.publish_message(json.dumps(
+                [ClientMessageType.REQUEST, self._nwc_sub_id] + nwc_filters.to_json_array()))
 
     # --- NWC request methods ---
 

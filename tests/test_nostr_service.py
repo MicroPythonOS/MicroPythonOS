@@ -37,6 +37,40 @@ class _FakeRelayManager:
         self.published.append(event)
 
 
+class _FakeRelay:
+    def __init__(self, url):
+        self.url = url
+        self.connected = False
+        self.error_counter = 0
+
+
+class _FakeRelayManagerForSync:
+    """Tracks add_relay/open_connections/publish_message for _sync_relays tests."""
+
+    def __init__(self, urls=None):
+        self.relays = {}
+        for url in (urls or []):
+            self.add_relay(url)
+        self.published = []
+        self.subscriptions_added = []
+
+    def add_relay(self, url):
+        self.relays[url] = _FakeRelay(url)
+
+    async def open_connections(self, ssl_options=None, proxy=None):
+        for relay in self.relays.values():
+            relay.connected = True
+
+    def connected_or_errored_relays(self):
+        return sum(1 for r in self.relays.values() if r.connected or r.error_counter > 0)
+
+    def publish_message(self, message):
+        self.published.append(message)
+
+    def add_subscription(self, sub_id, filters):
+        self.subscriptions_added.append((sub_id, filters))
+
+
 class TestNostrServiceHelpers(unittest.TestCase):
     """Low-level key/nsec/npub conversion helpers."""
 
@@ -231,6 +265,75 @@ class TestNostrManagerPublish(unittest.TestCase):
         self.assertTrue(isinstance(event.created_at, int))
         self.assertTrue(len(event.signature) > 0)
         self.assertEqual(event.tags, [["e", channel_id, "", "root"]])
+
+
+class TestNostrManagerRelaySync(unittest.TestCase):
+    """Hot-adding relays configured while the manager is already running."""
+
+    def setUp(self):
+        self.mgr = NostrManager.get_instance()
+        self.mgr._subscriptions = []
+        self.mgr._subscription_ids = {}
+        self.mgr._default_relays = []
+        self.mgr._nwc_relays = []
+        self.mgr._nostr_configured = False
+        self.mgr._nwc_configured = False
+        self.mgr._nostr_private_key = None
+        self.mgr._nwc_private_key = None
+        self.mgr._nwc_wallet_pubkey = None
+        self.mgr._relays_dirty = False
+        self.mgr.relay_manager = None
+        # Earlier tests may have scheduled the real _run() loop. Cancel it
+        # and pretend the main task is running so configure_identity doesn't
+        # spawn a new one while these tests run.
+        if self.mgr._main_task is not None and self.mgr._main_task is not True:
+            try:
+                self.mgr._main_task.cancel()
+            except Exception:
+                pass
+        self.mgr._main_task = True
+
+    def _fresh_nsec(self):
+        return PrivateKey().bech32()
+
+    def test_configure_identity_marks_relays_dirty_when_running(self):
+        self.mgr.relay_manager = _FakeRelayManagerForSync()
+        self.assertFalse(self.mgr._relays_dirty)
+        self.mgr.configure_identity(self._fresh_nsec(), relays="wss://a.example")
+        self.assertTrue(self.mgr._relays_dirty)
+
+    def test_sync_relays_adds_new_relays_and_republishes(self):
+        self.mgr.configure_identity(self._fresh_nsec(), relays="wss://old.example")
+        self.mgr.subscribe_channel("f" * 64)
+        sub_name = self.mgr._subscriptions[0].name
+        self.mgr._subscription_ids = {sub_name: "sub_1"}
+        self.mgr.relay_manager = _FakeRelayManagerForSync(["wss://old.example"])
+        self.mgr._default_relays = ["wss://old.example", "wss://new.example"]
+        self.mgr._relays_dirty = True
+
+        import asyncio
+        asyncio.run(self.mgr._sync_relays())
+
+        self.assertIn("wss://old.example", self.mgr.relay_manager.relays)
+        self.assertIn("wss://new.example", self.mgr.relay_manager.relays)
+        self.assertFalse(self.mgr._relays_dirty)
+        self.assertTrue(any("sub_1" in p for p in self.mgr.relay_manager.published))
+
+    def test_sync_relays_adds_nwc_relays(self):
+        self.mgr.configure_identity(self._fresh_nsec(), relays="wss://identity.example")
+        self.mgr.relay_manager = _FakeRelayManagerForSync(["wss://identity.example"])
+        self.mgr._nwc_relays = ["wss://nwc.example"]
+        self.mgr._nwc_configured = True
+        self.mgr._nwc_sub_id = "nwc_sub_1"
+        self.mgr._nwc_private_key = PrivateKey()
+        self.mgr._nwc_wallet_pubkey = "a" * 64
+        self.mgr._relays_dirty = True
+
+        import asyncio
+        asyncio.run(self.mgr._sync_relays())
+
+        self.assertIn("wss://nwc.example", self.mgr.relay_manager.relays)
+        self.assertTrue(any("nwc_sub_1" in p for p in self.mgr.relay_manager.published))
 
 
 class TestNostrEventFormatting(unittest.TestCase):
