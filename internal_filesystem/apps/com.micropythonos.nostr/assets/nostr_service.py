@@ -143,6 +143,25 @@ def _make_subscription_id(prefix):
     return prefix + str(int(time.time())) + "_" + str(_sub_id_counter)
 
 
+def _filter_identity(filter_obj):
+    """Return the filter without time-window fields, for identity comparison."""
+    identity = filter_obj.to_json_object()
+    identity.pop("since", None)
+    identity.pop("until", None)
+    identity.pop("limit", None)
+    return identity
+
+
+def _filters_identity_equal(a, b):
+    """Compare two Filters objects ignoring since/until/limit."""
+    if len(a.data) != len(b.data):
+        return False
+    for fa, fb in zip(a.data, b.data):
+        if _filter_identity(fa) != _filter_identity(fb):
+            return False
+    return True
+
+
 def _parse_nsec(nsec):
     if nsec.startswith("nsec1"):
         return PrivateKey.from_nsec(nsec)
@@ -440,10 +459,12 @@ class NostrManager:
         client fetch only recent events instead of the full relay history.
 
         If a subscription with the same name is already registered, the callback
-        and filter window are refreshed but no new request is sent. The stored
-        filter is used on the next reconnect or when the subscription is first
+        and filter window are refreshed. A new request is sent only when the
+        subscription's identity (kinds, authors, event/pubkey refs, etc.)
+        changes, not when only the time window or limit moves. The stored filter
+        is used on the next reconnect or when the subscription is first
         published. This prevents activities from re-subscribing every time they
-        resume, even when the moving ``since`` window changes.
+        resume.
         """
         if since is not None or limit is not None:
             for f in filters.data:
@@ -461,11 +482,17 @@ class NostrManager:
         if existing is not None:
             if callback is not None:
                 existing.callback = callback
-            # ponytail: subscription name is the identity in this app;
-            # callers use stable names (dms, channel-<id>, dm-<pair>).
-            # Refresh the filter window for reconnect, but don't re-publish
-            # the same subscription while already connected.
+            # ponytail: callers use stable names (dms, channel-<id>, dm-<pair>).
+            # Re-publish only when the subscription identity changes, not when
+            # only the time window or limit moves.
+            identity_changed = not _filters_identity_equal(existing.filters, filters)
             existing.filters = filters
+            if identity_changed and self.connected and self.relay_manager is not None:
+                sub_id = self._subscription_ids.get(name)
+                if sub_id is None:
+                    sub_id = _make_subscription_id("mpos_sub_")
+                    self._subscription_ids[name] = sub_id
+                self._publish_subscription(existing, sub_id)
             return
 
         sub = NostrSubscription(name, filters, callback)

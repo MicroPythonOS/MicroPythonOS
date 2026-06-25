@@ -62,6 +62,7 @@ LVGL tips:
 - instead of `.set_hidden(True)` use `.add_flag(lv.obj.FLAG.HIDDEN)`; instead of `.set_hidden(False)` use `.remove_flag(lv.obj.FLAG.HIDDEN)`
 - use `.remove_flag()` instead of `.clear_flag()`
 - use `obj.remove_state(...)` not `obj.clear_state(...)`
+- to disable/enable a widget use `obj.add_state(lv.STATE.DISABLED)` / `obj.remove_state(lv.STATE.DISABLED)`; do NOT use `obj.add_flag(lv.obj.FLAG.DISABLED)`
 - event handlers need 3 arguments: `button.add_event_cb(button_cb, lv.EVENT.CLICKED, None)`
 - if you pass a method as an event callback, it must accept the event argument: `def callback(self, event)`. Using the same method as both a direct call and an event callback requires a default: `def method(self, event=None)`.
 - don't hard-code display resolution; use `lv.pct(100)` or other techniques to scale the interface

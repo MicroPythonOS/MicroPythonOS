@@ -76,14 +76,21 @@ class EventStore:
         }
 
     def _ensure_dirs(self):
+        cache_existed = True
         for path in ("prefs", self._prefs_dir, self._cache_dir):
             try:
                 os.stat(path)
             except OSError:
+                if path == self._cache_dir:
+                    cache_existed = False
                 try:
                     os.mkdir(path)
                 except OSError:
                     pass
+        if not cache_existed:
+            # Cache directory was recreated; in-memory dedup cache no longer
+            # reflects persisted messages.
+            self._known_ids = set()
 
     def _index_path(self):
         return f"{self._cache_dir}/{INDEX_FILENAME}"
@@ -116,6 +123,7 @@ class EventStore:
         """Write the lightweight chat index to flash if it changed."""
         if not self._index_dirty:
             return True
+        self._ensure_dirs()
         path = self._index_path()
         try:
             with open(path, "w") as f:
@@ -231,11 +239,13 @@ class EventStore:
         return messages
 
     def _append_jsonl(self, path, obj):
+        self._ensure_dirs()
         with open(path, "a") as f:
             f.write(json.dumps(obj))
             f.write("\n")
 
     def _rewrite_jsonl(self, path, objs):
+        self._ensure_dirs()
         with open(path, "w") as f:
             for obj in objs:
                 f.write(json.dumps(obj.to_dict()))
@@ -251,6 +261,7 @@ class EventStore:
 
         Returns True if the message was new, False if it was already known.
         """
+        self._ensure_dirs()
         if not message.event_id:
             message.event_id = f"local:{chat_id}:{message.ts}"
         if message.event_id in self._known_ids:

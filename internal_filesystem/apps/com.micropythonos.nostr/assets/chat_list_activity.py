@@ -298,7 +298,7 @@ class ChatListActivity(Activity):
         chats = self._store.get_chats()
         if not chats:
             btn = self._chat_list.add_button(None, "No messages yet")
-            btn.add_flag(lv.obj.FLAG.DISABLED)
+            btn.add_state(lv.STATE.DISABLED)
             return
         now = _current_nostr_ts()
         for chat in chats:
