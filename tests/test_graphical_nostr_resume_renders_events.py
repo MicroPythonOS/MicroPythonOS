@@ -19,7 +19,7 @@ from event_store import EventStore
 from nostr_service import NostrManager
 
 from mpos import AppManager, wait_for_render
-from mpos.ui.testing import find_label_with_text, wait_for_text
+from mpos.ui.testing import click_label, find_label_with_text, wait_for_text
 
 
 class TestNostrChatListResumeRendersEvents(unittest.TestCase):
@@ -74,7 +74,7 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
         try:
             from mpos import ui
 
-            ui.back_screen()
+            ui.remove_and_stop_all_activities()
             wait_for_render(5)
         except Exception:
             pass
@@ -90,6 +90,29 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
         self.assertIsNotNone(
             found,
             "Chat list should show the stored channel event preview",
+        )
+
+    def test_opening_default_channel_chat_works(self):
+        result = AppManager.start_app("com.micropythonos.nostr")
+        self.assertTrue(result, "Nostr app should start")
+        wait_for_render(10)
+        wait_for_text("Hello from regression test", timeout=20)
+
+        # Click the default channel row. LVGL list buttons hold the text on the
+        # button itself, so click_label (which does not require a child label) is
+        # more reliable here than click_button.
+        clicked = click_label("MicroPythonOS", timeout=10)
+        self.assertTrue(clicked, "Should click the default channel row")
+        wait_for_render(10)
+
+        # The chat activity should show the title and the message history.
+        self.assertIsNotNone(
+            find_label_with_text(lv.screen_active(), "#MicroPythonOS"),
+            "Chat screen should show the channel title",
+        )
+        self.assertIsNotNone(
+            find_label_with_text(lv.screen_active(), "Hello from regression test"),
+            "Chat screen should show the stored message",
         )
 
 

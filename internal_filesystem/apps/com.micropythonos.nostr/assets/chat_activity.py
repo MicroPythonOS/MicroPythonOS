@@ -114,9 +114,9 @@ class ChatActivity(Activity):
         self._input_textarea.set_max_length(280)
 
         self._send_btn = lv.button(input_row)
-        self._send_btn.set_size(lv.pct(15), lv.SIZE_CONTENT)
+        self._send_btn.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
         send_lbl = lv.label(self._send_btn)
-        send_lbl.set_text(lv.SYMBOL.SEND)
+        send_lbl.set_text("Send")
         send_lbl.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
         send_lbl.center()
         self._send_btn.add_event_cb(lambda e: self._send(), lv.EVENT.CLICKED, None)

@@ -574,24 +574,30 @@ class NostrManager:
                     print("NostrManager: fetch_payments error: {}".format(e))
 
             # --- Process incoming events ---
-            if self.relay_manager.message_pool.has_events():
-                event_msg = self.relay_manager.message_pool.get_event()
-                event = event_msg.event
-                print("NostrManager: received event kind={} from {}".format(
-                    event.kind, event.public_key[:16]))
+            try:
+                if self.relay_manager.message_pool.has_events():
+                    event_msg = self.relay_manager.message_pool.get_event()
+                    event = event_msg.event
+                    print("NostrManager: received event kind={} from {}".format(
+                        event.kind, event.public_key[:16]))
 
-                try:
-                    self._process_event(event)
-                except Exception as e:
-                    print("NostrManager: error processing event: {}".format(e))
-                    import sys
-                    sys.print_exception(e)
+                    try:
+                        self._process_event(event)
+                    except Exception as e:
+                        print("NostrManager: error processing event: {}".format(e))
+                        import sys
+                        sys.print_exception(e)
 
-            if self.relay_manager.message_pool.has_notices():
-                notice = self.relay_manager.message_pool.get_notice()
-                print("NostrManager: relay notice: {}".format(notice))
-                if notice and hasattr(notice, 'content') and self._error_cb:
-                    self._error_cb("Relay: {}".format(notice.content))
+                if self.relay_manager.message_pool.has_notices():
+                    notice = self.relay_manager.message_pool.get_notice()
+                    print("NostrManager: relay notice: {}".format(notice))
+                    if notice and hasattr(notice, 'content') and self._error_cb:
+                        self._error_cb("Relay: {}".format(notice.content))
+            except Exception as e:
+                print("NostrManager: message poll error: {}".format(e))
+                import sys
+                sys.print_exception(e)
+                await TaskManager.sleep(1)
 
     def _process_event(self, event):
         """Route a single event to all relevant handlers."""
