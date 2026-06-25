@@ -383,6 +383,10 @@ class NostrManager:
         Optional ``since`` and ``limit`` are applied to every Filter in the
         supplied Filters object that does not already set them. This lets the
         client fetch only recent events instead of the full relay history.
+
+        If a subscription with the same name and identical filters is already
+        active, no new request is sent. This prevents activities from
+        re-fetching the same events every time they resume.
         """
         if since is not None or limit is not None:
             for f in filters.data:
@@ -390,6 +394,25 @@ class NostrManager:
                     f.since = since
                 if limit is not None and f.limit is None:
                     f.limit = limit
+
+        existing = None
+        for s in self._subscriptions:
+            if s.name == name:
+                existing = s
+                break
+
+        if existing is not None:
+            try:
+                if existing.filters.to_json_array() == filters.to_json_array():
+                    # Update callback without re-publishing the same filter.
+                    if callback is not None:
+                        existing.callback = callback
+                    if __debug__:
+                        print("NostrManager: subscription '{}' unchanged, skipping".format(name))
+                    return
+            except Exception:
+                pass
+
         self._subscriptions = [s for s in self._subscriptions if s.name != name]
         sub = NostrSubscription(name, filters, callback)
         self._subscriptions.append(sub)
