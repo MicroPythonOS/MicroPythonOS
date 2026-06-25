@@ -383,15 +383,17 @@ class NostrManager:
                 print("NostrManager: error closing subscription '{}': {}".format(name, e))
 
     def add_subscription(self, name, filters, callback=None, since=None, limit=None):
-        """Add a generic subscription, replacing any existing one with the same name.
+        """Add a generic subscription, reusing an existing one with the same name.
 
         Optional ``since`` and ``limit`` are applied to every Filter in the
         supplied Filters object that does not already set them. This lets the
         client fetch only recent events instead of the full relay history.
 
-        If a subscription with the same name and identical filters is already
-        active, no new request is sent. This prevents activities from
-        re-fetching the same events every time they resume.
+        If a subscription with the same name is already registered, the callback
+        and filter window are refreshed but no new request is sent. The stored
+        filter is used on the next reconnect or when the subscription is first
+        published. This prevents activities from re-subscribing every time they
+        resume, even when the moving ``since`` window changes.
         """
         if since is not None or limit is not None:
             for f in filters.data:
