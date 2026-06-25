@@ -1,6 +1,6 @@
 # Shared constants for the MicroPythonOS Nostr client.
 
-APP_FULLNAME = "com.micropythonos.nostr"
+APP_FULLNAME = "com_micropythonos_nostr"
 
 # Default relays used when the user has not configured one.
 # "wss://relay.nostr.band",

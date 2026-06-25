@@ -14,6 +14,44 @@ from nostr.key import PrivateKey
 
 logger = logging.getLogger(__name__)
 
+# Imported both by the Nostr app (as a package) and by displaywallet (as a flat
+# module).  Try the sibling modules that actually live with us; fall back to
+# flat imports so displaywallet can reuse NostrManager without the chat/storage
+# helpers it does not ship.
+try:
+    from .chat_model import (
+        Message,
+        channel_id_from_event,
+        chat_id_for_event,
+        peer_from_dm_event,
+    )
+    from .constants import (
+        APP_FULLNAME,
+        DEFAULT_CHANNEL_ID,
+        KIND_CHANNEL_MESSAGE,
+        KIND_DM,
+    )
+    from .event_store import EventStore
+except ImportError:
+    try:
+        from chat_model import (
+            Message,
+            channel_id_from_event,
+            chat_id_for_event,
+            peer_from_dm_event,
+        )
+        from constants import (
+            APP_FULLNAME,
+            DEFAULT_CHANNEL_ID,
+            KIND_CHANNEL_MESSAGE,
+            KIND_DM,
+        )
+        from event_store import EventStore
+    except ImportError:
+        Message = channel_id_from_event = chat_id_for_event = peer_from_dm_event = None
+        APP_FULLNAME = DEFAULT_CHANNEL_ID = KIND_CHANNEL_MESSAGE = KIND_DM = None
+        EventStore = None
+
 EVENT_KIND_NAMES = {
     0: "SET_METADATA",
     1: "TEXT_NOTE",
@@ -922,9 +960,6 @@ class NostrClientService(Service):
         self._persist_cb = None
 
     def onStart(self, intent):
-        from constants import APP_FULLNAME, KIND_DM, KIND_CHANNEL_MESSAGE
-        from event_store import EventStore
-
         print("NostrClientService: starting NostrManager")
         manager = NostrManager.get_instance()
         manager.start()
@@ -934,8 +969,6 @@ class NostrClientService(Service):
         manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)
 
     def onDestroy(self):
-        from constants import KIND_DM, KIND_CHANNEL_MESSAGE
-
         print("NostrClientService: stopping NostrManager")
         manager = NostrManager.get_instance()
         if self._persist_cb is not None:
@@ -959,14 +992,6 @@ class NostrClientService(Service):
         if self._store is None:
             return
         try:
-            from chat_model import (
-                Message,
-                channel_id_from_event,
-                chat_id_for_event,
-                peer_from_dm_event,
-            )
-            from constants import DEFAULT_CHANNEL_ID, KIND_DM
-
             manager = NostrManager.get_instance()
             own = manager.get_own_pubkey_hex()
             chat_id = chat_id_for_event(nostr_event.event, own)

@@ -10,6 +10,7 @@ Builtin Apps:
 - OSUpdate: show raw ESP error and a user-friendly message when the update fails to activate
 
 Frameworks:
+- AppManager: add support for apps as Python packages 
 - Strip trailing slashes from directory paths before filesystem calls to support both LittleFS and FAT32 (SD card)
 - SDCard: tolerate trailing slashes when listing SD card contents
 - StreamingUnzip: tolerate trailing slashes when creating directories

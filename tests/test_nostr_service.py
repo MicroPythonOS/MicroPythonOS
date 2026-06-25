@@ -3,11 +3,11 @@
 import sys
 import unittest
 
-# The module under test lives in the nostr app's assets directory.
-sys.path.append("apps/com.micropythonos.nostr/assets")
+# The module under test lives in the renamed nostr app root (a flat package).
+sys.path.append("apps")
 
 from nostr.key import PrivateKey, PublicKey
-from nostr_service import (
+from com_micropythonos_nostr.nostr_service import (
     NostrEvent,
     NostrManager,
     _parse_nsec,

@@ -13,15 +13,15 @@ from mpos import (
     SharedPreferences,
 )
 
-from chat_activity import ChatActivity
-from chat_model import (
+from .chat_activity import ChatActivity
+from .chat_model import (
     Message,
     channel_chat_id,
     channel_id_from_event,
     chat_id_for_event,
     peer_from_dm_event,
 )
-from constants import (
+from .constants import (
     APP_FULLNAME,
     DEFAULT_CHANNEL_ID,
     DEFAULT_CHANNEL_NAME,
@@ -35,10 +35,10 @@ from constants import (
     OVERLAP_SECONDS,
     SUBSCRIPTION_LIMIT_INITIAL,
 )
-from event_store import EventStore, _current_nostr_ts
-from new_chat_activity import NewChatActivity
-from nostr_service import NostrManager
-from show_npub_qr import ShowNpubQRActivity
+from .event_store import EventStore, _current_nostr_ts
+from .new_chat_activity import NewChatActivity
+from .nostr_service import NostrManager
+from .show_npub_qr import ShowNpubQRActivity
 
 logger = logging.getLogger(__name__)
 

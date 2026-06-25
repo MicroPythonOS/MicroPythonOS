@@ -1,6 +1,6 @@
 import logging
 
-from constants import (
+from .constants import (
     CHAT_ID_CHANNEL_PREFIX,
     CHAT_ID_DM_PREFIX,
     KIND_CHANNEL_MESSAGE,

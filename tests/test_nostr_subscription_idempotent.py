@@ -8,10 +8,10 @@ so re-fetching would be wasteful.
 import sys
 import unittest
 
-sys.path.append("apps/com.micropythonos.nostr/assets")
+sys.path.append("apps")
 
 from nostr.filter import Filter, Filters
-from nostr_service import NostrManager
+from com_micropythonos_nostr.nostr_service import NostrManager
 
 
 class _FakeRelayManager:

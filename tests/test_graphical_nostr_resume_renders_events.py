@@ -11,12 +11,16 @@ import unittest
 
 import lvgl as lv
 
-sys.path.append("apps/com.micropythonos.nostr/assets")
+sys.path.append("apps")
 
-from chat_model import Message, channel_chat_id
-from constants import APP_FULLNAME, DEFAULT_CHANNEL_ID, DEFAULT_CHANNEL_NAME
-from event_store import EventStore
-from nostr_service import NostrManager
+from com_micropythonos_nostr.chat_model import Message, channel_chat_id
+from com_micropythonos_nostr.constants import (
+    APP_FULLNAME,
+    DEFAULT_CHANNEL_ID,
+    DEFAULT_CHANNEL_NAME,
+)
+from com_micropythonos_nostr.event_store import EventStore
+from com_micropythonos_nostr.nostr_service import NostrManager
 
 from mpos import AppManager, wait_for_render
 from mpos.ui.testing import click_label, find_label_with_text, wait_for_text
@@ -80,7 +84,7 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
             pass
 
     def test_resumed_app_renders_stored_event(self):
-        result = AppManager.start_app("com.micropythonos.nostr")
+        result = AppManager.start_app("com_micropythonos_nostr")
         self.assertTrue(result, "Nostr app should start")
         wait_for_render(10)
 
@@ -93,7 +97,7 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
         )
 
     def test_opening_default_channel_chat_works(self):
-        result = AppManager.start_app("com.micropythonos.nostr")
+        result = AppManager.start_app("com_micropythonos_nostr")
         self.assertTrue(result, "Nostr app should start")
         wait_for_render(10)
         wait_for_text("Hello from regression test", timeout=20)

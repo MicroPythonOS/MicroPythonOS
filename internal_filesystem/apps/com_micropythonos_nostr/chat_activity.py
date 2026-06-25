@@ -10,15 +10,22 @@ from mpos import (
     SharedPreferences,
 )
 
-from chat_model import KIND_CHANNEL_MESSAGE, KIND_DM, Message
-from constants import (
+from .chat_model import (
+    KIND_CHANNEL_MESSAGE,
+    KIND_DM,
+    Message,
+    channel_chat_id,
+    chat_id_for_event,
+    dm_chat_id,
+)
+from .constants import (
     DEFAULT_RELAYS,
     LOOKBACK_WINDOW_SECONDS,
     OVERLAP_SECONDS,
     SUBSCRIPTION_LIMIT_INITIAL,
 )
-from event_store import EventStore, _current_nostr_ts
-from nostr_service import NostrManager
+from .event_store import EventStore, _current_nostr_ts
+from .nostr_service import NostrManager
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +67,8 @@ class ChatActivity(Activity):
 
         if self._chat_id is None:
             if self._kind == KIND_CHANNEL_MESSAGE and self._channel_id:
-                from chat_model import channel_chat_id
                 self._chat_id = channel_chat_id(self._channel_id)
             elif self._peer_pubkey:
-                from chat_model import dm_chat_id
                 own = self._manager.get_own_pubkey_hex() or ""
                 self._chat_id = dm_chat_id(own, self._peer_pubkey)
 
@@ -316,7 +321,6 @@ class ChatActivity(Activity):
 
     def _on_event(self, nostr_event):
         try:
-            from chat_model import chat_id_for_event
             own = self._manager.get_own_pubkey_hex()
             chat_id = chat_id_for_event(nostr_event.event, own)
             if chat_id != self._chat_id:

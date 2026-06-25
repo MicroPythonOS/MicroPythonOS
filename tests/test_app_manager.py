@@ -189,5 +189,137 @@ class TestAppManagerInstallMpk(unittest.TestCase):
         self._assert_not_exists(self.dest_folder)
 
 
+class TestAppManagerPackageLoading(unittest.TestCase):
+    """Tests for opt-in package loading in AppManager."""
+
+    APP_NAME = "com_micropythonos_testpkgloader"
+    APP_ROOT = "apps/" + APP_NAME
+
+    def setUp(self):
+        self._cleanup()
+        AppManager.clear()
+
+    def tearDown(self):
+        self._cleanup()
+        AppManager.clear()
+        AppManager.refresh_apps()
+
+    def _cleanup(self):
+        try:
+            shutil.rmtree(self.APP_ROOT)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _mkdir(path):
+        try:
+            os.mkdir(path)
+        except OSError:
+            pass
+
+    def _write_file(self, path, content):
+        with open(path, "w") as f:
+            f.write(content)
+
+    def _make_app_dir(self):
+        self._mkdir("apps")
+        self._mkdir(self.APP_ROOT)
+        self._mkdir(self.APP_ROOT + "/assets")
+
+    def _write_modules(self, package=True, cls_text="class Hello:\n    pass"):
+        self._make_app_dir()
+        manifest = (
+            '{"name":"PkgTest","publisher":"t","short_description":"x",'
+            '"long_description":"x","fullname":"' + self.APP_NAME +
+            '","version":"1.0.0","category":"development",'
+            '"activities":[{"entrypoint":"assets/hello.py","classname":"Hello",'
+            '"intent_filters":[{"action":"main","category":"test"}]}]}'
+        )
+        self._write_file(self.APP_ROOT + "/MANIFEST.JSON", manifest)
+        if package:
+            self._write_file(self.APP_ROOT + "/__init__.py", "")
+            self._write_file(self.APP_ROOT + "/assets/__init__.py", "")
+        self._write_file(self.APP_ROOT + "/assets/hello.py", cls_text)
+
+    def test_is_valid_identifier(self):
+        self.assertTrue(AppManager._is_valid_identifier("hello"))
+        self.assertTrue(AppManager._is_valid_identifier("_x123"))
+        self.assertFalse(AppManager._is_valid_identifier("123bad"))
+        self.assertFalse(AppManager._is_valid_identifier("bad-name"))
+        self.assertFalse(AppManager._is_valid_identifier(""))
+
+    def test_package_info_when_init_present(self):
+        self._write_modules(package=True)
+        AppManager.refresh_apps()
+        app = AppManager.get(self.APP_NAME)
+        self.assertTrue(app is not None)
+        pkg = AppManager._package_info(app, "assets/hello.py")
+        self.assertTrue(pkg is not None)
+        parent, module_name = pkg
+        self.assertEqual(module_name, self.APP_NAME + ".assets.hello")
+        self.assertEqual(parent, "apps")
+
+    def test_package_info_when_init_missing(self):
+        self._write_modules(package=False)
+        AppManager.refresh_apps()
+        app = AppManager.get(self.APP_NAME)
+        self.assertTrue(app is not None)
+        self.assertIsNone(AppManager._package_info(app, "assets/hello.py"))
+
+    def test_package_info_invalid_fullname(self):
+        self._make_app_dir()
+        self._write_file(self.APP_ROOT + "/__init__.py", "")
+        self._write_file(self.APP_ROOT + "/assets/__init__.py", "")
+
+        class _FakeApp:
+            installed_path = self.APP_ROOT
+            fullname = "bad-name.here"
+
+        self.assertIsNone(AppManager._package_info(_FakeApp(), "assets/hello.py"))
+
+    def test_del_module_tree(self):
+        import sys
+
+        sys.modules["x.y"] = object()
+        sys.modules["x.y.z"] = object()
+        sys.modules["x.y.other"] = object()
+        sys.modules["x.a"] = object()
+        AppManager._del_module_tree("x.y")
+        self.assertTrue("x.y" not in sys.modules)
+        self.assertTrue("x.y.z" not in sys.modules)
+        self.assertTrue("x.y.other" not in sys.modules)
+        self.assertTrue("x.a" in sys.modules)
+        del sys.modules["x.a"]
+
+    def test_import_handler_class_package(self):
+        self._write_modules(package=True, cls_text="class Hello:\n    X = 1")
+        AppManager.refresh_apps()
+        spec = {
+            "app_fullname": self.APP_NAME,
+            "entrypoint": "assets/hello.py",
+            "classname": "Hello",
+        }
+        cls = AppManager._import_handler_class(spec)
+        self.assertTrue(cls is not None)
+        self.assertEqual(cls.__name__, "Hello")
+        self.assertEqual(cls.X, 1)
+
+    def test_import_handler_class_package_reloads(self):
+        self._write_modules(package=True, cls_text="class Hello:\n    X = 1")
+        AppManager.refresh_apps()
+        spec = {
+            "app_fullname": self.APP_NAME,
+            "entrypoint": "assets/hello.py",
+            "classname": "Hello",
+        }
+        key = (spec["app_fullname"], spec["entrypoint"], spec["classname"])
+        cls1 = AppManager._import_handler_class(spec)
+        self.assertEqual(cls1.X, 1)
+        del AppManager._handler_class_cache[key]
+        self._write_modules(package=True, cls_text="class Hello:\n    X = 2")
+        cls2 = AppManager._import_handler_class(spec)
+        self.assertEqual(cls2.X, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

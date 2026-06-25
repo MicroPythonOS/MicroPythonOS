@@ -7,8 +7,8 @@ try:
 except ImportError:
     import json
 
-from chat_model import Chat, Message, channel_chat_id, dm_chat_id
-from constants import (
+from .chat_model import Chat, Message, channel_chat_id, dm_chat_id
+from .constants import (
     APP_FULLNAME,
     CACHE_DIR,
     CHAT_FILE_SUFFIX,

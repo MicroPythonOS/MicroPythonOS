@@ -4,11 +4,11 @@ import lvgl as lv
 
 from mpos import Activity, DisplayMetrics, Intent, MposKeyboard
 
-from chat_activity import ChatActivity
-from chat_model import KIND_CHANNEL_MESSAGE, KIND_DM
-from constants import APP_FULLNAME
-from event_store import EventStore
-from nostr_service import NostrManager
+from .chat_activity import ChatActivity
+from .chat_model import KIND_CHANNEL_MESSAGE, KIND_DM
+from .constants import APP_FULLNAME
+from .event_store import EventStore
+from .nostr_service import NostrManager
 
 logger = logging.getLogger(__name__)
 

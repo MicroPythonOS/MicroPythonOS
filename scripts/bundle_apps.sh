@@ -19,8 +19,8 @@ rm -f "$outputjson"
 # com.quasikili.quasidoodle doesn't work on touch screen devices AND has the wrong download URL
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.errortest_delayed is an intentional bad app for testing
-# com.micropythonos.nostr isn't ready for release yet
-blacklist="com.quasikili.quasidoodle com.micropythonos.nostr"
+# com_micropythonos_nostr isn't ready for release yet
+blacklist="com.quasikili.quasidoodle com_micropythonos_nostr"
 blacklist="$blacklist com.micropythonos.errortest com.micropythonos.errortest_delayed com.micropythonos.errortest_resume"
 blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.retrocore_launcher" # only for fri3d badges pre-built filesystem
 blacklist="$blacklist com.micropythonos.doom" # not ready yet

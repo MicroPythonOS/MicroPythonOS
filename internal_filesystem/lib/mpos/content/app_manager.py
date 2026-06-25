@@ -84,6 +84,60 @@ class AppManager:
             "path_pattern": path_pattern,
         })
 
+    @staticmethod
+    def _is_valid_identifier(s):
+        if not s:
+            return False
+
+        def _is_alpha(ch):
+            o = ord(ch)
+            return (o >= 97 and o <= 122) or (o >= 65 and o <= 90)
+
+        def _is_alnum(ch):
+            o = ord(ch)
+            return _is_alpha(ch) or (o >= 48 and o <= 57)
+
+        first = s[0]
+        if not (_is_alpha(first) or first == "_"):
+            return False
+        for c in s[1:]:
+            if not (_is_alnum(c) or c == "_"):
+                return False
+        return True
+
+    @classmethod
+    def _package_info(cls, app, entrypoint):
+        """Return (parent_dir, dotted_module_name) if app should load as a package.
+
+        Package loading is opt-in: the app root must contain __init__.py and every
+        directory on the path to the entrypoint must also contain __init__.py.
+        This lets old-style apps keep loading as flat modules while new apps can
+        use packages to avoid namespace collisions between apps.
+        """
+        import os
+        root = app.installed_path
+        if not os.path.isfile(root + "/__init__.py"):
+            return None
+        parts = entrypoint.split("/")
+        for i in range(len(parts) - 1):
+            sub = root + "/" + "/".join(parts[:i + 1])
+            if not os.path.isfile(sub + "/__init__.py"):
+                return None
+        for part in app.fullname.split("."):
+            if not cls._is_valid_identifier(part):
+                return None
+        module_name = app.fullname + "." + ".".join(parts)[:-3]  # strip .py
+        parent = "/".join(root.split("/")[:-1])
+        return parent, module_name
+
+    @staticmethod
+    def _del_module_tree(module_name):
+        """Remove a module and any cached submodules from sys.modules."""
+        import sys
+        keys = [k for k in sys.modules if k == module_name or k.startswith(module_name + ".")]
+        for k in keys:
+            del sys.modules[k]
+
     @classmethod
     def _import_handler_class(cls, spec):
         """Import the activity class for a file-handler spec, caching the result."""
@@ -98,12 +152,32 @@ class AppManager:
         if app is None or not app.installed_path:
             return None
 
+        path_before = sys.path[:]
+        pkg = cls._package_info(app, spec["entrypoint"])
+        if pkg:
+            parent, module_name = pkg
+            try:
+                if parent and parent not in sys.path:
+                    sys.path.insert(0, parent)
+                cls._del_module_tree(module_name)
+                module = __import__(module_name, None, None, [spec["classname"]])
+                activity_cls = getattr(module, spec["classname"], None)
+                if activity_cls is not None:
+                    cls._handler_class_cache[key] = activity_cls
+                    cls._handler_app_fullname[activity_cls] = spec["app_fullname"]
+                return activity_cls
+            except Exception as e:
+                logger.error("failed to import file handler %s from %s: %s",
+                             spec["classname"], spec["app_fullname"], e)
+                return None
+            finally:
+                sys.path = path_before
+
         entrypoint_path = app.installed_path + "/" + spec["entrypoint"]
         cwd = app.installed_path
         if "/" in spec["entrypoint"]:
             cwd = entrypoint_path.rsplit("/", 1)[0]
 
-        path_before = sys.path[:]
         module_name = spec["entrypoint"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
         previous_module = sys.modules.get(module_name, None)
         had_previous_module = module_name in sys.modules
@@ -579,40 +653,73 @@ class AppManager:
         try:
             if __debug__: logger.debug("Thread %s: starting script", thread_id)
             path_before = sys.path[:]  # Make a copy, not a reference
-            if cwd:
-                if cwd in sys.path:
-                    sys.path.remove(cwd)
-                sys.path.insert(0, cwd)
+            path_to_add = cwd
+            is_package = False
+            app = None
+            if app_fullname:
+                app = AppManager.get(app_fullname)
+            if app and app.installed_path and script_source.startswith(app.installed_path + "/"):
+                entrypoint = script_source[len(app.installed_path) + 1:]
+                pkg = AppManager._package_info(app, entrypoint)
+                if pkg:
+                    parent, module_name = pkg
+                    path_to_add = parent
+                    is_package = True
+
+            if path_to_add:
+                if path_to_add in sys.path:
+                    sys.path.remove(path_to_add)
+                sys.path.insert(0, path_to_add)
             try:
-                module_name = script_source.rsplit("/", 1)[-1]
-                if "." in module_name:
-                    module_name = module_name.rsplit(".", 1)[0]
-                previous_module = sys.modules.get(module_name, None)
-                had_previous_module = module_name in sys.modules
-                try:
-                    if had_previous_module:
-                        del sys.modules[module_name]
-                    start_time = utime.ticks_ms()
-                    module = __import__(module_name)
-                    import_time = utime.ticks_diff(utime.ticks_ms(), start_time)
-                    executed_name = getattr(module, "__file__", script_source)
-                    if __debug__: logger.debug("importing module %s took %sms", module_name, import_time)
-                    return _start_activity(getattr(module, classname, None), executed_name)
-                except Exception as import_error:
-                    logger.warning(
-                        "failed importing app module %s from %s: %s", module_name, compile_name, import_error
-                    )
-                    sys.print_exception(import_error)
-                    from mpos.ui.errordialog import show_app_error_dialog
-                    show_app_error_dialog(
-                        app_fullname, import_error, is_lifecycle=False
-                    )
-                    return False
-                finally:
-                    if had_previous_module:
-                        sys.modules[module_name] = previous_module
-                    elif module_name in sys.modules:
-                        del sys.modules[module_name]
+                if is_package:
+                    try:
+                        AppManager._del_module_tree(module_name)
+                        start_time = utime.ticks_ms()
+                        module = __import__(module_name, None, None, [classname])
+                        import_time = utime.ticks_diff(utime.ticks_ms(), start_time)
+                        executed_name = getattr(module, "__file__", script_source)
+                        if __debug__: logger.debug("importing module %s took %sms", module_name, import_time)
+                        return _start_activity(getattr(module, classname, None), executed_name)
+                    except Exception as import_error:
+                        logger.warning(
+                            "failed importing app module %s from %s: %s", module_name, compile_name, import_error
+                        )
+                        sys.print_exception(import_error)
+                        from mpos.ui.errordialog import show_app_error_dialog
+                        show_app_error_dialog(
+                            app_fullname, import_error, is_lifecycle=False
+                        )
+                        return False
+                else:
+                    module_name = script_source.rsplit("/", 1)[-1]
+                    if "." in module_name:
+                        module_name = module_name.rsplit(".", 1)[0]
+                    previous_module = sys.modules.get(module_name, None)
+                    had_previous_module = module_name in sys.modules
+                    try:
+                        if had_previous_module:
+                            del sys.modules[module_name]
+                        start_time = utime.ticks_ms()
+                        module = __import__(module_name)
+                        import_time = utime.ticks_diff(utime.ticks_ms(), start_time)
+                        executed_name = getattr(module, "__file__", script_source)
+                        if __debug__: logger.debug("importing module %s took %sms", module_name, import_time)
+                        return _start_activity(getattr(module, classname, None), executed_name)
+                    except Exception as import_error:
+                        logger.warning(
+                            "failed importing app module %s from %s: %s", module_name, compile_name, import_error
+                        )
+                        sys.print_exception(import_error)
+                        from mpos.ui.errordialog import show_app_error_dialog
+                        show_app_error_dialog(
+                            app_fullname, import_error, is_lifecycle=False
+                        )
+                        return False
+                    finally:
+                        if had_previous_module:
+                            sys.modules[module_name] = previous_module
+                        elif module_name in sys.modules:
+                            del sys.modules[module_name]
             except Exception as e:
                 logger.error("Thread %s: exception during execution:", thread_id)
                 sys.print_exception(e)
@@ -695,14 +802,22 @@ class AppManager:
                     classname = svc.get("classname")
                     if not entrypoint or not classname:
                         continue
-                    entrypoint_path = app.installed_path + "/" + entrypoint
-                    cwd = entrypoint_path.rsplit("/", 1)[0] if "/" in entrypoint else app.installed_path
                     path_before = sys.path[:]
                     try:
-                        if cwd and cwd not in sys.path:
-                            sys.path.insert(0, cwd)
-                        module_name = entrypoint.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                        module = __import__(module_name)
+                        pkg = cls._package_info(app, entrypoint)
+                        if pkg:
+                            parent, module_name = pkg
+                            if parent and parent not in sys.path:
+                                sys.path.insert(0, parent)
+                            cls._del_module_tree(module_name)
+                            module = __import__(module_name, None, None, [classname])
+                        else:
+                            entrypoint_path = app.installed_path + "/" + entrypoint
+                            cwd = entrypoint_path.rsplit("/", 1)[0] if "/" in entrypoint else app.installed_path
+                            if cwd and cwd not in sys.path:
+                                sys.path.insert(0, cwd)
+                            module_name = entrypoint.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                            module = __import__(module_name)
                         service_cls = getattr(module, classname, None)
                         if service_cls:
                             results.append((app.fullname, service_cls))

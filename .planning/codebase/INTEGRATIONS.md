@@ -22,7 +22,7 @@ MicroPythonOS is mostly offline-first, but it integrates with external services 
 
 ## Nostr
 
-- `internal_filesystem/apps/com.micropythonos.nostr/` — Nostr client app.
+- `internal_filesystem/apps/com_micropythonos_nostr/` — Nostr client app.
 - `micropython-nostr` submodule — protocol library.
 - `secp256k1-embedded-ecdh` submodule — key exchange primitives.
 
