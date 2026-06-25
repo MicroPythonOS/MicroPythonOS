@@ -633,30 +633,34 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
         self.assertIsNone(AppDetail._extract_main_executable(None))
 
     def test_fetch_badgehub_details_selects_version_matched_mpk(self):
-        """Integration: real BadgeHub fixture with one .mpk chooses the right file."""
-        import json
-        import os
+        """Integration: real BadgeHub fixture shape with one .mpk chooses the right file."""
         import asyncio
         import mpos.net.download_manager as dm
         from app_detail import AppDetail
 
-        # MicroPython does not define __file__ when tests are run via -c; the
-        # runner's cwd is internal_filesystem, but also accept running from the
-        # repo root for local debugging.
-        fixture_path = None
-        for candidate in (
-            os.path.abspath(os.path.join(os.getcwd(), "..", "appstore_projects_slog.json")),
-            os.path.join(os.getcwd(), "appstore_projects_slog.json"),
-        ):
-            try:
-                with open(candidate, "r"):
-                    fixture_path = candidate
-                    break
-            except OSError:
-                pass
-        self.assertIsNotNone(fixture_path)
-        with open(fixture_path, "r") as f:
-            fixture = f.read()
+        # Snapshot of the BadgeHub API response for com.lightningpiggy.displaywallet.
+        # Kept inline so the test does not depend on an untracked external file.
+        fixture = (
+            '{"slug":"com.lightningpiggy.displaywallet",'
+            '"version":{'
+            '"revision":38,"files":['
+            '{"name":"icon-64x64","ext":".png","full_path":"icon-64x64.png",'
+            '"url":"https://badgehub.eu/api/v3/projects/com.lightningpiggy.displaywallet/rev38/files/icon-64x64.png",'
+            '"size_of_content":1974},'
+            '{"name":"com.lightningpiggy.displaywallet_0.6.0","ext":".mpk",'
+            '"full_path":"com.lightningpiggy.displaywallet_0.6.0.mpk",'
+            '"url":"https://badgehub.eu/api/v3/projects/com.lightningpiggy.displaywallet/rev38/files/com.lightningpiggy.displaywallet_0.6.0.mpk",'
+            '"size_of_content":309363}'
+            '],'
+            '"app_metadata":{'
+            '"name":"Lightning Piggy",'
+            '"description":"Display wallet",'
+            '"long_description":"See https://www.LightningPiggy.com",'
+            '"author":"LightningPiggy Foundation",'
+            '"icon_map":{"64x64":"icon-64x64.png"},'
+            '"version":"0.6.0",'
+            '"badges":["mpos_api_0"]}}}'
+        )
 
         app_obj = type(
             "App",
