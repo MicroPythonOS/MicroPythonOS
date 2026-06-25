@@ -44,6 +44,7 @@ class ChatActivity(Activity):
     _store = None
     _prefs = None
     _handler_registered = False
+    _scroll_timer = None
 
     def onCreate(self):
         self._prefs = SharedPreferences(self.appFullName)
@@ -140,10 +141,12 @@ class ChatActivity(Activity):
             self._store.flush_index()
 
     def onPause(self, screen):
+        self._cancel_scroll_timer()
         self._unregister_handler()
         self._store.flush_index()
 
     def onDestroy(self, screen):
+        self._cancel_scroll_timer()
         self._unregister_handler()
         self._store.flush_index()
 
@@ -212,7 +215,7 @@ class ChatActivity(Activity):
                 self._title_label.set_text(chat.title)
         for msg in messages:
             self._append_message_row(msg)
-        self._scroll_to_bottom()
+        self._schedule_scroll_to_bottom()
 
     def _append_message_row(self, message):
         row = lv.obj(self._messages_container)
@@ -236,15 +239,33 @@ class ChatActivity(Activity):
         body.set_width(lv.pct(100))
         body.set_long_mode(lv.label.LONG_MODE.WRAP)
 
-    def _scroll_to_bottom(self):
+    def _scroll_to_bottom(self, timer=None):
         try:
             count = self._messages_container.get_child_count()
             if count > 0:
                 self._messages_container.get_child(count - 1).scroll_to_view_recursive(
-                    lv.ANIM.OFF
+                    True
                 )
         except Exception:
             pass
+        self._scroll_timer = None
+
+    def _schedule_scroll_to_bottom(self):
+        if self._scroll_timer is not None:
+            return
+        try:
+            self._scroll_timer = lv.timer_create(self._scroll_to_bottom, 50, None)
+            self._scroll_timer.set_repeat_count(1)
+        except Exception:
+            self._scroll_timer = None
+
+    def _cancel_scroll_timer(self):
+        if self._scroll_timer is not None:
+            try:
+                self._scroll_timer.delete()
+            except Exception:
+                pass
+            self._scroll_timer = None
 
     def _format_time(self, ts):
         try:
@@ -279,7 +300,7 @@ class ChatActivity(Activity):
                 )
                 self._store.add_message(self._chat_id, message, mark_unread=False)
                 self._append_message_row(message)
-                self._scroll_to_bottom()
+                self._schedule_scroll_to_bottom()
             except Exception as e:
                 logger.error("Send failed: %s", e)
                 self._queue_local_message(text, own)
@@ -306,7 +327,7 @@ class ChatActivity(Activity):
             )
         if message is not None:
             self._append_message_row(message)
-            self._scroll_to_bottom()
+            self._schedule_scroll_to_bottom()
 
     def _on_event(self, nostr_event):
         try:
@@ -330,6 +351,6 @@ class ChatActivity(Activity):
             )
             if self._store.add_message(self._chat_id, message, mark_unread=False):
                 self._append_message_row(message)
-                self._scroll_to_bottom()
+                self._schedule_scroll_to_bottom()
         except Exception as e:
             logger.error("Error handling chat event: %s", e)
