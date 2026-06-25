@@ -177,8 +177,12 @@ class FileExplorerActivity(Activity):
             btn = self._list.add_button(None, "< Back")
             btn.add_event_cb(lambda e, p=parent: self._populate_dir(p), lv.EVENT.CLICKED, None)
 
+        # FAT32 (SD card) rejects paths ending with '/' for os.listdir(),
+        # returning EINVAL (Errno 22), while the internal LittleFS filesystem
+        # accepts them. Strip the trailing slash only for the listing call;
+        # keep it on the main path string so child paths concatenate correctly.
         try:
-            items = os.listdir(path)
+            items = os.listdir(path.rstrip("/") or "/")
         except OSError:
             return
 
@@ -384,6 +388,8 @@ class FileExplorerActivity(Activity):
         new_name = result.get("data", {}).get("value", "").strip()
         if not new_name:
             return
+        # FAT32 rejects directory paths ending with '/' for os.rename().
+        old_path = old_path.rstrip("/") or "/"
         parts = old_path.rstrip("/").split("/")
         if len(parts) > 1:
             new_path = "/".join(parts[:-1]) + "/" + new_name

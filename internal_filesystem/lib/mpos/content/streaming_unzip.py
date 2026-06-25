@@ -87,7 +87,7 @@ def _strip_leading_slash(name):
 
 
 def _makedirs(path):
-    """MicroPython-compatible "os.makedirs"."""
+    """MicroPython-compatible \"os.makedirs\"."""
     parts = path.split("/")
     acc = ""
     for part in parts:
@@ -95,9 +95,11 @@ def _makedirs(path):
             continue
         acc += part + "/"
         try:
-            os.mkdir(acc)
+            # FAT32 (SD card) rejects directory paths ending with '/' for os.mkdir().
+            os.mkdir(acc.rstrip("/") or "/")
         except OSError:
             pass
+
 
 
 def _check_top_dir(filename, expected_app_name):

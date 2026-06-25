@@ -10,6 +10,8 @@ def rmtree(d):
     if not d:
         raise ValueError
 
+    # FAT32 (SD card) rejects directory paths ending with '/' for os.listdir()/os.rmdir().
+    d = d.rstrip("/") or "/"
     for name, type, *_ in os.ilistdir(d):
         path = d + "/" + name
         if type & 0x4000:  # dir
@@ -46,6 +48,9 @@ def copyfile(src, dst):
 
 
 def copytree(src, dst):
+    # FAT32 (SD card) rejects directory paths ending with '/' for os.listdir()/os.mkdir().
+    src = src.rstrip("/") or "/"
+    dst = dst.rstrip("/") or "/"
     os.mkdir(dst)
     for name, type, *_ in os.ilistdir(src):
         src_path = src + "/" + name
@@ -64,8 +69,9 @@ def move(src, dst):
     copy + delete when rename raises OSError (e.g. cross-filesystem).
     """
     # If dst is an existing directory, move src *into* it.
+    # FAT32 (SD card) rejects directory paths ending with '/' for os.stat().
     try:
-        st = os.stat(dst)
+        st = os.stat(dst.rstrip("/") or "/")
         if st[0] & 0x4000:  # directory
             dst = dst.rstrip("/") + "/" + src.rsplit("/", 1)[-1]
     except OSError:
@@ -80,8 +86,9 @@ def move(src, dst):
             raise
 
     # Slow path: copy then remove (cross-filesystem or FAT limitation).
+    # FAT32 (SD card) rejects directory paths ending with '/' for os.stat().
     try:
-        st = os.stat(src)
+        st = os.stat(src.rstrip("/") or "/")
         if st[0] & 0x4000:  # directory
             copytree(src, dst)
             rmtree(src)

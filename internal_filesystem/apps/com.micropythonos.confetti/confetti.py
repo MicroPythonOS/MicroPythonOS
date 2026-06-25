@@ -56,7 +56,8 @@ class Confetti:
         if dir_path.startswith("M:"):
             dir_path = dir_path[2:]
         try:
-            for entry in os.listdir(dir_path):
+            # FAT32 (SD card) rejects directory paths ending with '/' for os.listdir().
+            for entry in os.listdir(dir_path.rstrip("/") or "/"):
                 name = entry[0] if isinstance(entry, tuple) else entry
                 if name.lower().endswith(".png"):
                     asset_files.append(name)

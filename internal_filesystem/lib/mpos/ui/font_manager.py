@@ -501,9 +501,11 @@ droplet_sweat,💧
 
     @classmethod
     def _list_dir_names(cls, path):
+        # FAT32 (SD card) rejects directory paths ending with '/' for ilistdir()/listdir().
+        clean_path = path.rstrip("/") or "/"
         try:
             names = []
-            for entry in os.ilistdir(path):
+            for entry in os.ilistdir(clean_path):
                 if isinstance(entry, tuple):
                     names.append(entry[0])
                 else:
@@ -513,7 +515,7 @@ droplet_sweat,💧
             pass
 
         try:
-            return os.listdir(path)
+            return os.listdir(clean_path)
         except Exception:
             return None
 

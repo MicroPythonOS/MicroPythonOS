@@ -148,7 +148,8 @@ class ImageView(Activity):
     def _collect_images_from_dir(self, path):
         images = []
         try:
-            for item in os.listdir(path):
+            # FAT32 (SD card) rejects directory paths ending with '/' for os.listdir().
+            for item in os.listdir(path.rstrip("/") or "/"):
                 print(item)
                 if not self._is_image_file(item):
                     continue

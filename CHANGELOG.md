@@ -6,13 +6,20 @@ Put unreleased changes here!
 Builtin Apps:
 - About: fix logo not showing
 - AppStore: download the correct .mpk from BadgeHub.eu if there are multiple versions
+- File Manager: fix browsing SD card (FAT32) folders and files not showing
 - OSUpdate: show raw ESP error and a user-friendly message when the update fails to activate
 
 Frameworks:
+- Strip trailing slashes from directory paths before filesystem calls to support both LittleFS and FAT32 (SD card)
+- SDCard: tolerate trailing slashes when listing SD card contents
+- StreamingUnzip: tolerate trailing slashes when creating directories
+- FontManager: tolerate trailing slashes when listing directories
 - WifiService: increase connection timeout from 10 to 13 seconds
 
 OS:
 - Increase size of esp32-small and lilygo_t4 partitions to 3800000 to accomodate esp32 builds
+- shutil: tolerate trailing slashes in `rmtree()`, `copytree()`, and `move()`
+- os.path: fix `exists()`, `isdir()`, and `isfile()` for directories ending with `/` on FAT32
 
 0.13.0
 ======

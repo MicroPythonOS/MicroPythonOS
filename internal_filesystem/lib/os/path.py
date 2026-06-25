@@ -47,8 +47,9 @@ def basename(path):
 
 
 def exists(path):
+    # FAT32 (SD card) rejects directory paths ending with '/' for os.stat().
     try:
-        os.stat(path)
+        os.stat(path.rstrip("/") or "/")
         return True
     except OSError:
         return False
@@ -59,16 +60,19 @@ lexists = exists
 
 
 def isdir(path):
+    # FAT32 (SD card) rejects directory paths ending with '/' for os.stat().
     try:
-        mode = os.stat(path)[0]
+        mode = os.stat(path.rstrip("/") or "/")[0]
         return mode & 0o040000
     except OSError:
         return False
 
 
 def isfile(path):
+    # FAT32 (SD card) rejects directory paths ending with '/' for os.stat().
+    # Stripping the separator preserves correctness: a directory remains not-a-file.
     try:
-        return bool(os.stat(path)[0] & 0x8000)
+        return bool(os.stat(path.rstrip("/") or "/")[0] & 0x8000)
     except OSError:
         return False
 

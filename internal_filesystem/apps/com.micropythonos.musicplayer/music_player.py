@@ -171,7 +171,8 @@ class MusicPlayer(Activity):
         for path in paths:
             if path.endswith("/"):
                 try:
-                    items = os.listdir(path)
+                    # FAT32 (SD card) rejects directory paths ending with '/' for os.listdir().
+                    items = os.listdir(path.rstrip("/") or "/")
                     items.sort()
                     for item in items:
                         if item.lower().endswith(".wav"):

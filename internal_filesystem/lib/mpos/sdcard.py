@@ -192,7 +192,8 @@ class SDCardManager:
                 return False
 
         try:
-            contents = os.listdir(mount_point)
+            # FAT32 rejects directory paths ending with '/' for os.listdir().
+            contents = os.listdir(mount_point.rstrip("/") or "/")
             if __debug__: logger.debug("SD card contents at %s: %s", mount_point, contents)
             return True
         except OSError as e:
@@ -225,7 +226,8 @@ class SDCardManager:
 
     def list(self, mount_point):
         try:
-            contents = os.listdir(mount_point)
+            # FAT32 rejects directory paths ending with '/' for os.listdir().
+            contents = os.listdir(mount_point.rstrip("/") or "/")
             if __debug__: logger.debug("SD card contents at %s: %s", mount_point, contents)
             return contents
         except OSError as e:
