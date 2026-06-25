@@ -2,6 +2,8 @@ import ssl
 import json
 import time
 
+import logging
+
 from mpos import Service, TaskManager
 
 from nostr.relay_manager import RelayManager
@@ -9,6 +11,17 @@ from nostr.message_type import ClientMessageType
 from nostr.filter import Filter, Filters
 from nostr.event import Event, EncryptedDirectMessage
 from nostr.key import PrivateKey
+
+from chat_model import (
+    Message,
+    channel_id_from_event,
+    chat_id_for_event,
+    peer_from_dm_event,
+)
+from constants import APP_FULLNAME, DEFAULT_CHANNEL_ID, KIND_DM, KIND_CHANNEL_MESSAGE
+from event_store import EventStore
+
+logger = logging.getLogger(__name__)
 
 EVENT_KIND_NAMES = {
     0: "SET_METADATA",
@@ -205,6 +218,10 @@ class NostrManager:
         # Event callbacks: kind -> [callbacks]
         self._event_handlers = {}
 
+        # Post-event callbacks run after normal handlers/subscriptions so
+        # background persistence can store events already processed by the UI.
+        self._post_event_handlers = {}
+
         # NWC-specific callbacks (set by NWCWallet)
         self._nwc_balance_cb = None
         self._nwc_payments_cb = None
@@ -267,6 +284,23 @@ class NostrManager:
         if kind in self._event_handlers:
             self._event_handlers[kind] = [
                 cb for cb in self._event_handlers[kind] if cb != callback
+            ]
+
+    def register_post_event_handler(self, kind, callback):
+        """Register a callback that runs after normal UI event handlers.
+
+        Post handlers receive the same NostrEvent instance and are intended
+        for background persistence/notification work that should not race
+        with foreground UI updates.
+        """
+        if kind not in self._post_event_handlers:
+            self._post_event_handlers[kind] = []
+        self._post_event_handlers[kind].append(callback)
+
+    def unregister_post_event_handler(self, kind, callback):
+        if kind in self._post_event_handlers:
+            self._post_event_handlers[kind] = [
+                cb for cb in self._post_event_handlers[kind] if cb != callback
             ]
 
     def set_nwc_callbacks(self, balance_cb=None, payments_cb=None, notification_cb=None):
@@ -634,9 +668,11 @@ class NostrManager:
             self._process_nwc_event(event)
             return
 
+        # Build the shared wrapper once; decrypt DMs if a private key is set.
+        nostr_event = NostrEvent(event, self._nostr_private_key)
+
         # Route by kind to registered callbacks
         if event.kind in self._event_handlers:
-            nostr_event = NostrEvent(event, self._nostr_private_key)
             for cb in self._event_handlers[event.kind]:
                 try:
                     cb(nostr_event)
@@ -644,7 +680,6 @@ class NostrManager:
                     print("NostrManager: event handler error: {}".format(e))
 
         # Store in events list for NostrApp
-        nostr_event = NostrEvent(event, self._nostr_private_key)
         self.events.append(nostr_event)
         if len(self.events) > self.EVENTS_TO_SHOW:
             self.events = self.events[-self.EVENTS_TO_SHOW:]
@@ -656,6 +691,14 @@ class NostrManager:
                     sub.callback(nostr_event)
             except Exception as e:
                 print("NostrManager: subscription callback error: {}".format(e))
+
+        # Post-event background handlers (e.g. persistence) run after UI handlers.
+        if event.kind in self._post_event_handlers:
+            for cb in self._post_event_handlers[event.kind]:
+                try:
+                    cb(nostr_event)
+                except Exception as e:
+                    print("NostrManager: post-event handler error: {}".format(e))
 
         if self._events_updated_cb:
             try:
@@ -784,10 +827,77 @@ class NostrManager:
 
 class NostrClientService(Service):
 
+    def __init__(self):
+        super().__init__()
+        self._store = None
+        self._persist_cb = None
+
     def onStart(self, intent):
         print("NostrClientService: starting NostrManager")
-        NostrManager.get_instance().start()
+        manager = NostrManager.get_instance()
+        manager.start()
+        self._store = EventStore(APP_FULLNAME)
+        self._persist_cb = lambda e: self._persist_event(e)
+        manager.register_post_event_handler(KIND_DM, self._persist_cb)
+        manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)
 
     def onDestroy(self):
         print("NostrClientService: stopping NostrManager")
-        NostrManager.get_instance().stop()
+        manager = NostrManager.get_instance()
+        if self._persist_cb is not None:
+            manager.unregister_post_event_handler(KIND_DM, self._persist_cb)
+            manager.unregister_post_event_handler(
+                KIND_CHANNEL_MESSAGE, self._persist_cb
+            )
+            self._persist_cb = None
+        if self._store is not None:
+            self._store.flush_index()
+        manager.stop()
+
+    def _persist_event(self, nostr_event):
+        """Persist an event that made it past the UI handlers.
+
+        This runs as a post-event handler, so normal UI callbacks already had
+        a chance to store and display the message. If there are no UI
+        handlers, we store it here so the chat list/chat still show the
+        message when the user re-opens the app.
+        """
+        if self._store is None:
+            return
+        try:
+            manager = NostrManager.get_instance()
+            own = manager.get_own_pubkey_hex()
+            chat_id = chat_id_for_event(nostr_event.event, own)
+            if chat_id is None:
+                return
+
+            kind = nostr_event.kind
+            if kind == KIND_DM:
+                content = nostr_event.get_display_content()
+            else:
+                content = nostr_event.content
+
+            chat = self._store.get_chat(chat_id)
+            if chat is None:
+                if kind == KIND_DM:
+                    peer = peer_from_dm_event(nostr_event.event, own)
+                    chat = self._store.get_or_create_dm(own or "", peer)
+                else:
+                    channel_id = channel_id_from_event(nostr_event.event)
+                    chat = self._store.get_or_create_channel(
+                        channel_id or DEFAULT_CHANNEL_ID
+                    )
+
+            message = Message(
+                event_id=nostr_event.event.id,
+                ts=nostr_event.created_at,
+                pubkey=nostr_event.public_key,
+                content=content,
+                kind=kind,
+            )
+            self._store.add_message(chat_id, message, mark_unread=True)
+        except Exception as e:
+            logger.error("Failed to persist Nostr event: %s", e)
+            import sys
+
+            sys.print_exception(e)

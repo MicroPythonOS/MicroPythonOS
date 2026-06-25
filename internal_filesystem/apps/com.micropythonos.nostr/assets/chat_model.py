@@ -64,6 +64,26 @@ def _channel_chat_id_from_event(event):
     return None
 
 
+def peer_from_dm_event(event, own_pubkey):
+    """Return the peer pubkey from a DM event's p-tags."""
+    tags = getattr(event, "tags", []) or []
+    for tag in tags:
+        if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "p":
+            p = tag[1]
+            if p != own_pubkey:
+                return p
+    return getattr(event, "public_key", None) or event.pubkey
+
+
+def channel_id_from_event(event):
+    """Return the raw channel id from the first e-tag on a kind 42 event."""
+    tags = getattr(event, "tags", []) or []
+    for tag in tags:
+        if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "e":
+            return tag[1]
+    return None
+
+
 class Message:
     """Minimal chat message. Signatures are discarded after verification."""
 

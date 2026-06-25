@@ -48,7 +48,16 @@ class EventStore:
     outbox file and retried when connectivity returns.
     """
 
+    _instances = {}
+
+    def __new__(cls, app_fullname=APP_FULLNAME):
+        if app_fullname not in cls._instances:
+            cls._instances[app_fullname] = super().__new__(cls)
+        return cls._instances[app_fullname]
+
     def __init__(self, app_fullname=APP_FULLNAME):
+        if getattr(self, "_loaded", False):
+            return
         self._app_fullname = app_fullname
         self._prefs_dir = f"prefs/{app_fullname}"
         self._cache_dir = f"{self._prefs_dir}/{CACHE_DIR}"
@@ -101,6 +110,7 @@ class EventStore:
             logger.error("Failed to load index: %s", e)
             self._index = self._empty_index()
         self._index_dirty = False
+        self._loaded = True
 
     def flush_index(self):
         """Write the lightweight chat index to flash if it changed."""

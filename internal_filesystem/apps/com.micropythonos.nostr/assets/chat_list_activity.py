@@ -14,7 +14,13 @@ from mpos import (
 )
 
 from chat_activity import ChatActivity
-from chat_model import Message, channel_chat_id, chat_id_for_event
+from chat_model import (
+    Message,
+    channel_chat_id,
+    channel_id_from_event,
+    chat_id_for_event,
+    peer_from_dm_event,
+)
 from constants import (
     APP_FULLNAME,
     DEFAULT_CHANNEL_ID,
@@ -247,10 +253,10 @@ class ChatListActivity(Activity):
             chat = self._store.get_chat(chat_id)
             if chat is None:
                 if kind == KIND_DM:
-                    peer = self._peer_from_dm_event(nostr_event.event, own)
+                    peer = peer_from_dm_event(nostr_event.event, own)
                     chat = self._store.get_or_create_dm(own, peer)
                 else:
-                    channel_id = self._channel_id_from_event(nostr_event.event)
+                    channel_id = channel_id_from_event(nostr_event.event)
                     chat = self._store.get_or_create_channel(
                         channel_id or DEFAULT_CHANNEL_ID
                     )
@@ -265,21 +271,6 @@ class ChatListActivity(Activity):
                 self._post_notification(chat, message)
         except Exception as e:
             logger.error("Error handling Nostr event: %s", e)
-
-    def _peer_from_dm_event(self, event, own_pubkey):
-        tags = getattr(event, "tags", []) or []
-        for tag in tags:
-            if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "p":
-                if tag[1] != own_pubkey:
-                    return tag[1]
-        return getattr(event, "public_key", None) or event.pubkey
-
-    def _channel_id_from_event(self, event):
-        tags = getattr(event, "tags", []) or []
-        for tag in tags:
-            if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "e":
-                return tag[1]
-        return None
 
     def _post_notification(self, chat, message):
         try:
