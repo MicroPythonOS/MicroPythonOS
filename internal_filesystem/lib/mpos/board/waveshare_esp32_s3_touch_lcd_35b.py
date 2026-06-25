@@ -2,7 +2,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-if __debug__: logger.debug("esp32_s3_touch_lcd_35b.py initialization")
+if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_35b.py initialization")
 
 import time
 from micropython import const
@@ -205,4 +205,4 @@ try:
 except Exception as e:
     logger.warning("BOOT button init failed: %s", e)
 
-if __debug__: logger.debug("esp32_s3_touch_lcd_35b.py finished")
+if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_35b.py finished")
