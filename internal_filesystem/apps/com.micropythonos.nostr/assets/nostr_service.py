@@ -12,15 +12,6 @@ from nostr.filter import Filter, Filters
 from nostr.event import Event, EncryptedDirectMessage
 from nostr.key import PrivateKey
 
-from chat_model import (
-    Message,
-    channel_id_from_event,
-    chat_id_for_event,
-    peer_from_dm_event,
-)
-from constants import APP_FULLNAME, DEFAULT_CHANNEL_ID, KIND_DM, KIND_CHANNEL_MESSAGE
-from event_store import EventStore
-
 logger = logging.getLogger(__name__)
 
 EVENT_KIND_NAMES = {
@@ -931,6 +922,9 @@ class NostrClientService(Service):
         self._persist_cb = None
 
     def onStart(self, intent):
+        from constants import APP_FULLNAME, KIND_DM, KIND_CHANNEL_MESSAGE
+        from event_store import EventStore
+
         print("NostrClientService: starting NostrManager")
         manager = NostrManager.get_instance()
         manager.start()
@@ -940,6 +934,8 @@ class NostrClientService(Service):
         manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)
 
     def onDestroy(self):
+        from constants import KIND_DM, KIND_CHANNEL_MESSAGE
+
         print("NostrClientService: stopping NostrManager")
         manager = NostrManager.get_instance()
         if self._persist_cb is not None:
@@ -963,6 +959,14 @@ class NostrClientService(Service):
         if self._store is None:
             return
         try:
+            from chat_model import (
+                Message,
+                channel_id_from_event,
+                chat_id_for_event,
+                peer_from_dm_event,
+            )
+            from constants import DEFAULT_CHANNEL_ID, KIND_DM
+
             manager = NostrManager.get_instance()
             own = manager.get_own_pubkey_hex()
             chat_id = chat_id_for_event(nostr_event.event, own)
