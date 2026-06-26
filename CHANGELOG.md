@@ -10,6 +10,7 @@ Builtin Apps:
 - OSUpdate: show raw ESP error and a user-friendly message when the update fails to activate
 
 Frameworks:
+- Focus: `add_focus_border()` highlights now stay hidden until the user navigates by direction (joystick/keypad). The widget is still added to the focus group, but the border is only drawn from the first `move_focus_direction()` onward. Touch-only UIs (which focus widgets by tapping) never show a stray ring — e.g. the gold rectangle that appeared around the Lightning Piggy balance after tapping it — while keypad/encoder navigation is unchanged.
 - AppManager: add support for apps as Python packages 
 - Strip trailing slashes from directory paths before filesystem calls to support both LittleFS and FAT32 (SD card)
 - SDCard: tolerate trailing slashes when listing SD card contents

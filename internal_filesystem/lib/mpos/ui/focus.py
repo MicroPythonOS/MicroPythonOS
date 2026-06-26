@@ -1,7 +1,26 @@
 import lvgl as lv
 
 
+# Focus borders highlight which widget directional (keypad/joystick) focus is
+# on. They must stay invisible until the user actually navigates by direction,
+# so a touch-only UI — where widgets are focused by tapping — never shows a
+# stray highlight, and a hybrid touch+keypad device only shows it once the
+# joystick is used. move_focus_direction() flips this on first use via
+# enable_focus_borders().
+_focus_nav_active = False
+
+
+def enable_focus_borders():
+    """Mark that the user has navigated by direction (joystick/keypad). From
+    then on, focused widgets draw their focus border."""
+    global _focus_nav_active
+    _focus_nav_active = True
+
+
 def _focus_border_handler(event, width, color, opacity, radius):
+    if not _focus_nav_active:
+        # No directional navigation yet (e.g. touch-only use): no highlight.
+        return
     target = event.get_target_obj()
     target.set_style_border_color(color, lv.PART.MAIN)
     target.set_style_border_width(width, lv.PART.MAIN)
@@ -18,7 +37,12 @@ def _defocus_border_handler(event):
 
 
 def add_focus_border(widget, width=1, color=None, opacity=None, radius=None):
-    """Register focus/defocus callbacks that draw a border around a widget."""
+    """Register focus/defocus callbacks that draw a border around a widget.
+
+    The widget is always added to the focus group, but the border stays
+    invisible until the user navigates by direction (see enable_focus_borders
+    / move_focus_direction) — keeping the highlight off touch-only UIs while
+    preserving it for keypad/encoder navigation."""
     if color is None:
         color = lv.theme_get_color_primary(None)
     widget.add_event_cb(
