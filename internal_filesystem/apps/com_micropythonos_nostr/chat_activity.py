@@ -454,6 +454,12 @@ class ChatActivity(Activity):
     def _on_event(self, nostr_event):
         try:
             own = self._manager.get_own_pubkey_hex()
+            if own and nostr_event.public_key == own:
+                # Outgoing messages are added to the UI immediately by _send();
+                # the relay echo (including the sender copy of a NIP-17 gift-wrap)
+                # must not be rendered again as an incoming message.
+                return
+
             chat_id = chat_id_for_event(nostr_event.event, own)
             if chat_id != self._chat_id:
                 return
