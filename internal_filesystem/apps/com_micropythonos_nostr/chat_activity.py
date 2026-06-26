@@ -54,6 +54,7 @@ class ChatActivity(Activity):
     _prefs = None
     _handler_registered = False
     _rendered_ids = None
+    _sent_event_ids = None
 
     def onCreate(self):
         self._prefs = SharedPreferences(self.appFullName)
@@ -74,6 +75,7 @@ class ChatActivity(Activity):
                 own = self._manager.get_own_pubkey_hex() or ""
                 self._chat_id = dm_chat_id(own, self._peer_pubkey)
 
+        self._sent_event_ids = set()
         self._setup_ui()
 
     def _setup_ui(self):
@@ -334,6 +336,8 @@ class ChatActivity(Activity):
 
         online = ConnectivityManager.get().is_online() and self._manager.is_connected()
         own = self._manager.get_own_pubkey_hex() or ""
+        event_id = None
+        event_ids = None
 
         if self._kind == KIND_NIP17_CHAT:
             try:
@@ -410,6 +414,12 @@ class ChatActivity(Activity):
         self._append_message_row(message)
         self._scroll_to_bottom()
 
+        if event_id:
+            self._sent_event_ids.add(event_id)
+        if self._kind in (KIND_DM, KIND_NIP17_CHAT) and event_ids:
+            for eid in event_ids:
+                self._sent_event_ids.add(eid)
+
         self._input_textarea.set_text("")
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
@@ -454,12 +464,6 @@ class ChatActivity(Activity):
     def _on_event(self, nostr_event):
         try:
             own = self._manager.get_own_pubkey_hex()
-            if own and nostr_event.public_key == own:
-                # Outgoing messages are added to the UI immediately by _send();
-                # the relay echo (including the sender copy of a NIP-17 gift-wrap)
-                # must not be rendered again as an incoming message.
-                return
-
             chat_id = chat_id_for_event(nostr_event.event, own)
             if chat_id != self._chat_id:
                 return
@@ -476,6 +480,12 @@ class ChatActivity(Activity):
                 content=content,
                 kind=nostr_event.kind,
             )
+
+            # Don't render the relay echo of a message we just sent from this
+            # activity; _send() already added it to the store and UI.
+            if message.event_id in self._sent_event_ids:
+                return
+
             # Persist if not already stored; mark unread=False because the
             # user is already looking at this chat.
             self._store.add_message(self._chat_id, message, mark_unread=False)

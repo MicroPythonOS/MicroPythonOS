@@ -7,7 +7,13 @@ sys.path.insert(0, "lib")
 sys.path.insert(0, "apps/com_micropythonos_nostr")
 
 from apps.com_micropythonos_nostr.chat_activity import ChatActivity
-from apps.com_micropythonos_nostr.chat_model import KIND_DM, KIND_NIP17_CHAT
+from apps.com_micropythonos_nostr.chat_model import (
+    KIND_CHANNEL_MESSAGE,
+    KIND_DM,
+    KIND_NIP17_CHAT,
+    channel_chat_id,
+    dm_chat_id,
+)
 
 
 class _FakeManager:
@@ -26,6 +32,14 @@ class _FakeManager:
         return self.own_pubkey
 
 
+class _FakeStore:
+    def add_message(self, chat_id, message, mark_unread=False):
+        return True
+
+    def get_chat(self, chat_id):
+        return None
+
+
 class _FakeNostrEvent:
     def __init__(self, public_key, event_id="eid", kind=KIND_NIP17_CHAT,
                  content="hi", created_at=1234567890, tags=None):
@@ -36,6 +50,7 @@ class _FakeNostrEvent:
         self.tags = tags or []
         self.event = self
         self.event_id = event_id
+        self.id = event_id
 
     def get_display_content(self):
         return self.content
@@ -81,20 +96,55 @@ class TestChatActivityRegistersNip17Handler(unittest.TestCase):
 
 
 class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
-    def test_on_event_skips_self_authored_messages(self):
+    def _activity(self, own_pubkey, chat_id, kind):
         act = object.__new__(ChatActivity)
-        act._manager = _FakeManager(own_pubkey="own123")
-        act._chat_id = "dm_own123_peer456"
-        act._kind = KIND_DM
-        act._store = None
+        act._manager = _FakeManager(own_pubkey=own_pubkey)
+        act._chat_id = chat_id
+        act._kind = kind
+        act._store = _FakeStore()
         act._rendered_ids = set()
+        act._sent_event_ids = set()
+        return act
+
+    def test_on_event_skips_echo_of_just_sent_message(self):
+        act = self._activity(
+            "own123",
+            dm_chat_id("own123", "peer456"),
+            KIND_DM,
+        )
+        act._sent_event_ids.add("gw1")
         appended = []
         act._append_message_row = lambda msg: appended.append(msg)
 
-        own_event = _FakeNostrEvent(public_key="own123", event_id="gw1")
-        act._on_event(own_event)
+        echo = _FakeNostrEvent(
+            public_key="own123",
+            event_id="gw1",
+            kind=KIND_NIP17_CHAT,
+            tags=[["p", "peer456"]],
+        )
+        act._on_event(echo)
 
         self.assertEqual(appended, [])
+
+    def test_on_event_renders_self_authored_channel_message(self):
+        """Own messages sent from another client must still show in a channel."""
+        channel_id = "chan42"
+        chat_id = channel_chat_id(channel_id)
+        act = self._activity("own123", chat_id, KIND_CHANNEL_MESSAGE)
+        appended = []
+        act._append_message_row = lambda msg: appended.append(msg)
+
+        own_channel_event = _FakeNostrEvent(
+            public_key="own123",
+            event_id="event_from_other_client",
+            kind=KIND_CHANNEL_MESSAGE,
+            content="from amethyst",
+            tags=[["e", channel_id, "", "root"]],
+        )
+        act._on_event(own_channel_event)
+
+        self.assertEqual(len(appended), 1)
+        self.assertEqual(appended[0].content, "from amethyst")
 
 
 if __name__ == "__main__":
