@@ -20,36 +20,30 @@ logger = logging.getLogger(__name__)
 # helpers it does not ship.
 try:
     from .chat_model import (
+        DEFAULT_CHANNEL_ID,
+        KIND_CHANNEL_MESSAGE,
+        KIND_DM,
         Message,
         channel_id_from_event,
         chat_id_for_event,
         peer_from_dm_event,
     )
-    from .constants import (
-        APP_FULLNAME,
-        DEFAULT_CHANNEL_ID,
-        KIND_CHANNEL_MESSAGE,
-        KIND_DM,
-    )
     from .event_store import EventStore
 except ImportError:
     try:
         from chat_model import (
+            DEFAULT_CHANNEL_ID,
+            KIND_CHANNEL_MESSAGE,
+            KIND_DM,
             Message,
             channel_id_from_event,
             chat_id_for_event,
             peer_from_dm_event,
         )
-        from constants import (
-            APP_FULLNAME,
-            DEFAULT_CHANNEL_ID,
-            KIND_CHANNEL_MESSAGE,
-            KIND_DM,
-        )
         from event_store import EventStore
     except ImportError:
         Message = channel_id_from_event = chat_id_for_event = peer_from_dm_event = None
-        APP_FULLNAME = DEFAULT_CHANNEL_ID = KIND_CHANNEL_MESSAGE = KIND_DM = None
+        DEFAULT_CHANNEL_ID = KIND_CHANNEL_MESSAGE = KIND_DM = None
         EventStore = None
 
 EVENT_KIND_NAMES = {
@@ -963,7 +957,7 @@ class NostrClientService(Service):
         print("NostrClientService: starting NostrManager")
         manager = NostrManager.get_instance()
         manager.start()
-        self._store = EventStore(APP_FULLNAME)
+        self._store = EventStore(self.appFullName)
         self._persist_cb = lambda e: self._persist_event(e)
         manager.register_post_event_handler(KIND_DM, self._persist_cb)
         manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)

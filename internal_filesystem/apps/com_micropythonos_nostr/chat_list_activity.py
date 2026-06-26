@@ -15,32 +15,38 @@ from mpos import (
 
 from .chat_activity import ChatActivity
 from .chat_model import (
+    DEFAULT_CHANNEL_ID,
+    DEFAULT_CHANNEL_NAME,
+    KIND_CHANNEL_MESSAGE,
+    KIND_DM,
     Message,
     channel_chat_id,
     channel_id_from_event,
     chat_id_for_event,
     peer_from_dm_event,
 )
-from .constants import (
-    APP_FULLNAME,
-    DEFAULT_CHANNEL_ID,
-    DEFAULT_CHANNEL_NAME,
-    DEFAULT_MAX_MESSAGES_PER_CHAT,
-    DEFAULT_RELAY,
-    DEFAULT_RELAYS,
-    INDEX_FLUSH_MS,
-    KIND_CHANNEL_MESSAGE,
-    KIND_DM,
-    LOOKBACK_WINDOW_SECONDS,
-    OVERLAP_SECONDS,
-    SUBSCRIPTION_LIMIT_INITIAL,
-)
-from .event_store import EventStore, _current_nostr_ts
+from .event_store import DEFAULT_MAX_MESSAGES_PER_CHAT, EventStore, _current_nostr_ts
 from .new_chat_activity import NewChatActivity
 from .nostr_service import NostrManager
 from .show_npub_qr import ShowNpubQRActivity
 
 logger = logging.getLogger(__name__)
+
+# Default relays used when the user has not configured one.
+DEFAULT_RELAYS = [
+    "wss://nos.lol",
+    "wss://relay.damus.io",
+    "wss://relay.primal.net",
+]
+DEFAULT_RELAY = DEFAULT_RELAYS[0]
+
+# Subscription tuning.
+LOOKBACK_WINDOW_SECONDS = 24 * 60 * 60  # 24 hours
+OVERLAP_SECONDS = 60  # margin when using since=last_known_ts
+SUBSCRIPTION_LIMIT_INITIAL = 200
+
+# Index flush period (milliseconds).
+INDEX_FLUSH_MS = 5000
 
 
 class ChatListActivity(Activity):
@@ -61,8 +67,8 @@ class ChatListActivity(Activity):
     _connectivity_cb = None
 
     def onCreate(self):
-        self._prefs = SharedPreferences(self.appFullName or APP_FULLNAME)
-        self._store = EventStore(self.appFullName or APP_FULLNAME)
+        self._prefs = SharedPreferences(self.appFullName)
+        self._store = EventStore(self.appFullName)
         self._manager = NostrManager.get_instance()
         self._setup_ui()
         self._auto_join_default_channel()

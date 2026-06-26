@@ -6,7 +6,6 @@ from mpos import Activity, DisplayMetrics, Intent, MposKeyboard
 
 from .chat_activity import ChatActivity
 from .chat_model import KIND_CHANNEL_MESSAGE, KIND_DM
-from .constants import APP_FULLNAME
 from .event_store import EventStore
 from .nostr_service import NostrManager
 
@@ -24,7 +23,7 @@ class NewChatActivity(Activity):
     _error_label = None
 
     def onCreate(self):
-        self._store = EventStore(self.appFullName or APP_FULLNAME)
+        self._store = EventStore(self.appFullName)
         self._manager = NostrManager.get_instance()
         self._setup_ui()
 

@@ -18,12 +18,6 @@ from .chat_model import (
     chat_id_for_event,
     dm_chat_id,
 )
-from .constants import (
-    DEFAULT_RELAYS,
-    LOOKBACK_WINDOW_SECONDS,
-    OVERLAP_SECONDS,
-    SUBSCRIPTION_LIMIT_INITIAL,
-)
 from .event_store import EventStore, _current_nostr_ts
 from .nostr_service import NostrManager
 
@@ -166,6 +160,13 @@ class ChatActivity(Activity):
         self._handler_registered = False
 
     def _start_subscriptions(self):
+        from .chat_list_activity import (
+            DEFAULT_RELAYS,
+            LOOKBACK_WINDOW_SECONDS,
+            OVERLAP_SECONDS,
+            SUBSCRIPTION_LIMIT_INITIAL,
+        )
+
         if not self._manager.is_running():
             self._manager.start()
 
@@ -204,6 +205,8 @@ class ChatActivity(Activity):
             logger.error("DM subscription failed: %s", e)
 
     def _since_for_chat(self):
+        from .chat_list_activity import LOOKBACK_WINDOW_SECONDS, OVERLAP_SECONDS
+
         chat = self._store.get_chat(self._chat_id)
         if chat is not None and chat.last_ts:
             return max(0, chat.last_ts - OVERLAP_SECONDS)
@@ -338,10 +341,11 @@ class ChatActivity(Activity):
                 content=content,
                 kind=self._kind,
             )
-            # Persist if not already stored; render regardless, because
-            # ChatListActivity may have stored this event before our handler runs.
+            # Persist if not already stored; mark unread=False because the
+            # user is already looking at this chat.
             self._store.add_message(self._chat_id, message, mark_unread=False)
-            if message.event_id not in self._rendered_ids:
+            # If it hasn't been rendered yet:
+            if self._rendered_ids is None or message.event_id not in self._rendered_ids:
                 self._append_message_row(message)
                 self._scroll_to_bottom()
         except Exception as e:

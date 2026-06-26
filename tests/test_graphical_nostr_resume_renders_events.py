@@ -13,17 +13,22 @@ import lvgl as lv
 
 sys.path.append("apps")
 
-from com_micropythonos_nostr.chat_model import Message, channel_chat_id
-from com_micropythonos_nostr.constants import (
-    APP_FULLNAME,
+from com_micropythonos_nostr.chat_model import (
     DEFAULT_CHANNEL_ID,
     DEFAULT_CHANNEL_NAME,
+    KIND_CHANNEL_MESSAGE,
+    Message,
+    channel_chat_id,
 )
 from com_micropythonos_nostr.event_store import EventStore
+
+APP_FULLNAME = "com_micropythonos_nostr"
 from com_micropythonos_nostr.nostr_service import NostrManager
 
 from mpos import AppManager, wait_for_render
 from mpos.ui.testing import click_label, find_label_with_text, wait_for_text
+
+from nostr.event import Event
 
 
 class TestNostrChatListResumeRendersEvents(unittest.TestCase):
@@ -117,6 +122,32 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
         self.assertIsNotNone(
             find_label_with_text(lv.screen_active(), "Hello from regression test"),
             "Chat screen should show the stored message",
+        )
+
+    def test_incoming_channel_message_renders_in_open_chat(self):
+        result = AppManager.start_app("com_micropythonos_nostr")
+        self.assertTrue(result, "Nostr app should start")
+        wait_for_render(10)
+        wait_for_text("Hello from regression test", timeout=20)
+
+        clicked = click_label("MicroPythonOS", timeout=10)
+        self.assertTrue(clicked, "Should click the default channel row")
+        wait_for_render(10)
+
+        # Simulate an incoming kind-42 event for the default channel.
+        event = Event(
+            content="Incoming live message",
+            public_key="c" * 64,
+            kind=KIND_CHANNEL_MESSAGE,
+            tags=[["e", DEFAULT_CHANNEL_ID, "", "root"]],
+        )
+        event.__post_init__()
+        NostrManager.get_instance()._process_event(event)
+        wait_for_render(10)
+
+        self.assertIsNotNone(
+            find_label_with_text(lv.screen_active(), "Incoming live message"),
+            "Open chat should render the incoming channel message",
         )
 
 

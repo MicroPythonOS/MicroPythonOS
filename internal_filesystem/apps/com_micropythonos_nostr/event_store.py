@@ -8,19 +8,20 @@ except ImportError:
     import json
 
 from .chat_model import Chat, Message, channel_chat_id, dm_chat_id
-from .constants import (
-    APP_FULLNAME,
-    CACHE_DIR,
-    CHAT_FILE_SUFFIX,
-    DEFAULT_MAX_MESSAGES_PER_CHAT,
-    INDEX_FILENAME,
-    MAX_MESSAGES_PER_CHAT_MAX,
-    MAX_MESSAGES_PER_CHAT_MIN,
-    OUTBOX_FILENAME,
-    STORE_VERSION,
-)
 
 logger = logging.getLogger(__name__)
+
+# JSONL/index file layout under prefs/<app_fullname>/cache/.
+CACHE_DIR = "cache"
+INDEX_FILENAME = "index.json"
+OUTBOX_FILENAME = "outbox.jsonl"
+CHAT_FILE_SUFFIX = ".jsonl"
+STORE_VERSION = 1
+
+# Per-chat message store limits.
+DEFAULT_MAX_MESSAGES_PER_CHAT = 200
+MAX_MESSAGES_PER_CHAT_MIN = 10
+MAX_MESSAGES_PER_CHAT_MAX = 2000
 
 
 def _current_nostr_ts():
@@ -50,12 +51,12 @@ class EventStore:
 
     _instances = {}
 
-    def __new__(cls, app_fullname=APP_FULLNAME):
+    def __new__(cls, app_fullname):
         if app_fullname not in cls._instances:
             cls._instances[app_fullname] = super().__new__(cls)
         return cls._instances[app_fullname]
 
-    def __init__(self, app_fullname=APP_FULLNAME):
+    def __init__(self, app_fullname):
         if getattr(self, "_loaded", False):
             return
         self._app_fullname = app_fullname

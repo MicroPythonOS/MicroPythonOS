@@ -1,13 +1,21 @@
 import logging
 
-from .constants import (
-    CHAT_ID_CHANNEL_PREFIX,
-    CHAT_ID_DM_PREFIX,
-    KIND_CHANNEL_MESSAGE,
-    KIND_DM,
-)
-
 logger = logging.getLogger(__name__)
+
+# Nostr kind codes used by this client.
+KIND_DM = 4
+KIND_CHANNEL_CREATE = 40
+KIND_CHANNEL_META = 41
+KIND_CHANNEL_MESSAGE = 42
+
+# Chat ID prefixes.
+CHAT_ID_DM_PREFIX = "dm_"
+CHAT_ID_CHANNEL_PREFIX = "channel_"
+
+# Auto-joined public channel (#MicroPythonOS, NIP-28).
+DEFAULT_CHANNEL_ID = "cbf20cd9212aea3c7d399777b69cec750a0109edd831001a5011d892268a9481"
+DEFAULT_CHANNEL_NAME = "MicroPythonOS"
+DEFAULT_CHANNEL_ABOUT = "MicroPythonOS community chat"
 
 
 def _peer_sort_key(own_pubkey, peer_pubkey):
