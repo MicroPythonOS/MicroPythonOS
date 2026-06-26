@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # Default relays used when the user has not configured one.
 DEFAULT_RELAYS = [
-    "wss://nos.lol",
+    "wss://relay.0xchat.com",
     "wss://relay.damus.io",
     "wss://relay.primal.net",
 ]
