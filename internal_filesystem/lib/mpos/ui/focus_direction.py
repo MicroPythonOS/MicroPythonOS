@@ -320,6 +320,12 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
 # ---------------------------------------------------------------------------
 
 def move_focus_direction(angle):
+    # First directional navigation enables focus borders (see mpos.ui.focus):
+    # they stay hidden during touch-only use and appear once the joystick/keypad
+    # is actually used, so the highlight follows real navigation rather than
+    # device capability.
+    from .focus import enable_focus_borders
+    enable_focus_borders()
     focus_group = lv.group_get_default()
     if not focus_group:
         logger.warning("move_focus_direction: no default focus_group found, returning...")
