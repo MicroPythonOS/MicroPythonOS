@@ -118,7 +118,38 @@ class EventStore:
             logger.error("Failed to load index: %s", e)
             self._index = self._empty_index()
         self._index_dirty = False
+        self._rebuild_summaries()
         self._loaded = True
+
+    def _rebuild_summaries(self):
+        """Backfill last_ts/last_preview from JSONL files when index is stale.
+
+        Messages are appended to per-chat JSONL files immediately, while the
+        lightweight index is flushed periodically. After a hard reset the index
+        may lag behind; rebuild summaries so the chat list shows DMs that have
+        persisted history.
+        """
+        try:
+            files = os.listdir(self._cache_dir)
+        except OSError:
+            return
+        changed = False
+        for name in files:
+            if not name.endswith(CHAT_FILE_SUFFIX):
+                continue
+            chat_id = name[: -len(CHAT_FILE_SUFFIX)]
+            entry = self._index.get("chats", {}).get(chat_id)
+            if entry is None or entry.get("last_ts", 0):
+                continue
+            messages = self.load_messages(chat_id)
+            if not messages:
+                continue
+            chat = Chat.from_dict(chat_id, entry)
+            chat.update_from_message(messages[-1])
+            self._index["chats"][chat_id] = chat.to_dict()
+            changed = True
+        if changed:
+            self._index_dirty = True
 
     def flush_index(self):
         """Write the lightweight chat index to flash if it changed."""

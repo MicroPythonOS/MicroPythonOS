@@ -193,12 +193,11 @@ class ChatActivity(Activity):
         nsec = self._prefs.get_string("nostr_nsec")
         if nsec:
             relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAYS
-            if not self._manager._nostr_configured:
-                try:
-                    self._manager.configure_identity(nsec, relays=relay)
-                except Exception as e:
-                    logger.error("Failed to configure identity: %s", e)
-                    return
+            try:
+                self._manager.configure_identity(nsec, relays=relay)
+            except Exception as e:
+                logger.error("Failed to configure identity: %s", e)
+                return
 
         if self._kind == KIND_CHANNEL_MESSAGE and self._channel_id:
             since = self._since_for_chat()
@@ -221,6 +220,7 @@ class ChatActivity(Activity):
                 if chat.kind == KIND_DM and chat.last_ts:
                     dm_since = min(dm_since, chat.last_ts - OVERLAP_SECONDS)
             self._manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
+            self._manager.subscribe_nip17_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
         except Exception as e:
             logger.error("DM subscription failed: %s", e)
 

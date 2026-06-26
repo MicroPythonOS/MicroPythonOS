@@ -8,6 +8,9 @@ sys.path.append("apps")
 
 from nostr.key import PrivateKey, PublicKey
 from com_micropythonos_nostr.nostr_service import (
+    KIND_DM_RELAY_LIST,
+    KIND_NIP17_GIFT_WRAP,
+    KIND_RELAY_LIST,
     NostrEvent,
     NostrManager,
     _parse_nsec,
@@ -278,6 +281,27 @@ class TestNostrManagerPublish(unittest.TestCase):
         self.assertNotEqual(event.content, content)
         self.assertTrue(len(event.content) > 0)
         self.assertTrue(len(event.signature) > 0)
+
+    def test_publish_relay_lists_publishes_kind10002_and_kind10050(self):
+        self.mgr.configure_identity(
+            self.mgr._current_nsec, relays="wss://relay.example"
+        )
+        self.mgr.publish_relay_list()
+        kinds = [e.kind for e in self.mgr.relay_manager.published]
+        self.assertIn(KIND_RELAY_LIST, kinds)
+        self.assertIn(KIND_DM_RELAY_LIST, kinds)
+        for event in self.mgr.relay_manager.published:
+            self.assertEqual(event.public_key, self.mgr._nostr_private_key.public_key.hex())
+            self.assertEqual(event.content, "")
+            self.assertTrue(len(event.signature) > 0)
+            self.assertTrue(len(event.tags) > 0)
+
+    def test_subscribe_nip17_dms_adds_debug_subscription(self):
+        self.mgr.subscribe_nip17_dms()
+        sub = self.mgr._subscriptions[-1]
+        self.assertEqual(sub.name, "nip17-debug")
+        filt = sub.filters.to_json_array()[0]
+        self.assertIn(KIND_NIP17_GIFT_WRAP, filt.get("kinds", []))
 
 
 class TestNostrManagerNwcPublish(unittest.TestCase):

@@ -194,12 +194,11 @@ class ChatListActivity(Activity):
 
         nsec = self._ensure_identity()
         relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAYS
-        if not self._manager._nostr_configured:
-            try:
-                self._manager.configure_identity(nsec, relays=relay)
-            except Exception as e:
-                logger.error("Failed to configure identity: %s", e)
-                return
+        try:
+            self._manager.configure_identity(nsec, relays=relay)
+        except Exception as e:
+            logger.error("Failed to configure identity: %s", e)
+            return
 
         own = self._manager.get_own_pubkey_hex()
         now = _current_nostr_ts()
@@ -213,6 +212,12 @@ class ChatListActivity(Activity):
             self._manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
         except Exception as e:
             logger.error("DM subscription failed: %s", e)
+
+        # NIP-17 / NIP-59 debug subscription.
+        try:
+            self._manager.subscribe_nip17_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
+        except Exception as e:
+            logger.error("NIP-17 subscription failed: %s", e)
 
         # Channel subscriptions: one per known channel.
         for chat in self._store.get_chats():
