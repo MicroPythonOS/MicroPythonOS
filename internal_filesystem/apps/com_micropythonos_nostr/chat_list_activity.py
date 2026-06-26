@@ -272,9 +272,18 @@ class ChatListActivity(Activity):
             if not is_new:
                 return
 
+            # If the user is already looking at this exact chat, don't bump
+            # unread counts or notify.
+            if ChatActivity.currently_open_chat_id == chat_id:
+                chat.mark_read()
+                self._store.update_chat(chat)
+                if self.has_foreground():
+                    self._refresh_chat_list()
+                return
+
             if self.has_foreground():
                 self._refresh_chat_list()
-            else:
+            elif self._notifications_enabled(chat):
                 self._post_notification(chat, message)
         except Exception as e:
             logger.error("Error handling Nostr event: %s", e)
@@ -300,21 +309,30 @@ class ChatListActivity(Activity):
         except Exception as e:
             logger.error("Failed to post notification: %s", e)
 
+    def _notifications_enabled(self, chat):
+        # Per-chat notification toggle; default to enabled (1).
+        key = f"notifications:{chat.chat_id}"
+        return self._prefs.get_int(key, 1) != 0
+
     def _refresh_chat_list(self):
         self._chat_list.clean()
         chats = self._store.get_chats()
-        if not chats:
-            btn = self._chat_list.add_button(None, "No messages yet")
-            btn.add_state(lv.STATE.DISABLED)
-            return
         now = _current_nostr_ts()
+        visible = 0
         for chat in chats:
+            # Hide empty DM chats that have never had any traffic.
+            if chat.kind == KIND_DM and chat.last_ts == 0:
+                continue
             text = self._format_chat_row(chat, now)
             btn = self._chat_list.add_button(None, text)
             btn.add_event_cb(lambda e, cid=chat.chat_id: self._open_chat(cid), lv.EVENT.CLICKED, None)
             # Highlight unread rows.
             if chat.unread:
                 btn.add_state(lv.STATE.CHECKED)
+            visible += 1
+        if visible == 0:
+            btn = self._chat_list.add_button(None, "No messages yet")
+            btn.add_state(lv.STATE.DISABLED)
 
     def _format_chat_row(self, chat, now):
         title = chat.title

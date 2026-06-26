@@ -124,7 +124,7 @@ class WebSocketApp:
         if not self.ws or not self.running:
             _log_error("Send failed: Connection closed or not running")
             raise WebSocketConnectionClosedException("Connection is already closed.")
-        _log_debug(f"Scheduling send: opcode={opcode}, data={str(data)[:20]}...")
+        _log_debug(f"Scheduling send: opcode={opcode}, data={str(data)[:100]}...")
         asyncio.create_task(self._send_async(data, opcode))
 
     def send_text(self, text_data):
@@ -322,7 +322,7 @@ class WebSocketApp:
             async for msg in ws:
                 import micropython
                 print(f"websocket.py _connect_and_run thread stack used: {micropython.stack_use()}")
-                _log_debug(f"websocket.py _connect_and_run received msg: type={msg.type}, length: {len(msg.data)} and data={str(msg.data)[:120]}...")
+                _log_debug(f"websocket.py _connect_and_run received msg: type={msg.type}, length: {len(msg.data)} and data={str(msg.data)[:180]}...")
                 if not self.running:
                     _log_debug("Not running, breaking message loop")
                     break

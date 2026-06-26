@@ -6,7 +6,9 @@ from mpos import (
     Activity,
     ConnectivityManager,
     DisplayMetrics,
+    Intent,
     MposKeyboard,
+    SettingsActivity,
     SharedPreferences,
 )
 
@@ -25,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 class ChatActivity(Activity):
+
+    # Tracks which chat is currently on screen so the chat list can avoid
+    # notifying/spamming unread counts for the conversation the user is
+    # already viewing.
+    currently_open_chat_id = None
 
     _chat_id = None
     _kind = None
@@ -91,6 +98,14 @@ class ChatActivity(Activity):
         self._title_label = lv.label(header)
         self._title_label.set_text(self._title or self._chat_id or "Chat")
         self._title_label.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
+        self._title_label.set_flex_grow(1)
+
+        settings_btn = lv.button(header)
+        settings_btn.set_size(DisplayMetrics.pct_of_width(12), DisplayMetrics.pct_of_width(12))
+        settings_lbl = lv.label(settings_btn)
+        settings_lbl.set_text(lv.SYMBOL.SETTINGS)
+        settings_lbl.center()
+        settings_btn.add_event_cb(lambda e: self._open_settings(), lv.EVENT.CLICKED, None)
 
         self._messages_container = lv.obj(self._screen)
         self._messages_container.set_width(lv.pct(100))
@@ -129,6 +144,7 @@ class ChatActivity(Activity):
 
     def onResume(self, screen):
         super().onResume(screen)
+        ChatActivity.currently_open_chat_id = self._chat_id
         self._register_handler()
         self._start_subscriptions()
         self._load_and_render()
@@ -140,10 +156,14 @@ class ChatActivity(Activity):
             self._store.flush_index()
 
     def onPause(self, screen):
+        if ChatActivity.currently_open_chat_id == self._chat_id:
+            ChatActivity.currently_open_chat_id = None
         self._unregister_handler()
         self._store.flush_index()
 
     def onDestroy(self, screen):
+        if ChatActivity.currently_open_chat_id == self._chat_id:
+            ChatActivity.currently_open_chat_id = None
         self._unregister_handler()
         self._store.flush_index()
 
@@ -235,20 +255,38 @@ class ChatActivity(Activity):
         row.set_style_border_width(0, lv.PART.MAIN)
         row.set_style_pad_bottom(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
         row.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        row.add_flag(lv.obj.FLAG.CLICKABLE)
+        row.add_event_cb(lambda e, msg=message: self._on_message_clicked(msg), lv.EVENT.CLICKED, None)
 
         chat = self._store.get_chat(self._chat_id)
         sender = chat.sender_name(message) if chat else "?"
         if message.outgoing and message.queued:
             sender = f"{sender} (queued)"
 
+        align = lv.TEXT_ALIGN.RIGHT if message.outgoing else lv.TEXT_ALIGN.LEFT
+
         meta = lv.label(row)
         meta.set_text(f"{sender} · {self._format_time(message.ts)}")
         meta.set_style_text_font(lv.font_montserrat_10, lv.PART.MAIN)
+        meta.set_width(lv.pct(100))
+        meta.set_style_text_align(align, lv.PART.MAIN)
 
         body = lv.label(row)
         body.set_text(message.content)
         body.set_width(lv.pct(100))
         body.set_long_mode(lv.label.LONG_MODE.WRAP)
+        body.set_style_text_align(align, lv.PART.MAIN)
+
+    def _on_message_clicked(self, message):
+        own = self._manager.get_own_pubkey_hex()
+        if not own:
+            return
+        chat = self._store.get_or_create_dm(own, message.pubkey)
+        intent = Intent(activity_class=ChatActivity)
+        intent.putExtra("chat_id", chat.chat_id)
+        intent.putExtra("kind", KIND_DM)
+        intent.putExtra("peer_pubkey", chat.peer_pubkey)
+        self.startActivity(intent)
 
     def _scroll_to_bottom(self):
         try:
@@ -267,6 +305,21 @@ class ChatActivity(Activity):
             return "{:02d}:{:02d}".format(t[3], t[4])
         except Exception:
             return ""
+
+    def _open_settings(self):
+        key = f"notifications:{self._chat_id}"
+        intent = Intent(activity_class=SettingsActivity)
+        intent.putExtra("prefs", self._prefs)
+        intent.putExtra("settings", [
+            {
+                "title": "Enable notifications",
+                "key": key,
+                "ui": "radiobuttons",
+                "ui_options": [("On", "1"), ("Off", "0")],
+                "default_value": "1",
+            },
+        ])
+        self.startActivity(intent)
 
     def _send(self):
         text = self._input_textarea.get_text().strip()

@@ -184,3 +184,7 @@ with MPOSController(backend='process') as mpos:
 - Add custom input widgets (e.g. `lv.textarea`) to the content container returned by `mbox.get_content()`.
 - Default `mpos.screenshot()` and `capture_screenshot()` do **not** include `lv.layer_top()` overlays. Pass `all_layers=True` to capture popups/notifications in screenshots — it's slower but necessary for verifying dialog appearance.
 - If screenshots or MPOSController behave oddly after hard-killing debug scripts (e.g. `timeout -s 9 ...`), check for stale `lvgl_micropy_unix`/`run_desktop.sh` processes with `ps aux | grep lvgl_micropy_unix`. Clean them up with `killall -9 lvgl_micropy_unix run_desktop.sh`.
+
+
+### Specific app tips
+- The app com_micropythonos_nostr and the app com.lightningpiggy.displaywallet use the same copy of nostr_service.py so when you update it, make sure to also update the other copy of that file and make sure it doesn't break the other app either.
