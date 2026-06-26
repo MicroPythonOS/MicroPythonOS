@@ -172,12 +172,17 @@ class ChatActivity(Activity):
         if self._handler_registered:
             return
         self._manager.register_event_handler(self._kind, self._on_event)
+        # NIP-17 gift-wraps unwrap to kind 14; a DM chat must also see them.
+        if self._kind != KIND_NIP17_CHAT:
+            self._manager.register_event_handler(KIND_NIP17_CHAT, self._on_event)
         self._handler_registered = True
 
     def _unregister_handler(self):
         if not self._handler_registered:
             return
         self._manager.unregister_event_handler(self._kind, self._on_event)
+        if self._kind != KIND_NIP17_CHAT:
+            self._manager.unregister_event_handler(KIND_NIP17_CHAT, self._on_event)
         self._handler_registered = False
 
     def _start_subscriptions(self):
@@ -463,7 +468,7 @@ class ChatActivity(Activity):
                 ts=nostr_event.created_at,
                 pubkey=nostr_event.public_key,
                 content=content,
-                kind=self._kind,
+                kind=nostr_event.kind,
             )
             # Persist if not already stored; mark unread=False because the
             # user is already looking at this chat.
