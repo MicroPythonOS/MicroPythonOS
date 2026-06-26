@@ -7,7 +7,13 @@ try:
 except ImportError:
     import json
 
-from .chat_model import Chat, Message, channel_chat_id, dm_chat_id
+from .chat_model import (
+    Chat,
+    Message,
+    channel_chat_id,
+    dm_chat_id,
+    nip17_group_chat_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +238,16 @@ class EventStore:
             self._save_index()
         return chat
 
+    def get_or_create_nip17_group(self, participants, title=None):
+        """Return or create a NIP-17 group chat for the given participants."""
+        chat_id = nip17_group_chat_id(participants)
+        chat = self.get_chat(chat_id)
+        if chat is None:
+            chat = Chat.nip17_group(participants, title=title)
+            self._index["chats"][chat_id] = chat.to_dict()
+            self._save_index()
+        return chat
+
     def update_chat(self, chat):
         """Persist metadata changes for an existing Chat."""
         if chat.chat_id not in self._index.get("chats", {}):
@@ -320,7 +336,15 @@ class EventStore:
             messages = messages[-limit:]
             self._rewrite_jsonl(self._chat_path(chat_id), messages)
 
-    def queue_outgoing(self, chat_id, content, kind, recipient_pubkey=None, channel_id=None):
+    def queue_outgoing(
+        self,
+        chat_id,
+        content,
+        kind,
+        recipient_pubkey=None,
+        channel_id=None,
+        participants=None,
+    ):
         """Store an outgoing message that cannot be published right now.
 
         Returns the queued Message placeholder.
@@ -346,6 +370,7 @@ class EventStore:
             "kind": kind,
             "recipient_pubkey": recipient_pubkey,
             "channel_id": channel_id,
+            "participants": participants,
         }
         self._append_jsonl(self._outbox_path(), outbox_item)
         return message

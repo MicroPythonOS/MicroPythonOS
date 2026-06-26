@@ -21,6 +21,7 @@ OS:
 - Increase size of esp32-small and lilygo_t4 partitions to 3800000 to accomodate esp32 builds
 - shutil: tolerate trailing slashes in `rmtree()`, `copytree()`, and `move()`
 - os.path: fix `exists()`, `isdir()`, and `isfile()` for directories ending with `/` on FAT32
+- micropython-nostr: add NIP-17 and NIP-44 support
 
 0.13.0
 ======

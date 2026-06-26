@@ -9,6 +9,7 @@ sys.path.append("apps")
 from nostr.key import PrivateKey, PublicKey
 from com_micropythonos_nostr.nostr_service import (
     KIND_DM_RELAY_LIST,
+    KIND_NIP17_CHAT,
     KIND_NIP17_GIFT_WRAP,
     KIND_RELAY_LIST,
     NostrEvent,
@@ -302,6 +303,62 @@ class TestNostrManagerPublish(unittest.TestCase):
         self.assertEqual(sub.name, "nip17-debug")
         filt = sub.filters.to_json_array()[0]
         self.assertIn(KIND_NIP17_GIFT_WRAP, filt.get("kinds", []))
+
+    def test_publish_nip17_message_creates_kind1059_wrappers(self):
+        recipient = PrivateKey()
+        ids = self.mgr.publish_nip17_message("hello", [recipient.public_key.hex()])
+        self.assertEqual(len(ids), 2)  # recipient + sender copy
+        self.assertEqual(len(self.mgr.relay_manager.published), 2)
+        for event in self.mgr.relay_manager.published:
+            self.assertEqual(event.kind, KIND_NIP17_GIFT_WRAP)
+            self.assertTrue(len(event.content) > 0)
+            self.assertTrue(len(event.signature) > 0)
+
+    def test_publish_nip17_message_rejects_empty_content(self):
+        try:
+            self.mgr.publish_nip17_message("", [PrivateKey().public_key.hex()])
+        except ValueError:
+            return
+        self.fail("publish_nip17_message should reject empty content")
+
+    def test_publish_nip17_message_rejects_empty_recipients(self):
+        try:
+            self.mgr.publish_nip17_message("hi", [])
+        except ValueError:
+            return
+        self.fail("publish_nip17_message should reject empty recipients")
+
+    def test_process_event_unwraps_gift_wrap_to_rumor(self):
+        from nostr.nip17 import make_nip17_messages
+
+        alice = PrivateKey()
+        bob = PrivateKey()
+        self.mgr._nostr_private_key = bob
+        self.mgr._nostr_configured = True
+        gifts = make_nip17_messages(alice, "secret dm", [bob.public_key.hex()])
+        gift = None
+        for g in gifts:
+            for tag in g["tags"]:
+                if tag[0] == "p" and tag[1] == bob.public_key.hex():
+                    gift = g
+                    break
+        self.assertIsNotNone(gift)
+        from nostr.event import Event
+
+        wrap_event = Event(
+            content=gift["content"],
+            public_key=gift["pubkey"],
+            created_at=gift["created_at"],
+            kind=gift["kind"],
+            tags=gift["tags"],
+            signature=gift["sig"],
+        )
+        caught = []
+        self.mgr.register_post_event_handler(KIND_NIP17_CHAT, lambda e: caught.append(e))
+        self.mgr._process_event(wrap_event)
+        self.assertEqual(len(caught), 1)
+        self.assertEqual(caught[0].event.content, "secret dm")
+        self.assertEqual(caught[0].event.public_key, alice.public_key.hex())
 
 
 class TestNostrManagerNwcPublish(unittest.TestCase):

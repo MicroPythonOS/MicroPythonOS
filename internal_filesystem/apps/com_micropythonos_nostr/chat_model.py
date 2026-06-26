@@ -7,10 +7,12 @@ KIND_DM = 4
 KIND_CHANNEL_CREATE = 40
 KIND_CHANNEL_META = 41
 KIND_CHANNEL_MESSAGE = 42
+KIND_NIP17_CHAT = 14
 
 # Chat ID prefixes.
 CHAT_ID_DM_PREFIX = "dm_"
 CHAT_ID_CHANNEL_PREFIX = "channel_"
+CHAT_ID_NIP17_PREFIX = "nip17_"
 
 # Auto-joined public channel (#MicroPythonOS, NIP-28).
 DEFAULT_CHANNEL_ID = "cbf20cd9212aea3c7d399777b69cec750a0109edd831001a5011d892268a9481"
@@ -36,6 +38,36 @@ def channel_chat_id(channel_id):
     return f"{CHAT_ID_CHANNEL_PREFIX}{channel_id}"
 
 
+def nip17_group_chat_id(participants):
+    """Stable NIP-17 group chat id from a list of participant pubkeys."""
+    return f"{CHAT_ID_NIP17_PREFIX}{'_'.join(sorted(participants))}"
+
+
+def participants_from_nip17_event(event, own_pubkey):
+    """Return the other participants of a kind 14 event, excluding the user."""
+    tags = getattr(event, "tags", []) or []
+    participants = set()
+    for tag in tags:
+        if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "p":
+            participants.add(tag[1])
+    author = getattr(event, "public_key", None)
+    if not author and hasattr(event, "pubkey"):
+        author = event.pubkey
+    if author:
+        participants.add(author)
+    participants.discard(own_pubkey)
+    return sorted(participants)
+
+
+def subject_from_nip17_event(event):
+    """Return the subject tag value of a kind 14 event, if any."""
+    tags = getattr(event, "tags", []) or []
+    for tag in tags:
+        if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "subject":
+            return tag[1]
+    return None
+
+
 def chat_id_for_event(event, own_pubkey):
     """Return the chat id that an incoming event belongs to, or None."""
     kind = getattr(event, "kind", None)
@@ -43,6 +75,12 @@ def chat_id_for_event(event, own_pubkey):
         return _dm_chat_id_from_event(event, own_pubkey)
     if kind == KIND_CHANNEL_MESSAGE:
         return _channel_chat_id_from_event(event)
+    if kind == KIND_NIP17_CHAT:
+        participants = participants_from_nip17_event(event, own_pubkey)
+        if len(participants) == 1:
+            return dm_chat_id(own_pubkey, participants[0])
+        if len(participants) > 1:
+            return nip17_group_chat_id(participants)
     return None
 
 
@@ -159,15 +197,17 @@ class Chat:
         title=None,
         peer_pubkey=None,
         channel_id=None,
+        participants=None,
         last_ts=0,
         last_preview="",
         unread=0,
     ):
         self.chat_id = chat_id
         self.kind = kind
-        self.title = title or _default_title(kind, peer_pubkey, channel_id)
+        self.title = title or _default_title(kind, peer_pubkey, channel_id, participants)
         self.peer_pubkey = peer_pubkey
         self.channel_id = channel_id
+        self.participants = list(participants) if participants else []
         self.last_ts = int(last_ts)
         self.last_preview = last_preview
         self.unread = int(unread)
@@ -192,6 +232,17 @@ class Chat:
         )
 
     @classmethod
+    def nip17_group(cls, participants, title=None):
+        chat_id = nip17_group_chat_id(participants)
+        return cls(
+            chat_id=chat_id,
+            kind=KIND_NIP17_CHAT,
+            title=title,
+            peer_pubkey=participants[0] if len(participants) == 1 else None,
+            participants=participants,
+        )
+
+    @classmethod
     def from_dict(cls, chat_id, data):
         return cls(
             chat_id=chat_id,
@@ -199,6 +250,7 @@ class Chat:
             title=data.get("title"),
             peer_pubkey=data.get("peer_pubkey"),
             channel_id=data.get("channel_id"),
+            participants=data.get("participants"),
             last_ts=data.get("last_ts", 0),
             last_preview=data.get("last_preview", ""),
             unread=data.get("unread", 0),
@@ -210,6 +262,7 @@ class Chat:
             "title": self.title,
             "peer_pubkey": self.peer_pubkey,
             "channel_id": self.channel_id,
+            "participants": self.participants,
             "last_ts": self.last_ts,
             "last_preview": self.last_preview,
             "unread": self.unread,
@@ -233,8 +286,12 @@ class Chat:
         return _short_name(message.pubkey)
 
 
-def _default_title(kind, peer_pubkey, channel_id):
+def _default_title(kind, peer_pubkey, channel_id, participants=None):
     if kind == KIND_DM:
+        return _short_name(peer_pubkey)
+    if kind == KIND_NIP17_CHAT:
+        if participants and len(participants) > 1:
+            return ", ".join(_short_name(p) for p in participants)
         return _short_name(peer_pubkey)
     if channel_id:
         return f"#{channel_id[:8]}"

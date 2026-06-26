@@ -19,11 +19,14 @@ from .chat_model import (
     DEFAULT_CHANNEL_NAME,
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
+    KIND_NIP17_CHAT,
     Message,
     channel_chat_id,
     channel_id_from_event,
     chat_id_for_event,
+    participants_from_nip17_event,
     peer_from_dm_event,
+    subject_from_nip17_event,
 )
 from .event_store import DEFAULT_MAX_MESSAGES_PER_CHAT, EventStore, _current_nostr_ts
 from .new_chat_activity import NewChatActivity
@@ -142,6 +145,7 @@ class ChatListActivity(Activity):
             return
         self._manager.register_event_handler(KIND_DM, self._on_event)
         self._manager.register_event_handler(KIND_CHANNEL_MESSAGE, self._on_event)
+        self._manager.register_event_handler(KIND_NIP17_CHAT, self._on_event)
         self._handlers_registered = True
 
     def _unregister_handlers(self):
@@ -149,6 +153,7 @@ class ChatListActivity(Activity):
             return
         self._manager.unregister_event_handler(KIND_DM, self._on_event)
         self._manager.unregister_event_handler(KIND_CHANNEL_MESSAGE, self._on_event)
+        self._manager.unregister_event_handler(KIND_NIP17_CHAT, self._on_event)
         self._handlers_registered = False
 
     def _start_flush_timer(self):
@@ -206,7 +211,7 @@ class ChatListActivity(Activity):
         # DM subscription: since the oldest DM chat we know, or lookback window.
         dm_since = now - LOOKBACK_WINDOW_SECONDS
         for chat in self._store.get_chats():
-            if chat.kind == KIND_DM and chat.last_ts:
+            if chat.kind in (KIND_DM, KIND_NIP17_CHAT) and chat.last_ts:
                 dm_since = min(dm_since, chat.last_ts - OVERLAP_SECONDS)
         try:
             self._manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
@@ -240,7 +245,7 @@ class ChatListActivity(Activity):
             self._store.get_or_create_channel(DEFAULT_CHANNEL_ID, title=f"#{DEFAULT_CHANNEL_NAME}")
 
     def _on_event(self, nostr_event):
-        """Handle an incoming kind 4 or kind 42 event."""
+        """Handle an incoming kind 4, kind 14, or kind 42 event."""
         try:
             own = self._manager.get_own_pubkey_hex()
             chat_id = chat_id_for_event(nostr_event.event, own)
@@ -248,7 +253,7 @@ class ChatListActivity(Activity):
                 return
 
             kind = nostr_event.kind
-            if kind == KIND_DM:
+            if kind in (KIND_DM, KIND_NIP17_CHAT):
                 content = nostr_event.get_display_content()
             else:
                 content = nostr_event.content
@@ -267,6 +272,17 @@ class ChatListActivity(Activity):
                 if kind == KIND_DM:
                     peer = peer_from_dm_event(nostr_event.event, own)
                     chat = self._store.get_or_create_dm(own, peer)
+                elif kind == KIND_NIP17_CHAT:
+                    participants = participants_from_nip17_event(
+                        nostr_event.event, own
+                    )
+                    title = subject_from_nip17_event(nostr_event.event)
+                    if len(participants) == 1:
+                        chat = self._store.get_or_create_dm(own, participants[0])
+                    else:
+                        chat = self._store.get_or_create_nip17_group(
+                            participants, title=title
+                        )
                 else:
                     channel_id = channel_id_from_event(nostr_event.event)
                     chat = self._store.get_or_create_channel(
@@ -367,6 +383,8 @@ class ChatListActivity(Activity):
         intent.putExtra("kind", chat.kind)
         if chat.kind == KIND_CHANNEL_MESSAGE:
             intent.putExtra("channel_id", chat.channel_id)
+        elif chat.kind == KIND_NIP17_CHAT:
+            intent.putExtra("peer_pubkey", chat.peer_pubkey or chat.participants[0] if chat.participants else "")
         else:
             intent.putExtra("peer_pubkey", chat.peer_pubkey)
         self.startActivity(intent)
@@ -381,6 +399,7 @@ class ChatListActivity(Activity):
             {"title": "Nostr Private Key (nsec)", "key": "nostr_nsec", "placeholder": "nsec1...", "should_show": self._should_show_setting},
             {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": DEFAULT_RELAY, "should_show": self._should_show_setting},
             {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self._should_show_setting},
+            {"title": "New chats protocol", "key": "new_chats_protocol", "ui": "radiobuttons", "ui_options": [("nip17", "nip17"), ("nip4", "nip4")], "default_value": "nip17", "should_show": self._should_show_setting},
             {"title": "Max messages per chat", "key": "max_messages_per_chat", "placeholder": "200", "should_show": self._should_show_setting},
         ])
         self.startActivity(intent)
@@ -406,10 +425,20 @@ class ChatListActivity(Activity):
         own = self._manager.get_own_pubkey_hex()
         for item in items:
             try:
-                if item.get("kind") == KIND_DM:
+                kind = item.get("kind")
+                if kind == KIND_DM:
                     event_id = self._manager.publish_dm(
                         item["recipient_pubkey"], item["content"]
                     )
+                elif kind == KIND_NIP17_CHAT:
+                    participants = item.get("participants")
+                    if not participants and item.get("recipient_pubkey"):
+                        participants = [item["recipient_pubkey"]]
+                    event_ids = self._manager.publish_nip17_message(
+                        item["content"],
+                        participants,
+                    )
+                    event_id = event_ids[0]
                 else:
                     event_id = self._manager.publish_channel_message(
                         item["channel_id"], item["content"]

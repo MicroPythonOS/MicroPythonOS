@@ -23,10 +23,14 @@ try:
         DEFAULT_CHANNEL_ID,
         KIND_CHANNEL_MESSAGE,
         KIND_DM,
+        KIND_NIP17_CHAT,
         Message,
         channel_id_from_event,
         chat_id_for_event,
+        nip17_group_chat_id,
+        participants_from_nip17_event,
         peer_from_dm_event,
+        subject_from_nip17_event,
     )
     from .event_store import EventStore
 except ImportError:
@@ -35,16 +39,29 @@ except ImportError:
             DEFAULT_CHANNEL_ID,
             KIND_CHANNEL_MESSAGE,
             KIND_DM,
+            KIND_NIP17_CHAT,
             Message,
             channel_id_from_event,
             chat_id_for_event,
+            nip17_group_chat_id,
+            participants_from_nip17_event,
             peer_from_dm_event,
+            subject_from_nip17_event,
         )
         from event_store import EventStore
     except ImportError:
-        Message = channel_id_from_event = chat_id_for_event = peer_from_dm_event = None
-        DEFAULT_CHANNEL_ID = KIND_CHANNEL_MESSAGE = KIND_DM = None
+        Message = (
+            channel_id_from_event
+        ) = chat_id_for_event = peer_from_dm_event = nip17_group_chat_id = None
+        participants_from_nip17_event = subject_from_nip17_event = None
+        DEFAULT_CHANNEL_ID = KIND_CHANNEL_MESSAGE = KIND_DM = KIND_NIP17_CHAT = None
         EventStore = None
+
+try:
+    from nostr.nip17 import decrypt_gift_wrap_to_rumor, make_nip17_messages
+except ImportError:
+    decrypt_gift_wrap_to_rumor = None
+    make_nip17_messages = None
 
 # NIP-65 relay list metadata and NIP-17 DM relay list / private messages.
 KIND_RELAY_LIST = 10002
@@ -568,6 +585,49 @@ class NostrManager:
         print("NostrManager: published DM to {}".format(recipient_hex[:16]))
         return dm_id
 
+    def publish_nip17_message(self, content, recipients, subject=None, reply_to=None):
+        """Sign and publish a NIP-17 gift-wrapped chat message (kind 14).
+
+        Returns a list of the published kind 1059 event ids.
+        """
+        if self._nostr_private_key is None:
+            raise RuntimeError("Identity must be configured before publishing messages")
+        if not content:
+            raise ValueError("Message content cannot be empty")
+        if self.relay_manager is None:
+            raise RuntimeError("Relay manager is not ready yet")
+        if not recipients:
+            raise ValueError("Recipients cannot be empty")
+        if make_nip17_messages is None:
+            raise RuntimeError("NIP-17 support is not available")
+
+        hex_recipients = [_pubkey_to_hex(r) for r in recipients]
+        gift_events = make_nip17_messages(
+            self._nostr_private_key,
+            content,
+            hex_recipients,
+            subject=subject,
+            reply_to=reply_to,
+        )
+        ids = []
+        for gift in gift_events:
+            event = Event(
+                content=gift["content"],
+                public_key=gift["pubkey"],
+                created_at=gift["created_at"],
+                kind=gift["kind"],
+                tags=gift["tags"],
+                signature=gift["sig"],
+            )
+            self.relay_manager.publish_event(event)
+            ids.append(gift["id"])
+        print(
+            "NostrManager: published NIP-17 message to {} recipient(s)".format(
+                len(ids)
+            )
+        )
+        return ids
+
     def get_own_pubkey_hex(self):
         """Return the configured identity's public key in hex, or None."""
         if self._nostr_private_key is None:
@@ -851,6 +911,27 @@ class NostrManager:
                 sys.print_exception(e)
                 await TaskManager.sleep(1)
 
+    def _decrypt_nip17_gift_wrap(self, event):
+        """Unwrap a kind 1059/21059 gift-wrap into a kind 14 rumor event."""
+        if decrypt_gift_wrap_to_rumor is None or self._nostr_private_key is None:
+            return None
+        try:
+            rumor = decrypt_gift_wrap_to_rumor(event, self._nostr_private_key)
+            if not rumor:
+                return None
+            return Event(
+                content=rumor.get("content", ""),
+                public_key=rumor.get("pubkey", ""),
+                created_at=rumor.get("created_at", event.created_at),
+                kind=rumor.get("kind", KIND_NIP17_CHAT),
+                tags=rumor.get("tags", []),
+                signature=None,
+            )
+        except Exception as e:
+            if __debug__:
+                logger.debug("Failed to unwrap gift-wrap event: %s", e)
+            return None
+
     def _process_event(self, event):
         """Route a single event to all relevant handlers."""
 
@@ -863,6 +944,21 @@ class NostrManager:
             print(
                 "NostrManager: received {} (kind={}) from {}"
                 .format(get_kind_name(event.kind), event.kind, event.public_key[:16])
+            )
+
+        if event.kind in (KIND_NIP17_GIFT_WRAP, KIND_NIP17_GIFT_WRAP_EPHEMERAL):
+            decrypted_event = self._decrypt_nip17_gift_wrap(event)
+            if decrypted_event is None:
+                return
+            # Preserve the original gift-wrap id so the same message deduplicates.
+            # Event.id is a computed property; assign an instance attribute to
+            # shadow it for downstream code that reads event.id.
+            decrypted_event.id = event.id
+            event = decrypted_event
+            print(
+                "NostrManager: unwrapped NIP-17 message from {}".format(
+                    event.public_key[:16]
+                )
             )
 
         # Build the shared wrapper once; decrypt DMs if a private key is set.
@@ -1089,6 +1185,7 @@ class NostrClientService(Service):
         self._persist_cb = lambda e: self._persist_event(e)
         manager.register_post_event_handler(KIND_DM, self._persist_cb)
         manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)
+        manager.register_post_event_handler(KIND_NIP17_CHAT, self._persist_cb)
 
     def onDestroy(self):
         print("NostrClientService: stopping NostrManager")
@@ -1097,6 +1194,9 @@ class NostrClientService(Service):
             manager.unregister_post_event_handler(KIND_DM, self._persist_cb)
             manager.unregister_post_event_handler(
                 KIND_CHANNEL_MESSAGE, self._persist_cb
+            )
+            manager.unregister_post_event_handler(
+                KIND_NIP17_CHAT, self._persist_cb
             )
             self._persist_cb = None
         if self._store is not None:
@@ -1131,6 +1231,14 @@ class NostrClientService(Service):
                 if kind == KIND_DM:
                     peer = peer_from_dm_event(nostr_event.event, own)
                     chat = self._store.get_or_create_dm(own or "", peer)
+                elif kind == KIND_NIP17_CHAT:
+                    participants = participants_from_nip17_event(
+                        nostr_event.event, own
+                    )
+                    title = subject_from_nip17_event(nostr_event.event)
+                    chat = self._store.get_or_create_nip17_group(
+                        participants, title=title
+                    )
                 else:
                     channel_id = channel_id_from_event(nostr_event.event)
                     chat = self._store.get_or_create_channel(

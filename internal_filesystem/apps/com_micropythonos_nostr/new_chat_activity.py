@@ -5,7 +5,7 @@ import lvgl as lv
 from mpos import Activity, DisplayMetrics, Intent, MposKeyboard
 
 from .chat_activity import ChatActivity
-from .chat_model import KIND_CHANNEL_MESSAGE, KIND_DM
+from .chat_model import KIND_CHANNEL_MESSAGE, KIND_DM, KIND_NIP17_CHAT
 from .event_store import EventStore
 from .nostr_service import NostrManager
 
@@ -76,7 +76,7 @@ class NewChatActivity(Activity):
         chan_btn.add_event_cb(lambda e: self._set_mode(KIND_CHANNEL_MESSAGE), lv.EVENT.CLICKED, None)
 
         hint = lv.label(self._screen)
-        hint.set_text("Enter npub (DM) or channel id")
+        hint.set_text("Enter npub(s) comma-separated (DM) or channel id")
         hint.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
 
         self._textarea = lv.textarea(self._screen)
@@ -118,12 +118,15 @@ class NewChatActivity(Activity):
             return
 
         if self._mode == KIND_DM:
-            peer_pubkey = self._parse_npub(raw)
-            if peer_pubkey is None:
-                self._error_label.set_text("Invalid npub")
+            pubkeys = self._parse_pubkeys(raw)
+            if pubkeys is None:
+                self._error_label.set_text("Invalid npub(s)")
                 return
             own = self._manager.get_own_pubkey_hex() or ""
-            chat = self._store.get_or_create_dm(own, peer_pubkey)
+            if len(pubkeys) == 1:
+                chat = self._store.get_or_create_dm(own, pubkeys[0])
+            else:
+                chat = self._store.get_or_create_nip17_group(pubkeys)
         else:
             channel_id = raw.lower().strip()
             if len(channel_id) != 64 or not all(c in "0123456789abcdef" for c in channel_id):
@@ -137,6 +140,8 @@ class NewChatActivity(Activity):
         intent.putExtra("kind", chat.kind)
         if chat.kind == KIND_CHANNEL_MESSAGE:
             intent.putExtra("channel_id", chat.channel_id)
+        elif chat.kind == KIND_NIP17_CHAT:
+            intent.putExtra("peer_pubkey", chat.peer_pubkey or chat.participants[0])
         else:
             intent.putExtra("peer_pubkey", chat.peer_pubkey)
         self.startActivity(intent)
@@ -155,3 +160,13 @@ class NewChatActivity(Activity):
         if len(text) == 64 and all(c in "0123456789abcdef" for c in text):
             return text
         return None
+
+    def _parse_pubkeys(self, text):
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+        pubkeys = []
+        for part in parts:
+            pk = self._parse_npub(part)
+            if pk is None:
+                return None
+            pubkeys.append(pk)
+        return pubkeys if pubkeys else None

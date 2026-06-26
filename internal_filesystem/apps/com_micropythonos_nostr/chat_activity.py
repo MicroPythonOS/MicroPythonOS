@@ -15,6 +15,7 @@ from mpos import (
 from .chat_model import (
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
+    KIND_NIP17_CHAT,
     Message,
     channel_chat_id,
     chat_id_for_event,
@@ -211,13 +212,13 @@ class ChatActivity(Activity):
             except Exception as e:
                 logger.error("Channel subscription failed: %s", e)
 
-        # Always keep a DM subscription active so incoming DMs arrive.
+        # Always keep DM / NIP-17 subscriptions active so incoming messages arrive.
         try:
             own = self._manager.get_own_pubkey_hex()
             chats = self._store.get_chats()
             dm_since = _current_nostr_ts() - LOOKBACK_WINDOW_SECONDS
             for chat in chats:
-                if chat.kind == KIND_DM and chat.last_ts:
+                if chat.kind in (KIND_DM, KIND_NIP17_CHAT) and chat.last_ts:
                     dm_since = min(dm_since, chat.last_ts - OVERLAP_SECONDS)
             self._manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
             self._manager.subscribe_nip17_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
@@ -329,40 +330,110 @@ class ChatActivity(Activity):
         online = ConnectivityManager.get().is_online() and self._manager.is_connected()
         own = self._manager.get_own_pubkey_hex() or ""
 
-        if online:
+        if self._kind == KIND_NIP17_CHAT:
             try:
-                if self._kind == KIND_DM:
-                    event_id = self._manager.publish_dm(self._peer_pubkey, text)
+                if online:
+                    event_ids = self._manager.publish_nip17_message(
+                        text, self._get_recipients()
+                    )
+                    event_id = event_ids[0]
+                    kind = KIND_NIP17_CHAT
                 else:
-                    event_id = self._manager.publish_channel_message(self._channel_id, text)
-                message = Message(
-                    event_id=event_id,
-                    ts=_current_nostr_ts(),
-                    pubkey=own,
-                    content=text,
-                    kind=self._kind,
-                    outgoing=True,
-                    queued=False,
-                )
-                self._store.add_message(self._chat_id, message, mark_unread=False)
-                self._append_message_row(message)
-                self._scroll_to_bottom()
+                    self._queue_local_message(text, own)
+                    self._input_textarea.set_text("")
+                    self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                    return
             except Exception as e:
                 logger.error("Send failed: %s", e)
                 self._queue_local_message(text, own)
+                self._input_textarea.set_text("")
+                self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                return
+        elif self._kind == KIND_DM:
+            protocol = self._prefs.get_string("new_chats_protocol", "nip17")
+            try:
+                if online:
+                    if protocol == "nip17":
+                        event_ids = self._manager.publish_nip17_message(
+                            text, [self._peer_pubkey]
+                        )
+                        event_id = event_ids[0]
+                        kind = KIND_NIP17_CHAT
+                    else:
+                        event_id = self._manager.publish_dm(self._peer_pubkey, text)
+                        kind = KIND_DM
+                else:
+                    self._queue_local_message(text, own)
+                    self._input_textarea.set_text("")
+                    self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                    return
+            except Exception as e:
+                logger.error("Send failed: %s", e)
+                self._queue_local_message(text, own)
+                self._input_textarea.set_text("")
+                self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                return
         else:
-            self._queue_local_message(text, own)
+            try:
+                if online:
+                    event_id = self._manager.publish_channel_message(
+                        self._channel_id, text
+                    )
+                    kind = KIND_CHANNEL_MESSAGE
+                else:
+                    self._queue_local_message(text, own)
+                    self._input_textarea.set_text("")
+                    self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                    return
+            except Exception as e:
+                logger.error("Send failed: %s", e)
+                self._queue_local_message(text, own)
+                self._input_textarea.set_text("")
+                self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                return
+
+        message = Message(
+            event_id=event_id,
+            ts=_current_nostr_ts(),
+            pubkey=own,
+            content=text,
+            kind=kind,
+            outgoing=True,
+            queued=False,
+        )
+        self._store.add_message(self._chat_id, message, mark_unread=False)
+        self._append_message_row(message)
+        self._scroll_to_bottom()
 
         self._input_textarea.set_text("")
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
+    def _get_recipients(self):
+        if self._kind == KIND_NIP17_CHAT:
+            chat = self._store.get_chat(self._chat_id)
+            if chat is not None and chat.participants:
+                return chat.participants
+        return [self._peer_pubkey] if self._peer_pubkey else []
+
     def _queue_local_message(self, text, own_pubkey):
-        if self._kind == KIND_DM:
+        if self._kind == KIND_NIP17_CHAT:
             message = self._store.queue_outgoing(
                 self._chat_id,
                 text,
-                KIND_DM,
+                KIND_NIP17_CHAT,
+                participants=self._get_recipients(),
+            )
+        elif self._kind == KIND_DM:
+            protocol = self._prefs.get_string("new_chats_protocol", "nip17")
+            kind = KIND_NIP17_CHAT if protocol == "nip17" else KIND_DM
+            message = self._store.queue_outgoing(
+                self._chat_id,
+                text,
+                kind,
                 recipient_pubkey=self._peer_pubkey,
+                participants=[self._peer_pubkey]
+                if kind == KIND_NIP17_CHAT
+                else None,
             )
         else:
             message = self._store.queue_outgoing(
