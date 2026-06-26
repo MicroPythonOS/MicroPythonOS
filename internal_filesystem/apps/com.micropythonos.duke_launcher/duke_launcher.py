@@ -6,13 +6,13 @@ class DukeLauncher(Activity):
 
     def onCreate(self):
         help_text = (
-            "- To change audio device and volume: MENU - GAME OPTIONS - RETROGO OPTIONS\n"
-            "- Hotkey mode: keep START pressed and then:\n"
-            "\t- look up/down: Y/B\n"
-            "\t- jetpack on: arrow down\n"
-            "\t- joystick left/right to scroll, arrow up to choose\n"
             "- Shoot: A, Jump: B, Weapon: X, Crouch: Y, Use: START\n"
-            "- Autoaim is on so no no need to look up and down"
+            "- Autoaim is on (no need to look up or down)"
+            "- Changing audio device and volume: MENU - GAME OPTIONS - RETROGO OPTIONS\n"
+            "- Hotkey: long-press START\n"
+            "    + look up/down: Y/B\n"
+            "    + jetpack on: arrow down\n"
+            "    + joystick left/right to scroll, arrow up to choose\n"
         )
         self.startActivity(
             Intent(activity_class=RetroGoLauncher)
@@ -22,5 +22,6 @@ class DukeLauncher(Activity):
             .putExtra("boot_name", "duke3d")
             .putExtra("game_name", "Duke Nukem 3D")
             .putExtra("file_extensions", (".grp", ".zip"))
+            .putExtra("starting_title", "Hints:")
             .putExtra("starting_text", help_text)
         )

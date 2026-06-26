@@ -12,11 +12,18 @@ class StartingActivity(Activity):
         game_name = extras.get("game_name", "Game")
         bootfile_prefix = extras.get("bootfile_prefix", "")
         gamefile = extras.get("gamefile", "")
+        default_title = "Starting..."
         default_text = f"Launching {game_name} with file: {bootfile_prefix}{gamefile}"
+        starting_title = extras.get("starting_title", default_title)
         starting_text = extras.get("starting_text", default_text)
 
         screen = lv.obj()
-        screen.set_style_pad_all(15, lv.PART.MAIN)
+        screen.set_style_pad_all(5, lv.PART.MAIN)
+
+        title = lv.label(screen)
+        title.set_text(starting_title)
+        title.align(lv.ALIGN.TOP_MID, 0, 0)
+        title.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
 
         label = lv.label(screen)
         label.set_text(starting_text)
