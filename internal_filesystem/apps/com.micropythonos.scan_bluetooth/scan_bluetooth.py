@@ -5,16 +5,17 @@ https://docs.micropython.org/en/latest/library/bluetooth.html
 
 import time
 
-try:
-    import bluetooth
-except ImportError:  # Linux test runner may not provide bluetooth module
-    bluetooth = None
-
 import sys
 
 import lvgl as lv
 from micropython import const
 from mpos import Activity, TaskManager
+
+try:
+    import bluetooth
+except ImportError:  # Linux test runner / desktop may not provide bluetooth module
+    bluetooth = None
+    from mpos.testing.mocks import MockBluetooth
 
 # Scan for 5 seconds,
 SCAN_DURATION_MS = const(5000)  # Duration of each BLE scan in milliseconds
@@ -29,6 +30,16 @@ _IRQ_SCAN_DONE = const(6)
 _ADV_TYPE_SHORT_NAME = const(8)
 _ADV_TYPE_NAME = const(9)
 
+# Column layout: key, title, width percentage
+_COLUMNS = (
+    ("pos", "#", 8),
+    ("mac", "MAC", 26),
+    ("rssi", "RSSI", 13),
+    ("last", "Last", 13),
+    ("count", "Cnt", 10),
+    ("name", "Name", 30),
+)
+
 
 def decode_name(payload: bytes) -> str | None:
     i = 0
@@ -42,85 +53,102 @@ def decode_name(payload: bytes) -> str | None:
             if new_name := payload[i + 2 : i + length + 1]:
                 return str(new_name, "utf-8")
         else:
-            print(f"Unsupported: {field_type=} with {length=}")
+            print("Unsupported: field_type=%s with length=%s" % (field_type, length))
         i += length + 1
-
-
-def set_dynamic_column_widths(table, font=None, padding=8):
-    font = font or lv.font_montserrat_14
-    for col in range(table.get_column_count()):
-        max_width = 0
-        for row in range(table.get_row_count()):
-            value = table.get_cell_value(row, col)
-            width = lv.text_get_width(value, len(value), font, lv.TEXT_FLAG.NONE)
-            if width > max_width:
-                max_width = width
-        table.set_column_width(col, max_width + padding)
-
-
-def set_cell_value(table, *, row: int, values: tuple):
-    for col, value in enumerate(values):
-        table.set_cell_value(row, col, value)
 
 
 class ScanBluetooth(Activity):
     def onCreate(self):
+        self.simulation_mode = bluetooth is None
+        if self.simulation_mode:
+            ble_module = MockBluetooth()
+        else:
+            ble_module = bluetooth
+        self.ble = ble_module.BLE()
+
         main_content = lv.obj()
         main_content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        main_content.set_style_pad_all(0, 0)
+        main_content.set_style_pad_all(5, 0)
         main_content.set_size(lv.pct(100), lv.pct(100))
 
         info_column = lv.obj(main_content)
         info_column.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        info_column.set_style_pad_all(1, 1)
+        info_column.set_style_pad_all(2, 0)
         info_column.set_size(lv.pct(100), lv.SIZE_CONTENT)
 
         self.info_label = lv.label(info_column)
         self.info_label.set_style_text_font(lv.font_montserrat_14, 0)
+        if self.simulation_mode:
+            self.info("Bluetooth simulation mode")
+        else:
+            self.info("Bluetooth ready")
 
-        if bluetooth is None:
-            self.info("Bluetooth not available on this platform")
-            self.setContentView(main_content)
-            return
+        header_row = lv.obj(main_content)
+        header_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        header_row.set_style_pad_all(2, 0)
+        header_row.set_style_pad_gap(4, 0)
+        header_row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        self._create_header(header_row)
 
-        tabel_column = lv.obj(main_content)
-        tabel_column.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tabel_column.set_style_pad_all(0, 0)
-        tabel_column.set_size(lv.pct(100), lv.SIZE_CONTENT)
-
-        self.table = lv.table(tabel_column)
-        set_cell_value(
-            self.table,
-            row=0,
-            values=("pos", "MAC", "RSSI", "last", "count", "Name"),
-        )
-        set_dynamic_column_widths(self.table)
+        self.rows_container = lv.obj(main_content)
+        self.rows_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self.rows_container.set_style_flex_grow(1, 0)
+        self.rows_container.set_style_pad_all(2, 0)
+        self.rows_container.set_style_pad_gap(2, 0)
+        self.rows_container.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        self.rows_container.add_flag(lv.obj.FLAG.SCROLLABLE)
 
         self.scan_count = 0
+        self.scanning = False
         self.mac2column = {}
         self.mac2counts = {}
         self.mac2name = {}
         self.mac2last_seen = {}
-
-        self.ble = bluetooth.BLE()
+        self.row_widgets = {}
 
         self.setContentView(main_content)
 
+    def _create_header(self, parent):
+        for key, title, width in _COLUMNS:
+            label = lv.label(parent)
+            label.set_text(title)
+            label.set_size(lv.pct(width), lv.SIZE_CONTENT)
+            label.set_style_text_font(lv.font_montserrat_12, 0)
+
+    def _get_or_create_row(self, addr):
+        labels = self.row_widgets.get(addr)
+        if labels:
+            return labels
+        row = lv.obj(self.rows_container)
+        row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        row.set_style_pad_all(2, 0)
+        row.set_style_pad_gap(4, 0)
+        row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        labels = {}
+        for key, title, width in _COLUMNS:
+            label = lv.label(row)
+            label.set_text("")
+            label.set_size(lv.pct(width), lv.SIZE_CONTENT)
+            label.set_style_text_font(lv.font_montserrat_12, 0)
+            labels[key] = label
+        self.row_widgets[addr] = labels
+        return labels
+
     def info(self, text):
         print(text)
+        if self.simulation_mode:
+            text = "Simulation mode\n%s" % text
         self.info_label.set_text(text)
 
     async def ble_scan(self):
         """Check sensor every second"""
         while self.scanning:
-            print(f"async scan for {SCAN_DURATION_MS}ms...")
+            print("async scan for %sms..." % SCAN_DURATION_MS)
             self.ble.gap_scan(SCAN_DURATION_MS, INTERVAL_US, WINDOW_US, True)
             await TaskManager.sleep_ms(SCAN_DURATION_MS + 500)
 
     def onResume(self, screen):
         super().onResume(screen)
-        if bluetooth is None:
-            return
 
         self.info("Activating Bluetooth...")
         self.ble.irq(self.ble_irq_handler)
@@ -131,8 +159,6 @@ class ScanBluetooth(Activity):
 
     def onPause(self, screen):
         super().onPause(screen)
-        if bluetooth is None:
-            return
 
         self.scanning = False
 
@@ -146,15 +172,16 @@ class ScanBluetooth(Activity):
         current_time = int(time.time())
         for addr, last_seen in self.mac2last_seen.items():
             last_seen_sec = int(current_time - last_seen)
-            column_index = self.mac2column[addr]
-            self.table.set_cell_value(column_index, 3, f"{last_seen_sec}s")
+            labels = self.row_widgets.get(addr)
+            if labels:
+                labels["last"].set_text("%ss" % last_seen_sec)
 
     def ble_irq_handler(self, event: int, data: tuple) -> None:
         try:
             if event == _IRQ_SCAN_RESULT:
                 addr_type, addr, adv_type, rssi, adv_data = data
-                addr = ":".join(f"{b:02x}" for b in addr)
-                print(f"{addr=} {rssi=} {len(adv_data)=}")
+                addr = ":".join("%02x" % b for b in addr)
+                print("addr=%s rssi=%s len(adv_data)=%s" % (addr, rssi, len(adv_data)))
                 self.mac2last_seen[addr] = int(time.time())
                 if name := decode_name(adv_data):
                     self.mac2name[addr] = name
@@ -168,27 +195,21 @@ class ScanBluetooth(Activity):
                 else:
                     self.mac2counts[addr] += 1
 
-                set_cell_value(
-                    self.table,
-                    row=column_index,
-                    values=(
-                        str(column_index),
-                        addr,
-                        f"{rssi} dBm",
-                        '0s', # Last seen since 0 sec ;)
-                        str(self.mac2counts[addr]),
-                        name,
-                    ),
-                )
+                labels = self._get_or_create_row(addr)
+                labels["pos"].set_text(str(column_index))
+                labels["mac"].set_text(addr)
+                labels["rssi"].set_text("%s dBm" % rssi)
+                labels["last"].set_text("0s")
+                labels["count"].set_text(str(self.mac2counts[addr]))
+                labels["name"].set_text(name)
             elif event == _IRQ_SCAN_DONE:
                 self.update_last_seen()
-                set_dynamic_column_widths(self.table)
                 self.scan_count += 1
                 self.info(
-                    f"{len(self.mac2column)} unique devices (Scan {self.scan_count})"
+                    "%s unique devices (Scan %s)" % (len(self.mac2column), self.scan_count)
                 )
             else:
-                print(f"Ignored BLE {event=}")
+                print("Ignored BLE event=%s" % event)
         except Exception as e:
             sys.print_exception(e)
-            print(f"Error in BLE IRQ handler {event=}: {e}")
+            print("Error in BLE IRQ handler event=%s: %s" % (event, e))

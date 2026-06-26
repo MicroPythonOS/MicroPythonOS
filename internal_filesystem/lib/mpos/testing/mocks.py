@@ -1320,3 +1320,64 @@ def make_usocket_module(socket_cls):
 
 def make_shared_preferences_module(shared_prefs_cls):
     return type("module", (), {"SharedPreferences": shared_prefs_cls})()
+
+
+# =============================================================================
+# Bluetooth Mocks
+# =============================================================================
+
+def _encode_advertisement_name(name):
+    """Encode a BLE advertisement data payload with the given device name."""
+    name_bytes = bytes(name, "utf-8")
+    payload = bytearray()
+    payload.append(len(name_bytes) + 1)
+    payload.append(0x09)  # Complete local name
+    payload.extend(name_bytes)
+    return bytes(payload)
+
+
+class MockBluetooth:
+    """Mock bluetooth module for testing without BLE hardware."""
+
+    def __init__(self, scan_results=None):
+        self._scan_results = scan_results
+        self._ble = None
+
+    def BLE(self):
+        if self._ble is None:
+            self._ble = MockBLE(self._scan_results)
+        return self._ble
+
+
+class MockBLE:
+    """Mock BLE controller for desktop/simulation testing."""
+
+    IRQ_SCAN_RESULT = 5
+    IRQ_SCAN_DONE = 6
+
+    def __init__(self, scan_results=None):
+        self._active = False
+        self._irq = None
+        if scan_results is None:
+            scan_results = [
+                (0, b"\xaa\xbb\xcc\xdd\xee\x01", 0, -42, _encode_advertisement_name("Simulated Phone")),
+                (0, b"\xaa\xbb\xcc\xdd\xee\x02", 0, -68, _encode_advertisement_name("Simulated Headset")),
+                (0, b"\xaa\xbb\xcc\xdd\xee\x03", 0, -55, _encode_advertisement_name("Simulated Watch")),
+            ]
+        self._scan_results = scan_results
+
+    def active(self, state=None):
+        if state is None:
+            return self._active
+        self._active = state
+
+    def irq(self, handler):
+        self._irq = handler
+
+    def gap_scan(self, duration_ms, interval_us=None, window_us=None, active_scan=None):
+        if duration_ms is None:
+            return
+        if self._irq:
+            for result in self._scan_results:
+                self._irq(self.IRQ_SCAN_RESULT, result)
+            self._irq(self.IRQ_SCAN_DONE, None)
