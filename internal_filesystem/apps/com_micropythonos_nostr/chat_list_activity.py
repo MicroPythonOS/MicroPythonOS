@@ -193,6 +193,20 @@ class ChatListActivity(Activity):
         else:
             self._status_label.set_text(lv.SYMBOL.CLOSE)
 
+    @staticmethod
+    def _dm_subscription_since(now, chats):
+        """Return the since= value for the global DM subscription.
+
+        We want the latest safe timestamp that still covers possible new
+        messages: the newest DM/NIP-17 activity minus a small overlap, but
+        never older than the configured lookback window.
+        """
+        dm_since = now - LOOKBACK_WINDOW_SECONDS
+        for chat in chats:
+            if chat.kind in (KIND_DM, KIND_NIP17_CHAT) and chat.last_ts:
+                dm_since = max(dm_since, chat.last_ts - OVERLAP_SECONDS)
+        return dm_since
+
     def _start_manager_and_subscriptions(self):
         if not self._manager.is_running():
             self._manager.start()
@@ -208,11 +222,7 @@ class ChatListActivity(Activity):
         own = self._manager.get_own_pubkey_hex()
         now = _current_nostr_ts()
 
-        # DM subscription: since the oldest DM chat we know, or lookback window.
-        dm_since = now - LOOKBACK_WINDOW_SECONDS
-        for chat in self._store.get_chats():
-            if chat.kind in (KIND_DM, KIND_NIP17_CHAT) and chat.last_ts:
-                dm_since = min(dm_since, chat.last_ts - OVERLAP_SECONDS)
+        dm_since = self._dm_subscription_since(now, self._store.get_chats())
         try:
             self._manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
         except Exception as e:

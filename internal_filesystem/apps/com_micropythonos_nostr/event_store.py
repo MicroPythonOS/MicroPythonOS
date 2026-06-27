@@ -74,6 +74,7 @@ class EventStore:
         self._known_ids = set()  # small in-memory dedup cache
         self._ensure_dirs()
         self._load_index()
+        self._load_known_ids()
 
     def _empty_index(self):
         return {
@@ -156,6 +157,36 @@ class EventStore:
             changed = True
         if changed:
             self._index_dirty = True
+
+    def _load_known_ids(self):
+        """Populate the in-memory dedup cache from persisted chat files.
+
+        Without this, a restart leaves the dedup cache empty and the same
+        messages returned by relays are stored again, bumping unread counts.
+        """
+        try:
+            files = os.listdir(self._cache_dir)
+        except OSError:
+            return
+        for name in files:
+            if not name.endswith(CHAT_FILE_SUFFIX):
+                continue
+            path = f"{self._cache_dir}/{name}"
+            try:
+                with open(path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                        except Exception:
+                            continue
+                        event_id = data.get("id") or data.get("event_id")
+                        if event_id:
+                            self._known_ids.add(event_id)
+            except OSError:
+                pass
 
     def flush_index(self):
         """Write the lightweight chat index to flash if it changed."""
