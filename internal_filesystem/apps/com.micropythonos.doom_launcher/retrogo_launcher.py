@@ -18,18 +18,17 @@ class StartingActivity(Activity):
         starting_text = extras.get("starting_text", default_text)
 
         screen = lv.obj()
+        screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(5, lv.PART.MAIN)
 
         title = lv.label(screen)
         title.set_text(starting_title)
-        title.align(lv.ALIGN.TOP_MID, 0, 0)
         title.set_style_text_font(lv.font_montserrat_20, lv.PART.MAIN)
 
         label = lv.label(screen)
         label.set_text(starting_text)
         label.set_long_mode(lv.label.LONG_MODE.WRAP)
         label.set_width(lv.pct(100))
-        label.center()
 
         self.setContentView(screen)
 
@@ -277,6 +276,8 @@ class RetroGoLauncher(Activity):
     async def start_game(self, bootfile_prefix, bootfile_to_write, gamefile):
         intent = Intent(activity_class=StartingActivity)
         original_extras = self.getIntent().extras if self.getIntent() else {}
+        if original_extras and "starting_title" in original_extras:
+            intent.putExtra("starting_title", original_extras["starting_title"])
         if original_extras and "starting_text" in original_extras:
             intent.putExtra("starting_text", original_extras["starting_text"])
         intent.putExtra("game_name", self.game_name)

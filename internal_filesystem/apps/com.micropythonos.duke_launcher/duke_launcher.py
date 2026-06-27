@@ -6,13 +6,16 @@ class DukeLauncher(Activity):
 
     def onCreate(self):
         help_text = (
-            "- Shoot: A, Jump: B, Weapon: X, Crouch: Y, Use: START\n"
-            "- Autoaim is on (no need to look up or down)"
-            "- Changing audio device and volume: MENU - GAME OPTIONS - RETROGO OPTIONS\n"
-            "- Hotkey: long-press START\n"
+            "• Shoot = A, Jump = B, Weapon = X, Crouch = Y\n"
+            "• Menu = MENU, Use = START\n"
+            "\n"
+            "• Hotkey = long-press START\n"
             "    + look up/down: Y/B\n"
             "    + jetpack on: arrow down\n"
-            "    + joystick left/right to scroll, arrow up to choose\n"
+            "    + joystick left/right to scroll, up to choose\n"
+            "\n"
+            "• Autoaim is on (no need to look up or down)\n"
+            "• Change audio device and volume in GAME OPTIONS - RETROGO OPTIONS\n"
         )
         self.startActivity(
             Intent(activity_class=RetroGoLauncher)

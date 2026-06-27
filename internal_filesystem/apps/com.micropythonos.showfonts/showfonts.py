@@ -49,6 +49,7 @@ class ShowFonts(Activity):
             for cp in range(start_cp, end_cp):
                 if lookup_font.get_glyph_dsc(lookup_font, dsc, cp, cp):
                     parts.append(chr(cp))
+                    #parts.append(f"{cp}:{chr(cp)}")
         self._log_timing("addAllGlyphs/base glyph scan", scan_start)
 
         if emoji:
