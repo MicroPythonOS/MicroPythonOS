@@ -6,6 +6,7 @@ from mpos import (
     Activity,
     ConnectivityManager,
     DisplayMetrics,
+    FontManager,
     Intent,
     Notification,
     NotificationManager,
@@ -357,6 +358,11 @@ class ChatListActivity(Activity):
             text = self._format_chat_row(chat, now)
             btn = self._chat_list.add_button(None, text)
             btn.add_event_cb(lambda e, cid=chat.chat_id: self._open_chat(cid), lv.EVENT.CLICKED, None)
+            lbl = btn.get_child(0)
+            if lbl is not None:
+                lbl.set_style_text_font(
+                    FontManager.getFont(emoji=True), lv.PART.MAIN
+                )
             # Highlight unread rows.
             if chat.unread:
                 btn.add_state(lv.STATE.CHECKED)

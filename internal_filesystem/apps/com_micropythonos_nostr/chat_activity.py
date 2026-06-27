@@ -6,6 +6,7 @@ from mpos import (
     Activity,
     ConnectivityManager,
     DisplayMetrics,
+    FontManager,
     Intent,
     MposKeyboard,
     SettingsActivity,
@@ -100,7 +101,9 @@ class ChatActivity(Activity):
 
         self._title_label = lv.label(header)
         self._title_label.set_text(self._title or self._chat_id or "Chat")
-        self._title_label.set_style_text_font(lv.font_montserrat_18, lv.PART.MAIN)
+        self._title_label.set_style_text_font(
+            FontManager.getFont(size=18, emoji=True), lv.PART.MAIN
+        )
         self._title_label.set_flex_grow(1)
 
         settings_btn = lv.button(header)
@@ -275,12 +278,15 @@ class ChatActivity(Activity):
 
         meta = lv.label(row)
         meta.set_text(f"{sender} · {self._format_time(message.ts)}")
-        meta.set_style_text_font(lv.font_montserrat_10, lv.PART.MAIN)
+        meta.set_style_text_font(
+            FontManager.getFont(size=10, emoji=True), lv.PART.MAIN
+        )
         meta.set_width(lv.pct(100))
         meta.set_style_text_align(align, lv.PART.MAIN)
 
         body = lv.label(row)
         body.set_text(message.content)
+        body.set_style_text_font(FontManager.getFont(emoji=True), lv.PART.MAIN)
         body.set_width(lv.pct(100))
         body.set_long_mode(lv.label.LONG_MODE.WRAP)
         body.set_style_text_align(align, lv.PART.MAIN)
