@@ -6,7 +6,6 @@ is routed to registered handlers. This mirrors the relay echo path and
 catches regressions where sending works but receiving does not.
 """
 
-import json
 import sys
 import unittest
 
@@ -35,13 +34,15 @@ class _FakeRelayManager:
 class TestNip17SelfSendReceive(unittest.TestCase):
     """Send a NIP-17 message to yourself and verify it can be unwrapped and routed."""
 
-    def _load_real_key(self):
-        with open("prefs/com_micropythonos_nostr/config.json", "r") as f:
-            config = json.load(f)
-        return PrivateKey.from_nsec(config["nostr_nsec"])
+    def _load_test_key(self):
+        # Deterministic test key. Avoids depending on /prefs/ so the test runs
+        # on the build server and in clean workspaces.
+        return PrivateKey(bytes.fromhex(
+            "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        ))
 
     def setUp(self):
-        self.private_key = self._load_real_key()
+        self.private_key = self._load_test_key()
         self.own_hex = self.private_key.public_key.hex()
 
         self.mgr = NostrManager.get_instance()
