@@ -32,7 +32,7 @@ try:
         peer_from_dm_event,
         subject_from_nip17_event,
     )
-    from .event_store import EventStore
+    from .event_store import EventStore, _current_nostr_ts
 except ImportError:
     try:
         from chat_model import (
@@ -48,7 +48,7 @@ except ImportError:
             peer_from_dm_event,
             subject_from_nip17_event,
         )
-        from event_store import EventStore
+        from event_store import EventStore, _current_nostr_ts
     except ImportError:
         Message = (
             channel_id_from_event
@@ -585,7 +585,9 @@ class NostrManager:
         print("NostrManager: published DM to {}".format(recipient_hex[:16]))
         return dm_id
 
-    def publish_nip17_message(self, content, recipients, subject=None, reply_to=None):
+    def publish_nip17_message(
+        self, content, recipients, subject=None, reply_to=None, created_at=None
+    ):
         """Sign and publish a NIP-17 gift-wrapped chat message (kind 14).
 
         Returns a list of the published kind 1059 event ids.
@@ -602,12 +604,18 @@ class NostrManager:
             raise RuntimeError("NIP-17 support is not available")
 
         hex_recipients = [_pubkey_to_hex(r) for r in recipients]
+        # Capture the wall-clock timestamp once, before the pure-Python
+        # ChaCha20 loop can starve the ESP32 scheduler and make time.time()
+        # stale.
+        if created_at is None:
+            created_at = _current_nostr_ts()
         gift_events = make_nip17_messages(
             self._nostr_private_key,
             content,
             hex_recipients,
             subject=subject,
             reply_to=reply_to,
+            created_at=created_at,
         )
         ids = []
         for gift in gift_events:

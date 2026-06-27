@@ -453,6 +453,7 @@ class ChatListActivity(Activity):
                     event_ids = self._manager.publish_nip17_message(
                         item["content"],
                         participants,
+                        created_at=item.get("ts"),
                     )
                     event_id = event_ids[0]
                 else:

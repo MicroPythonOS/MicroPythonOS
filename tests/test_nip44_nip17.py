@@ -140,6 +140,28 @@ class TestNip17(unittest.TestCase):
                     targets.add(tag[1])
         self.assertEqual(targets, {alice.public_key.hex(), bob.public_key.hex(), charlie.public_key.hex()})
 
+    def test_created_at_is_respected(self):
+        alice = PrivateKey()
+        bob = PrivateKey()
+        fixed_ts = 2000000000
+        messages = make_nip17_messages(
+            alice, "ts test", [bob.public_key.hex()], created_at=fixed_ts
+        )
+        for gift in messages:
+            self.assertEqual(gift["created_at"], fixed_ts)
+            # Verify the id was computed with the fixed timestamp by
+            # reconstructing the Event.
+            from nostr.event import Event
+
+            event = Event(
+                content=gift["content"],
+                public_key=gift["pubkey"],
+                created_at=gift["created_at"],
+                kind=gift["kind"],
+                tags=gift["tags"],
+            )
+            self.assertEqual(event.id, gift["id"])
+
 
 if __name__ == "__main__":
     unittest.main()

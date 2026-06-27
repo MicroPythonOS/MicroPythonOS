@@ -344,12 +344,15 @@ class ChatActivity(Activity):
         own = self._manager.get_own_pubkey_hex() or ""
         event_id = None
         event_ids = None
+        # Capture the wall-clock timestamp once before any slow crypto work so
+        # the local message timestamp matches the NIP-17 event timestamp.
+        send_ts = _current_nostr_ts()
 
         if self._kind == KIND_NIP17_CHAT:
             try:
                 if online:
                     event_ids = self._manager.publish_nip17_message(
-                        text, self._get_recipients()
+                        text, self._get_recipients(), created_at=send_ts
                     )
                     event_id = event_ids[0]
                     kind = KIND_NIP17_CHAT
@@ -370,7 +373,7 @@ class ChatActivity(Activity):
                 if online:
                     if protocol == "nip17":
                         event_ids = self._manager.publish_nip17_message(
-                            text, [self._peer_pubkey]
+                            text, [self._peer_pubkey], created_at=send_ts
                         )
                         event_id = event_ids[0]
                         kind = KIND_NIP17_CHAT
@@ -409,7 +412,7 @@ class ChatActivity(Activity):
 
         message = Message(
             event_id=event_id,
-            ts=_current_nostr_ts(),
+            ts=send_ts,
             pubkey=own,
             content=text,
             kind=kind,
