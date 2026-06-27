@@ -19,11 +19,11 @@ rm -f "$outputjson"
 # com.quasikili.quasidoodle doesn't work on touch screen devices AND has the wrong download URL
 # com.micropythonos.errortest is an intentional bad app for testing (caught by tests/test_graphical_launch_all_apps.py)
 # com.micropythonos.errortest_delayed is an intentional bad app for testing
-# com_micropythonos_nostr isn't ready for release yet
-blacklist="com.quasikili.quasidoodle com_micropythonos_nostr"
+# com.micropythonos.nostr isn't ready for release yet
+blacklist="com.quasikili.quasidoodle com.micropythonos.nostr"
 blacklist="$blacklist com.micropythonos.errortest com.micropythonos.errortest_delayed com.micropythonos.errortest_resume"
-blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.retrocore_launcher" # only for fri3d badges pre-built filesystem
-blacklist="$blacklist com.micropythonos.doom" # not ready yet
+blacklist="$blacklist com.micropythonos.doom_launcher com.micropythonos.duke_launcher com.micropythonos.retrocore_launcher" # not ready yet
+blacklist="$blacklist com.micropythonos.doom com.micropythonos.breakout" # not ready yet
 blacklist="$blacklist cz.ucw.pavel.calendar cz.ucw.pavel.cellular cz.ucw.pavel.compass cz.ucw.pavel.weather" # not ready yet
 
 echo "[" | tee -a "$outputjson"
@@ -39,7 +39,15 @@ for apprepo in internal_filesystem/apps; do
         else
             echo "Bundling $apprepo/$appdir"
             appfullpath="$apprepo/$appdir"
-            manifest="$appfullpath/MANIFEST.JSON"
+            if [ ! -d "$appfullpath" ]; then
+                echo "Skipping $appdir because it is not a valid directory (broken symlink?)"
+                continue
+            fi
+            if [ -f "$appfullpath/MANIFEST.JSON" ]; then
+                manifest="$appfullpath/MANIFEST.JSON"
+            else
+                manifest="$appfullpath/META-INF/MANIFEST.JSON"
+            fi
             version=$( jq -r '.version' "$manifest" )
             result=$?
             if [ $result -ne 0 ]; then
@@ -66,7 +74,12 @@ for apprepo in internal_filesystem/apps; do
             rm -f "$mpkname"
             echo "Creating $mpkname with deterministic file order..."
             (cd "$apprepo" && (find -L "$appdir" -type d; find -L "$appdir" -type f) | grep -v ".git/" | sort | TZ=CET zip -X -r0 "$mpkname" -@)
-            cp "$appfullpath"/icon_64x64.png "$thisappdir"/icons/"$appdir"_"$version"_64x64.png
+            if [ -f "$appfullpath/icon_64x64.png" ]; then
+                icon_src="$appfullpath/icon_64x64.png"
+            else
+                icon_src="$appfullpath/res/mipmap-mdpi/icon_64x64.png"
+            fi
+            cp "$icon_src" "$thisappdir"/icons/"$appdir"_"$version"_64x64.png
         fi
     done
 done
