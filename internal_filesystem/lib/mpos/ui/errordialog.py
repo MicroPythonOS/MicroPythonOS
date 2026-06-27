@@ -1,6 +1,8 @@
 import lvgl as lv
 import sys
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _format_exception(e):
     try:
@@ -21,6 +23,7 @@ def show_app_error_dialog(app_fullname, exception, is_lifecycle=False):
         message = 'Could not load app "' + str(app_fullname) + '". Maybe there\'s an update that fixes it?'
 
     detail = _format_exception(exception)
+    logger.warning(detail)
 
     mbox = lv.msgbox(lv.layer_top())
     mbox.add_title(title)
