@@ -6,10 +6,41 @@ import logging
 import machine
 import micropython
 import os
+import sys
 import time
 from mpos.audio import adpcm_ima
 
 logger = logging.getLogger(__name__)
+
+
+def _detect_desktop_player():
+    """
+    Detect which OS audio player is available for desktop (non-ESP32) playback.
+
+    Returns:
+        str: player name ('afplay', 'ffplay', 'aplay', 'paplay') or None if none found.
+    """
+    if sys.platform == "darwin":
+        return "afplay"
+    for candidate in ("ffplay", "aplay", "paplay"):
+        if os.system("command -v %s >/dev/null 2>&1" % candidate) == 0:
+            return candidate
+    return None
+
+
+def _shell_quote(path):
+    """
+    Safely single-quote a file path for use in shell commands.
+
+    Replaces each embedded single-quote with '"'"' then wraps in outer single quotes.
+
+    Args:
+        path: File path string to quote.
+
+    Returns:
+        str: Shell-safe single-quoted path.
+    """
+    return "'" + path.replace("'", "'\"'\"'") + "'"
 
 
 class WAVStream:
@@ -385,6 +416,63 @@ class WAVStream:
                     self._duration_ms = int((self._total_samples / original_rate) * 1000)
 
                 if __debug__: logger.debug("I2S init params: requested_rate=%s, playback_rate=%s, original_rate=%s, channels=%s, bits=16, i2s_pins=%s", self.requested_sample_rate, playback_rate, original_rate, channels, self.i2s_pins)
+
+                # Desktop (non-ESP32) audio playback branch
+                if sys.platform != "esp32":
+                    player = _detect_desktop_player()
+                    quoted = _shell_quote(self.file_path)
+                    bname = self.file_path.rsplit('/', 1)[-1]
+
+                    if player is None:
+                        logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
+                        elapsed_ms = 0
+                        while self._keep_running:
+                            if self._duration_ms is None:
+                                break
+                            time.sleep_ms(100)
+                            elapsed_ms += 100
+                            if self._playback_rate:
+                                self._progress_samples = min(
+                                    int(elapsed_ms / 1000.0 * self._playback_rate),
+                                    self._total_samples
+                                )
+                            if elapsed_ms >= self._duration_ms:
+                                break
+                    else:
+                        if player == "afplay":
+                            cmd = "afplay -v %.2f %s >/dev/null 2>&1 &" % (
+                                max(0.0, min(1.0, self.volume / 100.0)),
+                                quoted
+                            )
+                        elif player == "ffplay":
+                            cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 &" % (
+                                self.volume,
+                                quoted
+                            )
+                        elif player == "aplay":
+                            cmd = "aplay -q %s >/dev/null 2>&1 &" % quoted
+                        else:
+                            cmd = "paplay %s >/dev/null 2>&1 &" % quoted
+
+                        os.system(cmd)
+
+                        start_ticks = time.ticks_ms()
+                        while self._keep_running:
+                            time.sleep_ms(100)
+                            elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                            if self._playback_rate:
+                                self._progress_samples = min(
+                                    int(elapsed_ms / 1000.0 * self._playback_rate),
+                                    self._total_samples
+                                )
+                            if elapsed_ms >= (self._duration_ms or 0):
+                                break
+
+                        os.system("pkill -f %s >/dev/null 2>&1" % _shell_quote(self.file_path))
+
+                    if self.on_complete:
+                        self.on_complete("Finished: %s" % self.file_path)
+                    return
 
                 # Initialize I2S (always 16-bit output)
                 try:
