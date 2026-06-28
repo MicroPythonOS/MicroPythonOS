@@ -1,0 +1,19 @@
+diff --git a/ports/unix/unix_mphal.c b/ports/unix/unix_mphal.c
+--- a/ports/unix/unix_mphal.c
++++ b/ports/unix/unix_mphal.c
+@@ -214,6 +214,14 @@ mp_uint_t mp_hal_stdout_tx_strn(const char *str, size_t len) {
+ mp_uint_t mp_hal_stdout_tx_strn(const char *str, size_t len) {
+     ssize_t ret;
+     MP_HAL_RETRY_SYSCALL(ret, write(STDOUT_FILENO, str, len), {});
+     mp_uint_t written = ret < 0 ? 0 : ret;
++    #if defined(__EMSCRIPTEN__)
++    // Mirror all stdout to the browser host (e.g. ViperIDE) via the _webterm
++    // bridge so an external REPL driver sees boot logs, REPL framing and the
++    // output of code executed over the REPL. Implemented in the _webterm user
++    // C module; no-op until a host installs Module.__webterm.onOutput.
++    extern void mp_webterm_stdout(const char *str, size_t len);
++    mp_webterm_stdout(str, len);
++    #endif
+     int dupterm_res = mp_os_dupterm_tx_strn(str, len);
+     if (dupterm_res >= 0) {
+         written = MIN((mp_uint_t)dupterm_res, written);

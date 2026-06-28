@@ -1,0 +1,30 @@
+--- a/make.py
++++ b/make.py
+@@ -73,7 +73,7 @@
+     help='build target',
+     choices=[
+         'esp32', 'windows', 'stm32', 'unix', 'rp2',
+-        'renesas-ra', 'nrf', 'mimxrt', 'samd', 'macOS', 'raspberry_pi'
++        'renesas-ra', 'nrf', 'mimxrt', 'samd', 'macOS', 'raspberry_pi', 'web'
+     ],
+     action='store',
+     nargs=1
+@@ -101,7 +101,7 @@
+     default=None
+ )
+ 
+-if target in ('windows', 'unix', 'macOS', 'raspberry_pi'):
++if target in ('windows', 'unix', 'macOS', 'raspberry_pi', 'web'):
+     argParser.add_argument(
+         'VARIANT',
+         dest='board',
+@@ -277,6 +277,9 @@
+     elif target.lower() == 'raspberry_pi':
+         from builder import raspberry_pi as mod
+         target = 'unix'
++    elif target.lower() == 'web':
++        from builder import web as mod
++        target = 'unix'
+     elif target.lower() == 'windows':
+         from builder import windows as mod
+     else:
