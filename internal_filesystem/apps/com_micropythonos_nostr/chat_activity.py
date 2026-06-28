@@ -421,7 +421,6 @@ class ChatActivity(Activity):
         )
         self._store.add_message(self._chat_id, message, mark_unread=False)
         self._append_message_row(message)
-        self._scroll_to_bottom()
 
         if event_id:
             self._sent_event_ids.add(event_id)
@@ -431,6 +430,7 @@ class ChatActivity(Activity):
 
         self._input_textarea.set_text("")
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self._scroll_to_bottom()
 
     def _get_recipients(self):
         if self._kind == KIND_NIP17_CHAT:
