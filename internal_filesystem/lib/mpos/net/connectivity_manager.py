@@ -116,7 +116,7 @@ class ConnectivityManager:
              return True
          start = time.time()
          while time.time() - start < timeout:
-             if self.is_online:
+             if self.is_online():
                  return True
              time.sleep(1)
          return False
