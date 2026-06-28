@@ -234,7 +234,7 @@ def detect_board():
                     return "freenove_esp32s3_display"
                 restore_i2c(sda=16, scl=15)
 
-            if __debug__: logger.debug("fri3d_2024 ?")
+            if __debug__: logger.debug("fri3d_2024/2026 ?")
             if i2c0 := fail_save_i2c(sda=9, scl=18):
                 if single_address_i2c_scan(i2c0, 0x6A): # ) 0x15: CST8 touch, 0x6A: IMU
                     return "fri3d_2026"
