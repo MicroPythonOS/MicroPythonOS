@@ -171,3 +171,39 @@ class TestRTTTL(unittest.TestCase):
         """Test playing flag is initially false."""
         stream = RTTTLStream("Test:d=4,o=5,b=120:c", 0, 100, self.buzzer, None)
         self.assertFalse(stream.is_playing())
+
+    def test_set_repeat(self):
+        """Test that set_repeat updates the repeat count."""
+        stream = RTTTLStream("Test:d=4,o=5,b=120:c", 0, 100, self.buzzer, None)
+        self.assertEqual(stream._repeat_count, 1)
+
+        stream.set_repeat(3)
+        self.assertEqual(stream._repeat_count, 3)
+
+        stream.set_repeat(0)
+        self.assertEqual(stream._repeat_count, 0)
+
+        stream.set_repeat("bad")
+        self.assertEqual(stream._repeat_count, 0)
+
+    def test_play_repeats(self):
+        """Test that play() loops for the configured repeat count."""
+        import mpos.audio.stream_rtttl as stream_module
+        real_time = stream_module.time
+
+        class _FakeTime:
+            def sleep_ms(self, _ms):
+                pass
+
+        stream_module.time = _FakeTime()
+        try:
+            stream = RTTTLStream("Test:d=4,o=5,b=120:c,d,e", 0, 100, self.buzzer, None)
+            stream.set_repeat(2)
+            stream.play()
+
+            notes_per_repeat = 3
+            expected_tones = notes_per_repeat * 2
+            tone_calls = [f for f in self.buzzer.freq_history if f > 0]
+            self.assertEqual(len(tone_calls), expected_tones)
+        finally:
+            stream_module.time = real_time

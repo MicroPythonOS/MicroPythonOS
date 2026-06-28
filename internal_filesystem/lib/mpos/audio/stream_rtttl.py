@@ -56,8 +56,10 @@ class RTTTLStream:
         self.on_complete = on_complete
         self._keep_running = True
         self._is_playing = False
+        self._repeat_count = 1
 
         # Parse RTTTL format
+        rtttl_string = rtttl_string.strip()
         tune_pieces = rtttl_string.split(':')
         if len(tune_pieces) != 3:
             raise ValueError('RTTTL should contain exactly 2 colons')
@@ -204,21 +206,25 @@ class RTTTLStream:
         if __debug__: logger.debug("Playing '%s' (volume %s%%)", self.name, self.volume)
 
         try:
-            for freq, msec in self._notes():
-                if not self._keep_running:
-                    if __debug__: logger.debug("Playback stopped by user")
-                    break
+            iteration = 0
+            while self._keep_running and iteration < self._repeat_count:
+                iteration += 1
+                self.tune_idx = 0
+                for freq, msec in self._notes():
+                    if not self._keep_running:
+                        if __debug__: logger.debug("Playback stopped by user")
+                        break
 
-                # Play tone
-                if freq > 0:
-                    self.buzzer.freq(int(freq))
-                    self.buzzer.duty_u16(duty)
+                    # Play tone
+                    if freq > 0:
+                        self.buzzer.freq(int(freq))
+                        self.buzzer.duty_u16(duty)
 
-                # Play for 90% of duration, silent for 10% (note separation)
-                # Blocking sleep is OK - we're in a separate thread
-                time.sleep_ms(int(msec * 0.9))
-                self.buzzer.duty_u16(0)
-                time.sleep_ms(int(msec * 0.1))
+                    # Play for 90% of duration, silent for 10% (note separation)
+                    # Blocking sleep is OK - we're in a separate thread
+                    time.sleep_ms(int(msec * 0.9))
+                    self.buzzer.duty_u16(0)
+                    time.sleep_ms(int(msec * 0.1))
 
             if __debug__: logger.debug("Finished playing '%s'", self.name)
             if self.on_complete:
@@ -236,3 +242,12 @@ class RTTTLStream:
 
     def set_volume(self, vol):
         self.volume = vol
+
+    def set_repeat(self, count):
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            return
+        if count < 0:
+            count = 0
+        self._repeat_count = count

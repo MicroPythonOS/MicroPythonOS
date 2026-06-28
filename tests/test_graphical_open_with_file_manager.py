@@ -40,7 +40,7 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
         except OSError:
             pass
         os.mkdir(self.test_path)
-        for name in ("sample.wav", "sample.png", "sample.txt"):
+        for name in ("sample.wav", "sample.png", "sample.txt", "sample.rtttl"):
             with open("{}/{}".format(self.test_path, name), "wb") as f:
                 f.write(b"dummy")
 
@@ -77,6 +77,21 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
         self.assertTrue(
             wait_for_text("Stop", timeout=10),
             "Music Player did not open",
+        )
+        self.assertEqual(
+            get_foreground_app(),
+            "com.micropythonos.musicplayer",
+            "Foreground app is not Music Player",
+        )
+
+    def test_rtttl_file_opens_music_player_without_buzzer(self):
+        """Clicking a .rtttl file should launch Music Player and report the missing buzzer output."""
+        self._start_file_manager()
+
+        self.assertTrue(click_label("sample.rtttl"), "Could not click sample.rtttl")
+        self.assertTrue(
+            wait_for_text("RTTTL requires a buzzer output", timeout=10),
+            "Music Player did not show buzzer-required error",
         )
         self.assertEqual(
             get_foreground_app(),

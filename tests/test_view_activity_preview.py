@@ -55,6 +55,13 @@ class TestViewActivityPreview(unittest.TestCase):
             "This is an audio file.\nInstall a music or audio player to open it.",
         )
 
+    def test_rtttl_extension_shows_audio_hint(self):
+        path = self._write("view_preview_audio.rtttl", b"not really audio")
+        self.assertEqual(
+            self.activity._read_preview(path),
+            "This is an audio file.\nInstall a music or audio player to open it.",
+        )
+
     def test_unknown_binary_data_shows_generic_binary_hint(self):
         path = self._write("view_preview_unknown.bin", bytes(range(256)))
         self.assertEqual(

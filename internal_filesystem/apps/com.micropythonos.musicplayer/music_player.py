@@ -122,6 +122,21 @@ class MusicPlayer(Activity):
         AudioManager.stop()
         time.sleep(0.1)
 
+        is_rtttl = filename.lower().endswith(".rtttl")
+        rtttl_string = None
+        if is_rtttl:
+            try:
+                with open(filename) as f:
+                    rtttl_string = f.read().strip()
+            except Exception as exc:
+                error_msg = "Error: Could not read RTTTL file"
+                logger.error("%s: %s", error_msg, exc)
+                self.update_ui_threadsafe_if_foreground(
+                    self._filename_label.set_text,
+                    error_msg
+                )
+                return
+
         output = AudioManager.get_default_output()
         if output is None:
             error_msg = "Error: No audio output available"
@@ -132,13 +147,27 @@ class MusicPlayer(Activity):
             )
             return
 
+        if is_rtttl and output.kind != "buzzer":
+            output = self._find_buzzer_output()
+            if output is None:
+                error_msg = "Error: RTTTL requires a buzzer output"
+                logger.error(error_msg)
+                self.update_ui_threadsafe_if_foreground(
+                    self._filename_label.set_text,
+                    error_msg
+                )
+                return
+
         try:
-            player = AudioManager.player(
+            player_kwargs = dict(
                 file_path=filename,
                 stream_type=AudioManager.STREAM_MUSIC,
                 on_complete=self.player_finished,
                 output=output,
             )
+            if is_rtttl:
+                player_kwargs["rtttl"] = rtttl_string
+            player = AudioManager.player(**player_kwargs)
             player.set_repeat(self._get_repeat_count())
             player.start()
         except Exception as exc:
@@ -149,10 +178,17 @@ class MusicPlayer(Activity):
                 error_msg
             )
 
+    @staticmethod
+    def _find_buzzer_output():
+        for output in AudioManager.get_outputs():
+            if output.kind == "buzzer":
+                return output
+        return None
+
     def _open_file_clicked(self, event):
         intent = Intent(
             action="pick_file",
-            extras={"start_dir": "/data/audio/", "path_pattern": [".wav"]},
+            extras={"start_dir": "/data/audio/", "path_pattern": [".wav", ".rtttl"]},
         )
         self.startActivityForResult(intent, self._on_file_picked)
 
@@ -160,14 +196,14 @@ class MusicPlayer(Activity):
         if not result or not result.get("result_code"):
             return
         paths = result.get("data", {}).get("paths", [])
-        filename = self._find_first_wav(paths)
+        filename = self._find_first_audio(paths)
         if filename:
             self._filename = filename
             self._playback_attempted_for = None
             self._filename_label.set_text(self._filename)
             self._start_playback(self._filename)
 
-    def _find_first_wav(self, paths):
+    def _find_first_audio(self, paths):
         for path in paths:
             if path.endswith("/"):
                 try:
@@ -175,13 +211,18 @@ class MusicPlayer(Activity):
                     items = os.listdir(path.rstrip("/") or "/")
                     items.sort()
                     for item in items:
-                        if item.lower().endswith(".wav"):
+                        if self._is_audio_path(item):
                             return path + item
                 except OSError:
                     pass
-            elif path.lower().endswith(".wav"):
+            elif self._is_audio_path(path):
                 return path
         return None
+
+    @staticmethod
+    def _is_audio_path(path):
+        lower_path = path.lower()
+        return lower_path.endswith(".wav") or lower_path.endswith(".rtttl")
 
     def _repeat_checkbox_changed(self, event):
         self._apply_repeat()

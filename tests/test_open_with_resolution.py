@@ -67,6 +67,19 @@ class TestFileTypeResolution(unittest.TestCase):
         self.assertEqual(handlers[0].activity_class, _FakeMusicPlayer)
         self.assertEqual(handlers[0].app_fullname, "com.micropythonos.musicplayer")
 
+    def test_rtttl_resolves_to_music_player(self):
+        """A .rtttl file should resolve to the registered audio handler."""
+        self._register_file_handler(
+            "view", "com.micropythonos.musicplayer", "music_player.py", "MusicPlayer",
+            _FakeMusicPlayer, path_pattern=[".rtttl"], mime_type="audio/rtttl",
+        )
+
+        handlers = AppManager.resolve_activity(Intent(action="view", data="/sdcard/music/song.rtttl"))
+
+        self.assertEqual(len(handlers), 1)
+        self.assertEqual(handlers[0].activity_class, _FakeMusicPlayer)
+        self.assertEqual(handlers[0].app_fullname, "com.micropythonos.musicplayer")
+
     def test_png_jpg_raw_resolve_to_image_view(self):
         """Image files should resolve to the registered image handler."""
         self._register_file_handler(
