@@ -12,6 +12,9 @@ on:
 jobs:
   build:
     runs-on: macos-14 # 15 was giving a blank screen for some MacOS users
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_ANALYTICS: 1
 
     steps:
       - name: Checkout repository with submodules

@@ -277,6 +277,17 @@ PY
 	ensure_mpconfig_define MICROPY_PY_WEBREPL
 	ensure_mpconfig_define MICROPY_PY_OS_DUPTERM
 
+	# sdl2 has been removed from Homebrew in favor of sdl2-compat on some runners,
+	# but the lvgl_micropython macOS builder still queries the sdl2 formula. Point
+	# it at sdl2-compat so the brew info / LDFLAGS / CFLAGS discovery works.
+	if [ "$target" == "macOS" ]; then
+		macos_builder="$codebasedir"/lvgl_micropython/builder/macOS.py
+		if [ -f "$macos_builder" ] && grep -q "brew_path, 'info', 'sdl2'" "$macos_builder" 2>/dev/null; then
+			echo "Patching macOS builder for sdl2-compat..."
+			sed -i.backup "s/brew_path, 'info', 'sdl2'/brew_path, 'info', 'sdl2-compat'/g" "$macos_builder"
+		fi
+	fi
+
 	# Suppress warnings that newer Clang (17+) treats as errors on macOS.
 	# GCC on Linux doesn't have -Wgnu-folding-constant so this must be skipped there.
 	# -Wno-unknown-warning-option prevents Clang from erroring on GCC-only flag names
