@@ -22,7 +22,8 @@ jobs:
       - name: Install dependencies via Homebrew
         run: |
           xcode-select --install || true # already installed on github
-          brew install pkg-config libffi ninja make SDL2
+          #brew install pkg-config libffi ninja make SDL2 error 404 on https://formulae.brew.sh/api/formula/sdl2.json
+          brew install pkg-config libffi ninja make sdl2-compat
           # After brew install libffi make sdl2 etc.
           export LDFLAGS="-L/opt/homebrew/opt/libffi/lib"
           export CPPFLAGS="-I/opt/homebrew/opt/libffi/include"
