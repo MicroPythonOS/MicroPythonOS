@@ -399,6 +399,16 @@ class TestConnectivityManagerWaitUntilOnline(unittest.TestCase):
         result = cm.wait_until_online(timeout=5)
         self.assertTrue(result)
 
+    def test_wait_until_online_offline_returns_false(self):
+        """Offline must NOT return True early: regression for the is_online bound-method bug."""
+        self.mock_network.set_connected(False)
+        cm = self.ConnectivityManager()
+        self.assertFalse(cm.is_online())
+        # With the bug (`if self.is_online:`) this returned True instantly;
+        # fixed (`if self.is_online():`) it must wait and return False.
+        result = cm.wait_until_online(timeout=0.5)
+        self.assertFalse(result)
+
     def test_wait_until_online_without_network_module(self):
         """Test wait_until_online without network module (desktop)."""
         # Remove network module
