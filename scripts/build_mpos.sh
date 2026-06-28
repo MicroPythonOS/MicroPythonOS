@@ -140,7 +140,7 @@ fi
 echo "Minifying and inlining HTML..."
 pushd "$codebasedir"/webrepl/
 python3 inline_minify_webrepl.py
-result=$0
+result=$?
 if [ $? -ne 0 ]; then
 	echo "ERROR: webrepl/inline_minify_webrepl.py failed with exit code $result, webrepl won't work"
 else
