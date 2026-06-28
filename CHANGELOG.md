@@ -10,6 +10,7 @@ Builtin Apps:
 - OSUpdate: show 'OS Update' instead of 'OTA Update' during progress
 
 Board Support:
+- DFRobot UniHiker K10: add board support (ST7789 display, XL9535 GPIO expander, GC2145 camera, on-board sensors, RGB LED); auto-detected via I2C probe for the XL9535 expander; BTN_A=ENTER / BTN_B=NEXT navigation
 - Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
 - Fri3d 2026: add support for headset-only audio output (without simulteneous communicator output)
 
