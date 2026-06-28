@@ -145,6 +145,10 @@ class RetroCoreLauncher(Activity):
         self.setContentView(screen)
 
     def launch_retrogo(self, roms_subdir, game_name, title, file_extensions):
+        help_text = (
+            "• Change audio device and volume by pressing B\n"
+            "• To exit, press MENU and choose 'Quit'\n"
+        )
         self.startActivity(
             Intent(activity_class=RetroGoLauncher)
             .putExtra("title", title)
@@ -153,4 +157,5 @@ class RetroCoreLauncher(Activity):
             .putExtra("boot_name", roms_subdir)
             .putExtra("game_name", game_name)
             .putExtra("file_extensions", file_extensions)
+            .putExtra("starting_text", help_text)
         )
