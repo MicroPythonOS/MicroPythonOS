@@ -10,6 +10,7 @@ Manages WiFi connections including:
 This service works alongside ConnectivityManager which monitors connection status.
 """
 
+import _thread
 import logging
 import time
 
@@ -42,6 +43,11 @@ class WifiService:
     # Class-level lock to prevent concurrent WiFi operations
     # Use is_busy() to check state; operations like scan_networks() manage this automatically
     wifi_busy = False
+
+    # Guards the check-then-set of wifi_busy so two threads (e.g. the boot
+    # auto-connect thread and the WiFi app) cannot both observe wifi_busy=False
+    # and proceed -> double-connect. Acquire via _acquire_busy().
+    _busy_lock = _thread.allocate_lock()
 
     # Dictionary of saved access points {ssid: {password: "..."}}
     access_points = {}
@@ -315,6 +321,20 @@ class WifiService:
             return False
 
     @staticmethod
+    def _acquire_busy():
+        """Atomically claim the wifi_busy flag.
+
+        Returns True if the flag was free and is now held by the caller, False
+        if another operation already holds it. Pairs the check and the set under
+        _busy_lock so concurrent threads cannot both proceed.
+        """
+        with WifiService._busy_lock:
+            if WifiService.wifi_busy:
+                return False
+            WifiService.wifi_busy = True
+            return True
+
+    @staticmethod
     def auto_connect(network_module=None, time_module=None):
         """
         Auto-connect to a saved WiFi network on boot.
@@ -347,13 +367,13 @@ class WifiService:
             if __debug__: logger.debug("No access points configured, exiting")
             return
 
-        # Check if WiFi is busy (e.g., WiFi app is scanning)
-        if WifiService.wifi_busy:
+        # Atomically claim the busy flag (e.g. WiFi app may be scanning). If
+        # another operation holds it, abort instead of racing into a connect.
+        if not WifiService._acquire_busy():
             WifiService._restore_hotspot_if_needed(network_module=network_module)
             if __debug__: logger.debug("WiFi busy, auto-connect aborted")
             return
 
-        WifiService.wifi_busy = True
         connected = False
 
         try:
@@ -404,7 +424,9 @@ class WifiService:
         Raises:
             RuntimeError: If WiFi operations are already in progress
         """
-        if WifiService.wifi_busy:
+        # Atomically claim the busy flag so a concurrent auto-connect cannot slip
+        # in between the check and the set below.
+        if not WifiService._acquire_busy():
             raise RuntimeError("Cannot disable WiFi: WifiService is already busy")
 
         was_connected = False
@@ -424,8 +446,7 @@ class WifiService:
             "hotspot_was_enabled": hotspot_was_enabled,
         }
 
-        # Now set busy flag and disconnect
-        WifiService.wifi_busy = True
+        # Busy flag already claimed atomically above; now disconnect.
         WifiService.disconnect(network_module=network_module)
 
         return was_connected
