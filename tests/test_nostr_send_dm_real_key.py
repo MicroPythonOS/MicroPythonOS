@@ -1,6 +1,5 @@
 """Verify NIP-04 and NIP-17 signatures with the device's saved Nostr key."""
 
-import json
 import sys
 import unittest
 
@@ -15,9 +14,11 @@ class TestSendDmSignatures(unittest.TestCase):
     """Local signature check that mirrors what a relay does on publish."""
 
     def setUp(self):
-        with open("prefs/com_micropythonos_nostr/config.json", "r") as f:
-            config = json.load(f)
-        self.private_key = PrivateKey.from_nsec(config["nostr_nsec"])
+        # Deterministic test key so the test runs on the build server
+        # without depending on /prefs/ config files.
+        self.private_key = PrivateKey(bytes.fromhex(
+            "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        ))
         self.recipient = "181137054fe60df5168976311f0bf44dbe4bd4d2e0af69325dfee9fa81a8cbda"
 
     def test_nip04_dm_signature_verifies(self):
