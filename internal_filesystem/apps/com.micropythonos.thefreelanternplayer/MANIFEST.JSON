@@ -1,0 +1,23 @@
+{
+  "activities": [
+    {
+      "classname": "AlbumPlayer",
+      "entrypoint": "assets/tfl_player.py",
+      "intent_filters": [
+        {
+          "action": "main",
+          "category": "launcher"
+        }
+      ]
+    }
+  ],
+  "category": "utilities",
+  "download_url": "https://apps.micropythonos.com/apps/com.micropythonos.thefreelanternplayer/mpks/com.micropythonos.thefreelanternplayer_1.0.0.mpk",
+  "fullname": "com.micropythonos.thefreelanternplayer",
+  "icon_url": "https://www.thefreelantern.com/favicon-64x64.png",
+  "long_description": "Streams music from The Free Lantern website or from local SD card.",
+  "name": "The Free Lantern",
+  "publisher": "MicroPythonOS",
+  "short_description": "Plays music from The Free Lantern",
+  "version": "1.0.0"
+}

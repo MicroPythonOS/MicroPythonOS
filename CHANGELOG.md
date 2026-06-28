@@ -4,63 +4,45 @@ Future release (next version)
 Put unreleased changes here!
 
 Builtin Apps:
-- About: fix logo not showing
-- AppStore: download the correct .mpk from BadgeHub.eu if there are multiple versions
-- File Manager: fix browsing SD card (FAT32) folders and files not showing
-- OSUpdate: show raw ESP error and a user-friendly message when the update fails to activate
-
-Frameworks:
-- Focus: `add_focus_border()` highlights now stay hidden until the user navigates by direction (joystick/keypad). The widget is still added to the focus group, but the border is only drawn from the first `move_focus_direction()` onward. Touch-only UIs (which focus widgets by tapping) never show a stray ring — e.g. the gold rectangle that appeared around the Lightning Piggy balance after tapping it — while keypad/encoder navigation is unchanged.
-- AppManager: add support for apps as Python packages 
-- Strip trailing slashes from directory paths before filesystem calls to support both LittleFS and FAT32 (SD card)
-- SDCard: tolerate trailing slashes when listing SD card contents
-- StreamingUnzip: tolerate trailing slashes when creating directories
-- FontManager: tolerate trailing slashes when listing directories
-- WifiService: increase connection timeout from 10 to 13 seconds
-
-OS:
-- Increase size of esp32-small and lilygo_t4 partitions to 3800000 to accomodate esp32 builds
-- shutil: tolerate trailing slashes in `rmtree()`, `copytree()`, and `move()`
-- os.path: fix `exists()`, `isdir()`, and `isfile()` for directories ending with `/` on FAT32
-- micropython-nostr: add NIP-17 and NIP-44 support
-
-0.13.0
-======
-
-Builtin Apps:
-- Add File Manager to builtin apps, with support for dispatching an implicit 'view' intent to open files
+- Add File Manager to builtin apps, with support for dispatching an implicit "view" intent to open files
 - AppStore: make BadgeHub.eu the default backend, with Apps.MicroPythonOS.com second, cleanups
 - AppStore: prioritize display of known icons, show installed apps first (no network needed)
-- OSUpdate: show 'OS Update' instead of 'OTA Update' during progress
+- OSUpdate: show "OS Update" instead of "OTA Update" during progress
 
 Board Support:
 - Fri3d 2024/2026: correct IR TX pin for SAO IO13/IO21 (not IO10 badge link) so Mini Blaster / Noisy Cricket works with IR Remote app
-- Fri3d 2026: add support for headset-only audio output (without simultaneous communicator output)
-- Fri3d 2026: update CH32 coprocessor firmware to 2.0.1 by @bertouttier
-- Fri3d 2026: fix battery voltage reading by @bertouttier
+- Fri3d 2026: add support for headset-only audio output (without simulteneous communicator output)
 
 Drivers:
 - ST7789 display controller: tune up VCOMS, VRHS for improved contrast; raise frame rate to 90 Hz to prevent tearing effect; update positive and negative gamma curves for better colors
 
 Frameworks:
 - Add generic `InputActivity` for reusable single-value input UI; `SettingActivity` is now a thin wrapper that launches `InputActivity` and persists the result
-- FontManager: add a few more emojis and have `getEmojiStrings()` return complete emoji sequences (e.g. flag pairs) for visual emoji lists
+- FontManager: add `getEmojiStrings()` to return complete emoji sequences (e.g. flag pairs like 🇸🇻) for visual emoji lists
 - Add new `add_focus_border` utility and migrate all focus/defocus border handlers (ImageView, MusicPlayer, ShowFonts, About, HowTo, Launcher, WiFi Settings, Connect4, SettingsActivity, topmenu) to use it
 - Add new builtin File Explorer Activity with picker
 - AppManager: add support to install/update mpk/zip packages with 0-byte files (like IR Remote)
-- AppManager: move to new 'flat' mpk structure to reduce directory overhead by LittleFS
-- AppManager: add file-type association support (mimeType/pathPattern intent filters) and an 'Open With' chooser
+- AppManager: move to new "flat" mpk structure to reduce directory overhead by LittleFS
+- AppManager: add file-type association support (mimeType/pathPattern intent filters) and an "Open With" chooser
 - AudioManager: add support for compressed 4-bit ADPCM IMA WAV format
 - ActivityNavigator: dispatch implicit file intents to installed apps with proper app context and status-bar handling
 - Fix ChooserActivity, ViewActivity, and ShareActivity for LVGL 9.x and remove undefined references
 - ViewActivity fallback now displays the filename plus the first 512 bytes of the file's contents
 - Activity: add `onBackPressed()` hook so an activity can intercept the back/close gesture and stay foreground until it decides to close
 - View: split the explicit `finish_current_activity()` path from `back_screen()` so `Activity.finish()` no longer re-triggers `onBackPressed()`
-- SharedPreferences: migrate and store preferences to /prefs/appname instead of /data/appname
+- SharedPreferences: migrate and store preferences to /data/prefs/<appname> instead of /data/<appname>
+
+Apps:
+- The Free Lantern Player: stream music from thefreelantern.com over WiFi or from SD card
+- ShowFonts: include multi-codepoint emoji (including the El Salvador flag 🇸🇻) in the all-glyphs list by using `FontManager.getEmojiStrings()`
+- Music Player: declare support for .wav files and open them directly when launched via "Open With"
+- Image View: declare support for .png, .jpg, .jpeg, and .raw images and open a single image when launched via "Open With"
+- Image View: add "Open File..." button using the File Explorer Activity picker; position filename label in the top-left corner; add focus border to the image
+- TextEditor: fix closing with unsaved changes destroying the UI before the save prompt could be answered; now prompts Yes/No/Cancel via `onBackPressed()` and only closes after the user decides
 
 OS:
 - Add BMP bitmap image support (with fix for LVGL 9.4 bmp scaling)
-- Fix tjpgd JPEG scaling in LVGL 9.4
+- Fix tjpgd JPEG scaling in LVGL
 - Move MicroPythonOS-logo-white-long-w296.png to /builtin/res/
 
 0.12.2
