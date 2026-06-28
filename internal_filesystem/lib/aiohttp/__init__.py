@@ -3,6 +3,7 @@
 
 import asyncio
 import json as _json
+from mpos.net.async_dns import getaddrinfo_async
 from .aiohttp_ws import (
     _WSRequestContextManager,
     ClientWebSocketResponse,
@@ -250,12 +251,24 @@ class ClientSession:
             host, port = host.split(":", 1)
             port = int(port)
 
+        async def _resolve_and_connect():
+            # Warm the DNS resolver off the event-loop thread so the UI stays
+            # responsive during the (possibly slow) lookup: getaddrinfo releases the
+            # GIL while it waits (modsocket.c:239-253), so the worker thread keeps the
+            # loop alive. open_connection() below then resolves from the resolver
+            # cache (fast) instead of blocking the loop.
+            #
+            # We pass the hostname (not a resolved address) to open_connection so TLS
+            # SNI and cert validation use the real host. MicroPython getaddrinfo
+            # returns the sockaddr as an opaque bytearray (not an (ip, port) tuple),
+            # so the address cannot be substituted portably anyway.
+            await getaddrinfo_async(host, port)
+            return await asyncio.open_connection(host, port, ssl=ssl)
+
         if timeout is not None:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port, ssl=ssl), timeout
-            )
+            reader, writer = await asyncio.wait_for(_resolve_and_connect(), timeout)
         else:
-            reader, writer = await asyncio.open_connection(host, port, ssl=ssl)
+            reader, writer = await _resolve_and_connect()
 
         # Use protocol 1.0, because 1.1 always allows to use chunked transfer-encoding
         # But explicitly set Connection: close, even though this should be default for 1.0,
