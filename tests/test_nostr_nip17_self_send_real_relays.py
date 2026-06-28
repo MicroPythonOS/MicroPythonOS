@@ -7,7 +7,6 @@ filter, network, and relay-specific issues.
 """
 
 import asyncio
-import json
 import sys
 import time
 import unittest
@@ -19,6 +18,7 @@ from com_micropythonos_nostr.nostr_service import (
     KIND_NIP17_GIFT_WRAP,
     NostrManager,
 )
+from nostr.key import PrivateKey
 
 
 def _run_async(coro):
@@ -35,12 +35,11 @@ _DEFAULT_RELAYS = [
 class TestNip17SelfSendRealRelays(unittest.TestCase):
     """Send a NIP-17 message to yourself over the internet and verify receipt."""
 
-    def _load_real_key(self):
-        with open("prefs/com_micropythonos_nostr/config.json", "r") as f:
-            config = json.load(f)
-        from nostr.key import PrivateKey
-
-        return PrivateKey.from_nsec(config["nostr_nsec"])
+    def _load_test_key(self):
+        # Deterministic test key so the test does not depend on /prefs/.
+        return PrivateKey(bytes.fromhex(
+            "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+        ))
 
     async def _wait_for_connected(self, manager, timeout=30):
         """Yield until manager reports connected, up to timeout seconds."""
@@ -62,7 +61,7 @@ class TestNip17SelfSendRealRelays(unittest.TestCase):
 
     async def _async_test_self_send(self):
         """Async body: connect, publish, wait for echo."""
-        private_key = self._load_real_key()
+        private_key = self._load_test_key()
         own_hex = private_key.public_key.hex()
 
         # Use a fresh manager instance so a running service doesn't interfere.
