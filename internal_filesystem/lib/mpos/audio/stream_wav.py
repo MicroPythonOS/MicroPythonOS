@@ -43,6 +43,27 @@ def _shell_quote(path):
     return "'" + path.replace("'", "'\"'\"'") + "'"
 
 
+def _stop_desktop_player(pid_file, kill):
+    """Stop a backgrounded desktop player by its recorded PID.
+
+    Killing the exact PID (vs `pkill -f <path>`) avoids matching unrelated
+    processes or cross-killing another player of the same file. Only called to
+    kill on an explicit stop; on natural completion the player has already
+    exited (so we just remove the pid file, which also dodges PID reuse).
+    """
+    if kill:
+        try:
+            with open(pid_file) as f:
+                pid = int(f.read().strip())
+            os.system("kill %d >/dev/null 2>&1" % pid)
+        except Exception:
+            pass
+    try:
+        os.remove(pid_file)
+    except OSError:
+        pass
+
+
 class WAVStream:
     """
     WAV file playback stream with I2S output.
@@ -421,7 +442,6 @@ class WAVStream:
                 if sys.platform != "esp32":
                     player = _detect_desktop_player()
                     quoted = _shell_quote(self.file_path)
-                    bname = self.file_path.rsplit('/', 1)[-1]
 
                     if player is None:
                         logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
@@ -439,20 +459,26 @@ class WAVStream:
                             if elapsed_ms >= self._duration_ms:
                                 break
                     else:
+                        # Record the backgrounded player's PID (shell $!) so we can
+                        # stop it precisely by PID instead of `pkill -f <path>`.
+                        pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
+                        qpid = _shell_quote(pid_file)
                         if player == "afplay":
-                            cmd = "afplay -v %.2f %s >/dev/null 2>&1 &" % (
+                            cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
                                 max(0.0, min(1.0, self.volume / 100.0)),
-                                quoted
+                                quoted,
+                                qpid
                             )
                         elif player == "ffplay":
-                            cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 &" % (
+                            cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
                                 self.volume,
-                                quoted
+                                quoted,
+                                qpid
                             )
                         elif player == "aplay":
-                            cmd = "aplay -q %s >/dev/null 2>&1 &" % quoted
+                            cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
                         else:
-                            cmd = "paplay %s >/dev/null 2>&1 &" % quoted
+                            cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
 
                         os.system(cmd)
 
@@ -468,7 +494,9 @@ class WAVStream:
                             if elapsed_ms >= (self._duration_ms or 0):
                                 break
 
-                        os.system("pkill -f %s >/dev/null 2>&1" % _shell_quote(self.file_path))
+                        # Kill the player by its real PID on explicit stop; on natural
+                        # completion it has already exited, so just clean up the pid file.
+                        _stop_desktop_player(pid_file, not self._keep_running)
 
                     if self.on_complete:
                         self.on_complete("Finished: %s" % self.file_path)

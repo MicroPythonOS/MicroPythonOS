@@ -107,11 +107,11 @@ class _RequestContextManager:
 
 
 class ClientSession:
-    def __init__(self, base_url="", headers={}, version=HttpVersion10):
+    def __init__(self, base_url="", headers=None, version=HttpVersion10):
         self._reader = None
         self._base_url = base_url
         self._base_headers = {"Connection": "close", "User-Agent": "compat"}
-        self._base_headers.update(**headers)
+        self._base_headers.update(**(headers or {}))
         self._http_version = version
 
     async def __aenter__(self):
@@ -122,26 +122,40 @@ class ClientSession:
 
     # Connection timeout is supported via the timeout parameter on request methods
 
-    async def _request(self, method, url, data=None, json=None, ssl=None, params=None, headers={}, timeout=None):
+    async def _request(self, method, url, data=None, json=None, ssl=None, params=None, headers=None, timeout=None):
+        if headers is None:
+            headers = {}
         redir_cnt = 0
         while redir_cnt < 2:
             reader = await self.request_raw(method, url, data, json, ssl, params, headers, timeout=timeout)
-            _headers = []
-            redirect_location = None
-            sline = await reader.readline()
-            sline = sline.split(None, 2)
-            status = int(sline[1])
-            chunked = False
-            while True:
-                line = await reader.readline()
-                if not line or line == b"\r\n":
-                    break
-                _headers.append(line)
-                if line.startswith(b"Transfer-Encoding:"):
-                    if b"chunked" in line:
-                        chunked = True
-                elif line.startswith(b"Location:"):
-                    redirect_location = line.rstrip().split(None, 1)[1].decode()
+
+            async def _read_head():
+                _headers = []
+                redirect_location = None
+                sline = await reader.readline()
+                sline = sline.split(None, 2)
+                status = int(sline[1])
+                chunked = False
+                while True:
+                    line = await reader.readline()
+                    if not line or line == b"\r\n":
+                        break
+                    _headers.append(line)
+                    if line.startswith(b"Transfer-Encoding:"):
+                        if b"chunked" in line:
+                            chunked = True
+                    elif line.startswith(b"Location:"):
+                        redirect_location = line.rstrip().split(None, 1)[1].decode()
+                return status, _headers, chunked, redirect_location
+
+            # Bound the status-line + header read by the same timeout as connect, so
+            # a server that accepts the connection then stalls before/while sending
+            # headers cannot hang the event loop (and the UI) forever. Body reads are
+            # bounded by the caller (e.g. DownloadManager's per-chunk timeout).
+            if timeout is not None:
+                status, _headers, chunked, redirect_location = await asyncio.wait_for(_read_head(), timeout)
+            else:
+                status, _headers, chunked, redirect_location = await _read_head()
 
             if 301 <= status <= 303:
                 if redirect_location:
@@ -220,11 +234,15 @@ class ClientSession:
         json=None,
         ssl=None,
         params=None,
-        headers={},
+        headers=None,
         is_handshake=False,
         version=None,
         timeout=None,
     ):
+        # Copy into a fresh dict: this method mutates headers in place (Host,
+        # Content-Type, Content-Length), so mutating a caller-shared dict would
+        # poison later requests.
+        headers = dict(headers) if headers else {}
         if json and isinstance(json, dict):
             data = _json.dumps(json)
         if data is not None and method == "GET":
@@ -294,7 +312,7 @@ class ClientSession:
             await writer.awrite(query)
             return reader, writer
 
-    def request(self, method, url, data=None, json=None, ssl=None, params=None, headers={}, timeout=None):
+    def request(self, method, url, data=None, json=None, ssl=None, params=None, headers=None, timeout=None):
         return _RequestContextManager(
             self,
             self._request(
@@ -304,7 +322,7 @@ class ClientSession:
                 json=json,
                 ssl=ssl,
                 params=params,
-                headers=dict(**self._base_headers, **headers),
+                headers=dict(**self._base_headers, **(headers or {})),
                 timeout=timeout,
             ),
         )
