@@ -65,6 +65,7 @@ class ChatActivity(Activity):
     _handler_registered = False
     _rendered_ids = None
     _sent_event_ids = None
+    _pending_scroll_to_bottom = False
 
     def onCreate(self):
         self._prefs = SharedPreferences(self.appFullName)
@@ -238,7 +239,7 @@ class ChatActivity(Activity):
                 self._title_label.set_text(_display_title(chat.title))
         for msg in messages:
             self._append_message_row(msg)
-        self._scroll_to_bottom()
+        self._request_scroll_to_bottom()
 
     def _append_message_row(self, message):
         if self._rendered_ids is None:
@@ -329,8 +330,15 @@ class ChatActivity(Activity):
 
     def _on_keyboard_hide(self):
         self._header.remove_flag(lv.obj.FLAG.HIDDEN)
-        # Re-scroll after header restoration so the last message stays visible.
-        self._scroll_to_bottom()
+        # Layout is now final (keyboard gone, header restored), so scroll.
+        self._request_scroll_to_bottom()
+
+    def _request_scroll_to_bottom(self):
+        if self._keyboard.has_flag(lv.obj.FLAG.HIDDEN):
+            self._scroll_to_bottom()
+            self._pending_scroll_to_bottom = False
+        else:
+            self._pending_scroll_to_bottom = True
 
     def _open_settings(self):
         protocol_key = f"protocol:{self._chat_id}"
@@ -453,8 +461,9 @@ class ChatActivity(Activity):
                 self._sent_event_ids.add(eid)
 
         self._input_textarea.set_text("")
-        self._keyboard.hide_keyboard()
-        self._scroll_to_bottom()
+        self._request_scroll_to_bottom()
+        if not self._keyboard.has_flag(lv.obj.FLAG.HIDDEN):
+            self._keyboard.hide_keyboard()
 
     def _get_recipients(self):
         if self._kind == KIND_NIP17_CHAT:
@@ -492,7 +501,6 @@ class ChatActivity(Activity):
             )
         if message is not None:
             self._append_message_row(message)
-            self._scroll_to_bottom()
 
     def _on_event(self, nostr_event):
         try:
@@ -530,6 +538,6 @@ class ChatActivity(Activity):
             # If it hasn't been rendered yet:
             if self._rendered_ids is None or message.event_id not in self._rendered_ids:
                 self._append_message_row(message)
-                self._scroll_to_bottom()
+                self._request_scroll_to_bottom()
         except Exception as e:
             logger.error("Error handling chat event: %s", e)
