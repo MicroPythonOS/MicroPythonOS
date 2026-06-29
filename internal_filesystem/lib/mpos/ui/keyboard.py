@@ -112,6 +112,9 @@ class MposKeyboard:
     # Store textarea reference (we DON'T pass it to LVGL to avoid double-typing)
     _textarea = None
     _textarea_emoji_font_applied = False
+    # Optional callbacks invoked when the keyboard is shown/hidden.
+    _on_show = None
+    _on_hide = None
 
     def __init__(self, parent):
         # Create underlying LVGL keyboard widget
@@ -209,7 +212,7 @@ class MposKeyboard:
         # Update textarea
         ta.set_text(new_text)
 
-    def set_textarea(self, textarea):
+    def set_textarea(self, textarea, on_show=None, on_hide=None):
         """
         Set the textarea that this keyboard types into.
 
@@ -220,9 +223,13 @@ class MposKeyboard:
 
         Args:
             textarea: The lv.textarea widget to type into, or None to disconnect
+            on_show: Optional callback invoked when the keyboard is shown
+            on_hide: Optional callback invoked after the keyboard is hidden
         """
         self._textarea = textarea
         self._textarea_emoji_font_applied = False
+        self._on_show = on_show
+        self._on_hide = on_hide
         # NOTE: We deliberately DO NOT call self._keyboard.set_textarea()
         # to avoid LVGL's automatic character insertion
         self._textarea.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
@@ -305,8 +312,12 @@ class MposKeyboard:
 
     def scroll_back_after_hide(self, timer):
         self._parent.scroll_to_y(self._saved_scroll_y, True)
+        if self._on_hide:
+            self._on_hide()
 
     def show_keyboard(self):
+        if self._on_show:
+            self._on_show()
         self._saved_scroll_y = self._parent.get_scroll_y()
         WidgetAnimator.smooth_show(self._keyboard, duration=500)
         # Scroll to view on a timer because it will be hidden initially

@@ -56,6 +56,7 @@ class ChatActivity(Activity):
     _input_textarea = None
     _keyboard = None
     _send_btn = None
+    _header = None
 
     # State
     _manager = None
@@ -93,29 +94,29 @@ class ChatActivity(Activity):
         self._screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         self._screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
-        header = lv.obj(self._screen)
-        header.set_width(lv.pct(100))
-        header.set_height(lv.SIZE_CONTENT)
-        header.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
-        header.set_flex_flow(lv.FLEX_FLOW.ROW)
-        header.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
-        header.set_style_border_width(0, lv.PART.MAIN)
+        self._header = lv.obj(self._screen)
+        self._header.set_width(lv.pct(100))
+        self._header.set_height(lv.SIZE_CONTENT)
+        self._header.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+        self._header.set_flex_flow(lv.FLEX_FLOW.ROW)
+        self._header.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
+        self._header.set_style_border_width(0, lv.PART.MAIN)
 
-        back_btn = lv.button(header)
+        back_btn = lv.button(self._header)
         back_btn.set_size(DisplayMetrics.pct_of_width(12), DisplayMetrics.pct_of_width(12))
         back_lbl = lv.label(back_btn)
         back_lbl.set_text(lv.SYMBOL.LEFT)
         back_lbl.center()
         back_btn.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
 
-        self._title_label = lv.label(header)
+        self._title_label = lv.label(self._header)
         self._title_label.set_text(self._title or self._chat_id or "Chat")
         self._title_label.set_style_text_font(
             FontManager.getFont(size=18, emoji=True), lv.PART.MAIN
         )
         self._title_label.set_flex_grow(1)
 
-        settings_btn = lv.button(header)
+        settings_btn = lv.button(self._header)
         settings_btn.set_size(DisplayMetrics.pct_of_width(12), DisplayMetrics.pct_of_width(12))
         settings_lbl = lv.label(settings_btn)
         settings_lbl.set_text(lv.SYMBOL.SETTINGS)
@@ -152,7 +153,11 @@ class ChatActivity(Activity):
 
         self._keyboard = MposKeyboard(self._screen)
         self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
-        self._keyboard.set_textarea(self._input_textarea)
+        self._keyboard.set_textarea(
+            self._input_textarea,
+            on_show=self._on_keyboard_show,
+            on_hide=self._on_keyboard_hide,
+        )
 
         self.setContentView(self._screen)
 
@@ -319,6 +324,12 @@ class ChatActivity(Activity):
             self._prefs.get_string("new_chats_protocol", DEFAULT_DM_PROTOCOL),
         )
 
+    def _on_keyboard_show(self):
+        self._header.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _on_keyboard_hide(self):
+        self._header.remove_flag(lv.obj.FLAG.HIDDEN)
+
     def _open_settings(self):
         protocol_key = f"protocol:{self._chat_id}"
         settings = [
@@ -370,13 +381,13 @@ class ChatActivity(Activity):
                 else:
                     self._queue_local_message(text, own)
                     self._input_textarea.set_text("")
-                    self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                    self._keyboard.hide_keyboard()
                     return
             except Exception as e:
                 logger.error("Send failed: %s", e)
                 self._queue_local_message(text, own)
                 self._input_textarea.set_text("")
-                self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                self._keyboard.hide_keyboard()
                 return
         elif self._kind == KIND_DM:
             protocol = self._dm_send_protocol()
@@ -394,13 +405,13 @@ class ChatActivity(Activity):
                 else:
                     self._queue_local_message(text, own)
                     self._input_textarea.set_text("")
-                    self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                    self._keyboard.hide_keyboard()
                     return
             except Exception as e:
                 logger.error("Send failed: %s", e)
                 self._queue_local_message(text, own)
                 self._input_textarea.set_text("")
-                self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                self._keyboard.hide_keyboard()
                 return
         else:
             try:
@@ -412,13 +423,13 @@ class ChatActivity(Activity):
                 else:
                     self._queue_local_message(text, own)
                     self._input_textarea.set_text("")
-                    self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                    self._keyboard.hide_keyboard()
                     return
             except Exception as e:
                 logger.error("Send failed: %s", e)
                 self._queue_local_message(text, own)
                 self._input_textarea.set_text("")
-                self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+                self._keyboard.hide_keyboard()
                 return
 
         message = Message(
@@ -440,7 +451,7 @@ class ChatActivity(Activity):
                 self._sent_event_ids.add(eid)
 
         self._input_textarea.set_text("")
-        self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+        self._keyboard.hide_keyboard()
         self._scroll_to_bottom()
 
     def _get_recipients(self):
