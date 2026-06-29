@@ -21,6 +21,7 @@ from .chat_model import (
     KIND_NIP17_CHAT,
     Message,
     PROTOCOL_LABELS,
+    _display_title,
     channel_chat_id,
     chat_id_for_event,
     dm_chat_id,
@@ -229,7 +230,7 @@ class ChatActivity(Activity):
         chat = self._store.get_chat(self._chat_id)
         if chat is not None:
             if not self._title:
-                self._title_label.set_text(chat.title)
+                self._title_label.set_text(_display_title(chat.title))
         for msg in messages:
             self._append_message_row(msg)
         self._scroll_to_bottom()

@@ -3,33 +3,32 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, DisplayMetrics
+
 logger = logging.getLogger(__name__)
 
 
-class ShowNpubQRActivity(Activity):
-    """Activity that computes npub from nsec and displays it as a QR code."""
+class ShowNsecQRActivity(Activity):
+    """Activity that displays the configured nsec as a QR code."""
 
     def onCreate(self):
         try:
             prefs = self.getIntent().extras.get("prefs")
-            nsec = prefs.get_string("nostr_nsec") if prefs else None
+            secret = prefs.get_string("nostr_nsec") if prefs else None
 
-            if not nsec:
+            if not secret:
                 self._show_error("No nsec configured")
                 return
 
             from nostr.key import PrivateKey
 
-            if nsec.startswith("nsec1"):
-                private_key = PrivateKey.from_nsec(nsec)
+            if secret.startswith("nsec1"):
+                private_key = PrivateKey.from_nsec(secret)
             else:
-                private_key = PrivateKey(bytes.fromhex(nsec))
+                private_key = PrivateKey(bytes.fromhex(secret))
 
-            npub = private_key.public_key.bech32()
+            nsec = private_key.bech32()
 
             qr_size = round(DisplayMetrics.min_dimension() * 0.6)
-            # Reuse FullscreenQR via composition: build its screen manually so
-            # we can return to the settings screen instead of finishing the app.
             screen = lv.obj()
             screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
             screen.set_flex_align(lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
@@ -39,16 +38,16 @@ class ShowNpubQRActivity(Activity):
             screen.add_event_cb(lambda e: self.finish(), lv.EVENT.CLICKED, None)
             big_qr = lv.qrcode(screen)
             big_qr.set_size(qr_size)
-            big_qr.update(npub, len(npub))
-            npub_lbl = lv.label(screen)
-            npub_lbl.set_text(npub)
-            npub_lbl.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
-            npub_lbl.set_long_mode(lv.label.LONG_MODE.WRAP)
-            npub_lbl.set_width(lv.pct(100))
-            npub_lbl.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
+            big_qr.update(nsec, len(nsec))
+            nsec_lbl = lv.label(screen)
+            nsec_lbl.set_text(nsec)
+            nsec_lbl.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            nsec_lbl.set_long_mode(lv.label.LONG_MODE.WRAP)
+            nsec_lbl.set_width(lv.pct(100))
+            nsec_lbl.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
             self.setContentView(screen)
         except Exception as e:
-            logger.exception("ShowNpubQRActivity failed: %s", e)
+            logger.exception("ShowNsecQRActivity failed: %s", e)
             self._show_error(f"Error: {e}")
 
     def _show_error(self, text):

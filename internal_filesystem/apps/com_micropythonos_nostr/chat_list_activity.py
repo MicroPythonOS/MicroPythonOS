@@ -22,6 +22,7 @@ from .chat_model import (
     KIND_DM,
     KIND_NIP17_CHAT,
     Message,
+    _display_title,
     channel_chat_id,
     channel_id_from_event,
     chat_id_for_event,
@@ -29,10 +30,12 @@ from .chat_model import (
     peer_from_dm_event,
     subject_from_nip17_event,
 )
+
 from .event_store import DEFAULT_MAX_MESSAGES_PER_CHAT, EventStore, _current_nostr_ts
 from .new_chat_activity import NewChatActivity
 from .nostr_initializer import DEFAULT_RELAY, configure_nostr_manager
 from .nostr_service import NostrManager
+from .show_nsec_qr import ShowNsecQRActivity
 from .show_npub_qr import ShowNpubQRActivity
 
 logger = logging.getLogger(__name__)
@@ -285,7 +288,13 @@ class ChatListActivity(Activity):
             btn.add_state(lv.STATE.DISABLED)
 
     def _format_chat_row(self, chat, now):
-        title = chat.title
+        title = _display_title(chat.title)
+        if chat.kind == KIND_CHANNEL_MESSAGE or (
+            chat.kind == KIND_NIP17_CHAT and chat.participants and len(chat.participants) > 1
+        ):
+            title = f"Group: {title}"
+        else:
+            title = f"Direct: {title}"
         preview = chat.last_preview or ""
         time_text = self._format_relative_time(now, chat.last_ts)
         unread = f" ({chat.unread})" if chat.unread else ""
@@ -329,8 +338,9 @@ class ChatListActivity(Activity):
             {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": DEFAULT_RELAY, "should_show": self._should_show_setting},
             {"title": "Connect at boot", "key": "connect_at_boot", "ui": "radiobuttons", "ui_options": [("On", "1"), ("Off", "0")], "default_value": "1", "should_show": self._should_show_setting},
             {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self._should_show_setting},
+            {"title": "Show My Private Key (nsec)", "key": "show_nsec_qr", "ui": "activity", "activity_class": ShowNsecQRActivity, "dont_persist": True, "should_show": self._should_show_setting},
             {"title": "New chats protocol", "key": "new_chats_protocol", "ui": "radiobuttons", "ui_options": [("nip17", "nip17"), ("nip4", "nip4")], "default_value": DEFAULT_DM_PROTOCOL, "should_show": self._should_show_setting},
-            {"title": "Max messages per chat", "key": "max_messages_per_chat", "placeholder": "200", "should_show": self._should_show_setting},
+            {"title": "Max messages per chat", "key": "max_messages_per_chat", "default_value": str(DEFAULT_MAX_MESSAGES_PER_CHAT), "should_show": self._should_show_setting},
         ])
         self.startActivity(intent)
 
