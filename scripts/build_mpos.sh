@@ -237,18 +237,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		local name="$1"
 		if ! grep -q "$name" "$mpconfig_unix"; then
 			echo "Enabling $name in $mpconfig_unix"
-			python3 - "$mpconfig_unix" "$name" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-name = sys.argv[2]
-text = path.read_text()
-needle = '#include "mpconfigvariant.h"'
-insert = f"\n\n#ifndef {name}\n#define {name} (1)\n#endif\n"
-if needle in text and name not in text:
-	path.write_text(text.replace(needle, needle + insert))
-PY
+			python3 "$mydir"/ensure_mpconfig_define.py "$mpconfig_unix" "$name"
 		else
 			echo "$name already configured in $mpconfig_unix"
 		fi
