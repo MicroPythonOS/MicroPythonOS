@@ -801,3 +801,133 @@ class TestRedactedExceptionPath(unittest.TestCase):
             any("...REDACTED..." in l for l in exc_lines),
             "default behaviour should not insert REDACTED placeholder; "
             "got lines: {}".format(exc_lines))
+
+
+class TestDownloadResumeOnConnectionDrop(unittest.TestCase):
+    """A mid-stream connection drop must be recovered by reconnecting with a
+    Range header and resuming, not by failing the whole download.
+
+    Installs a fake aiohttp (via sys.modules, like TestRedactedExceptionPath)
+    whose first connection delivers part of the payload then raises on the next
+    read (simulating ECONNRESET). The reconnect carries `Range: bytes=<n>-` and
+    the fake serves the remainder as a 206. The reassembled file must equal the
+    full payload.
+    """
+
+    def setUp(self):
+        self.temp_dir = "/tmp/test_download_manager"
+        try:
+            os.mkdir(self.temp_dir)
+        except OSError:
+            pass
+
+    def _run_with_fake_aiohttp(self, *, payload, drop_after, outfile):
+        import asyncio
+        import sys
+
+        ranges = []
+
+        class _FakeContent:
+            def __init__(self, buf, drop):
+                self._buf = buf
+                self._pos = 0
+                self._drop = drop
+                self._delivered = 0
+
+            async def read(self, n):
+                if self._drop is not None and self._delivered >= self._drop:
+                    raise OSError(-104, "ECONNRESET")
+                chunk = self._buf[self._pos:self._pos + n]
+                self._pos += len(chunk)
+                self._delivered += len(chunk)
+                return chunk  # b'' at EOF
+
+        class _FakeResp:
+            def __init__(self, status, headers, content):
+                self.status = status
+                self.headers = headers
+                self.content = content
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+        class _FakeClientSession:
+            def get(self, request_url, headers=None, **kwargs):
+                rng = (headers or {}).get("Range")
+                ranges.append(rng)
+                if rng is None:
+                    return _FakeResp(200,
+                                     {"Content-Length": str(len(payload))},
+                                     _FakeContent(payload, drop_after))
+                start = int(rng.split("=")[1].split("-")[0])
+                hdrs = {"Content-Range":
+                        "bytes %d-%d/%d" % (start, len(payload) - 1, len(payload))}
+                return _FakeResp(206, hdrs, _FakeContent(payload[start:], None))
+
+            async def close(self):
+                pass
+
+        class _FakeAiohttp:
+            pass
+
+        fake_aiohttp = _FakeAiohttp()
+        fake_aiohttp.ClientSession = _FakeClientSession
+
+        old_aiohttp = sys.modules.get("aiohttp")
+        sys.modules["aiohttp"] = fake_aiohttp
+        try:
+            async def _go():
+                return await DownloadManager._download_url_async(
+                    "http://fake.invalid/f.bin", outfile=outfile)
+            result = asyncio.run(_go())
+        finally:
+            if old_aiohttp is None:
+                try:
+                    del sys.modules["aiohttp"]
+                except KeyError:
+                    pass
+            else:
+                sys.modules["aiohttp"] = old_aiohttp
+
+        return result, ranges
+
+    def test_resumes_after_midstream_drop(self):
+        payload = bytes((i * 7) % 256 for i in range(12000))  # ~3 chunks of 4096
+        outfile = self.temp_dir + "/resume.bin"
+        try:
+            os.remove(outfile)
+        except OSError:
+            pass
+
+        result, ranges = self._run_with_fake_aiohttp(
+            payload=payload, drop_after=5000, outfile=outfile)
+
+        self.assertTrue(result)
+        # First request (no Range) + exactly one resume (Range).
+        self.assertEqual(len(ranges), 2)
+        self.assertIsNone(ranges[0])
+        self.assertIsNotNone(ranges[1])
+        self.assertTrue(ranges[1].startswith("bytes="))
+        with open(outfile, "rb") as f:
+            got = f.read()
+        self.assertEqual(got, payload)
+
+    def test_clean_download_uses_single_connection(self):
+        payload = bytes((i * 3) % 256 for i in range(9000))
+        outfile = self.temp_dir + "/clean.bin"
+        try:
+            os.remove(outfile)
+        except OSError:
+            pass
+
+        result, ranges = self._run_with_fake_aiohttp(
+            payload=payload, drop_after=None, outfile=outfile)
+
+        self.assertTrue(result)
+        self.assertEqual(ranges, [None])  # no reconnect, no Range used
+        with open(outfile, "rb") as f:
+            got = f.read()
+        self.assertEqual(got, payload)
