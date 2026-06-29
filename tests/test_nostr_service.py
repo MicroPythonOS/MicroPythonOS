@@ -46,6 +46,10 @@ class _FakeRelay:
         self.url = url
         self.connected = False
         self.error_counter = 0
+        self.published = []
+
+    def publish(self, message):
+        self.published.append(message)
 
 
 class _FakeRelayManagerForSync:
@@ -464,6 +468,33 @@ class TestNostrManagerRelaySync(unittest.TestCase):
 
         self.assertIn("wss://nwc.example", self.mgr.relay_manager.relays)
         self.assertTrue(any("nwc_sub_1" in p for p in self.mgr.relay_manager.published))
+
+    def test_send_subscriptions_to_relays_publishes_req_to_connected(self):
+        self.mgr.configure_identity(self._fresh_nsec())
+        self.mgr.subscribe_channel("f" * 64)
+        sub_name = self.mgr._subscriptions[0].name
+        self.mgr._subscription_ids = {sub_name: "sub_1"}
+        self.mgr.relay_manager = _FakeRelayManagerForSync(["wss://r.example"])
+        self.mgr.relay_manager.relays["wss://r.example"].connected = True
+
+        self.mgr._send_subscriptions_to_relays(["wss://r.example"])
+
+        relay = self.mgr.relay_manager.relays["wss://r.example"]
+        self.assertTrue(any("sub_1" in p for p in relay.published))
+        self.assertTrue(any("REQ" in p for p in relay.published))
+
+    def test_send_subscriptions_skips_disconnected_relays(self):
+        self.mgr.configure_identity(self._fresh_nsec())
+        self.mgr.subscribe_channel("f" * 64)
+        sub_name = self.mgr._subscriptions[0].name
+        self.mgr._subscription_ids = {sub_name: "sub_1"}
+        self.mgr.relay_manager = _FakeRelayManagerForSync(["wss://r.example"])
+        # leave connected=False
+
+        self.mgr._send_subscriptions_to_relays(["wss://r.example"])
+
+        relay = self.mgr.relay_manager.relays["wss://r.example"]
+        self.assertEqual(relay.published, [])
 
 
 class TestNostrEventFormatting(unittest.TestCase):

@@ -280,6 +280,13 @@ class NostrManager:
         # main loop picks them up and hot-adds them to the running relay pool.
         self._relays_dirty = False
 
+        # Track per-relay connected state so we can re-send subscriptions when
+        # a relay (re)connects. On ESP32 the first SSL handshake often errors
+        # and the websocket reconnects a few seconds later, after the initial
+        # subscription broadcast has already been dropped.
+        self._relay_connected_state = {}
+        self._nwc_filters = None
+
         # Event callbacks: kind -> [callbacks]
         self._event_handlers = {}
 
@@ -670,6 +677,43 @@ class NostrManager:
         print("NostrManager: subscribed to '{}' with filters {}".format(
             sub.name, sub.filters.to_json_array()))
 
+    def _send_subscriptions_to_relays(self, urls):
+        """Re-send all active subscriptions to a specific set of relays.
+
+        Used when a relay (re)connects after the initial broadcast, so the
+        relay does not silently drop events.
+        """
+        if self.relay_manager is None or not urls:
+            return
+        for sub in self._subscriptions:
+            sub_id = self._subscription_ids.get(sub.name)
+            if sub_id is None:
+                sub_id = _make_subscription_id("mpos_sub_")
+                self._subscription_ids[sub.name] = sub_id
+            self.relay_manager.add_subscription(sub_id, sub.filters)
+            req = [ClientMessageType.REQUEST, sub_id]
+            req.extend(sub.filters.to_json_array())
+            req_json = json.dumps(req)
+            for url in urls:
+                relay = self.relay_manager.relays.get(url)
+                if relay is not None and relay.connected:
+                    relay.publish(req_json)
+        if self._nwc_configured and self._nwc_sub_id:
+            if self._nwc_filters is None:
+                self._nwc_filters = Filters([Filter(
+                    kinds=[23195, 23196],
+                    authors=[self._nwc_wallet_pubkey],
+                    pubkey_refs=[self._nwc_private_key.public_key.hex()]
+                )])
+            self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
+            req = [ClientMessageType.REQUEST, self._nwc_sub_id]
+            req.extend(self._nwc_filters.to_json_array())
+            req_json = json.dumps(req)
+            for url in urls:
+                relay = self.relay_manager.relays.get(url)
+                if relay is not None and relay.connected:
+                    relay.publish(req_json)
+
     def configure_nwc(self, nwc_url):
         """Configure and start NWC subscriptions."""
         if self._nwc_nwc_url == nwc_url:
@@ -764,10 +808,13 @@ class NostrManager:
         self.connected = False
         nrconnected = 0
 
+        # Wait for at least one *actually* connected relay. On ESP32 the first
+        # SSL handshake often fails and is retried, so counting errored relays
+        # as connected makes us broadcast subscriptions while disconnected.
         for _ in range(300):
             await TaskManager.sleep(0.1)
-            nrconnected = self.relay_manager.connected_or_errored_relays()
-            if nrconnected == len(self.relay_manager.relays) or not self.keep_running:
+            nrconnected = self.relay_manager.connected_relays()
+            if nrconnected > 0 or not self.keep_running:
                 break
 
         if nrconnected == 0:
@@ -797,19 +844,23 @@ class NostrManager:
         # Set up NWC subscription
         if self._nwc_configured:
             self._nwc_sub_id = _make_subscription_id("micropython_nwc_")
-            nwc_filters = Filters([Filter(
+            self._nwc_filters = Filters([Filter(
                 kinds=[23195, 23196],
                 authors=[self._nwc_wallet_pubkey],
                 pubkey_refs=[self._nwc_private_key.public_key.hex()]
             )])
-            self.relay_manager.add_subscription(self._nwc_sub_id, nwc_filters)
+            self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
             req = [ClientMessageType.REQUEST, self._nwc_sub_id]
-            req.extend(nwc_filters.to_json_array())
+            req.extend(self._nwc_filters.to_json_array())
             self.relay_manager.publish_message(json.dumps(req))
             print("NostrManager: subscribed to NWC responses")
             if self._nwc_lud16 and "@" in self._nwc_lud16:
                 # Don't use permissive ensure_lightning_prefix, only allow LUD-16
                 self._handle_nwc_static_receive_code((self._nwc_lud16))
+
+        self._relay_connected_state = {
+            url: relay.connected for url, relay in self.relay_manager.relays.items()
+        }
 
         if self._relay_list_pending:
             try:
@@ -833,6 +884,17 @@ class NostrManager:
                     print("NostrManager: relay sync error: {}".format(e))
                     import sys
                     sys.print_exception(e)
+
+            # Detect relays that (re)connected after the initial open and
+            # re-send subscriptions. On ESP32 the websocket often reconnects
+            # after the first SSL error, and subscriptions sent earlier while
+            # disconnected are dropped by the relay.
+            if self.relay_manager is not None:
+                for url, relay in self.relay_manager.relays.items():
+                    was = self._relay_connected_state.get(url, False)
+                    if relay.connected and not was:
+                        self._send_subscriptions_to_relays([url])
+                    self._relay_connected_state[url] = relay.connected
 
             now = time.time()
 
@@ -1041,6 +1103,7 @@ class NostrManager:
 
         old_relay_urls = list(self.relay_manager.relays.keys()) if hasattr(self.relay_manager, 'relays') else []
         self.relay_manager = RelayManager()
+        self._relay_connected_state = {}
         for url in old_relay_urls:
             self.relay_manager.add_relay(url)
 
@@ -1053,25 +1116,16 @@ class NostrManager:
             await TaskManager.sleep(0.1)
             if not self.keep_running:
                 return
-            if self.relay_manager.connected_or_errored_relays() == len(old_relay_urls) if old_relay_urls else True:
+            if self.relay_manager.connected_relays() > 0:
                 break
 
-        # Re-subscribe generic subscriptions
+        connected = [url for url, relay in self.relay_manager.relays.items() if relay.connected]
         self._subscription_ids = {}
-        for sub in self._subscriptions:
-            sub_id = _make_subscription_id("mpos_sub_")
-            self._subscription_ids[sub.name] = sub_id
-            self._publish_subscription(sub, sub_id)
-        if self._nwc_configured:
-            self._nwc_sub_id = _make_subscription_id("micropython_nwc_")
-            nwc_filters = Filters([Filter(
-                kinds=[23195, 23196],
-                authors=[self._nwc_wallet_pubkey],
-                pubkey_refs=[self._nwc_private_key.public_key.hex()]
-            )])
-            self.relay_manager.add_subscription(self._nwc_sub_id, nwc_filters)
-            self.relay_manager.publish_message(json.dumps(
-                [ClientMessageType.REQUEST, self._nwc_sub_id] + nwc_filters.to_json_array()))
+        if connected:
+            self._send_subscriptions_to_relays(connected)
+        self._relay_connected_state = {
+            url: relay.connected for url, relay in self.relay_manager.relays.items()
+        }
 
         self._polls_since_last_event = 0
 
@@ -1114,14 +1168,18 @@ class NostrManager:
             self._publish_subscription(sub, sub_id)
 
         if self._nwc_configured and self._nwc_sub_id:
-            nwc_filters = Filters([Filter(
+            self._nwc_filters = Filters([Filter(
                 kinds=[23195, 23196],
                 authors=[self._nwc_wallet_pubkey],
                 pubkey_refs=[self._nwc_private_key.public_key.hex()]
             )])
-            self.relay_manager.add_subscription(self._nwc_sub_id, nwc_filters)
+            self.relay_manager.add_subscription(self._nwc_sub_id, self._nwc_filters)
             self.relay_manager.publish_message(json.dumps(
-                [ClientMessageType.REQUEST, self._nwc_sub_id] + nwc_filters.to_json_array()))
+                [ClientMessageType.REQUEST, self._nwc_sub_id] + self._nwc_filters.to_json_array()))
+
+        self._relay_connected_state.update({
+            url: relay.connected for url, relay in self.relay_manager.relays.items()
+        })
 
         if self._relay_list_pending:
             try:
