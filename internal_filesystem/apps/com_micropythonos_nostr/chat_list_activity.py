@@ -8,13 +8,12 @@ from mpos import (
     DisplayMetrics,
     FontManager,
     Intent,
-    Notification,
-    NotificationManager,
     SettingsActivity,
     SharedPreferences,
 )
 
 from .chat_activity import ChatActivity
+from .chat_notifications import post_chat_notification
 from .chat_model import (
     DEFAULT_CHANNEL_ID,
     DEFAULT_CHANNEL_NAME,
@@ -242,36 +241,13 @@ class ChatListActivity(Activity):
 
             if self.has_foreground():
                 self._refresh_chat_list()
-            elif self._notifications_enabled(chat):
-                self._post_notification(chat, message)
+
+            self._post_notification(chat, message)
         except Exception as e:
             logger.error("Error handling Nostr event: %s", e)
 
     def _post_notification(self, chat, message):
-        try:
-            intent = Intent(activity_class=ChatActivity)
-            intent.putExtra("chat_id", chat.chat_id)
-            intent.putExtra("kind", chat.kind)
-            if chat.kind == KIND_CHANNEL_MESSAGE:
-                intent.putExtra("channel_id", chat.channel_id)
-            else:
-                intent.putExtra("peer_pubkey", chat.peer_pubkey)
-            NotificationManager.notify(
-                Notification(
-                    notification_id=f"nostr:{chat.chat_id}",
-                    title=chat.title,
-                    text=message.short_preview(40),
-                    intent=intent,
-                    app_fullname=self.appFullName,
-                )
-            )
-        except Exception as e:
-            logger.error("Failed to post notification: %s", e)
-
-    def _notifications_enabled(self, chat):
-        # Per-chat notification toggle; default to enabled (1).
-        key = f"notifications:{chat.chat_id}"
-        return self._prefs.get_int(key, 1) != 0
+        post_chat_notification(self.appFullName, chat, message)
 
     def _refresh_chat_list(self):
         self._chat_list.clean()
