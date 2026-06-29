@@ -146,6 +146,32 @@ class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
         self.assertEqual(len(appended), 1)
         self.assertEqual(appended[0].content, "from amethyst")
 
+    def test_on_event_marks_own_nip17_as_outgoing_after_recreation(self):
+        """A relay echo from the local key must show as outgoing even when the
+        per-instance _sent_event_ids set has been lost (e.g. activity recreated).
+        """
+        own = "own123"
+        peer = "peer456"
+        chat_id = dm_chat_id(own, peer)
+        act = self._activity(own, chat_id, KIND_DM)
+        # Simulate a fresh activity: no recently-sent ids recorded.
+        act._sent_event_ids = set()
+        appended = []
+        act._append_message_row = lambda msg: appended.append(msg)
+
+        echo = _FakeNostrEvent(
+            public_key=own,
+            event_id="gw1",
+            kind=KIND_NIP17_CHAT,
+            content="from mpy",
+            tags=[["p", peer]],
+        )
+        act._on_event(echo)
+
+        self.assertEqual(len(appended), 1)
+        self.assertTrue(appended[0].outgoing)
+        self.assertEqual(appended[0].content, "from mpy")
+
 
 if __name__ == "__main__":
     unittest.main()

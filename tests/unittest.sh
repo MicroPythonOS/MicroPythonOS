@@ -54,11 +54,11 @@ one_test() {
 	echo "Testing $file"
 
 	# Detect if this is a graphical test (filename contains "graphical")
+	# Always expose the tests directory on sys.path so tests can share helpers.
+	tests_abs_path=$(readlink -f "$testdir")
 	if echo "$file" | grep -q "graphical"; then
 		echo "Detected graphical test - including boot and main files"
 		is_graphical=1
-		# Get absolute path to tests directory for imports
-		tests_abs_path=$(readlink -f "$testdir")
 	else
 		is_graphical=0
 	fi

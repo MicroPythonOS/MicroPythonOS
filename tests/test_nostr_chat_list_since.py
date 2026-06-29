@@ -6,7 +6,7 @@ import unittest
 sys.path.insert(0, "lib")
 sys.path.insert(0, "apps/com_micropythonos_nostr")
 
-from com_micropythonos_nostr.chat_list_activity import ChatListActivity
+from com_micropythonos_nostr.nostr_initializer import _dm_subscription_since
 from com_micropythonos_nostr.chat_model import (
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
@@ -24,7 +24,7 @@ class TestDmSubscriptionSince(unittest.TestCase):
     def test_fresh_install_uses_lookback_window(self):
         now = 1700000000
         chats = []
-        since = ChatListActivity._dm_subscription_since(now, chats)
+        since = _dm_subscription_since(now, chats)
         self.assertEqual(since, now - 24 * 60 * 60)
 
     def test_newest_chat_drives_the_window(self):
@@ -35,7 +35,7 @@ class TestDmSubscriptionSince(unittest.TestCase):
         ]
         chats[0].last_ts = now - 3600
         chats[1].last_ts = now - 30
-        since = ChatListActivity._dm_subscription_since(now, chats)
+        since = _dm_subscription_since(now, chats)
         # Newest activity minus overlap, not the oldest.
         self.assertEqual(since, now - 30 - 60)
 
@@ -43,21 +43,21 @@ class TestDmSubscriptionSince(unittest.TestCase):
         now = 1700000000
         chats = [Chat.dm("a" * 64, "b" * 64)]
         chats[0].last_ts = now - 48 * 3600
-        since = ChatListActivity._dm_subscription_since(now, chats)
+        since = _dm_subscription_since(now, chats)
         self.assertEqual(since, now - 24 * 60 * 60)
 
     def test_channel_chats_are_ignored(self):
         now = 1700000000
         chats = [Chat.channel("chan" * 16)]
         chats[0].last_ts = now - 10
-        since = ChatListActivity._dm_subscription_since(now, chats)
+        since = _dm_subscription_since(now, chats)
         self.assertEqual(since, now - 24 * 60 * 60)
 
     def test_nip17_chats_are_included(self):
         now = 1700000000
         chats = [Chat.nip17_group(["a" * 64, "b" * 64])]
         chats[0].last_ts = now - 120
-        since = ChatListActivity._dm_subscription_since(now, chats)
+        since = _dm_subscription_since(now, chats)
         self.assertEqual(since, now - 120 - 60)
 
 

@@ -231,7 +231,7 @@ class WebSocketApp:
         try:
             print("websocket's run_forever creating _async_main task")
             #self._loop.run_until_complete(self._async_main()) # this doesn't always finish!
-            asyncio.create_task(self._async_main())
+            asyncio.create_task(self._async_main(reconnect=reconnect))
         except KeyboardInterrupt:
             _log_debug("run_forever got KeyboardInterrupt")
             self.close()
@@ -244,19 +244,21 @@ class WebSocketApp:
         _log_debug("run_forever completed")
         return self.has_errored
 
-    async def _async_main(self):
+    async def _async_main(self, reconnect=None):
         """Main async loop for WebSocket handling."""
         _log_debug("Starting _async_main")
-        #reconnect = 0  # Default, as RECONNECT may not be defined
-        #try:
-        #    from websocket import RECONNECT
-        #    reconnect = RECONNECT
-        #except ImportError:
-        #    pass
-        #if reconnect is not None:
-        #    reconnect = reconnect
-        reconnect = 3
-        _log_debug(f"Reconnect interval set to {reconnect}s")
+
+        # Normalise the reconnect interval. ``True``/``None`` use a default;
+        # a numeric value uses that many seconds; ``False``/0 disables it.
+        if reconnect is True or reconnect is None:
+            reconnect_interval = 3
+        elif reconnect is False:
+            reconnect_interval = 0
+        elif isinstance(reconnect, (int, float)):
+            reconnect_interval = reconnect
+        else:
+            reconnect_interval = 3
+        _log_debug(f"Reconnect interval set to {reconnect_interval}s")
 
         # Start callback processing task
         try:
@@ -274,11 +276,11 @@ class WebSocketApp:
                 _log_error(f"_async_main's await self._connect_and_run() for {self.url} got exception: {e}")
                 self.has_errored = True
                 _run_callback(self.on_error, self, e)
-                if reconnect is not True:
+                if reconnect_interval <= 0:
                     _log_debug("No reconnect configured, breaking loop")
                     break
-                _log_debug(f"Reconnecting after error in {reconnect}s")
-                await asyncio.sleep(reconnect)
+                _log_debug(f"Reconnecting after error in {reconnect_interval}s")
+                await asyncio.sleep(reconnect_interval)
                 if self.on_reconnect:
                     _run_callback(self.on_reconnect, self)
 
@@ -345,9 +347,15 @@ class WebSocketApp:
                 elif msg.type == WSMsgType.ERROR or ws.ws.closed:
                     _log_error("WebSocket error or closed")
                     raise WebSocketConnectionClosedException("WebSocket closed")
+                elif msg.type == ABNF.OPCODE_PONG:
+                    self.last_pong_tm = time.time()
                 elif msg.type == ABNF.OPCODE_PING:
                     data = msg.data
                     _run_callback(self.on_ping, self, data)
+                    try:
+                        await self.ws.pong(data)
+                    except Exception as e:
+                        _log_error(f"Failed to send pong: {e}")
 
     async def _send_async(self, data, opcode):
         """Async send implementation."""

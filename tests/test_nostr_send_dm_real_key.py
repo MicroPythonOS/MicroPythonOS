@@ -36,7 +36,7 @@ class TestSendDmSignatures(unittest.TestCase):
             "local NIP-17 test",
             [self.recipient],
         )
-        self.assertEqual(len(gifts), 2)
+        self.assertEqual(len(gifts), 1)
         for gift in gifts:
             event = Event(
                 content=gift["content"],

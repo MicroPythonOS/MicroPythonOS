@@ -203,6 +203,11 @@ class ChatListActivity(Activity):
                 content=content,
                 kind=kind,
             )
+            # Treat events authored by the local key as outgoing. This handles
+            # relay echoes seen after activity recreation, before the per-instance
+            # outbox state can identify them.
+            if own and message.pubkey == own:
+                message.outgoing = True
 
             # Ensure chat exists so metadata is available for notifications.
             chat = self._store.get_chat(chat_id)
@@ -242,6 +247,10 @@ class ChatListActivity(Activity):
 
             if self.has_foreground():
                 self._refresh_chat_list()
+
+            # Don't notify the user for messages they sent themselves.
+            if message.outgoing:
+                return
 
             self._post_notification(chat, message)
         except Exception as e:

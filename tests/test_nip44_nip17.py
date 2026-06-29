@@ -88,11 +88,12 @@ class TestNip17(unittest.TestCase):
             return
         self.fail("empty recipients should raise ValueError")
 
-    def test_make_nip17_messages_includes_sender(self):
+    def test_make_nip17_messages_does_not_auto_wrap_sender(self):
         alice = PrivateKey()
         bob = PrivateKey()
         messages = make_nip17_messages(alice, "hello", [bob.public_key.hex()])
-        self.assertEqual(len(messages), 2)
+        # The sender is no longer auto-added; only Bob should receive a wrap.
+        self.assertEqual(len(messages), 1)
         self.assertTrue(all(m["kind"] == 1059 for m in messages))
 
     def test_roundtrip_decrypt_gift_wrap(self):
@@ -131,14 +132,14 @@ class TestNip17(unittest.TestCase):
         charlie = PrivateKey()
         recipients = [bob.public_key.hex(), charlie.public_key.hex()]
         messages = make_nip17_messages(alice, "group hi", recipients, subject="g")
-        # Sender is added, so each of alice/bob/charlie gets a wrap.
-        self.assertEqual(len(messages), 3)
+        # Only the explicit recipients get a wrap; the sender is not auto-added.
+        self.assertEqual(len(messages), 2)
         targets = set()
         for m in messages:
             for tag in m["tags"]:
                 if tag[0] == "p" and len(tag) >= 2:
                     targets.add(tag[1])
-        self.assertEqual(targets, {alice.public_key.hex(), bob.public_key.hex(), charlie.public_key.hex()})
+        self.assertEqual(targets, {bob.public_key.hex(), charlie.public_key.hex()})
 
     def test_created_at_is_respected(self):
         alice = PrivateKey()

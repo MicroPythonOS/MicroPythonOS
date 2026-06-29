@@ -895,8 +895,11 @@ class NostrManager:
                 signature=None,
             )
         except Exception as e:
-            if __debug__:
-                logger.debug("Failed to unwrap gift-wrap event: %s", e)
+            logger.warning(
+                "Failed to unwrap gift-wrap event %s: %s",
+                getattr(event, "id", "?"),
+                e,
+            )
             return None
 
     def _process_event(self, event):

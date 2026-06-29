@@ -307,8 +307,8 @@ class TestNostrManagerPublish(unittest.TestCase):
     def test_publish_nip17_message_creates_kind1059_wrappers(self):
         recipient = PrivateKey()
         ids = self.mgr.publish_nip17_message("hello", [recipient.public_key.hex()])
-        self.assertEqual(len(ids), 2)  # recipient + sender copy
-        self.assertEqual(len(self.mgr.relay_manager.published), 2)
+        self.assertEqual(len(ids), 1)  # only the recipient's gift-wrap
+        self.assertEqual(len(self.mgr.relay_manager.published), 1)
         for event in self.mgr.relay_manager.published:
             self.assertEqual(event.kind, KIND_NIP17_GIFT_WRAP)
             self.assertTrue(len(event.content) > 0)

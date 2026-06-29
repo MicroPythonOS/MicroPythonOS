@@ -497,6 +497,11 @@ class ChatActivity(Activity):
                 content=content,
                 kind=nostr_event.kind,
             )
+            # Treat events authored by the local key as outgoing. They may come
+            # back from a relay subscription after the activity was recreated,
+            # so this must not rely on the per-instance _sent_event_ids set.
+            if own and message.pubkey == own:
+                message.outgoing = True
 
             # Don't render the relay echo of a message we just sent from this
             # activity; _send() already added it to the store and UI.
