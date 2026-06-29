@@ -7,6 +7,7 @@ filter, network, and relay-specific issues.
 """
 
 import asyncio
+import os
 import sys
 import time
 import unittest
@@ -32,6 +33,11 @@ _DEFAULT_RELAYS = [
 ]
 
 
+@unittest.skipUnless(
+    os.getenv("MPOS_RUN_NETWORK_TESTS"),
+    "live-relay integration test; depends on external relay uptime. "
+    "Set MPOS_RUN_NETWORK_TESTS=1 to run.",
+)
 class TestNip17SelfSendRealRelays(unittest.TestCase):
     """Send a NIP-17 message to yourself over the internet and verify receipt."""
 
