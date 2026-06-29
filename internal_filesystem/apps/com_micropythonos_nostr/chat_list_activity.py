@@ -74,8 +74,11 @@ class ChatListActivity(Activity):
         self._prefs = SharedPreferences(self.appFullName)
         self._store = EventStore(self.appFullName)
         self._manager = NostrManager.get_instance()
-        self._setup_ui()
+        # Ensure the default public channel is joined before the UI is shown,
+        # otherwise onResume/_refresh_chat_list runs during setContentView and
+        # renders an empty list on first launch.
         self._auto_join_default_channel()
+        self._setup_ui()
 
     def _setup_ui(self):
         self._screen = lv.obj()

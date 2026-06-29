@@ -6,6 +6,7 @@ chat cache and verifies the chat list shows the message preview.
 """
 
 import os
+import shutil
 import sys
 import unittest
 
@@ -148,6 +149,58 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
         self.assertIsNotNone(
             find_label_with_text(lv.screen_active(), "Incoming live message"),
             "Open chat should render the incoming channel message",
+        )
+
+
+class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
+    """A brand new Nostr install should list the default public channel."""
+
+    def setUp(self):
+        AppManager.restart_launcher()
+        wait_for_render(5)
+
+        # Simulate a fresh install by wiping the app's prefs directory and
+        # dropping any in-memory EventStore singleton.
+        try:
+            shutil.rmtree(f"prefs/{APP_FULLNAME}")
+        except OSError:
+            pass
+        EventStore._instances.clear()
+
+        # Reset NostrManager so each test starts from the same state.
+        mgr = NostrManager.get_instance()
+        mgr.stop()
+        mgr._main_task = None
+        mgr._cleanup_done = True
+        mgr._subscriptions = []
+        mgr._subscription_ids = {}
+        mgr._default_relays = []
+        mgr._nostr_configured = False
+        mgr._nostr_private_key = None
+        mgr._nwc_configured = False
+        mgr._nwc_relays = []
+        mgr._nwc_private_key = None
+        mgr._nwc_nwc_url = None
+        mgr.events = []
+        mgr.connected = False
+        mgr.relay_manager = None
+
+    def tearDown(self):
+        try:
+            from mpos import ui
+
+            ui.remove_and_stop_all_activities()
+            wait_for_render(5)
+        except Exception:
+            pass
+
+    def test_default_channel_visible_on_first_open(self):
+        result = AppManager.start_app(APP_FULLNAME)
+        self.assertTrue(result, "Nostr app should start")
+        wait_for_render(10)
+        self.assertTrue(
+            wait_for_text("#MicroPythonOS", timeout=20),
+            "Default public channel should appear on first open",
         )
 
 
