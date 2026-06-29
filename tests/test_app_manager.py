@@ -277,6 +277,50 @@ class TestAppManagerPackageLoading(unittest.TestCase):
 
         self.assertIsNone(AppManager._package_info(_FakeApp(), "assets/hello.py"))
 
+    def test_package_info_when_init_mpy_present(self):
+        self._make_app_dir()
+        manifest = (
+            '{"name":"PkgTest","publisher":"t","short_description":"x",'
+            '"long_description":"x","fullname":"' + self.APP_NAME +
+            '","version":"1.0.0","category":"development",'
+            '"activities":[{"entrypoint":"assets/hello.py","classname":"Hello",'
+            '"intent_filters":[{"action":"main","category":"test"}]}]}'
+        )
+        self._write_file(self.APP_ROOT + "/MANIFEST.JSON", manifest)
+        self._write_file(self.APP_ROOT + "/__init__.mpy", "")
+        self._write_file(self.APP_ROOT + "/assets/__init__.mpy", "")
+        self._write_file(self.APP_ROOT + "/assets/hello.py", "class Hello:\n    pass")
+        AppManager.refresh_apps()
+        app = AppManager.get(self.APP_NAME)
+        self.assertTrue(app is not None)
+        pkg = AppManager._package_info(app, "assets/hello.py")
+        self.assertTrue(pkg is not None)
+        parent, module_name = pkg
+        self.assertEqual(module_name, self.APP_NAME + ".assets.hello")
+        self.assertEqual(parent, "apps")
+
+    def test_package_info_mpy_entrypoint(self):
+        self._make_app_dir()
+        manifest = (
+            '{"name":"PkgTest","publisher":"t","short_description":"x",'
+            '"long_description":"x","fullname":"' + self.APP_NAME +
+            '","version":"1.0.0","category":"development",'
+            '"activities":[{"entrypoint":"assets/hello.mpy","classname":"Hello",'
+            '"intent_filters":[{"action":"main","category":"test"}]}]}'
+        )
+        self._write_file(self.APP_ROOT + "/MANIFEST.JSON", manifest)
+        self._write_file(self.APP_ROOT + "/__init__.py", "")
+        self._write_file(self.APP_ROOT + "/assets/__init__.py", "")
+        self._write_file(self.APP_ROOT + "/assets/hello.mpy", "")
+        AppManager.refresh_apps()
+        app = AppManager.get(self.APP_NAME)
+        self.assertTrue(app is not None)
+        pkg = AppManager._package_info(app, "assets/hello.mpy")
+        self.assertTrue(pkg is not None)
+        parent, module_name = pkg
+        self.assertEqual(module_name, self.APP_NAME + ".assets.hello")
+        self.assertEqual(parent, "apps")
+
     def test_del_module_tree(self):
         import sys
 

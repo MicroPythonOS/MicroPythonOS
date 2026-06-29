@@ -105,28 +105,40 @@ class AppManager:
                 return False
         return True
 
+    @staticmethod
+    def _has_init_module(path):
+        import os
+        return os.path.isfile(path + "/__init__.py") or os.path.isfile(path + "/__init__.mpy")
+
+    @staticmethod
+    def _drop_py_extension(s):
+        if s.endswith(".py"):
+            return s[:-3]
+        if s.endswith(".mpy"):
+            return s[:-4]
+        return s
+
     @classmethod
     def _package_info(cls, app, entrypoint):
         """Return (parent_dir, dotted_module_name) if app should load as a package.
 
-        Package loading is opt-in: the app root must contain __init__.py and every
-        directory on the path to the entrypoint must also contain __init__.py.
+        Package loading is opt-in: the app root must contain __init__.py or __init__.mpy
+        and every directory on the path to the entrypoint must also contain one.
         This lets old-style apps keep loading as flat modules while new apps can
         use packages to avoid namespace collisions between apps.
         """
-        import os
         root = app.installed_path
-        if not os.path.isfile(root + "/__init__.py"):
+        if not cls._has_init_module(root):
             return None
         parts = entrypoint.split("/")
         for i in range(len(parts) - 1):
             sub = root + "/" + "/".join(parts[:i + 1])
-            if not os.path.isfile(sub + "/__init__.py"):
+            if not cls._has_init_module(sub):
                 return None
         for part in app.fullname.split("."):
             if not cls._is_valid_identifier(part):
                 return None
-        module_name = app.fullname + "." + ".".join(parts)[:-3]  # strip .py
+        module_name = app.fullname + "." + cls._drop_py_extension(".".join(parts))
         parent = "/".join(root.split("/")[:-1])
         return parent, module_name
 
