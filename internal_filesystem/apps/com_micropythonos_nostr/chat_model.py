@@ -9,6 +9,17 @@ KIND_CHANNEL_META = 41
 KIND_CHANNEL_MESSAGE = 42
 KIND_NIP17_CHAT = 14
 
+# Default protocol for 1-on-1 KIND_DM chats without a per-chat override.
+# Change to "nip4" if you want NIP-04 as the default instead of NIP-17.
+DEFAULT_DM_PROTOCOL = "nip17"
+
+# Human-readable protocol label shown next to each chat message.
+PROTOCOL_LABELS = {
+    KIND_DM: "NIP-04",
+    KIND_NIP17_CHAT: "NIP-17",
+    KIND_CHANNEL_MESSAGE: "NIP-28",
+}
+
 # Chat ID prefixes.
 CHAT_ID_DM_PREFIX = "dm_"
 CHAT_ID_CHANNEL_PREFIX = "channel_"

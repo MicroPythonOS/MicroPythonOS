@@ -14,10 +14,12 @@ from mpos import (
 )
 
 from .chat_model import (
+    DEFAULT_DM_PROTOCOL,
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
     KIND_NIP17_CHAT,
     Message,
+    PROTOCOL_LABELS,
     channel_chat_id,
     chat_id_for_event,
     dm_chat_id,
@@ -27,6 +29,9 @@ from .nostr_initializer import configure_nostr_manager
 from .nostr_service import NostrManager
 
 logger = logging.getLogger(__name__)
+
+# Toggle the per-message protocol label (NIP-04 / NIP-17 / NIP-28).
+_SHOW_PROTOCOL_LABELS = True
 
 
 class ChatActivity(Activity):
@@ -264,6 +269,18 @@ class ChatActivity(Activity):
         body.set_long_mode(lv.label.LONG_MODE.WRAP)
         body.set_style_text_align(align, lv.PART.MAIN)
 
+        if _SHOW_PROTOCOL_LABELS:
+            proto_label = PROTOCOL_LABELS.get(message.kind)
+            if proto_label:
+                proto = lv.label(row)
+                proto.set_text(proto_label)
+                proto.set_style_text_font(
+                    FontManager.getFont(size=9, emoji=True), lv.PART.MAIN
+                )
+                proto.set_style_text_color(lv.color_hex(0x888888), lv.PART.MAIN)
+                proto.set_width(lv.pct(100))
+                proto.set_style_text_align(align, lv.PART.MAIN)
+
     def _on_message_clicked(self, message):
         own = self._manager.get_own_pubkey_hex()
         if not own:
@@ -293,19 +310,37 @@ class ChatActivity(Activity):
         except Exception:
             return ""
 
+    def _dm_send_protocol(self):
+        return self._prefs.get_string(
+            f"protocol:{self._chat_id}",
+            self._prefs.get_string("new_chats_protocol", DEFAULT_DM_PROTOCOL),
+        )
+
     def _open_settings(self):
-        key = f"notifications:{self._chat_id}"
-        intent = Intent(activity_class=SettingsActivity)
-        intent.putExtra("prefs", self._prefs)
-        intent.putExtra("settings", [
+        protocol_key = f"protocol:{self._chat_id}"
+        settings = [
             {
                 "title": "Enable notifications",
-                "key": key,
+                "key": f"notifications:{self._chat_id}",
                 "ui": "radiobuttons",
                 "ui_options": [("On", "1"), ("Off", "0")],
                 "default_value": "1",
             },
-        ])
+        ]
+        if self._kind == KIND_DM:
+            settings.append({
+                "title": "Encryption",
+                "key": protocol_key,
+                "ui": "radiobuttons",
+                "ui_options": [
+                    ("NIP-04: basic but fast encryption", "nip4"),
+                    ("NIP-17: advanced encryption", "nip17"),
+                ],
+                "default_value": DEFAULT_DM_PROTOCOL,
+            })
+        intent = Intent(activity_class=SettingsActivity)
+        intent.putExtra("prefs", self._prefs)
+        intent.putExtra("settings", settings)
         self.startActivity(intent)
 
     def _send(self):
@@ -341,7 +376,7 @@ class ChatActivity(Activity):
                 self._keyboard.add_flag(lv.obj.FLAG.HIDDEN)
                 return
         elif self._kind == KIND_DM:
-            protocol = self._prefs.get_string("new_chats_protocol", "nip17")
+            protocol = self._dm_send_protocol()
             try:
                 if online:
                     if protocol == "nip17":
@@ -421,7 +456,7 @@ class ChatActivity(Activity):
                 participants=self._get_recipients(),
             )
         elif self._kind == KIND_DM:
-            protocol = self._prefs.get_string("new_chats_protocol", "nip17")
+            protocol = self._dm_send_protocol()
             kind = KIND_NIP17_CHAT if protocol == "nip17" else KIND_DM
             message = self._store.queue_outgoing(
                 self._chat_id,

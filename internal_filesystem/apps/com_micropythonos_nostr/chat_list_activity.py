@@ -17,6 +17,7 @@ from .chat_notifications import post_chat_notification
 from .chat_model import (
     DEFAULT_CHANNEL_ID,
     DEFAULT_CHANNEL_NAME,
+    DEFAULT_DM_PROTOCOL,
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
     KIND_NIP17_CHAT,
@@ -319,7 +320,7 @@ class ChatListActivity(Activity):
             {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": DEFAULT_RELAY, "should_show": self._should_show_setting},
             {"title": "Connect at boot", "key": "connect_at_boot", "ui": "radiobuttons", "ui_options": [("On", "1"), ("Off", "0")], "default_value": "1", "should_show": self._should_show_setting},
             {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self._should_show_setting},
-            {"title": "New chats protocol", "key": "new_chats_protocol", "ui": "radiobuttons", "ui_options": [("nip17", "nip17"), ("nip4", "nip4")], "default_value": "nip17", "should_show": self._should_show_setting},
+            {"title": "New chats protocol", "key": "new_chats_protocol", "ui": "radiobuttons", "ui_options": [("nip17", "nip17"), ("nip4", "nip4")], "default_value": DEFAULT_DM_PROTOCOL, "should_show": self._should_show_setting},
             {"title": "Max messages per chat", "key": "max_messages_per_chat", "placeholder": "200", "should_show": self._should_show_setting},
         ])
         self.startActivity(intent)

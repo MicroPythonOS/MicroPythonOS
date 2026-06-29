@@ -12,6 +12,8 @@ from nostr.filter import Filter, Filters
 from nostr.event import Event, EncryptedDirectMessage
 from nostr.key import PrivateKey
 
+from .event_store import _current_nostr_ts
+
 logger = logging.getLogger(__name__)
 
 try:
