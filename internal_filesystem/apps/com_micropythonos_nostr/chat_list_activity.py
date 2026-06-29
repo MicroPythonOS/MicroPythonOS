@@ -31,23 +31,11 @@ from .chat_model import (
 )
 from .event_store import DEFAULT_MAX_MESSAGES_PER_CHAT, EventStore, _current_nostr_ts
 from .new_chat_activity import NewChatActivity
+from .nostr_initializer import DEFAULT_RELAY, configure_nostr_manager
 from .nostr_service import NostrManager
 from .show_npub_qr import ShowNpubQRActivity
 
 logger = logging.getLogger(__name__)
-
-# Default relays used when the user has not configured one.
-DEFAULT_RELAYS = [
-    "wss://relay.0xchat.com",
-    "wss://relay.damus.io",
-    "wss://relay.primal.net",
-]
-DEFAULT_RELAY = DEFAULT_RELAYS[0]
-
-# Subscription tuning.
-LOOKBACK_WINDOW_SECONDS = 24 * 60 * 60  # 24 hours
-OVERLAP_SECONDS = 60  # margin when using since=last_known_ts
-SUBSCRIPTION_LIMIT_INITIAL = 200
 
 # Index flush period (milliseconds).
 INDEX_FLUSH_MS = 5000
@@ -179,17 +167,6 @@ class ChatListActivity(Activity):
             pass
         self._flush_timer = None
 
-    def _ensure_identity(self):
-        nsec = self._prefs.get_string("nostr_nsec")
-        if not nsec:
-            from nostr.key import PrivateKey
-
-            nsec = PrivateKey().bech32()
-            self._prefs.edit().put_string("nostr_nsec", nsec).commit()
-            if __debug__:
-                logger.debug("Generated new nostr nsec")
-        return nsec
-
     def network_changed(self, online):
         if online:
             self._status_label.set_text(lv.SYMBOL.WIFI)
@@ -197,61 +174,8 @@ class ChatListActivity(Activity):
         else:
             self._status_label.set_text(lv.SYMBOL.CLOSE)
 
-    @staticmethod
-    def _dm_subscription_since(now, chats):
-        """Return the since= value for the global DM subscription.
-
-        We want the latest safe timestamp that still covers possible new
-        messages: the newest DM/NIP-17 activity minus a small overlap, but
-        never older than the configured lookback window.
-        """
-        dm_since = now - LOOKBACK_WINDOW_SECONDS
-        for chat in chats:
-            if chat.kind in (KIND_DM, KIND_NIP17_CHAT) and chat.last_ts:
-                dm_since = max(dm_since, chat.last_ts - OVERLAP_SECONDS)
-        return dm_since
-
     def _start_manager_and_subscriptions(self):
-        if not self._manager.is_running():
-            self._manager.start()
-
-        nsec = self._ensure_identity()
-        relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAYS
-        try:
-            self._manager.configure_identity(nsec, relays=relay)
-        except Exception as e:
-            logger.error("Failed to configure identity: %s", e)
-            return
-
-        own = self._manager.get_own_pubkey_hex()
-        now = _current_nostr_ts()
-
-        dm_since = self._dm_subscription_since(now, self._store.get_chats())
-        try:
-            self._manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
-        except Exception as e:
-            logger.error("DM subscription failed: %s", e)
-
-        # NIP-17 / NIP-59 debug subscription.
-        try:
-            self._manager.subscribe_nip17_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
-        except Exception as e:
-            logger.error("NIP-17 subscription failed: %s", e)
-
-        # Channel subscriptions: one per known channel.
-        for chat in self._store.get_chats():
-            if chat.kind == KIND_CHANNEL_MESSAGE and chat.channel_id:
-                since = chat.last_ts - OVERLAP_SECONDS if chat.last_ts else now - LOOKBACK_WINDOW_SECONDS
-                try:
-                    self._manager.subscribe_channel(
-                        chat.channel_id,
-                        name=chat.chat_id,
-                        since=since,
-                        limit=SUBSCRIPTION_LIMIT_INITIAL,
-                    )
-                except Exception as e:
-                    logger.error("Channel subscription failed: %s", e)
-
+        configure_nostr_manager(self._prefs, self._manager, store=self._store)
         self._flush_outbox_if_online()
 
     def _auto_join_default_channel(self):
@@ -417,6 +341,7 @@ class ChatListActivity(Activity):
         intent.putExtra("settings", [
             {"title": "Nostr Private Key (nsec)", "key": "nostr_nsec", "placeholder": "nsec1...", "should_show": self._should_show_setting},
             {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": DEFAULT_RELAY, "should_show": self._should_show_setting},
+            {"title": "Connect at boot", "key": "connect_at_boot", "ui": "radiobuttons", "ui_options": [("On", "1"), ("Off", "0")], "default_value": "1", "should_show": self._should_show_setting},
             {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self._should_show_setting},
             {"title": "New chats protocol", "key": "new_chats_protocol", "ui": "radiobuttons", "ui_options": [("nip17", "nip17"), ("nip4", "nip4")], "default_value": "nip17", "should_show": self._should_show_setting},
             {"title": "Max messages per chat", "key": "max_messages_per_chat", "placeholder": "200", "should_show": self._should_show_setting},

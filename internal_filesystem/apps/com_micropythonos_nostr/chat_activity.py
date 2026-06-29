@@ -23,6 +23,7 @@ from .chat_model import (
     dm_chat_id,
 )
 from .event_store import EventStore, _current_nostr_ts
+from .nostr_initializer import configure_nostr_manager
 from .nostr_service import NostrManager
 
 logger = logging.getLogger(__name__)
@@ -191,24 +192,9 @@ class ChatActivity(Activity):
         self._handler_registered = False
 
     def _start_subscriptions(self):
-        from .chat_list_activity import (
-            DEFAULT_RELAYS,
-            LOOKBACK_WINDOW_SECONDS,
-            OVERLAP_SECONDS,
-            SUBSCRIPTION_LIMIT_INITIAL,
-        )
+        from .nostr_initializer import SUBSCRIPTION_LIMIT_INITIAL
 
-        if not self._manager.is_running():
-            self._manager.start()
-
-        nsec = self._prefs.get_string("nostr_nsec")
-        if nsec:
-            relay = self._prefs.get_string("nostr_relay") or DEFAULT_RELAYS
-            try:
-                self._manager.configure_identity(nsec, relays=relay)
-            except Exception as e:
-                logger.error("Failed to configure identity: %s", e)
-                return
+        configure_nostr_manager(self._prefs, self._manager, store=self._store)
 
         if self._kind == KIND_CHANNEL_MESSAGE and self._channel_id:
             since = self._since_for_chat()
@@ -222,21 +208,8 @@ class ChatActivity(Activity):
             except Exception as e:
                 logger.error("Channel subscription failed: %s", e)
 
-        # Always keep DM / NIP-17 subscriptions active so incoming messages arrive.
-        try:
-            own = self._manager.get_own_pubkey_hex()
-            chats = self._store.get_chats()
-            dm_since = _current_nostr_ts() - LOOKBACK_WINDOW_SECONDS
-            for chat in chats:
-                if chat.kind in (KIND_DM, KIND_NIP17_CHAT) and chat.last_ts:
-                    dm_since = min(dm_since, chat.last_ts - OVERLAP_SECONDS)
-            self._manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
-            self._manager.subscribe_nip17_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
-        except Exception as e:
-            logger.error("DM subscription failed: %s", e)
-
     def _since_for_chat(self):
-        from .chat_list_activity import LOOKBACK_WINDOW_SECONDS, OVERLAP_SECONDS
+        from .nostr_initializer import LOOKBACK_WINDOW_SECONDS, OVERLAP_SECONDS
 
         chat = self._store.get_chat(self._chat_id)
         if chat is not None and chat.last_ts:

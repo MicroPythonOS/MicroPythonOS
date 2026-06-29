@@ -14,49 +14,6 @@ from nostr.key import PrivateKey
 
 logger = logging.getLogger(__name__)
 
-# Imported both by the Nostr app (as a package) and by displaywallet (as a flat
-# module).  Try the sibling modules that actually live with us; fall back to
-# flat imports so displaywallet can reuse NostrManager without the chat/storage
-# helpers it does not ship.
-try:
-    from .chat_model import (
-        DEFAULT_CHANNEL_ID,
-        KIND_CHANNEL_MESSAGE,
-        KIND_DM,
-        KIND_NIP17_CHAT,
-        Message,
-        channel_id_from_event,
-        chat_id_for_event,
-        nip17_group_chat_id,
-        participants_from_nip17_event,
-        peer_from_dm_event,
-        subject_from_nip17_event,
-    )
-    from .event_store import EventStore, _current_nostr_ts
-except ImportError:
-    try:
-        from chat_model import (
-            DEFAULT_CHANNEL_ID,
-            KIND_CHANNEL_MESSAGE,
-            KIND_DM,
-            KIND_NIP17_CHAT,
-            Message,
-            channel_id_from_event,
-            chat_id_for_event,
-            nip17_group_chat_id,
-            participants_from_nip17_event,
-            peer_from_dm_event,
-            subject_from_nip17_event,
-        )
-        from event_store import EventStore, _current_nostr_ts
-    except ImportError:
-        Message = (
-            channel_id_from_event
-        ) = chat_id_for_event = peer_from_dm_event = nip17_group_chat_id = None
-        participants_from_nip17_event = subject_from_nip17_event = None
-        DEFAULT_CHANNEL_ID = KIND_CHANNEL_MESSAGE = KIND_DM = KIND_NIP17_CHAT = None
-        EventStore = None
-
 try:
     from nostr.nip17 import decrypt_gift_wrap_to_rumor, make_nip17_messages
 except ImportError:
@@ -1179,90 +1136,20 @@ class NostrManager:
 
 
 class NostrClientService(Service):
+    """Generic boot-time starter for the shared NostrManager.
 
-    def __init__(self):
-        super().__init__()
-        self._store = None
-        self._persist_cb = None
+    This service intentionally does no app-specific setup: no shared
+    preferences, no default relays, no persistence. Apps that need a
+    particular relay set or behavior should provide their own boot service
+    and call NostrManager's configuration methods directly.
+    """
 
     def onStart(self, intent):
-        print("NostrClientService: starting NostrManager")
-        manager = NostrManager.get_instance()
-        manager.start()
-        self._store = EventStore(self.appFullName)
-        self._persist_cb = lambda e: self._persist_event(e)
-        manager.register_post_event_handler(KIND_DM, self._persist_cb)
-        manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)
-        manager.register_post_event_handler(KIND_NIP17_CHAT, self._persist_cb)
+        if __debug__:
+            logger.debug("NostrClientService: starting NostrManager")
+        NostrManager.get_instance().start()
 
     def onDestroy(self):
-        print("NostrClientService: stopping NostrManager")
-        manager = NostrManager.get_instance()
-        if self._persist_cb is not None:
-            manager.unregister_post_event_handler(KIND_DM, self._persist_cb)
-            manager.unregister_post_event_handler(
-                KIND_CHANNEL_MESSAGE, self._persist_cb
-            )
-            manager.unregister_post_event_handler(
-                KIND_NIP17_CHAT, self._persist_cb
-            )
-            self._persist_cb = None
-        if self._store is not None:
-            self._store.flush_index()
-        manager.stop()
-
-    def _persist_event(self, nostr_event):
-        """Persist an event that made it past the UI handlers.
-
-        This runs as a post-event handler, so normal UI callbacks already had
-        a chance to store and display the message. If there are no UI
-        handlers, we store it here so the chat list/chat still show the
-        message when the user re-opens the app.
-        """
-        if self._store is None:
-            return
-        try:
-            manager = NostrManager.get_instance()
-            own = manager.get_own_pubkey_hex()
-            chat_id = chat_id_for_event(nostr_event.event, own)
-            if chat_id is None:
-                return
-
-            kind = nostr_event.kind
-            if kind == KIND_DM:
-                content = nostr_event.get_display_content()
-            else:
-                content = nostr_event.content
-
-            chat = self._store.get_chat(chat_id)
-            if chat is None:
-                if kind == KIND_DM:
-                    peer = peer_from_dm_event(nostr_event.event, own)
-                    chat = self._store.get_or_create_dm(own or "", peer)
-                elif kind == KIND_NIP17_CHAT:
-                    participants = participants_from_nip17_event(
-                        nostr_event.event, own
-                    )
-                    title = subject_from_nip17_event(nostr_event.event)
-                    chat = self._store.get_or_create_nip17_group(
-                        participants, title=title
-                    )
-                else:
-                    channel_id = channel_id_from_event(nostr_event.event)
-                    chat = self._store.get_or_create_channel(
-                        channel_id or DEFAULT_CHANNEL_ID
-                    )
-
-            message = Message(
-                event_id=nostr_event.event.id,
-                ts=nostr_event.created_at,
-                pubkey=nostr_event.public_key,
-                content=content,
-                kind=kind,
-            )
-            self._store.add_message(chat_id, message, mark_unread=True)
-        except Exception as e:
-            logger.error("Failed to persist Nostr event: %s", e)
-            import sys
-
-            sys.print_exception(e)
+        if __debug__:
+            logger.debug("NostrClientService: stopping NostrManager")
+        NostrManager.get_instance().stop()
