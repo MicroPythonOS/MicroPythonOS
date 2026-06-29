@@ -329,6 +329,8 @@ class ChatActivity(Activity):
 
     def _on_keyboard_hide(self):
         self._header.remove_flag(lv.obj.FLAG.HIDDEN)
+        # Re-scroll after header restoration so the last message stays visible.
+        self._scroll_to_bottom()
 
     def _open_settings(self):
         protocol_key = f"protocol:{self._chat_id}"
