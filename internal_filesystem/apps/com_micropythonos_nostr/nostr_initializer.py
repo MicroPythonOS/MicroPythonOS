@@ -15,8 +15,12 @@ DEFAULT_RELAY = DEFAULT_RELAYS[0]
 
 # Subscription tuning.
 LOOKBACK_WINDOW_SECONDS = 24 * 60 * 60  # 24 hours
+# NIP-17 gift-wraps randomize created_at within a 2-day window, so the
+# subscription window must be wider than the chat-history-driven window.
+NIP17_LOOKBACK_WINDOW_SECONDS = 3 * 24 * 60 * 60  # 3 days
 OVERLAP_SECONDS = 60  # margin when using since=last_known_ts
 SUBSCRIPTION_LIMIT_INITIAL = 200
+SUBSCRIPTION_LIMIT_NIP17 = 50
 
 
 def ensure_identity(prefs):
@@ -83,13 +87,26 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
         chats = store.get_chats() if store is not None else []
         dm_since = _dm_subscription_since(now, chats)
 
+    # NIP-17 gift-wraps use randomized created_at timestamps, so they may be
+    # older than the newest chat activity. Use a fixed 3-day window instead of
+    # the chat-history-driven dm_since.
+    nip17_since = now - NIP17_LOOKBACK_WINDOW_SECONDS
+    logger.info(
+        "Nostr subscriptions: dm_since=%s nip17_since=%s (now=%s)",
+        dm_since,
+        nip17_since,
+        now,
+    )
+
     try:
         manager.subscribe_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
     except Exception as e:
         logger.error("DM subscription failed: %s", e)
 
     try:
-        manager.subscribe_nip17_dms(since=dm_since, limit=SUBSCRIPTION_LIMIT_INITIAL)
+        manager.subscribe_nip17_dms(
+            since=nip17_since, limit=SUBSCRIPTION_LIMIT_NIP17
+        )
     except Exception as e:
         logger.error("NIP-17 subscription failed: %s", e)
 

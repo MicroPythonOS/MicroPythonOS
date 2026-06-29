@@ -667,7 +667,8 @@ class NostrManager:
         req = [ClientMessageType.REQUEST, sub_id]
         req.extend(sub.filters.to_json_array())
         self.relay_manager.publish_message(json.dumps(req))
-        print("NostrManager: subscribed to '{}'".format(sub.name))
+        print("NostrManager: subscribed to '{}' with filters {}".format(
+            sub.name, sub.filters.to_json_array()))
 
     def configure_nwc(self, nwc_url):
         """Configure and start NWC subscriptions."""
@@ -779,7 +780,11 @@ class NostrManager:
         if not self.keep_running:
             return
 
+        connected, disconnected = self.relay_manager.connection_summary()
         print("NostrManager: {} relay(s) connected".format(nrconnected))
+        print("NostrManager: connected relays: {}".format(connected))
+        if disconnected:
+            print("NostrManager: disconnected relays: {}".format(disconnected))
         self.connected = True
 
         # Set up generic subscriptions
@@ -857,11 +862,11 @@ class NostrManager:
                 if self.relay_manager.message_pool.has_events():
                     event_msg = self.relay_manager.message_pool.get_event()
                     event = event_msg.event
-                    print("NostrManager: received event kind={} from {}".format(
-                        event.kind, event.public_key[:16]))
+                    print("NostrManager: received event kind={} from {} via {}".format(
+                        event.kind, event.public_key[:16], event_msg.url))
 
                     try:
-                        self._process_event(event)
+                        self._process_event(event, relay_url=event_msg.url)
                     except Exception as e:
                         print("NostrManager: error processing event: {}".format(e))
                         import sys
@@ -902,7 +907,7 @@ class NostrManager:
             )
             return None
 
-    def _process_event(self, event):
+    def _process_event(self, event, relay_url=None):
         """Route a single event to all relevant handlers."""
 
         # NWC events are private and handled separately.
@@ -912,13 +917,17 @@ class NostrManager:
 
         if event.kind in NIP17_KINDS or event.kind in (KIND_RELAY_LIST, KIND_DM_RELAY_LIST):
             print(
-                "NostrManager: received {} (kind={}) from {}"
-                .format(get_kind_name(event.kind), event.kind, event.public_key[:16])
+                "NostrManager: received {} (kind={}) from {} via {}"
+                .format(get_kind_name(event.kind), event.kind, event.public_key[:16], relay_url)
             )
 
         if event.kind in (KIND_NIP17_GIFT_WRAP, KIND_NIP17_GIFT_WRAP_EPHEMERAL):
             decrypted_event = self._decrypt_nip17_gift_wrap(event)
             if decrypted_event is None:
+                print(
+                    "NostrManager: failed to unwrap NIP-17 message from {} via {}".format(
+                        event.public_key[:16], relay_url)
+                )
                 return
             # Preserve the original gift-wrap id so the same message deduplicates.
             # Event.id is a computed property; assign an instance attribute to
@@ -926,13 +935,21 @@ class NostrManager:
             decrypted_event.id = event.id
             event = decrypted_event
             print(
-                "NostrManager: unwrapped NIP-17 message from {}".format(
-                    event.public_key[:16]
+                "NostrManager: unwrapped NIP-17 message from {}: {!r}".format(
+                    event.public_key[:16], event.content
                 )
             )
 
         # Build the shared wrapper once; decrypt DMs if a private key is set.
         nostr_event = NostrEvent(event, self._nostr_private_key)
+
+        # Log plaintext for DMs / NIP-17 chat messages so we can see what arrived.
+        if event.kind in (4, KIND_NIP17_CHAT):
+            print(
+                "NostrManager: plaintext message from {} via {}: {!r}".format(
+                    event.public_key[:16], relay_url, nostr_event.get_display_content()
+                )
+            )
 
         # Route by kind to registered callbacks
         if event.kind in self._event_handlers:
