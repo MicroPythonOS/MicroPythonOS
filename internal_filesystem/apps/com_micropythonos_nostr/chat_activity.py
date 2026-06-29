@@ -4,6 +4,7 @@ import lvgl as lv
 
 from mpos import (
     Activity,
+    add_focus_border,
     ConnectivityManager,
     DisplayMetrics,
     FontManager,
@@ -89,6 +90,7 @@ class ChatActivity(Activity):
         self._screen = lv.obj()
         self._screen.set_style_pad_all(0, lv.PART.MAIN)
         self._screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self._screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         header = lv.obj(self._screen)
         header.set_width(lv.pct(100))
@@ -124,7 +126,6 @@ class ChatActivity(Activity):
         self._messages_container.set_flex_grow(1)
         self._messages_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         self._messages_container.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
-        self._messages_container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
         input_row = lv.obj(self._screen)
         input_row.set_width(lv.pct(100))
@@ -246,6 +247,7 @@ class ChatActivity(Activity):
         row.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         row.add_flag(lv.obj.FLAG.CLICKABLE)
         row.add_event_cb(lambda e, msg=message: self._on_message_clicked(msg), lv.EVENT.CLICKED, None)
+        add_focus_border(row)
 
         chat = self._store.get_chat(self._chat_id)
         sender = chat.sender_name(message) if chat else "?"
