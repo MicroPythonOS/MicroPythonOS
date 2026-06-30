@@ -19,7 +19,8 @@ Frameworks:
 - AppManager: add support for apps as Python packages
 - AudioManager: support for desktop audio by @jnuyens
 - DownloadManager and aiohttp: various connection handling improvements by @jnuyens
-- Focus: `add_focus_border()` highlights now stay hidden until the user navigates by direction (joystick/keypad). The widget is still added to the focus group, but the border is only drawn from the first `move_focus_direction()` onward. Touch-only UIs (which focus widgets by tapping) never show a stray ring — e.g. the gold rectangle that appeared around the Lightning Piggy balance after tapping it — while keypad/encoder navigation is unchanged.
+- Focus: `add_focus_border()` highlights stay hidden until the user navigates by direction
+- FontManager: fallback to included lips for various variations
 - SDCard: tolerate trailing slashes when listing SD card contents
 - StreamingUnzip: tolerate trailing slashes when creating directories
 - FontManager: tolerate trailing slashes when listing directories

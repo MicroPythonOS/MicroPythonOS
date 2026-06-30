@@ -36,9 +36,9 @@ class FontManager:
 
     # Paste/update emoji similarity groups here as CSV with header: group_id,emoji
     _EMOJI_SIMILARITY_GROUPS_CSV = """group_id,emoji
-hearts,❤️
-hearts,♥️
-hearts,❣️
+hearts,❤
+hearts,♥
+hearts,❣
 hearts,💞
 hearts,💖
 hearts,💗
@@ -75,8 +75,8 @@ sad_cry,😓
 music_group,🎶
 music_group,🎵
 checkmarks,✅
-checkmarks,✔️
-exclamation,‼️
+checkmarks,✔
+exclamation,‼
 exclamation,❗
 angry,🔴
 angry,😡
@@ -95,6 +95,9 @@ pigs,🐷
 pigs,🐖
 droplet_sweat,💦
 droplet_sweat,💧
+lips,💋
+lips,👄
+lips,🫦
 """
 
     @classmethod
