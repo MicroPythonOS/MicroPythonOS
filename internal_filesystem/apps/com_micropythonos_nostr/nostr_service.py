@@ -12,7 +12,6 @@ from nostr.filter import Filter, Filters
 from nostr.event import Event, EncryptedDirectMessage
 from nostr.key import PrivateKey
 
-from .event_store import _current_nostr_ts
 
 logger = logging.getLogger(__name__)
 
@@ -574,7 +573,7 @@ class NostrManager:
         # ChaCha20 loop can starve the ESP32 scheduler and make time.time()
         # stale.
         if created_at is None:
-            created_at = _current_nostr_ts()
+            created_at = Event.epoch_seconds()
         gift_events = make_nip17_messages(
             self._nostr_private_key,
             content,
