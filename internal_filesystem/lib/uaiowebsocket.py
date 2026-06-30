@@ -3,17 +3,22 @@
 # Compatible with websocket-client's WebSocketApp API, using MicroPython aiohttp
 
 import uasyncio as asyncio
+import logging
 import time
 import ucollections
 import aiohttp
 from aiohttp import WSMsgType
 
+logger = logging.getLogger(__name__)
+
+
 # Simplified logging for MicroPython with timestamps
 def _log_debug(msg):
-    print(f"[DEBUG {time.ticks_ms()}] {msg}")
+    if __debug__:
+        logger.debug("%s", msg)
 
 def _log_error(msg):
-    print(f"[ERROR {time.ticks_ms()}] {msg}")
+    logger.error("%s", msg)
 
 # Simplified ABNF for opcode compatibility
 class ABNF:
@@ -38,7 +43,7 @@ _callback_queue = ucollections.deque((), 100)  # Empty tuple, maxlen=100
 
 def _run_callback(callback, *args):
     if not callback:
-        print("_run_callback: skipping None callback")
+        logger.debug("_run_callback: skipping None callback")
         return
     """Add callback to queue for execution."""
     try:
@@ -229,7 +234,7 @@ class WebSocketApp:
 
         # Run the event loop in the main thread
         try:
-            print("websocket's run_forever creating _async_main task")
+            logger.info("websocket run_forever creating _async_main task")
             #self._loop.run_until_complete(self._async_main()) # this doesn't always finish!
             asyncio.create_task(self._async_main(reconnect=reconnect))
         except KeyboardInterrupt:
@@ -266,7 +271,7 @@ class WebSocketApp:
             callback_task = asyncio.create_task(_process_callbacks_async())
             _log_debug("Started callback processing task")
         except Exception as e:
-            print(f"websocket.py: create_ask(_process_callbacks_async()) had exception {e}")
+            logger.error("websocket create_task(_process_callbacks_async()) exception: %s", e)
 
         while self.running:
             _log_debug("Main loop iteration: self.running=True")
@@ -312,7 +317,7 @@ class WebSocketApp:
         self.session = aiohttp.ClientSession(headers=self.header)
         async with self.session.ws_connect(self.url, ssl=ssl_context) as ws:
             if not ws:
-                print("ERROR: ws_connect got None instead of ws object!")
+                logger.error("ERROR: ws_connect got None instead of ws object!")
                 _run_callback(self.on_error, self, str(e))
                 return
 
@@ -323,7 +328,7 @@ class WebSocketApp:
 
             async for msg in ws:
                 import micropython
-                print(f"websocket.py _connect_and_run thread stack used: {micropython.stack_use()}")
+                logger.debug("websocket thread stack used: %s", micropython.stack_use())
                 _log_debug(f"websocket.py _connect_and_run received msg: type={msg.type}, length: {len(msg.data)} and data={str(msg.data)[:180]}...")
                 if not self.running:
                     _log_debug("Not running, breaking message loop")

@@ -117,9 +117,11 @@ class NostrEvent:
                     self.public_key
                 )
                 self.decrypted_content = decrypted
-                print(f"DEBUG: Successfully decrypted DM: {decrypted}")
+                if __debug__:
+                    logger.debug("Successfully decrypted DM: %s", decrypted)
         except Exception as e:
-            print(f"DEBUG: Failed to decrypt DM: {e}")
+            if __debug__:
+                logger.debug("Failed to decrypt DM: %s", e)
 
     def get_kind_name(self):
         return get_kind_name(self.kind)
@@ -210,21 +212,6 @@ def _pubkey_to_hex(pubkey_or_npub):
         from nostr.key import PublicKey
         return PublicKey.from_npub(pubkey_or_npub).hex()
     return pubkey_or_npub
-
-
-_orig_relay_on_error = None
-try:
-    import nostr.relay as _nostr_relay
-    _orig_relay_on_error = _nostr_relay.Relay._on_error
-    def _patched_relay_on_error(self, class_obj, error):
-        try:
-            print("relay.py got error for {}: {!r}".format(self.url, error))
-        except Exception:
-            pass
-        return _orig_relay_on_error(self, class_obj, error)
-    _nostr_relay.Relay._on_error = _patched_relay_on_error
-except Exception as _e:
-    print("Failed to patch Relay._on_error for diagnostics:", _e)
 
 
 class NostrManager:
@@ -328,7 +315,7 @@ class NostrManager:
             try:
                 await self.relay_manager.close_connections()
             except Exception as e:
-                print("NostrManager: error closing connections: {}".format(e))
+                logger.warning("NostrManager: error closing connections: %s", e)
         self._main_task = None
         self._default_relays = []
         self._subscriptions = []
@@ -495,8 +482,8 @@ class NostrManager:
         key = self._relay_config_key(self._current_nsec, self._configured_relays)
         self._relay_list_published_for = key
         self._relay_list_pending = False
-        print(
-            "NostrManager: published relay lists ({})".format(len(ids))
+        logger.info(
+            "NostrManager: published relay lists (%s)", len(ids)
         )
         return ids
 
@@ -517,7 +504,7 @@ class NostrManager:
         event.__post_init__()
         self._nostr_private_key.sign_event(event)
         self.relay_manager.publish_event(event)
-        print("NostrManager: published channel message to {}".format(channel_id[:16]))
+        logger.info("NostrManager: published channel message to %s", channel_id[:16])
         return event.id
 
     def _publish_signed_dm(self, private_key, recipient_hex, content, kind=4, reference_event_id=None):
@@ -547,7 +534,7 @@ class NostrManager:
             content,
             reference_event_id=reference_event_id,
         )
-        print("NostrManager: published DM to {}".format(recipient_hex[:16]))
+        logger.info("NostrManager: published DM to %s", recipient_hex[:16])
         return dm_id
 
     def publish_nip17_message(
@@ -594,10 +581,9 @@ class NostrManager:
             )
             self.relay_manager.publish_event(event)
             ids.append(gift["id"])
-        print(
-            "NostrManager: published NIP-17 message to {} recipient(s)".format(
-                len(ids)
-            )
+        logger.info(
+            "NostrManager: published NIP-17 message to %s recipient(s)",
+            len(ids)
         )
         return ids
 
@@ -615,7 +601,7 @@ class NostrManager:
             try:
                 self.relay_manager.close_subscription(name)
             except Exception as e:
-                print("NostrManager: error closing subscription '{}': {}".format(name, e))
+                logger.warning("NostrManager: error closing subscription '%s': %s", name, e)
 
     def add_subscription(self, name, filters, callback=None, since=None, limit=None):
         """Add a generic subscription, reusing an existing one with the same name.
@@ -673,8 +659,8 @@ class NostrManager:
         req = [ClientMessageType.REQUEST, sub_id]
         req.extend(sub.filters.to_json_array())
         self.relay_manager.publish_message(json.dumps(req))
-        print("NostrManager: subscribed to '{}' with filters {}".format(
-            sub.name, sub.filters.to_json_array()))
+        logger.info("NostrManager: subscribed to '%s' with filters %s",
+            sub.name, sub.filters.to_json_array())
 
     def _send_subscriptions_to_relays(self, urls):
         """Re-send all active subscriptions to a specific set of relays.
@@ -736,7 +722,8 @@ class NostrManager:
 
     def _parse_nwc_url(self, nwc_url):
         from mpos.util import urldecode
-        print("DEBUG: Starting to parse NWC URL")
+        if __debug__:
+            logger.debug("Starting to parse NWC URL")
         try:
             if nwc_url.startswith('nostr+walletconnect://'):
                 nwc_url = nwc_url[22:]
@@ -766,7 +753,8 @@ class NostrManager:
                 raise ValueError("Invalid NWC URL: missing required fields (pubkey, relay, or secret)")
             if len(secret) != 64 or not all(c in '0123456789abcdef' for c in secret):
                 raise ValueError("Invalid NWC URL: secret must be 64 hex characters")
-            print(f"DEBUG: Parsed NWC data - Relays: {relays}, lud16: {lud16}")
+            if __debug__:
+                logger.debug("Parsed NWC data - Relays: %s, lud16: %s", relays, lud16)
             return relays, pubkey, secret, lud16
         except Exception as e:
             raise RuntimeError(f"Exception parsing NWC URL: {e}")
@@ -788,7 +776,7 @@ class NostrManager:
             self.relay_manager.add_relay(relay)
 
         if not self.relay_manager.relays:
-            print("NostrManager: no relays configured, waiting...")
+            logger.warning("NostrManager: no relays configured, waiting...")
             while self.keep_running and not self._relays_configured:
                 await TaskManager.sleep(0.5)
                 if self._default_relays or self._nwc_relays:
@@ -800,7 +788,7 @@ class NostrManager:
             for relay in self._nwc_relays:
                 self.relay_manager.add_relay(relay)
             if not self.relay_manager.relays:
-                print("NostrManager: still no relays after wait, exiting")
+                logger.warning("NostrManager: still no relays after wait, exiting")
                 return
 
         await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
@@ -818,7 +806,7 @@ class NostrManager:
 
         if nrconnected == 0:
             msg = "Could not connect to any Nostr relay."
-            print("NostrManager:", msg)
+            logger.warning("NostrManager: %s", msg)
             if self._error_cb:
                 self._error_cb(msg)
             return
@@ -827,10 +815,10 @@ class NostrManager:
             return
 
         connected, disconnected = self.relay_manager.connection_summary()
-        print("NostrManager: {} relay(s) connected".format(nrconnected))
-        print("NostrManager: connected relays: {}".format(connected))
+        logger.info("NostrManager: %s relay(s) connected", nrconnected)
+        logger.info("NostrManager: connected relays: %s", connected)
         if disconnected:
-            print("NostrManager: disconnected relays: {}".format(disconnected))
+            logger.info("NostrManager: disconnected relays: %s", disconnected)
         self.connected = True
 
         # Set up generic subscriptions
@@ -852,7 +840,7 @@ class NostrManager:
             req = [ClientMessageType.REQUEST, self._nwc_sub_id]
             req.extend(self._nwc_filters.to_json_array())
             self.relay_manager.publish_message(json.dumps(req))
-            print("NostrManager: subscribed to NWC responses")
+            logger.info("NostrManager: subscribed to NWC responses")
             if self._nwc_lud16 and "@" in self._nwc_lud16:
                 # Don't use permissive ensure_lightning_prefix, only allow LUD-16
                 self._handle_nwc_static_receive_code((self._nwc_lud16))
@@ -865,7 +853,7 @@ class NostrManager:
             try:
                 self.publish_relay_list()
             except Exception as e:
-                print("NostrManager: relay list publish error: {}".format(e))
+                logger.error("NostrManager: relay list publish error: %s", e)
 
         self._last_nwc_poll = time.time() - self.NWC_POLL_SECONDS
 
@@ -880,7 +868,7 @@ class NostrManager:
                 try:
                     await self._sync_relays()
                 except Exception as e:
-                    print("NostrManager: relay sync error: {}".format(e))
+                    logger.error("NostrManager: relay sync error: %s", e)
                     import sys
                     sys.print_exception(e)
 
@@ -911,35 +899,35 @@ class NostrManager:
                 try:
                     self.nwc_fetch_balance()
                 except Exception as e:
-                    print("NostrManager: fetch_balance error: {}".format(e))
+                    logger.warning("NostrManager: fetch_balance error: %s", e)
 
                 try:
                     self.nwc_fetch_payments()
                 except Exception as e:
-                    print("NostrManager: fetch_payments error: {}".format(e))
+                    logger.warning("NostrManager: fetch_payments error: %s", e)
 
             # --- Process incoming events ---
             try:
                 if self.relay_manager.message_pool.has_events():
                     event_msg = self.relay_manager.message_pool.get_event()
                     event = event_msg.event
-                    print("NostrManager: received event kind={} from {} via {}".format(
-                        event.kind, event.public_key[:16], event_msg.url))
+                    logger.info("NostrManager: received event kind=%s from %s via %s",
+                        event.kind, event.public_key[:16], event_msg.url)
 
                     try:
                         self._process_event(event, relay_url=event_msg.url)
                     except Exception as e:
-                        print("NostrManager: error processing event: {}".format(e))
+                        logger.error("NostrManager: error processing event: %s", e)
                         import sys
                         sys.print_exception(e)
 
                 if self.relay_manager.message_pool.has_notices():
                     notice = self.relay_manager.message_pool.get_notice()
-                    print("NostrManager: relay notice: {}".format(notice))
+                    logger.warning("NostrManager: relay notice: %s", notice)
                     if notice and hasattr(notice, 'content') and self._error_cb:
                         self._error_cb("Relay: {}".format(notice.content))
             except Exception as e:
-                print("NostrManager: message poll error: {}".format(e))
+                logger.error("NostrManager: message poll error: %s", e)
                 import sys
                 sys.print_exception(e)
                 await TaskManager.sleep(1)
@@ -977,17 +965,17 @@ class NostrManager:
             return
 
         if event.kind in NIP17_KINDS or event.kind in (KIND_RELAY_LIST, KIND_DM_RELAY_LIST):
-            print(
-                "NostrManager: received {} (kind={}) from {} via {}"
-                .format(get_kind_name(event.kind), event.kind, event.public_key[:16], relay_url)
+            logger.info(
+                "NostrManager: received %s (kind=%s) from %s via %s",
+                get_kind_name(event.kind), event.kind, event.public_key[:16], relay_url
             )
 
         if event.kind in (KIND_NIP17_GIFT_WRAP, KIND_NIP17_GIFT_WRAP_EPHEMERAL):
             decrypted_event = self._decrypt_nip17_gift_wrap(event)
             if decrypted_event is None:
-                print(
-                    "NostrManager: failed to unwrap NIP-17 message from {} via {}".format(
-                        event.public_key[:16], relay_url)
+                logger.warning(
+                    "NostrManager: failed to unwrap NIP-17 message from %s via %s",
+                    event.public_key[:16], relay_url
                 )
                 return
             # Preserve the original gift-wrap id so the same message deduplicates.
@@ -995,10 +983,9 @@ class NostrManager:
             # shadow it for downstream code that reads event.id.
             decrypted_event.id = event.id
             event = decrypted_event
-            print(
-                "NostrManager: unwrapped NIP-17 message from {}: {!r}".format(
-                    event.public_key[:16], event.content
-                )
+            logger.info(
+                "NostrManager: unwrapped NIP-17 message from %s: %s",
+                event.public_key[:16], event.content
             )
 
         # Build the shared wrapper once; decrypt DMs if a private key is set.
@@ -1006,10 +993,9 @@ class NostrManager:
 
         # Log plaintext for DMs / NIP-17 chat messages so we can see what arrived.
         if event.kind in (4, KIND_NIP17_CHAT):
-            print(
-                "NostrManager: plaintext message from {} via {}: {!r}".format(
-                    event.public_key[:16], relay_url, nostr_event.get_display_content()
-                )
+            logger.info(
+                "NostrManager: plaintext message from %s via %s: %s",
+                event.public_key[:16], relay_url, nostr_event.get_display_content()
             )
 
         # Route by kind to registered callbacks
@@ -1018,7 +1004,7 @@ class NostrManager:
                 try:
                     cb(nostr_event)
                 except Exception as e:
-                    print("NostrManager: event handler error: {}".format(e))
+                    logger.error("NostrManager: event handler error: %s", e)
 
         # Store in events list for NostrApp
         self.events.append(nostr_event)
@@ -1031,7 +1017,7 @@ class NostrManager:
                 if sub.callback and sub.filters.match(event):
                     sub.callback(nostr_event)
             except Exception as e:
-                print("NostrManager: subscription callback error: {}".format(e))
+                logger.error("NostrManager: subscription callback error: %s", e)
 
         # Post-event background handlers (e.g. persistence) run after UI handlers.
         if event.kind in self._post_event_handlers:
@@ -1039,13 +1025,13 @@ class NostrManager:
                 try:
                     cb(nostr_event)
                 except Exception as e:
-                    print("NostrManager: post-event handler error: {}".format(e))
+                    logger.error("NostrManager: post-event handler error: %s", e)
 
         if self._events_updated_cb:
             try:
                 self._events_updated_cb()
             except Exception as e:
-                print("NostrManager: events_updated callback error: {}".format(e))
+                logger.error("NostrManager: events_updated callback error: %s", e)
 
     def _process_nwc_event(self, event):
         """Decrypt and process an NWC response/notification event."""
@@ -1054,23 +1040,26 @@ class NostrManager:
                 event.content,
                 event.public_key,
             )
-            print("NostrManager: decrypted NWC: {}".format(decrypted))
+            if __debug__:
+                logger.debug("NostrManager: decrypted NWC: %s", decrypted)
             response = json.loads(decrypted)
             result = response.get("result")
             if result:
                 if result.get("balance") is not None:
                     new_balance = round(int(result["balance"]) / 1000)
-                    print("NostrManager: NWC balance: {}".format(new_balance))
+                    logger.info("NostrManager: NWC balance: %s", new_balance)
                     if self._polls_since_last_event > 0:
-                        print("NostrManager: NWC watchdog counter reset (balance)")
+                        if __debug__:
+                            logger.debug("NostrManager: NWC watchdog counter reset (balance)")
                     self._polls_since_last_event = 0
                     if self._nwc_balance_cb:
                         self._nwc_balance_cb(new_balance)
 
                 elif result.get("transactions") is not None:
-                    print("NostrManager: NWC transactions received")
+                    logger.info("NostrManager: NWC transactions received")
                     if self._polls_since_last_event > 0:
-                        print("NostrManager: NWC watchdog counter reset (transactions)")
+                        if __debug__:
+                            logger.debug("NostrManager: NWC watchdog counter reset (transactions)")
                     self._polls_since_last_event = 0
                     if self._nwc_payments_cb:
                         self._nwc_payments_cb(result["transactions"])
@@ -1081,7 +1070,7 @@ class NostrManager:
                     self._nwc_notification_cb(notification)
 
         except Exception as e:
-            print("NostrManager: NWC event processing error: {}".format(e))
+            logger.error("NostrManager: NWC event processing error: %s", e)
             import sys
             sys.print_exception(e)
 
@@ -1091,12 +1080,12 @@ class NostrManager:
 
     async def _reconnect_relay(self):
         """Watchdog reconnect: close, wait, reopen, re-subscribe."""
-        print("NostrManager: watchdog reconnecting relay (silent for {} polls)".format(
-            self._polls_since_last_event))
+        logger.warning("NostrManager: watchdog reconnecting relay (silent for %s polls)",
+            self._polls_since_last_event)
         try:
             await self.relay_manager.close_connections()
         except Exception as e:
-            print("NostrManager: close during reconnect failed: {}".format(e))
+                    logger.warning("NostrManager: close during reconnect failed: %s", e)
 
         await TaskManager.sleep(2)
 
@@ -1109,7 +1098,7 @@ class NostrManager:
         try:
             await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
         except Exception as e:
-            print("NostrManager: open_connections during reconnect failed: {}".format(e))
+            logger.warning("NostrManager: open_connections during reconnect failed: %s", e)
 
         for _ in range(50):
             await TaskManager.sleep(0.1)
@@ -1147,7 +1136,7 @@ class NostrManager:
         if not new_urls:
             return
 
-        print("NostrManager: adding new relays: {}".format(new_urls))
+        logger.info("NostrManager: adding new relays: %s", new_urls)
         await self.relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
 
         new_relays = [self.relay_manager.relays[url] for url in new_urls]
@@ -1184,7 +1173,7 @@ class NostrManager:
             try:
                 self.publish_relay_list()
             except Exception as e:
-                print("NostrManager: relay list publish error: {}".format(e))
+                logger.error("NostrManager: relay list publish error: %s", e)
 
     # --- NWC request methods ---
 
