@@ -196,148 +196,158 @@ class DownloadManager:
         try:
             headers = cls._merge_headers(headers)
             
-            async with session.get(url, headers=headers, ssl=sslctx, timeout=_CHUNK_TIMEOUT_SECONDS) as response:
-                if response.status < 200 or response.status >= 400:
-                    logger.error("HTTP error %s", response.status)
-                    raise RuntimeError(f"HTTP {response.status}")
-                
-                # Figure out total size and starting offset (for resume support)
-                # When redacting, suppress the headers dump entirely — response
-                # headers can include `set-cookie`, `cf-ray` and other tokens
-                # that correlate to the request's secret-bearing URL.
-                if redact_url:
-                    if __debug__: logger.debug("Response headers: <redacted>")
-                else:
-                    if __debug__: logger.debug("Response headers: %s", response.headers)
-                resume_offset = 0  # Starting byte offset (0 for new downloads, >0 for resumed)
-                
-                if total_size is None:
-                    # response.headers is a dict (after parsing) or None/list (before parsing)
-                    try:
-                        if isinstance(response.headers, dict):
-                            # Check for Content-Range first (used when resuming with Range header)
-                            # Format: 'bytes 1323008-3485807/3485808'
-                            # START is the resume offset, TOTAL is the complete file size
-                            content_range = response.headers.get('Content-Range')
-                            if content_range:
-                                # Parse total size and starting offset from Content-Range header
-                                # Example: 'bytes 1323008-3485807/3485808' -> offset=1323008, total=3485808
-                                if '/' in content_range and ' ' in content_range:
-                                    # Extract the range part: '1323008-3485807'
-                                    range_part = content_range.split(' ')[1].split('/')[0]
-                                    # Extract starting offset
-                                    resume_offset = int(range_part.split('-')[0])
-                                    # Extract total size
-                                    total_size = int(content_range.split('/')[-1])
-                                    if __debug__: logger.debug("Resuming from byte %s, total size: %s", resume_offset, total_size)
-                            
-                            # Fall back to Content-Length if Content-Range not present
+            # State that must survive a reconnect. On a mid-stream connection
+            # drop we re-issue the request with a Range header from partial_size
+            # and keep writing to the same fd, so a flaky link resumes the
+            # download instead of aborting it.
+            from mpos import TaskManager
+            chunks = []
+            chunk_size = _DEFAULT_CHUNK_SIZE
+            partial_size = None   # absolute byte offset reached so far (None = no connection yet)
+            last_progress_pct = -1.0
+            speed_bytes_since_last_update = 0
+            speed_last_update_time = None
+            try:
+                import time
+                speed_last_update_time = time.ticks_ms()
+            except ImportError:
+                pass  # time module not available
+
+            reconnects_left = _MAX_RETRIES
+            while True:
+                attempt_headers = dict(headers)
+                resuming = partial_size is not None
+                if resuming:
+                    # Resume from where the stream dropped. A server that supports
+                    # ranges replies 206; one that does not replies 200 (handled below).
+                    attempt_headers['Range'] = 'bytes=%d-' % partial_size
+
+                reconnect_needed = False
+                async with session.get(url, headers=attempt_headers, ssl=sslctx, timeout=_CHUNK_TIMEOUT_SECONDS) as response:
+                    if response.status < 200 or response.status >= 400:
+                        logger.error("HTTP error %s", response.status)
+                        raise RuntimeError(f"HTTP {response.status}")
+
+                    if resuming:
+                        # A 206 is required to safely append; a 200 means the server
+                        # ignored Range and would resend from the start (can't resume).
+                        if response.status != 206:
+                            raise OSError(-110, "Server does not support resume (HTTP %s)" % response.status)
+                    else:
+                        # ---- one-time setup, runs only on the first connection ----
+                        # When redacting, suppress the headers dump entirely - response
+                        # headers can include set-cookie / cf-ray tokens that correlate
+                        # to a secret-bearing URL.
+                        if redact_url:
+                            if __debug__: logger.debug("Response headers: <redacted>")
+                        else:
+                            if __debug__: logger.debug("Response headers: %s", response.headers)
+                        resume_offset = 0  # Starting byte offset (0 for new downloads, >0 for caller-resumed)
+
+                        if total_size is None:
+                            # response.headers is a dict (after parsing) or None/list (before parsing)
+                            try:
+                                if isinstance(response.headers, dict):
+                                    # Content-Range wins (caller-side resume): 'bytes 1323008-3485807/3485808'
+                                    content_range = response.headers.get('Content-Range')
+                                    if content_range:
+                                        if '/' in content_range and ' ' in content_range:
+                                            range_part = content_range.split(' ')[1].split('/')[0]
+                                            resume_offset = int(range_part.split('-')[0])
+                                            total_size = int(content_range.split('/')[-1])
+                                            if __debug__: logger.debug("Resuming from byte %s, total size: %s", resume_offset, total_size)
+                                    # Fall back to Content-Length if Content-Range absent
+                                    if total_size is None:
+                                        content_length = response.headers.get('Content-Length')
+                                        if content_length:
+                                            total_size = int(content_length)
+                                            if __debug__: logger.debug("Using Content-Length: %s", total_size)
+                            except (AttributeError, TypeError, ValueError, IndexError) as e:
+                                logger.error("Could not parse Content-Range/Content-Length: %s", e)
                             if total_size is None:
-                                content_length = response.headers.get('Content-Length')
-                                if content_length:
-                                    total_size = int(content_length)
-                                    if __debug__: logger.debug("Using Content-Length: %s", total_size)
-                    except (AttributeError, TypeError, ValueError, IndexError) as e:
-                        logger.error("Could not parse Content-Range/Content-Length: %s", e)
-                    
-                    if total_size is None:
-                        logger.warning("Unable to determine total_size, assuming %s bytes", _DEFAULT_TOTAL_SIZE)
-                        total_size = _DEFAULT_TOTAL_SIZE
-                
-                # Setup output
-                if outfile:
-                    fd = open(outfile, 'wb')
-                    if not fd:
-                        logger.warning("Could not open %s for writing!", outfile)
-                        return False
-                
-                chunks = []
-                partial_size = resume_offset  # Start from resume offset for accurate progress
-                chunk_size = _DEFAULT_CHUNK_SIZE
-                
-                # Progress tracking with 2-decimal precision
-                last_progress_pct = -1.0  # Track last reported progress to avoid duplicates
-                
-                # Speed tracking
-                speed_bytes_since_last_update = 0
-                speed_last_update_time = None
-                try:
-                    import time
-                    speed_last_update_time = time.ticks_ms()
-                except ImportError:
-                    pass  # time module not available
-                
-                if __debug__: logger.debug("Downloading %s bytes in chunks of size %s", total_size, chunk_size)
-                
-                # Download loop with retry logic
-                while True:
-                    tries_left = _MAX_RETRIES
-                    chunk_data = None
-                    while tries_left > 0:
+                                logger.warning("Unable to determine total_size, assuming %s bytes", _DEFAULT_TOTAL_SIZE)
+                                total_size = _DEFAULT_TOTAL_SIZE
+
+                        # Setup output
+                        if outfile:
+                            fd = open(outfile, 'wb')
+                            if not fd:
+                                logger.warning("Could not open %s for writing!", outfile)
+                                return False
+
+                        partial_size = resume_offset  # Start from resume offset for accurate progress
+                        if __debug__: logger.debug("Downloading %s bytes in chunks of size %s", total_size, chunk_size)
+
+                    # ---- read this connection until EOF or a read error ----
+                    while True:
                         try:
-                            # Import TaskManager here to avoid circular imports
-                            from mpos import TaskManager
                             chunk_data = await TaskManager.wait_for(
                                 response.content.read(chunk_size),
                                 _CHUNK_TIMEOUT_SECONDS
                             )
-                            break
                         except Exception as e:
+                            # A read error (timeout / dropped connection) is recoverable:
+                            # break out and resume via a Range request below.
                             logger.error("Chunk read error: %s", e)
-                            tries_left -= 1
-                    
-                    if tries_left == 0:
-                        logger.error("Failed to download chunk after retries")
-                        if fd:
-                            fd.close()
-                        raise OSError(-110, "Failed to download chunk after retries")
-                    
-                    if chunk_data:
-                        # Output chunk
+                            reconnect_needed = True
+                            break
+
+                        if not chunk_data:
+                            # Chunk is empty, download complete
+                            if __debug__: logger.debug("Finished downloading %s", log_url)
+                            if fd:
+                                fd.close()
+                                fd = None
+                                return True
+                            elif chunk_callback:
+                                return True
+                            else:
+                                return b''.join(chunks)
+
+                        # Output chunk. Write/callback errors propagate - they are not
+                        # connection problems, so they must not trigger a reconnect.
                         if fd:
                             fd.write(chunk_data)
                         elif chunk_callback:
                             await chunk_callback(chunk_data)
                         else:
                             chunks.append(chunk_data)
-                        
+
                         # Track bytes for speed calculation
                         chunk_len = len(chunk_data)
                         partial_size += chunk_len
                         speed_bytes_since_last_update += chunk_len
-                        
-                        # Report progress with 2-decimal precision
-                        # Only call callback if progress changed by at least 0.01%
+
+                        # Report progress with 2-decimal precision (only on change)
                         progress_pct = round((partial_size * 100) / int(total_size), 2)
                         if progress_callback and progress_pct != last_progress_pct:
                             if __debug__: logger.debug("Progress: %s / %s bytes = %s%%", partial_size, total_size, progress_pct)
                             await progress_callback(progress_pct)
                             last_progress_pct = progress_pct
-                        
+
                         # Report speed periodically
                         if speed_callback and speed_last_update_time is not None:
                             import time
                             current_time = time.ticks_ms()
                             elapsed_ms = time.ticks_diff(current_time, speed_last_update_time)
                             if elapsed_ms >= _SPEED_UPDATE_INTERVAL_MS:
-                                # Calculate bytes per second
                                 bytes_per_second = (speed_bytes_since_last_update * 1000) / elapsed_ms
                                 if __debug__: logger.debug("Speed: %s B/s", bytes_per_second)
                                 await speed_callback(bytes_per_second)
-                                # Reset for next interval
                                 speed_bytes_since_last_update = 0
                                 speed_last_update_time = current_time
-                    else:
-                        # Chunk is None, download complete
-                        if __debug__: logger.debug("Finished downloading %s", log_url)
-                        if fd:
-                            fd.close()
-                            fd = None
-                            return True
-                        elif chunk_callback:
-                            return True
-                        else:
-                            return b''.join(chunks)
+
+                # Connection ended without reaching EOF. Resume if we have budget.
+                if not reconnect_needed:
+                    break  # defensive: read loop only exits via return or reconnect
+                reconnects_left -= 1
+                if reconnects_left <= 0:
+                    logger.error("Failed to download chunk after retries")
+                    if fd:
+                        fd.close()
+                    raise OSError(-110, "Failed to download chunk after retries")
+                if __debug__: logger.warning("Connection lost at %s/%s bytes, resuming...", partial_size, total_size)
+                await TaskManager.sleep_ms(200)
         
         except Exception as e:
             # Exception strings from aiohttp often embed the full URL —
