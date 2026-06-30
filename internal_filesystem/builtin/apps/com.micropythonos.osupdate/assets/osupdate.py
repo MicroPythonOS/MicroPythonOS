@@ -61,7 +61,7 @@ class OSUpdate(Activity):
         self.check_again_button.add_event_cb(lambda e: self.check_again_click(), lv.EVENT.CLICKED, None)
         self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         check_again_label = lv.label(self.check_again_button)
-        check_again_label.set_text("Check Again")
+        check_again_label.set_text("Refresh")
         check_again_label.center()
 
         self.status_label = lv.label(self.main_screen)
@@ -116,6 +116,7 @@ class OSUpdate(Activity):
             else:
                 self.status_label.set_text("Update available!")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+            lv.group_focus_obj(self.install_button)
         elif state == UpdateState.NO_UPDATE:
             info = self._um.get_update_info()
             self._update_install_button(info["comparison"] if info else "same")
@@ -128,6 +129,7 @@ class OSUpdate(Activity):
             else:
                 self.status_label.set_text("No updates available.")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+            lv.group_focus_obj(self.install_button)
         elif state == UpdateState.DOWNLOADING:
             self.status_label.set_text("Update in progress.\nNavigate away to cancel.")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
