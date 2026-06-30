@@ -24,6 +24,7 @@ Usage:
 
 import socket
 import _thread
+import sys
 from mpos.task_manager import TaskManager
 
 # Module-level reference to the getaddrinfo implementation.  Tests replace this
@@ -63,9 +64,17 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
         Whatever exception socket.getaddrinfo() raises (e.g. OSError on
         NXDOMAIN or network unreachable).
     """
-    global _inflight
     if socktype is None:
         socktype = socket.SOCK_STREAM
+
+    # On the unix port _thread is marked 'unsafe'; spawning worker threads for
+    # DNS on desktop corrupts the heap and crashes the process. Call getaddrinfo
+    # directly there (it is reasonably fast and does not block an LVGL task
+    # handler on desktop). On ESP32 keep the off-loop worker thread.
+    if sys.platform == "linux":
+        return _getaddrinfo(host, port, proto, socktype)
+
+    global _inflight
 
     # Wait for a free worker slot without blocking the event loop. If cancelled
     # here, we have not reserved a slot yet, so nothing leaks.

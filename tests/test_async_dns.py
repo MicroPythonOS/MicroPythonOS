@@ -25,6 +25,12 @@ FAKE_AI = [(2, 1, 0, '', ('93.184.216.34', 80))]
 class TestGetaddrinfoAsync(unittest.TestCase):
 
     def setUp(self):
+        # Off-loop DNS is only used on ESP32; on linux getaddrinfo runs
+        # synchronously so there is no worker thread to test.
+        self._skip = sys.platform == "linux"
+        if self._skip:
+            return
+
         import mpos.net.async_dns as async_dns_mod
         self._async_dns_mod = async_dns_mod
         # Save the module-level _getaddrinfo reference so tearDown can restore it.
@@ -34,6 +40,8 @@ class TestGetaddrinfoAsync(unittest.TestCase):
 
     def tearDown(self):
         # Restore original _getaddrinfo to avoid pollution between tests.
+        if self._skip:
+            return
         self._async_dns_mod._getaddrinfo = self._orig_getaddrinfo
 
     # ------------------------------------------------------------------
@@ -63,6 +71,8 @@ class TestGetaddrinfoAsync(unittest.TestCase):
 
     def test_event_loop_stays_alive_during_dns(self):
         """Event loop must keep ticking while the DNS worker blocks for 150 ms."""
+        if self._skip:
+            return
         import asyncio
         result, ticks = asyncio.run(self._run_test_loop_alive())
         # 150ms sleep / 5ms heartbeat = ~30 ticks expected; assert > 5 for safety
@@ -88,6 +98,8 @@ class TestGetaddrinfoAsync(unittest.TestCase):
 
     def test_worker_exception_is_reraised(self):
         """An OSError from the worker thread must propagate to the caller."""
+        if self._skip:
+            return
         import asyncio
         raised = asyncio.run(self._run_test_exception())
         self.assertTrue(raised, "OSError from worker thread was not re-raised")
