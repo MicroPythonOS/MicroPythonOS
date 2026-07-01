@@ -231,10 +231,8 @@ class Sorter(Activity):
         tight_width = available_width // max(1, num_tubes)
         tube_width = max(28, int(tight_width * 0.85))
         emoji_size = min(32, max(14, tube_width - 8))
-        #emoji_size = 32
         #tube_height = int((emoji_size * self.capacity + 8) * 1.4)
         tube_height = int((emoji_size * 1.35 * self.capacity))
-        #tube_height = emoji_size * self.capacity
 
         for idx in range(num_tubes):
             tube = self._build_tube_widget(idx, tube_width, tube_height, emoji_size)
