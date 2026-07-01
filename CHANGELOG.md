@@ -20,6 +20,7 @@ Frameworks:
 - AppManager: add support for apps as Python packages
 - AudioManager: support for desktop audio by @jnuyens
 - DownloadManager and aiohttp: various connection handling improvements by @jnuyens
+- File Explorer: add support for deleting directories
 - Focus: `add_focus_border()` highlights stay hidden until the user navigates by direction
 - FontManager: fallback to included lips for various variations
 - NotificationManager: add buzzer sound notifications with setting

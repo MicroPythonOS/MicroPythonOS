@@ -3,6 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 import os
+import shutil
 import lvgl as lv
 
 from .. import sdcard
@@ -357,13 +358,14 @@ class FileExplorerActivity(Activity):
         mbox.delete()
         path = self._selected_path
         try:
-            os.remove(path)
-        except OSError:
-            try:
-                os.rmdir(path.rstrip("/"))
-            except OSError as e:
-                logger.error("FileExplorer: delete error %s: %s", path, e)
-        if __debug__: logger.debug("FileExplorer: deleted %s", path)
+            if path.rstrip("/") and os.stat(path.rstrip("/"))[0] & 0x4000:
+                shutil.rmtree(path.rstrip("/"))
+            else:
+                os.remove(path)
+        except OSError as e:
+            logger.error("FileExplorer: delete error %s: %s", path, e)
+        else:
+            if __debug__: logger.debug("FileExplorer: deleted %s", path)
         self._populate_dir(self._current_path)
 
     def _prompt_rename(self):
