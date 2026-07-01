@@ -1,78 +1,14 @@
 from mpos import Activity, AppearanceManager, DisplayMetrics, SharedPreferences
+import mpos.ui
 import lvgl as lv
+import os
 import random
 import time
 
 
-_EMOJI_DIR = "M:builtin/res/emojis/32x32/"
-_EMOJIS = [
-    "1F339.png",
-    "1F33D.png",
-    "1F346.png",
-    "1F351.png",
-    "1F355.png",
-    "1F389.png",
-    "1F3B6.png",
-    "1F3CE-FE0F.png",
-    "1F426.png",
-    "1F437.png",
-    "1F43D.png",
-    "1F440.png",
-    "1F447.png",
-    "1F44D.png",
-    "1F44E.png",
-    "1F48B.png",
-    "1F49C.png",
-    "1F4A5.png",
-    "1F4A6.png",
-    "1F4A8.png",
-    "1F4A9.png",
-    "1F4AA.png",
-    "1F4AF.png",
-    "1F525.png",
-    "1F600.png",
-    "1F601.png",
-    "1F602.png",
-    "1F605.png",
-    "1F606.png",
-    "1F607.png",
-    "1F609.png",
-    "1F60A.png",
-    "1F60B.png",
-    "1F60C.png",
-    "1F60D.png",
-    "1F60E.png",
-    "1F60F.png",
-    "1F612.png",
-    "1F614.png",
-    "1F618.png",
-    "1F61C.png",
-    "1F622.png",
-    "1F62D.png",
-    "1F631.png",
-    "1F642.png",
-    "1F644.png",
-    "1F648.png",
-    "1F64F.png",
-    "1F680.png",
-    "1F914.png",
-    "1F917.png",
-    "1F926.png",
-    "1F929.png",
-    "1F92D.png",
-    "1F937.png",
-    "1F970.png",
-    "1F973.png",
-    "1F9E1.png",
-    "1FAF6.png",
-    "203C-FE0F.png",
-    "263A-FE0F.png",
-    "26A1.png",
-    "270A.png",
-    "270C-FE0F.png",
-    "2728.png",
-    "2764-FE0F.png",
-]
+_EMOJI_FS_DIR = "builtin/res/emojis/32x32"
+_EMOJI_DIR = "M:" + _EMOJI_FS_DIR + "/"
+_EMOJIS = sorted([f for f in os.listdir(_EMOJI_FS_DIR) if f.endswith(".png")])
 
 # Difficulty scaling knobs. These tune how quickly each dimension grows.
 _LEVEL1_FILLED = 2
@@ -234,7 +170,6 @@ class Sorter(Activity):
         self.container = None
         self.tube_widgets = []
         self.level = 1
-        self.total_solved = 0
         self.score = 0
         self.moves = 0
         self.selected = -1
@@ -259,9 +194,6 @@ class Sorter(Activity):
 
         self.moves_label = lv.label(self.screen)
         self.moves_label.align(lv.ALIGN.TOP_RIGHT, -10, 10)
-
-        self.solved_label = lv.label(self.screen)
-        self.solved_label.align(lv.ALIGN.TOP_LEFT, 10, 10)
 
         self.score_label = lv.label(self.screen)
         self.score_label.align(lv.ALIGN.BOTTOM_LEFT, 10, -10)
@@ -299,7 +231,10 @@ class Sorter(Activity):
         tight_width = available_width // max(1, num_tubes)
         tube_width = max(28, int(tight_width * 0.85))
         emoji_size = min(32, max(14, tube_width - 8))
-        tube_height = emoji_size * self.capacity + 8
+        #emoji_size = 32
+        #tube_height = int((emoji_size * self.capacity + 8) * 1.4)
+        tube_height = int((emoji_size * 1.35 * self.capacity))
+        #tube_height = emoji_size * self.capacity
 
         for idx in range(num_tubes):
             tube = self._build_tube_widget(idx, tube_width, tube_height, emoji_size)
@@ -309,14 +244,15 @@ class Sorter(Activity):
         tube_obj = lv.obj(self.container)
         tube_obj.set_size(tube_width, tube_height)
         tube_obj.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tube_obj.set_style_pad_all(2, 0)
-        tube_obj.set_style_pad_column(2, 0)
-        tube_obj.set_style_radius(4, 0)
-        tube_obj.set_style_bg_color(self.TUBE_BG, 0)
-        tube_obj.set_style_border_color(self.TUBE_BORDER, 0)
-        tube_obj.set_style_border_width(2, 0)
+        tube_obj.set_style_pad_all(2, lv.PART.MAIN)
+        tube_obj.set_style_pad_column(2, lv.PART.MAIN)
+        tube_obj.set_style_radius(4, lv.PART.MAIN)
+        tube_obj.set_style_bg_color(self.TUBE_BG, lv.PART.MAIN)
+        tube_obj.set_style_border_color(self.TUBE_BORDER, lv.PART.MAIN)
+        tube_obj.set_style_border_width(2, lv.PART.MAIN)
         tube_obj.add_flag(lv.obj.FLAG.CLICKABLE)
         tube_obj.add_event_cb(lambda e, i=idx: self.on_tube(e, i), lv.EVENT.CLICKED, None)
+        mpos.ui.add_focus_border(tube_obj, width=4)
 
         if self.selected == idx:
             tube_obj.set_style_border_color(self.SELECT_COLOR, 0)
@@ -335,7 +271,6 @@ class Sorter(Activity):
     def refresh_labels(self):
         self.level_label.set_text(f"Level: {self.level}")
         self.moves_label.set_text(f"Moves: {self.moves}")
-        self.solved_label.set_text(f"Solved: {self.total_solved}")
         self.score_label.set_text(f"Score: {self.score}")
         best = max(self.score, self.highscore)
         self.highscore_label.set_text(f"Best: {best}")
@@ -350,7 +285,6 @@ class Sorter(Activity):
         editor = SharedPreferences(self.appFullName).edit()
         editor.put_int("autosave_level", self.level)
         editor.put_int("autosave_score", self.score)
-        editor.put_int("autosave_solved", self.total_solved)
         editor.commit()
 
     def _save_highscore(self):
@@ -365,14 +299,12 @@ class Sorter(Activity):
         editor = SharedPreferences(self.appFullName).edit()
         editor.put_int("autosave_level", 0)
         editor.put_int("autosave_score", 0)
-        editor.put_int("autosave_solved", 0)
         editor.commit()
 
     def _check_autoload(self):
         prefs = SharedPreferences(self.appFullName)
         saved_level = prefs.get_int("autosave_level", 0)
         saved_score = prefs.get_int("autosave_score", 0)
-        saved_solved = prefs.get_int("autosave_solved", 0)
         if saved_level == 0 and saved_score == 0:
             return
 
@@ -382,7 +314,7 @@ class Sorter(Activity):
 
         yes_btn = mbox.add_footer_button("Yes")
         yes_btn.add_event_cb(
-            lambda e: self._do_load(e, saved_level, saved_score, saved_solved),
+            lambda e: self._do_load(e, saved_level, saved_score),
             lv.EVENT.CLICKED, None
         )
         no_btn = mbox.add_footer_button("No")
@@ -390,11 +322,10 @@ class Sorter(Activity):
 
         self.popup_modal = mbox
 
-    def _do_load(self, event, saved_level, saved_score, saved_solved):
+    def _do_load(self, event, saved_level, saved_score):
         self._close_popup()
         self.level = saved_level
         self.score = saved_score
-        self.total_solved = saved_solved
         self.new_game()
         self.build_board()
         self.refresh_labels()
@@ -480,7 +411,6 @@ class Sorter(Activity):
         min_moves = filled * capacity
         wasted = max(0, self.moves - min_moves)
         self.score += self.level * 10 + max(10, 100 - wasted * 5)
-        self.total_solved += 1
         self.refresh_labels()
         self._win_timer = lv.timer_create(self._advance_level, 1000, None)
         self._win_timer.set_repeat_count(1)
@@ -506,7 +436,6 @@ class Sorter(Activity):
         self._save_highscore()
         self._last_ts = time.ticks_ms()
         self.level = 1
-        self.total_solved = 0
         self.score = 0
         self.new_game()
         self.build_board()
