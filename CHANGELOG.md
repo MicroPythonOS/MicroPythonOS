@@ -8,9 +8,6 @@ Board Support:
 - DFRobot UniHiker K10: add board support (ST7789 display, XL9535 GPIO expander, GC2145 camera, on-board sensors, RGB LED); auto-detected via I2C probe for the XL9535 expander; BTN_A=ENTER / BTN_B=NEXT navigation by @woodhead-tech
 
 Builtin Apps:
-- com_micropythonos_nostr: disable the Send button and show "Encrypting..." (or "Sending...") while the slow publish work runs, then restore it
-- com_micropythonos_nostr: wait 30 seconds at boot before connecting to relays so Wi-Fi and system services can settle
-- com_micropythonos_nostr: remove duplicated chat-creation logic between the boot service and chat activity by sharing helpers in chat_model.py
 - About: fix logo not showing
 - AppStore: download the correct .mpk from BadgeHub.eu if there are multiple versions
 - File Manager: fix browsing SD card (FAT32) folders and files not showing
