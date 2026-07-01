@@ -3,6 +3,8 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.14.0
+======
 
 Board Support:
 - DFRobot UniHiker K10: add board support (ST7789 display, XL9535 GPIO expander, GC2145 camera, on-board sensors, RGB LED); auto-detected via I2C probe for the XL9535 expander; BTN_A=ENTER / BTN_B=NEXT navigation by @woodhead-tech
@@ -19,6 +21,7 @@ Frameworks:
 - DownloadManager and aiohttp: various connection handling improvements by @jnuyens
 - Focus: `add_focus_border()` highlights stay hidden until the user navigates by direction
 - FontManager: fallback to included lips for various variations
+- NotificationManager: add buzzer sound notifications with setting
 - SDCard: tolerate trailing slashes when listing SD card contents
 - StreamingUnzip: tolerate trailing slashes when creating directories
 - FontManager: tolerate trailing slashes when listing directories
