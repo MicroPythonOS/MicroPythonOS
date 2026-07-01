@@ -146,7 +146,7 @@ class RetroCoreLauncher(Activity):
 
     def launch_retrogo(self, roms_subdir, game_name, title, file_extensions):
         help_text = (
-            "• Change audio device and volume by pressing B\n"
+            "• Change audio device and volume by pressing Y\n"
             "• To exit, press MENU and choose 'Quit'\n"
         )
         self.startActivity(
