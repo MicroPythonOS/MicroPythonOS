@@ -131,13 +131,22 @@ def _apply_move(source, target, capacity):
 
 
 def _is_solved(tubes):
+    """True when every color is fully gathered in one tube.
+
+    Each non-empty tube must be uniform and no color may be split across
+    multiple tubes. Empty tubes are allowed.
+    """
+    seen = set()
     for tube in tubes:
         if not tube:
             continue
-        first = tube[0]
+        color = tube[0]
         for item in tube:
-            if item != first:
+            if item != color:
                 return False
+        if color in seen:
+            return False
+        seen.add(color)
     return True
 
 
@@ -285,9 +294,11 @@ class Sorter(Activity):
 
         self.tube_widgets = []
         num_tubes = len(self.tubes)
-        pct = min(22, 95 // max(1, num_tubes))
-        tube_width = max(32, DisplayMetrics.pct_of_width(pct))
-        emoji_size = min(32, tube_width - 8)
+        gap = 6
+        available_width = DisplayMetrics.width() - ((num_tubes - 1) * gap)
+        tight_width = available_width // max(1, num_tubes)
+        tube_width = max(28, int(tight_width * 0.85))
+        emoji_size = min(32, max(14, tube_width - 8))
         tube_height = emoji_size * self.capacity + 8
 
         for idx in range(num_tubes):
