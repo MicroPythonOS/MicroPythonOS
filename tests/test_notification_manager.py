@@ -1,3 +1,4 @@
+import sys
 import unittest
 
 from mpos import Intent
@@ -26,6 +27,9 @@ class _FakePrefs:
     def __init__(self, initial_data=None):
         self.data = initial_data or {}
 
+    def get_string(self, key, default=None):
+        return self.data.get(key, default)
+
     def get_list(self, key, default=None):
         if key in self.data:
             return list(self.data[key])
@@ -35,14 +39,53 @@ class _FakePrefs:
         return _FakeEditor(self)
 
 
+class _FakeOutput:
+    def __init__(self, kind):
+        self.kind = kind
+
+
+class _FakePlayer:
+    def start(self):
+        pass
+
+
+class _FakeAudioManager:
+    STREAM_NOTIFICATION = 1
+    _outputs = []
+    _calls = []
+
+    @classmethod
+    def get_outputs(cls):
+        return cls._outputs
+
+    @classmethod
+    def player(cls, **kwargs):
+        cls._calls.append(kwargs)
+        return _FakePlayer()
+
+
 class TestNotificationManager(unittest.TestCase):
     def setUp(self):
         self.fake_prefs = _FakePrefs({"notifications": []})
         NotificationManager._reset_for_tests(clear_storage=False)
         NotificationManager._prefs = self.fake_prefs
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "coin"})
+        self._orig_audio_manager = sys.modules["mpos.notification_manager"].AudioManager
+        sys.modules["mpos.notification_manager"].AudioManager = _FakeAudioManager
+        _FakeAudioManager._outputs = []
+        _FakeAudioManager._calls = []
 
     def tearDown(self):
+        sys.modules["mpos.notification_manager"].AudioManager = self._orig_audio_manager
         NotificationManager._reset_for_tests(clear_storage=False)
+
+    def _set_outputs(self, *outputs):
+        _FakeAudioManager._outputs = list(outputs)
+
+    def _last_sound_call(self):
+        if not _FakeAudioManager._calls:
+            return None
+        return _FakeAudioManager._calls[-1]
 
     def test_notify_persists_new_notification(self):
         n = Notification(
@@ -168,6 +211,38 @@ class TestNotificationManager(unittest.TestCase):
             self.assertIsNone(NotificationManager.get_notification("open.app"))
         finally:
             AppManager.start_app = old_start_app
+
+    def test_notification_sound_defaults_to_coin(self):
+        self._set_outputs(_FakeOutput("buzzer"))
+        NotificationManager.notify(Notification(notification_id="sound.default", title="Default"))
+        call = self._last_sound_call()
+        self.assertIsNotNone(call)
+        self.assertEqual(call["rtttl"], NotificationManager._NOTIFICATION_SOUNDS["coin"])
+        self.assertEqual(call["stream_type"], _FakeAudioManager.STREAM_NOTIFICATION)
+        self.assertEqual(call["volume"], 60)
+
+    def test_notification_sound_none_is_silent(self):
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "none"})
+        self._set_outputs(_FakeOutput("buzzer"))
+        NotificationManager.notify(Notification(notification_id="sound.none", title="Silent"))
+        self.assertIsNone(self._last_sound_call())
+
+    def test_notification_sound_scale_up(self):
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "scale_up"})
+        self._set_outputs(_FakeOutput("buzzer"))
+        NotificationManager.notify(Notification(notification_id="sound.scale", title="Scale"))
+        self.assertEqual(self._last_sound_call()["rtttl"], NotificationManager._NOTIFICATION_SOUNDS["scale_up"])
+
+    def test_notification_sound_superhappy(self):
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "superhappy"})
+        self._set_outputs(_FakeOutput("buzzer"))
+        NotificationManager.notify(Notification(notification_id="sound.happy", title="Happy"))
+        self.assertEqual(self._last_sound_call()["rtttl"], NotificationManager._NOTIFICATION_SOUNDS["superhappy"])
+
+    def test_notification_sound_no_buzzer_is_silent(self):
+        self._set_outputs(_FakeOutput("i2s"))
+        NotificationManager.notify(Notification(notification_id="sound.nobuzzer", title="No buzzer"))
+        self.assertIsNone(self._last_sound_call())
 
 
 if __name__ == "__main__":

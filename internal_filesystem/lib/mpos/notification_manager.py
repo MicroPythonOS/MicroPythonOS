@@ -3,6 +3,7 @@ import time
 
 from .shared_preferences import SharedPreferences
 from .content.intent import Intent
+from .audio.audiomanager import AudioManager
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +121,17 @@ class NotificationManager:
     _PREFS_FILENAME = "notifications.json"
     _PREFS_KEY = "notifications"
 
+    _SETTINGS_APP_NAME = "com.micropythonos.settings"
+    _SETTINGS_KEY = "notification_sound"
+    _NOTIFICATION_SOUNDS = {
+        "coin": "coin:d=8,o=6,b=200:16b5,e6",
+        "scale_up": "scale_up:d=32,o=5,b=100:c,c#,d#,e,f#,g#,a#,b",
+        "superhappy": "superhappy:d=8,o=5,b=635:c,e,g,c,e,g,c,e,g,c6,e6,g6,c6,e6,g6,c6,e6,g6,c7,e7,g7,c7,e7,g7,c7,e7,g7",
+    }
+
     _prefs = None
     _initialized = False
+    _settings_prefs = None
     _notifications = {}
     _listeners = []
     _persist_write_count = 0
@@ -144,6 +154,43 @@ class NotificationManager:
                 defaults={cls._PREFS_KEY: []},
             )
         return cls._prefs
+
+    @classmethod
+    def _get_settings_prefs(cls):
+        if cls._settings_prefs is None:
+            cls._settings_prefs = SharedPreferences(
+                cls._SETTINGS_APP_NAME,
+                defaults={cls._SETTINGS_KEY: "coin"},
+            )
+        return cls._settings_prefs
+
+    @staticmethod
+    def _find_buzzer_output():
+        for output in AudioManager.get_outputs():
+            if output.kind == "buzzer":
+                return output
+        return None
+
+    @classmethod
+    def _play_notification_sound(cls):
+        try:
+            sound = cls._get_settings_prefs().get_string(cls._SETTINGS_KEY, "coin")
+            if sound == "none":
+                return
+            rtttl = cls._NOTIFICATION_SOUNDS.get(sound) or cls._NOTIFICATION_SOUNDS["coin"]
+            if not rtttl:
+                return
+            output = cls._find_buzzer_output()
+            if output is None:
+                return
+            AudioManager.player(
+                rtttl=rtttl,
+                stream_type=AudioManager.STREAM_NOTIFICATION,
+                volume=60,
+                output=output,
+            ).start()
+        except Exception as e:
+            logger.error("Failed to play notification sound: %s", e)
 
     @classmethod
     def _ensure_initialized(cls):
@@ -265,17 +312,19 @@ class NotificationManager:
             # Update content + timestamp but do NOT persist — same ID, no flash write
             existing.update_from(notification)
             existing.updated_at = now_ts
-            cls._notify_listeners()
-            return existing.notification_id
+            notification_id = existing.notification_id
+        else:
+            if notification.created_at is None:
+                notification.created_at = now_ts
+            notification.updated_at = now_ts
+            cls._notifications[notification.notification_id] = notification
+            cls._trim_to_limit(persist=False)
+            cls._persist()           # debounced write
+            notification_id = notification.notification_id
 
-        if notification.created_at is None:
-            notification.created_at = now_ts
-        notification.updated_at = now_ts
-        cls._notifications[notification.notification_id] = notification
-        cls._trim_to_limit(persist=False)
-        cls._persist()           # debounced write
         cls._notify_listeners()
-        return notification.notification_id
+        cls._play_notification_sound()
+        return notification_id
 
     @classmethod
     def cancel(cls, notification_id):
@@ -346,6 +395,7 @@ class NotificationManager:
         cls._persist_write_count = 0
         cls._pending_persist = False
         cls._debounce_timer = None
+        cls._settings_prefs = None
         if clear_storage:
             prefs = SharedPreferences(
                 cls._PREFS_APP_NAME,
