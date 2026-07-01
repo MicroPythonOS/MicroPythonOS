@@ -357,18 +357,7 @@ import _thread
 
 def startup_wow_effect():
     try:
-        # Startup jingle: Happy upbeat sequence (ascending scale with flourish)
-        startup_jingle = "Startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7"
-        #startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
-
-        # Start the jingle
-        player = AudioManager.player(
-            rtttl=startup_jingle,
-            stream_type=AudioManager.STREAM_NOTIFICATION,
-            volume=60,
-            output=buzzer_output,
-        )
-        player.start()
+        AudioManager.player(rtttl="7_note_startup:d=8,o=6,b=200:c,d,e,g,4c7,4e,4c7",stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output).start()
 
         # Rainbow colors for the 5 LEDs
         rainbow = [
