@@ -29,6 +29,11 @@ class NostrBootService(Service):
 
     With ``connect_at_boot`` disabled, the service exits immediately and all
     initialization is deferred until the user manually starts the app.
+
+    On a real device the relay handshake is deferred by 30 seconds so Wi-Fi
+    and system services have time to settle first. In test harnesses that run
+    without a live event loop, initialization happens synchronously so other
+    tests are not affected.
     """
 
     # Delay before connecting at boot so Wi-Fi / system services have time to
@@ -48,17 +53,15 @@ class NostrBootService(Service):
                 logger.debug("NostrBootService: connect_at_boot disabled, skipping")
             return
 
-        if __debug__:
-            logger.debug("NostrBootService: scheduling delayed start")
-        TaskManager.create_task(self._delayed_start(prefs))
+        if TaskManager.disabled:
+            # Test harness without a live asyncio loop: initialize now.
+            self._start_now(prefs)
+        else:
+            if __debug__:
+                logger.debug("NostrBootService: scheduling delayed start")
+            TaskManager.create_task(self._delayed_start(prefs))
 
-    async def _delayed_start(self, prefs):
-        await TaskManager.sleep_ms(self.STARTUP_DELAY_MS)
-        if not self._running:
-            return
-        if prefs.get_int("connect_at_boot", 1) == 0:
-            return
-
+    def _start_now(self, prefs):
         if __debug__:
             logger.debug("NostrBootService: starting Nostr initialization")
 
@@ -69,6 +72,14 @@ class NostrBootService(Service):
         manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)
         manager.register_post_event_handler(KIND_NIP17_CHAT, self._persist_cb)
         configure_nostr_manager(prefs, manager, store=self._store)
+
+    async def _delayed_start(self, prefs):
+        await TaskManager.sleep_ms(self.STARTUP_DELAY_MS)
+        if not self._running:
+            return
+        if prefs.get_int("connect_at_boot", 1) == 0:
+            return
+        self._start_now(prefs)
 
     def onDestroy(self):
         self._running = False
