@@ -123,8 +123,8 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
 
         self._prev_digital = digital
 
-        # The first held non-MENU key becomes the repeat candidate.
-        held = [idx for idx in _BUTTON_INDICES if digital[idx] and idx != _IDX_BTN_MENU]
+        # The first held key becomes the repeat candidate.
+        held = [idx for idx in _BUTTON_INDICES if digital[idx]]
         if held:
             first = held[0]
             now = time.ticks_ms()
