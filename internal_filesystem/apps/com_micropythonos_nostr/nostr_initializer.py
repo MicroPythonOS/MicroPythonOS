@@ -1,6 +1,12 @@
 import logging
 
-from .chat_model import KIND_CHANNEL_MESSAGE, KIND_DM, KIND_NIP17_CHAT
+from .chat_model import (
+    DEFAULT_CHANNEL_ID,
+    DEFAULT_CHANNEL_NAME,
+    KIND_CHANNEL_MESSAGE,
+    KIND_DM,
+    KIND_NIP17_CHAT,
+)
 from .event_store import _current_nostr_ts
 
 logger = logging.getLogger(__name__)
@@ -111,6 +117,11 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
         logger.error("NIP-17 subscription failed: %s", e)
 
     if store is not None:
+        # Ensure the default public channel exists so boot-time notifications
+        # and messages are received even before the user opens the UI.
+        store.get_or_create_channel(
+            DEFAULT_CHANNEL_ID, title=f"#{DEFAULT_CHANNEL_NAME}"
+        )
         for chat in store.get_chats():
             if chat.kind == KIND_CHANNEL_MESSAGE and chat.channel_id:
                 since = chat.last_ts - OVERLAP_SECONDS if chat.last_ts else now - LOOKBACK_WINDOW_SECONDS

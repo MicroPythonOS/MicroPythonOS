@@ -294,6 +294,7 @@ class NostrManager:
         # Lifecycle
         self.keep_running = False
         self._cleanup_done = True
+        self._cm_callback = None
 
     # --- Public lifecycle ---
 
@@ -302,28 +303,65 @@ class NostrManager:
         if self.keep_running:
             return
         self.keep_running = True
+        try:
+            from mpos.net.connectivity_manager import ConnectivityManager
+
+            if self._cm_callback is None:
+                self._cm_callback = self._on_connectivity_change
+                ConnectivityManager.register_callback(self._cm_callback)
+                if __debug__:
+                    logger.debug("NostrManager: registered connectivity callback")
+        except Exception:
+            if __debug__:
+                logger.debug(
+                    "NostrManager: ConnectivityManager unavailable, "
+                    "online/offline handling disabled"
+                )
 
     def stop(self):
-        """Stop the manager and close all relay connections."""
+        """Stop the manager and close all relay connections.
+
+        Subscriptions and configuration are preserved so the manager can be
+        restarted when the device comes back online.
+        """
         self.keep_running = False
-        if self._main_task is not None and self._cleanup_done:
+        if (
+            self._main_task is not None
+            and self._main_task is not True
+            and self._cleanup_done
+        ):
             self._cleanup_done = False
             TaskManager.create_task(self._do_close())
 
     async def _do_close(self):
+        # Let the main loop finish cleanly first so it doesn't touch
+        # relay_manager while we are closing it.
+        if self._main_task is not None and self._main_task is not True:
+            try:
+                await self._main_task
+            except Exception:
+                pass
         if self.relay_manager is not None:
             try:
                 await self.relay_manager.close_connections()
             except Exception as e:
                 logger.warning("NostrManager: error closing connections: %s", e)
         self._main_task = None
-        self._default_relays = []
-        self._subscriptions = []
-        self._subscription_ids = {}
-        self._nostr_configured = False
-        self._nwc_configured = False
-        self._relays_configured = False
+        self.connected = False
+        self.relay_manager = None
+        self._relay_connected_state = {}
+        # Subscriptions, identity and NWC config are intentionally kept so
+        # start() can restore them on the next online event.
         self._cleanup_done = True
+
+    def _on_connectivity_change(self, online):
+        if online:
+            if not self.keep_running:
+                self.start()
+            self._ensure_main_task()
+        else:
+            if self.keep_running:
+                self.stop()
 
     def is_running(self):
         return self.keep_running
@@ -509,6 +547,8 @@ class NostrManager:
 
     def _publish_signed_dm(self, private_key, recipient_hex, content, kind=4, reference_event_id=None):
         """Build, sign and publish an encrypted direct message."""
+        if self.relay_manager is None:
+            raise RuntimeError("Relay manager is not ready yet")
         dm = EncryptedDirectMessage(
             recipient_pubkey=recipient_hex,
             cleartext_content=content,
@@ -809,6 +849,11 @@ class NostrManager:
             logger.warning("NostrManager: %s", msg)
             if self._error_cb:
                 self._error_cb(msg)
+            # Reset lifecycle state so start() can be retried when we come
+            # back online.
+            self.connected = False
+            self._main_task = None
+            self.keep_running = False
             return
 
         if not self.keep_running:

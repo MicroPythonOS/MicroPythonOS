@@ -416,7 +416,10 @@ class TestNostrManagerRelaySync(unittest.TestCase):
         self.mgr._nwc_private_key = None
         self.mgr._nwc_wallet_pubkey = None
         self.mgr._relays_dirty = False
+        self.mgr.connected = False
         self.mgr.relay_manager = None
+        self.mgr.keep_running = True
+        self.mgr._cleanup_done = True
         # Earlier tests may have scheduled the real _run() loop. Cancel it
         # and pretend the main task is running so configure_identity doesn't
         # spawn a new one while these tests run.
@@ -495,6 +498,116 @@ class TestNostrManagerRelaySync(unittest.TestCase):
 
         relay = self.mgr.relay_manager.relays["wss://r.example"]
         self.assertEqual(relay.published, [])
+
+
+class TestNostrManagerConnectivity(unittest.TestCase):
+    """Online/offline callbacks and restart-safe stop behaviour."""
+
+    def setUp(self):
+        self.mgr = NostrManager.get_instance()
+        if self.mgr._main_task is not None and self.mgr._main_task is not True:
+            try:
+                self.mgr._main_task.cancel()
+            except Exception:
+                pass
+        self.mgr._subscriptions = []
+        self.mgr._subscription_ids = {}
+        self.mgr._default_relays = []
+        self.mgr._nwc_relays = []
+        self.mgr._nostr_configured = False
+        self.mgr._nwc_configured = False
+        self.mgr._nwc_nwc_url = None
+        self.mgr._nostr_private_key = None
+        self.mgr._nwc_private_key = None
+        self.mgr._nwc_wallet_pubkey = None
+        self.mgr._relays_dirty = False
+        self.mgr.connected = False
+        self.mgr.relay_manager = None
+        self.mgr.keep_running = False
+        self.mgr._cleanup_done = True
+        self.mgr._main_task = True  # suppress async task creation in tests
+
+    def test_run_resets_main_task_after_failed_relay_connection(self):
+        """If no relay connects, _run() must reset state so start() can retry."""
+        from com_micropythonos_nostr import nostr_service
+
+        original_relay_manager = nostr_service.RelayManager
+
+        class _FakeNoConnectRelayManager:
+            def __init__(self):
+                self.relays = {"wss://test.example": object()}
+
+            def add_relay(self, url):
+                self.relays[url] = object()
+
+            async def open_connections(self, ssl_options=None, proxy=None):
+                pass
+
+            def connected_relays(self):
+                return 0
+
+        nostr_service.RelayManager = _FakeNoConnectRelayManager
+        try:
+            self.mgr._default_relays = ["wss://test.example"]
+            # Simulate the loop having already been asked to stop so the
+            # 30-second connection wait exits immediately.
+            self.mgr.keep_running = False
+            import asyncio
+
+            asyncio.run(self.mgr._run())
+            self.assertIsNone(self.mgr._main_task)
+            self.assertFalse(self.mgr.keep_running)
+        finally:
+            nostr_service.RelayManager = original_relay_manager
+
+    def test_stop_preserves_subscriptions_and_config(self):
+        """stop() must clear only runtime state, not configured state."""
+        import asyncio
+
+        nsec = PrivateKey().bech32()
+        self.mgr.configure_identity(nsec, relays="wss://preserve.example")
+        self.mgr.subscribe_channel("f" * 64, name="preserved")
+        self.mgr._nwc_configured = True
+        self.mgr._nwc_nwc_url = "nwc://wallet.example"
+
+        self.mgr.stop()
+        self.assertFalse(self.mgr.keep_running)
+        # Run the close coroutine synchronously because the async cleanup
+        # task will not execute in the test runner.
+        asyncio.run(self.mgr._do_close())
+
+        self.assertTrue(self.mgr._nostr_configured)
+        self.assertEqual(self.mgr._default_relays, ["wss://preserve.example"])
+        self.assertEqual(len(self.mgr._subscriptions), 1)
+        self.assertEqual(self.mgr._subscriptions[0].name, "preserved")
+        self.assertTrue(self.mgr._nwc_configured)
+        self.assertEqual(self.mgr._nwc_nwc_url, "nwc://wallet.example")
+        self.assertIsNone(self.mgr._main_task)
+        self.assertIsNone(self.mgr.relay_manager)
+
+    def test_on_connectivity_change_starts_when_offline(self):
+        self.mgr.keep_running = False
+        self.mgr._main_task = True  # suppress async task creation
+        self.mgr._on_connectivity_change(True)
+        self.assertTrue(self.mgr.keep_running)
+
+    def test_on_connectivity_change_stops_when_online(self):
+        self.mgr.keep_running = True
+        self.mgr._main_task = True
+        self.mgr._on_connectivity_change(False)
+        self.assertFalse(self.mgr.keep_running)
+
+    def test_publish_signed_dm_requires_relay_manager(self):
+        """NWC helpers must fail cleanly when stopped/offline."""
+        self.mgr._nwc_configured = True
+        self.mgr._nwc_private_key = PrivateKey()
+        self.mgr._nwc_wallet_pubkey = "a" * 64
+        self.mgr.relay_manager = None
+        try:
+            self.mgr.nwc_fetch_balance()
+        except RuntimeError:
+            return
+        self.fail("nwc_fetch_balance should raise RuntimeError when offline")
 
 
 class TestNostrEventFormatting(unittest.TestCase):

@@ -9,7 +9,12 @@ sys.path.insert(0, "apps/com_micropythonos_nostr")
 from nostr.key import PrivateKey
 
 from com_micropythonos_nostr import nostr_initializer
-from com_micropythonos_nostr.chat_model import Chat, KIND_DM
+from com_micropythonos_nostr.chat_model import (
+    Chat,
+    DEFAULT_CHANNEL_ID,
+    DEFAULT_CHANNEL_NAME,
+    KIND_DM,
+)
 from com_micropythonos_nostr.nostr_initializer import configure_nostr_manager
 
 
@@ -57,9 +62,18 @@ class _FakeManager:
 class _FakeStore:
     def __init__(self, chats=None):
         self._chats = list(chats) if chats else []
+        self.created_channels = []
 
     def get_chats(self):
         return self._chats
+
+    def get_or_create_channel(self, channel_id, title=None):
+        self.created_channels.append((channel_id, title))
+        chat_id = f"channel_{channel_id}"
+        chat = Chat.channel(channel_id, title=title)
+        if not any(c.chat_id == chat_id for c in self._chats):
+            self._chats.append(chat)
+        return chat
 
 
 class TestConfigureNostrManager(unittest.TestCase):
@@ -116,6 +130,24 @@ class TestConfigureNostrManager(unittest.TestCase):
             self.now - nostr_initializer.NIP17_LOOKBACK_WINDOW_SECONDS,
         )
         self.assertEqual(nip17_call[1]["limit"], 50)
+
+    def test_default_public_channel_is_joined_and_subscribed(self):
+        """A fresh install must still subscribe to the default #MicroPythonOS channel."""
+        manager = _FakeManager()
+        store = _FakeStore()
+        prefs = _FakePrefs(nsec=self._make_nsec(), relay="wss://relay.example")
+
+        configure_nostr_manager(prefs, manager, store=store)
+
+        self.assertIn(
+            (DEFAULT_CHANNEL_ID, f"#{DEFAULT_CHANNEL_NAME}"),
+            store.created_channels,
+        )
+        channel_calls = [
+            c for c in manager.calls
+            if c[0] == "subscribe_channel" and c[1]["channel_id"] == DEFAULT_CHANNEL_ID
+        ]
+        self.assertEqual(len(channel_calls), 1)
 
 
 if __name__ == "__main__":

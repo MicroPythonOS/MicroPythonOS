@@ -30,21 +30,18 @@ class NostrBootService(Service):
     With ``connect_at_boot`` disabled, the service exits immediately and all
     initialization is deferred until the user manually starts the app.
 
-    On a real device the relay handshake is deferred by 30 seconds so Wi-Fi
-    and system services have time to settle first. In test harnesses that run
-    without a live event loop, initialization happens synchronously so other
-    tests are not affected.
+    The service uses ConnectivityManager to wait for network connectivity
+    before starting the relay handshake. If the device is already online it
+    starts immediately; otherwise it waits for the next online transition.
     """
-
-    # Delay before connecting at boot so Wi-Fi / system services have time to
-    # settle before the network-heavy relay handshake starts.
-    STARTUP_DELAY_MS = 30 * 1000
 
     def __init__(self):
         super().__init__()
         self._store = None
         self._persist_cb = None
         self._running = True
+        self._started = False
+        self._online_cb = None
 
     def onStart(self, intent):
         prefs = SharedPreferences(self.appFullName)
@@ -56,12 +53,46 @@ class NostrBootService(Service):
         if TaskManager.disabled:
             # Test harness without a live asyncio loop: initialize now.
             self._start_now(prefs)
-        else:
-            if __debug__:
-                logger.debug("NostrBootService: scheduling delayed start")
-            TaskManager.create_task(self._delayed_start(prefs))
+            return
+
+        try:
+            from mpos.net.connectivity_manager import ConnectivityManager
+
+            if ConnectivityManager.is_online():
+                self._start_now(prefs)
+            else:
+                self._online_cb = lambda online: self._on_online(online, prefs)
+                ConnectivityManager.register_callback(self._online_cb)
+                if __debug__:
+                    logger.debug("NostrBootService: waiting for connectivity")
+        except Exception as e:
+            logger.warning(
+                "NostrBootService: ConnectivityManager unavailable (%s), starting anyway", e
+            )
+            self._start_now(prefs)
+
+    def _on_online(self, online, prefs):
+        if not online or self._started:
+            return
+        self._unregister_online_cb()
+        self._start_now(prefs)
+
+    def _unregister_online_cb(self):
+        if self._online_cb is None:
+            return
+        try:
+            from mpos.net.connectivity_manager import ConnectivityManager
+
+            ConnectivityManager.unregister_callback(self._online_cb)
+        except Exception:
+            pass
+        self._online_cb = None
 
     def _start_now(self, prefs):
+        if self._started:
+            return
+        self._started = True
+        self._unregister_online_cb()
         if __debug__:
             logger.debug("NostrBootService: starting Nostr initialization")
 
@@ -73,16 +104,9 @@ class NostrBootService(Service):
         manager.register_post_event_handler(KIND_NIP17_CHAT, self._persist_cb)
         configure_nostr_manager(prefs, manager, store=self._store)
 
-    async def _delayed_start(self, prefs):
-        await TaskManager.sleep_ms(self.STARTUP_DELAY_MS)
-        if not self._running:
-            return
-        if prefs.get_int("connect_at_boot", 1) == 0:
-            return
-        self._start_now(prefs)
-
     def onDestroy(self):
         self._running = False
+        self._unregister_online_cb()
         if self._persist_cb is not None:
             manager = NostrManager.get_instance()
             manager.unregister_post_event_handler(KIND_DM, self._persist_cb)
