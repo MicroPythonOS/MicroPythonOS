@@ -20,6 +20,22 @@ def _log_debug(msg):
 def _log_error(msg):
     logger.error("%s", msg)
 
+
+def _network_available():
+    """Return True unless we are on an ESP32 without a Wi-Fi STA connection."""
+    try:
+        import sys
+
+        if sys.platform != "esp32":
+            return True
+        import network
+
+        return network.WLAN(network.STA_IF).isconnected()
+    except Exception:
+        # Non-ESP32 ports or missing network module: assume connectivity is OK.
+        return True
+
+
 # Simplified ABNF for opcode compatibility
 class ABNF:
     OPCODE_TEXT = 1
@@ -275,6 +291,14 @@ class WebSocketApp:
 
         while self.running:
             _log_debug("Main loop iteration: self.running=True")
+            if not _network_available():
+                if __debug__:
+                    logger.debug(
+                        "Skipping connection attempt for %s: no network",
+                        self.url,
+                    )
+                await asyncio.sleep(reconnect_interval or 3)
+                continue
             try:
                 await self._connect_and_run() # keep waiting for it, until finished
             except Exception as e:
