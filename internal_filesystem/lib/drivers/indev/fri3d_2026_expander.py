@@ -1,5 +1,6 @@
 import lvgl as lv
 import micropython
+import time
 import keypad_framework
 from micropython import const
 
@@ -31,6 +32,9 @@ _BUTTON_INDICES = (
     _IDX_BTN_Y,
     _IDX_BTN_X,
 )
+
+LONG_PRESS_TIME = const(400)
+LONG_PRESS_REPEAT_TIME = const(100)
 
 # joy_up/down/left/right -> navigation
 # button_a               -> ENTER
@@ -80,7 +84,11 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
         self._expander = expander
         self._int_pin = int_pin
         self._prev_digital = None
+        self._last_digital = None
         self._queue = []
+        self._repeat_idx = None
+        self._repeat_start_ms = 0
+        self._repeat_last_emit_ms = 0
 
         if int_pin is not None:
             def _irq_cb(_):
@@ -98,6 +106,7 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
     def _poll_state(self):
         """Compare current digital state to previous; enqueue changed buttons."""
         digital = self._expander.digital
+        self._last_digital = digital
 
         if self._prev_digital is None:
             self._prev_digital = digital
@@ -109,27 +118,89 @@ class Fri3d2026Expander(keypad_framework.KeypadDriver):
             if curr != prev:
                 state = self.PRESSED if curr else self.RELEASED
                 self._queue.append((state, _KEY_MAP[idx]))
+                if not curr and idx == self._repeat_idx:
+                    self._reset_repeat()
 
         self._prev_digital = digital
+
+        # The first held non-MENU key becomes the repeat candidate.
+        held = [idx for idx in _BUTTON_INDICES if digital[idx] and idx != _IDX_BTN_MENU]
+        if held:
+            first = held[0]
+            now = time.ticks_ms()
+            if first != self._repeat_idx:
+                self._repeat_idx = first
+                self._repeat_start_ms = now
+                self._repeat_last_emit_ms = now
+        else:
+            self._reset_repeat()
+
+    def _reset_repeat(self):
+        self._repeat_idx = None
+        self._repeat_start_ms = 0
+        self._repeat_last_emit_ms = 0
+
+    def _maybe_enqueue_repeat(self):
+        if self._repeat_idx is None:
+            return
+        if self._last_digital is None or not self._last_digital[self._repeat_idx]:
+            self._reset_repeat()
+            return
+
+        now = time.ticks_ms()
+        elapsed = time.ticks_diff(now, self._repeat_start_ms)
+        since_last = time.ticks_diff(now, self._repeat_last_emit_ms)
+
+        if elapsed < LONG_PRESS_TIME:
+            return
+        if since_last < LONG_PRESS_REPEAT_TIME:
+            return
+
+        self._repeat_last_emit_ms = now
+        key = _KEY_MAP[self._repeat_idx]
+        self._queue.append((self.PRESSED, key))
+        self._queue.append((self.RELEASED, key))
+
+    def _fire_nav_hook(self, state, key):
+        if state != self.PRESSED:
+            return
+        if key == lv.KEY.ESC:
+            mpos.ui.back_screen()
+        elif key == lv.KEY.HOME:
+            from mpos.ui import topmenu as topmenu
+            topmenu.toggle_drawer()
+        elif key == lv.KEY.RIGHT:
+            mpos.ui.focus_direction.move_focus_direction(90)
+        elif key == lv.KEY.LEFT:
+            mpos.ui.focus_direction.move_focus_direction(270)
+        elif key == lv.KEY.UP:
+            mpos.ui.focus_direction.move_focus_direction(0)
+        elif key == lv.KEY.DOWN:
+            mpos.ui.focus_direction.move_focus_direction(180)
 
     def _get_key(self):
         if self._int_pin is None:
             # Polling mode: detect changes on every LVGL tick.
             self._poll_state()
 
+        self._maybe_enqueue_repeat()
+
         if self._queue:
             state, key = self._queue.pop(0)
-            if state == self.PRESSED:
-                if key == lv.KEY.ESC:
-                    mpos.ui.back_screen()
-                elif key == lv.KEY.RIGHT:
-                    mpos.ui.focus_direction.move_focus_direction(90)
-                elif key == lv.KEY.LEFT:
-                    mpos.ui.focus_direction.move_focus_direction(270)
-                elif key == lv.KEY.UP:
-                    mpos.ui.focus_direction.move_focus_direction(0)
-                elif key == lv.KEY.DOWN:
-                    mpos.ui.focus_direction.move_focus_direction(180)
+            self._fire_nav_hook(state, key)
             return state, key
 
         return None
+
+    def _read(self, drv, data):  # NOQA
+        key = self._get_key()
+
+        if key is None:
+            state = self.RELEASED
+            key = self._last_key
+        else:
+            state, key = key
+
+        data.key = self._last_key = key
+        data.state = self._current_state = state
+        data.continue_reading = bool(self._queue)
