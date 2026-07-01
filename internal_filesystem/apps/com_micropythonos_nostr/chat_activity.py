@@ -12,6 +12,7 @@ from mpos import (
     MposKeyboard,
     SettingsActivity,
     SharedPreferences,
+    TaskManager,
 )
 
 from .chat_model import (
@@ -24,6 +25,7 @@ from .chat_model import (
     _display_title,
     channel_chat_id,
     chat_id_for_event,
+    content_from_event,
     dm_chat_id,
 )
 from .event_store import EventStore, _current_nostr_ts
@@ -56,6 +58,7 @@ class ChatActivity(Activity):
     _input_textarea = None
     _keyboard = None
     _send_btn = None
+    _send_btn_label = None
     _header = None
 
     # State
@@ -146,10 +149,10 @@ class ChatActivity(Activity):
 
         self._send_btn = lv.button(input_row)
         self._send_btn.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
-        send_lbl = lv.label(self._send_btn)
-        send_lbl.set_text("Send")
-        send_lbl.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-        send_lbl.center()
+        self._send_btn_label = lv.label(self._send_btn)
+        self._send_btn_label.set_text("Send")
+        self._send_btn_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        self._send_btn_label.center()
         self._send_btn.add_event_cb(lambda e: self._send(), lv.EVENT.CLICKED, None)
 
         self._keyboard = MposKeyboard(self._screen)
@@ -368,80 +371,44 @@ class ChatActivity(Activity):
         self.startActivity(intent)
 
     def _send(self):
+        if self._send_btn is None or self._send_btn_label is None:
+            return
         text = self._input_textarea.get_text().strip()
         if not text:
             return
+        if self._send_btn.has_state(lv.STATE.DISABLED):
+            return
 
-        online = ConnectivityManager.get().is_online() and self._manager.is_connected()
-        own = self._manager.get_own_pubkey_hex() or ""
-        event_id = None
-        event_ids = None
-        # Capture the wall-clock timestamp once before any slow crypto work so
-        # the local message timestamp matches the NIP-17 event timestamp.
-        send_ts = _current_nostr_ts()
+        label = (
+            "Encrypting..."
+            if self._kind in (KIND_DM, KIND_NIP17_CHAT)
+            else "Sending..."
+        )
+        self._set_sending_state(label, True)
+        TaskManager.create_task(self._send_async(text))
 
-        if self._kind == KIND_NIP17_CHAT:
-            try:
-                if online:
-                    event_ids = self._manager.publish_nip17_message(
-                        text, self._get_recipients(), created_at=send_ts
-                    )
-                    event_id = event_ids[0]
-                    kind = KIND_NIP17_CHAT
-                else:
-                    self._queue_local_message(text, own)
-                    self._input_textarea.set_text("")
-                    self._keyboard.hide_keyboard()
-                    return
-            except Exception as e:
-                logger.error("Send failed: %s", e)
-                self._queue_local_message(text, own)
-                self._input_textarea.set_text("")
-                self._keyboard.hide_keyboard()
-                return
-        elif self._kind == KIND_DM:
-            protocol = self._dm_send_protocol()
-            try:
-                if online:
-                    if protocol == "nip17":
-                        event_ids = self._manager.publish_nip17_message(
-                            text, [self._peer_pubkey], created_at=send_ts
-                        )
-                        event_id = event_ids[0]
-                        kind = KIND_NIP17_CHAT
-                    else:
-                        event_id = self._manager.publish_dm(self._peer_pubkey, text)
-                        kind = KIND_DM
-                else:
-                    self._queue_local_message(text, own)
-                    self._input_textarea.set_text("")
-                    self._keyboard.hide_keyboard()
-                    return
-            except Exception as e:
-                logger.error("Send failed: %s", e)
-                self._queue_local_message(text, own)
-                self._input_textarea.set_text("")
-                self._keyboard.hide_keyboard()
-                return
-        else:
-            try:
-                if online:
-                    event_id = self._manager.publish_channel_message(
-                        self._channel_id, text
-                    )
-                    kind = KIND_CHANNEL_MESSAGE
-                else:
-                    self._queue_local_message(text, own)
-                    self._input_textarea.set_text("")
-                    self._keyboard.hide_keyboard()
-                    return
-            except Exception as e:
-                logger.error("Send failed: %s", e)
-                self._queue_local_message(text, own)
-                self._input_textarea.set_text("")
-                self._keyboard.hide_keyboard()
-                return
+    def _set_sending_state(self, label, disabled):
+        try:
+            self._send_btn_label.set_text(label)
+            if disabled:
+                self._send_btn.add_state(lv.STATE.DISABLED)
+            else:
+                self._send_btn.remove_state(lv.STATE.DISABLED)
+        except Exception:
+            pass
 
+    async def _send_async(self, text):
+        try:
+            result = self._do_send_sync(text)
+        except Exception as e:
+            logger.error("Send failed: %s", e)
+            result = None
+        finally:
+            self._set_sending_state("Send", False)
+
+        if result is None:
+            return
+        event_id, event_ids, kind, own, send_ts = result
         message = Message(
             event_id=event_id,
             ts=send_ts,
@@ -464,6 +431,79 @@ class ChatActivity(Activity):
         self._request_scroll_to_bottom()
         if not self._keyboard.has_flag(lv.obj.FLAG.HIDDEN):
             self._keyboard.hide_keyboard()
+
+    def _do_send_sync(self, text):
+        online = ConnectivityManager.get().is_online() and self._manager.is_connected()
+        own = self._manager.get_own_pubkey_hex() or ""
+        event_id = None
+        event_ids = None
+        # Capture the wall-clock timestamp once before any slow crypto work so
+        # the local message timestamp matches the NIP-17 event timestamp.
+        send_ts = _current_nostr_ts()
+
+        if self._kind == KIND_NIP17_CHAT:
+            try:
+                if online:
+                    event_ids = self._manager.publish_nip17_message(
+                        text, self._get_recipients(), created_at=send_ts
+                    )
+                    event_id = event_ids[0]
+                    kind = KIND_NIP17_CHAT
+                else:
+                    self._queue_local_message(text, own)
+                    self._input_textarea.set_text("")
+                    self._keyboard.hide_keyboard()
+                    return None
+            except Exception as e:
+                logger.error("Send failed: %s", e)
+                self._queue_local_message(text, own)
+                self._input_textarea.set_text("")
+                self._keyboard.hide_keyboard()
+                return None
+        elif self._kind == KIND_DM:
+            protocol = self._dm_send_protocol()
+            try:
+                if online:
+                    if protocol == "nip17":
+                        event_ids = self._manager.publish_nip17_message(
+                            text, [self._peer_pubkey], created_at=send_ts
+                        )
+                        event_id = event_ids[0]
+                        kind = KIND_NIP17_CHAT
+                    else:
+                        event_id = self._manager.publish_dm(self._peer_pubkey, text)
+                        kind = KIND_DM
+                else:
+                    self._queue_local_message(text, own)
+                    self._input_textarea.set_text("")
+                    self._keyboard.hide_keyboard()
+                    return None
+            except Exception as e:
+                logger.error("Send failed: %s", e)
+                self._queue_local_message(text, own)
+                self._input_textarea.set_text("")
+                self._keyboard.hide_keyboard()
+                return None
+        else:
+            try:
+                if online:
+                    event_id = self._manager.publish_channel_message(
+                        self._channel_id, text
+                    )
+                    kind = KIND_CHANNEL_MESSAGE
+                else:
+                    self._queue_local_message(text, own)
+                    self._input_textarea.set_text("")
+                    self._keyboard.hide_keyboard()
+                    return None
+            except Exception as e:
+                logger.error("Send failed: %s", e)
+                self._queue_local_message(text, own)
+                self._input_textarea.set_text("")
+                self._keyboard.hide_keyboard()
+                return None
+
+        return (event_id, event_ids, kind, own, send_ts)
 
     def _get_recipients(self):
         if self._kind == KIND_NIP17_CHAT:
@@ -509,10 +549,7 @@ class ChatActivity(Activity):
             if chat_id != self._chat_id:
                 return
 
-            if self._kind == KIND_DM:
-                content = nostr_event.get_display_content()
-            else:
-                content = nostr_event.content
+            content = content_from_event(nostr_event)
 
             message = Message(
                 event_id=nostr_event.event.id,

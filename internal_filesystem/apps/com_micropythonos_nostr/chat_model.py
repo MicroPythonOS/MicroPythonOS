@@ -141,6 +141,40 @@ def channel_id_from_event(event):
     return None
 
 
+def content_from_event(nostr_event):
+    """Return the human-readable content for a chat message event."""
+    if nostr_event.kind == KIND_DM:
+        return nostr_event.get_display_content()
+    return nostr_event.content
+
+
+def get_or_create_chat_for_event(store, nostr_event, own_pubkey):
+    """Return the chat an incoming event belongs to, creating it if needed."""
+    event = nostr_event.event
+    chat_id = chat_id_for_event(event, own_pubkey)
+    if chat_id is None:
+        return None
+
+    chat = store.get_chat(chat_id)
+    if chat is not None:
+        return chat
+
+    kind = event.kind
+    if kind == KIND_DM:
+        peer = peer_from_dm_event(event, own_pubkey)
+        return store.get_or_create_dm(own_pubkey or "", peer)
+    if kind == KIND_NIP17_CHAT:
+        participants = participants_from_nip17_event(event, own_pubkey)
+        title = subject_from_nip17_event(event)
+        if len(participants) == 1:
+            return store.get_or_create_dm(own_pubkey or "", participants[0])
+        return store.get_or_create_nip17_group(participants, title=title)
+    if kind == KIND_CHANNEL_MESSAGE:
+        channel_id = channel_id_from_event(event)
+        return store.get_or_create_channel(channel_id or DEFAULT_CHANNEL_ID)
+    return None
+
+
 class Message:
     """Minimal chat message. Signatures are discarded after verification."""
 

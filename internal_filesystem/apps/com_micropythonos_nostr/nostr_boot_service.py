@@ -1,18 +1,14 @@
 import logging
 
-from mpos import Service, SharedPreferences
+from mpos import Service, SharedPreferences, TaskManager
 
 from .chat_model import (
-    DEFAULT_CHANNEL_ID,
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
     KIND_NIP17_CHAT,
     Message,
-    channel_id_from_event,
-    chat_id_for_event,
-    participants_from_nip17_event,
-    peer_from_dm_event,
-    subject_from_nip17_event,
+    content_from_event,
+    get_or_create_chat_for_event,
 )
 from .chat_notifications import post_chat_notification
 from .event_store import EventStore
@@ -35,10 +31,15 @@ class NostrBootService(Service):
     initialization is deferred until the user manually starts the app.
     """
 
+    # Delay before connecting at boot so Wi-Fi / system services have time to
+    # settle before the network-heavy relay handshake starts.
+    STARTUP_DELAY_MS = 30 * 1000
+
     def __init__(self):
         super().__init__()
         self._store = None
         self._persist_cb = None
+        self._running = True
 
     def onStart(self, intent):
         prefs = SharedPreferences(self.appFullName)
@@ -48,18 +49,29 @@ class NostrBootService(Service):
             return
 
         if __debug__:
+            logger.debug("NostrBootService: scheduling delayed start")
+        TaskManager.create_task(self._delayed_start(prefs))
+
+    async def _delayed_start(self, prefs):
+        await TaskManager.sleep_ms(self.STARTUP_DELAY_MS)
+        if not self._running:
+            return
+        if prefs.get_int("connect_at_boot", 1) == 0:
+            return
+
+        if __debug__:
             logger.debug("NostrBootService: starting Nostr initialization")
 
         manager = NostrManager.get_instance()
         self._store = EventStore(self.appFullName)
-        configure_nostr_manager(prefs, manager, store=self._store)
-
         self._persist_cb = lambda e: self._persist_event(e)
         manager.register_post_event_handler(KIND_DM, self._persist_cb)
         manager.register_post_event_handler(KIND_CHANNEL_MESSAGE, self._persist_cb)
         manager.register_post_event_handler(KIND_NIP17_CHAT, self._persist_cb)
+        configure_nostr_manager(prefs, manager, store=self._store)
 
     def onDestroy(self):
+        self._running = False
         if self._persist_cb is not None:
             manager = NostrManager.get_instance()
             manager.unregister_post_event_handler(KIND_DM, self._persist_cb)
@@ -78,46 +90,18 @@ class NostrBootService(Service):
         try:
             manager = NostrManager.get_instance()
             own = manager.get_own_pubkey_hex()
-            chat_id = chat_id_for_event(nostr_event.event, own)
-            if chat_id is None:
-                return
-
-            kind = nostr_event.kind
-            if kind == KIND_DM:
-                content = nostr_event.get_display_content()
-            else:
-                content = nostr_event.content
-
-            chat = self._store.get_chat(chat_id)
+            chat = get_or_create_chat_for_event(self._store, nostr_event, own)
             if chat is None:
-                if kind == KIND_DM:
-                    peer = peer_from_dm_event(nostr_event.event, own)
-                    chat = self._store.get_or_create_dm(own or "", peer)
-                elif kind == KIND_NIP17_CHAT:
-                    participants = participants_from_nip17_event(
-                        nostr_event.event, own
-                    )
-                    title = subject_from_nip17_event(nostr_event.event)
-                    if len(participants) == 1:
-                        chat = self._store.get_or_create_dm(own or "", participants[0])
-                    else:
-                        chat = self._store.get_or_create_nip17_group(
-                            participants, title=title
-                        )
-                else:
-                    channel_id = channel_id_from_event(nostr_event.event)
-                    chat = self._store.get_or_create_channel(
-                        channel_id or DEFAULT_CHANNEL_ID
-                    )
+                return
 
             message = Message(
                 event_id=nostr_event.event.id,
                 ts=nostr_event.created_at,
                 pubkey=nostr_event.public_key,
-                content=content,
-                kind=kind,
+                content=content_from_event(nostr_event),
+                kind=nostr_event.kind,
             )
-            is_new = self._store.add_message(chat_id, message, mark_unread=True)
+            is_new = self._store.add_message(chat.chat_id, message, mark_unread=True)
             if is_new:
                 post_chat_notification(self.appFullName, chat, message)
         except Exception as e:
