@@ -253,8 +253,9 @@ class Sorter(Activity):
         mpos.ui.add_focus_border(tube_obj, width=4)
 
         if self.selected == idx:
-            tube_obj.set_style_border_color(self.SELECT_COLOR, 0)
-            tube_obj.set_style_border_width(4, 0)
+            tube_obj.set_style_bg_color(self.SELECT_COLOR, 0)
+        else:
+            tube_obj.set_style_bg_color(self.TUBE_BG, 0)
 
         items = self.tubes[idx]
         # Render from top of stack downward.
@@ -265,6 +266,21 @@ class Sorter(Activity):
             img.center()
 
         return tube_obj
+
+    def _update_selection(self):
+        for i, tube in enumerate(self.tube_widgets):
+            if self.selected == i:
+                tube.set_style_bg_color(self.SELECT_COLOR, 0)
+            else:
+                tube.set_style_bg_color(self.TUBE_BG, 0)
+
+    def _restore_focus(self, idx):
+        if idx < 0 or idx >= len(self.tube_widgets):
+            return
+        try:
+            lv.group_focus_obj(self.tube_widgets[idx])
+        except Exception:
+            pass
 
     def refresh_labels(self):
         self.level_label.set_text(f"Level: {self.level}")
@@ -379,13 +395,13 @@ class Sorter(Activity):
             if self.tubes[idx]:
                 self.selected = idx
                 self._last_ts = now
-                self.build_board()
+                self._update_selection()
             return
 
         if self.selected == idx:
             self.selected = -1
             self._last_ts = now
-            self.build_board()
+            self._update_selection()
             return
 
         src = self.tubes[self.selected]
@@ -396,13 +412,14 @@ class Sorter(Activity):
             self.moves += 1
             self.selected = -1
             self.build_board()
+            self._restore_focus(idx)
             self.refresh_labels()
             if _is_solved(self.tubes):
                 self.on_win()
         else:
             self.selected = -1
             self._last_ts = now
-            self.build_board()
+            self._update_selection()
 
     def on_win(self):
         filled, capacity, extra = _level_params(self.level)
