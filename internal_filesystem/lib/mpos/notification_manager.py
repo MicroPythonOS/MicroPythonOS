@@ -9,6 +9,17 @@ logger = logging.getLogger(__name__)
 
 _DEBOUNCE_MS = 500
 
+NOTIFICATION_SOUND_OPTIONS = [
+    ("None", ""),
+    ("Coin", "coin:d=8,o=6,b=200:16b5,e6"),
+    ("Scale up", "scale_up:d=32,o=5,b=100:c,c#,d#,e,f#,g#,a#,b"),
+    (
+        "Superhappy",
+        "superhappy:d=8,o=5,b=635:c,e,g,c,e,g,c,e,g,c6,e6,g6,c6,e6,g6,c6,e6,g6,c7,e7,g7,c7,e7,g7,c7,e7,g7",
+    ),
+]
+DEFAULT_NOTIFICATION_SOUND = NOTIFICATION_SOUND_OPTIONS[1][1]
+
 
 class Notification:
     PRIORITY_MIN = -1
@@ -123,11 +134,6 @@ class NotificationManager:
 
     _SETTINGS_APP_NAME = "com.micropythonos.settings"
     _SETTINGS_KEY = "notification_sound"
-    _NOTIFICATION_SOUNDS = {
-        "coin": "coin:d=8,o=6,b=200:16b5,e6",
-        "scale_up": "scale_up:d=32,o=5,b=100:c,c#,d#,e,f#,g#,a#,b",
-        "superhappy": "superhappy:d=8,o=5,b=635:c,e,g,c,e,g,c,e,g,c6,e6,g6,c6,e6,g6,c6,e6,g6,c7,e7,g7,c7,e7,g7,c7,e7,g7",
-    }
 
     _prefs = None
     _initialized = False
@@ -160,7 +166,7 @@ class NotificationManager:
         if cls._settings_prefs is None:
             cls._settings_prefs = SharedPreferences(
                 cls._SETTINGS_APP_NAME,
-                defaults={cls._SETTINGS_KEY: "coin"},
+                defaults={cls._SETTINGS_KEY: DEFAULT_NOTIFICATION_SOUND},
             )
         return cls._settings_prefs
 
@@ -174,10 +180,9 @@ class NotificationManager:
     @classmethod
     def _play_notification_sound(cls):
         try:
-            sound = cls._get_settings_prefs().get_string(cls._SETTINGS_KEY, "coin")
-            if sound == "none":
-                return
-            rtttl = cls._NOTIFICATION_SOUNDS.get(sound) or cls._NOTIFICATION_SOUNDS["coin"]
+            rtttl = cls._get_settings_prefs().get_string(
+                cls._SETTINGS_KEY, DEFAULT_NOTIFICATION_SOUND
+            )
             if not rtttl:
                 return
             output = cls._find_buzzer_output()

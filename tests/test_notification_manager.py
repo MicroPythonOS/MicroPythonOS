@@ -2,7 +2,16 @@ import sys
 import unittest
 
 from mpos import Intent
-from mpos.notification_manager import NotificationManager, Notification
+from mpos.notification_manager import (
+    DEFAULT_NOTIFICATION_SOUND,
+    NOTIFICATION_SOUND_OPTIONS,
+    Notification,
+    NotificationManager,
+)
+
+_NONE_SOUND = NOTIFICATION_SOUND_OPTIONS[0][1]
+_SCALE_UP_SOUND = NOTIFICATION_SOUND_OPTIONS[2][1]
+_SUPERHAPPY_SOUND = NOTIFICATION_SOUND_OPTIONS[3][1]
 
 
 class _FakeEditor:
@@ -69,7 +78,7 @@ class TestNotificationManager(unittest.TestCase):
         self.fake_prefs = _FakePrefs({"notifications": []})
         NotificationManager._reset_for_tests(clear_storage=False)
         NotificationManager._prefs = self.fake_prefs
-        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "coin"})
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": DEFAULT_NOTIFICATION_SOUND})
         self._orig_audio_manager = sys.modules["mpos.notification_manager"].AudioManager
         sys.modules["mpos.notification_manager"].AudioManager = _FakeAudioManager
         _FakeAudioManager._outputs = []
@@ -217,27 +226,27 @@ class TestNotificationManager(unittest.TestCase):
         NotificationManager.notify(Notification(notification_id="sound.default", title="Default"))
         call = self._last_sound_call()
         self.assertIsNotNone(call)
-        self.assertEqual(call["rtttl"], NotificationManager._NOTIFICATION_SOUNDS["coin"])
+        self.assertEqual(call["rtttl"], DEFAULT_NOTIFICATION_SOUND)
         self.assertEqual(call["stream_type"], _FakeAudioManager.STREAM_NOTIFICATION)
         self.assertEqual(call["volume"], 60)
 
     def test_notification_sound_none_is_silent(self):
-        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "none"})
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": _NONE_SOUND})
         self._set_outputs(_FakeOutput("buzzer"))
         NotificationManager.notify(Notification(notification_id="sound.none", title="Silent"))
         self.assertIsNone(self._last_sound_call())
 
     def test_notification_sound_scale_up(self):
-        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "scale_up"})
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": _SCALE_UP_SOUND})
         self._set_outputs(_FakeOutput("buzzer"))
         NotificationManager.notify(Notification(notification_id="sound.scale", title="Scale"))
-        self.assertEqual(self._last_sound_call()["rtttl"], NotificationManager._NOTIFICATION_SOUNDS["scale_up"])
+        self.assertEqual(self._last_sound_call()["rtttl"], _SCALE_UP_SOUND)
 
     def test_notification_sound_superhappy(self):
-        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": "superhappy"})
+        NotificationManager._settings_prefs = _FakePrefs({"notification_sound": _SUPERHAPPY_SOUND})
         self._set_outputs(_FakeOutput("buzzer"))
         NotificationManager.notify(Notification(notification_id="sound.happy", title="Happy"))
-        self.assertEqual(self._last_sound_call()["rtttl"], NotificationManager._NOTIFICATION_SOUNDS["superhappy"])
+        self.assertEqual(self._last_sound_call()["rtttl"], _SUPERHAPPY_SOUND)
 
     def test_notification_sound_no_buzzer_is_silent(self):
         self._set_outputs(_FakeOutput("i2s"))
