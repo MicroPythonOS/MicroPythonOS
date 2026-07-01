@@ -7,6 +7,16 @@ class TimeZone:
 
     timezone_preference = None
 
+    # Unix epoch seconds for 2026-01-01T00:00:00Z.
+    # Used to detect a clock that has not yet been NTP-synced.
+    _EPOCH_2026_01_01 = 1767225600
+
+    @staticmethod
+    def time_is_set():
+        """Return True if the system clock has been synced (year >= 2026)."""
+        import mpos.time
+        return mpos.time.epoch_seconds() >= TimeZone._EPOCH_2026_01_01
+
     @staticmethod
     def timezone_to_posix_time_zone(timezone):
         """

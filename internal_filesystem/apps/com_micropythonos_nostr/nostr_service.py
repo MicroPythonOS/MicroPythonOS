@@ -5,6 +5,7 @@ import time
 import logging
 
 from mpos import Service, TaskManager
+from mpos.time_zone import TimeZone
 
 from nostr.relay_manager import RelayManager
 from nostr.message_type import ClientMessageType
@@ -806,6 +807,35 @@ class NostrManager:
 
     async def _run(self):
         """Main event loop — manages relay connections, subscriptions, event routing, and NWC polling."""
+
+        # Wait for NTP time sync before opening relay connections.
+        if not TimeZone.time_is_set():
+            try:
+                from mpos.net.connectivity_manager import ConnectivityManager
+                online = ConnectivityManager.is_online()
+            except Exception as e:
+                if __debug__:
+                    logger.debug(
+                        "NostrManager: cannot check connectivity, skipping time-sync wait: %s", e
+                    )
+                online = False
+
+            if online:
+                logger.info("NostrManager: waiting for NTP time sync...")
+                while (
+                    self.keep_running
+                    and online
+                    and not TimeZone.time_is_set()
+                ):
+                    await TaskManager.sleep_ms(1000)
+                    try:
+                        online = ConnectivityManager.is_online()
+                    except Exception:
+                        online = False
+
+                if not self.keep_running or not online:
+                    return
+                logger.info("NostrManager: time synced, continuing initialization")
 
         self.relay_manager = RelayManager()
 

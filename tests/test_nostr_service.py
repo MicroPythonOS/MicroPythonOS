@@ -505,6 +505,10 @@ class TestNostrManagerConnectivity(unittest.TestCase):
 
     def setUp(self):
         self.mgr = NostrManager.get_instance()
+        # Ensure direct _run() calls in these tests do not block waiting for
+        # an NTP-synced clock.
+        from mpos.time_zone import TimeZone
+        TimeZone.time_is_set = lambda: True
         if self.mgr._main_task is not None and self.mgr._main_task is not True:
             try:
                 self.mgr._main_task.cancel()
@@ -608,6 +612,19 @@ class TestNostrManagerConnectivity(unittest.TestCase):
         except RuntimeError:
             return
         self.fail("nwc_fetch_balance should raise RuntimeError when offline")
+
+
+class TestTimeZoneTimeIsSet(unittest.TestCase):
+    """Sanity check for the clock-sync threshold helper."""
+
+    def test_time_is_set_matches_local_year(self):
+        from mpos.time_zone import TimeZone
+        import time
+        # The threshold is 2026-01-01; this test is True on synced modern clocks.
+        if time.localtime()[0] < 2026:
+            self.assertFalse(TimeZone.time_is_set())
+        else:
+            self.assertTrue(TimeZone.time_is_set())
 
 
 class TestNostrEventFormatting(unittest.TestCase):
