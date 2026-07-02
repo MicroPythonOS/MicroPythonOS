@@ -1,4 +1,5 @@
 import logging
+import time
 
 from mpos import (
     Intent,
@@ -11,6 +12,30 @@ from mpos import (
 from .chat_model import KIND_CHANNEL_MESSAGE
 
 logger = logging.getLogger(__name__)
+
+
+def is_initial_fetch_silenced(chat, manager):
+    """Return True if this chat is still receiving its initial backfill.
+
+    When a subscription starts we set a short grace window. Any chat that had
+    no prior messages (last_ts == 0) when the first event arrived is kept
+    silent until the window closes, so the device does not make a sound for
+    every historical message on first connect.
+    """
+    deadline = getattr(manager, "_initial_fetch_deadline", None)
+    if deadline is None:
+        return False
+    if time.time() >= deadline:
+        return False
+    silenced = getattr(manager, "_silent_initial_chats", None)
+    if silenced is None:
+        return False
+    if chat.chat_id in silenced:
+        return True
+    if chat.last_ts == 0:
+        silenced.add(chat.chat_id)
+        return True
+    return False
 
 
 def post_chat_notification(app_fullname, chat, message):

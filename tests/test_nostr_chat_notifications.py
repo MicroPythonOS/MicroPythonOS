@@ -1,13 +1,17 @@
 """Tests for chat notification logic: foreground, per-chat toggle, open chat."""
 
 import sys
+import time
 import unittest
 
 sys.path.insert(0, "apps")
 
 from com_micropythonos_nostr.chat_model import KIND_DM, Chat, Message
 from com_micropythonos_nostr import chat_notifications
-from com_micropythonos_nostr.chat_notifications import post_chat_notification
+from com_micropythonos_nostr.chat_notifications import (
+    is_initial_fetch_silenced,
+    post_chat_notification,
+)
 
 
 class _FakeNotify:
@@ -86,6 +90,32 @@ class TestChatNotifications(unittest.TestCase):
         self._chat_activity.currently_open_chat_id = chat.chat_id
         post_chat_notification("com_micropythonos_nostr", chat, self._make_message())
         self.assertEqual(len(self._fake_notify.calls), 0)
+
+    def test_initial_fetch_silenced_without_history(self):
+        chat = self._make_chat()
+        chat.last_ts = 0
+        manager = type("M", (), {"_initial_fetch_deadline": time.time() + 10, "_silent_initial_chats": set()})()
+        self.assertTrue(is_initial_fetch_silenced(chat, manager))
+        self.assertIn(chat.chat_id, manager._silent_initial_chats)
+
+    def test_initial_fetch_silenced_while_in_silenced_set(self):
+        chat = self._make_chat()
+        chat.last_ts = 12345
+        silenced = {chat.chat_id}
+        manager = type("M", (), {"_initial_fetch_deadline": time.time() + 10, "_silent_initial_chats": silenced})()
+        self.assertTrue(is_initial_fetch_silenced(chat, manager))
+
+    def test_initial_fetch_not_silenced_with_history(self):
+        chat = self._make_chat()
+        chat.last_ts = 12345
+        manager = type("M", (), {"_initial_fetch_deadline": time.time() + 10, "_silent_initial_chats": set()})()
+        self.assertFalse(is_initial_fetch_silenced(chat, manager))
+
+    def test_initial_fetch_not_silenced_after_deadline(self):
+        chat = self._make_chat()
+        chat.last_ts = 0
+        manager = type("M", (), {"_initial_fetch_deadline": time.time() - 1, "_silent_initial_chats": set()})()
+        self.assertFalse(is_initial_fetch_silenced(chat, manager))
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ from .chat_model import (
     content_from_event,
     get_or_create_chat_for_event,
 )
-from .chat_notifications import post_chat_notification
+from .chat_notifications import is_initial_fetch_silenced, post_chat_notification
 from .event_store import EventStore
 from .nostr_initializer import configure_nostr_manager
 from .nostr_service import NostrManager
@@ -137,7 +137,7 @@ class NostrBootService(Service):
                 kind=nostr_event.kind,
             )
             is_new = self._store.add_message(chat.chat_id, message, mark_unread=True)
-            if is_new:
+            if is_new and not is_initial_fetch_silenced(chat, manager):
                 post_chat_notification(self.appFullName, chat, message)
         except Exception as e:
             logger.error("Failed to persist Nostr event: %s", e)

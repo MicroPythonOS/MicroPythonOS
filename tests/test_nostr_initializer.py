@@ -108,15 +108,15 @@ class TestConfigureNostrManager(unittest.TestCase):
 
         # DM subscription stays tight because NIP-04 messages are not randomized.
         self.assertEqual(dm_call[1]["since"], self.now - 120 - 60)
-        self.assertEqual(dm_call[1]["limit"], 200)
+        self.assertEqual(dm_call[1]["limit"], nostr_initializer.DM_FETCH_LIMIT)
 
         # NIP-17 subscription must use the fixed 3-day lookback, not the
         # chat-history-driven dm_since.
         self.assertEqual(
             nip17_call[1]["since"],
-            self.now - nostr_initializer.NIP17_LOOKBACK_WINDOW_SECONDS,
+            self.now - (nostr_initializer.NIP17_FETCH_SINCE_MINUTES * 60),
         )
-        self.assertEqual(nip17_call[1]["limit"], 50)
+        self.assertEqual(nip17_call[1]["limit"], nostr_initializer.NIP17_FETCH_LIMIT)
 
     def test_nip17_subscription_uses_three_day_window_without_history(self):
         manager = _FakeManager()
@@ -127,9 +127,9 @@ class TestConfigureNostrManager(unittest.TestCase):
         nip17_call = [c for c in manager.calls if c[0] == "subscribe_nip17_dms"][0]
         self.assertEqual(
             nip17_call[1]["since"],
-            self.now - nostr_initializer.NIP17_LOOKBACK_WINDOW_SECONDS,
+            self.now - (nostr_initializer.NIP17_FETCH_SINCE_MINUTES * 60),
         )
-        self.assertEqual(nip17_call[1]["limit"], 50)
+        self.assertEqual(nip17_call[1]["limit"], nostr_initializer.NIP17_FETCH_LIMIT)
 
     def test_default_public_channel_is_joined_and_subscribed(self):
         """A fresh install must still subscribe to the default #MicroPythonOS channel."""

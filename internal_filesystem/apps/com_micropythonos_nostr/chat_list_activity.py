@@ -13,7 +13,7 @@ from mpos import (
 )
 
 from .chat_activity import ChatActivity
-from .chat_notifications import post_chat_notification
+from .chat_notifications import is_initial_fetch_silenced, post_chat_notification
 from .chat_model import (
     DEFAULT_CHANNEL_ID,
     DEFAULT_CHANNEL_NAME,
@@ -253,6 +253,11 @@ class ChatListActivity(Activity):
 
             # Don't notify the user for messages they sent themselves.
             if message.outgoing:
+                return
+
+            # Silence notifications while an empty chat is receiving its
+            # initial backfill on first connect.
+            if is_initial_fetch_silenced(chat, self._manager):
                 return
 
             self._post_notification(chat, message)

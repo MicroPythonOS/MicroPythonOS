@@ -29,7 +29,7 @@ from .chat_model import (
     dm_chat_id,
 )
 from .event_store import EventStore, _current_nostr_ts
-from .nostr_initializer import configure_nostr_manager
+from .nostr_initializer import _chat_lookback_seconds, configure_nostr_manager
 from .nostr_service import NostrManager
 
 logger = logging.getLogger(__name__)
@@ -208,29 +208,30 @@ class ChatActivity(Activity):
         self._handler_registered = False
 
     def _start_subscriptions(self):
-        from .nostr_initializer import SUBSCRIPTION_LIMIT_INITIAL
+        from .nostr_initializer import _group_fetch_settings
 
         configure_nostr_manager(self._prefs, self._manager, store=self._store)
 
         if self._kind == KIND_CHANNEL_MESSAGE and self._channel_id:
             since = self._since_for_chat()
+            group_limit = _group_fetch_settings(self._prefs)["limit"]
             try:
                 self._manager.subscribe_channel(
                     self._channel_id,
                     name=self._chat_id,
                     since=since,
-                    limit=SUBSCRIPTION_LIMIT_INITIAL,
+                    limit=group_limit,
                 )
             except Exception as e:
                 logger.error("Channel subscription failed: %s", e)
 
     def _since_for_chat(self):
-        from .nostr_initializer import LOOKBACK_WINDOW_SECONDS, OVERLAP_SECONDS
+        from .nostr_initializer import OVERLAP_SECONDS
 
         chat = self._store.get_chat(self._chat_id)
         if chat is not None and chat.last_ts:
             return max(0, chat.last_ts - OVERLAP_SECONDS)
-        return max(0, _current_nostr_ts() - LOOKBACK_WINDOW_SECONDS)
+        return max(0, _current_nostr_ts() - _chat_lookback_seconds(self._prefs, self._kind))
 
     def _load_and_render(self):
         self._messages_container.clean()
