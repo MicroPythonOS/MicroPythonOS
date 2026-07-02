@@ -48,6 +48,7 @@ class Breakout(Activity):
     lives = 5
     highscore = 0
     _initialized = False
+    _paused = False
     _game_over_handled = False
     _state_timer = None
     _autosaved_level = 0
@@ -79,11 +80,13 @@ class Breakout(Activity):
         self.setContentView(self.screen)
 
     def onResume(self, screen):
+        self._paused = False
         if not self._initialized:
             self._initialized = True
             breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
-            mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
             mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
+
+        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
 
         prefs = SharedPreferences(self.appFullName)
         self.highscore = prefs.get_int("highscore", 0)
@@ -95,19 +98,26 @@ class Breakout(Activity):
             self._state_timer = lv.timer_create(self._update_state, 2000, None)
 
     def onPause(self, screen):
+        self._paused = True
         self._save_state()
         self._stop_state_timer()
+        # If a chunk is mid-flight, release the display driver so the next
+        # activity can flush normally.
+        if self.chunk_waiting:
+            self.chunk_waiting = False
+            self.chunk_in_progress = False
+            self.render_next = True
+            self.flush_ready = False
+            try:
+                mpos.ui.main_display._disp_drv.flush_ready()
+            except Exception:
+                pass
         mpos.ui.main_display._data_bus.register_callback(mpos.ui.main_display._flush_ready_cb)
 
     def onDestroy(self, screen):
+        self._paused = True
         self._save_state()
         self._stop_state_timer()
-        if self.screen is not None:
-            try:
-                self.screen.delete()
-            except Exception:
-                pass
-            self.screen = None
 
     def _stop_state_timer(self):
         if self._state_timer is not None:
@@ -166,6 +176,9 @@ class Breakout(Activity):
         self.flush_ready = True
 
     def drawframe(self, arg1=None, arg2=None):
+        if self._paused:
+            return
+
         if self.chunk_waiting:
             if self.flush_ready:
                 self.flush_ready = False
