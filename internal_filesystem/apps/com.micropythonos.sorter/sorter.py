@@ -10,6 +10,11 @@ _EMOJI_FS_DIR = "builtin/res/emojis/32x32"
 _EMOJI_DIR = "M:" + _EMOJI_FS_DIR + "/"
 _EMOJIS = sorted([f for f in os.listdir(_EMOJI_FS_DIR) if f.endswith(".png")])
 
+# Number of emoji indices to shuffle together. 20 is more than enough for any
+# level (max 7 colors) while keeping the saved JSON small enough to inline in
+# littlefs.
+_MAX_EMOJI_ORDER = 20
+
 # Difficulty scaling knobs. These tune how quickly each dimension grows.
 _LEVEL1_FILLED = 2
 _LEVEL1_CAPACITY = 3
@@ -33,6 +38,14 @@ def _shuffle(lst):
     for i in range(len(lst) - 1, 0, -1):
         j = random.randint(0, i)
         lst[i], lst[j] = lst[j], lst[i]
+
+
+def _generate_emoji_order():
+    """Return a shuffled list of emoji indices used for a new game."""
+    count = min(_MAX_EMOJI_ORDER, len(_EMOJIS))
+    order = list(range(count))
+    _shuffle(order)
+    return order
 
 
 def _top_run(tube):
@@ -181,13 +194,23 @@ class Sorter(Activity):
         self.selected = -1
         self.tubes = []
         self.capacity = 0
+        self.emoji_order = []
         self.highscore = SharedPreferences(self.appFullName).get_int("highscore", 0)
-        self.new_game()
+        self._new_game()
         self.create_ui()
         self.setContentView(self.screen)
         self._check_autoload()
 
-    def new_game(self):
+    def _new_game(self):
+        """Start a brand new game (level 1) with a fresh emoji order."""
+        self.level = 1
+        self.score = 0
+        self.emoji_order = _generate_emoji_order()
+        self._autosave()
+        self._start_level()
+
+    def _start_level(self):
+        """Generate tubes for the current level, keeping the current emoji order."""
         filled, capacity, extra = _level_params(self.level)
         self.capacity = capacity
         self.moves = 0
@@ -275,7 +298,7 @@ class Sorter(Activity):
         scale = int(256 * emoji_size / 32)
         for item in reversed(items):
             img = lv.image(tube_obj)
-            img.set_src(_EMOJI_DIR + _EMOJIS[item])
+            img.set_src(_EMOJI_DIR + _EMOJIS[self.emoji_order[item]])
             img.set_size(emoji_size, emoji_size)
             img.set_scale(scale)
             img.center()
@@ -336,6 +359,8 @@ class Sorter(Activity):
         editor = SharedPreferences(self.appFullName).edit()
         editor.put_int("autosave_level", self.level)
         editor.put_int("autosave_score", self.score)
+        if self.emoji_order:
+            editor.put_list("emoji_order", self.emoji_order)
         editor.commit()
 
     def _save_highscore(self):
@@ -373,11 +398,28 @@ class Sorter(Activity):
 
         self.popup_modal = mbox
 
+    def _load_emoji_order(self, prefs):
+        """Load stored emoji order or generate a fresh one if invalid."""
+        order = prefs.get_list("emoji_order", [])
+        try:
+            if (
+                isinstance(order, list)
+                and _MAX_FILLED <= len(order) <= _MAX_EMOJI_ORDER
+                and len(set(order)) == len(order)
+                and all(0 <= i < len(_EMOJIS) for i in order)
+            ):
+                return [int(i) for i in order]
+        except Exception:
+            pass
+        return _generate_emoji_order()
+
     def _do_load(self, event, saved_level, saved_score):
         self._close_popup()
+        prefs = SharedPreferences(self.appFullName)
+        self.emoji_order = self._load_emoji_order(prefs)
         self.level = saved_level
         self.score = saved_score
-        self.new_game()
+        self._start_level()
         self.build_board()
         self.refresh_labels()
 
@@ -476,7 +518,7 @@ class Sorter(Activity):
         self.level += 1
         self._autosave()
         self._last_ts = time.ticks_ms()
-        self.new_game()
+        self._start_level()
         self.build_board()
         self.refresh_labels()
 
@@ -507,9 +549,7 @@ class Sorter(Activity):
             self._win_timer = None
         self._save_highscore()
         self._last_ts = time.ticks_ms()
-        self.level = 1
-        self.score = 0
-        self.new_game()
+        self._new_game()
         self.build_board()
         self.refresh_labels()
 

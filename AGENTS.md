@@ -15,6 +15,7 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 - Syntax tests run via `./tests/syntax.sh` and compile every `internal_filesystem/**/*.py` with `mpy-cross` but remove the .mpy files afterwards; failing files are reported by path.
 - `mpy-cross` binary lives at `./lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross`.
 - Unit tests run via `./tests/unittest.sh [test_file] [--ondevice]`; runner injects `main.py` and disables `mpos.TaskManager` for desktop, but on-device runs must NOT re-run boot/main (the script handles this).
+- Running all unit tests takes a very long time (20 to 35 minutes) so better to run a broad selection of what might be impacted by the change. The build server will run all of them upon git push anyway.
 - Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files.
 - To run a single test, pass a file path to `./tests/unittest.sh` (absolute path is resolved inside the script).
 - Testing workflow details and examples live in `tests/README.md`; check it before adding new tests.
