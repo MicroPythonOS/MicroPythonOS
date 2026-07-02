@@ -2,6 +2,8 @@
 !.editorconfig
 !.gitignore
 
+.planning/
+
 trash/
 
 conf.json*
