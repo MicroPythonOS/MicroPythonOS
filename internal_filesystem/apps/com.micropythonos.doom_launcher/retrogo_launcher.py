@@ -284,7 +284,6 @@ class RetroGoLauncher(Activity):
         intent.putExtra("bootfile_prefix", bootfile_prefix)
         intent.putExtra("gamefile", gamefile)
         self.startActivity(intent)
-        await TaskManager.sleep(1)
 
         self.mkdir(bootfile_prefix + self.romdir)
         self.mkdir(bootfile_prefix + self.romdir + "/" + self.roms_subdir)
@@ -360,7 +359,7 @@ class RetroGoLauncher(Activity):
 
         # Wait a few seconds so the user has time to switch off the device in the "boot to retro-go" state
         # This is useful to capture debug logging, as this triggers a re-init of the USB-to-serial.
-        await TaskManager.sleep(3)
+        # await TaskManager.sleep(3)
 
         try:
             import machine
