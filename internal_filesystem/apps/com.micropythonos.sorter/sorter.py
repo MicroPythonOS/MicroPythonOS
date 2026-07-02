@@ -1,4 +1,4 @@
-from mpos import Activity, AppearanceManager, DisplayMetrics, SharedPreferences
+from mpos import Activity, AppearanceManager, AudioManager, DisplayMetrics, SharedPreferences
 import mpos.ui
 import lvgl as lv
 import os
@@ -21,6 +21,12 @@ _EXTRA_MIN = 1
 _MAX_FILLED = 7
 _MAX_CAPACITY = 5
 _MAX_LEVEL = 100
+
+# RTTTL sound cues for buzzer output.
+_RTTTL_SELECT = "SortSel:d=16,o=7,b=250:8c"
+_RTTTL_MOVE = "SortMove:d=16,o=6,b=250:8e"
+_RTTTL_INVALID = "SortNo:d=16,o=5,b=200:8a,8a"
+_RTTTL_WIN = "SortWin:d=8,o=6,b=160:c,e,g,c7,4e7"
 
 
 def _shuffle(lst):
@@ -189,22 +195,25 @@ class Sorter(Activity):
         self.tubes = _generate_level(filled, capacity, extra)
 
     def create_ui(self):
+        self.score_best_label = lv.label(self.screen)
+        self.score_best_label.align(lv.ALIGN.TOP_LEFT, 10, 10)
+        self.score_best_label.add_flag(lv.obj.FLAG.CLICKABLE)
+        self.score_best_label.add_event_cb(self.on_highscore_tap, lv.EVENT.CLICKED, None)
+
         self.level_label = lv.label(self.screen)
         self.level_label.align(lv.ALIGN.TOP_MID, 0, 10)
 
         self.moves_label = lv.label(self.screen)
         self.moves_label.align(lv.ALIGN.TOP_RIGHT, -10, 10)
 
-        self.score_label = lv.label(self.screen)
-        self.score_label.align(lv.ALIGN.BOTTOM_LEFT, 10, -10)
-
-        self.highscore_label = lv.label(self.screen)
-        self.highscore_label.align(lv.ALIGN.BOTTOM_MID, 0, -10)
-        self.highscore_label.add_flag(lv.obj.FLAG.CLICKABLE)
-        self.highscore_label.add_event_cb(self.on_highscore_tap, lv.EVENT.CLICKED, None)
-
         self.refresh_labels()
         self.build_board()
+
+        refresh_btn = lv.button(self.screen)
+        refresh_label = lv.label(refresh_btn)
+        refresh_label.set_text(lv.SYMBOL.REFRESH)
+        refresh_btn.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        refresh_btn.add_event_cb(self.on_refresh, lv.EVENT.CLICKED, None)
 
         reset_btn = lv.button(self.screen)
         reset_label = lv.label(reset_btn)
@@ -223,6 +232,7 @@ class Sorter(Activity):
         self.container.set_style_pad_row(6, 0)
         self.container.set_style_pad_column(6, 0)
         self.container.set_style_radius(0, 0)
+        self.container.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         self.tube_widgets = []
         num_tubes = len(self.tubes)
@@ -230,9 +240,11 @@ class Sorter(Activity):
         available_width = DisplayMetrics.width() - ((num_tubes - 1) * gap)
         tight_width = available_width // max(1, num_tubes)
         tube_width = max(28, int(tight_width * 0.85))
-        emoji_size = min(32, max(14, tube_width - 8))
-        #tube_height = int((emoji_size * self.capacity + 8) * 1.4)
-        tube_height = int((emoji_size * 1.35 * self.capacity))
+        # Scale emojis down as tubes get deeper so everything fits.
+        max_tube_height = DisplayMetrics.pct_of_height(55)
+        emoji_size_from_height = int(max_tube_height // (self.capacity * 1.35))
+        emoji_size = max(14, min(32, tube_width - 8, emoji_size_from_height))
+        tube_height = int(emoji_size * 1.35 * self.capacity)
 
         for idx in range(num_tubes):
             tube = self._build_tube_widget(idx, tube_width, tube_height, emoji_size)
@@ -259,10 +271,12 @@ class Sorter(Activity):
 
         items = self.tubes[idx]
         # Render from top of stack downward.
+        scale = int(256 * emoji_size / 32)
         for item in reversed(items):
             img = lv.image(tube_obj)
             img.set_src(_EMOJI_DIR + _EMOJIS[item])
             img.set_size(emoji_size, emoji_size)
+            img.set_scale(scale)
             img.center()
 
         return tube_obj
@@ -285,15 +299,37 @@ class Sorter(Activity):
     def refresh_labels(self):
         self.level_label.set_text(f"Level: {self.level}")
         self.moves_label.set_text(f"Moves: {self.moves}")
-        self.score_label.set_text(f"Score: {self.score}")
         best = max(self.score, self.highscore)
-        self.highscore_label.set_text(f"Best: {best}")
+        self.score_best_label.set_text(f"Score/Best: {self.score}/{best}")
         if self.score > self.highscore and self.score > 0:
-            self.highscore_label.set_style_text_color(lv.color_hex(0xE74C3C), lv.PART.MAIN)
+            self.score_best_label.set_style_text_color(lv.color_hex(0xE74C3C), lv.PART.MAIN)
         elif AppearanceManager.is_light_mode():
-            self.highscore_label.set_style_text_color(lv.color_hex(0x000000), lv.PART.MAIN)
+            self.score_best_label.set_style_text_color(lv.color_hex(0x000000), lv.PART.MAIN)
         else:
-            self.highscore_label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
+            self.score_best_label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
+
+    def _find_buzzer_output(self):
+        try:
+            for output in AudioManager.get_outputs():
+                if output.kind == "buzzer":
+                    return output
+        except Exception:
+            pass
+        return None
+
+    def _play_rtttl(self, rtttl):
+        output = self._find_buzzer_output()
+        if output is None:
+            return
+        try:
+            AudioManager.player(
+                rtttl=rtttl,
+                stream_type=AudioManager.STREAM_NOTIFICATION,
+                volume=50,
+                output=output,
+            ).start()
+        except Exception:
+            pass
 
     def _autosave(self):
         editor = SharedPreferences(self.appFullName).edit()
@@ -396,6 +432,7 @@ class Sorter(Activity):
                 self.selected = idx
                 self._last_ts = now
                 self._update_selection()
+                self._play_rtttl(_RTTTL_SELECT)
             return
 
         if self.selected == idx:
@@ -411,6 +448,7 @@ class Sorter(Activity):
             _apply_move(src, tgt, self.capacity)
             self.moves += 1
             self.selected = -1
+            self._play_rtttl(_RTTTL_MOVE)
             self.build_board()
             self._restore_focus(idx)
             self.refresh_labels()
@@ -420,8 +458,10 @@ class Sorter(Activity):
             self.selected = -1
             self._last_ts = now
             self._update_selection()
+            self._play_rtttl(_RTTTL_INVALID)
 
     def on_win(self):
+        self._play_rtttl(_RTTTL_WIN)
         filled, capacity, extra = _level_params(self.level)
         min_moves = filled * capacity
         wasted = max(0, self.moves - min_moves)
@@ -438,6 +478,20 @@ class Sorter(Activity):
         self.new_game()
         self.build_board()
         self.refresh_labels()
+
+    def on_refresh(self, event):
+        self._restart_level()
+
+    def _restart_level(self):
+        if self._win_timer:
+            lv.timer_del(self._win_timer)
+            self._win_timer = None
+        self.moves = 0
+        self.selected = -1
+        self.new_game()
+        self.build_board()
+        self.refresh_labels()
+        self._autosave()
 
     def on_reset(self, event):
         self._show_confirm_popup("New game?", self._do_reset, self._close_popup)
