@@ -13,7 +13,7 @@ codebasedir=$(cd "$mydir/.." && pwd -P)
 port="${PORT:-8080}"
 
 if [ "${1:-}" != "--no-build" ]; then
-	"$mydir/build_mpos_web.sh"
+	"$mydir/build_mpos.sh web"
 fi
 
 webdir="$codebasedir/web"
@@ -24,4 +24,8 @@ fi
 
 echo "Serving $webdir at http://localhost:$port/"
 echo "Press Ctrl-C to stop."
+echo
+echo "Note that internal_filesystem/apps/ is copied to your browser's LocalStorage at first run"
+echo "so you might need to clear that in your browser's site settings if you want to start fresh!"
+echo
 exec python3 -m http.server "$port" -d "$webdir"
