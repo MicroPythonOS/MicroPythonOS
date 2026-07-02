@@ -193,6 +193,7 @@ class Sorter(Activity):
         self.moves = 0
         self.selected = -1
         self.tubes = _generate_level(filled, capacity, extra)
+        self.initial_tubes = [list(t) for t in self.tubes]
 
     def create_ui(self):
         self.score_best_label = lv.label(self.screen)
@@ -488,8 +489,10 @@ class Sorter(Activity):
             self._win_timer = None
         self.moves = 0
         self.selected = -1
-        self.new_game()
+        if self.initial_tubes:
+            self.tubes = [list(t) for t in self.initial_tubes]
         self.build_board()
+        self._restore_focus(0)
         self.refresh_labels()
         self._autosave()
 
