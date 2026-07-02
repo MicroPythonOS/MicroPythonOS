@@ -1,0 +1,1 @@
+{"name": "HelloWorld", "publisher": "MicroPythonOS", "short_description": "Minimal app", "long_description": "Demonstrates the simplest app.", "fullname": "com.micropythonos.helloworld", "version": "0.2.0", "category": "development", "activities": [{"entrypoint": "hello.py", "classname": "Hello", "intent_filters": [{"action": "main", "category": "launcher"}]}]}

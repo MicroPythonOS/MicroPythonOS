@@ -1,0 +1,1383 @@
+"""
+Mock implementations for MicroPythonOS testing.
+
+This module provides mock implementations of hardware and system modules
+for testing without actual hardware. Works on both desktop and device.
+"""
+
+import sys
+
+
+_REAL_MACHINE = None
+
+
+def _capture_real_machine(mock_to_inject=None):
+    global _REAL_MACHINE
+    if _REAL_MACHINE is not None:
+        return _REAL_MACHINE
+
+    existing = sys.modules.get("machine")
+    if existing is None:
+        try:
+            import machine as existing  # type: ignore[no-redef]
+        except Exception:
+            existing = None
+
+    if existing is None:
+        return None
+
+    if mock_to_inject is not None and existing is mock_to_inject:
+        return None
+
+    if getattr(existing, "__mpos_mock_machine__", False):
+        return None
+
+    _REAL_MACHINE = existing
+    return _REAL_MACHINE
+
+
+_capture_real_machine()
+
+
+# =============================================================================
+# Helper Functions
+# =============================================================================
+
+class MockModule:
+    """
+    Simple class that acts as a module container.
+    MicroPython doesn't have types.ModuleType, so we use this instead.
+    """
+    pass
+
+
+def create_mock_module(name, **attrs):
+    """
+    Create a mock module with the given attributes.
+    
+    Args:
+        name: Module name (for debugging)
+        **attrs: Attributes to set on the module
+        
+    Returns:
+        MockModule instance with attributes set
+    """
+    module = MockModule()
+    module.__name__ = name
+    for key, value in attrs.items():
+        setattr(module, key, value)
+    return module
+
+
+def inject_mocks(mock_specs):
+    """
+    Inject mock modules into sys.modules.
+    
+    Args:
+        mock_specs: Dict mapping module names to mock instances/classes
+                   e.g., {'machine': MockMachine(), 'mpos.task_manager': mock_tm}
+    """
+    if "machine" in mock_specs:
+        _capture_real_machine(mock_to_inject=mock_specs["machine"])
+
+    for name, mock in mock_specs.items():
+        sys.modules[name] = mock
+
+
+# =============================================================================
+# Hardware Mocks - machine module
+# =============================================================================
+
+class MockPin:
+    """Mock machine.Pin for testing GPIO operations."""
+    
+    IN = 0
+    OUT = 1
+    PULL_UP = 2
+    PULL_DOWN = 3
+    
+    def __init__(self, pin_number, mode=None, pull=None):
+        self.pin_number = pin_number
+        self.mode = mode
+        self.pull = pull
+        self._value = 0
+    
+    def value(self, val=None):
+        """Get or set pin value."""
+        if val is None:
+            return self._value
+        self._value = val
+    
+    def on(self):
+        """Set pin high."""
+        self._value = 1
+    
+    def off(self):
+        """Set pin low."""
+        self._value = 0
+
+
+class MockPWM:
+    """Mock machine.PWM for testing PWM operations (buzzer, etc.)."""
+    
+    def __init__(self, pin, freq=0, duty=0):
+        self.pin = pin
+        self.last_freq = freq
+        self.last_duty = duty
+    
+    def freq(self, value=None):
+        """Get or set frequency."""
+        if value is not None:
+            self.last_freq = value
+        return self.last_freq
+    
+    def duty_u16(self, value=None):
+        """Get or set duty cycle (16-bit)."""
+        if value is not None:
+            self.last_duty = value
+        return self.last_duty
+    
+    def duty(self, value=None):
+        """Get or set duty cycle (10-bit)."""
+        if value is not None:
+            self.last_duty = value * 64  # Convert to 16-bit
+        return self.last_duty // 64
+    
+    def deinit(self):
+        """Deinitialize PWM."""
+        self.last_freq = 0
+        self.last_duty = 0
+
+
+class MockI2S:
+    """Mock machine.I2S for testing audio I2S operations."""
+    
+    TX = 0
+    RX = 1
+    MONO = 0
+    STEREO = 1
+    
+    def __init__(self, id, sck=None, ws=None, sd=None, mode=None, 
+                 bits=16, format=None, rate=44100, ibuf=None):
+        self.id = id
+        self.sck = sck
+        self.ws = ws
+        self.sd = sd
+        self.mode = mode
+        self.bits = bits
+        self.format = format
+        self.rate = rate
+        self.ibuf = ibuf
+        self._write_buffer = bytearray(1024)
+        self._bytes_written = 0
+    
+    def write(self, buf):
+        """Write audio data (blocking)."""
+        self._bytes_written += len(buf)
+        return len(buf)
+    
+    def write_readinto(self, write_buf, read_buf):
+        """Non-blocking write with readback."""
+        self._bytes_written += len(write_buf)
+        return len(write_buf)
+    
+    def deinit(self):
+        """Deinitialize I2S."""
+        pass
+
+
+class MockTimer:
+    """Mock machine.Timer for testing periodic callbacks."""
+    
+    _all_timers = {}
+    
+    PERIODIC = 1
+    ONE_SHOT = 0
+    
+    def __init__(self, timer_id=-1):
+        self.timer_id = timer_id
+        self.callback = None
+        self.period = None
+        self.mode = None
+        self.active = False
+        if timer_id >= 0:
+            MockTimer._all_timers[timer_id] = self
+    
+    def init(self, period=None, mode=None, callback=None):
+        """Initialize/configure the timer."""
+        self.period = period
+        self.mode = mode
+        self.callback = callback
+        self.active = True
+    
+    def deinit(self):
+        """Deinitialize the timer."""
+        self.active = False
+        self.callback = None
+    
+    def trigger(self, *args, **kwargs):
+        """Manually trigger the timer callback (for testing)."""
+        if self.callback and self.active:
+            self.callback(*args, **kwargs)
+    
+    @classmethod
+    def get_timer(cls, timer_id):
+        """Get a timer by ID."""
+        return cls._all_timers.get(timer_id)
+    
+    @classmethod
+    def trigger_all(cls):
+        """Trigger all active timers (for testing)."""
+        for timer in cls._all_timers.values():
+            if timer.active:
+                timer.trigger()
+    
+    @classmethod
+    def reset_all(cls):
+        """Reset all timers (clear registry)."""
+        cls._all_timers.clear()
+
+
+class MockNeoPixel:
+    """Mock neopixel.NeoPixel for testing LED operations."""
+    
+    def __init__(self, pin, num_leds, bpp=3, timing=1):
+        self.pin = pin
+        self.num_leds = num_leds
+        self.bpp = bpp
+        self.timing = timing
+        self.pixels = [(0, 0, 0)] * num_leds
+        self.write_count = 0
+    
+    def __setitem__(self, index, value):
+        """Set LED color (R, G, B) or (R, G, B, W) tuple."""
+        if 0 <= index < self.num_leds:
+            self.pixels[index] = value
+    
+    def __getitem__(self, index):
+        """Get LED color."""
+        if 0 <= index < self.num_leds:
+            return self.pixels[index]
+        return (0, 0, 0)
+    
+    def __len__(self):
+        """Return number of LEDs."""
+        return self.num_leds
+    
+    def fill(self, color):
+        """Fill all LEDs with the same color."""
+        for i in range(self.num_leds):
+            self.pixels[i] = color
+    
+    def write(self):
+        """Update hardware (mock - just increment counter)."""
+        self.write_count += 1
+    
+    def get_all_colors(self):
+        """Get all LED colors (for testing assertions)."""
+        return self.pixels.copy()
+    
+    def reset_write_count(self):
+        """Reset the write counter (for testing)."""
+        self.write_count = 0
+
+
+class MockMachine:
+    """
+    Mock machine module containing all hardware mocks.
+    
+    Usage:
+        sys.modules['machine'] = MockMachine()
+    """
+
+    __mpos_mock_machine__ = True
+    
+    Pin = MockPin
+    PWM = MockPWM
+    I2S = MockI2S
+    Timer = MockTimer
+    
+    @staticmethod
+    def freq(freq=None):
+        """Get or set CPU frequency."""
+        return 240000000  # 240 MHz
+    
+    @staticmethod
+    def reset():
+        """Reset the device via the real machine module."""
+        real_machine = _capture_real_machine(mock_to_inject=None)
+        if real_machine is None or not hasattr(real_machine, "reset"):
+            raise RuntimeError("Real machine module not captured; cannot reset.")
+        return real_machine.reset()
+    
+    @staticmethod
+    def soft_reset():
+        """Soft reset the device (no-op in mock)."""
+        pass
+
+
+# =============================================================================
+# MPOS Mocks - TaskManager
+# =============================================================================
+
+class MockTask:
+    """Mock asyncio Task for testing."""
+    
+    def __init__(self):
+        self.ph_key = 0
+        self._done = False
+        self.coro = None
+        self._result = None
+        self._exception = None
+    
+    def done(self):
+        """Check if task is done."""
+        return self._done
+    
+    def cancel(self):
+        """Cancel the task."""
+        self._done = True
+    
+    def result(self):
+        """Get task result."""
+        if self._exception:
+            raise self._exception
+        return self._result
+
+
+class MockTaskManager:
+    """
+    Mock TaskManager for testing async operations.
+    
+    Usage:
+        mock_tm = create_mock_module('mpos.task_manager', TaskManager=MockTaskManager)
+        sys.modules['mpos.task_manager'] = mock_tm
+    """
+    
+    task_list = []
+    
+    @classmethod
+    def create_task(cls, coroutine):
+        """Create a mock task from a coroutine."""
+        task = MockTask()
+        task.coro = coroutine
+        cls.task_list.append(task)
+        return task
+    
+    @staticmethod
+    async def sleep(seconds):
+        """Mock async sleep (no actual delay)."""
+        pass
+    
+    @staticmethod
+    async def sleep_ms(milliseconds):
+        """Mock async sleep in milliseconds (no actual delay)."""
+        pass
+    
+    @staticmethod
+    async def wait_for(awaitable, timeout):
+        """Mock wait_for with timeout."""
+        return await awaitable
+    
+    @staticmethod
+    def notify_event():
+        """Create a mock async event."""
+        class MockEvent:
+            def __init__(self):
+                self._set = False
+            
+            async def wait(self):
+                pass
+            
+            def set(self):
+                self._set = True
+            
+            def is_set(self):
+                return self._set
+        
+        return MockEvent()
+    
+    @classmethod
+    def clear_tasks(cls):
+        """Clear all tracked tasks (for test cleanup)."""
+        cls.task_list = []
+
+
+# =============================================================================
+# Network Mocks
+# =============================================================================
+
+class MockNetwork:
+    """Mock network module for testing network connectivity."""
+    
+    STA_IF = 0
+    AP_IF = 1
+    
+    class MockWLAN:
+        """Mock WLAN interface."""
+        
+        def __init__(self, interface, connected=True):
+            self.interface = interface
+            self._connected = connected
+            self._active = True
+            self._config = {}
+            self._scan_results = []
+        
+        def isconnected(self):
+            """Return whether the WLAN is connected."""
+            return self._connected
+        
+        def active(self, is_active=None):
+            """Get/set whether the interface is active."""
+            if is_active is None:
+                return self._active
+            self._active = is_active
+        
+        def connect(self, ssid, password):
+            """Simulate connecting to a network."""
+            self._connected = True
+            self._config['ssid'] = ssid
+        
+        def disconnect(self):
+            """Simulate disconnecting from network."""
+            self._connected = False
+        
+        def config(self, param):
+            """Get configuration parameter."""
+            return self._config.get(param)
+        
+        def ifconfig(self):
+            """Get IP configuration."""
+            if self._connected:
+                return ('192.168.1.100', '255.255.255.0', '192.168.1.1', '8.8.8.8')
+            return ('0.0.0.0', '0.0.0.0', '0.0.0.0', '0.0.0.0')
+
+        def ipconfig(self, key=None):
+            """Return IP configuration details, mirroring network.WLAN.ipconfig."""
+            config = self.ifconfig()
+            mapping = {
+                'addr4': config[0],
+                'netmask4': config[1],
+                'gateway4': config[2],
+                'dns4': config[3],
+            }
+            if key is None:
+                return mapping
+            return mapping.get(key)
+        
+        def scan(self):
+            """Scan for available networks."""
+            return self._scan_results
+    
+    def __init__(self, connected=True):
+        self._connected = connected
+        self._wlan_instances = {}
+    
+    def WLAN(self, interface):
+        """Create or return a WLAN interface."""
+        if interface not in self._wlan_instances:
+            self._wlan_instances[interface] = self.MockWLAN(interface, self._connected)
+        return self._wlan_instances[interface]
+    
+    def set_connected(self, connected):
+        """Change the connection state of all WLAN interfaces."""
+        self._connected = connected
+        for wlan in self._wlan_instances.values():
+            wlan._connected = connected
+
+
+class MockRaw:
+    """Mock raw HTTP response for streaming."""
+    
+    def __init__(self, content, fail_after_bytes=None):
+        self.content = content
+        self.position = 0
+        self.fail_after_bytes = fail_after_bytes
+    
+    def read(self, size):
+        """Read a chunk of data."""
+        if self.fail_after_bytes is not None and self.position >= self.fail_after_bytes:
+            raise OSError(-113, "ECONNABORTED")
+        
+        chunk = self.content[self.position:self.position + size]
+        self.position += len(chunk)
+        return chunk
+
+
+class MockResponse:
+    """Mock HTTP response."""
+    
+    def __init__(self, status_code=200, text='', headers=None, content=b'', fail_after_bytes=None):
+        self.status_code = status_code
+        self.text = text
+        self.headers = headers or {}
+        self.content = content
+        self._closed = False
+        self.raw = MockRaw(content, fail_after_bytes=fail_after_bytes)
+    
+    def close(self):
+        """Close the response."""
+        self._closed = True
+    
+    def json(self):
+        """Parse response as JSON."""
+        import json
+        return json.loads(self.text)
+
+
+class MockRequests:
+    """Mock requests module for testing HTTP operations."""
+    
+    def __init__(self):
+        self.last_url = None
+        self.last_headers = None
+        self.last_timeout = None
+        self.last_stream = None
+        self.last_request = None
+        self.next_response = None
+        self.raise_exception = None
+        self.call_history = []
+    
+    def get(self, url, stream=False, timeout=None, headers=None):
+        """Mock GET request."""
+        self.last_url = url
+        self.last_headers = headers
+        self.last_timeout = timeout
+        self.last_stream = stream
+        
+        self.last_request = {
+            'method': 'GET',
+            'url': url,
+            'stream': stream,
+            'timeout': timeout,
+            'headers': headers or {}
+        }
+        self.call_history.append(self.last_request.copy())
+        
+        if self.raise_exception:
+            exc = self.raise_exception
+            self.raise_exception = None
+            raise exc
+        
+        if self.next_response:
+            response = self.next_response
+            self.next_response = None
+            return response
+        
+        return MockResponse()
+    
+    def post(self, url, data=None, json=None, timeout=None, headers=None):
+        """Mock POST request."""
+        self.last_url = url
+        self.last_headers = headers
+        self.last_timeout = timeout
+        
+        self.call_history.append({
+            'method': 'POST',
+            'url': url,
+            'data': data,
+            'json': json,
+            'timeout': timeout,
+            'headers': headers
+        })
+        
+        if self.raise_exception:
+            exc = self.raise_exception
+            self.raise_exception = None
+            raise exc
+        
+        if self.next_response:
+            response = self.next_response
+            self.next_response = None
+            return response
+        
+        return MockResponse()
+    
+    def set_next_response(self, status_code=200, text='', headers=None, content=b'', fail_after_bytes=None):
+        """Configure the next response to return."""
+        self.next_response = MockResponse(status_code, text, headers, content, fail_after_bytes=fail_after_bytes)
+        return self.next_response
+    
+    def set_exception(self, exception):
+        """Configure an exception to raise on the next request."""
+        self.raise_exception = exception
+    
+    def clear_history(self):
+        """Clear the call history."""
+        self.call_history = []
+
+
+class MockSocket:
+    """Mock socket for testing socket operations."""
+    
+    AF_INET = 2
+    SOCK_STREAM = 1
+    
+    def __init__(self, af=None, sock_type=None):
+        self.af = af
+        self.sock_type = sock_type
+        self.connected = False
+        self.bound = False
+        self.listening = False
+        self.address = None
+        self._send_exception = None
+        self._recv_data = b''
+        self._recv_position = 0
+    
+    def connect(self, address):
+        """Simulate connecting to an address."""
+        self.connected = True
+        self.address = address
+    
+    def bind(self, address):
+        """Simulate binding to an address."""
+        self.bound = True
+        self.address = address
+    
+    def listen(self, backlog):
+        """Simulate listening for connections."""
+        self.listening = True
+    
+    def send(self, data):
+        """Simulate sending data."""
+        if self._send_exception:
+            exc = self._send_exception
+            self._send_exception = None
+            raise exc
+        return len(data)
+    
+    def recv(self, size):
+        """Simulate receiving data."""
+        chunk = self._recv_data[self._recv_position:self._recv_position + size]
+        self._recv_position += len(chunk)
+        return chunk
+    
+    def close(self):
+        """Close the socket."""
+        self.connected = False
+    
+    def set_send_exception(self, exception):
+        """Configure an exception to raise on next send()."""
+        self._send_exception = exception
+    
+    def set_recv_data(self, data):
+        """Configure data to return from recv()."""
+        self._recv_data = data
+        self._recv_position = 0
+
+
+# =============================================================================
+# Utility Mocks
+# =============================================================================
+
+class MockTime:
+    """Mock time module for testing time-dependent code."""
+    
+    def __init__(self, start_time=0):
+        self._current_time_ms = start_time
+        self._sleep_calls = []
+    
+    def ticks_ms(self):
+        """Get current time in milliseconds."""
+        return self._current_time_ms
+    
+    def ticks_diff(self, ticks1, ticks2):
+        """Calculate difference between two tick values."""
+        return ticks1 - ticks2
+    
+    def sleep(self, seconds):
+        """Simulate sleep (doesn't actually sleep)."""
+        self._sleep_calls.append(seconds)
+    
+    def sleep_ms(self, milliseconds):
+        """Simulate sleep in milliseconds."""
+        self._sleep_calls.append(milliseconds / 1000.0)
+    
+    def advance(self, milliseconds):
+        """Advance the mock time."""
+        self._current_time_ms += milliseconds
+    
+    def get_sleep_calls(self):
+        """Get history of sleep calls."""
+        return self._sleep_calls
+    
+    def clear_sleep_calls(self):
+        """Clear the sleep call history."""
+        self._sleep_calls = []
+
+
+class MockJSON:
+    """Mock JSON module for testing JSON parsing."""
+    
+    def __init__(self):
+        self.raise_exception = None
+    
+    def loads(self, text):
+        """Parse JSON string."""
+        if self.raise_exception:
+            exc = self.raise_exception
+            self.raise_exception = None
+            raise exc
+        
+        import json
+        return json.loads(text)
+    
+    def dumps(self, obj):
+        """Serialize object to JSON string."""
+        import json
+        return json.dumps(obj)
+    
+    def set_exception(self, exception):
+        """Configure an exception to raise on the next loads() call."""
+        self.raise_exception = exception
+
+
+class MockDownloadManager:
+    """Mock DownloadManager for testing async downloads."""
+    
+    def __init__(self):
+        self.download_data = b''
+        self.should_fail = False
+        self.fail_after_bytes = None
+        self.headers_received = None
+        self.url_received = None
+        self.call_history = []
+        self.chunk_size = 1024
+        self.simulated_speed_bps = 100 * 1024
+    
+    async def download_url(self, url, outfile=None, total_size=None,
+                          progress_callback=None, chunk_callback=None, headers=None,
+                          speed_callback=None, redact_url=False):
+        """Mock async download with flexible output modes."""
+        from mpos.net.download_manager import DownloadManager
+
+        headers = DownloadManager._merge_headers(headers)
+        self.url_received = url
+        self.headers_received = headers
+        self.redact_url_received = redact_url
+
+        self.call_history.append({
+            'url': url,
+            'outfile': outfile,
+            'total_size': total_size,
+            'headers': headers,
+            'has_progress_callback': progress_callback is not None,
+            'has_chunk_callback': chunk_callback is not None,
+            'has_speed_callback': speed_callback is not None,
+            'redact_url': redact_url,
+        })
+        
+        if self.should_fail:
+            if outfile or chunk_callback:
+                return False
+            return None
+        
+        if self.fail_after_bytes is not None and self.fail_after_bytes == 0:
+            raise OSError(-113, "ECONNABORTED")
+        
+        bytes_sent = 0
+        chunks = []
+        total_data_size = len(self.download_data)
+        effective_total_size = total_size if total_size else total_data_size
+        last_progress_pct = -1.0
+        bytes_since_speed_update = 0
+        speed_update_threshold = 1000
+        
+        while bytes_sent < total_data_size:
+            if self.fail_after_bytes is not None and bytes_sent >= self.fail_after_bytes:
+                raise OSError(-113, "ECONNABORTED")
+            
+            chunk = self.download_data[bytes_sent:bytes_sent + self.chunk_size]
+            
+            if chunk_callback:
+                await chunk_callback(chunk)
+            elif outfile:
+                pass
+            else:
+                chunks.append(chunk)
+            
+            bytes_sent += len(chunk)
+            bytes_since_speed_update += len(chunk)
+            
+            if progress_callback and effective_total_size > 0:
+                percent = round((bytes_sent * 100) / effective_total_size, 2)
+                if percent != last_progress_pct:
+                    await progress_callback(percent)
+                    last_progress_pct = percent
+            
+            if speed_callback and bytes_since_speed_update >= speed_update_threshold:
+                await speed_callback(self.simulated_speed_bps)
+                bytes_since_speed_update = 0
+        
+        if outfile or chunk_callback:
+            if outfile:
+                with open(outfile, "wb") as f:
+                    f.write(self.download_data)
+            return True
+        else:
+            return b''.join(chunks)
+    
+    def set_download_data(self, data):
+        """Configure the data to return from downloads."""
+        self.download_data = data
+    
+    def set_should_fail(self, should_fail):
+        """Configure whether downloads should fail."""
+        self.should_fail = should_fail
+    
+    def set_fail_after_bytes(self, bytes_count):
+        """Configure network failure after specified bytes."""
+        self.fail_after_bytes = bytes_count
+    
+    def clear_history(self):
+        """Clear the call history."""
+        self.call_history = []
+
+
+# =============================================================================
+# Threading Mocks
+# =============================================================================
+
+class MockThread:
+    """
+    Mock _thread module for testing threaded operations.
+    
+    Usage:
+        sys.modules['_thread'] = MockThread
+    """
+    
+    _started_threads = []
+    _stack_size = 0
+    
+    @classmethod
+    def start_new_thread(cls, func, args):
+        """Record thread start but don't actually start a thread."""
+        cls._started_threads.append((func, args))
+        return len(cls._started_threads)
+    
+    @classmethod
+    def stack_size(cls, size=None):
+        """Mock stack_size."""
+        if size is not None:
+            cls._stack_size = size
+        return cls._stack_size
+    
+    @classmethod
+    def clear_threads(cls):
+        """Clear recorded threads (for test cleanup)."""
+        cls._started_threads = []
+    
+    @classmethod
+    def get_started_threads(cls):
+        """Get list of started threads (for test assertions)."""
+        return cls._started_threads
+
+
+class MockApps:
+    """
+    Mock mpos.apps module for testing (deprecated, use MockAppManager instead).
+    
+    This is kept for backward compatibility with existing tests.
+    
+    Usage:
+        sys.modules['mpos.apps'] = MockApps
+    """
+    
+    @staticmethod
+    def start_app(fullname):
+        """Mock start_app function."""
+        return True
+    
+    @staticmethod
+    def restart_launcher():
+        """Mock restart_launcher function."""
+        return True
+    
+    @staticmethod
+    def execute_script(script_source, classname, cwd=None, app_fullname=None):
+        """Mock execute_script function."""
+        return True
+
+
+class MockAppManager:
+    """
+    Mock mpos.content.app_manager module for testing.
+    
+    Usage:
+        sys.modules['mpos.content.app_manager'] = MockAppManager
+    """
+    
+    @staticmethod
+    def start_app(fullname):
+        """Mock start_app function."""
+        return True
+    
+    @staticmethod
+    def restart_launcher():
+        """Mock restart_launcher function."""
+        return True
+    
+    @staticmethod
+    def execute_script(script_source, classname, cwd=None, app_fullname=None):
+        """Mock execute_script function."""
+        return True
+
+
+class MockSharedPreferences:
+    """Mock SharedPreferences for testing."""
+
+    _all_data = {}
+
+    def __init__(self, app_id, filename=None):
+        self.app_id = app_id
+        self.filename = filename
+        if app_id not in MockSharedPreferences._all_data:
+            MockSharedPreferences._all_data[app_id] = {}
+
+    def _get_value(self, key, default):
+        return MockSharedPreferences._all_data.get(self.app_id, {}).get(key, default)
+
+    def get_dict(self, key):
+        return self._get_value(key, {})
+
+    def get_list(self, key, default=None):
+        return self._get_value(key, default)
+
+    def get_bool(self, key, default=False):
+        value = self._get_value(key, default)
+        return bool(value)
+
+    def get_string(self, key, default=""):
+        value = self._get_value(key, default)
+        return value if value is not None else default
+
+    def get_int(self, key, default=0):
+        value = self._get_value(key, default)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def edit(self):
+        return MockEditor(self)
+
+    @classmethod
+    def reset_all(cls):
+        cls._all_data = {}
+
+
+class MockEditor:
+    """Mock editor for SharedPreferences."""
+
+    def __init__(self, prefs):
+        self.prefs = prefs
+        self.pending = {}
+
+    def put_dict(self, key, value):
+        self.pending[key] = value
+
+    def put_dict_item(self, dict_key, item_key, config):
+        if dict_key not in self.pending:
+            existing = self.prefs._get_value(dict_key, {})
+            self.pending[dict_key] = dict(existing)
+        if isinstance(config, dict):
+            self.pending[dict_key][item_key] = config
+
+    def remove_dict_item(self, dict_key, item_key):
+        if dict_key not in self.pending:
+            existing = self.prefs._get_value(dict_key, {})
+            self.pending[dict_key] = dict(existing)
+        self.pending[dict_key].pop(item_key, None)
+
+    def put_list(self, key, value):
+        self.pending[key] = value
+
+    def put_bool(self, key, value):
+        self.pending[key] = bool(value)
+
+    def put_string(self, key, value):
+        self.pending[key] = value
+
+    def put_int(self, key, value):
+        self.pending[key] = int(value)
+
+    def commit(self):
+        if self.prefs.app_id not in MockSharedPreferences._all_data:
+            MockSharedPreferences._all_data[self.prefs.app_id] = {}
+        MockSharedPreferences._all_data[self.prefs.app_id].update(self.pending)
+
+
+class MockMpos:
+    """Mock mpos module with shared_preferences and time."""
+
+    class shared_preferences:
+        @staticmethod
+        def SharedPreferences(app_id):
+            return MockSharedPreferences(app_id)
+
+    class time:
+        @staticmethod
+        def sync_time():
+            pass
+
+
+class HotspotMockNetwork:
+    """Mock network module with AP/STA support for hotspot tests."""
+
+    STA_IF = 0
+    AP_IF = 1
+
+    AUTH_OPEN = 0
+    AUTH_WPA_PSK = 1
+    AUTH_WPA2_PSK = 2
+    AUTH_WPA_WPA2_PSK = 3
+
+    class MockWLAN:
+        def __init__(self, interface):
+            self.interface = interface
+            self._active = False
+            self._connected = False
+            self._config = {}
+            self._scan_results = []
+            self._ifconfig = ("0.0.0.0", "0.0.0.0", "0.0.0.0", "0.0.0.0")
+
+        def active(self, is_active=None):
+            if is_active is None:
+                return self._active
+            self._active = is_active
+            return None
+
+        def isconnected(self):
+            return self._connected
+
+        def connect(self, ssid, password):
+            self._connected = True
+            self._config["essid"] = ssid
+
+        def disconnect(self):
+            self._connected = False
+
+        def config(self, *args, **kwargs):
+            if kwargs:
+                self._config.update(kwargs)
+                return None
+            if args:
+                return self._config.get(args[0])
+            return self._config
+
+        def ifconfig(self, cfg=None):
+            if cfg is None:
+                return self._ifconfig
+            self._ifconfig = cfg
+            return None
+
+        def ipconfig(self, key=None):
+            config = self.ifconfig()
+            mapping = {
+                "addr4": config[0],
+                "netmask4": config[1],
+                "gw4": config[2],
+                "dns4": config[3],
+            }
+            if key is None:
+                return mapping
+            return mapping.get(key)
+
+        def scan(self):
+            return self._scan_results
+
+    def __init__(self):
+        self._wlan_instances = {}
+
+    def WLAN(self, interface):
+        if interface not in self._wlan_instances:
+            self._wlan_instances[interface] = self.MockWLAN(interface)
+        return self._wlan_instances[interface]
+
+
+class MockADC:
+    """Mock ADC for testing."""
+
+    ATTN_11DB = 3
+
+    def __init__(self, pin):
+        self.pin = pin
+        self._atten = None
+        self._read_value = 2048
+
+    def atten(self, value):
+        self._atten = value
+
+    def read(self):
+        return self._read_value
+
+    def set_read_value(self, value):
+        """Test helper to set ADC reading."""
+        self._read_value = value
+
+
+class MockPin:
+    """Mock Pin for testing."""
+
+    def __init__(self, pin_num):
+        self.pin_num = pin_num
+
+
+class MockMachineADC:
+    """Mock machine module with ADC/Pin."""
+
+    __mpos_mock_machine__ = True
+
+    ADC = MockADC
+    Pin = MockPin
+
+    @staticmethod
+    def reset():
+        """Reset the device via the real machine module."""
+        real_machine = _capture_real_machine(mock_to_inject=None)
+        if real_machine is None or not hasattr(real_machine, "reset"):
+            raise RuntimeError("Real machine module not captured; cannot reset.")
+        return real_machine.reset()
+
+
+class MockWifiService:
+    """Mock WifiService for testing."""
+
+    wifi_busy = False
+    _connected = False
+    _temporarily_disabled = False
+
+    @classmethod
+    def is_connected(cls):
+        return cls._connected
+
+    @classmethod
+    def disconnect(cls):
+        cls._connected = False
+
+    @classmethod
+    def temporarily_disable(cls):
+        """Temporarily disable WiFi and return whether it was connected."""
+        if cls.wifi_busy:
+            raise RuntimeError("Cannot disable WiFi: WifiService is already busy")
+        was_connected = cls._connected
+        cls.wifi_busy = True
+        cls._connected = False
+        cls._temporarily_disabled = True
+        return was_connected
+
+    @classmethod
+    def temporarily_enable(cls, was_connected):
+        """Re-enable WiFi and reconnect if it was connected before."""
+        cls.wifi_busy = False
+        cls._temporarily_disabled = False
+        if was_connected:
+            cls._connected = True
+
+    @classmethod
+    def reset(cls):
+        """Test helper to reset state."""
+        cls.wifi_busy = False
+        cls._connected = False
+        cls._temporarily_disabled = False
+
+
+class MockI2C:
+    """Mock I2C bus for testing."""
+
+    def __init__(self, bus_id, sda=None, scl=None):
+        self.bus_id = bus_id
+        self.sda = sda
+        self.scl = scl
+        self.memory = {}
+
+    def readfrom_mem(self, addr, reg, nbytes):
+        """Read from memory (simulates I2C read)."""
+        if addr not in self.memory:
+            raise OSError("I2C device not found")
+        if reg not in self.memory[addr]:
+            return bytes([0] * nbytes)
+        return bytes(self.memory[addr][reg])
+
+    def writeto_mem(self, addr, reg, data):
+        """Write to memory (simulates I2C write)."""
+        if addr not in self.memory:
+            self.memory[addr] = {}
+        self.memory[addr][reg] = list(data)
+
+
+class MockQMI8658:
+    """Mock QMI8658 IMU sensor."""
+
+    def __init__(self, i2c_bus, address=0x6B, accel_scale=0b10, gyro_scale=0b100):
+        self.i2c = i2c_bus
+        self.address = address
+        self.accel_scale = accel_scale
+        self.gyro_scale = gyro_scale
+
+    @property
+    def temperature(self):
+        """Return mock temperature."""
+        return 25.5
+
+    @property
+    def acceleration(self):
+        """Return mock acceleration (in G)."""
+        return (0.0, 0.0, 1.0)
+
+    @property
+    def gyro(self):
+        """Return mock gyroscope (in deg/s)."""
+        return (0.0, 0.0, 0.0)
+
+
+class MockWsenIsds:
+    """Mock WSEN_ISDS IMU sensor."""
+
+    def __init__(
+        self,
+        i2c,
+        address=0x6B,
+        acc_range="8g",
+        acc_data_rate="104Hz",
+        gyro_range="500dps",
+        gyro_data_rate="104Hz",
+    ):
+        self.i2c = i2c
+        self.address = address
+        self.acc_range = acc_range
+        self.gyro_range = gyro_range
+        self.acc_sensitivity = 0.244
+        self.gyro_sensitivity = 17.5
+        self.acc_offset_x = 0
+        self.acc_offset_y = 0
+        self.acc_offset_z = 0
+        self.gyro_offset_x = 0
+        self.gyro_offset_y = 0
+        self.gyro_offset_z = 0
+
+    def get_chip_id(self):
+        """Return WHO_AM_I value."""
+        return 0x6A
+
+    def _read_raw_accelerations(self):
+        """Return mock acceleration (in mg)."""
+        return (0.0, 0.0, 1000.0)
+
+    def read_angular_velocities(self):
+        """Return mock gyroscope (in mdps)."""
+        return (0.0, 0.0, 0.0)
+
+    def acc_calibrate(self, samples=None):
+        """Mock calibration."""
+        pass
+
+    def gyro_calibrate(self, samples=None):
+        """Mock calibration."""
+        pass
+
+
+def make_machine_i2c_module(i2c_cls, pin_cls=None):
+    if pin_cls is None:
+        pin_cls = type("Pin", (), {})
+    return type(
+        "module",
+        (),
+        {
+            "I2C": i2c_cls,
+            "Pin": pin_cls,
+            "reset": staticmethod(MockMachine.reset),
+            "__mpos_mock_machine__": True,
+        },
+    )()
+
+
+def make_machine_timer_module(timer_cls):
+    return type(
+        "module",
+        (),
+        {
+            "Timer": timer_cls,
+            "reset": staticmethod(MockMachine.reset),
+            "__mpos_mock_machine__": True,
+        },
+    )()
+
+
+def make_usocket_module(socket_cls):
+    class MockUsocket:
+        """Mock usocket module."""
+
+        AF_INET = socket_cls.AF_INET
+        SOCK_STREAM = socket_cls.SOCK_STREAM
+
+        @staticmethod
+        def socket(af, sock_type):
+            return socket_cls(af, sock_type)
+
+    return MockUsocket
+
+
+def make_shared_preferences_module(shared_prefs_cls):
+    return type("module", (), {"SharedPreferences": shared_prefs_cls})()
+
+
+# =============================================================================
+# Bluetooth Mocks
+# =============================================================================
+
+def _encode_advertisement_name(name):
+    """Encode a BLE advertisement data payload with the given device name."""
+    name_bytes = bytes(name, "utf-8")
+    payload = bytearray()
+    payload.append(len(name_bytes) + 1)
+    payload.append(0x09)  # Complete local name
+    payload.extend(name_bytes)
+    return bytes(payload)
+
+
+class MockBluetooth:
+    """Mock bluetooth module for testing without BLE hardware."""
+
+    def __init__(self, scan_results=None):
+        self._scan_results = scan_results
+        self._ble = None
+
+    def BLE(self):
+        if self._ble is None:
+            self._ble = MockBLE(self._scan_results)
+        return self._ble
+
+
+class MockBLE:
+    """Mock BLE controller for desktop/simulation testing."""
+
+    IRQ_SCAN_RESULT = 5
+    IRQ_SCAN_DONE = 6
+
+    def __init__(self, scan_results=None):
+        self._active = False
+        self._irq = None
+        if scan_results is None:
+            scan_results = [
+                (0, b"\xaa\xbb\xcc\xdd\xee\x01", 0, -42, _encode_advertisement_name("Simulated Phone")),
+                (0, b"\xaa\xbb\xcc\xdd\xee\x02", 0, -68, _encode_advertisement_name("Simulated Headset")),
+                (0, b"\xaa\xbb\xcc\xdd\xee\x03", 0, -55, _encode_advertisement_name("Simulated Watch")),
+            ]
+        self._scan_results = scan_results
+
+    def active(self, state=None):
+        if state is None:
+            return self._active
+        self._active = state
+
+    def irq(self, handler):
+        self._irq = handler
+
+    def gap_scan(self, duration_ms, interval_us=None, window_us=None, active_scan=None):
+        if duration_ms is None:
+            return
+        if self._irq:
+            for result in self._scan_results:
+                self._irq(self.IRQ_SCAN_RESULT, result)
+            self._irq(self.IRQ_SCAN_DONE, None)

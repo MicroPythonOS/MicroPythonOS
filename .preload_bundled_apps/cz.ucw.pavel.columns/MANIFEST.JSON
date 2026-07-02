@@ -1,0 +1,1 @@
+{"name":"Columns","publisher":"Pavel Machek","short_description":"Falling columns game","long_description":"Blocks of 3 colors are falling. Align the colors to make blocks disappear.","fullname":"cz.ucw.pavel.columns","version":"0.3.2","category":"game","activities":[{"entrypoint":"main.py","classname":"Main","intent_filters":[{"action":"main","category":"launcher"}]}]}

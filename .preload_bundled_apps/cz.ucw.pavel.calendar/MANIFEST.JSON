@@ -1,0 +1,1 @@
+{"name": "Calendar", "publisher": "Pavel Machek", "short_description": "Calendar", "long_description": "Simple calendar app.", "fullname": "cz.ucw.pavel.calendar", "version": "0.2.0", "category": "utilities", "activities": [{"entrypoint": "main.py", "classname": "Main", "intent_filters": [{"action": "main", "category": "launcher"}]}]}

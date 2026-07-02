@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>MicroPythonOS Web</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #111;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+    }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    canvas {
+      image-rendering: pixelated;
+      background: black;
+      outline: none;
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
+    }
+    #status {
+      color: #9ad;
+      font-size: 12px;
+      min-height: 14px;
+    }
+    #log {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 28vh;
+      margin: 0;
+      overflow: auto;
+      color: #ddd;
+      background: rgba(0, 0, 0, 0.78);
+      font: 12px/1.4 ui-monospace, monospace;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="status">Loading MicroPythonOS…</div>
+    <!-- LVGL display size; MicroPythonOS default profile is 320x240. -->
+    <canvas id="canvas" width="320" height="240" tabindex="0"
+            oncontextmenu="event.preventDefault()"></canvas>
+  </div>
+  <pre id="log"></pre>
+
+  <script>
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+    const canvas = document.getElementById("canvas");
+
+    function appendLog(text, isErr) {
+      logEl.textContent += (isErr ? "[err] " : "") + text + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // --- Persistent filesystem helpers (IDBFS / IndexedDB) -----------------
+    // /data and /apps are mounted from IndexedDB so app preferences and
+    // user-installed apps survive page reloads. The functions below run inside
+    // the Emscripten runtime once `FS` exists (preRun / onRuntimeInitialized).
+
+    function copyRecursive(src, dst) {
+      var entries = FS.readdir(src);
+      for (var i = 0; i < entries.length; i++) {
+        var name = entries[i];
+        if (name === "." || name === "..") continue;
+        var s = src + "/" + name;
+        var d = dst + "/" + name;
+        var mode;
+        try {
+          mode = FS.stat(s).mode;
+        } catch (e) {
+          continue;
+        }
+        if (FS.isDir(mode)) {
+          try { FS.mkdir(d); } catch (e) {}
+          copyRecursive(s, d);
+        } else {
+          // Regular files (and any symlink resolved by readFile).
+          try {
+            FS.writeFile(d, FS.readFile(s));
+          } catch (e) {
+            console.error("seed copy failed for " + s + ":", e);
+          }
+        }
+      }
+    }
+
+    // Copy the bundled demo apps into the persistent /apps store, but only
+    // once. The marker file makes user uninstalls of bundled apps stick across
+    // reloads instead of being re-seeded every boot.
+    function seedBundledApps() {
+      var marker = "/apps/.seeded";
+      try { FS.stat(marker); return; } catch (e) {}
+      try { FS.stat("/.bundled_apps"); } catch (e) { return; }
+      copyRecursive("/.bundled_apps", "/apps");
+      try { FS.writeFile(marker, "1"); } catch (e) {}
+      flushPersist();
+    }
+
+    var _persistInFlight = false;
+    var _persistTimer = null;
+    function flushPersist() {
+      if (_persistInFlight) return;
+      _persistInFlight = true;
+      FS.syncfs(false, function (err) {
+        _persistInFlight = false;
+        if (err) console.error("IDBFS flush failed:", err);
+      });
+    }
+    function startPersistFlush() {
+      if (_persistTimer) return;
+      _persistTimer = setInterval(flushPersist, 4000);
+      window.addEventListener("pagehide", flushPersist);
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") flushPersist();
+      });
+    }
+
+    var Module = {
+      canvas: canvas,
+      // Run MicroPythonOS: import the frozen main module. No -i so the
+      // browser is not blocked on an interactive REPL read.
+      arguments: ["-X", "heapsize=16M", "-m", "main"],
+      print: (text) => { console.log(text); appendLog(text, false); },
+      printErr: (text) => { console.error(text); appendLog(text, true); },
+      setStatus: (text) => {
+        if (statusEl) statusEl.textContent = text;
+        if (text === "") statusEl.style.display = "none";
+      },
+      preRun: [
+        function () {
+          // Keep keyboard focus on the canvas for SDL keyboard events.
+          canvas.addEventListener("click", () => canvas.focus());
+
+          // Mount the persistent filesystem (IndexedDB) before the runtime
+          // starts. /data holds app preferences/config and /apps holds
+          // user-installed apps; both are kept disjoint from the read-only
+          // preload package so they survive reloads. The boot is gated on the
+          // initial syncfs so Python sees the persisted contents.
+          var IDB = FS.filesystems.IDBFS;
+          try { FS.mkdir("/data"); } catch (e) {}
+          try { FS.mkdir("/apps"); } catch (e) {}
+          FS.mount(IDB, {}, "/data");
+          FS.mount(IDB, {}, "/apps");
+          addRunDependency("idbfs-load");
+          FS.syncfs(true, function (err) {
+            if (err) console.error("IDBFS initial load failed:", err);
+            removeRunDependency("idbfs-load");
+          });
+        }
+      ],
+      onRuntimeInitialized: function () {
+        statusEl.textContent = "";
+        canvas.focus();
+        // Seed bundled apps into /apps on first run (after preload + syncfs),
+        // then start flushing writes back to IndexedDB periodically.
+        try { seedBundledApps(); } catch (e) { console.error("seedBundledApps failed:", e); }
+        startPersistFlush();
+      }
+    };
+  </script>
+
+  <script async type="text/javascript" src="micropython.js"></script>
+</body>
+</html>

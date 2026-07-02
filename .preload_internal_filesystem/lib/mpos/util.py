@@ -1,0 +1,74 @@
+import logging
+import lvgl as lv
+import os
+
+logger = logging.getLogger(__name__)
+
+def urldecode(s):
+    result = ""
+    i = 0
+    while i < len(s):
+        if s[i] == '%':
+            result += chr(int(s[i+1:i+3], 16))
+            i += 3
+        else:
+            result += s[i]
+            i += 1
+    return result
+
+def print_lvgl_widget(obj, depth=0):
+    if obj:
+        label = ""
+        hidden = ""
+        editable = "editable"
+        obj_area = lv.area_t()
+        obj.get_coords(obj_area)
+        if obj.has_flag(lv.obj.FLAG.HIDDEN):
+            hidden = "hidden "
+        if not obj.is_editable():
+            editable = "not editable "
+        if isinstance(obj,lv.label):
+            label = f" with label '{obj.get_text()}'"
+        padding = "  " * depth
+        if __debug__: logger.debug("%s%s pos:%sx%s size:%sx%s %s%s %s", padding, obj, obj_area.x1, obj_area.y1, obj_area.get_width(), obj_area.get_height(), hidden, editable, label)
+        for childnr in range(obj.get_child_count()):
+            print_lvgl_widget(obj.get_child(childnr), depth+1)
+    else:
+        logger.error("print_lvgl_widget called on 'None'")
+
+
+def mkdir_parents(path):
+    """
+    Create directory and all parent directories like `mkdir -p`.
+
+    Creates intermediate directories as needed, does nothing if the path
+    already exists, and raises if any component exists as a non-directory.
+    """
+    if not path:
+        return
+
+    def _is_dir(stat_result):
+        return (stat_result[0] & 0x4000) != 0
+
+    parts = path.split("/")
+    current = "/" if path.startswith("/") else ""
+
+    for part in parts:
+        if not part:
+            continue
+        if current in ("", "/"):
+            current = f"{current}{part}"
+        else:
+            current = f"{current}/{part}"
+        try:
+            stat_result = os.stat(current)
+        except OSError:
+            try:
+                os.mkdir(current)
+            except OSError:
+                stat_result = os.stat(current)
+                if not _is_dir(stat_result):
+                    raise
+        else:
+            if not _is_dir(stat_result):
+                raise OSError("Path component exists and is not a directory")

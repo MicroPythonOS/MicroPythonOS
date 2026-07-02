@@ -1,0 +1,190 @@
+import os
+import socket
+import uio
+import struct
+
+import _webrepl
+from . import webrepl
+import websocket
+import lvgl as lv
+
+import logging
+logger = logging.getLogger(__name__)
+
+from mpos.ui.display_metrics import DisplayMetrics
+from mpos.ui.testing import capture_screenshot
+
+WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html.gz" # built by MicroPythonOS/webrepl/inline_minify_webrepl.py
+
+WEBREPL_ASSETS = {
+    b"/": (WEBREPL_HTML_PATH, b"text/html"),
+    b"/index.html": (WEBREPL_HTML_PATH, b"text/html"),
+}
+
+
+class _MakefileSocket:
+    def __init__(self, sock, raw_request):
+        self._sock = sock
+        self._raw_request = raw_request
+
+    def makefile(self, *args, **kwargs):
+        return uio.BytesIO(self._raw_request)
+
+    def __getattr__(self, name):
+        return getattr(self._sock, name)
+
+
+def _read_http_request(cl):
+    req = cl.makefile("rwb", 0)
+    first_line = req.readline()
+    if not first_line:
+        return None, None, b""
+
+    raw_request = first_line
+    headers = {}
+    while True:
+        line = req.readline()
+        if not line:
+            break
+        raw_request += line
+        if line == b"\r\n":
+            break
+        if b":" in line:
+            key, value = line.split(b":", 1)
+            headers[key.strip().lower()] = value.strip().lower()
+
+    parts = first_line.split()
+    path = parts[1] if len(parts) >= 2 else b"/"
+    if b"?" in path:
+        path = path.split(b"?", 1)[0]
+
+    return path, headers, raw_request
+
+
+def _is_websocket_request(headers):
+    connection = headers.get(b"connection", b"")
+    upgrade = headers.get(b"upgrade", b"")
+    return b"upgrade" in connection and upgrade == b"websocket"
+
+
+def _send_response(cl, status, content_type, body, extra_headers=None):
+    cl.send(b"HTTP/1.0 " + status + b"\r\n")
+    cl.send(b"Server: MicroPythonOS\r\n")
+    cl.send(b"Content-Type: " + content_type + b"\r\n")
+    if extra_headers:
+        for header in extra_headers:
+            cl.send(header + b"\r\n")
+    cl.send(b"Content-Length: %d\r\n\r\n" % len(body))
+    cl.send(body)
+    cl.close()
+
+
+def _build_bmp_header(width, height, pixel_data_size):
+    bmp_header_size = 54
+    file_size = bmp_header_size + pixel_data_size
+    header = bytearray(bmp_header_size)
+    header[0:2] = b"BM"
+    header[2:6] = struct.pack("<I", file_size)
+    header[10:14] = struct.pack("<I", bmp_header_size)
+    header[14:18] = struct.pack("<I", 40)
+    header[18:22] = struct.pack("<I", width)
+    header[22:26] = struct.pack("<i", -height)
+    header[26:28] = struct.pack("<H", 1)
+    header[28:30] = struct.pack("<H", 24)
+    header[30:34] = struct.pack("<I", 0)
+    header[34:38] = struct.pack("<I", pixel_data_size)
+    return header
+
+
+def _snapshot_to_bmp(all_layers=False):
+    width = DisplayMetrics.width()
+    height = DisplayMetrics.height()
+    rgb_size = width * height * 3
+    row_stride = ((width * 3 + 3) // 4) * 4
+    pixel_data_size = row_stride * height
+
+    rgb_buffer = capture_screenshot(width=width, height=height, color_format=lv.COLOR_FORMAT.RGB888, all_layers=all_layers)
+
+    bmp = bytearray(54 + pixel_data_size)
+    bmp[0:54] = _build_bmp_header(width, height, pixel_data_size)
+
+    view = memoryview(bmp)[54:]
+    if row_stride == width * 3:
+        view[:rgb_size] = rgb_buffer
+    else:
+        for y in range(height):
+            src_start = y * width * 3
+            src_end = src_start + width * 3
+            dest_start = y * row_stride
+            view[dest_start : dest_start + width * 3] = rgb_buffer[src_start:src_end]
+
+    return bmp
+
+
+def _send_file_response(cl, path, content_type, extra_headers=None):
+    try:
+        with open(path, "rb") as handle:
+            body = handle.read()
+    except OSError:
+        _send_response(cl, b"404 Not Found", b"text/plain", b"Not Found")
+        return False
+
+    _send_response(cl, b"200 OK", content_type, body, extra_headers=extra_headers)
+    return False
+
+
+def _start_webrepl_session(cl, remote_addr):
+    if __debug__: logger.debug("WebREPL connection from: %s", remote_addr)
+    webrepl.client_s = cl
+
+    ws = websocket.websocket(cl, True)
+    ws = _webrepl._webrepl(ws)
+    cl.setblocking(False)
+    if hasattr(os, "dupterm_notify"):
+        cl.setsockopt(socket.SOL_SOCKET, 20, os.dupterm_notify)
+    os.dupterm(ws)
+
+    return True
+
+
+def accept_handler(listen_sock):
+    cl, remote_addr = listen_sock.accept()
+    if __debug__: logger.debug("Connection from: %s", remote_addr)
+    try:
+        path, headers, raw_request = _read_http_request(cl)
+        if not path:
+            cl.close()
+            return False
+
+        if _is_websocket_request(headers):
+            if not webrepl.server_handshake(_MakefileSocket(cl, raw_request)):
+                cl.close()
+                return False
+            return _start_webrepl_session(cl, remote_addr)
+
+        if path in WEBREPL_ASSETS:
+            asset_path, content_type = WEBREPL_ASSETS[path]
+            extra_headers = None
+            if asset_path.endswith(".gz"):
+                extra_headers = [b"Content-Encoding: gzip"]
+            return _send_file_response(cl, asset_path, content_type, extra_headers=extra_headers)
+
+        if path == b"/screenshot.bmp":
+            bmp = _snapshot_to_bmp(all_layers=False)
+            _send_response(cl, b"200 OK", b"image/bmp", bmp)
+            return False
+
+        if path == b"/screenshot_all_layers.bmp":
+            bmp = _snapshot_to_bmp(all_layers=True)
+            _send_response(cl, b"200 OK", b"image/bmp", bmp)
+            return False
+
+        _send_response(cl, b"404 Not Found", b"text/plain", b"Not Found")
+        return False
+    except Exception as exc:
+        logger.error("Error handling connection: %s", exc)
+        try:
+            cl.close()
+        except Exception:
+            pass
+        return False

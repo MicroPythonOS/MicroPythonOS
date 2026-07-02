@@ -1,0 +1,412 @@
+# Hardware initialization for Fri3d Camp 2026 Badge
+
+# Overview:
+# - Touch screen controller is cst816s
+# - IMU (LSM6DSO) is different from fri3d_2024 (and address 0x6A instead of 0x6B) but the API seems the same, except different chip ID (0x6C iso 0x6A)
+# - I2S audio (communicator) is the same
+# - headphone jack microphone is on ESP.IO1
+# - buzzer
+# - Coprocessor CH32X035GxUx over I2C offers IO expansion:
+#   - battery voltage measurement
+#   - analog joystick
+#   - digital buttons (X,Y,A,B, MENU)
+#   - LCD reset
+#   - LCD backlight
+
+# Multicolor LEDs are used for feedback. Counting from left:
+#
+# 0: board detected, earliest startup (green)
+# 1: coprocessor firmware version read warning (orange) or error (red)
+# 2: coprocessor firmware install failure (red)
+#
+# During coprocessor firmware install progress: 0 to 4 (rainbow colors)
+#
+# After board initialization: 4 to 0 (rainbow colors)
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+from machine import I2C, Pin, SPI
+import lcd_bus
+import i2c
+import time
+
+import lvgl as lv
+
+import drivers.display.st7789 as st7789
+
+import mpos.ui
+import mpos.ui.focus_direction
+from mpos import InputManager, IRManager, DeviceManager
+
+# === LED HARDWARE ===
+import mpos.lights as LightsManager
+# Initialize 5 NeoPixel LEDs (GPIO 12)
+LightsManager.init(neopixel_pin=12)
+LightsManager.set_led_num(5)
+# Set left LED red
+LightsManager.set_led(4, 21, 96, 67)
+LightsManager.write()
+
+spi_bus = SPI.Bus(
+    host=2,
+    mosi=6,
+    miso=8,
+    sck=7
+)
+
+# Would be better to do this only when the LoRa app starts:
+try:
+    lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+except Exception as e:
+    import sys
+    sys.print_exception(e)
+else:
+    from drivers.lora.sx1262 import SX1262
+    rf_sw = Pin(46, Pin.OUT)
+    rf_sw.value(1)
+    if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable receiver mode
+    sx = SX1262(lora_spi_device, 40, 11, 41, 45) # reset pin isn't used but driver expects a value so set to 11 (IR receiver) here for now
+    from mpos import LoRaManager
+    LoRaManager.radioChip = sx
+
+display_bus = lcd_bus.SPIBus(
+    spi_bus=spi_bus,
+    freq=40000000, # 40 Mhz
+    dc=4,
+    cs=5
+)
+
+# lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
+# The default was /10 so 15360 bytes.
+# /2 = 76800 shows something on display and then hangs the board
+# /2 = 38400 works and pretty high framerate but camera gets ESP_FAIL
+# /2 = 19200 works, including camera at 9FPS
+# 28800 is between the two and still works with camera!
+# 30720 is /5 and is already too much
+#_BUFFER_SIZE = const(28800)
+buffersize = const(28800)
+fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+
+# Avoid excessive prints here because it slows down if the serial connects during printing?!
+def progress(msg, pct):
+    twentieth = int(pct / 20)
+    lednr = max(0,4 - twentieth)
+    #color = (int(pct*2.5), int(255-pct*2.5), abs(128-int(pct*2.5)))
+    from mpos import AppearanceManager
+    color = AppearanceManager.percent_to_rainbow_color(pct)
+    LightsManager.set_led(lednr, *color)
+    LightsManager.write()
+
+def warning(msg="", sleep_ms=0, r=96, g=58, b=21): # default rgb: orange warning
+    LightsManager.set_led(3, r, g, b)
+    LightsManager.write()
+    time.sleep_ms(sleep_ms)
+    if __debug__: logger.debug(msg)
+
+def failure(e):
+    LightsManager.set_led(2, 96, 21, 21)
+    LightsManager.write()
+    time.sleep(5)
+    logger.error("CH32 firmware install failed because exception: %s" % (e))
+    import sys
+    sys.print_exception(e)
+
+# CH32 coprocessor / IO expander
+from drivers.fri3d.expander import Expander
+expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
+expander = Expander(i2c_bus=expander_i2c)
+expander.wait_for_normal_mode(min_uptime_ms=1000)
+if expander.install_firmware_if_needed(
+        "/builtin/firmware/fri3d_2026/coprocessor_2.0.1.fw", (2, 0, 1), progress_cb=progress,
+        success_cb=lambda: (LightsManager.set_all(21, 96, 67), LightsManager.write()),
+        warning_cb=warning, failure_cb=failure):
+    if __debug__: logger.debug("Re-initializing expander_i2c")
+    expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
+    expander = Expander(i2c_bus=expander_i2c)
+    try:
+        if __debug__: logger.debug("CH32 coprocessor firmware version is now: %s" % (expander.version))
+    except Exception as e:
+        if __debug__: logger.debug("Could not re-check CH32 firmware version. Many things, including LCD RESET, might not work!")
+
+# Make expander accessible later
+import mpos
+mpos.io_expander = expander
+
+from mpos import BatteryManager
+BatteryManager.read_raw_adc = lambda *args: mpos.io_expander.analog[1]
+BatteryManager.has_battery = lambda *args: True
+BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (mpos.io_expander.analog[1] * 0.00192308 - 0.28076923)
+
+# LCD and Lora reset using the CH32 microcontroller
+expander.config = 0x01 # 3v3 aux on + LCD off + Lora Off
+time.sleep_ms(100)
+expander.config = 0x13 # 3v3 aux + LCD on + Lora on
+
+# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
+mpos.ui.main_display = st7789.ST7789(
+    data_bus=display_bus,
+    frame_buffer1=fb1,
+    frame_buffer2=fb2,
+    display_width=240,
+    display_height=320,
+    color_space=lv.COLOR_FORMAT.RGB565,
+    color_byte_order=st7789.BYTE_ORDER_BGR,
+    rgb565_byte_swap=True,
+    # reset_pin is driven by the CH32 microcontroller
+) # calls lv.init() if necessary
+
+mpos.ui.main_display.init()
+mpos.ui.main_display.set_power(True)
+mpos.ui.main_display.set_backlight(100)
+mpos.ui.main_display.set_color_inversion(True)
+mpos.ui.main_display.set_backlight = lambda percent: setattr(expander, "lcd_brightness", percent)
+
+# Touch handling:
+# touch pad interrupt TP Int is on ESP.IO13
+import drivers.indev.cst816s as cst816s
+i2c_bus = i2c.I2C.Bus(host=0, scl=18, sda=9, freq=400000, use_locks=False)
+DeviceManager.registerBus(i2c_bus=i2c_bus) # register because Time of Flight app needs it
+touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
+try:
+    tindev=cst816s.CST816S(touch_dev,startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
+    InputManager.register_indev(tindev)
+except Exception as e:
+    logger.error("Touch screen init got exception: %s" % (e))
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
+
+# Button handling code:
+btn_start = Pin(0, Pin.IN, Pin.PULL_UP) # START
+
+# Read callback
+# Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
+# that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
+_last_key = None
+
+def keypad_read_cb(indev, data):
+    global _last_key
+    current_key = None
+
+    if btn_start.value() == 0:
+        current_key = lv.KEY.END
+
+    data.continue_reading = False
+
+    if current_key is not None:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        _last_key = current_key
+    else:
+        data.key = _last_key if _last_key is not None else lv.KEY.ENTER
+        data.state = lv.INDEV_STATE.RELEASED
+        _last_key = None
+
+group = lv.group_get_default()
+
+# Create and set up the input device
+indev = lv.indev_create()
+indev.set_type(lv.INDEV_TYPE.KEYPAD)
+indev.set_read_cb(keypad_read_cb)
+indev.set_group(group) # is this needed? maybe better to move the default group creation to main.py so it's available everywhere...
+disp = lv.display_get_default()
+indev.set_display(disp)  # different from display
+indev.enable(True)
+indev.set_long_press_time(400)
+indev.set_long_press_repeat_time(100)
+InputManager.register_indev(indev)
+
+# initialize the expander as indev driver
+try:
+    from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
+    #expander_int_pin = Pin(3, Pin.IN, Pin.PULL_UP)
+    tindev_buttons=Fri3d2026Expander(expander) # not passing int_pin because MicroPython interrupts are unreliable under high load
+    tindev_buttons.set_group(group)
+    #tindev_buttons.set_display(disp) # error? weird? probably a fluke...
+    tindev_buttons.enable(True)
+    InputManager.register_indev(tindev_buttons)
+except Exception as e:
+    logger.error("expander init got exception: %s" % (e))
+
+import mpos.sdcard
+mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
+
+IRManager.txPin = Pin(21, Pin.OUT) # mini blaster / noisycricket has an IR LED
+IRManager.rxPin = Pin(11, Pin.IN)
+
+# === AUDIO HARDWARE ===
+from mpos import AudioManager
+
+# By default, sending audio to the headset will be heard on both.
+# And sending audio to the communicator will be heard only on the communicator, as then mck won't be active.
+#
+# It's possible to send only to the headset (and silence the communicator) by simply setting sck to a "wrong" pin like IO10 (badge link).
+# That could be useful sometimes, to use the communicator for easy typing while having the communicator's speaker silent.
+both_i2s_output_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'sck': 2,       # SCLK aka BCLK is optional for CJC4344 DAC hardware (but MicroPython I2S needs a valid pin, could also be set to something random like IO10 badge link)
+    'mck': 17,      # MCLK (mandatory) - not driving it will disable the chip.
+}
+
+headset_i2s_output_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'sck': 10,      # PURPOSELY WRONG OUTPUT PIN TO PREVENT ALSO DRIVING COMMUNICATOR - SCLK aka BCLK is optional for CJC4344 DAC hardware (but MicroPython I2S needs a valid pin so use rarely-used badgelink)
+    'mck': 17,      # MCLK (mandatory) - not driving it will disable the chip.
+}
+
+communicator_i2s_output_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sd': 16,       # Serial Data OUT (speaker/DAC)
+    'sck': 2,       # SCLK or BCLK - Bit Clock for DAC output (mandatory). Not driving it will disable the chip.
+}
+
+communicator_i2s_input_pins = {
+    'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+    'sck_in': 17,   # SCLK - Serial Clock for microphone input
+    'sd_in': 15,    # DIN - Serial Data IN (microphone)
+}
+
+# Check if BOOT/START button is held during startup
+if btn_start.value() == 0:
+    time.sleep_ms(400)
+    if btn_start.value() == 0:
+        logger.warning("BOOT button is held down during startup, doing prototype audio initialization")
+        headset_i2s_output_pins = {
+            'ws': 47,       # Word Select / LRCLK shared between DAC and mic (mandatory)
+            'sd': 16,       # Serial Data OUT (speaker/DAC)
+            'sck': 10,      # SCLK aka BCLK is optional for CJC4344 DAC hardware but MicroPython I2S needs a valid pin so set it to IO10 (badge link) for now. It's 17 on the prototype and 2 in final device.
+            'mck': 2,       # MCLK (mandatory) BUT this pin is sck on the communicator. Not driving it will disable the chip. Will change to 17 in final device.
+        }
+        both_i2s_output_pins = headset_i2s_output_pins # prototype doesnt support both
+
+AudioManager.add(
+    AudioManager.Output(
+        name="Headset+Communicator Output",
+        kind="i2s",
+        i2s_pins=both_i2s_output_pins,
+    )
+)
+
+AudioManager.add(
+    AudioManager.Input(
+        name="Headset Input",
+        kind="adc",
+        adc_mic_pin=1, # ADC microphone is on GPIO 1
+    )
+)
+
+# Add this after the headset output so that it doesn't become the default:
+buzzer_output = AudioManager.add(
+    AudioManager.Output(
+        name="Badge Buzzer",
+        kind="buzzer",
+        buzzer_pin=38,
+    )
+)
+
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="Headset Output",
+        kind="i2s",
+        i2s_pins=headset_i2s_output_pins,
+    )
+)
+
+# Would be better to only add these if the communicator is connected:
+speaker_output = AudioManager.add(
+    AudioManager.Output(
+        name="Communicator Output",
+        kind="i2s",
+        i2s_pins=communicator_i2s_output_pins,
+    )
+)
+mic_input = AudioManager.add(
+    AudioManager.Input(
+        name="Communicator Input",
+        kind="i2s",
+        i2s_pins=communicator_i2s_input_pins,
+    )
+)
+
+# === SENSOR HARDWARE ===
+from mpos import SensorManager
+SensorManager.init(i2c_bus, address=0x6A, mounted_position=SensorManager.FACING_EARTH) # IMU (LSM6DSOTR-C / LSM6DSO)
+
+# Communicator add-on keyboard input (UART HID reports -> LVGL keypad indev)
+try:
+    if __debug__: logger.debug("Checking for 2024 or 2026 Communicator Add-On over I2C")
+    from machine import UART
+
+    COMMUNICATOR_2024_ADDR = const(0x38)
+    COMMUNICATOR_2026_ADDR = const(0x39)
+
+    comm_i2c_bus = DeviceManager.getBus(type="i2c")
+    comm_uart = UART(2, baudrate=115200, rx=Pin(44), tx=Pin(43))
+
+    communicator = None
+    i2c_devices = comm_i2c_bus.scan()
+
+    if COMMUNICATOR_2026_ADDR in i2c_devices:
+        from drivers.fri3d.communicator import Communicator2026
+        communicator = Communicator2026(i2c_bus=comm_i2c_bus, uart_bus=comm_uart,use_irq=False)
+    elif COMMUNICATOR_2024_ADDR in i2c_devices:
+        from drivers.fri3d.communicator import Communicator2024
+        communicator = Communicator2024(i2c_bus=comm_i2c_bus,uart_bus=comm_uart,use_irq=False)
+
+    if communicator is not None:
+        if __debug__: logger.debug("Disabling UART REPL because it receives data from the Communicator Add-On. Use esp.uart_repl(True) to re-enable.")
+        import esp
+        esp.uart_repl(False)
+        if __debug__: logger.debug("Initializing Fri3dCommunicatorKeyboard and registering as indev")
+        from drivers.indev.fri3d_communicator_keyboard import Fri3dCommunicatorKeyboard
+        communicator_indev = Fri3dCommunicatorKeyboard(communicator)
+        communicator_indev.set_group(group)
+        communicator_indev.enable(True)
+        InputManager.register_indev(communicator_indev)
+except Exception as e:
+    logger.error("communicator keyboard init got exception: %s" % (e))
+
+# === STARTUP "WOW" EFFECT ===
+import _thread
+
+def startup_wow_effect():
+    try:
+        AudioManager.player(rtttl="5_note_startup:d=8,o=6,b=200:c,d,e,g,4c7",stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output).start()
+
+        # Rainbow colors for the 5 LEDs
+        rainbow = [
+            (255, 0, 0),    # Red
+            (255, 128, 0),  # Orange
+            (255, 255, 0),  # Yellow
+            (0, 255, 0),    # Green
+            (0, 0, 255),    # Blue
+        ]
+
+        # Single rainbow sweep
+        for i in range(5):
+            # Light up LEDs progressively
+            for j in range(i + 1):
+                LightsManager.set_led(j, *rainbow[j])
+            LightsManager.write()
+            time.sleep_ms(500)
+
+        fade_steps = 80
+        max_brightness = 64 # instead of 255 because that's too bright
+        for step in range(fade_steps):
+            level = int(max_brightness * (fade_steps - 1 - step) / (fade_steps - 1))
+            LightsManager.set_all(level, level, level)
+            LightsManager.write()
+            time.sleep_ms(20)
+
+    except Exception as e:
+        logger.error("Startup effect error: %s" % (e))
+
+# Would be nice if this were a setting:
+from mpos import TaskManager
+_thread.stack_size(TaskManager.good_stack_size()) # default stack size won't work, crashes!
+_thread.start_new_thread(startup_wow_effect, ())
+
+if __debug__: logger.debug("fri3d_2026.py finished")
