@@ -4,6 +4,9 @@
 
 .planning/
 
+# generated:
+web/.preload_bundled_apps/
+
 trash/
 
 conf.json*
