@@ -196,6 +196,7 @@ class Sorter(Activity):
         self.capacity = 0
         self.emoji_order = []
         self.highscore = SharedPreferences(self.appFullName).get_int("highscore", 0)
+        self.sound_effects = SharedPreferences(self.appFullName).get_bool("sound_effects", True)
         self._new_game()
         self.create_ui()
         self.setContentView(self.screen)
@@ -232,6 +233,13 @@ class Sorter(Activity):
 
         self.refresh_labels()
         self.build_board()
+
+        settings_btn = lv.button(self.screen)
+        settings_label = lv.label(settings_btn)
+        settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_btn.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        settings_btn.add_event_cb(self.on_settings, lv.EVENT.CLICKED, None)
+        mpos.ui.add_focus_border(settings_btn)
 
         refresh_btn = lv.button(self.screen)
         refresh_label = lv.label(refresh_btn)
@@ -277,7 +285,9 @@ class Sorter(Activity):
     def _build_tube_widget(self, idx, tube_width, tube_height, emoji_size):
         tube_obj = lv.obj(self.container)
         tube_obj.set_size(tube_width, tube_height)
+        # Pack icons at the bottom so empty tubes look empty at the top.
         tube_obj.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        tube_obj.set_flex_align(lv.FLEX_ALIGN.END, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
         tube_obj.set_style_pad_all(2, lv.PART.MAIN)
         tube_obj.set_style_pad_column(2, lv.PART.MAIN)
         tube_obj.set_style_radius(4, lv.PART.MAIN)
@@ -294,14 +304,14 @@ class Sorter(Activity):
             tube_obj.set_style_bg_color(self.TUBE_BG, 0)
 
         items = self.tubes[idx]
-        # Render from top of stack downward.
+        # Items are stored bottom..top, so render in that order; flex aligns
+        # them to the bottom of the tube, producing a fall-to-bottom look.
         scale = int(256 * emoji_size / 32)
-        for item in reversed(items):
+        for item in items:
             img = lv.image(tube_obj)
             img.set_src(_EMOJI_DIR + _EMOJIS[self.emoji_order[item]])
             img.set_size(emoji_size, emoji_size)
             img.set_scale(scale)
-            img.center()
 
         return tube_obj
 
@@ -342,6 +352,8 @@ class Sorter(Activity):
         return None
 
     def _play_rtttl(self, rtttl):
+        if not self.sound_effects:
+            return
         output = self._find_buzzer_output()
         if output is None:
             return
@@ -450,6 +462,37 @@ class Sorter(Activity):
             except Exception:
                 pass
             self.popup_modal = None
+
+    def on_settings(self, event):
+        self._close_popup()
+
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(75))
+        mbox.add_title("Settings")
+
+        content = mbox.get_content()
+        content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        content.set_style_pad_all(4, lv.PART.MAIN)
+
+        cb = lv.checkbox(content)
+        cb.set_text("Sound effects")
+        cb.set_width(lv.pct(100))
+        if self.sound_effects:
+            cb.add_state(lv.STATE.CHECKED)
+        cb.add_event_cb(lambda e, c=cb: self._on_sound_toggled(e, c), lv.EVENT.VALUE_CHANGED, None)
+        mpos.ui.add_focus_border(cb)
+
+        close_btn = mbox.add_footer_button("Close")
+        close_btn.add_event_cb(self._close_popup, lv.EVENT.CLICKED, None)
+
+        self.popup_modal = mbox
+
+    def _on_sound_toggled(self, event, checkbox):
+        checked = bool(checkbox.get_state() & lv.STATE.CHECKED)
+        self.sound_effects = checked
+        editor = SharedPreferences(self.appFullName).edit()
+        editor.put_bool("sound_effects", checked)
+        editor.commit()
 
     def _on_reset_highscore_yes(self, event):
         self.highscore = 0
