@@ -132,7 +132,7 @@ def back_screen():
         return True
 
     if len(screen_stack) <= 1:
-        logger.warning("Can't go back — stack empty")
+        logger.info("Can't go back — stack empty")
         return False
 
     current_activity, current_screen, _, _ = screen_stack[-1]
