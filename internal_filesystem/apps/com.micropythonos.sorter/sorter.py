@@ -41,11 +41,11 @@ def _shuffle(lst):
 
 
 def _generate_emoji_order():
-    """Return a shuffled list of emoji indices used for a new game."""
+    """Return a shuffled sample of emoji indices from the full emoji pool."""
     count = min(_MAX_EMOJI_ORDER, len(_EMOJIS))
-    order = list(range(count))
+    order = list(range(len(_EMOJIS)))
     _shuffle(order)
-    return order
+    return order[:count]
 
 
 def _top_run(tube):
