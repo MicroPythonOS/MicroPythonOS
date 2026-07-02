@@ -253,6 +253,35 @@ class TestNotificationManager(unittest.TestCase):
         NotificationManager.notify(Notification(notification_id="sound.nobuzzer", title="No buzzer"))
         self.assertIsNone(self._last_sound_call())
 
+    def test_notification_sound_rate_limited(self):
+        self._set_outputs(_FakeOutput("buzzer"))
+        nm_module = sys.modules["mpos.notification_manager"]
+        original_time = nm_module.time
+        now = [0]
+
+        class _FakeTime:
+            @staticmethod
+            def ticks_ms():
+                return now[0]
+
+            @staticmethod
+            def ticks_diff(end, start):
+                return end - start
+
+        nm_module.time = _FakeTime()
+        try:
+            NotificationManager.notify(Notification(notification_id="sound.1", title="One"))
+            self.assertEqual(len(_FakeAudioManager._calls), 1)
+
+            NotificationManager.notify(Notification(notification_id="sound.2", title="Two"))
+            self.assertEqual(len(_FakeAudioManager._calls), 1)  # rate-limited
+
+            now[0] += nm_module._NOTIFICATION_SOUND_MIN_INTERVAL_MS
+            NotificationManager.notify(Notification(notification_id="sound.3", title="Three"))
+            self.assertEqual(len(_FakeAudioManager._calls), 2)
+        finally:
+            nm_module.time = original_time
+
 
 if __name__ == "__main__":
     unittest.main()

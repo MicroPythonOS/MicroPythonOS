@@ -217,13 +217,23 @@ class RTTTLStream:
 
                     # Play tone
                     if freq > 0:
-                        self.buzzer.freq(int(freq))
-                        self.buzzer.duty_u16(duty)
+                        try:
+                            self.buzzer.freq(int(freq))
+                            self.buzzer.duty_u16(duty)
+                        except RuntimeError:
+                            # PWM was deinitialized by another thread/session
+                            self._keep_running = False
+                            break
 
                     # Play for 90% of duration, silent for 10% (note separation)
                     # Blocking sleep is OK - we're in a separate thread
                     time.sleep_ms(int(msec * 0.9))
-                    self.buzzer.duty_u16(0)
+                    try:
+                        self.buzzer.duty_u16(0)
+                    except RuntimeError:
+                        # PWM was deinitialized by another thread/session
+                        self._keep_running = False
+                        break
                     time.sleep_ms(int(msec * 0.1))
 
             if __debug__: logger.debug("Finished playing '%s'", self.name)
@@ -237,7 +247,11 @@ class RTTTLStream:
 
         finally:
             # Ensure buzzer is off
-            self.buzzer.duty_u16(0)
+            try:
+                self.buzzer.duty_u16(0)
+            except RuntimeError:
+                # PWM was already deinitialized by another thread/session
+                pass
             self._is_playing = False
 
     def set_volume(self, vol):

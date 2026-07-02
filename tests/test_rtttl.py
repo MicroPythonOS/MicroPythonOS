@@ -186,6 +186,37 @@ class TestRTTTL(unittest.TestCase):
         stream.set_repeat("bad")
         self.assertEqual(stream._repeat_count, 0)
 
+    def test_play_tolerates_pwm_inactive(self):
+        """Playback must not propagate RuntimeError when PWM is deinitialized mid-play."""
+
+        class _FailingPWM(MockPWM):
+            def freq(self, value=None):
+                if value is not None:
+                    raise RuntimeError("PWM is inactive")
+                return self.last_freq
+
+            def duty_u16(self, value=None):
+                if value is not None:
+                    raise RuntimeError("PWM is inactive")
+                return self.last_duty
+
+        buzzer = _FailingPWM(46)
+        import mpos.audio.stream_rtttl as stream_module
+
+        real_time = stream_module.time
+
+        class _FakeTime:
+            def sleep_ms(self, _ms):
+                pass
+
+        stream_module.time = _FakeTime()
+        try:
+            stream = RTTTLStream("Test:d=4,o=5,b=120:c", 0, 100, buzzer, None)
+            stream.play()
+            self.assertFalse(stream.is_playing())
+        finally:
+            stream_module.time = real_time
+
     def test_play_repeats(self):
         """Test that play() loops for the configured repeat count."""
         import mpos.audio.stream_rtttl as stream_module

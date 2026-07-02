@@ -8,6 +8,7 @@ from .audio.audiomanager import AudioManager
 logger = logging.getLogger(__name__)
 
 _DEBOUNCE_MS = 500
+_NOTIFICATION_SOUND_MIN_INTERVAL_MS = 500
 
 NOTIFICATION_SOUND_OPTIONS = [
     ("None", ""),
@@ -143,6 +144,7 @@ class NotificationManager:
     _persist_write_count = 0
     _pending_persist = False
     _debounce_timer = None
+    _last_sound_ts = None
 
     @classmethod
     def _now_seconds(cls):
@@ -188,6 +190,14 @@ class NotificationManager:
             output = cls._find_buzzer_output()
             if output is None:
                 return
+
+            now = time.ticks_ms()
+            if cls._last_sound_ts is not None and time.ticks_diff(now, cls._last_sound_ts) < _NOTIFICATION_SOUND_MIN_INTERVAL_MS:
+                if __debug__:
+                    logger.debug("Notification sound rate-limited")
+                return
+            cls._last_sound_ts = now
+
             AudioManager.player(
                 rtttl=rtttl,
                 stream_type=AudioManager.STREAM_NOTIFICATION,
@@ -195,7 +205,7 @@ class NotificationManager:
                 output=output,
             ).start()
         except Exception as e:
-            logger.error("Failed to play notification sound: %s", e)
+            logger.warning("Failed to play notification sound: %s", e)
 
     @classmethod
     def _ensure_initialized(cls):
@@ -400,6 +410,7 @@ class NotificationManager:
         cls._persist_write_count = 0
         cls._pending_persist = False
         cls._debounce_timer = None
+        cls._last_sound_ts = None
         cls._settings_prefs = None
         if clear_storage:
             prefs = SharedPreferences(
