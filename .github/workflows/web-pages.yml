@@ -40,7 +40,7 @@ jobs:
             ninja-build
 
       - name: Set up Emscripten SDK
-        # Puts emcc/em++/emar on PATH so build_mpos_web.sh skips its in-tree
+        # Puts emcc/em++/emar on PATH so build_mpos.sh skips its in-tree
         # emsdk lookup. Bump the version if the build needs a newer toolchain.
         uses: mymindstorm/setup-emsdk@v14
         with:
@@ -54,12 +54,12 @@ jobs:
           echo "Extracted version: $OS_VERSION"
 
       - name: Build web (WebAssembly/Emscripten) target
-        run: ./scripts/build_mpos_web.sh
+        run: ./scripts/build_mpos.sh web
 
       - name: Upload built web export as a regular artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MicroPythonOS_web_${{ steps.version.outputs.OS_VERSION }}
+          name: MicroPythonOS_web_${{ steps.version.outputs.OS_VERSION }}.zip
           path: web/
           retention-days: 7
 

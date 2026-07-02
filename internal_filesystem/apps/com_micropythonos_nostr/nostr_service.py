@@ -876,7 +876,7 @@ class NostrManager:
 
         if nrconnected == 0:
             msg = "Could not connect to any Nostr relay."
-            logger.warning("NostrManager: %s", msg)
+            logger.info("NostrManager: %s", msg)
             if self._error_cb:
                 self._error_cb(msg)
             # Reset lifecycle state so start() can be retried when we come
