@@ -28,7 +28,7 @@ Frameworks:
 - SDCard: tolerate trailing slashes when listing SD card contents
 - StreamingUnzip: tolerate trailing slashes when creating directories
 - FontManager: tolerate trailing slashes when listing directories
-- WifiService: increase connection timeout from 10 to 13 seconds
+- WifiService: increase connection timeout from 10 to 13 seconds, reduce log levels to avoid polluting REPL shell
 
 OS:
 - Increase size of esp32-small and lilygo_t4 partitions to 3800000 to accomodate esp32 builds

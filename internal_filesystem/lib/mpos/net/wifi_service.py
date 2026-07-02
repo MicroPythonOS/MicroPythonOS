@@ -247,7 +247,7 @@ class WifiService:
                     if __debug__: logger.debug("Connected to hidden network '%s'", ssid)
                     return True
                 else:
-                    logger.error("Failed to connect to hidden network '%s'", ssid)
+                    logger.info("Failed to connect to hidden network '%s'", ssid)
 
         if __debug__: logger.debug("No saved networks found or connected")
         return False
@@ -311,12 +311,12 @@ class WifiService:
                 if __debug__: logger.debug("Waiting for connection, attempt %s/10", i+1)
                 time_mod.sleep(1)
 
-            logger.warning("Connection timeout for '%s'", ssid)
+            logger.info("Connection timeout for '%s'", ssid)
             WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
         except Exception as e:
-            logger.error("Connection error: %s", e)
+            logger.info("Connection error: %s", e)
             WifiService._restore_hotspot_if_needed(network_module=network_module)
             return False
 
@@ -393,7 +393,7 @@ class WifiService:
                     connected = True
                     if __debug__: logger.debug("Auto-connect successful")
                 else:
-                    logger.error("Auto-connect failed")
+                    logger.info("Auto-connect failed")
 
                     # Disable WiFi to conserve power if connection failed
                     net = WifiService._get_network_module(network_module)
