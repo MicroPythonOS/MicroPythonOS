@@ -6,16 +6,14 @@
 # displays without requiring a full-size framebuffer.
 import lvgl as lv
 import mpos.ui
-from mpos import Activity, InputManager
+from mpos import Activity, InputManager, SharedPreferences
 
 import sys
-# should check sys_mpy = sys.implementation._mpy
-# arch = (sys_mpy >> 10) & 0x0F
-# and put archN in the filename
 if sys.platform == "esp32":
     import breakout_xtensawin as breakout
 else:
     import breakout_x64 as breakout
+
 
 class Breakout(Activity):
 
@@ -41,10 +39,20 @@ class Breakout(Activity):
 
     # Widgets:
     screen = None
-    canvas = None
     leftbutton = None
-    playbutton = None
     rightbutton = None
+
+    # State mirrors of native state (not displayed without fonts).
+    score = 0
+    level = 1
+    lives = 5
+    highscore = 0
+    _initialized = False
+    _game_over_handled = False
+    _state_timer = None
+    _autosaved_level = 0
+    _autosaved_score = 0
+    _autosaved_lives = 5
 
     def onCreate(self):
         self.screen = lv.obj()
@@ -53,54 +61,103 @@ class Breakout(Activity):
 
         d = lv.display_get_default()
         self.hor_res = d.get_horizontal_resolution()
-        self.paddle_move_step = round(self.hor_res/10)
+        self.paddle_move_step = round(self.hor_res / 10)
         self.ver_res = d.get_vertical_resolution()
 
         self.leftbutton = lv.button(self.screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         leftlabel = lv.label(self.leftbutton)
         leftlabel.set_text("<")
-        self.leftbutton.add_event_cb(lambda e: self.move_left_unfocus(),lv.EVENT.FOCUSED,None)
-        self.leftbutton.add_event_cb(lambda e: self.move_left(),lv.EVENT.CLICKED,None)
-
-        # Invisible button, just for defocusing the left and right buttons:
-        self.play_button = lv.button(self.screen)
-        self.play_button.align(lv.ALIGN.BOTTOM_MID,0,0)
-        self.play_button.set_size(1,1)
-        self.play_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+        self.leftbutton.add_event_cb(lambda e: self.move_left(), lv.EVENT.CLICKED, None)
 
         self.rightbutton = lv.button(self.screen)
         self.rightbutton.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
         rightlabel = lv.label(self.rightbutton)
         rightlabel.set_text(">")
-        self.rightbutton.add_event_cb(lambda e: self.move_right_unfocus(),lv.EVENT.FOCUSED,None)
-        self.rightbutton.add_event_cb(lambda e: self.move_right(),lv.EVENT.CLICKED,None)
+        self.rightbutton.add_event_cb(lambda e: self.move_right(), lv.EVENT.CLICKED, None)
 
         self.setContentView(self.screen)
 
     def onResume(self, screen):
-        #lv.log_register_print_cb(self.log_callback)
-        breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
-        mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
-        mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
+        if not self._initialized:
+            self._initialized = True
+            breakout.init(mpos.ui.main_display._frame_buffer1, self.hor_res, self.ver_res)
+            mpos.ui.main_display._data_bus.register_callback(self.flush_ready_cb)
+            mpos.ui.task_handler.add_event_cb(self.drawframe, mpos.ui.task_handler.TASK_HANDLER_FINISHED)
+
+        prefs = SharedPreferences(self.appFullName)
+        self.highscore = prefs.get_int("highscore", 0)
+        breakout.set_highscore(self.highscore)
+
+        self._check_autoload()
+
+        if self._state_timer is None:
+            self._state_timer = lv.timer_create(self._update_state, 2000, None)
 
     def onPause(self, screen):
-        lv.log_register_print_cb(None)
+        self._save_state()
+        self._stop_state_timer()
         mpos.ui.main_display._data_bus.register_callback(mpos.ui.main_display._flush_ready_cb)
 
+    def onDestroy(self, screen):
+        self._save_state()
+        self._stop_state_timer()
+        if self.screen is not None:
+            try:
+                self.screen.delete()
+            except Exception:
+                pass
+            self.screen = None
+
+    def _stop_state_timer(self):
+        if self._state_timer is not None:
+            try:
+                self._state_timer.delete()
+            except Exception:
+                pass
+            self._state_timer = None
+
+    def _save_state(self):
+        self._save_highscore()
+        self._autosave()
+
+    def _update_state(self, _=None):
+        try:
+            self.score = breakout.get_score()
+            self.level = breakout.get_level()
+            self.lives = breakout.get_lives()
+            game_over = breakout.is_game_over()
+        except Exception:
+            return
+
+        if self.score > self.highscore:
+            self.highscore = self.score
+
+        # Save progress when the level changes; skip when dead to avoid
+        # reloading a game that is already over.
+        if self.lives > 0 and (
+            self.level != self._autosaved_level or
+            self.score != self._autosaved_score or
+            self.lives != self._autosaved_lives
+        ):
+            self._autosave()
+
+        if game_over and not self._game_over_handled:
+            self._save_highscore()
+            self._delete_autosave()
+            self._game_over_handled = True
+
+        # Detect that the native module has restarted and reset our flag.
+        if self._game_over_handled and self.lives == 5 and self.score == 0:
+            self._game_over_handled = False
+
     def move_left(self):
-        breakout.move_paddle(-self.paddle_move_step)
+        if not breakout.is_game_over():
+            breakout.move_paddle(-self.paddle_move_step)
 
     def move_right(self):
-        breakout.move_paddle(self.paddle_move_step)
-
-    def move_left_unfocus(self):
-        lv.group_focus_obj(self.play_button)
-        breakout.move_paddle(-self.paddle_move_step)
-
-    def move_right_unfocus(self):
-        lv.group_focus_obj(self.play_button)
-        breakout.move_paddle(self.paddle_move_step)
+        if not breakout.is_game_over():
+            breakout.move_paddle(self.paddle_move_step)
 
     def flush_ready_cb(self, arg1=None, arg2=None):
         # This is called in IRQ (interrupt) context so it can't allocate memory
@@ -163,14 +220,12 @@ class Breakout(Activity):
 
         y_offset = self.chunk_index * self.chunk_rows_per
         rows = min(self.chunk_rows_per, self.ver_res - y_offset)
-        advance = (self.chunk_index == 0)
-        is_last = (self.chunk_index + 1) == self.chunk_total
 
         self.chunk_waiting = True
-        breakout.render(y_offset, rows, advance)
-        self.send_to_display(y_offset, rows, is_last)
+        breakout.render(y_offset, rows)
+        self.send_to_display(y_offset, rows)
 
-    def send_to_display(self, y_offset=0, rows=None, is_last=True):
+    def send_to_display(self, y_offset=0, rows=None):
         x1 = 0
         x2 = mpos.ui.main_display.get_horizontal_resolution() - 1
         x2 = x2 + mpos.ui.main_display._offset_x
@@ -197,6 +252,9 @@ class Breakout(Activity):
         )
 
     def touch_cb(self, event):
+        if breakout.is_game_over():
+            return
+
         event_code = event.get_code()
         if event_code == lv.EVENT.PRESSED:
             x, y = InputManager.pointer_xy()
@@ -214,7 +272,7 @@ class Breakout(Activity):
             if self.touch_last_x is not None:
                 delta = x - self.touch_last_x
                 if delta:
-                    breakout.move_paddle(round(delta*1.3)) # amplify movement to avoid sides
+                    breakout.move_paddle(round(delta * 1.3))
             self.touch_last_x = x
             return
 
@@ -223,11 +281,69 @@ class Breakout(Activity):
             self.touch_last_x = None
             return
 
+    def _autosave(self):
+        if self.lives <= 0:
+            return
+        self._autosaved_level = self.level
+        self._autosaved_score = self.score
+        self._autosaved_lives = self.lives
+        editor = SharedPreferences(self.appFullName).edit()
+        editor.put_int("autosave_level", self.level)
+        editor.put_int("autosave_score", self.score)
+        editor.put_int("autosave_lives", self.lives)
+        editor.commit()
+
+    def _save_highscore(self):
+        best = max(self.score, self.highscore)
+        if best > self.highscore:
+            self.highscore = best
+        if best > 0:
+            editor = SharedPreferences(self.appFullName).edit()
+            editor.put_int("highscore", self.highscore)
+            editor.commit()
+
+    def _delete_autosave(self):
+        self._autosaved_level = 0
+        self._autosaved_score = 0
+        self._autosaved_lives = 5
+        editor = SharedPreferences(self.appFullName).edit()
+        editor.put_int("autosave_level", 0)
+        editor.put_int("autosave_score", 0)
+        editor.put_int("autosave_lives", 0)
+        editor.commit()
+
+    def _check_autoload(self):
+        prefs = SharedPreferences(self.appFullName)
+        saved_level = prefs.get_int("autosave_level", 0)
+        saved_score = prefs.get_int("autosave_score", 0)
+        saved_lives = prefs.get_int("autosave_lives", 0)
+
+        if saved_level <= 0 or saved_lives <= 0:
+            # Start a fresh game and clear any stale dead save.
+            self._delete_autosave()
+            breakout.new_game()
+            self._autosaved_level = 1
+            self._autosaved_score = 0
+            self._autosaved_lives = 5
+            return
+
+        self.level = saved_level
+        self.score = saved_score
+        self.lives = saved_lives
+        self._autosaved_level = self.level
+        self._autosaved_score = self.score
+        self._autosaved_lives = self.lives
+        breakout.set_highscore(self.highscore)
+        breakout.set_level(self.level)
+        breakout.set_score(self.score)
+        breakout.set_lives(self.lives)
+
     average_samples = 20
     fps_buffer = [0.0] * average_samples
     fps_index = 0
     fps_sum = 0.0
-    fps_count = 0  # Number of valid samples (0 to average_samples)
+    fps_count = 0
+
     def moving_average(self, value):
         if self.fps_count == self.average_samples:
             self.fps_sum -= self.fps_buffer[self.fps_index]
@@ -246,6 +362,6 @@ class Breakout(Activity):
                 fps_part = log_str.split("FPS")[0].split("sysmon:")[1].strip()
                 self.last_fps = int(fps_part)
                 self.average_fps = self.moving_average(self.last_fps)
-                print(f"Current FPS: {self.last_fps} - Average FPS: {self.average_fps}")
+                print("Current FPS: %d - Average FPS: %d" % (self.last_fps, self.average_fps))
             except (IndexError, ValueError):
                 pass
