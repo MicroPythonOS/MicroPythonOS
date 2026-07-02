@@ -1,0 +1,76 @@
+name: Build web target and deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: # allow manual workflow starts
+
+# Allow the GITHUB_TOKEN to force-push the built site to the gh-pages branch.
+permissions:
+  contents: write
+
+# Only one concurrent deployment; don't cancel an in-progress run so a
+# half-published site is never left behind.
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libffi-dev \
+            pkg-config \
+            cmake \
+            ninja-build
+
+      - name: Set up Emscripten SDK
+        # Puts emcc/em++/emar on PATH so build_mpos_web.sh skips its in-tree
+        # emsdk lookup. Bump the version if the build needs a newer toolchain.
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 6.0.0
+
+      - name: Extract OS version
+        id: version
+        run: |
+          OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
+          echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $OS_VERSION"
+
+      - name: Build web (WebAssembly/Emscripten) target
+        run: ./scripts/build_mpos_web.sh
+
+      - name: Upload built web export as a regular artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroPythonOS_web_${{ steps.version.outputs.OS_VERSION }}
+          path: web/
+          retention-days: 7
+
+      - name: Deploy to gh-pages branch
+        # Publish only on push to main; PRs just build for validation.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./web
+          publish_branch: gh-pages
+          # Export contains files/dirs starting with "_" (preloaded fs).
+          enable_jekyll: false
+          force_orphan: true # single squashed commit, no history

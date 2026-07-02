@@ -1,3 +1,6 @@
+#if defined(MPOS_WEB) || defined(__EMSCRIPTEN__)
+#include "py/runtime.h"
+#else
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -629,3 +632,4 @@ const mp_obj_module_t webcam_user_cmodule = {
 };
 
 MP_REGISTER_MODULE(MP_QSTR_webcam, webcam_user_cmodule);
+#endif

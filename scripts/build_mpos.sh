@@ -15,9 +15,10 @@ buildtype="$2"
 
 if [ -z "$target" ]; then
     echo "Usage: $0 target"
-    echo "Usage: $0 <esp32 or esp32-small or unix or macOS>"
+    echo "Usage: $0 <esp32 or esp32-small or unix or macOS or web>"
     echo "Example: $0 unix"
     echo "Example: $0 macOS"
+    echo "Example: $0 web"
     echo "Example: $0 esp32"
     echo "Example: $0 esp32-small"
     echo "Example: $0 esp32s3"
@@ -258,18 +259,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		local name="$1"
 		if ! grep -q "$name" "$mpconfig_unix"; then
 			echo "Enabling $name in $mpconfig_unix"
-			python3 - "$mpconfig_unix" "$name" <<'PY'
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-name = sys.argv[2]
-text = path.read_text()
-needle = '#include "mpconfigvariant.h"'
-insert = f"\n\n#ifndef {name}\n#define {name} (1)\n#endif\n"
-if needle in text and name not in text:
-	path.write_text(text.replace(needle, needle + insert))
-PY
+			python3 "$mydir"/ensure_mpconfig_define.py "$mpconfig_unix" "$name"
 		else
 			echo "$name already configured in $mpconfig_unix"
 		fi
@@ -332,6 +322,239 @@ PY
 		echo "Restoring unix Makefile CWARN..."
 		mv "$unix_makefile".backup "$unix_makefile"
 	fi
+elif [ "$target" == "web" ]; then
+	# WebAssembly / Emscripten build.
+	# Reuses the unix port (LVGL + SDL display/indev drivers, frozen manifest,
+	# ext_mod C modules) but compiles with emcc and links Emscripten's SDL2
+	# port, producing web/micropython.{html,js,wasm,data}.
+
+	# Make sure the Emscripten toolchain is available.
+	if ! command -v emcc >/dev/null 2>&1; then
+		for envsh in "$codebasedir"/../emsdk/emsdk_env.sh "$codebasedir"/../../emsdk/emsdk_env.sh; do
+			if [ -f "$envsh" ]; then
+				echo "Sourcing Emscripten env from $envsh"
+				# shellcheck disable=SC1090
+				source "$envsh"
+				break
+			fi
+		done
+	fi
+	if ! command -v emcc >/dev/null 2>&1; then
+		echo "ERROR: emcc not found. Activate the Emscripten SDK first:"
+		echo "  source <path-to>/emsdk/emsdk_env.sh"
+		exit 1
+	fi
+	echo "Using $(emcc --version | head -1)"
+
+	# Full cleanup: stale native .o would not relink under emcc.
+	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
+
+	echo "Applying unix auto-import main patch..."
+	pushd "$codebasedir"/lvgl_micropython/lib/micropython
+	patch -p1 --forward < ../../unix_autoimport_main.patch || true
+	popd
+
+	# Apply the web-port modifications to the lvgl_micropython submodule. These
+	# live in THIS (MicroPythonOS) repo under scripts/web_port/ so the entire web
+	# port is reproducible from a clean submodule checkout without hand-editing
+	# submodule sources. `patch --forward` makes re-application a no-op, and the
+	# web.py copy is idempotent, so this is safe to run on every build.
+	echo "Applying web-port changes to lvgl_micropython submodule..."
+	web_port_dir="$mydir"/web_port
+	# 1) Emscripten/WebAssembly build backend consumed by lvgl_micropython's make.py.
+	cp "$web_port_dir"/web.py "$codebasedir"/lvgl_micropython/builder/web.py
+	# 1b) Register the 'web' target in make.py (argparse choices + builder dispatch).
+	patch -p1 --forward -d "$codebasedir"/lvgl_micropython < "$web_port_dir"/make.py.patch || true
+	# 1c) Gate lcd_bus SDL flags behind MPOS_WEB=1 so the web build uses Emscripten's
+	#     bundled SDL2 (-sUSE_SDL=2) instead of linking a natively built SDL2.
+	patch -p1 --forward -d "$codebasedir"/lvgl_micropython < "$web_port_dir"/lcd_bus_micropython.mk.patch || true
+	# 2) SDL bus struct-layout fix (32-bit/wasm indirect-call type safety).
+	patch -p1 --forward -d "$codebasedir"/lvgl_micropython < "$web_port_dir"/sdl_bus.h.patch || true
+	# 3) Conservative-GC stack/register scan for wasm (fixes "memory access out of bounds").
+	patch -p1 --forward -d "$codebasedir"/lvgl_micropython/lib/micropython < "$web_port_dir"/gccollect.c.patch || true
+	# 3b) Mirror unix stdout to the _webterm bridge (lets an external host see all
+	#     REPL/stdout output). Guarded by __EMSCRIPTEN__ so device builds are unaffected.
+	patch -p1 --forward -d "$codebasedir"/lvgl_micropython/lib/micropython < "$web_port_dir"/unix_mphal.c.patch || true
+	# 4) _webnet native user C module (browser fetch() bridge for HTTP networking).
+	#    Auto-discovered via USER_C_MODULES; only built when MPOS_WEB=1.
+	mkdir -p "$codebasedir"/lvgl_micropython/ext_mod/_webnet
+	cp "$web_port_dir"/ext_mod/_webnet/webnet.c "$codebasedir"/lvgl_micropython/ext_mod/_webnet/webnet.c
+	cp "$web_port_dir"/ext_mod/_webnet/micropython.mk "$codebasedir"/lvgl_micropython/ext_mod/_webnet/micropython.mk
+	# 5) _webterm native user C module (browser <-> MicroPython stdio byte bridge).
+	#    Lets an external host (e.g. ViperIDE) drive the asyncio REPL like a serial
+	#    device. Auto-discovered via USER_C_MODULES; only built when MPOS_WEB=1.
+	mkdir -p "$codebasedir"/lvgl_micropython/ext_mod/_webterm
+	cp "$web_port_dir"/ext_mod/_webterm/webterm.c "$codebasedir"/lvgl_micropython/ext_mod/_webterm/webterm.c
+	cp "$web_port_dir"/ext_mod/_webterm/micropython.mk "$codebasedir"/lvgl_micropython/ext_mod/_webterm/micropython.mk
+
+	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
+	frozenmanifest="FROZEN_MANIFEST=$manifest"
+
+	mkdir -p "$codebasedir"/web
+	shell_file="$codebasedir"/web/shell.html
+	staged_fs="$codebasedir"/web/.preload_internal_filesystem
+	rm -rf "$staged_fs"
+	mkdir -p "$staged_fs"
+
+	# Browser packaging cannot include dangling symlinks. The development tree may
+	# contain app symlinks that point to optional sibling repositories not present
+	# in this workspace, so stage a copy and prune broken links first.
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -a "$codebasedir"/internal_filesystem/ "$staged_fs"/
+	else
+		cp -a "$codebasedir"/internal_filesystem/. "$staged_fs"/
+	fi
+
+	broken_links=$(find "$staged_fs" -type l ! -exec test -e {} \; -print)
+	if [ -n "$broken_links" ]; then
+		echo "Pruning dangling symlinks from staged internal_filesystem:"
+		echo "$broken_links"
+		find "$staged_fs" -type l ! -exec test -e {} \; -delete
+	fi
+
+	# Persistence split for the browser build (IDBFS / IndexedDB):
+	#   - /data and /apps are mounted from IndexedDB at boot (see web/shell.html)
+	#     so app preferences and user-installed apps survive page reloads.
+	#   - Those two paths therefore must NOT be baked into the read-only preload
+	#     package, or the preload would shadow/conflict with the IDBFS mounts.
+	#   - The bundled demo apps still need to ship with the image, so they are
+	#     packaged separately at /.bundled_apps and copied into the persistent
+	#     /apps store once, on first boot (seedBundledApps() in shell.html).
+	staged_bundled_apps="$codebasedir"/web/.preload_bundled_apps
+	rm -rf "$staged_bundled_apps"
+	if [ -d "$staged_fs"/apps ]; then
+		mv "$staged_fs"/apps "$staged_bundled_apps"
+	else
+		mkdir -p "$staged_bundled_apps"
+	fi
+	# /data is recreated empty by IDBFS at boot; drop the preloaded copy so it
+	# does not collide with the persistent mount.
+	rm -rf "$staged_fs"/data
+
+	# The browser build disables native threading (MICROPY_PY_THREAD=0), so the
+	# C builtin `_thread` module is absent. MicroPythonOS imports `_thread`
+	# widely (TaskManager, threading.py, audio, wifi). Provide a web-only
+	# cooperative shim on the staged filesystem so `import _thread` resolves
+	# from lib/ (it is not present on real device builds). The shim runs thread
+	# bodies as asyncio tasks on the event loop TaskManager already drives, and
+	# treats locks as no-ops (a single-threaded cooperative scheduler cannot
+	# have true lock contention).
+	echo "Injecting web-only cooperative _thread shim into staged lib/..."
+	cp "$web_port_dir"/staged_lib/_thread.py "$staged_fs"/lib/_thread.py
+
+	# The browser build also disables native networking (MICROPY_PY_SOCKET=0),
+	# so the C builtin `socket` module is absent. MicroPythonOS imports it for
+	# the WebREPL/web server, which cannot use raw TCP sockets inside the
+	# browser sandbox anyway. Provide a web-only stub so `import socket`
+	# succeeds; any actual socket use raises a clear, catchable error instead
+	# of crashing the import chain at boot.
+	echo "Injecting web-only socket stub into staged lib/..."
+	cp "$web_port_dir"/staged_lib/socket.py "$staged_fs"/lib/socket.py
+
+	# Web-only REPL bridge. MicroPythonOS runs an asyncio REPL (aiorepl) that
+	# reads sys.stdin, but the browser has no readable stdin, so the stock
+	# aiorepl fails with EIO at boot. This staged override replaces aiorepl with
+	# a drop-in that reads input from the `_webterm` JS bridge instead, so an
+	# external host (e.g. ViperIDE/Fri3d-IDE) can drive the REPL like a serial
+	# device. Output still goes through sys.stdout, which the web build mirrors
+	# to the host via _webterm (see unix_mphal.c.patch + ext_mod/_webterm).
+	# AIOReplService (device source, unchanged) imports aiorepl and calls
+	# aiorepl.task(); on web that resolves to this override from lib/.
+	echo "Injecting web-only aiorepl (REPL-over-_webterm) shim into staged lib/..."
+	cp "$web_port_dir"/staged_lib/aiorepl.py "$staged_fs"/lib/aiorepl.py
+
+	# WebREPL/WebSocket rely on the native `_webrepl` and `websocket` C modules,
+	# which are not built for web and which depend on raw sockets (unavailable
+	# in the browser sandbox). The webserver code only instantiates these inside
+	# connection handlers that never fire here (sockets are stubbed), so plain
+	# import-satisfying stubs are sufficient to let the boot import chain
+	# complete.
+	echo "Injecting web-only _webrepl and websocket stubs into staged lib/..."
+	cp "$web_port_dir"/staged_lib/_webrepl.py "$staged_fs"/lib/_webrepl.py
+	cp "$web_port_dir"/staged_lib/websocket.py "$staged_fs"/lib/websocket.py
+
+	# Web-only `aiohttp` shim backed by the _webnet native fetch() bridge.
+	# Overwrites only __init__.py in the staged aiohttp package so the real
+	# socket-based implementation (which cannot work in the browser) is shadowed
+	# while leaving the device tree untouched. Provides the surface MPOS uses:
+	# ClientSession + get/post/put/delete returning an async context manager with
+	# .status, .headers (dict) and a streaming .content.read(n). WebSocket
+	# (ws_connect) is not implemented here yet and raises a clear error.
+	echo "Injecting web-only aiohttp (fetch) shim into staged lib/aiohttp/..."
+	mkdir -p "$staged_fs"/lib/aiohttp
+	cp "$web_port_dir"/staged_lib/aiohttp/__init__.py "$staged_fs"/lib/aiohttp/__init__.py
+
+	# Web-only replacement for the frozen `task_handler` driver. The stock
+	# driver in lvgl_micropython drives LVGL from a `machine.Timer` interrupt,
+	# but `machine_timer.c` is removed from the web build (no native timers).
+	# This shim keeps the exact same public API but drives LVGL from an asyncio
+	# task instead, integrating with the asyncio loop that TaskManager.start()
+	# runs via asyncio.run(). main.py does `sys.path.insert(0, "lib")`, so this
+	# file (in /lib) shadows the frozen module.
+	cp "$web_port_dir"/staged_lib/task_handler.py "$staged_fs"/lib/task_handler.py
+
+	# Web-only `machine.Timer` replacement. The native timer (machine_timer.c)
+	# is removed from the web build, but MicroPythonOS code (connectivity
+	# manager, several apps via `from machine import Timer`) expects the
+	# standard periodic/one-shot Timer API. This asyncio-backed implementation
+	# provides the same surface and is injected into the native `machine`
+	# module at boot (see the staged main.py patch below).
+	cp "$web_port_dir"/staged_lib/_web_machine_timer.py "$staged_fs"/lib/_web_machine_timer.py
+
+	# Inject machine.Timer into the native `machine` module at the very start of
+	# boot, before any MicroPythonOS code runs. Patch the STAGED copy of main.py
+	# only (never the source device file). Insert right after the
+	# `sys.path.insert(0, "lib")` line so lib/ is importable.
+	python3 "$web_port_dir"/inject_web_machine_timer.py "$staged_fs"/main.py
+
+	# Emscripten link-time packaging: bundle internal_filesystem read-only into
+	# the virtual FS at "/" (matching the on-device layout, where the internal
+	# filesystem is the root). MicroPythonOS' frozen main.py does
+	# `sys.path.insert(0, "lib")` and apps use root-relative paths like /apps and
+	# /builtin, so the staged tree must live at the root for those to resolve.
+	# The bundled demo apps are packaged separately at /.bundled_apps because
+	# /apps is a persistent IDBFS mount (see web/shell.html); they are seeded
+	# into /apps on first boot.
+	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --shell-file $shell_file"
+
+	pushd "$codebasedir"/lvgl_micropython/
+	set -x
+	python3 make.py web \
+		LV_CFLAGS="-O2" \
+		STRIP= \
+		DISPLAY=sdl_display \
+		INDEV=sdl_pointer \
+		MPY_CROSS_FLAGS="-O3" \
+		"$frozenmanifest"
+	build_status=$?
+	set +x
+	popd
+
+	if [ $build_status -ne 0 ]; then
+		echo "ERROR: web build failed (make.py web exit code $build_status)."
+		exit $build_status
+	fi
+
+	# Collect canonical Emscripten artifacts into web/.
+	for f in micropython.html micropython.js micropython.wasm micropython.data micropython.wasm.map; do
+		if [ -f "$codebasedir/lvgl_micropython/build/$f" ]; then
+			cp "$codebasedir/lvgl_micropython/build/$f" "$codebasedir/web/$f"
+		fi
+	done
+
+	# Remove stale renamed wasm/js/data aliases from older builds.
+	rm -f "$codebasedir/web/mpos.js" "$codebasedir/web/mpos.wasm" "$codebasedir/web/mpos.data" "$codebasedir/web/mpos.wasm.map"
+
+	# Convenience entry points (served as the entry point and legacy URL).
+	if [ -f "$codebasedir/web/micropython.html" ]; then
+		cp "$codebasedir/web/micropython.html" "$codebasedir/web/index.html"
+		cp "$codebasedir/web/micropython.html" "$codebasedir/web/mpos.html"
+		echo "Web build complete. Artifacts in $codebasedir/web/"
+		echo "Serve with: python3 -m http.server 8080 -d $codebasedir/web"
+	else
+		echo "Web build did not produce micropython.html — check the build log above."
+	fi
 else
 	echo "invalid target $target"
 fi
+

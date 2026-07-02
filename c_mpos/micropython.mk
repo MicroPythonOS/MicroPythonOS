@@ -8,10 +8,12 @@ endif
 
 # Check which system this build is being performed on
 UNAME_S := $(shell uname -s)
+ifneq ($(MPOS_WEB),1)
 ifneq ($(UNAME_S),Darwin)
     # Non-macOS settings (e.g., Linux)
     LDFLAGS += -lv4l2
     SRC_USERMOD_C += $(MOD_DIR)/src/webcam.c
+endif
 endif
 
 SRC_USERMOD_C += $(MOD_DIR)/src/quirc_decode.c
@@ -22,5 +24,7 @@ SRC_USERMOD_C += $(MOD_DIR)/quirc/lib/quirc.c
 
 #SRC_USERMOD_C += $(MOD_DIR)/src/font_Noto_Sans_sat_emojis_compressed.c
 
+ifneq ($(MPOS_WEB),1)
 CFLAGS+= -I/usr/include
+endif
 

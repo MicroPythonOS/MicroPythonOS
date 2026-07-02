@@ -1,0 +1,22 @@
+--- a/ext_mod/lcd_bus/micropython.mk
++++ b/ext_mod/lcd_bus/micropython.mk
+@@ -22,6 +22,14 @@
+ SRC_USERMOD_C += $(MOD_DIR)/common_src/rgb_bus.c
+ SRC_USERMOD_C += $(MOD_DIR)/sdl_bus/sdl_bus.c
+ 
++ifeq ($(MPOS_WEB),1)
++    # Emscripten / WebAssembly: SDL2 is supplied by Emscripten's ports system.
++    # The -sUSE_SDL=2 flag (passed via CFLAGS_EXTRA/LDFLAGS_EXTRA) adds the
++    # SDL2 headers to the include path and links the SDL2 port, so no explicit
++    # -I/-L/-lSDL2 is needed here.
++    CFLAGS_USERMOD += -DMP_PORT_UNIX=1
++    CFLAGS_USERMOD += -sUSE_SDL=2
++else
+ ifneq (,$(findstring unix, $(LV_PORT)))
+     CFLAGS_USERMOD += -DMP_PORT_UNIX=1
+     CFLAGS_USERMOD += -I$(BUILD)/SDL/include/SDL2
+@@ -39,3 +47,4 @@
+     	LDFLAGS_USERMOD += $(shell sdl2-config --libs)
+     endif
+ endif
++endif
