@@ -346,6 +346,10 @@ elif [ "$target" == "web" ]; then
 	fi
 	echo "Using $(emcc --version | head -1)"
 
+	# Native/viper decorators are unsupported by the WASM/native emitter used for
+	# the web port, so disable them before freezing.
+	disable_native_viper "$codebasedir/internal_filesystem"
+
 	# Full cleanup: stale native .o would not relink under emcc.
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
 
