@@ -436,27 +436,22 @@ class AppStore(Activity):
     def _generate_raw_app_icon(app_name):
         size = AppStore._ICON_SIZE
         digest = hashlib.sha1(app_name.encode()).digest()
-        bg = (digest[0], digest[1], digest[2])
-        fg = (digest[3], digest[4], digest[5])
+        bg = AppStore._rgb565_from_bytes(digest[0], digest[1], digest[2])
+        fg = AppStore._rgb565_from_bytes(digest[3], digest[4], digest[5])
         bits = digest[6:14]
-        buf = bytearray(size * size * 4)
+        buf = bytearray(size * size * 2)
         cell = size // 8
         for row in range(8):
             for col in range(8):
                 bit = 1 << (col % 8)
-                if bits[row] & bit:
-                    color = fg
-                else:
-                    color = bg
+                color = fg if bits[row] & bit else bg
                 for y in range(row * cell, (row + 1) * cell):
-                    base = y * size * 4
+                    base = y * size * 2
                     for x in range(col * cell, (col + 1) * cell):
-                        i = base + x * 4
-                        buf[i] = color[2]
-                        buf[i + 1] = color[1]
-                        buf[i + 2] = color[0]
-                        buf[i + 3] = 0xFF
-        stride = size * 4
+                        i = base + x * 2
+                        buf[i] = color & 0xFF
+                        buf[i + 1] = color >> 8
+        stride = size * 2
         try:
             dsc = lv.image_dsc_t({
                 "header": {
@@ -464,7 +459,7 @@ class AppStore(Activity):
                     "w": size,
                     "h": size,
                     "stride": stride,
-                    "cf": lv.COLOR_FORMAT.ARGB8888,
+                    "cf": lv.COLOR_FORMAT.RGB565,
                 },
                 "data_size": len(buf),
                 "data": buf,
@@ -476,9 +471,13 @@ class AppStore(Activity):
             dsc.header.w = size
             dsc.header.h = size
             dsc.header.stride = stride
-            dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
+            dsc.header.cf = lv.COLOR_FORMAT.RGB565
             dsc.data_size = len(buf)
         return dsc, buf
+
+    @staticmethod
+    def _rgb565_from_bytes(r, g, b):
+        return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
