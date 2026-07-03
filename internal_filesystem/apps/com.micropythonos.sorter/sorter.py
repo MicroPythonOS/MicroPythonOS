@@ -1,4 +1,4 @@
-from mpos import Activity, AppearanceManager, AudioManager, DisplayMetrics, SharedPreferences
+from mpos import Activity, AppearanceManager, AudioManager, DisplayMetrics, Intent, SettingActivity, SharedPreferences
 import mpos.ui
 import lvgl as lv
 import os
@@ -181,6 +181,14 @@ class Sorter(Activity):
     TUBE_BORDER = lv.color_hex(0x5D6D7E)
     WHITE = lv.color_hex(0xFFFFFF)
 
+    SOUND_EFFECTS_SETTING = {
+        "title": "Sound effects",
+        "key": "sound_effects",
+        "ui": "radiobuttons",
+        "default_value": "true",
+        "ui_options": [("On", "true"), ("Off", "false")],
+    }
+
     def onCreate(self):
         self.screen = lv.obj()
         self._last_ts = 0
@@ -195,8 +203,9 @@ class Sorter(Activity):
         self.tubes = []
         self.capacity = 0
         self.emoji_order = []
-        self.highscore = SharedPreferences(self.appFullName).get_int("highscore", 0)
-        self.sound_effects = SharedPreferences(self.appFullName).get_bool("sound_effects", True)
+        self.prefs = SharedPreferences(self.appFullName)
+        self.highscore = self.prefs.get_int("highscore", 0)
+        self.sound_effects = self._load_sound_effects()
         self._new_game()
         self.create_ui()
         self.setContentView(self.screen)
@@ -425,6 +434,11 @@ class Sorter(Activity):
             pass
         return _generate_emoji_order()
 
+    def _load_sound_effects(self):
+        """Return the user's sound effects preference; defaults to enabled."""
+        value = self.prefs.get_string("sound_effects", "true")
+        return str(value).lower() != "false"
+
     def _do_load(self, event, saved_level, saved_score):
         self._close_popup()
         prefs = SharedPreferences(self.appFullName)
@@ -465,34 +479,13 @@ class Sorter(Activity):
 
     def on_settings(self, event):
         self._close_popup()
+        intent = Intent(activity_class=SettingActivity)
+        intent.putExtra("prefs", self.prefs)
+        intent.putExtra("setting", self.SOUND_EFFECTS_SETTING)
+        self.startActivity(intent)
 
-        mbox = lv.msgbox()
-        mbox.set_width(DisplayMetrics.pct_of_width(75))
-        mbox.add_title("Settings")
-
-        content = mbox.get_content()
-        content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        content.set_style_pad_all(4, lv.PART.MAIN)
-
-        cb = lv.checkbox(content)
-        cb.set_text("Sound effects")
-        cb.set_width(lv.pct(100))
-        if self.sound_effects:
-            cb.add_state(lv.STATE.CHECKED)
-        cb.add_event_cb(lambda e, c=cb: self._on_sound_toggled(e, c), lv.EVENT.VALUE_CHANGED, None)
-        mpos.ui.add_focus_border(cb)
-
-        close_btn = mbox.add_footer_button("Close")
-        close_btn.add_event_cb(self._close_popup, lv.EVENT.CLICKED, None)
-
-        self.popup_modal = mbox
-
-    def _on_sound_toggled(self, event, checkbox):
-        checked = bool(checkbox.get_state() & lv.STATE.CHECKED)
-        self.sound_effects = checked
-        editor = SharedPreferences(self.appFullName).edit()
-        editor.put_bool("sound_effects", checked)
-        editor.commit()
+    def onResume(self, screen):
+        self.sound_effects = self._load_sound_effects()
 
     def _on_reset_highscore_yes(self, event):
         self.highscore = 0

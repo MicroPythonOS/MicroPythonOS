@@ -95,6 +95,7 @@ LVGL tips:
 
 MicroPythonOS tips:
 - `self.appFullName` is automatically set by the ActivityNavigator when launching an Activity. Use it instead of hard-coding the app's package name (e.g. for `SharedPreferences(self.appFullName)`).
+- Use `mpos.ui.SettingsActivity` to edit multiple related settings and `mpos.ui.SettingActivity` to edit a single setting. Prefer these shared activities over building custom dialogs or activities.
 
 MicroPython compatibility:
 - Soft reset is broken on lvgl_micropython and therefore also on MicroPythonOS. Use `machine.reset()` to do a hard reset.
