@@ -6,8 +6,8 @@ codebasedir=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
 disable_native_viper() {
 	echo "Disabling @micropython.native/@micropython.viper for $target build..."
-	find -L "$1" -name '*.py' -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/'
-	find -L "$1" -name '*.py.bak' -delete
+	find -L "$1" -name '*.py' -type f -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/'
+	find -L "$1" -name '*.py.bak' -delete || echo "deleting .py.bak got error but that's fine"
 }
 
 reset_web_port_changes() {
@@ -184,6 +184,17 @@ else
 fi
 popd
 
+if [ "$target" == "unix" -o "$target" == "macOS" -o "$target" == "web" ]; then
+	# Native/viper decorators generate Mach-O sections that break frozen bytecode
+	# on macOS and are unsupported on some desktop architectures (e.g. arm64),
+	# so disable them before freezing. In CI the unix/macOS build is run after
+	# the esp32/esp32s3 builds, so those still get the optimized decorators.
+	#
+	# Native/viper decorators are unsupported by the WASM/native emitter used for
+	# the web port, so disable them before freezing.
+	disable_native_viper "$codebasedir/internal_filesystem"
+fi
+
 echo "Refreshing freezefs..."
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
 	builtin_march="xtensawin"
@@ -282,12 +293,6 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
     set +x
 	popd
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
-	# Native/viper decorators generate Mach-O sections that break frozen bytecode
-	# on macOS and are unsupported on some desktop architectures (e.g. arm64),
-	# so disable them before freezing. In CI the unix/macOS build is run after
-	# the esp32/esp32s3 builds, so those still get the optimized decorators.
-	disable_native_viper "$codebasedir/internal_filesystem"
-
 	# Full cleanup: old .o from upstream MicroPython builds would cause link errors
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
 
@@ -402,10 +407,6 @@ elif [ "$target" == "web" ]; then
 		exit 1
 	fi
 	echo "Using $(emcc --version | head -1)"
-
-	# Native/viper decorators are unsupported by the WASM/native emitter used for
-	# the web port, so disable them before freezing.
-	disable_native_viper "$codebasedir/internal_filesystem"
 
 	# Full cleanup: stale native .o would not relink under emcc.
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
