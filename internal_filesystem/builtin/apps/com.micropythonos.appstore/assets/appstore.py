@@ -438,19 +438,7 @@ class AppStore(Activity):
         digest = hashlib.sha1(app_name.encode()).digest()
         bg = AppStore._rgb565_from_bytes(digest[0], digest[1], digest[2])
         fg = AppStore._rgb565_from_bytes(digest[3], digest[4], digest[5])
-        bits = digest[6:14]
-        buf = bytearray(size * size * 2)
-        cell = size // 8
-        for row in range(8):
-            for col in range(8):
-                bit = 1 << (col % 8)
-                color = fg if bits[row] & bit else bg
-                for y in range(row * cell, (row + 1) * cell):
-                    base = y * size * 2
-                    for x in range(col * cell, (col + 1) * cell):
-                        i = base + x * 2
-                        buf[i] = color & 0xFF
-                        buf[i + 1] = color >> 8
+        buf = AppStore._fill_rgb565_icon_buffer(size, digest[6:14], bg, fg)
         stride = size * 2
         try:
             dsc = lv.image_dsc_t({
@@ -474,6 +462,24 @@ class AppStore(Activity):
             dsc.header.cf = lv.COLOR_FORMAT.RGB565
             dsc.data_size = len(buf)
         return dsc, buf
+
+    @staticmethod
+    @micropython.viper
+    def _fill_rgb565_icon_buffer(size: int, bits, bg: int, fg: int):
+        buf = bytearray(size * size * 2)
+        p = ptr8(buf)
+        cell = size // 8
+        for row in range(8):
+            b = int(bits[row])
+            for col in range(8):
+                color = fg if (b & (1 << col)) else bg
+                for y in range(row * cell, (row + 1) * cell):
+                    base = y * size * 2
+                    for x in range(col * cell, (col + 1) * cell):
+                        i = base + x * 2
+                        p[i] = color & 0xFF
+                        p[i + 1] = color >> 8
+        return buf
 
     @staticmethod
     def _rgb565_from_bytes(r, g, b):
