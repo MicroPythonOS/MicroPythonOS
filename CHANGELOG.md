@@ -8,6 +8,7 @@ Builtin Apps:
 
 Frameworks:
 - MposKeyboard: don't show NEWLINE button when the linked textarea is set_one_line(True)
+- MposKeyboard: add emoji input mode
 
 0.14.0
 ======
