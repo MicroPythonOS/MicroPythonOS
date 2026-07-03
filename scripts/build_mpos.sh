@@ -10,6 +10,41 @@ disable_native_viper() {
 	find -L "$1" -name '*.py.bak' -delete
 }
 
+reset_web_port_changes() {
+	# The web build applies web-port-only patches and copies web-only files into
+	# the lvgl_micropython submodule.  These changes must not leak into esp32,
+	# unix, or macOS builds, so restore the affected tracked files and remove
+	# the web-only untracked files before building anything else.
+	echo "Resetting web-port-only changes from lvgl_micropython submodule..."
+	local lvgl_dir="$codebasedir"/lvgl_micropython
+	local mp_dir="$lvgl_dir"/lib/micropython
+
+	# Remove web-port-only untracked files/directories.
+	rm -f "$lvgl_dir"/builder/web.py
+	rm -rf "$lvgl_dir"/ext_mod/_webnet
+	rm -rf "$lvgl_dir"/ext_mod/_webterm
+
+	# Remove stale patch reject files left by earlier failed/forward patch runs.
+	rm -f "$lvgl_dir"/make.py.rej
+	rm -f "$lvgl_dir"/ext_mod/lcd_bus/micropython.mk.rej
+	rm -f "$lvgl_dir"/ext_mod/lcd_bus/sdl_bus/sdl_bus.h.rej
+
+	# Restore tracked files touched by the web-port patches.
+	if [ -e "$lvgl_dir"/.git ]; then
+		git -C "$lvgl_dir" checkout -- \
+			make.py \
+			ext_mod/lcd_bus/micropython.mk \
+			ext_mod/lcd_bus/sdl_bus/sdl_bus.h \
+			2>/dev/null || true
+	fi
+	if [ -e "$mp_dir"/.git ]; then
+		git -C "$mp_dir" checkout -- \
+			ports/unix/gccollect.c \
+			ports/unix/unix_mphal.c \
+			2>/dev/null || true
+	fi
+}
+
 target="$1"
 buildtype="$2"
 
@@ -156,6 +191,12 @@ else
 	builtin_march="host"
 fi
 "$codebasedir"/scripts/freezefs_mount_builtin.sh -march "$builtin_march"
+
+# If this is not a web build, make sure no web-port-only modifications are
+# still present in the lvgl_micropython submodule from a previous web build.
+if [ "$target" != "web" ]; then
+	reset_web_port_changes
+fi
 
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
 	# Cleanup compiled .py files, otherwise if one from lib/ gets delected, the old .mpy might be used
