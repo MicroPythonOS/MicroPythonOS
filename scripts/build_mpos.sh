@@ -5,8 +5,8 @@ mydir=$(dirname "$mydir")
 codebasedir=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
 disable_native_viper() {
-	echo "Disabling @micropython.native decorators for $target build and leaving viper..."
-	find -L "$1" -name '*.py' -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native)[[:space:]]*)$/\1#\2/'
+	echo "Disabling @micropython.native/@micropython.viper for $target build and leaving viper..."
+	find -L "$1" -name '*.py' -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/'
 	find -L "$1" -name '*.py.bak' -delete
 }
 

@@ -467,18 +467,19 @@ class AppStore(Activity):
     @micropython.viper
     def _fill_rgb565_icon_buffer(size: int, bits, bg: int, fg: int):
         buf = bytearray(size * size * 2)
-        p = ptr8(buf)
         cell = size // 8
         for row in range(8):
-            b = int(bits[row])
+            b = bits[row]
             for col in range(8):
                 color = fg if (b & (1 << col)) else bg
+                low = color & 0xFF
+                high = color >> 8
                 for y in range(row * cell, (row + 1) * cell):
                     base = y * size * 2
                     for x in range(col * cell, (col + 1) * cell):
                         i = base + x * 2
-                        p[i] = color & 0xFF
-                        p[i + 1] = color >> 8
+                        buf[i] = low
+                        buf[i + 1] = high
         return buf
 
     @staticmethod
