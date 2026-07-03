@@ -25,6 +25,14 @@
       background: black;
       outline: none;
       box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
+      /* Stop the browser from treating touch drags on the canvas as page
+         scroll / zoom / pull-to-refresh so vertical swipes reach LVGL. Without
+         this, Android Chrome scrolls/gestures on a swipe and in-app scrolling
+         in the LVGL display feels broken. */
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
     }
     #status {
       color: #9ad;
