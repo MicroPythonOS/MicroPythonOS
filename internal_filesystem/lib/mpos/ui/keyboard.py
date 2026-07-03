@@ -212,6 +212,29 @@ class MposKeyboard:
         # Update textarea
         ta.set_text(new_text)
 
+    def _without_newline_key(self, key_map, ctrl_map):
+        """
+        Return copies of the key/control maps with the bottom-right NEW_LINE
+        button removed. Used when the keyboard is attached to a single-line
+        textarea.
+        """
+        key_map = list(key_map)
+        ctrl_map = list(ctrl_map)
+        # NEW_LINE is always the second-to-last item before the sentinel None.
+        if len(key_map) >= 2 and key_map[-2] == lv.SYMBOL.NEW_LINE:
+            del key_map[-2]
+            del ctrl_map[-2]
+        return key_map, ctrl_map
+
+    def _single_line_mode_info(self):
+        """Return mode_info maps stripped of the newline key for all modes."""
+        return {
+            self.MODE_LOWERCASE: self._without_newline_key(self._lowercase_map, self._lowercase_ctrl),
+            self.MODE_UPPERCASE: self._without_newline_key(self._uppercase_map, self._uppercase_ctrl),
+            self.MODE_NUMBERS: self._without_newline_key(self._numbers_map, self._numbers_ctrl),
+            self.MODE_SPECIALS: self._without_newline_key(self._specials_map, self._specials_ctrl),
+        }
+
     def set_textarea(self, textarea, on_show=None, on_hide=None):
         """
         Set the textarea that this keyboard types into.
@@ -230,9 +253,19 @@ class MposKeyboard:
         self._textarea_emoji_font_applied = False
         self._on_show = on_show
         self._on_hide = on_hide
+
+        # The newline key is only meaningful for multi-line textareas.
+        if textarea is not None and textarea.get_one_line():
+            self.mode_info = self._single_line_mode_info()
+        else:
+            self.mode_info = dict(type(self).mode_info)
+
         # NOTE: We deliberately DO NOT call self._keyboard.set_textarea()
         # to avoid LVGL's automatic character insertion
         self._textarea.add_event_cb(lambda *args: self.show_keyboard(), lv.EVENT.CLICKED, None)
+
+        # Apply the selected maps by refreshing the current mode.
+        self.set_mode(self._current_mode if self._current_mode is not None else self.MODE_LOWERCASE)
 
     def _ensure_textarea_emoji_font(self, textarea, text):
         if self._textarea_emoji_font_applied:

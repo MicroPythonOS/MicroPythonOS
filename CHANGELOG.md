@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Frameworks:
+- MposKeyboard: don't show NEWLINE button when the linked textarea is set_one_line(True)
+
 0.14.0
 ======
 
