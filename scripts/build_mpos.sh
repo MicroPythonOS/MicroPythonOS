@@ -330,6 +330,17 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# (e.g. -Wno-error=unterminated-string-initialization is GCC-only; Clang 21 rejects
 	# it with -Werror,-Wunknown-warning-option which kills the build).
 	unix_makefile="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/Makefile
+
+	# Ensure the socket module is compiled into the unix binary. The web-port
+	# patch removes modsocket.c from SRC_C; if those changes linger (or a clean
+	# checkout ships the socket-less Makefile), restore it here.
+	if grep -q '^[[:space:]]*modsocket\.c[[:space:]]*\\$' "$unix_makefile"; then
+		echo "modsocket.c already present in $unix_makefile"
+	else
+		echo "Restoring modsocket.c in $unix_makefile"
+		sed -i '/^[[:space:]]*fatfs_port\.c[[:space:]]*\\$/a\'$'\t''modsocket.c \\' "$unix_makefile"
+	fi
+
 	if [ "$(uname -s)" = "Darwin" ]; then
 		echo "Temporarily suppressing Clang warnings for macOS build..."
 		sed -i.backup 's/^CWARN = -Wall -Werror$/CWARN = -Wall -Werror -Wno-unknown-warning-option -Wno-error=gnu-folding-constant -Wno-error=missing-field-initializers -Wno-error=unterminated-string-initialization/' "$unix_makefile"
