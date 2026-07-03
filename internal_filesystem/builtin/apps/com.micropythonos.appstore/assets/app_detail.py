@@ -49,8 +49,12 @@ class AppDetail(Activity):
                 'data_size': len(self.app.icon_data),
                 'data': self.app.icon_data
             })
+            self.app._icon_dsc = dsc
+            self.app._icon_buf = None
         else:
-            dsc = self.appstore._generate_raw_app_icon(self.app.fullname)
+            dsc, buf = self.appstore._generate_raw_app_icon(self.app.fullname)
+            self.app._icon_dsc = dsc
+            self.app._icon_buf = buf
         self.icon_image.set_src(dsc)
 
     async def _download_icon(self):

@@ -424,8 +424,12 @@ class AppStore(Activity):
                 'data_size': len(app.icon_data),
                 'data': app.icon_data
             })
+            app._icon_dsc = dsc
+            app._icon_buf = None
         else:
-            dsc = self._generate_raw_app_icon(app.fullname)
+            dsc, buf = self._generate_raw_app_icon(app.fullname)
+            app._icon_dsc = dsc
+            app._icon_buf = buf
         widget.set_src(dsc)
 
     @staticmethod
@@ -452,12 +456,29 @@ class AppStore(Activity):
                         buf[i + 1] = color[1]
                         buf[i + 2] = color[0]
                         buf[i + 3] = 0xFF
-        dsc = lv.image_dsc_t()
-        dsc.data = buf
-        dsc.header.w = size
-        dsc.header.h = size
-        dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
-        return dsc
+        stride = size * 4
+        try:
+            dsc = lv.image_dsc_t({
+                "header": {
+                    "magic": lv.IMAGE_HEADER_MAGIC,
+                    "w": size,
+                    "h": size,
+                    "stride": stride,
+                    "cf": lv.COLOR_FORMAT.ARGB8888,
+                },
+                "data_size": len(buf),
+                "data": buf,
+            })
+        except Exception:
+            dsc = lv.image_dsc_t()
+            dsc.data = buf
+            dsc.header.magic = lv.IMAGE_HEADER_MAGIC
+            dsc.header.w = size
+            dsc.header.h = size
+            dsc.header.stride = stride
+            dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
+            dsc.data_size = len(buf)
+        return dsc, buf
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
