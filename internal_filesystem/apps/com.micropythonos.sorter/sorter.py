@@ -313,10 +313,12 @@ class Sorter(Activity):
             tube_obj.set_style_bg_color(self.TUBE_BG, 0)
 
         items = self.tubes[idx]
-        # Items are stored bottom..top, so render in that order; flex aligns
-        # them to the bottom of the tube, producing a fall-to-bottom look.
+        # Items are stored bottom..top, but LVGL lays out children in
+        # creation order with the first child at the visual top. Reverse the
+        # render order so the top emoji appears at the top of the tube while
+        # the whole column is still aligned to the tube bottom.
         scale = int(256 * emoji_size / 32)
-        for item in items:
+        for item in reversed(items):
             img = lv.image(tube_obj)
             img.set_src(_EMOJI_DIR + _EMOJIS[self.emoji_order[item]])
             img.set_size(emoji_size, emoji_size)
@@ -563,7 +565,10 @@ class Sorter(Activity):
 
     def _restart_level(self):
         if self._win_timer:
-            lv.timer_del(self._win_timer)
+            try:
+                self._win_timer.delete()
+            except Exception:
+                pass
             self._win_timer = None
         self.moves = 0
         self.selected = -1
@@ -581,7 +586,10 @@ class Sorter(Activity):
         self._close_popup()
         self._delete_autosave()
         if self._win_timer:
-            lv.timer_del(self._win_timer)
+            try:
+                self._win_timer.delete()
+            except Exception:
+                pass
             self._win_timer = None
         self._save_highscore()
         self._last_ts = time.ticks_ms()
@@ -594,7 +602,10 @@ class Sorter(Activity):
         self._save_highscore()
         self._close_popup()
         if self._win_timer:
-            lv.timer_del(self._win_timer)
+            try:
+                self._win_timer.delete()
+            except Exception:
+                pass
             self._win_timer = None
         if self.container:
             self.container.delete()
