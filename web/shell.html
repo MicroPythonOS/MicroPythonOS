@@ -53,6 +53,22 @@
       padding: 8px;
       white-space: pre-wrap;
     }
+    /* Log is a toggleable panel, closed by default. */
+    #log.hidden { display: none; }
+    #log-toggle {
+      position: fixed;
+      top: 8px;
+      right: 8px;
+      z-index: 10;
+      padding: 4px 10px;
+      color: #9ad;
+      background: rgba(0, 0, 0, 0.78);
+      border: 1px solid #345;
+      border-radius: 4px;
+      font: 12px/1.2 ui-monospace, monospace;
+      cursor: pointer;
+    }
+    #log-toggle:hover { background: rgba(20, 30, 45, 0.9); }
   </style>
 </head>
 <body>
@@ -62,16 +78,26 @@
     <canvas id="canvas" width="320" height="240" tabindex="0"
             oncontextmenu="event.preventDefault()"></canvas>
   </div>
-  <pre id="log"></pre>
+  <button id="log-toggle" type="button" aria-expanded="false">Log</button>
+  <pre id="log" class="hidden"></pre>
 
   <script>
     const logEl = document.getElementById("log");
+    const logToggle = document.getElementById("log-toggle");
     const statusEl = document.getElementById("status");
     const canvas = document.getElementById("canvas");
 
+    // Toggleable log panel (closed by default).
+    logToggle.addEventListener("click", () => {
+      const open = logEl.classList.toggle("hidden") === false;
+      logToggle.setAttribute("aria-expanded", String(open));
+      logToggle.textContent = open ? "Hide log" : "Log";
+      if (open) logEl.scrollTop = logEl.scrollHeight;
+    });
+
     function appendLog(text, isErr) {
       logEl.textContent += (isErr ? "[err] " : "") + text + "\n";
-      logEl.scrollTop = logEl.scrollHeight;
+      if (!logEl.classList.contains("hidden")) logEl.scrollTop = logEl.scrollHeight;
     }
 
     // --- Persistent filesystem helpers (IDBFS / IndexedDB) -----------------
