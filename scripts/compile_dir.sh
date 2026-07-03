@@ -3,10 +3,37 @@
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
 
+march=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-march)
+			march="$2"
+			shift 2
+			;;
+		-march=*)
+			march="${1#-march=}"
+			shift
+			;;
+		*)
+			break
+			;;
+esac
+done
+
+if [ -z "$march" ]; then
+	march="host"
+	echo ""
+	echo "************************************************************************"
+	echo "WARNING: $0 defaulting to -march=$march."
+	echo "         Pass -march <arch> when cross-compiling for embedded boards."
+	echo "************************************************************************"
+	echo ""
+fi
+
 indir="$1"
 outdir="$2"
 if [ -z "$indir" -o -z "$outdir" ]; then
-	echo "Usage: $0 <inputdir> <outdir>"
+	echo "Usage: $0 [-march <arch>] <inputdir> <outdir>"
 	exit 1
 fi
 
@@ -23,14 +50,8 @@ find -L "$outdir" -iname "*.py" | while read pyfile; do
 		echo "Symlinking $newname to $newtarget"
 		ln -s "$newtarget" "$newname"
 	else
-		echo "Compiling $pyfile"
-		#"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" "$pyfile"
-		# -march= is needed to fix @viper stuff, but host is probably wrong because the host is x64 while it's running on esp32 (xtensawin)
-		# this is fine for builtin/apps because they don't use viper, but lib/mpos/ does (audio) so that might not work
-		# At level 3, the mpy-cross will try to make the code as small as possible and run as fast as possible, but this may increase the compilation time.
-		"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -O3 -march=host "$pyfile"
-		#"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -march=xtensawin "$pyfile"
-		#"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -march=x64 "$pyfile"
+		echo "Compiling $pyfile with -march=$march"
+		"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -O3 -march="$march" "$pyfile"
 		result=$?
 		if [ $result -ne 0 ]; then
 			echo "error: $result"

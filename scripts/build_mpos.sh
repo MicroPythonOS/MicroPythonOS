@@ -150,7 +150,12 @@ fi
 popd
 
 echo "Refreshing freezefs..."
-"$codebasedir"/scripts/freezefs_mount_builtin.sh
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
+	builtin_march="xtensawin"
+else
+	builtin_march="host"
+fi
+"$codebasedir"/scripts/freezefs_mount_builtin.sh -march "$builtin_march"
 
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
 	# Cleanup compiled .py files, otherwise if one from lib/ gets delected, the old .mpy might be used
