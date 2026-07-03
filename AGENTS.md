@@ -96,6 +96,7 @@ LVGL tips:
 MicroPythonOS tips:
 - `self.appFullName` is automatically set by the ActivityNavigator when launching an Activity. Use it instead of hard-coding the app's package name (e.g. for `SharedPreferences(self.appFullName)`).
 - Use `mpos.ui.SettingsActivity` to edit multiple related settings and `mpos.ui.SettingActivity` to edit a single setting. Prefer these shared activities over building custom dialogs or activities.
+- When investigating a UI bug, trust visual reality over the code's intent. Especially with LVGL flex layouts, aligning a column to the bottom of its parent does **not** reverse child paint order: the first child created still renders at the visual top. Inspect the actual widget coordinates — for example with `mpos.get_widget_tree()` — instead of reasoning only from the internal data model. And when a user keeps insisting after an initial disagreement, they are likely seeing something you are missing.
 
 MicroPython compatibility:
 - Soft reset is broken on lvgl_micropython and therefore also on MicroPythonOS. Use `machine.reset()` to do a hard reset.
