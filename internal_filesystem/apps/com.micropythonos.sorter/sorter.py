@@ -406,6 +406,8 @@ class Sorter(Activity):
         saved_score = prefs.get_int("autosave_score", 0)
         if saved_level == 0 and saved_score == 0:
             return
+        if saved_level == 1 and saved_score == 0:
+            return
 
         mbox = lv.msgbox()
         mbox.set_width(DisplayMetrics.pct_of_width(75))
