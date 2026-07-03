@@ -19,6 +19,8 @@ internal_filesystem.mpy/
 
 # config files etc:
 internal_filesystem/data
+internal_filesystem/cache_audio
+internal_filesystem/prefs
 internal_filesystem/sdcard
 internal_filesystem/tests
 
