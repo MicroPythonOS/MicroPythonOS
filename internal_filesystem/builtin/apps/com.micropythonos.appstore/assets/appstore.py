@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 
@@ -113,8 +114,9 @@ class AppStore(Activity):
 
         if not self._data_loaded:
             self.refresh_list()
-        elif self.apps and any(not getattr(app, "icon_data", None) for app in self.apps):
-            TaskManager.create_task(self.download_icons())
+        elif self._data_loaded and hasattr(self, "apps_list") and self.apps_list:
+            for app in self.apps:
+                self._set_icon_widget(app)
 
     def onPause(self, screen):
         try:
@@ -252,8 +254,6 @@ class AppStore(Activity):
             self.apps.append(installed_app)
         self._data_loaded = True
         self.create_apps_list()
-        await TaskManager.sleep(0.1)
-        TaskManager.create_task(self.download_icons())
 
         # Phase 2: download store index and merge in new apps
         try:
@@ -302,8 +302,6 @@ class AppStore(Activity):
             idx = self._find_sorted_insert_index(app)
             self.apps.insert(idx, app)
             self._insert_app_list_item(app, idx)
-        if new_apps:
-            TaskManager.create_task(self.download_icons())
 
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
@@ -337,16 +335,9 @@ class AppStore(Activity):
             self._add_click_handler(cont, self.show_app_detail, app)
             icon_spacer = lv.image(cont)
             icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
-            if app.icon_data:
-                image_dsc = lv.image_dsc_t({
-                    'data_size': len(app.icon_data),
-                    'data': app.icon_data
-                })
-                icon_spacer.set_src(image_dsc)
-            else:
-                icon_spacer.set_src(lv.SYMBOL.REFRESH)
             self._add_click_handler(icon_spacer, self.show_app_detail, app)
             app.image_icon_widget = icon_spacer
+            self._set_icon_widget(app)
             label_cont = lv.obj(cont)
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -394,16 +385,9 @@ class AppStore(Activity):
         self._add_click_handler(cont, self.show_app_detail, app)
         icon_spacer = lv.image(cont)
         icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
-        if app.icon_data:
-            image_dsc = lv.image_dsc_t({
-                'data_size': len(app.icon_data),
-                'data': app.icon_data
-            })
-            icon_spacer.set_src(image_dsc)
-        else:
-            icon_spacer.set_src(lv.SYMBOL.REFRESH)
         self._add_click_handler(icon_spacer, self.show_app_detail, app)
         app.image_icon_widget = icon_spacer
+        self._set_icon_widget(app)
         label_cont = lv.obj(cont)
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -427,44 +411,53 @@ class AppStore(Activity):
         # Move to correct sorted position
         item.move_to_index(index)
 
-    async def download_icons(self):
-        if __debug__: logger.debug("downloading icons")
-        # First pass: show already-cached icons immediately
-        for app in self.apps:
-            if not self.has_foreground():
-                if __debug__: logger.debug("app stopping, aborting icon downloads")
-                return
-            if app.icon_data:
-                self._set_icon_widget(app)
-        # Second pass: download missing icons
-        for app in self.apps:
-            if not self.has_foreground():
-                if __debug__: logger.debug("app stopping, aborting icon downloads")
-                break
-            if app.icon_data:
-                continue
-            logger.warning("downloading icon for %s from %s", app.fullname, app.icon_url)
-            try:
-                app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
-            except Exception as e:
-                if __debug__: logger.debug("download of %s failed: %s", app.icon_url, e)
-                continue
-            if app.icon_data:
-                self._set_icon_widget(app)
-        if __debug__: logger.debug("finished downloading icons")
-
     def _set_icon_widget(self, app):
-        image_icon_widget = None
         try:
-            image_icon_widget = app.image_icon_widget
+            widget = app.image_icon_widget
         except Exception as e:
-            logger.warning("image_icon_widget error: %s", e)
-        if image_icon_widget:
-            image_dsc = lv.image_dsc_t({
+            if __debug__: logger.debug("no icon widget for %s: %s", app.fullname, e)
+            return
+        if not widget:
+            return
+        if app.icon_data:
+            dsc = lv.image_dsc_t({
                 'data_size': len(app.icon_data),
                 'data': app.icon_data
             })
-            image_icon_widget.set_src(image_dsc)
+        else:
+            dsc = self._generate_raw_app_icon(app.fullname)
+        widget.set_src(dsc)
+
+    @staticmethod
+    def _generate_raw_app_icon(app_name):
+        size = AppStore._ICON_SIZE
+        digest = hashlib.sha1(app_name.encode()).digest()
+        bg = (digest[0], digest[1], digest[2])
+        fg = (digest[3], digest[4], digest[5])
+        bits = digest[6:14]
+        buf = bytearray(size * size * 4)
+        cell = size // 8
+        for row in range(8):
+            for col in range(8):
+                bit = 1 << (col % 8)
+                if bits[row] & bit:
+                    color = fg
+                else:
+                    color = bg
+                for y in range(row * cell, (row + 1) * cell):
+                    base = y * size * 4
+                    for x in range(col * cell, (col + 1) * cell):
+                        i = base + x * 4
+                        buf[i] = color[2]
+                        buf[i + 1] = color[1]
+                        buf[i + 2] = color[0]
+                        buf[i + 3] = 0xFF
+        dsc = lv.image_dsc_t()
+        dsc.data = buf
+        dsc.header.w = size
+        dsc.header.h = size
+        dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
+        return dsc
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)

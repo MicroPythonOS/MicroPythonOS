@@ -24,6 +24,8 @@ class AppDetail(Activity):
     buttoncont = None
     publisher_label = None
     _open_button = None
+    icon_image = None
+    _icon_download_started = False
 
     # Received from the Intent extras:
     app = None
@@ -40,6 +42,33 @@ class AppDetail(Activity):
             self._open_button.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             self._open_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _set_icon_widget(self):
+        if self.app.icon_data:
+            dsc = lv.image_dsc_t({
+                'data_size': len(self.app.icon_data),
+                'data': self.app.icon_data
+            })
+        else:
+            dsc = self.appstore._generate_raw_app_icon(self.app.fullname)
+        self.icon_image.set_src(dsc)
+
+    async def _download_icon(self):
+        if not self.app.icon_url:
+            return
+        if __debug__: logger.debug("downloading icon for %s from %s", self.app.fullname, self.app.icon_url)
+        try:
+            self.app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(self.app.icon_url), 5)
+        except Exception as e:
+            if __debug__: logger.debug("download of %s failed: %s", self.app.icon_url, e)
+            self._icon_download_started = False
+            return
+        if self.app.icon_data:
+            self._set_icon_widget()
+            try:
+                self.appstore._set_icon_widget(self.app)
+            except Exception as e:
+                if __debug__: logger.debug("could not update list icon for %s: %s", self.app.fullname, e)
 
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):
@@ -152,16 +181,9 @@ class AppDetail(Activity):
         headercont.set_flex_flow(lv.FLEX_FLOW.ROW)
         headercont.set_size(lv.pct(100), lv.SIZE_CONTENT)
         headercont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
-        icon_spacer = lv.image(headercont)
-        icon_spacer.set_size(64, 64)
-        if self.app.icon_data:
-            image_dsc = lv.image_dsc_t({
-                'data_size': len(self.app.icon_data),
-                'data': self.app.icon_data
-            })
-            icon_spacer.set_src(image_dsc)
-        else:
-            icon_spacer.set_src(lv.SYMBOL.IMAGE)
+        self.icon_image = lv.image(headercont)
+        self.icon_image.set_size(64, 64)
+        self._set_icon_widget()
         detail_cont = lv.obj(headercont)
         self._apply_default_styles(detail_cont)
         detail_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -222,6 +244,9 @@ class AppDetail(Activity):
 
     def onResume(self, screen):
         self._sync_open_button()
+        if not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
+            self._icon_download_started = True
+            TaskManager.create_task(self._download_icon())
         backend_type = self.appstore.get_backend_type_from_settings()
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())

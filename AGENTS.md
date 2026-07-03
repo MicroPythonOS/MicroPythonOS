@@ -191,3 +191,14 @@ with MPOSController(backend='process') as mpos:
 
 ### Specific app tips
 - The app internal_filesystem/apps/com_micropythonos_nostr and the app internal_filessytem/apps/com.lightningpiggy.displaywallet (symlinked) use the same copy of nostr_service.py so when you update it, make sure to also update the other copy of that file and make sure it doesn't break the other app either.
+
+## Documentation
+
+Public documentation source lives in the sibling `../docs/` directory (`/home/user/projects/MicroPythonOS/claude/docs`). It is a separate MkDocs site from the MicroPythonOS code repository.
+
+When editing docs:
+- Run `python3 -m mkdocs build` (or `./build.sh`) from the `../docs/` directory to check for errors.
+- Some Markdown files are intentionally included into other pages instead of being listed directly in `mkdocs.yml` nav. Examples from `../docs/docs/os-development/`:
+  - `compiling.md` is included by `linux.md` and `macos.md`.
+  - `running-on-desktop.md` is included by `linux.md` and `macos.md`.
+- This is why `mkdocs build` warns "The following pages exist ... but are not included in the nav" for those files. Do not add them to `nav` unless explicitly requested.

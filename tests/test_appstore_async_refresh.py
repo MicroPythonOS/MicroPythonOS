@@ -8,7 +8,8 @@ Regression tests:
 - download_app_index() Phase 1 builds from installed apps (no network).
 - download_app_index() Phase 2 merges store apps and patches installed ones.
 - _data_loaded flag gates onResume from re-downloading.
-- onResume re-triggers icon downloads when some icons are missing.
+- download_app_index() must not spawn icon download tasks for the app list.
+- onResume must not re-trigger icon downloads; placeholders are used instead.
 - _run_update_all must call AppManager.refresh_apps before AppUpdateManager recheck.
 - _trigger_update_recheck must refresh apps before scheduling recheck.
 
@@ -197,8 +198,8 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
             "refresh_list() must not start a second task while one is in progress",
         )
 
-    def test_download_icons_is_spawned_not_awaited(self):
-        """download_app_index should spawn download_icons as a background task."""
+    def test_app_index_does_not_download_icons(self):
+        """download_app_index should not start icon downloads for the app list."""
         import asyncio
 
         store = self._make_store()
@@ -221,21 +222,11 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         finally:
             dm.DownloadManager.download_url = orig
 
-        # After the "list" is built, download_icons should have been queued as
-        # its own task rather than awaited inline inside download_app_index.
-        icon_tasks = [
-            t
-            for t in self.tasks_created
-            if getattr(t, "__name__", "") == "download_icons"
-            or (hasattr(t, "cr_frame") and t.cr_frame.f_code.co_name == "download_icons")
-        ]
-        # Because MicroPython coroutine introspection is limited, we settle for
-        # the simpler guarantee: at least one task was created for download_icons,
-        # proving icons are loaded in the background.
-        self.assertGreaterEqual(
+        # No background icon download tasks should be queued from the list.
+        self.assertEqual(
             len(self.tasks_created),
-            1,
-            "download_icons() should be started as a separate background task",
+            0,
+            "download_app_index must not spawn icon download tasks",
         )
 
 
@@ -465,8 +456,8 @@ class TestAppStoreDataFlow(unittest.TestCase):
             "onResume must NOT start refresh_list when _data_loaded is True",
         )
 
-    def test_on_resume_resumes_missing_icons(self):
-        """onResume re-triggers icon downloads when some apps lack icon_data."""
+    def test_on_resume_does_not_download_icons(self):
+        """onResume must not start icon downloads when some apps lack icon_data."""
         from mpos import App
 
         store = self._make_store()
@@ -478,10 +469,10 @@ class TestAppStoreDataFlow(unittest.TestCase):
 
         store.onResume(MockLabel())
 
-        self.assertGreaterEqual(
+        self.assertEqual(
             len(self.tasks_created),
-            1,
-            "onResume must re-trigger download_icons when icons are missing",
+            0,
+            "onResume must not spawn icon download tasks for missing icons",
         )
 
 

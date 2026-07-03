@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Builtin Apps:
+- AppStore: improve responsiveness by delaying download of icons in list view
+
 Frameworks:
 - MposKeyboard: don't show NEWLINE button when the linked textarea is set_one_line(True)
 
