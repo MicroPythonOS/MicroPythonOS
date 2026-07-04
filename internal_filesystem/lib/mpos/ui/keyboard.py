@@ -174,6 +174,7 @@ class MposKeyboard:
         self._emoji_pane.set_size(lv.pct(100), lv.SIZE_CONTENT)
         self._emoji_pane.align(lv.ALIGN.TOP_LEFT, 0, 0)
         self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
+        self._emoji_pane.add_flag(lv.obj.FLAG.FLOATING)
         self._emoji_pane.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         _clear_bg_border_padding(self._emoji_pane)
 
