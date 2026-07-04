@@ -307,9 +307,7 @@ class MposKeyboard:
                 _strip_button_theme(btn)
                 if text == self.LABEL_EMOJI:
                     img = lv.image(btn)
-                    img.set_src("M:builtin/res/emojis/32x32/1F642.png")
-                    img.set_style_image_recolor(lv.color_hex(0x808080), lv.PART.MAIN)
-                    img.set_style_image_recolor_opa(lv.OPA.COVER, lv.PART.MAIN)
+                    img.set_src("M:builtin/res/emojis/32x32/1F642_gray.png")
                     img.center()
                 else:
                     label = lv.label(btn)
