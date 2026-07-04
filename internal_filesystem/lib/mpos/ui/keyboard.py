@@ -41,7 +41,6 @@ class MposKeyboard:
     LABEL_SPECIALS = "=\\<"
     LABEL_LETTERS = "Abc"
     LABEL_SPACE = " "
-    LABEL_EMOJI = "emoji"
 
     # Keyboard modes - use USER modes for our API
     # We'll also register to standard modes to catch LVGL's internal switches
@@ -79,27 +78,25 @@ class MposKeyboard:
         "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "\n",
         "@", "#", "$", "_", "&", "-", "+", "(", ")", "/", "\n",
         LABEL_SPECIALS, "*", "\"", "'", ":", ";", "!", "?", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_LETTERS, ",", LABEL_EMOJI, LABEL_SPACE, ".", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
+        LABEL_LETTERS, ",", LABEL_SPACE, ".", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
     ]
     _numbers_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_numbers_map)
     _numbers_ctrl[30] = lv.buttonmatrix.CTRL.WIDTH_5 # comma
-    _numbers_ctrl[31] = lv.buttonmatrix.CTRL.WIDTH_5 # emoji
-    _numbers_ctrl[32] = lv.buttonmatrix.CTRL.WIDTH_10 # space
-    _numbers_ctrl[33] = lv.buttonmatrix.CTRL.WIDTH_5 # dot
+    _numbers_ctrl[31] = lv.buttonmatrix.CTRL.WIDTH_15 # space
+    _numbers_ctrl[32] = lv.buttonmatrix.CTRL.WIDTH_5 # dot
 
     # Additional special characters with emoticons
     _specials_map = [
         "~", "`", "|", "•", "🙂", "😉", "😆", "\n",
         "😒", "😭", "^", "°", "=", "{", "}", "\\", "\n",
         LABEL_NUMBERS_SPECIALS, "%", "😱", "😋", "[", "]", lv.SYMBOL.BACKSPACE, "\n",
-        LABEL_LETTERS, "<", LABEL_EMOJI, LABEL_SPACE, ">", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
+        LABEL_LETTERS, "<", LABEL_SPACE, ">", lv.SYMBOL.OK, lv.SYMBOL.NEW_LINE, None
     ]
     _specials_ctrl = [lv.buttonmatrix.CTRL.WIDTH_10] * len(_specials_map)
     _specials_ctrl[15] = lv.buttonmatrix.CTRL.WIDTH_15 # LABEL_NUMBERS_SPECIALS is pretty wide
     _specials_ctrl[23] = lv.buttonmatrix.CTRL.WIDTH_5 # <
-    _specials_ctrl[24] = lv.buttonmatrix.CTRL.WIDTH_5 # emoji
-    _specials_ctrl[25] = lv.buttonmatrix.CTRL.WIDTH_10 # space
-    _specials_ctrl[26] = lv.buttonmatrix.CTRL.WIDTH_5 # >
+    _specials_ctrl[24] = lv.buttonmatrix.CTRL.WIDTH_15 # space
+    _specials_ctrl[25] = lv.buttonmatrix.CTRL.WIDTH_5 # >
 
     # Map modes to their layouts
     mode_info = {
@@ -118,8 +115,6 @@ class MposKeyboard:
     # Optional callbacks invoked when the keyboard is shown/hidden.
     _on_show = None
     _on_hide = None
-
-    _EMOJI_COLUMNS = 8
 
     def __init__(self, parent):
         # Create underlying LVGL keyboard widget
@@ -142,86 +137,6 @@ class MposKeyboard:
 
         # Set good default height
         self._keyboard.set_style_min_height(175, lv.PART.MAIN)
-
-        # Build a scrollable emoji pane layered above the keyboard grid.
-        self._emoji_pane = lv.obj(self._keyboard)
-        self._emoji_pane.set_size(lv.pct(100), lv.pct(100))
-        self._emoji_pane.align(lv.ALIGN.TOP_MID, 0, 0)
-        self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
-        self._emoji_pane.set_style_bg_color(lv.color_hex(0x202020), lv.PART.MAIN)
-        self._emoji_pane.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
-        self._emoji_pane.set_style_pad_all(4, lv.PART.MAIN)
-        self._emoji_pane.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-
-        self._emoji_buttons = lv.buttonmatrix(self._emoji_pane)
-        self._emoji_buttons.set_size(lv.pct(100), lv.pct(100))
-        emoji_font = FontManager.getFont(24, emoji=True)
-        self._emoji_buttons.set_style_text_font(emoji_font, lv.PART.ITEMS)
-        self._emoji_buttons.set_style_text_font(emoji_font, lv.PART.MAIN)
-        self._emoji_buttons.add_event_cb(self._handle_emoji_events, lv.EVENT.ALL, None)
-        self._build_emoji_map()
-
-    def _build_emoji_map(self):
-        """Populate the emoji pane's button matrix from supported emoji strings."""
-        emojis = FontManager.getEmojiStrings()
-        key_map = [self.LABEL_LETTERS]
-        ctrl_map = [lv.buttonmatrix.CTRL.WIDTH_10]
-        for emoji in emojis:
-            key_map.append(emoji)
-            ctrl_map.append(lv.buttonmatrix.CTRL.WIDTH_10)
-            if len(key_map) % (self._EMOJI_COLUMNS + 1) == 0:
-                key_map.append("\n")
-                ctrl_map.append(lv.buttonmatrix.CTRL.WIDTH_10)
-        key_map.append(None)
-        self._emoji_map = key_map
-        self._emoji_ctrl = ctrl_map
-        self._emoji_buttons.set_map(self._emoji_map)
-        try:
-            self._emoji_buttons.set_ctrl_map(self._emoji_ctrl)
-        except Exception:
-            pass
-        self._last_emoji_press = 0
-
-    def _handle_emoji_events(self, event):
-        code = event.get_code()
-        if code == lv.EVENT.READY or code == lv.EVENT.CANCEL:
-            self.hide_keyboard()
-            return
-        if code != lv.EVENT.VALUE_CHANGED:
-            return
-
-        # Debounce the phantom asynchronous event that set_map() can generate.
-        now = lv.tick_get()
-        if now - self._last_emoji_press < 50:
-            return
-        self._last_emoji_press = now
-
-        target_obj = event.get_target_obj()
-        if not target_obj:
-            return
-        button = target_obj.get_selected_button()
-        if button is None:
-            return
-        text = target_obj.get_button_text(button)
-        if text is None:
-            return
-
-        if text == self.LABEL_LETTERS:
-            self._hide_emoji_pane()
-            self.set_mode(self.MODE_LOWERCASE)
-            return
-
-        ta = self._textarea
-        if ta:
-            ta.set_text(ta.get_text() + text)
-            self._ensure_textarea_emoji_font(ta, text)
-
-    def _show_emoji_pane(self):
-        self._emoji_pane.remove_flag(lv.obj.FLAG.HIDDEN)
-        self._emoji_pane.move_foreground()
-
-    def _hide_emoji_pane(self):
-        self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _handle_events(self, event):
         code = event.get_code()
@@ -275,10 +190,6 @@ class MposKeyboard:
             # Switch to additional specials
             self.set_mode(self.MODE_SPECIALS)
             return  # Don't modify text
-        elif text == self.LABEL_EMOJI:
-            # Show the emoji selection pane
-            self._show_emoji_pane()
-            return
         elif text == self.LABEL_SPACE:
             # Space bar
             new_text = current_text + " "
@@ -440,7 +351,6 @@ class MposKeyboard:
     def show_keyboard(self):
         if self._on_show:
             self._on_show()
-        self._hide_emoji_pane()
         self._saved_scroll_y = self._parent.get_scroll_y()
         WidgetAnimator.smooth_show(self._keyboard, duration=500)
         # Scroll to view on a timer because it will be hidden initially
@@ -454,7 +364,6 @@ class MposKeyboard:
         self.focus_on_keyboard()
 
     def hide_keyboard(self):
-        self._hide_emoji_pane()
         WidgetAnimator.smooth_hide(self._keyboard, duration=500)
         # Do this after the hide so the scrollbars disappear automatically if not needed
         scroll_timer = lv.timer_create(self.scroll_back_after_hide,550,None).set_repeat_count(1)
