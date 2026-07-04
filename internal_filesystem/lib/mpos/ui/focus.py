@@ -75,6 +75,16 @@ def move_focusgroup_objects(fromgroup, togroup):
             togroup.add_obj(obj)
 
 
+def focus_coordinates(x, y):
+    """Move the default input-group focus to the object nearest to (x, y).
+
+    The actual implementation lives in mpos.ui.focus_direction; this is a thin
+    wrapper so callers can import it from mpos.ui.focus.
+    """
+    from . import focus_direction
+    focus_direction.focus_coordinates(x, y)
+
+
 def save_and_clear_current_focusgroup():
     from .view import screen_stack as s
     d = lv.group_get_default()

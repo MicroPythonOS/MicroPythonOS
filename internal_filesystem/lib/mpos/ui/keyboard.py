@@ -506,8 +506,28 @@ class MposKeyboard:
 
     def set_mode(self, mode):
         """Switch to a different keyboard layout mode."""
+        old_x, old_y = None, None
+        group = lv.group_get_default()
+        if group and self._keys:
+            focused = group.get_focused()
+            if focused in self._keys:
+                area = lv.area_t()
+                focused.get_coords(area)
+                old_x = (area.x1 + area.x2) / 2
+                old_y = (area.y1 + area.y2) / 2
+
         self._current_mode = mode
         self._build_keyboard(mode)
+
+        if old_x is not None:
+            # Layout is not ready yet while we are still inside an event handler
+            # (e.g. the user tapped the uppercase-key). Defer the coordinate-based
+            # focus restore until the next LVGL tick so buttons have valid coords.
+            def _restore_focus(timer, x=old_x, y=old_y):
+                focus.focus_coordinates(x, y)
+
+            lv.timer_create(_restore_focus, 1, None).set_repeat_count(1)
+
         # Rebuild scrolling to keep the linked textarea in view, not the keyboard
         # at the top of the screen.
         if self._textarea:

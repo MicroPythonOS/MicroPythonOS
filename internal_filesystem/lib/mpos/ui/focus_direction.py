@@ -250,6 +250,27 @@ def minor_axis_distance(src, dest, direction):
         return abs(src_cx - dst_cx)
 
 
+def _point_rect_dist_sq(x, y, rect):
+    """Return squared distance from (x, y) to the closest point on a rectangle.
+
+    This gives 0 when (x, y) lies inside the rectangle, and penalises only the
+    actual gap to the nearest edge — much better than centre distance for
+    widgets with very different widths (e.g. wide mode-switch keys).
+    """
+    x1, y1, x2, y2 = rect
+    dx = 0
+    if x < x1:
+        dx = x1 - x
+    elif x > x2:
+        dx = x - x2
+    dy = 0
+    if y < y1:
+        dy = y1 - y
+    elif y > y2:
+        dy = y - y2
+    return dx * dx + dy * dy
+
+
 def weighted_distance(major, minor):
     """Score used to rank candidates when beam-status is equal.
 
@@ -512,6 +533,66 @@ def _navigate_matrix_internal(matrix, focus_group, direction_degrees):
         _NAVIGATION_SUPPRESS = None
     return True
 
+
+
+def focus_coordinates(x, y):
+    """Move focus to the focus-group object closest to screen coordinate (x, y).
+
+    This is useful when a widget is rebuilt (e.g. switching keyboard layouts)
+    and focus should stay near the same on-screen position rather than jumping
+    to the first group member.
+    """
+    from .focus import enable_focus_borders
+    enable_focus_borders()
+    focus_group = lv.group_get_default()
+    if not focus_group:
+        logger.warning("focus_coordinates: no default focus_group found, returning...")
+        return
+
+    # Keep modal-overlay behaviour consistent with move_focus_direction().
+    first_on_top = _first_focusable_on_layer_top(focus_group)
+    top_layer_active = first_on_top is not None
+
+    best = None
+    best_btn = None
+    best_dist = None
+
+    for i in range(focus_group.get_obj_count()):
+        obj = focus_group.get_obj_by_index(i)
+        if not is_object_in_focus_group(focus_group, obj):
+            continue
+        if _is_on_layer_top(obj) != top_layer_active:
+            continue
+
+        layout = _matrix_layout(obj)
+        if layout is not None:
+            if not is_object_in_focus_group(focus_group, obj):
+                continue
+            for btn_idx in layout["buttons"]:
+                if not _matrix_button_visible(obj, btn_idx, layout):
+                    continue
+                rect = _matrix_button_rect(obj, btn_idx, layout)
+                d = _point_rect_dist_sq(x, y, rect)
+                if best_dist is None or d < best_dist:
+                    best_dist = d
+                    best = obj
+                    best_btn = btn_idx
+            continue
+
+        rect = _get_rect(obj)
+        d = _point_rect_dist_sq(x, y, rect)
+        if best_dist is None or d < best_dist:
+            best_dist = d
+            best = obj
+            best_btn = None
+
+    if best is None:
+        return
+
+    if best_btn is not None:
+        _focus_matrix_button(best, best_btn, focus_group)
+    else:
+        lv.group_focus_obj(best)
 
 
 def move_focus_direction(angle):

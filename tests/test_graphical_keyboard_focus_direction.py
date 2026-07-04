@@ -24,6 +24,13 @@ class TestKeyboardFocusDirection(GraphicalTestCase):
                 return child.get_text()
         return None
 
+    def _find_button(self, keyboard, text):
+        """Return the keyboard key button whose label text equals `text`."""
+        for btn in keyboard._keys:
+            if self._button_text(btn) == text:
+                return btn
+        return None
+
     def _prepare_keyboard(self):
         """Create and focus a lowercase MposKeyboard, return it."""
         textarea = lv.textarea(self.screen)
@@ -115,6 +122,26 @@ class TestKeyboardFocusDirection(GraphicalTestCase):
         self._move_and_expect(keyboard, 180, "d")
         self._move_and_expect(keyboard, 270, "s")
         self._move_and_expect(keyboard, 270, "a")
+
+    def test_mode_switch_keeps_focus_nearby(self):
+        """Switching modes preserves focus near the same on-screen position."""
+        keyboard = self._prepare_keyboard()
+
+        # Direct set_mode() should focus the corresponding key at the same spot.
+        g_btn = self._find_button(keyboard, "g")
+        self.assertTrue(g_btn is not None)
+        lv.group_focus_obj(g_btn)
+        self._wait_for_selected(keyboard, "g")
+        keyboard.set_mode(keyboard.MODE_UPPERCASE)
+        self._wait_for_selected(keyboard, "G")
+
+        # Switching back via the mode-switch key lands on the matching key.
+        down_btn = self._find_button(keyboard, lv.SYMBOL.DOWN)
+        self.assertTrue(down_btn is not None)
+        lv.group_focus_obj(down_btn)
+        self._wait_for_selected(keyboard, lv.SYMBOL.DOWN)
+        down_btn.send_event(lv.EVENT.CLICKED, None)
+        self._wait_for_selected(keyboard, lv.SYMBOL.UP)
 
 
 if __name__ == "__main__":
