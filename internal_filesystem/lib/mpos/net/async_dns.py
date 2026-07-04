@@ -38,7 +38,7 @@ _getaddrinfo = socket.getaddrinfo
 # keeps running until the lookup completes. Capping concurrency applies
 # backpressure -- a burst of cancellations/retries cannot exhaust MicroPython's
 # RAM-bounded thread budget; new lookups await a free slot.
-_MAX_INFLIGHT = 4
+_MAX_INFLIGHT = 3
 _inflight_lock = _thread.allocate_lock()
 _inflight = 0
 
