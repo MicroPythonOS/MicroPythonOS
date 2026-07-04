@@ -428,6 +428,10 @@ class MposKeyboard:
         """Switch to a different keyboard layout mode."""
         self._current_mode = mode
         self._build_keyboard(mode)
+        # Rebuild scrolling to keep the linked textarea in view, not the keyboard
+        # at the top of the screen.
+        if self._textarea:
+            self._textarea.scroll_to_view_recursive(True)
 
     def scroll_after_show(self, timer):
         self._keyboard.scroll_to_view_recursive(True)
