@@ -16,6 +16,14 @@ from mpos.ui.testing import GraphicalTestCase
 class TestKeyboardFocusDirection(GraphicalTestCase):
     """Verify keyboard keys are navigated as individual focus candidates."""
 
+    def _button_text(self, btn):
+        """Return the text of a key button's label child."""
+        for i in range(btn.get_child_count()):
+            child = btn.get_child(i)
+            if isinstance(child, lv.label):
+                return child.get_text()
+        return None
+
     def _prepare_keyboard(self):
         """Create and focus a lowercase MposKeyboard, return it."""
         textarea = lv.textarea(self.screen)
@@ -33,21 +41,14 @@ class TestKeyboardFocusDirection(GraphicalTestCase):
         if not group:
             group = lv.group_create()
             group.set_default()
-        # Clean up stale buttonmatrix instances left in the default group by
-        # earlier runs so directional navigation targets only this keyboard.
-        # Stale keyboard matrices from previous tests can confuse focus
-        # direction; remove them and wait until this keyboard is the focused
-        # object in the default group before navigating.
-        stale = [group.get_obj_by_index(i) for i in range(group.get_obj_count())
-                 if isinstance(group.get_obj_by_index(i), lv.buttonmatrix)]
-        for obj in stale:
-            lv.group_remove_obj(obj)
-        group.add_obj(keyboard._keyboard)
-        lv.group_focus_obj(keyboard._keyboard)
-        keyboard._keyboard.set_selected_button(0)
+        # Remove stale objects so directional navigation targets only this keyboard.
+        group.remove_all_objs()
+        for btn in keyboard._keys:
+            group.add_obj(btn)
+        lv.group_focus_obj(keyboard._keys[0])
 
         for _ in range(30):
-            if (group.get_focused() is keyboard._keyboard
+            if (group.get_focused() is keyboard._keys[0]
                     and self._selected_text(keyboard) == "q"):
                 break
             self.wait_for_render(5)
@@ -58,13 +59,13 @@ class TestKeyboardFocusDirection(GraphicalTestCase):
         return keyboard
 
     def _selected_text(self, keyboard):
-        idx = keyboard._keyboard.get_selected_button()
-        if idx is None:
+        group = lv.group_get_default()
+        if not group:
             return None
-        try:
-            return keyboard._keyboard.get_button_text(idx)
-        except Exception:
+        btn = group.get_focused()
+        if btn not in keyboard._keys and btn not in keyboard._emoji_buttons:
             return None
+        return self._button_text(btn)
 
     def _wait_for_selected(self, keyboard, text, max_attempts=30):
         for _ in range(max_attempts):
@@ -77,10 +78,6 @@ class TestKeyboardFocusDirection(GraphicalTestCase):
     def _move_and_expect(self, keyboard, direction, expected_text):
         focus_direction.move_focus_direction(direction)
         self._wait_for_selected(keyboard, expected_text)
-        self.assertFalse(
-            keyboard._keyboard_indicator.has_flag(lv.obj.FLAG.HIDDEN),
-            "keyboard focus indicator should be visible",
-        )
 
     def test_horizontal_navigation_does_not_skip(self):
         """Moving right/left visits every key on the top row in order."""
