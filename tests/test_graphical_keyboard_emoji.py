@@ -56,10 +56,11 @@ class TestKeyboardEmoji(GraphicalTestCase):
         ):
             keyboard.set_mode(mode)
             self.wait_for_render(5)
-            self.assertTrue(
-                self._find_button(keyboard._keys, "emoji") is not None,
-                "emoji label missing in %s mode" % name,
+            emoji_found = any(
+                any(isinstance(btn.get_child(i), lv.image) for i in range(btn.get_child_count()))
+                for btn in keyboard._keys
             )
+            self.assertTrue(emoji_found, "emoji key missing in %s mode" % name)
 
     def test_emoji_pane_inserts_and_closes(self):
         """The emoji pane inserts emojis and closes via Abc."""
