@@ -40,6 +40,28 @@ def _key_grow(token):
     return 1
 
 
+def _clear_bg_border_padding(obj):
+    """Remove theme padding, margins, borders and background from a container."""
+    obj.set_style_pad_all(0, lv.PART.MAIN)
+    obj.set_style_pad_row(0, lv.PART.MAIN)
+    obj.set_style_pad_column(0, lv.PART.MAIN)
+    obj.set_style_margin_all(0, lv.PART.MAIN)
+    obj.set_style_border_width(0, lv.PART.MAIN)
+    obj.set_style_outline_width(0, lv.PART.MAIN)
+    obj.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+
+
+def _strip_button_theme(btn):
+    """Remove theme margins, borders and shadows that create gaps around a key."""
+    btn.set_style_margin_all(0, lv.PART.MAIN)
+    btn.set_style_border_width(0, lv.PART.MAIN)
+    btn.set_style_outline_width(0, lv.PART.MAIN)
+    btn.set_style_outline_pad(0, lv.PART.MAIN)
+    btn.set_style_shadow_width(0, lv.PART.MAIN)
+    btn.set_style_shadow_spread(0, lv.PART.MAIN)
+    return btn
+
+
 class MposKeyboard:
     """
     Enhanced keyboard widget with multiple layouts and emoticons.
@@ -132,11 +154,10 @@ class MposKeyboard:
 
         # Create underlying LVGL container widget.
         self._keyboard = lv.obj(parent)
-        self._keyboard.set_size(lv.pct(100), 175)
+        self._keyboard.set_width(lv.pct(100))
+        self._keyboard.set_height(lv.SIZE_CONTENT)
         self._keyboard.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        self._keyboard.set_style_pad_all(0, lv.PART.MAIN)
-        self._keyboard.set_style_pad_row(2, lv.PART.MAIN)
-        self._keyboard.set_style_min_height(175, lv.PART.MAIN)
+        _clear_bg_border_padding(self._keyboard)
 
         self.mode_info = dict(type(self).mode_info)
 
@@ -150,12 +171,11 @@ class MposKeyboard:
 
         # Build the emoji pane layered above the keyboard grid.
         self._emoji_pane = lv.obj(self._keyboard)
-        self._emoji_pane.set_size(lv.pct(100), lv.pct(100))
-        self._emoji_pane.align(lv.ALIGN.TOP_MID, 0, 0)
+        self._emoji_pane.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        self._emoji_pane.align(lv.ALIGN.TOP_LEFT, 0, 0)
         self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
-        self._emoji_pane.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
-        self._emoji_pane.set_style_pad_all(0, lv.PART.MAIN)
         self._emoji_pane.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        _clear_bg_border_padding(self._emoji_pane)
 
         self._build_emoji_pane()
 
@@ -173,10 +193,10 @@ class MposKeyboard:
         def make_row():
             row = lv.obj(self._emoji_pane)
             row.set_width(lv.pct(100))
-            row.set_flex_grow(1)
+            row.set_height(lv.SIZE_CONTENT)
             row.set_flex_flow(lv.FLEX_FLOW.ROW)
-            row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
-            row.set_style_pad_all(0, lv.PART.MAIN)
+            row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
+            _clear_bg_border_padding(row)
             row.set_style_pad_column(2, lv.PART.MAIN)
             return row
 
@@ -194,7 +214,9 @@ class MposKeyboard:
         """Create one emoji key button with a centered label."""
         btn = lv.button(row)
         btn.set_flex_grow(1)
+        btn.set_height(lv.SIZE_CONTENT)
         btn.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        _strip_button_theme(btn)
         label = lv.label(btn)
         label.set_text(text)
         label.set_style_text_font(font, lv.PART.MAIN)
@@ -210,6 +232,7 @@ class MposKeyboard:
         label.set_flex_grow(1)
         label.set_style_text_font(font, lv.PART.MAIN)
         label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
+        label.set_style_margin_all(0, lv.PART.MAIN)
         label.add_flag(lv.obj.FLAG.CLICKABLE)
         label.remove_flag(lv.obj.FLAG.SCROLLABLE)
         label.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)
@@ -237,20 +260,23 @@ class MposKeyboard:
         for row_spec in layout:
             row = lv.obj(self._keyboard)
             row.set_width(lv.pct(100))
-            row.set_flex_grow(1)
+            row.set_height(lv.SIZE_CONTENT)
             row.set_flex_flow(lv.FLEX_FLOW.ROW)
-            row.set_style_pad_all(0, lv.PART.MAIN)
-            row.set_style_pad_column(2, lv.PART.MAIN)
+            row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
+            _clear_bg_border_padding(row)
 
             for token in row_spec:
                 text = _key_text(token)
                 grow = _key_grow(token)
                 btn = lv.button(row)
                 btn.set_flex_grow(grow)
+                btn.set_height(lv.SIZE_CONTENT)
                 btn.remove_flag(lv.obj.FLAG.SCROLLABLE)
+                _strip_button_theme(btn)
                 label = lv.label(btn)
                 label.set_text(text)
                 label.set_style_text_font(keyboard_font, lv.PART.MAIN)
+                label.set_style_margin_all(0, lv.PART.MAIN)
                 label.center()
                 btn.add_event_cb(lambda e, key=text: self._on_key_press(key), lv.EVENT.CLICKED, None)
                 focus.add_focus_border(btn, width=2, color=lv.palette_main(lv.PALETTE.YELLOW))
