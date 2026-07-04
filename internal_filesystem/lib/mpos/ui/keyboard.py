@@ -169,12 +169,11 @@ class MposKeyboard:
         # Apply theme fix for light mode visibility
         AppearanceManager.apply_keyboard_fix(self._keyboard)
 
-        # Build the emoji pane layered above the keyboard grid.
+        # Build the emoji pane in the same slot as the keyboard rows.
         self._emoji_pane = lv.obj(self._keyboard)
-        self._emoji_pane.set_size(lv.pct(100), lv.SIZE_CONTENT)
-        self._emoji_pane.align(lv.ALIGN.TOP_LEFT, 0, 0)
+        self._emoji_pane.set_width(lv.pct(100))
+        self._emoji_pane.set_height(lv.SIZE_CONTENT)
         self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
-        self._emoji_pane.add_flag(lv.obj.FLAG.FLOATING)
         self._emoji_pane.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         _clear_bg_border_padding(self._emoji_pane)
 
@@ -285,6 +284,9 @@ class MposKeyboard:
 
             self._row_containers.append(row)
 
+        # Keep only one pane visible at a time.
+        self._sync_pane_visibility()
+
     def _on_key_press(self, text):
         """Handle a keyboard key press."""
         ta = self._textarea
@@ -347,14 +349,32 @@ class MposKeyboard:
             if self._keys:
                 lv.group_focus_obj(self._keys[0])
 
+    def _sync_pane_visibility(self, emoji_visible=None):
+        """Show either the emoji pane or the keyboard rows, never both."""
+        if emoji_visible is None:
+            if self._emoji_pane is None:
+                emoji_visible = False
+            else:
+                emoji_visible = not self._emoji_pane.has_flag(lv.obj.FLAG.HIDDEN)
+        if emoji_visible:
+            if self._emoji_pane is not None:
+                self._emoji_pane.remove_flag(lv.obj.FLAG.HIDDEN)
+            for row in self._row_containers:
+                row.add_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            if self._emoji_pane is not None:
+                self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
+            for row in self._row_containers:
+                row.remove_flag(lv.obj.FLAG.HIDDEN)
+
     def _show_emoji_pane(self):
-        self._emoji_pane.remove_flag(lv.obj.FLAG.HIDDEN)
         self._emoji_pane.move_foreground()
         self._set_emoji_focus(True)
+        self._sync_pane_visibility(True)
 
     def _hide_emoji_pane(self):
-        self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
         self._set_emoji_focus(False)
+        self._sync_pane_visibility(False)
 
     def _without_newline_key_layout(self, layout):
         """Return a layout copy with the NEW_LINE key removed from each row."""
