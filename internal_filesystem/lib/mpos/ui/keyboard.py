@@ -62,6 +62,21 @@ def _strip_button_theme(btn):
     return btn
 
 
+def _key_normal_bg_color():
+    """Return the unfocused key background color for the current theme."""
+    if AppearanceManager.is_light_mode():
+        return lv.palette_lighten(lv.PALETTE.GREY, 2)
+    return lv.palette_darken(lv.PALETTE.GREY, 3)
+
+
+def _key_focus_bg_color():
+    """Return the focused key background color."""
+    color = AppearanceManager.get_primary_color()
+    if color is None:
+        color = lv.theme_get_color_primary(None)
+    return color
+
+
 class MposKeyboard:
     """
     Enhanced keyboard widget with multiple layouts and emoticons.
@@ -212,9 +227,12 @@ class MposKeyboard:
 
     def _add_emoji_button(self, row, text, font, on_press):
         """Create one emoji key button with a centered label."""
+        normal_bg = _key_normal_bg_color()
+        focus_bg = _key_focus_bg_color()
         btn = lv.button(row)
         btn.set_flex_grow(1)
         btn.set_height(lv.SIZE_CONTENT)
+        btn.set_style_bg_color(normal_bg, lv.PART.MAIN)
         btn.remove_flag(lv.obj.FLAG.SCROLLABLE)
         _strip_button_theme(btn)
         label = lv.label(btn)
@@ -222,21 +240,25 @@ class MposKeyboard:
         label.set_style_text_font(font, lv.PART.MAIN)
         label.center()
         btn.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)
-        focus.add_focus_border(btn, width=2, color=lv.palette_main(lv.PALETTE.YELLOW))
+        focus.add_focus_border(btn, width=0, bg_color=focus_bg, bg_color_unfocused=normal_bg)
         self._emoji_buttons.append(btn)
 
     def _add_emoji_label(self, row, text, font, on_press):
         """Create one clickable emoji label and add it to the focus group."""
+        normal_bg = _key_normal_bg_color()
+        focus_bg = _key_focus_bg_color()
         label = lv.label(row)
         label.set_text(text)
         label.set_flex_grow(1)
         label.set_style_text_font(font, lv.PART.MAIN)
         label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
         label.set_style_margin_all(0, lv.PART.MAIN)
+        label.set_style_bg_color(normal_bg, lv.PART.MAIN)
+        label.set_style_pad_all(2, lv.PART.MAIN)
         label.add_flag(lv.obj.FLAG.CLICKABLE)
         label.remove_flag(lv.obj.FLAG.SCROLLABLE)
         label.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)
-        focus.add_focus_border(label, width=2, color=lv.palette_main(lv.PALETTE.YELLOW))
+        focus.add_focus_border(label, width=0, bg_color=focus_bg, bg_color_unfocused=normal_bg)
         self._emoji_buttons.append(label)
 
     def _insert_emoji(self, emoji):
@@ -256,6 +278,8 @@ class MposKeyboard:
 
         layout = self.mode_info[mode]
         keyboard_font = FontManager.getFont(20, emoji=True)
+        normal_bg = _key_normal_bg_color()
+        focus_bg = _key_focus_bg_color()
 
         for row_spec in layout:
             row = lv.obj(self._keyboard)
@@ -271,6 +295,7 @@ class MposKeyboard:
                 btn = lv.button(row)
                 btn.set_flex_grow(grow)
                 btn.set_height(lv.SIZE_CONTENT)
+                btn.set_style_bg_color(normal_bg, lv.PART.MAIN)
                 btn.remove_flag(lv.obj.FLAG.SCROLLABLE)
                 _strip_button_theme(btn)
                 label = lv.label(btn)
@@ -279,13 +304,14 @@ class MposKeyboard:
                 label.set_style_margin_all(0, lv.PART.MAIN)
                 label.center()
                 btn.add_event_cb(lambda e, key=text: self._on_key_press(key), lv.EVENT.CLICKED, None)
-                focus.add_focus_border(btn, width=2, color=lv.palette_main(lv.PALETTE.YELLOW))
+                focus.add_focus_border(btn, width=0, bg_color=focus_bg, bg_color_unfocused=normal_bg)
                 self._keys.append(btn)
 
             self._row_containers.append(row)
 
-        # Keep only one pane visible at a time.
-        self._sync_pane_visibility()
+        # The emoji pane is never shown at the same time as the keyboard rows.
+        if self._emoji_pane is not None:
+            self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _on_key_press(self, text):
         """Handle a keyboard key press."""
@@ -349,32 +375,24 @@ class MposKeyboard:
             if self._keys:
                 lv.group_focus_obj(self._keys[0])
 
-    def _sync_pane_visibility(self, emoji_visible=None):
-        """Show either the emoji pane or the keyboard rows, never both."""
-        if emoji_visible is None:
-            if self._emoji_pane is None:
-                emoji_visible = False
-            else:
-                emoji_visible = not self._emoji_pane.has_flag(lv.obj.FLAG.HIDDEN)
-        if emoji_visible:
-            if self._emoji_pane is not None:
-                self._emoji_pane.remove_flag(lv.obj.FLAG.HIDDEN)
-            for row in self._row_containers:
-                row.add_flag(lv.obj.FLAG.HIDDEN)
-        else:
-            if self._emoji_pane is not None:
-                self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
-            for row in self._row_containers:
-                row.remove_flag(lv.obj.FLAG.HIDDEN)
+    def _clear_keyboard_rows(self):
+        """Remove the normal keyboard row widgets."""
+        for row in self._row_containers:
+            row.delete()
+        self._row_containers = []
+        self._keys = []
 
     def _show_emoji_pane(self):
-        self._emoji_pane.move_foreground()
+        """Show the emoji pane and remove the normal keyboard rows."""
+        self._clear_keyboard_rows()
+        self._emoji_pane.remove_flag(lv.obj.FLAG.HIDDEN)
         self._set_emoji_focus(True)
-        self._sync_pane_visibility(True)
 
     def _hide_emoji_pane(self):
+        """Hide the emoji pane and rebuild the normal keyboard rows."""
+        self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
+        self.set_mode(self._current_mode if self._current_mode is not None else self.MODE_LOWERCASE)
         self._set_emoji_focus(False)
-        self._sync_pane_visibility(False)
 
     def _without_newline_key_layout(self, layout):
         """Return a layout copy with the NEW_LINE key removed from each row."""
