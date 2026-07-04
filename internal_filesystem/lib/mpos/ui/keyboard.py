@@ -144,6 +144,13 @@ class MposKeyboard:
 
         self.set_mode(self.MODE_LOWERCASE)
 
+        # Use the full display width and maximize key size by removing the
+        # matrix padding that otherwise shrinks the button area.
+        self._keyboard.set_width(lv.pct(100))
+        self._keyboard.set_style_pad_all(0, lv.PART.MAIN)
+        self._keyboard.set_style_pad_row(2, lv.PART.MAIN)
+        self._keyboard.set_style_pad_column(2, lv.PART.MAIN)
+
         # Add our input handler alongside the default buttonmatrix handler.
         # We keep LVGL's default handler so directional KEY events continue to
         # navigate individual buttons inside the matrix; we suppress the
@@ -168,11 +175,14 @@ class MposKeyboard:
         self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
         self._emoji_pane.set_style_bg_color(lv.color_hex(0x202020), lv.PART.MAIN)
         self._emoji_pane.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
-        self._emoji_pane.set_style_pad_all(4, lv.PART.MAIN)
+        self._emoji_pane.set_style_pad_all(0, lv.PART.MAIN)
         self._emoji_pane.set_flex_flow(lv.FLEX_FLOW.COLUMN)
 
         self._emoji_buttons = lv.buttonmatrix(self._emoji_pane)
         self._emoji_buttons.set_size(lv.pct(100), lv.pct(100))
+        self._emoji_buttons.set_style_pad_all(0, lv.PART.MAIN)
+        self._emoji_buttons.set_style_pad_row(2, lv.PART.MAIN)
+        self._emoji_buttons.set_style_pad_column(2, lv.PART.MAIN)
         emoji_font = FontManager.getFont(24, emoji=True)
         self._emoji_buttons.set_style_text_font(emoji_font, lv.PART.ITEMS)
         self._emoji_buttons.set_style_text_font(emoji_font, lv.PART.MAIN)
