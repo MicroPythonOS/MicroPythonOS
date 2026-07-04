@@ -220,19 +220,19 @@ class MposKeyboard:
         row = make_row()
         nomoji_font = FontManager.getFont(12, emoji=True)
         self._add_emoji_label(row, self.LABEL_LETTERS, nomoji_font,
-                              on_press=lambda: (self._hide_emoji_pane(), self.set_mode(self.MODE_LOWERCASE)), height=35, width=35)
+                              on_press=lambda: (self._hide_emoji_pane(), self.set_mode(self.MODE_LOWERCASE)), height=37, width=34)
 
         for emoji in FontManager.getEmojiStrings():
             if len(self._emoji_buttons) % self._EMOJI_COLUMNS == 0:
                 row = make_row()
             self._add_emoji_label(row, emoji, emoji_font,
-                                  on_press=lambda text=emoji: self._insert_emoji(text), height=35, width=35)
+                                  on_press=lambda text=emoji: self._insert_emoji(text), height=37, width=34)
 
         # Add an OK key at the end to close the emoji pane / confirm input.
         if len(self._emoji_buttons) % self._EMOJI_COLUMNS == 0:
             row = make_row()
         self._add_emoji_label(row, lv.SYMBOL.OK, nomoji_font,
-                              on_press=lambda: (self._hide_emoji_pane(), self._on_key_press(lv.SYMBOL.OK)))
+                              on_press=lambda: (self._hide_emoji_pane(), self._on_key_press(lv.SYMBOL.OK)), height=37, width=34)
 
     def _add_emoji_label(self, row, text, font, on_press, height=None,width=None):
         """Create one clickable emoji label and add it to the focus group."""
@@ -253,7 +253,7 @@ class MposKeyboard:
         '''
         label.set_style_pad_left(0, lv.PART.MAIN)
         label.set_style_pad_right(0, lv.PART.MAIN)
-        label.set_style_pad_top(7, lv.PART.MAIN)
+        label.set_style_pad_top(10, lv.PART.MAIN)
         label.set_style_pad_bottom(0, lv.PART.MAIN)
         label.set_style_radius(0, lv.PART.MAIN)
         label.set_style_bg_color(normal_bg, lv.PART.MAIN)
@@ -308,6 +308,7 @@ class MposKeyboard:
                 if text == self.LABEL_EMOJI:
                     img = lv.image(btn)
                     img.set_src("M:builtin/res/emojis/32x32/1F642_gray.png")
+                    img.set_scale(128)
                     img.center()
                 else:
                     label = lv.label(btn)
