@@ -153,7 +153,6 @@ class MposKeyboard:
         self._emoji_pane.set_size(lv.pct(100), lv.pct(100))
         self._emoji_pane.align(lv.ALIGN.TOP_MID, 0, 0)
         self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
-        self._emoji_pane.set_style_bg_color(lv.color_hex(0x202020), lv.PART.MAIN)
         self._emoji_pane.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
         self._emoji_pane.set_style_pad_all(0, lv.PART.MAIN)
         self._emoji_pane.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -161,8 +160,8 @@ class MposKeyboard:
         self._build_emoji_pane()
 
     def _build_emoji_pane(self):
-        """Populate the emoji pane with real buttons arranged in rows."""
-        # Clear any previous buttons (used when rebuilding)
+        """Populate the emoji pane: Abc button plus clickable emoji labels."""
+        # Clear any previous widgets (used when rebuilding)
         for btn in self._emoji_buttons:
             btn.delete()
         self._emoji_buttons = []
@@ -176,22 +175,23 @@ class MposKeyboard:
             row.set_width(lv.pct(100))
             row.set_flex_grow(1)
             row.set_flex_flow(lv.FLEX_FLOW.ROW)
+            row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
             row.set_style_pad_all(0, lv.PART.MAIN)
             row.set_style_pad_column(2, lv.PART.MAIN)
             return row
 
         row = make_row()
-        self._add_emoji_key(row, self.LABEL_LETTERS, emoji_font,
-                            on_press=lambda: (self._hide_emoji_pane(), self.set_mode(self.MODE_LOWERCASE)))
+        self._add_emoji_button(row, self.LABEL_LETTERS, emoji_font,
+                               on_press=lambda: (self._hide_emoji_pane(), self.set_mode(self.MODE_LOWERCASE)))
 
         for emoji in FontManager.getEmojiStrings():
             if len(self._emoji_buttons) % self._EMOJI_COLUMNS == 0:
                 row = make_row()
-            self._add_emoji_key(row, emoji, emoji_font,
-                                on_press=lambda text=emoji: self._insert_emoji(text))
+            self._add_emoji_label(row, emoji, emoji_font,
+                                  on_press=lambda text=emoji: self._insert_emoji(text))
 
-    def _add_emoji_key(self, row, text, font, on_press):
-        """Create one emoji key button and add it to the focus group."""
+    def _add_emoji_button(self, row, text, font, on_press):
+        """Create one emoji key button with a centered label."""
         btn = lv.button(row)
         btn.set_flex_grow(1)
         btn.remove_flag(lv.obj.FLAG.SCROLLABLE)
@@ -202,6 +202,19 @@ class MposKeyboard:
         btn.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)
         focus.add_focus_border(btn, width=2, color=lv.palette_main(lv.PALETTE.YELLOW))
         self._emoji_buttons.append(btn)
+
+    def _add_emoji_label(self, row, text, font, on_press):
+        """Create one clickable emoji label and add it to the focus group."""
+        label = lv.label(row)
+        label.set_text(text)
+        label.set_flex_grow(1)
+        label.set_style_text_font(font, lv.PART.MAIN)
+        label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
+        label.add_flag(lv.obj.FLAG.CLICKABLE)
+        label.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        label.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)
+        focus.add_focus_border(label, width=2, color=lv.palette_main(lv.PALETTE.YELLOW))
+        self._emoji_buttons.append(label)
 
     def _insert_emoji(self, emoji):
         """Append an emoji to the textarea."""

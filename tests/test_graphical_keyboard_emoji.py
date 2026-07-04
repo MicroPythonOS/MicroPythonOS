@@ -15,18 +15,20 @@ from mpos.ui.testing import GraphicalTestCase
 class TestKeyboardEmoji(GraphicalTestCase):
     """Verify the emoji overlay pane behaves as expected."""
 
-    def _button_label_text(self, btn):
-        """Return the text of a button's label child."""
-        for i in range(btn.get_child_count()):
-            child = btn.get_child(i)
+    def _widget_text(self, widget):
+        """Return the text of a button's label child, or the label itself."""
+        if isinstance(widget, lv.label):
+            return widget.get_text()
+        for i in range(widget.get_child_count()):
+            child = widget.get_child(i)
             if isinstance(child, lv.label):
                 return child.get_text()
         return None
 
     def _find_button(self, buttons, text):
-        """Return the first button whose label text matches, or None."""
+        """Return the first widget whose text matches, or None."""
         for btn in buttons:
-            if self._button_label_text(btn) == text:
+            if self._widget_text(btn) == text:
                 return btn
         return None
 
@@ -85,12 +87,12 @@ class TestKeyboardEmoji(GraphicalTestCase):
         for btn in keyboard._emoji_buttons:
             if btn is abcd_btn:
                 continue
-            text = self._button_label_text(btn)
+            text = self._widget_text(btn)
             if text and text != "Abc":
                 emoji_btn = btn
                 break
         self.assertTrue(emoji_btn is not None, "no emoji button found")
-        emoji_text = self._button_label_text(emoji_btn)
+        emoji_text = self._widget_text(emoji_btn)
 
         self._emulate_tap(emoji_btn)
         self.assertTrue(emoji_text in textarea.get_text(), "emoji not inserted")
