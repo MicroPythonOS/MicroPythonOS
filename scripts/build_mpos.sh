@@ -6,7 +6,8 @@ codebasedir=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
 disable_native_viper() {
 	echo "Disabling @micropython.native/@micropython.viper for $target build..."
-	find -L "$1" -name '*.py' -type f -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/'
+	# exclude symlinks with ! -type l otherwise BSD (macOS) sed errors out:
+	find -L "$1" -name '*.py' -type f ! -type l -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/'
 	find -L "$1" -name '*.py.bak' -delete || echo "deleting .py.bak got error but that's fine"
 }
 
