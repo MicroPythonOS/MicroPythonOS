@@ -195,7 +195,7 @@ class MposKeyboard:
         self._build_emoji_pane()
 
     def _build_emoji_pane(self):
-        """Populate the emoji pane: Abc button plus clickable emoji labels."""
+        """Populate the emoji pane with clickable emoji-style labels."""
         # Clear any previous widgets (used when rebuilding)
         for btn in self._emoji_buttons:
             btn.delete()
@@ -210,40 +210,31 @@ class MposKeyboard:
             row.set_width(lv.pct(100))
             row.set_height(lv.SIZE_CONTENT)
             row.set_flex_flow(lv.FLEX_FLOW.ROW)
-            row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.START)
+            # Cross (vertical) alignment END places labels on the bottom of the
+            # row, which keeps the top of tall emoji glyphs visible.
+            row.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.END, lv.FLEX_ALIGN.START)
             _clear_bg_border_padding(row)
             row.set_style_pad_column(2, lv.PART.MAIN)
             return row
 
         row = make_row()
-        self._add_emoji_button(row, self.LABEL_LETTERS, emoji_font,
-                               on_press=lambda: (self._hide_emoji_pane(), self.set_mode(self.MODE_LOWERCASE)))
+        nomoji_font = FontManager.getFont(12, emoji=True)
+        self._add_emoji_label(row, self.LABEL_LETTERS, nomoji_font,
+                              on_press=lambda: (self._hide_emoji_pane(), self.set_mode(self.MODE_LOWERCASE)), height=35, width=35)
 
         for emoji in FontManager.getEmojiStrings():
             if len(self._emoji_buttons) % self._EMOJI_COLUMNS == 0:
                 row = make_row()
             self._add_emoji_label(row, emoji, emoji_font,
-                                  on_press=lambda text=emoji: self._insert_emoji(text))
+                                  on_press=lambda text=emoji: self._insert_emoji(text), height=35, width=35)
 
-    def _add_emoji_button(self, row, text, font, on_press):
-        """Create one emoji key button with a centered label."""
-        normal_bg = _key_normal_bg_color()
-        focus_bg = _key_focus_bg_color()
-        btn = lv.button(row)
-        btn.set_flex_grow(1)
-        btn.set_height(lv.SIZE_CONTENT)
-        btn.set_style_bg_color(normal_bg, lv.PART.MAIN)
-        btn.remove_flag(lv.obj.FLAG.SCROLLABLE)
-        _strip_button_theme(btn)
-        label = lv.label(btn)
-        label.set_text(text)
-        label.set_style_text_font(font, lv.PART.MAIN)
-        label.center()
-        btn.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)
-        focus.add_focus_border(btn, width=0, bg_color=focus_bg, bg_color_unfocused=normal_bg)
-        self._emoji_buttons.append(btn)
+        # Add an OK key at the end to close the emoji pane / confirm input.
+        if len(self._emoji_buttons) % self._EMOJI_COLUMNS == 0:
+            row = make_row()
+        self._add_emoji_label(row, lv.SYMBOL.OK, nomoji_font,
+                              on_press=lambda: (self._hide_emoji_pane(), self._on_key_press(lv.SYMBOL.OK)))
 
-    def _add_emoji_label(self, row, text, font, on_press):
+    def _add_emoji_label(self, row, text, font, on_press, height=None,width=None):
         """Create one clickable emoji label and add it to the focus group."""
         normal_bg = _key_normal_bg_color()
         focus_bg = _key_focus_bg_color()
@@ -253,10 +244,24 @@ class MposKeyboard:
         label.set_style_text_font(font, lv.PART.MAIN)
         label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
         label.set_style_margin_all(0, lv.PART.MAIN)
-        label.set_style_pad_all(4, lv.PART.MAIN)
+        '''
+        label.set_style_pad_left(4, lv.PART.MAIN)
+        label.set_style_pad_right(4, lv.PART.MAIN)
+        label.set_style_pad_top(7, lv.PART.MAIN)
+        label.set_style_pad_bottom(0, lv.PART.MAIN)
         label.set_style_radius(4, lv.PART.MAIN)
+        '''
+        label.set_style_pad_left(0, lv.PART.MAIN)
+        label.set_style_pad_right(0, lv.PART.MAIN)
+        label.set_style_pad_top(7, lv.PART.MAIN)
+        label.set_style_pad_bottom(0, lv.PART.MAIN)
+        label.set_style_radius(0, lv.PART.MAIN)
         label.set_style_bg_color(normal_bg, lv.PART.MAIN)
         label.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
+        if height:
+            label.set_height(height)
+        if width:
+            label.set_width(width)
         label.add_flag(lv.obj.FLAG.CLICKABLE)
         label.remove_flag(lv.obj.FLAG.SCROLLABLE)
         label.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)

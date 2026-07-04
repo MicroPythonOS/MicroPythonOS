@@ -102,6 +102,38 @@ class TestKeyboardEmoji(GraphicalTestCase):
         self.wait_for_render(5)
         self.assertTrue(keyboard._emoji_pane.has_flag(lv.obj.FLAG.HIDDEN), "emoji pane still visible")
 
+    def test_emoji_pane_ok_key_closes(self):
+        """The last OK key on the emoji pane closes it and returns to the keyboard."""
+        textarea = lv.textarea(self.screen)
+        textarea.set_size(280, 40)
+        textarea.align(lv.ALIGN.TOP_MID, 0, 10)
+        # Use a multi-line textarea so the keyboard itself stays open.
+        textarea.set_one_line(False)
+        self.wait_for_render(5)
+
+        keyboard = MposKeyboard(self.screen)
+        keyboard.set_textarea(textarea)
+        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.wait_for_render(5)
+
+        keyboard._show_emoji_pane()
+        self.wait_for_render(5)
+
+        ok_btn = self._find_button(keyboard._emoji_buttons, lv.SYMBOL.OK)
+        self.assertTrue(ok_btn is not None, "OK key not found in emoji pane")
+
+        self._emulate_tap(ok_btn)
+        self.wait_for_render(5)
+
+        self.assertTrue(keyboard._emoji_pane.has_flag(lv.obj.FLAG.HIDDEN), "emoji pane still visible after OK")
+
+        group = lv.group_get_default()
+        if not group:
+            group = lv.group_create()
+            group.set_default()
+        self.wait_for_render(5)
+        self.assertTrue(group.get_focused() in keyboard._keys, "focus not restored to keyboard after OK")
+
     def test_emoji_pane_redirects_focus(self):
         """Joystick/encoder focus moves to the emoji pane while it is visible."""
         textarea = lv.textarea(self.screen)
