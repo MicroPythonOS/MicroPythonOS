@@ -10,9 +10,19 @@ This test verifies that clearing a level advances the level by exactly one,
 regardless of how many times _check_level_complete() is invoked.
 """
 
+import time
 import unittest
 
 from mpos import AppManager, wait_for_render
+
+
+def _wait(predicate, timeout_ms=3000):
+    deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+    while not predicate():
+        if time.ticks_diff(time.ticks_ms(), deadline) > 0:
+            return False
+        wait_for_render(1)
+    return True
 
 
 class TestSpaceInvadersLevelComplete(unittest.TestCase):
@@ -43,9 +53,11 @@ class TestSpaceInvadersLevelComplete(unittest.TestCase):
 
         activity = view.screen_stack[-1][0]
 
-        # Start a fresh game so we are at level 1 and invaders exist.
         activity._start_game()
-        wait_for_render(5)
+        self.assertTrue(
+            _wait(lambda: activity.game_state == "playing" and len(activity.invaders) > 0),
+            "Game should be playing with invaders",
+        )
 
         self.assertEqual(activity.level, 1)
         self.assertEqual(activity.game_state, "playing")

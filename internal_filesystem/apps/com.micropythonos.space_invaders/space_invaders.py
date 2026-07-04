@@ -426,7 +426,6 @@ class SpaceInvaders(Activity):
         self._update_labels()
 
     def _start_level(self):
-        self.game_state = "playing"
         rows = min(3 + self.level - 1, 5)
 
         self.invaders = []
@@ -464,6 +463,7 @@ class SpaceInvaders(Activity):
 
         self._update_entity_positions()
         self._update_labels()
+        self.game_state = "playing"
 
     def _recalc_invader_positions(self):
         alive = [i for i in self.invaders if i["alive"]]
