@@ -6,9 +6,17 @@ codebasedir=$(readlink -f "$mydir"/..) # build process needs absolute paths
 
 disable_native_viper() {
 	echo "Disabling @micropython.native/@micropython.viper for $target build..."
-	# exclude symlinks with ! -type l otherwise BSD (macOS) sed errors out:
-	find -L "$1" -name '*.py' -type f ! -type l -print0 | xargs -0 sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/'
-	find -L "$1" -name '*.py.bak' -delete || echo "deleting .py.bak got error but that's fine"
+	# Walk through symlinked directories (e.g. lib/nostr -> micropython-nostr/nostr)
+	# but skip files that are themselves symlinks: BSD/macOS sed -i.bak refuses
+	# to edit symlink paths even when the target is a regular file.
+	find -L "$1" -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+		if [ -L "$f" ]; then
+			continue
+		fi
+		sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/' "$f"
+	done
+	# Use rm instead of -delete because find still follows symlinks here.
+	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
 }
 
 reset_web_port_changes() {
