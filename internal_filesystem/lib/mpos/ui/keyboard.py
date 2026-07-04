@@ -340,9 +340,12 @@ class MposKeyboard:
             ta.set_text(current_text[:-1])
         elif text == lv.SYMBOL.OK:
             self._keyboard.send_event(lv.EVENT.READY, None)
+            if ta.get_one_line():
+                self.hide_keyboard()
         elif text == lv.SYMBOL.NEW_LINE:
             if ta.get_one_line():
                 self._keyboard.send_event(lv.EVENT.READY, None)
+                self.hide_keyboard()
             else:
                 ta.set_text(current_text + "\n")
         elif text == self.LABEL_SPACE:
