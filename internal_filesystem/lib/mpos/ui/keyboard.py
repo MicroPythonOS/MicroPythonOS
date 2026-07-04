@@ -253,12 +253,14 @@ class MposKeyboard:
         label.set_style_text_font(font, lv.PART.MAIN)
         label.set_style_text_align(lv.TEXT_ALIGN.CENTER, lv.PART.MAIN)
         label.set_style_margin_all(0, lv.PART.MAIN)
+        label.set_style_pad_all(4, lv.PART.MAIN)
+        label.set_style_radius(4, lv.PART.MAIN)
         label.set_style_bg_color(normal_bg, lv.PART.MAIN)
-        label.set_style_pad_all(2, lv.PART.MAIN)
+        label.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
         label.add_flag(lv.obj.FLAG.CLICKABLE)
         label.remove_flag(lv.obj.FLAG.SCROLLABLE)
         label.add_event_cb(lambda e: on_press(), lv.EVENT.CLICKED, None)
-        focus.add_focus_border(label, width=0, bg_color=focus_bg, bg_color_unfocused=normal_bg)
+        focus.add_focus_border(label, width=0, bg_color=focus_bg, bg_color_unfocused=normal_bg, radius=4)
         self._emoji_buttons.append(label)
 
     def _insert_emoji(self, emoji):
