@@ -4,6 +4,63 @@ import mpos.util
 
 logger = logging.getLogger(__name__)
 
+# Registered buttonmatrix layouts: matrix -> descriptor dict.
+# Descriptor has "rows" (list of per-row button-index lists) and
+# "buttons" (button-index -> {"row", "col", "width_unit", "text"}).
+_MATRIX_LAYOUTS = {}
+
+# Matrix currently being focused programmatically by move_focus_direction.
+# Keyboard event handlers can check this to avoid inserting characters when
+# focus_direction moves the selection.
+_NAVIGATION_SUPPRESS = None
+
+
+def suppress_keyboard_event(matrix):
+    """Return True if `matrix` is currently being focused programmatically."""
+    global _NAVIGATION_SUPPRESS
+    return _NAVIGATION_SUPPRESS is matrix
+
+
+# ---------------------------------------------------------------------------
+# Buttonmatrix registration
+# ---------------------------------------------------------------------------
+
+def register_buttonmatrix(matrix, map_list, ctrl_map=None):
+    """Register a buttonmatrix so its buttons are treated as individual focus candidates."""
+    buttons = {}
+    rows = []
+    current_row = []
+    btn_idx = 0
+    for i, text in enumerate(map_list):
+        if text is None:
+            break
+        if text == "\n":
+            rows.append(current_row)
+            current_row = []
+            continue
+        width_unit = ctrl_map[i] & 0xF if ctrl_map and i < len(ctrl_map) else 10
+        if width_unit == 0:
+            width_unit = 10
+        buttons[btn_idx] = {
+            "row": len(rows),
+            "col": len(current_row),
+            "width_unit": width_unit,
+            "text": text,
+        }
+        current_row.append(btn_idx)
+        btn_idx += 1
+    if current_row:
+        rows.append(current_row)
+    _MATRIX_LAYOUTS[matrix] = {"matrix": matrix, "rows": rows, "buttons": buttons}
+
+
+def unregister_buttonmatrix(matrix):
+    """Remove a previously registered buttonmatrix from focus-direction handling."""
+    _MATRIX_LAYOUTS.pop(matrix, None)
+
+
+update_buttonmatrix = register_buttonmatrix
+
 
 # ---------------------------------------------------------------------------
 # Rectangle helpers
@@ -18,6 +75,73 @@ def _get_rect(obj):
 
 def _rect_center(x1, y1, x2, y2):
     return (x1 + x2) / 2, (y1 + y2) / 2
+
+
+def _matrix_layout(matrix):
+    return _MATRIX_LAYOUTS.get(matrix)
+
+
+def _matrix_button_visible(matrix, btn_idx, layout):
+    """Return True if a buttonmatrix button is a valid focus candidate."""
+    text = layout["buttons"].get(btn_idx, {}).get("text")
+    if text is None or text == "\n":
+        return False
+    return True
+
+
+def _matrix_button_rect(matrix, btn_idx, layout):
+    """Return absolute (x1, y1, x2, y2) coordinates for a buttonmatrix button."""
+    mx1, my1, mx2, my2 = _get_rect(matrix)
+    total_w = mx2 - mx1 + 1
+    total_h = my2 - my1 + 1
+    btn = layout["buttons"][btn_idx]
+    row = btn["row"]
+    col = btn["col"]
+    rows = layout["rows"]
+    num_rows = len(rows)
+    if num_rows == 0:
+        return mx1, my1, mx2, my2
+
+    pad_left = matrix.get_style_pad_left(lv.PART.MAIN)
+    pad_right = matrix.get_style_pad_right(lv.PART.MAIN)
+    pad_top = matrix.get_style_pad_top(lv.PART.MAIN)
+    pad_bottom = matrix.get_style_pad_bottom(lv.PART.MAIN)
+    pad_row = matrix.get_style_pad_row(lv.PART.MAIN)
+    pad_col = matrix.get_style_pad_column(lv.PART.MAIN)
+
+    content_h = total_h - pad_top - pad_bottom - (num_rows - 1) * pad_row
+    if content_h < 1:
+        content_h = 1
+    row_h = content_h // num_rows
+    if row_h < 1:
+        row_h = 1
+    y = my1 + pad_top + row * (row_h + pad_row)
+
+    row_btns = rows[row]
+    total_units = sum(layout["buttons"][b]["width_unit"] for b in row_btns) or 1
+    content_w = total_w - pad_left - pad_right - (len(row_btns) - 1) * pad_col
+    if content_w < 1:
+        content_w = 1
+
+    x = mx1 + pad_left
+    for b in row_btns:
+        width_unit = layout["buttons"][b]["width_unit"]
+        btn_w = int(content_w * width_unit / total_units)
+        if b == btn_idx:
+            return x, y, x + btn_w - 1, y + row_h - 1
+        x += btn_w + pad_col
+    return mx1, my1, mx2, my2
+
+
+def get_matrix_button_rect(matrix, btn_idx):
+    """Return absolute (x1, y1, x2, y2) of matrix button `btn_idx`, or None."""
+    layout = _matrix_layout(matrix)
+    if layout is None or btn_idx not in layout["buttons"]:
+        return None
+    try:
+        return _matrix_button_rect(matrix, btn_idx, layout)
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +369,7 @@ def _first_focusable_on_layer_top(focus_group):
 
 
 def find_closest_obj_in_direction(focus_group, current_focused, direction_degrees,
-                                   top_layer_active=False, debug=False):
+                                    top_layer_active=False, debug=False):
     """Find the best focus target in direction_degrees from current_focused.
 
     Uses the Android FocusFinder algorithm:
@@ -253,23 +377,39 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
       2. beamBeats   — in-beam widgets get priority
       3. weightedDistance — tie-break by 13*major² + minor²
 
+    Registered buttonmatrices are expanded into individual button rectangles.
+
     top_layer_active: when True only layer_top candidates are considered;
                       when False only non-layer_top candidates are considered.
 
     direction_degrees: 0=UP, 90=RIGHT, 180=DOWN, 270=LEFT
-    Returns the winning object, or None.
+    Returns (target_obj, target_button_idx) where target_button_idx is set
+    for matrix-button targets and None for normal objects.
     """
     if not current_focused:
         logger.warning("find_closest_obj_in_direction: no focused object")
-        return None
+        return None, None
 
     direction = direction_degrees  # alias for readability
 
-    src = _get_rect(current_focused)
+    source_obj = current_focused
+    source_btn = None
+    source_layout = _matrix_layout(source_obj)
+    if source_layout is not None:
+        try:
+            cur = source_obj.get_selected_button()
+            if cur is not None and cur < 0xFFFF:
+                source_btn = cur
+        except Exception:
+            pass
+
+    if source_btn is not None:
+        src = _matrix_button_rect(source_obj, source_btn, source_layout)
+    else:
+        src = _get_rect(source_obj)
 
     # Seed best_rect as a ghost rect displaced one pixel PAST the source in
     # the opposite direction, so the first real candidate always beats it.
-    # (Equivalent to Android's mBestCandidateRect seeding.)
     sx1, sy1, sx2, sy2 = src
     w = sx2 - sx1
     h = sy2 - sy1
@@ -282,29 +422,43 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     else:  # RIGHT
         best_rect = (sx1 - 1 - w, sy1, sx1 - 1, sy2)
 
-    best_obj = None
+    best_target = (None, None)
 
     if debug:
         if __debug__: logger.debug("find_closest_obj_in_direction: src=%s dir=%s top_layer_active=%s", src, direction, top_layer_active)
 
-    def process_object(obj):
-        nonlocal best_rect, best_obj
+    def consider(rect, obj, btn_idx):
+        nonlocal best_rect, best_target
+        if rect is None or obj is None:
+            return
+        if is_better_candidate(src, rect, best_rect, direction):
+            best_rect = rect
+            best_target = (obj, btn_idx)
 
-        if obj is None or obj is current_focused:
+    def process_object(obj):
+        if obj is None:
             return
 
         # Enforce layer constraint: only consider candidates in the active layer.
         if _is_on_layer_top(obj) != top_layer_active:
             return
 
-        if is_object_in_focus_group(focus_group, obj):
-            dest = _get_rect(obj)
-            if is_better_candidate(src, dest, best_rect, direction):
-                best_rect = dest
-                best_obj = obj
-                if debug:
-                    if __debug__: logger.debug("  new best: %s", dest)
-                    mpos.util.print_lvgl_widget(obj)
+        layout = _matrix_layout(obj)
+        if layout is not None:
+            if not is_object_in_focus_group(focus_group, obj):
+                return
+            # Expand matrix into individual button candidates; do not recurse
+            # into its label children.
+            for btn_idx in layout["buttons"]:
+                if obj is source_obj and btn_idx == source_btn:
+                    continue
+                if not _matrix_button_visible(obj, btn_idx, layout):
+                    continue
+                consider(_matrix_button_rect(obj, btn_idx, layout), obj, btn_idx)
+            return
+
+        if obj is not source_obj and is_object_in_focus_group(focus_group, obj):
+            consider(_get_rect(obj), obj, None)
 
         for i in range(obj.get_child_count()):
             process_object(obj.get_child(i))
@@ -312,12 +466,53 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
     for i in range(focus_group.get_obj_count()):
         process_object(focus_group.get_obj_by_index(i))
 
-    return best_obj
+    return best_target
+
 
 
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
+def _focus_matrix_button(matrix, btn_idx, focus_group):
+    """Focus a specific button inside a registered buttonmatrix."""
+    global _NAVIGATION_SUPPRESS
+    if focus_group.get_focused() is not matrix:
+        lv.group_focus_obj(matrix)
+    _NAVIGATION_SUPPRESS = matrix
+    try:
+        matrix.set_selected_button(btn_idx)
+    except Exception:
+        pass
+    finally:
+        _NAVIGATION_SUPPRESS = None
+
+
+_MATRIX_KEYS = {UP: lv.KEY.UP, RIGHT: lv.KEY.RIGHT, DOWN: lv.KEY.DOWN, LEFT: lv.KEY.LEFT}
+
+
+def _navigate_matrix_internal(matrix, focus_group, direction_degrees):
+    """Let LVGL's default buttonmatrix handler move the selection.
+
+    Returns True if a key was sent; the caller still uses find_closest_obj_in_direction
+    when there is no neighbour inside the matrix.
+    """
+    key = _MATRIX_KEYS.get(direction_degrees)
+    if key is None:
+        return False
+    if focus_group.get_focused() is not matrix:
+        lv.group_focus_obj(matrix)
+    global _NAVIGATION_SUPPRESS
+    _NAVIGATION_SUPPRESS = matrix
+    try:
+        focus_group.send_data(key)
+    except Exception:
+        return False
+    finally:
+        _NAVIGATION_SUPPRESS = None
+    return True
+
+
 
 def move_focus_direction(angle):
     # First directional navigation enables focus borders (see mpos.ui.focus):
@@ -338,9 +533,6 @@ def move_focus_direction(angle):
     if not current_focused:
         logger.warning("move_focus_direction: could not focus on anything, returning...")
         return
-    if isinstance(current_focused, lv.keyboard):
-        if __debug__: logger.debug("focus is on a keyboard, which has its own move_focus_direction: NOT moving")
-        return
     if isinstance(current_focused, lv.dropdown) and current_focused.is_open():
         if __debug__: logger.debug("focus is on an open dropdown, which has its own move_focus_direction: NOT moving")
         return
@@ -358,9 +550,21 @@ def move_focus_direction(angle):
         lv.group_focus_obj(first_on_top)
         return
 
-    o = find_closest_obj_in_direction(focus_group, current_focused, angle,
-                                      top_layer_active=top_layer_active)
+    source_layout = _matrix_layout(current_focused)
+    if source_layout is not None:
+        # Use the matrix's own KEY handler for movement inside the grid.
+        # It handles row lengths, control widths, and hidden buttons exactly
+        # like LVGL does everywhere else.
+        if _navigate_matrix_internal(current_focused, focus_group, angle):
+            return
+
+    o, btn_idx = find_closest_obj_in_direction(focus_group, current_focused, angle,
+                                                top_layer_active=top_layer_active)
     if o:
         if __debug__: logger.debug("move_focus_direction: moving focus to:")
         mpos.util.print_lvgl_widget(o)
-        lv.group_focus_obj(o)
+        if btn_idx is not None:
+            _focus_matrix_button(o, btn_idx, focus_group)
+        else:
+            lv.group_focus_obj(o)
+

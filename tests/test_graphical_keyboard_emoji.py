@@ -88,6 +88,49 @@ class TestKeyboardEmoji(GraphicalTestCase):
         self.wait_for_render(5)
         self.assertTrue(keyboard._emoji_pane.has_flag(lv.obj.FLAG.HIDDEN), "emoji pane still visible")
 
+    def test_emoji_pane_redirects_focus(self):
+        """Joystick/encoder focus moves to the emoji pane while it is visible."""
+        textarea = lv.textarea(self.screen)
+        textarea.set_size(280, 40)
+        textarea.align(lv.ALIGN.TOP_MID, 0, 10)
+        textarea.set_one_line(True)
+        self.wait_for_render(5)
+
+        keyboard = MposKeyboard(self.screen)
+        keyboard.set_textarea(textarea)
+        keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.wait_for_render(5)
+
+        group = lv.group_get_default()
+        if not group:
+            group = lv.group_create()
+            group.set_default()
+        group.add_obj(keyboard._keyboard)
+
+        keyboard.show_keyboard()
+        self.wait_for_render(5)
+
+        # With the emoji pane visible, focus should be on its buttonmatrix.
+        keyboard._show_emoji_pane()
+        self.wait_for_render(5)
+        self.assertTrue(
+            group.get_focused() is keyboard._emoji_buttons,
+            "focus not on emoji pane: %s" % group.get_focused(),
+        )
+
+        # Navigating the focus group must not land back on the underlying keyboard.
+        for _ in range(10):
+            group.focus_next()
+            self.assertFalse(
+                group.get_focused() is keyboard._keyboard,
+                "focus leaked to underlying keyboard while emoji pane is open",
+            )
+
+        # Exiting emoji mode should restore focus to the keyboard.
+        keyboard._hide_emoji_pane()
+        self.wait_for_render(5)
+        self.assertTrue(group.get_focused() is keyboard._keyboard, "focus not restored to keyboard")
+
 
 if __name__ == "__main__":
     unittest.main()

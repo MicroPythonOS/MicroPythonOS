@@ -18,6 +18,7 @@ Usage:
 import logging
 import lvgl as lv
 
+from . import focus_direction
 from .appearance_manager import AppearanceManager
 from .font_manager import FontManager
 from .widget_animator import WidgetAnimator
@@ -122,23 +123,40 @@ class MposKeyboard:
     _EMOJI_COLUMNS = 8
 
     def __init__(self, parent):
-        # Create underlying LVGL keyboard widget
-        self._keyboard = lv.keyboard(parent)
+        # Initialize references early: event callbacks (e.g. for the focus
+        # overlay) may fire while the constructor is still building the widget.
+        self._parent = None
+        self._keyboard = None
+        self._keyboard_indicator = None
+        self._emoji_pane = None
+        self._emoji_buttons = None
+        self._emoji_indicator = None
+        self._textarea = None
+
+        # Create underlying LVGL buttonmatrix widget.
+        # We use a plain buttonmatrix (instead of lv.keyboard) so each key
+        # can be individually focused by focus_direction like any other widget.
+        self._keyboard = lv.buttonmatrix(parent)
         self._parent = parent # store it for later
-        # self._keyboard.set_popovers(True) # disabled for now because they're quite ugly on LVGL 9.3 - maybe better on 9.4?
         keyboard_font = FontManager.getFont(20, emoji=True)
         self._keyboard.set_style_text_font(keyboard_font, lv.PART.MAIN)
         self._keyboard.set_style_text_font(keyboard_font, lv.PART.ITEMS)
 
         self.set_mode(self.MODE_LOWERCASE)
 
-        # Remove default event handler(s)
-        for index in range(self._keyboard.get_event_count()):
-            self._keyboard.remove_event(index)
+        # Add our input handler alongside the default buttonmatrix handler.
+        # We keep LVGL's default handler so directional KEY events continue to
+        # navigate individual buttons inside the matrix; we suppress the
+        # VALUE_CHANGED events it generates during focus_direction navigation.
         self._keyboard.add_event_cb(self._handle_events, lv.EVENT.ALL, None)
 
         # Apply theme fix for light mode visibility
         AppearanceManager.apply_keyboard_fix(self._keyboard)
+
+        # The default buttonmatrix theme does not draw a per-key focus border,
+        # so we overlay a small box on top of the currently selected button.
+        self._keyboard_indicator = self._create_matrix_indicator(self._keyboard)
+        self._keyboard.add_event_cb(self._on_matrix_event, lv.EVENT.ALL, None)
 
         # Set good default height
         self._keyboard.set_style_min_height(175, lv.PART.MAIN)
@@ -159,6 +177,8 @@ class MposKeyboard:
         self._emoji_buttons.set_style_text_font(emoji_font, lv.PART.ITEMS)
         self._emoji_buttons.set_style_text_font(emoji_font, lv.PART.MAIN)
         self._emoji_buttons.add_event_cb(self._handle_emoji_events, lv.EVENT.ALL, None)
+        self._emoji_indicator = self._create_matrix_indicator(self._emoji_buttons)
+        self._emoji_buttons.add_event_cb(self._on_matrix_event, lv.EVENT.ALL, None)
         self._build_emoji_map()
 
     def _build_emoji_map(self):
@@ -180,12 +200,17 @@ class MposKeyboard:
             self._emoji_buttons.set_ctrl_map(self._emoji_ctrl)
         except Exception:
             pass
+        focus_direction.register_buttonmatrix(self._emoji_buttons, self._emoji_map, self._emoji_ctrl)
         self._last_emoji_press = 0
 
     def _handle_emoji_events(self, event):
         code = event.get_code()
         if code == lv.EVENT.READY or code == lv.EVENT.CANCEL:
             self.hide_keyboard()
+            return
+        # Ignore programmatic selection changes from focus_direction.
+        if (code == lv.EVENT.VALUE_CHANGED
+                and focus_direction.suppress_keyboard_event(self._emoji_buttons)):
             return
         if code != lv.EVENT.VALUE_CHANGED:
             return
@@ -216,19 +241,44 @@ class MposKeyboard:
             ta.set_text(ta.get_text() + text)
             self._ensure_textarea_emoji_font(ta, text)
 
+    def _set_emoji_focus(self, emoji_active):
+        """Swap the default input group between the keyboard and emoji pane."""
+        group = lv.group_get_default()
+        if not group:
+            return
+        if emoji_active:
+            try:
+                lv.group_remove_obj(self._keyboard)
+            except Exception:
+                pass
+            group.add_obj(self._emoji_buttons)
+            lv.group_focus_obj(self._emoji_buttons)
+        else:
+            try:
+                lv.group_remove_obj(self._emoji_buttons)
+            except Exception:
+                pass
+            group.add_obj(self._keyboard)
+            lv.group_focus_obj(self._keyboard)
+
     def _show_emoji_pane(self):
         self._emoji_pane.remove_flag(lv.obj.FLAG.HIDDEN)
         self._emoji_pane.move_foreground()
+        self._set_emoji_focus(True)
 
     def _hide_emoji_pane(self):
         self._emoji_pane.add_flag(lv.obj.FLAG.HIDDEN)
+        self._set_emoji_focus(False)
 
     def _handle_events(self, event):
         code = event.get_code()
 
-        # DEBUG:
         if code == lv.EVENT.READY or code == lv.EVENT.CANCEL:
             self.hide_keyboard()
+            return
+        # Ignore programmatic selection changes from focus_direction.
+        if (code == lv.EVENT.VALUE_CHANGED
+                and focus_direction.suppress_keyboard_event(self._keyboard)):
             return
         # Process VALUE_CHANGED events for actual typing
         if code != lv.EVENT.VALUE_CHANGED:
@@ -300,6 +350,64 @@ class MposKeyboard:
 
         # Update textarea
         ta.set_text(new_text)
+
+    def _create_matrix_indicator(self, parent):
+        """Create a focused-button overlay for a buttonmatrix."""
+        ind = lv.obj(parent)
+        ind.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        ind.remove_flag(lv.obj.FLAG.CLICKABLE)
+        ind.add_flag(lv.obj.FLAG.FLOATING)
+        ind.add_flag(lv.obj.FLAG.HIDDEN)
+        ind.set_style_bg_color(lv.palette_main(lv.PALETTE.YELLOW), lv.PART.MAIN)
+        ind.set_style_bg_opa(lv.OPA._30, lv.PART.MAIN)
+        ind.set_style_border_width(3, lv.PART.MAIN)
+        ind.set_style_border_color(lv.palette_main(lv.PALETTE.YELLOW), lv.PART.MAIN)
+        ind.set_style_radius(4, lv.PART.MAIN)
+        ind.set_style_pad_all(0, lv.PART.MAIN)
+        return ind
+
+    def _update_matrix_indicator(self, matrix, indicator):
+        """Move/show the overlay to match the matrix's currently selected button."""
+        if indicator is None:
+            return
+        group = lv.group_get_default()
+        if not group or group.get_focused() is not matrix:
+            indicator.add_flag(lv.obj.FLAG.HIDDEN)
+            return
+        btn = matrix.get_selected_button()
+        if btn is None or btn < 0 or btn >= 0xFFFF:
+            indicator.add_flag(lv.obj.FLAG.HIDDEN)
+            return
+        rect = focus_direction.get_matrix_button_rect(matrix, btn)
+        if rect is None:
+            indicator.add_flag(lv.obj.FLAG.HIDDEN)
+            return
+        area = lv.area_t()
+        matrix.get_coords(area)
+        rel_x = rect[0] - area.x1
+        rel_y = rect[1] - area.y1
+        indicator.set_pos(rel_x, rel_y)
+        indicator.set_size(rect[2] - rect[0] + 1, rect[3] - rect[1] + 1)
+        indicator.remove_flag(lv.obj.FLAG.HIDDEN)
+        indicator.move_foreground()
+
+    def _on_matrix_event(self, event):
+        """Keep the focus indicator aligned with the selected matrix button."""
+        code = event.get_code()
+        if code not in (
+            lv.EVENT.VALUE_CHANGED,
+            lv.EVENT.FOCUSED,
+            lv.EVENT.DEFOCUSED,
+            lv.EVENT.KEY,
+        ):
+            return
+        if self._keyboard_indicator is None or self._emoji_indicator is None:
+            return
+        target = event.get_target_obj()
+        if target is self._keyboard:
+            self._update_matrix_indicator(self._keyboard, self._keyboard_indicator)
+        elif target is self._emoji_buttons:
+            self._update_matrix_indicator(self._emoji_buttons, self._emoji_indicator)
 
     def _without_newline_key(self, key_map, ctrl_map):
         """
@@ -420,8 +528,12 @@ class MposKeyboard:
     def set_mode(self, mode):
         self._current_mode = mode
         key_map, ctrl_map = self.mode_info[mode]
-        self._keyboard.set_map(mode, key_map, ctrl_map)
-        self._keyboard.set_mode(mode)
+        self._keyboard.set_map(key_map)
+        # Trim the trailing None sentinel (if any) before passing control widths.
+        if ctrl_map and ctrl_map[-1] is None:
+            ctrl_map = ctrl_map[:-1]
+        self._keyboard.set_ctrl_map(ctrl_map)
+        focus_direction.update_buttonmatrix(self._keyboard, key_map, ctrl_map)
 
     def scroll_after_show(self, timer):
         #self._textarea.scroll_to_view_recursive(True) # makes sense but doesn't work and breaks the keyboard scroll

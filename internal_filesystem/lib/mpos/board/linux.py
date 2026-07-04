@@ -66,6 +66,8 @@ def catch_escape_key(indev, indev_data):
     #state = indev_data.state
     pressed, code = sdlkeyboard._get_key() # get the current key and state
     if __debug__: logger.debug("catch_escape_key caught: %s, %s" % (pressed, code))
+
+    arrow_handled = False
     if pressed == 1 and code == 27: # ESCAPE
         mpos.ui.back_screen()
     elif pressed == 1 and code == 2: # HOME
@@ -73,12 +75,24 @@ def catch_escape_key(indev, indev_data):
         topmenu.toggle_drawer()
     elif pressed == 1 and code == lv.KEY.RIGHT:
         mpos.ui.focus_direction.move_focus_direction(90)
+        arrow_handled = True
     elif pressed == 1 and code == lv.KEY.LEFT:
         mpos.ui.focus_direction.move_focus_direction(270)
+        arrow_handled = True
     elif pressed == 1 and code == lv.KEY.UP:
         mpos.ui.focus_direction.move_focus_direction(0)
+        arrow_handled = True
     elif pressed == 1 and code == lv.KEY.DOWN:
         mpos.ui.focus_direction.move_focus_direction(180)
+        arrow_handled = True
+
+    # Swallow arrow-key events after translating them into focus_direction
+    # moves. Otherwise focus_direction sends a key to the matrix AND the
+    # underlying SDL keyboard feeds the same key, causing double moves.
+    if arrow_handled:
+        indev_data.state = 0
+        indev_data.key = 0
+        return
 
     sdlkeyboard._read(indev, indev_data)
 
