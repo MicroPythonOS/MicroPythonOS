@@ -10,6 +10,7 @@ Builtin Apps:
 
 Frameworks:
 - MposKeyboard: don't show NEWLINE button when the linked textarea is set_one_line(True)
+- Code cleanups
 
 OS:
 - Reduce max concurrent DNS resolving threads from 4 to 3 to be on the safe side
