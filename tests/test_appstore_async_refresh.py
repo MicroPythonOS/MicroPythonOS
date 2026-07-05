@@ -21,7 +21,7 @@ import json
 import unittest
 import sys
 
-sys.path.insert(0, 'builtin/apps/com.micropythonos.appstore/assets')
+sys.path.insert(0, 'builtin/apps/com.micropythonos.appstore')
 
 from mpos.testing import MockNetwork, inject_mocks
 

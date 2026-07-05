@@ -107,7 +107,7 @@ class TestIMUCalibration(unittest.TestCase):
         calibrate_btn = find_button_with_text(screen, "Calibrate")
         self.assertIsNotNone(calibrate_btn, "Could not find 'Calibrate' button")
 
-        assets_path = "builtin/apps/com.micropythonos.settings/assets/"
+        assets_path = "builtin/apps/com.micropythonos.settings/"
         added_path = False
         if assets_path not in sys.path:
             sys.path.append(assets_path)
