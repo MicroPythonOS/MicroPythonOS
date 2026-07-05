@@ -113,9 +113,11 @@ class RetroGoLauncher(Activity):
         if mounted_sdcard:
             logger.info("sdcard is mounted, configuring it...")
             self.bootfile_prefix = self.mountpoint_sdcard
+        if self.bootfile_prefix:
+            self.bootfile_prefix = self.bootfile_prefix + "/"
         self.bootfile_to_write = self.bootfile_prefix + self.bootfile
         self.romartbase = self.bootfile_prefix + self.romartdir
-        if __debug__: logger.debug("writing to %s", self.bootfile_to_write)
+        if __debug__: logger.debug("config will later be written to %s", self.bootfile_to_write)
 
         self.refresh_file_list()
 
