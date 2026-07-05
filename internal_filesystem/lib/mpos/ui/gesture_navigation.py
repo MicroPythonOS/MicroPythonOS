@@ -115,11 +115,6 @@ def handle_back_swipe():
     style.set_bg_opa(lv.OPA.TRANSP)
     style.set_border_width(0)
     style.set_radius(0)
-    if False: # debug the swipe zone with a red border
-        style.set_bg_opa(15)
-        style.set_border_width(4)
-        style.set_border_color(lv.color_hex(0xFF0000))  # Red border for visibility
-        style.set_border_opa(lv.OPA._50)  # 50% opacity for the border
     rect.add_style(style, 0)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_back_swipe_cb, lv.EVENT.PRESSING, None)
@@ -154,11 +149,6 @@ def handle_top_swipe():
     style.set_bg_opa(lv.OPA.TRANSP)
     style.set_border_width(0)
     style.set_radius(0)
-    if False: # debug the swipe zone with a red border
-        style.set_bg_opa(15)
-        style.set_border_width(4)
-        style.set_border_color(lv.color_hex(0xFF0000))  # Red border for visibility
-        style.set_border_opa(lv.OPA._50)  # 50% opacity for the border
     rect.add_style(style, 0)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSED, None)
     rect.add_event_cb(_top_swipe_cb, lv.EVENT.PRESSING, None)

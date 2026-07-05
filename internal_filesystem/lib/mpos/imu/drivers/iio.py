@@ -86,8 +86,6 @@ class IIODriver(IMUDriverBase):
         return None
 
     def _read_text(self, name: str) -> str:
-        if False:
-            if __debug__: logger.debug("Read: %s", name)
         f = open(name, "r")
         try:
             return f.readline().strip()

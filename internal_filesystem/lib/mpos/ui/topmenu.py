@@ -324,11 +324,6 @@ def create_notification_bar():
     temp_label = lv.label(notification_bar)
     temp_label.set_text("00°C")
     temp_label.align_to(time_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(10), 0)
-    if False:
-        memfree_label = lv.label(notification_bar)
-        memfree_label.set_text("")
-        memfree_label.align_to(temp_label, lv.ALIGN.OUT_RIGHT_MID, DisplayMetrics.pct_of_width(7), 0)
-
     # WiFi icon
     #style = lv.style_t()
     #style.init()
