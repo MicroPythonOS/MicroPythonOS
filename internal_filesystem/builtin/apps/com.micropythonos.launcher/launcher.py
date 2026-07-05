@@ -196,12 +196,6 @@ class Launcher(Activity):
 
     @staticmethod
     def create_icon_dsc(icon_path):
-        with open(icon_path, 'rb') as f:
-            image_data = f.read()
-            image_dsc = lv.image_dsc_t({
-                'data_size': len(image_data),
-                'data': image_data
-            })
-        return image_dsc
+        pass
 
 

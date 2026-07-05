@@ -105,10 +105,6 @@ class CalibrateIMUActivity(Activity):
         self.set_state(CalibrationState.READY)
 
     def onPause(self, screen):
-        # Stop any running calibration
-        if self.current_state == CalibrationState.CALIBRATING:
-            # Calibration will detect activity is no longer in foreground
-            pass
         super().onPause(screen)
 
     def set_state(self, new_state):

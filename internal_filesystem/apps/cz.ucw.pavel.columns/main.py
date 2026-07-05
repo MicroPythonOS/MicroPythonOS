@@ -285,16 +285,6 @@ class Main(Activity):
 
     def on_touch(self, e):
         return
-        print("Touch event")
-        p = lv.indev_get_act().get_point()
-        x = p.x
-
-        if x < self.SCREEN_WIDTH // 3:
-            self.move(-1)
-        elif x > self.SCREEN_WIDTH * 2 // 3:
-            self.move(1)
-        else:
-            self.rotate()
 
     def on_key(self, event):
         """Handle keyboard input"""

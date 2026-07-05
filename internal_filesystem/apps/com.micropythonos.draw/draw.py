@@ -42,22 +42,6 @@ class Draw(Activity):
                 #self.draw_line(x,y)
                 return
 
-    def draw_line(self, x, y):
-        dsc = lv.draw_line_dsc_t()
-        lv.draw_line_dsc_t.init(dsc)
-        dsc.color = DARKPINK
-        dsc.width = 4
-        dsc.round_end = 1
-        dsc.round_start = 1
-        dsc.p1 = lv.point_precise_t()
-        dsc.p1.x = x
-        dsc.p1.y = y
-        dsc.p2 = lv.point_precise_t()
-        dsc.p2.x = 100
-        dsc.p2.y = 200
-        lv.draw_line(self.layer,dsc)
-        self.canvas.finish_layer(self.layer)
-
     @micropython.native
     def draw_rect(self, x: int, y: int):
         draw_dsc = lv.draw_rect_dsc_t()

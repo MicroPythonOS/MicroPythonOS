@@ -351,30 +351,5 @@ class Breakout(Activity):
         breakout.set_score(self.score)
         breakout.set_lives(self.lives)
 
-    average_samples = 20
-    fps_buffer = [0.0] * average_samples
-    fps_index = 0
-    fps_sum = 0.0
-    fps_count = 0
-
-    def moving_average(self, value):
-        if self.fps_count == self.average_samples:
-            self.fps_sum -= self.fps_buffer[self.fps_index]
-        else:
-            self.fps_count += 1
-        self.fps_sum += value
-        self.fps_buffer[self.fps_index] = value
-        self.fps_index = (self.fps_index + 1) % self.average_samples
-        return self.fps_sum / self.fps_count
-
-    # Custom log callback to capture FPS
     def log_callback(self, level, log_str):
-        log_str = log_str.decode() if isinstance(log_str, bytes) else log_str
-        if "sysmon:" in log_str and "FPS" in log_str:
-            try:
-                fps_part = log_str.split("FPS")[0].split("sysmon:")[1].strip()
-                self.last_fps = int(fps_part)
-                self.average_fps = self.moving_average(self.last_fps)
-                print("Current FPS: %d - Average FPS: %d" % (self.last_fps, self.average_fps))
-            except (IndexError, ValueError):
-                pass
+        pass
