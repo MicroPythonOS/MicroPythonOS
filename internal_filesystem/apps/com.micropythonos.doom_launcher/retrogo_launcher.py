@@ -1,6 +1,10 @@
+import logging
 import lvgl as lv
 import os
 from mpos import Activity, Intent, SettingsActivity, SharedPreferences, TaskManager, sdcard
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def compute_file_crc32(file_path):
@@ -108,11 +112,11 @@ class RetroGoLauncher(Activity):
         self.bootfile_prefix = ""
         mounted_sdcard = sdcard.mount_with_optional_format(self.mountpoint_sdcard)
         if mounted_sdcard:
-            print("sdcard is mounted, configuring it...")
+            logger.info("sdcard is mounted, configuring it...")
             self.bootfile_prefix = self.mountpoint_sdcard
         self.bootfile_to_write = self.bootfile_prefix + self.bootfile
         self.romartbase = self.bootfile_prefix + self.romartdir
-        print(f"writing to {self.bootfile_to_write}")
+        if __debug__: logger.debug("writing to %s", self.bootfile_to_write)
 
         self.refresh_file_list()
 
@@ -142,13 +146,13 @@ class RetroGoLauncher(Activity):
             except OSError:
                 pass
             except Exception as e:
-                print(f"Error scanning directory {directory}: {e}")
+                logger.warning("Error scanning directory %s: %s", directory, e)
         except Exception as e:
-            print(f"Error scanning directory {directory}: {e}")
+            logger.warning("Error scanning directory %s: %s", directory, e)
 
         subdirs.sort()
         matching_files.sort()
-        print(f"Found {len(matching_files)} files in {directory}: {matching_files}")
+        if __debug__: logger.debug("Found %d files in %s: %s", len(matching_files), directory, matching_files)
         return subdirs, matching_files
 
     def _try_romart(self, path):
@@ -178,9 +182,11 @@ class RetroGoLauncher(Activity):
         path = f"{self.romartbase}/{self.roms_subdir}/{lookup_name}.png"
         result = self._try_romart(path)
         if result:
+            if __debug__: logger.debug("romart (name) found for %s: %s", filename, result)
             return result
 
         if is_dir:
+            if __debug__: logger.debug("romart not found for dir %s", filename)
             return None
 
         crc = None
@@ -195,8 +201,10 @@ class RetroGoLauncher(Activity):
             crc_path = f"{self.romartbase}/{self.roms_subdir}/{crc_hex[0]}/{crc_hex}.png"
             result = self._try_romart(crc_path)
             if result:
+                if __debug__: logger.debug("romart (CRC32) found for %s: %s", filename, result)
                 return result
 
+        if __debug__: logger.debug("romart not found for %s", filename)
         return None
 
     def refresh_file_list(self):
@@ -243,17 +251,17 @@ class RetroGoLauncher(Activity):
             current_full_dir += "/" + self.current_subdir
 
         self.status_label.set_text(f"Listing: {current_full_dir}")
-        print(f"refresh_file_list: Clearing current list (dir={self.current_subdir})")
+        if __debug__: logger.debug("refresh_file_list: Clearing current list (dir=%s)", self.current_subdir)
         self.wadlist.clean()
 
         subdirs, all_files = self.scan_entries(current_full_dir)
 
         if not subdirs and not all_files:
             self.status_label.set_text(f"No files found in {current_full_dir}")
-            print("No files found")
+            if __debug__: logger.debug("No files found")
             return
 
-        print(f"refresh_file_list: {len(subdirs)} dirs, {len(all_files)} files")
+        if __debug__: logger.debug("refresh_file_list: %d dirs, %d files", len(subdirs), len(all_files))
 
         button = self.wadlist.add_button(None, "< Back")
         button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
@@ -334,7 +342,7 @@ class RetroGoLauncher(Activity):
         try:
             os.mkdir(dirname)
         except Exception as e:
-            print(f"Info: could not create directory {dirname} because: {e}")
+            logger.info("could not create directory %s because: %s", dirname, e)
 
     def _launch_game(self, gamefile):
         if self._launching:
@@ -368,7 +376,7 @@ class RetroGoLauncher(Activity):
                 "BootSlot": -1,
                 "BootFlags": 0
             }
-            print(f"Writing boot config: {bootconfig}")
+            if __debug__: logger.debug("Writing boot config: %s", bootconfig)
             json.dump(bootconfig, fd)
             fd.close()
         except Exception as e:
@@ -391,13 +399,13 @@ class RetroGoLauncher(Activity):
         try:
             partition.set_boot()
         except Exception as e:
-            print(f"ERROR: could not set partition {partition} as boot, it probably doesn't contain a valid program: {e}")
+            logger.error("could not set partition %s as boot, it probably doesn't contain a valid program: %s", partition, e)
 
         try:
             import vfs
             vfs.umount("/")
         except Exception as e:
-            print(f"Warning: could not unmount internal filesystem from /: {e}")
+            logger.warning("could not unmount internal filesystem from /: %s", e)
 
         '''
         # This is no longer needed but leave it here just in case:
@@ -434,4 +442,4 @@ class RetroGoLauncher(Activity):
             import machine
             machine.reset()
         except Exception as e:
-            print(f"Warning: could not restart machine: {e}")
+            logger.warning("could not restart machine: %s", e)
