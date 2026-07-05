@@ -158,7 +158,7 @@ class RetroGoLauncher(Activity):
     def _try_romart(self, path):
         try:
             os.stat(path)
-            return path
+            return f"M:{path}"
         except OSError:
             return None
 

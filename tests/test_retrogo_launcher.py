@@ -46,19 +46,19 @@ class TestFindRomart(unittest.TestCase):
         path = self.launcher._find_romart(
             f"{FIXTURES}/roms/gbc/Columns_DX.zip", "Columns_DX.zip"
         )
-        self.assertEqual(path, f"{FIXTURES}/romart/gbc/Columns_DX.png")
+        self.assertEqual(path, f"M:{FIXTURES}/romart/gbc/Columns_DX.png")
 
     def test_crc32_fallback_from_zip_no_name_match(self):
         path = self.launcher._find_romart(
             f"{FIXTURES}/roms/gbc/NoArtMatch.zip", "NoArtMatch.zip"
         )
-        self.assertEqual(path, f"{FIXTURES}/romart/gbc/9/90E9E751.png")
+        self.assertEqual(path, f"M:{FIXTURES}/romart/gbc/9/90E9E751.png")
 
     def test_crc32_fallback_from_raw_file(self):
         path = self.launcher._find_romart(
             f"{FIXTURES}/roms/gbc/Street_Racer.gbc", "Street_Racer.gbc"
         )
-        self.assertEqual(path, f"{FIXTURES}/romart/gbc/9/9AAAC765.png")
+        self.assertEqual(path, f"M:{FIXTURES}/romart/gbc/9/9AAAC765.png")
 
     def test_returns_none_when_no_match(self):
         path = self.launcher._find_romart(
@@ -68,11 +68,11 @@ class TestFindRomart(unittest.TestCase):
 
     def test_romart_for_console(self):
         path = self.launcher._romart_for_console("gb")
-        self.assertEqual(path, f"{FIXTURES}/romart/gb.png")
+        self.assertEqual(path, f"M:{FIXTURES}/romart/gb.png")
 
     def test_romart_for_dir(self):
         path = self.launcher._romart_for_dir("homebrew")
-        self.assertEqual(path, f"{FIXTURES}/romart/gbc/homebrew.png")
+        self.assertEqual(path, f"M:{FIXTURES}/romart/gbc/homebrew.png")
 
     def test_romart_for_console_nonexistent(self):
         path = self.launcher._romart_for_console("nonexistent")
