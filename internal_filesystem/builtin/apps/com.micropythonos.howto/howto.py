@@ -4,7 +4,6 @@ from mpos import Activity, SharedPreferences, DisplayMetrics, add_focus_border
 import lvgl as lv
 
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.DEBUG)
 
 class HowTo(Activity):
 

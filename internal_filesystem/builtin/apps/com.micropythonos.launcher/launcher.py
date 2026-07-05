@@ -6,7 +6,6 @@ import time
 from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics, add_focus_border
 
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.DEBUG)
 
 # Potential settings menu:
 # - background image

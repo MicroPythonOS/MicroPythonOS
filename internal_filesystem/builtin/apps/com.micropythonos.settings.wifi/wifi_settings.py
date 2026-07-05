@@ -41,7 +41,6 @@ class WiFiSettings(Activity):
         self.error_label = lv.label(main_screen)
         self.error_label.set_text("THIS IS ERROR TEXT THAT WILL BE SET LATER")
         self.error_label.align_to(self.aplist, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 0)
-        #self.error_label.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
         self.error_label.add_flag(lv.obj.FLAG.HIDDEN)
         self.add_network_button = lv.button(main_screen)
         self.add_network_button.set_size(lv.SIZE_CONTENT, lv.pct(15))

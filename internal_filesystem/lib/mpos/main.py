@@ -170,18 +170,6 @@ def detect_board():
         return "linux"
     elif sys.platform == "esp32":
 
-        '''
-        # Reading and storing all pinstates can be useful for board detection
-        # But reading some pins can break peripherals
-        # So it's disabled by default - it's more for development
-        try:
-            import mpos
-            from mpos.board import pinstates
-            mpos.pinstates = pinstates.read_all_pins(skiplist = [7,8])
-        except Exception as e:
-            pass
-        '''
-
         # First do unique_id-based board detections because they're fast and don't mess with actual hardware configurations
         import machine
         unique_id_prefixes = machine.unique_id()[0:3]

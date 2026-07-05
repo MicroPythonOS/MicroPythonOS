@@ -65,9 +65,6 @@ class About(Activity):
         self._add_label(screen, f"micropython.opt_level(): {micropython.opt_level()}")
         import gc
         self._add_label(screen, f"Memory: {gc.mem_free()} free, {gc.mem_alloc()} allocated, {gc.mem_alloc()+gc.mem_free()} total")
-        # These are always written to sys.stdout
-        #self._add_label(screen, f"micropython.mem_info(): {micropython.mem_info()}")
-        #self._add_label(screen, f"micropython.qstr_info(): {micropython.qstr_info()}")
         self._add_label(screen, f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
 
         # ESP32 hardware info
