@@ -5,6 +5,7 @@ Put unreleased changes here!
 
 Builtin Apps:
 - AppStore: improve responsiveness by delaying download of icons in list view
+- New MPOS-AppLogos icons by @QuasiKili
 
 Frameworks:
 - MposKeyboard: don't show NEWLINE button when the linked textarea is set_one_line(True)
