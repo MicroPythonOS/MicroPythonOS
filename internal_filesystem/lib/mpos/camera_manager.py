@@ -15,7 +15,7 @@ Example usage:
 
     # In app:
     cam_list = CameraManager.get_cameras()
-    if len(cam_list) > 0:
+    if cam_list:
         if __debug__: logger.debug("we have a camera!")
 
 MIT License

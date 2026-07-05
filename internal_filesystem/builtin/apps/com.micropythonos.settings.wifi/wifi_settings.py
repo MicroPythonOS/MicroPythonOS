@@ -357,7 +357,7 @@ class EditNetwork(Activity):
                 self.selected_ssid = new_ssid
         # If a password is filled, then it should be at least 8 characters:
         pwd = self.password_ta.get_text()
-        if len(pwd) > 0 and len(pwd) < 8:
+        if pwd and len(pwd) < 8:
             self.password_ta.set_style_bg_color(lv.color_hex(0xff8080), lv.PART.MAIN)
             return
 
