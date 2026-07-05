@@ -136,14 +136,7 @@ class ImageView(Activity):
             self.stop_fullscreen()
 
     def _is_image_file(self, filename):
-        lowercase = filename.lower()
-        return (
-            lowercase.endswith(".jpg")
-            or lowercase.endswith(".jpeg")
-            or lowercase.endswith(".png")
-            or lowercase.endswith(".raw")
-            or lowercase.endswith(".bmp")
-        )
+        return filename.lower().endswith((".jpg", ".jpeg", ".png", ".raw", ".bmp"))
 
     def _collect_images_from_dir(self, path):
         images = []
