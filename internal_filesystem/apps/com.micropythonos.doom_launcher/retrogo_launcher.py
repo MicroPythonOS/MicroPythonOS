@@ -3,6 +3,21 @@ import os
 from mpos import Activity, Intent, SettingsActivity, SharedPreferences, TaskManager, sdcard
 
 
+def compute_file_crc32(file_path):
+    import binascii
+    crc = 0
+    try:
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(512)
+                if not chunk:
+                    break
+                crc = binascii.crc32(chunk, crc)
+    except OSError:
+        return None
+    return crc
+
+
 class StartingActivity(Activity):
 
     def onCreate(self):
@@ -49,7 +64,8 @@ class RetroGoLauncher(Activity):
         self.game_name = extras.get("game_name", "Game")
         self.file_extensions = extras.get("file_extensions", (".wad", ".zip"))
 
-        self.romdir = "/roms"
+        self.romdir = "roms"
+        self.romartdir = "romart"
         self.retrogodir = "/retro-go"
         self.configdir = self.retrogodir + "/config"
         self.bootfile = self.configdir + "/boot.json"
@@ -95,6 +111,7 @@ class RetroGoLauncher(Activity):
             print("sdcard is mounted, configuring it...")
             self.bootfile_prefix = self.mountpoint_sdcard
         self.bootfile_to_write = self.bootfile_prefix + self.bootfile
+        self.romartbase = self.bootfile_prefix + self.romartdir
         print(f"writing to {self.bootfile_to_write}")
 
         self.refresh_file_list()
@@ -134,6 +151,54 @@ class RetroGoLauncher(Activity):
         print(f"Found {len(matching_files)} files in {directory}: {matching_files}")
         return subdirs, matching_files
 
+    def _try_romart(self, path):
+        try:
+            os.stat(path)
+            return path
+        except OSError:
+            return None
+
+    def _romart_for_console(self, dirname):
+        return self._try_romart(f"{self.romartbase}/{dirname}.png")
+
+    def _romart_for_dir(self, dirname):
+        if not self.roms_subdir:
+            return None
+        return self._try_romart(f"{self.romartbase}/{self.roms_subdir}/{dirname}.png")
+
+    def _find_romart(self, fullpath, filename, is_dir=False):
+        """Find romart PNG for a game file or directory. Returns path or None."""
+        if not self.roms_subdir:
+            return None
+
+        lookup_name = filename
+        if not is_dir and lookup_name.lower().endswith(".zip"):
+            lookup_name = lookup_name[:-4]
+
+        path = f"{self.romartbase}/{self.roms_subdir}/{lookup_name}.png"
+        result = self._try_romart(path)
+        if result:
+            return result
+
+        if is_dir:
+            return None
+
+        crc = None
+        if filename.lower().endswith(".zip"):
+            from mpos.content.streaming_unzip import get_zip_crc32
+            crc = get_zip_crc32(fullpath)
+        else:
+            crc = compute_file_crc32(fullpath)
+
+        if crc is not None:
+            crc_hex = f"{crc & 0xFFFFFFFF:08X}"
+            crc_path = f"{self.romartbase}/{self.roms_subdir}/{crc_hex[0]}/{crc_hex}.png"
+            result = self._try_romart(crc_path)
+            if result:
+                return result
+
+        return None
+
     def refresh_file_list(self):
         if self._at_root_level:
             current_full_dir = self.bootfile_prefix + self.romdir
@@ -168,7 +233,8 @@ class RetroGoLauncher(Activity):
                 return
 
             for d in subdirs:
-                button = self.wadlist.add_button(None, lv.SYMBOL.DIRECTORY + "  " + d)
+                romart = self._romart_for_console(d)
+                button = self.wadlist.add_button(romart, lv.SYMBOL.DIRECTORY + "  " + d)
                 button.add_event_cb(lambda e, dirname=d: self.select_rom_subdir(dirname), lv.EVENT.CLICKED, None)
             return
 
@@ -193,13 +259,16 @@ class RetroGoLauncher(Activity):
         button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
 
         for d in subdirs:
-            button = self.wadlist.add_button(None, d + "/")
+            romart = self._romart_for_dir(d)
+            button = self.wadlist.add_button(romart, d + "/")
             button.add_event_cb(lambda e, dirname=d: self.navigate_into(dirname), lv.EVENT.CLICKED, None)
 
         for f in all_files:
             gamedir = self.romdir + "/" + self.roms_subdir
             fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
-            button = self.wadlist.add_button(None, f)
+            diskpath = self.bootfile_prefix + fullpath
+            romart = self._find_romart(diskpath, f)
+            button = self.wadlist.add_button(romart, f)
             button.add_event_cb(
                 lambda e, p=fullpath: self._launch_game(p),
                 lv.EVENT.CLICKED, None

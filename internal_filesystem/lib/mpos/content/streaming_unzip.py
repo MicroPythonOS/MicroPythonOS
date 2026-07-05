@@ -444,3 +444,21 @@ def _run_free_space_check(limit_or_callable, required_bytes):
             "Not enough free space (limit: %d bytes, needed: %d bytes)"
             % (limit_or_callable, required_bytes)
         )
+
+
+def get_zip_crc32(zip_path):
+    """Return CRC32 of the first file entry in a ZIP archive, or None."""
+    try:
+        with open(zip_path, "rb") as f:
+            header = f.read(_LOCAL_HEADER_SIZE)
+    except OSError:
+        return None
+    if len(header) < _LOCAL_HEADER_SIZE:
+        return None
+    try:
+        fields = struct.unpack(_LOCAL_HEADER_STRUCT, header)
+    except Exception:
+        return None
+    if fields[0] != _LOCAL_HEADER_MAGIC:
+        return None
+    return fields[_FH_CRC]
