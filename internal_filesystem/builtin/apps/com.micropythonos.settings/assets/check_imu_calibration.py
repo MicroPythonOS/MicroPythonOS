@@ -213,7 +213,7 @@ class CheckIMUCalibrationActivity(Activity):
             self.issues_label.set_text(issues_text)
 
             self.status_label.set_text("Real-time monitoring (place on flat surface)")
-        except Exception as e:
+        except Exception:
             # If widgets were deleted (activity closed), stop updating silently
             self.updating = False
 

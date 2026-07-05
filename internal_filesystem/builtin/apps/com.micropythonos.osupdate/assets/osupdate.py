@@ -20,7 +20,6 @@ class OSUpdate(Activity):
 
     def __init__(self):
         super().__init__()
-        self._download_in_progress = False
         self._um = None
 
     def _ensure_update_manager(self):
@@ -162,7 +161,6 @@ class OSUpdate(Activity):
         if __debug__: logger.debug("install button click for url %s", url)
 
         self.install_button.add_state(lv.STATE.DISABLED)
-        self._download_in_progress = True
 
         self.progress_label = lv.label(self.main_screen)
         self.progress_label.set_text("OS Update: 0.00%")
@@ -225,8 +223,6 @@ class OSUpdate(Activity):
             speed_callback=self.async_speed_callback,
             should_continue_callback=self.has_foreground
         )
-
-        self._download_in_progress = False
 
         if not self.has_foreground():
             return

@@ -21,7 +21,7 @@ class ResetIntoBootloader(Activity):
 
     def onResume(self, screen):
         if __debug__: logger.debug("scheduling bootloader start")
-        timer = lv.timer_create(self.start_bootloader, 1000, None).set_repeat_count(1)
+        lv.timer_create(self.start_bootloader, 1000, None).set_repeat_count(1)
 
     def start_bootloader(self, timer):
         try:

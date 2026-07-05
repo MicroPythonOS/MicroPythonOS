@@ -11,7 +11,6 @@ class HowTo(Activity):
 
     dontshow_checkbox = None
     prefs = None
-    autostart_enabled = None
 
     def onCreate(self):
         screen = lv.obj()

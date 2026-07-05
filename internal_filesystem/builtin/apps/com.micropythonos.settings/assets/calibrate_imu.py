@@ -200,7 +200,6 @@ class CalibrateIMUActivity(Activity):
             self.show_calibration_complete(result_msg)
 
         except Exception as e:
-            import sys
             sys.print_exception(e)
             self.handle_calibration_error(str(e))
 
