@@ -78,7 +78,7 @@ class RetroGoLauncher(Activity):
         self._launching = False
 
         screen = lv.obj()
-        screen.set_style_pad_all(15, lv.PART.MAIN)
+        screen.set_style_pad_all(5, lv.PART.MAIN)
 
         title_label = lv.label(screen)
         title_label.set_text(self.title)
@@ -89,10 +89,9 @@ class RetroGoLauncher(Activity):
         self.wadlist.center()
 
         self.settings_button = lv.button(screen)
-        settings_margin = 15
-        settings_size = 44
+        settings_size = 35
         self.settings_button.set_size(settings_size, settings_size)
-        self.settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
+        self.settings_button.align(lv.ALIGN.TOP_RIGHT, -15, 0)
         self.settings_button.add_event_cb(self.settings_button_tap, lv.EVENT.CLICKED, None)
         settings_label = lv.label(self.settings_button)
         settings_label.set_text(lv.SYMBOL.SETTINGS)
