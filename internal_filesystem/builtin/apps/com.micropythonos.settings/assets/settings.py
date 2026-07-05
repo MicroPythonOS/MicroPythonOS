@@ -121,13 +121,13 @@ class Settings(SettingsActivity):
 
     # Change handlers:
     def reset_into_bootloader(self, new_value):
-        if new_value is not "bootloader":
+        if new_value != "bootloader":
             return
         intent = Intent(activity_class=ResetIntoBootloader)
         self.startActivity(intent)
 
     def format_internal_data_partition(self, new_value):
-        if new_value is not "yes":
+        if new_value != "yes":
             return # user picked "no" - abort
         # Inspired by lvgl_micropython/lib/micropython/ports/esp32/modules/inisetup.py
         # Note: it would be nice to create a "FormatInternalDataPartition" activity with some progress or confirmation

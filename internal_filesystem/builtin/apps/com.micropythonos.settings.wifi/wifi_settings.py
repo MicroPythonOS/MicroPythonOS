@@ -362,7 +362,7 @@ class EditNetwork(Activity):
             return
 
         # Return the result
-        hidden_checked = True if self.hidden_cb.get_state() & lv.STATE.CHECKED else False
+        hidden_checked = bool(self.hidden_cb.get_state() & lv.STATE.CHECKED)
         self.setResult(True, {"ssid": self.selected_ssid, "password": pwd, "hidden": hidden_checked})
         self.finish()
 
@@ -393,9 +393,9 @@ class EditNetwork(Activity):
                 self.ssid_ta.set_text(ssid)
             if password:
                 self.password_ta.set_text(password)
-            if hidden is True:
+            if hidden:
                 self.hidden_cb.set_state(lv.STATE.CHECKED, True)
-            elif hidden is False:
+            else:
                 self.hidden_cb.remove_state(lv.STATE.CHECKED)
 
     @staticmethod
