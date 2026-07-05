@@ -272,11 +272,12 @@ class RetroGoLauncher(Activity):
             button = self.wadlist.add_button(romart, d + "/")
             button.add_event_cb(lambda e, dirname=d: self.navigate_into(dirname), lv.EVENT.CLICKED, None)
 
+        has_romart = len(all_files) <= 12
         for f in all_files:
             gamedir = self.romdir + "/" + self.roms_subdir
             fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
             diskpath = self.bootfile_prefix + fullpath
-            romart = self._find_romart(diskpath, f)
+            romart = self._find_romart(diskpath, f) if has_romart else None
             button = self.wadlist.add_button(romart, f)
             button.add_event_cb(
                 lambda e, p=fullpath: self._launch_game(p),
@@ -373,7 +374,7 @@ class RetroGoLauncher(Activity):
             fd = open(bootfile_to_write, "w")
             bootconfig = {
                 "BootName": self.boot_name,
-                "BootArgs": f"/sd{gamefile}",
+                "BootArgs": f"/sd/{gamefile}",
                 "BootSlot": -1,
                 "BootFlags": 0
             }
