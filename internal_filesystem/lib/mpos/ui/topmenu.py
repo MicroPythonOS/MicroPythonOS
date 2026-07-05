@@ -673,9 +673,9 @@ def drawer_scroll_callback(event):
     event_code=event.get_code()
     x, y = InputManager.pointer_xy()
     #name = mpos.ui.get_event_name(event_code)
-    if event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y == None:
+    if event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y is None:
         scroll_start_y = y
-    elif event_code == lv.EVENT.SCROLL and scroll_start_y != None:
+    elif event_code == lv.EVENT.SCROLL and scroll_start_y is not None:
         diff = y - scroll_start_y
         if diff < -AppearanceManager.NOTIFICATION_BAR_HEIGHT:
             close_drawer()
