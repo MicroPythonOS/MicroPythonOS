@@ -331,7 +331,7 @@ class CameraActivity(Activity):
         if status_label_text in (self.STATUS_NO_CAMERA, self.STATUS_SEARCHING_QR, self.STATUS_FOUND_QR): # if it found a QR code, leave it
             self.status_label_cont.add_flag(lv.obj.FLAG.HIDDEN)
         # Check if it's necessary to restart the camera:
-        if activate_non_qr_mode is False:
+        if not activate_non_qr_mode:
             return
         # Instead of checking if any setting changed, just reload and restart the camera:
         self.load_settings_cached()

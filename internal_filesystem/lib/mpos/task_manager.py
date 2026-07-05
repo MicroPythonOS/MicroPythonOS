@@ -22,7 +22,7 @@ class TaskManager:
 
     @classmethod
     def start(cls):
-        if cls.disabled is True:
+        if cls.disabled:
             logger.warning("Not starting TaskManager because it's been disabled.")
             return
         cls.keep_running = True

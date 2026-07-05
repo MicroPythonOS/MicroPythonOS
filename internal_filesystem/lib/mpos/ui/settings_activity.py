@@ -62,7 +62,7 @@ class SettingsActivity(Activity):
             should_show_function = setting.get("should_show")
             if should_show_function:
                 should_show = should_show_function(setting)
-                if should_show is False:
+                if not should_show:
                     continue
             # Container for each setting
             setting_cont = lv.obj(screen)
