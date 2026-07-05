@@ -191,6 +191,7 @@ with MPOSController(backend='process') as mpos:
 
 ### Specific app tips
 - The app internal_filesystem/apps/com_micropythonos_nostr and the app internal_filessytem/apps/com.lightningpiggy.displaywallet (symlinked) use the same copy of nostr_service.py so when you update it, make sure to also update the other copy of that file and make sure it doesn't break the other app either.
+- Some apps in internal_filesystem/apps/ are symlinks to outside repo's like all the com.quasikili.* apps and com.lightningpiggy.displaywallet so be sure to follow symlinks when grepping and finding etc
 
 ## Documentation
 

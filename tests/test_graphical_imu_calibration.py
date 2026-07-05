@@ -27,8 +27,8 @@ class TestIMUCalibration(unittest.TestCase):
 
     def _start_activity_from_settings_assets(self, filename, classname):
         app_fullname = "com.micropythonos.settings"
-        entrypoint = f"builtin/apps/{app_fullname}/assets/{filename}"
-        cwd = f"builtin/apps/{app_fullname}/assets/"
+        entrypoint = f"builtin/apps/{app_fullname}/{filename}"
+        cwd = f"builtin/apps/{app_fullname}/"
         result = AppManager.execute_script(entrypoint, classname, cwd, app_fullname=app_fullname)
         self.assertTrue(result, f"Failed to start {classname} from {entrypoint}")
 

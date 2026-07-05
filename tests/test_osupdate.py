@@ -46,7 +46,7 @@ class MockPartition:
 
 
 # Import the actual classes we're testing
-# Tests run from internal_filesystem/, so we add the assets directory to path
+# Tests run from internal_filesystem/, so we add the app directory to path
 sys.path.append('builtin/apps/com.micropythonos.osupdate')
 from osupdate_core import UpdateChecker, UpdateDownloader, round_up_to_multiple, UpdateState, _get_version_comparison, format_set_boot_error
 
