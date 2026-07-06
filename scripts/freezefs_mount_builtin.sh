@@ -25,8 +25,14 @@ tempdir=$(mktemp -d)
 
 if [ -n "$march" ]; then
 	"$mydir"/compile_dir.sh -march "$march" "$builtindir" "$tempdir"
+	result=$?
 else
 	"$mydir"/compile_dir.sh "$builtindir" "$tempdir"
+	result=$?
+fi
+if [ $result -ne 0 ]; then
+	echo "aborting because compile_dir.sh failed"
+	exit 1
 fi
 
 pushd "$mydir"/../freezeFS/

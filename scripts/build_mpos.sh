@@ -210,7 +210,11 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 else
 	builtin_march="host"
 fi
-"$codebasedir"/scripts/freezefs_mount_builtin.sh -march "$builtin_march"
+"$codebasedir"/scripts/freezefs_mount_builtin.sh -march $builtin_march
+if [ $? -ne 0 ]; then
+	echo "scripts/freezefs_mount_builtin.sh -march $builtin_march failed, aborting!"
+	exit 1
+fi
 
 # If this is not a web build, make sure no web-port-only modifications are
 # still present in the lvgl_micropython submodule from a previous web build.
