@@ -569,15 +569,15 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
 
     def test_prefers_main_executable(self):
         """The file named in app_metadata.application.executable wins."""
-        from app_detail import AppDetail
+        from appstore_core import _extract_main_executable, _find_download_file
 
         files = self._make_files()
         app_metadata = {
             "version": "0.6.0",
             "application": [{"executable": "com.lightningpiggy.displaywallet_0.2.6.mpk"}],
         }
-        main_executable = AppDetail._extract_main_executable(app_metadata)
-        chosen = AppDetail._find_download_file(
+        main_executable = _extract_main_executable(app_metadata)
+        chosen = _find_download_file(
             files,
             [".mpk", ".zip"],
             app_version=app_metadata["version"],
@@ -588,10 +588,10 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
 
     def test_prefers_version_match_when_no_main_executable(self):
         """When no main executable is set, the .mpk matching the version is chosen."""
-        from app_detail import AppDetail
+        from appstore_core import _find_download_file
 
         files = self._make_files()
-        chosen = AppDetail._find_download_file(
+        chosen = _find_download_file(
             files,
             [".mpk", ".zip"],
             app_version="0.6.0",
@@ -602,26 +602,26 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
 
     def test_extract_main_executable_variants(self):
         """Main executable can live in app_metadata.application (list or dict) or top-level."""
-        from app_detail import AppDetail
+        from appstore_core import _extract_main_executable
 
         self.assertEqual(
-            AppDetail._extract_main_executable({
+            _extract_main_executable({
                 "application": [{"executable": "a.mpk"}],
             }),
             "a.mpk",
         )
         self.assertEqual(
-            AppDetail._extract_main_executable({
+            _extract_main_executable({
                 "application": {"executable": "b.mpk"},
             }),
             "b.mpk",
         )
         self.assertEqual(
-            AppDetail._extract_main_executable({"executable": "c.mpk"}),
+            _extract_main_executable({"executable": "c.mpk"}),
             "c.mpk",
         )
-        self.assertIsNone(AppDetail._extract_main_executable({}))
-        self.assertIsNone(AppDetail._extract_main_executable(None))
+        self.assertIsNone(_extract_main_executable({}))
+        self.assertIsNone(_extract_main_executable(None))
 
     def test_fetch_badgehub_details_selects_version_matched_mpk(self):
         """Integration: real BadgeHub fixture shape with one .mpk chooses the right file."""
