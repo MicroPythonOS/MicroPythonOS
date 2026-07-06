@@ -67,15 +67,21 @@ class Breakout(Activity):
 
         self.leftbutton = lv.button(self.screen)
         self.leftbutton.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
-        leftlabel = lv.label(self.leftbutton)
-        leftlabel.set_text("<")
-        self.leftbutton.add_event_cb(lambda e: self.move_left(), lv.EVENT.CLICKED, None)
+        self.leftbutton.set_size(1,1)
+        self.leftbutton.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+        self.leftbutton.add_event_cb(lambda e: self.move_left(), lv.EVENT.FOCUSED, None)
+
+        # Invisible button, just for defocusing the left and right buttons:
+        self.defocus_button = lv.button(self.screen)
+        self.defocus_button.align(lv.ALIGN.BOTTOM_MID,0,0)
+        self.defocus_button.set_size(1,1)
+        self.defocus_button.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
         self.rightbutton = lv.button(self.screen)
         self.rightbutton.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
-        rightlabel = lv.label(self.rightbutton)
-        rightlabel.set_text(">")
-        self.rightbutton.add_event_cb(lambda e: self.move_right(), lv.EVENT.CLICKED, None)
+        self.rightbutton.set_size(1,1)
+        self.rightbutton.set_style_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+        self.rightbutton.add_event_cb(lambda e: self.move_right(), lv.EVENT.FOCUSED, None)
 
         self.setContentView(self.screen)
 
@@ -163,10 +169,12 @@ class Breakout(Activity):
 
     def move_left(self):
         if not breakout.is_game_over():
+            lv.group_focus_obj(self.defocus_button)
             breakout.move_paddle(-self.paddle_move_step)
 
     def move_right(self):
         if not breakout.is_game_over():
+            lv.group_focus_obj(self.defocus_button)
             breakout.move_paddle(self.paddle_move_step)
 
     def flush_ready_cb(self, arg1=None, arg2=None):
