@@ -312,8 +312,7 @@ class RetroGoLauncher(Activity):
             self.current_subdir = "/".join(parts)
             self.refresh_file_list()
         elif not self._at_root_level:
-            self._at_root_level = True
-            self.refresh_file_list()
+            self.finish()
 
     def select_rom_subdir(self, dirname):
         self._at_root_level = False
