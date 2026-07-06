@@ -2,6 +2,8 @@ from mpos import Activity, Intent
 from retrogo_launcher import RetroGoLauncher
 import lvgl as lv
 
+_ASSET = "M:apps/com.micropythonos.retrocore_launcher/"
+
 
 class RetroCoreLauncher(Activity):
     def onCreate(self):
@@ -17,7 +19,7 @@ class RetroCoreLauncher(Activity):
         button_list.center()
 
         nes_btn = button_list.add_button(
-            None, "NES"
+            _ASSET + "console_nes.png", "NES"
         )
         nes_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -31,7 +33,7 @@ class RetroCoreLauncher(Activity):
         )
 
         gb_btn = button_list.add_button(
-            None, "Gameboy"
+            _ASSET + "console_gb.png", "Gameboy"
         )
         gb_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -45,7 +47,7 @@ class RetroCoreLauncher(Activity):
         )
 
         gbc_btn = button_list.add_button(
-            None, "Gameboy Color"
+            _ASSET + "console_gbc.png", "Gameboy Color"
         )
         gbc_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -59,7 +61,7 @@ class RetroCoreLauncher(Activity):
         )
 
         sms_btn = button_list.add_button(
-            None, "Sega Master System"
+            _ASSET + "console_sms.png", "Sega Master System"
         )
         sms_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -73,7 +75,7 @@ class RetroCoreLauncher(Activity):
         )
 
         gg_btn = button_list.add_button(
-            None, "Sega Game Gear"
+            _ASSET + "console_gg.png", "Sega Game Gear"
         )
         gg_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -87,7 +89,7 @@ class RetroCoreLauncher(Activity):
         )
 
         col_btn = button_list.add_button(
-            None, "ColecoVision"
+            _ASSET + "console_col.png", "ColecoVision"
         )
         col_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -101,7 +103,7 @@ class RetroCoreLauncher(Activity):
         )
 
         pce_btn = button_list.add_button(
-            None, "PC Engine"
+            _ASSET + "console_pce.png", "PC Engine"
         )
         pce_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -115,7 +117,7 @@ class RetroCoreLauncher(Activity):
         )
 
         lnx_btn = button_list.add_button(
-            None, "Atari Lynx"
+            _ASSET + "console_lnx.png", "Atari Lynx"
         )
         lnx_btn.add_event_cb(
             lambda e: self.launch_retrogo(
@@ -129,7 +131,7 @@ class RetroCoreLauncher(Activity):
         )
 
         gw_btn = button_list.add_button(
-            None, "Game & Watch"
+            _ASSET + "console_gw.png", "Game & Watch"
         )
         gw_btn.add_event_cb(
             lambda e: self.launch_retrogo(
