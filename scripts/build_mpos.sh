@@ -213,9 +213,16 @@ echo "Refreshing freezefs..."
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
 	builtin_march="xtensawin"
 else
-	builtin_march="host"
+	case "$(uname -m)" in
+		x86_64|i686|i386|armv6l|riscv64) builtin_march="host" ;;
+		*) builtin_march="" ;;
+	esac
 fi
-"$codebasedir"/scripts/freezefs_mount_builtin.sh -march $builtin_march
+if [ -n "$builtin_march" ]; then
+	"$codebasedir"/scripts/freezefs_mount_builtin.sh -march $builtin_march
+else
+	"$codebasedir"/scripts/freezefs_mount_builtin.sh
+fi
 if [ $? -ne 0 ]; then
 	echo "scripts/freezefs_mount_builtin.sh -march $builtin_march failed, aborting!"
 	exit 1

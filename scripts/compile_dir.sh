@@ -21,11 +21,11 @@ esac
 done
 
 if [ -z "$march" ]; then
-	march="host"
 	echo ""
 	echo "************************************************************************"
-	echo "WARNING: $0 defaulting to -march=$march."
-	echo "         Pass -march <arch> when cross-compiling for embedded boards."
+	echo "NOTE: $0 running without -march (bytecode only, no native emitter)."
+	echo "      Pass -march <arch> when cross-compiling for embedded boards"
+	echo "      or -march host for native desktop performance."
 	echo "************************************************************************"
 	echo ""
 fi
@@ -50,8 +50,13 @@ find -L "$outdir" -iname "*.py" | while read pyfile; do
 		echo "Symlinking $newname to $newtarget"
 		ln -s "$newtarget" "$newname"
 	else
-		echo "Compiling $pyfile with -march=$march"
-		"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -O3 -march="$march" "$pyfile"
+		if [ -n "$march" ]; then
+			echo "Compiling $pyfile with -march=$march"
+			"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -O3 -march="$march" "$pyfile"
+		else
+			echo "Compiling $pyfile (bytecode only)"
+			"$mydir"/../lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross -s "" -O3 "$pyfile"
+		fi
 		result=$?
 		if [ $result -ne 0 ]; then
 			echo "error: $result"
