@@ -182,9 +182,22 @@ class AppStore(Activity):
         for app_data in updatable_app_data_list:
             fullname = app_data.get("fullname")
             download_url = app_data.get("download_url")
-            if not fullname or not download_url:
-                if __debug__: logger.debug("skipping update for %s (missing fullname/download_url)", app_data)
+            if not fullname:
+                if __debug__: logger.debug("skipping update for %s (missing fullname)", app_data)
                 continue
+            if not download_url:
+                from appstore_core import fetch_badgehub_project_details
+                base_url = AppStore._BADGEHUB_PROD_BASE_URL
+                details_url = base_url + "/projects/" + fullname
+                self.update_all_label.set_text(f"Checking {app_data.get('name', fullname)}...")
+                details = await fetch_badgehub_project_details(details_url)
+                download_url = details.get("download_url")
+                if not download_url:
+                    logger.warning("no download URL for %s", fullname)
+                    app_data["download_url"] = None
+                    continue
+                app_data["download_url"] = download_url
+                app_data["download_url_size"] = details.get("download_url_size")
 
             self.update_all_label.set_text(f"Updating {app_data.get('name', fullname)}...")
             try:

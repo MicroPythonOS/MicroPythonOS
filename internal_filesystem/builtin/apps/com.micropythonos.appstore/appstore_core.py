@@ -149,10 +149,6 @@ class AppUpdateManager:
     NOTIFICATION_ID = "appstore.updates_available"
     ICON_PATH = "M:builtin/apps/com.micropythonos.appstore/icon_64x64.png"
 
-    _BADGEHUB_PROD_BASE_URL = "https://badgehub.eu/api/v3"
-    _GITHUB_PROD_BASE_URL = "https://apps.micropythonos.com"
-    _GITHUB_LIST = "/app_index.json"
-
     _PREF_KEY_BACKEND = "backend"
 
     @classmethod
@@ -324,14 +320,6 @@ class AppUpdateManager:
                             updatable.append(app_data)
                 except Exception as e:
                     logger.error("error checking %s: %s", app_data, e)
-
-            if backend_type == "badgehub":
-                for item in updatable:
-                    slug = item["fullname"]
-                    details_url = self._BADGEHUB_PROD_BASE_URL + "/projects/" + slug
-                    details = await fetch_badgehub_project_details(details_url)
-                    item["download_url"] = details.get("download_url")
-                    item["download_url_size"] = details.get("download_url_size")
 
             self.updatable_apps = updatable
 
