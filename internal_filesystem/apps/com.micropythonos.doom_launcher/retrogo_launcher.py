@@ -278,7 +278,7 @@ class RetroGoLauncher(Activity):
 
         if __debug__: logger.debug("refresh_file_list: %d dirs, %d files", len(subdirs), len(all_files))
 
-        button = self.wadlist.add_button(None, "< Back")
+        button = self.wadlist.add_button(None, lv.SYMBOL.LEFT + "  Back")
         button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
 
         for d in subdirs:
