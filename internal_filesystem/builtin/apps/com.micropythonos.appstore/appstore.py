@@ -469,7 +469,7 @@ class AppStore(Activity):
         buf = bytearray(size * size * 2)
         cell = size // 8
         for row in range(8):
-            b = bits[row]
+            b = int(bits[row])
             for col in range(8):
                 color = fg if (b & (1 << col)) else bg
                 low = color & 0xFF
