@@ -11,7 +11,7 @@ try:
 except ImportError:
     pass
 
-from mpos import Activity, DownloadManager
+from mpos import Activity, DownloadManager, TaskManager
 
 import ujson
 import utime
@@ -141,7 +141,7 @@ class Weather:
         self.daily = []
         self.summary = "(no weather)"
 
-    def fetch(self):
+    async def fetch(self):
         self.summary = "...fetching..."
 
         # See https://open-meteo.com/en/docs?forecast_days=1&current=relative_humidity_2m
@@ -159,7 +159,7 @@ class Weather:
         ).format(self.lat, self.lon)
 
         print("Weather fetch: ", path)
-        data = DownloadManager.download_url("https://"+host+path)
+        data = await DownloadManager.download_url("https://" + host + path)
         if not data:
             self.summary = "Download error"
             return
@@ -253,6 +253,7 @@ weather = Weather()
 class Main(Activity):
     def __init__(self):
         self.last_hour = 0
+        self.load_task = None
         super().__init__()
 
      # --------------------
@@ -307,6 +308,9 @@ class Main(Activity):
         if self.timer:
             self.timer.delete()
             self.timer = None
+        if self.load_task and not self.load_task.done():
+            self.load_task.cancel()
+            self.load_task = None
 
     # --------------------
 
@@ -323,8 +327,19 @@ class Main(Activity):
         self.label_summary.set_text(weather.summary)
 
     def do_load(self):
+        if self.load_task and not self.load_task.done():
+            return
         self.label_summary.set_text("Requesting...")
-        weather.fetch()
+        self.load_task = TaskManager.create_task(self.do_load_async())
+
+    async def do_load_async(self):
+        try:
+            await weather.fetch()
+        except Exception as e:
+            print("Weather fetch failed:", e)
+            self.label_summary.set_text("Download error")
+            return
+        self.label_summary.set_text(weather.summary)
         
     # --------------------
 
