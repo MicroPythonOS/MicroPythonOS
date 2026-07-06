@@ -41,6 +41,7 @@ class TestFindRomart(unittest.TestCase):
         self.launcher.roms_subdir = "gbc"
         self.launcher.bootfile_prefix = FIXTURES
         self.launcher.romdir = "/roms"
+        self.launcher.file_extensions = (".wad", ".zip")
 
     def test_name_match_from_zip(self):
         path = self.launcher._find_romart(
