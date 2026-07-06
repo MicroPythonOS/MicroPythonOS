@@ -5,6 +5,7 @@ Put unreleased changes here!
 
 Builtin Apps:
 - AppStore: improve responsiveness by skipping download of icons in list view (generate image based on SHA1 hash)
+- AppStore: use new version field in BadgeHub.eu's /project-summaries
 - New MPOS-AppLogos icons by @QuasiKili
 - Appstore, OSUpdate, Settings: remove redundant assets/ folder
 
