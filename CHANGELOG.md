@@ -4,7 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Frameworks:
-- App: change "no icon" log level from warning to info
+- App: change 'no icon' log level from warning to info
 
 0.14.2
 ======
