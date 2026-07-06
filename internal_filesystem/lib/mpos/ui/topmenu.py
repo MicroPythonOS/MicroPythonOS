@@ -9,6 +9,7 @@ from .appearance_manager import AppearanceManager
 from .input_manager import InputManager
 from .widget_animator import SlidePanel
 from .focus import add_focus_border
+from .font_manager import FontManager
 from mpos.content.app_manager import AppManager
 from mpos.notification_manager import NotificationManager
 
@@ -167,6 +168,8 @@ def _build_drawer_notification_item(parent, notification):
 
     title_label = lv.label(content_col)
     title_label.set_text(notification.title)
+    emoji_font = FontManager.getFont(emoji=True)
+    title_label.set_style_text_font(emoji_font, lv.PART.MAIN)
     title_label.set_long_mode(lv.label.LONG_MODE.WRAP)
     title_label.set_width(lv.pct(100))
     title_label.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
@@ -174,6 +177,7 @@ def _build_drawer_notification_item(parent, notification):
 
     if notification.text:
         text_label = lv.label(content_col)
+        text_label.set_style_text_font(emoji_font, lv.PART.MAIN)
         text_label.set_text(notification.text)
         text_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         text_label.set_width(lv.pct(100))

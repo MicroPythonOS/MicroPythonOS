@@ -3,6 +3,12 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.14.2
+======
+
+Frameworks:
+- NotificationManager: support emojis in notifications
+
 0.14.1
 ======
 
