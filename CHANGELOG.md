@@ -4,7 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Builtin Apps:
-- AppStore: improve responsiveness by delaying download of icons in list view
+- AppStore: improve responsiveness by skipping download of icons in list view (generate image based on SHA1 hash)
 - New MPOS-AppLogos icons by @QuasiKili
 - Appstore, OSUpdate, Settings: remove redundant assets/ folder
 
