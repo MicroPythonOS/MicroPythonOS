@@ -193,8 +193,3 @@ class Launcher(Activity):
         if target:
             lv.group_focus_obj(target)
 
-    @staticmethod
-    def create_icon_dsc(icon_path):
-        pass
-
-
