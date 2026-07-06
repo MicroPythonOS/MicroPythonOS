@@ -68,7 +68,7 @@ class App:
                 )
                 return
 
-        logger.warning("Could not find icon for %s", self.fullname)
+        logger.info("Could not find icon for %s", self.fullname)
 
     def _find_main_launcher_activity(self):
         for act in self.activities:
