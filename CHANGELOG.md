@@ -3,11 +3,10 @@ Future release (next version)
 
 Put unreleased changes here!
 
-0.14.2
-======
 
 Frameworks:
 - NotificationManager: support emojis in notifications
+- Topmenu: close notification bar when launching app from notification drawer
 
 0.14.1
 ======
