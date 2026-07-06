@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.14.1
+======
+
 Builtin Apps:
 - AppStore: improve responsiveness by skipping download of icons in list view (generate image based on SHA1 hash)
 - AppStore: use new version field in BadgeHub.eu's /project-summaries
