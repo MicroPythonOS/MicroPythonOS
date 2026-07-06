@@ -3,6 +3,8 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Builtin Apps:
+- AppStore: use one backend list call to check for updates instead of per-app detail fetches
 
 Frameworks:
 - NotificationManager: support emojis in notifications
