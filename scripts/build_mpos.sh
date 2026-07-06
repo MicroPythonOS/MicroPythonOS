@@ -204,6 +204,11 @@ if [ "$target" == "unix" -o "$target" == "macOS" -o "$target" == "web" ]; then
 	disable_native_viper "$codebasedir/internal_filesystem"
 fi
 
+if [ ! -f "$codebasedir"/lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross ]; then
+	echo "Building mpy-cross first (needed for freezefs)..."
+	make -j$(nproc) -C "$codebasedir"/lvgl_micropython/lib/micropython/mpy-cross
+fi
+
 echo "Refreshing freezefs..."
 if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
 	builtin_march="xtensawin"
