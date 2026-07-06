@@ -58,20 +58,6 @@ class RetroCoreLauncher(Activity):
             None,
         )
 
-        gw_btn = button_list.add_button(
-            None, "Game & Watch"
-        )
-        gw_btn.add_event_cb(
-            lambda e: self.launch_retrogo(
-                "gw",
-                "GW",
-                "Choose your Game & Watch ROM:",
-                (".gw",),
-            ),
-            lv.EVENT.CLICKED,
-            None,
-        )
-
         sms_btn = button_list.add_button(
             None, "Sega Master System"
         )
@@ -137,6 +123,20 @@ class RetroCoreLauncher(Activity):
                 "LNX",
                 "Choose your Atari Lynx ROM:",
                 (".lnx", ".zip"),
+            ),
+            lv.EVENT.CLICKED,
+            None,
+        )
+
+        gw_btn = button_list.add_button(
+            None, "Game & Watch"
+        )
+        gw_btn.add_event_cb(
+            lambda e: self.launch_retrogo(
+                "gw",
+                "GW",
+                "Choose your Game & Watch ROM:",
+                (".gw",),
             ),
             lv.EVENT.CLICKED,
             None,
