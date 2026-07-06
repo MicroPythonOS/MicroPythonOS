@@ -28,6 +28,8 @@ class StartingActivity(Activity):
         intent = self.getIntent()
         extras = intent.extras if intent else {}
 
+        self._cancel_signal = extras.get("_cancel_signal")
+
         game_name = extras.get("game_name", "Game")
         bootfile_prefix = extras.get("bootfile_prefix", "")
         gamefile = extras.get("gamefile", "")
@@ -50,6 +52,11 @@ class StartingActivity(Activity):
         label.set_width(lv.pct(100))
 
         self.setContentView(screen)
+
+    def onBackPressed(self, screen):
+        if self._cancel_signal is not None:
+            self._cancel_signal[0] = True
+        return False
 
 
 class RetroGoLauncher(Activity):
@@ -177,8 +184,15 @@ class RetroGoLauncher(Activity):
             return None
 
         lookup_name = filename
-        if not is_dir and lookup_name.lower().endswith(".zip"):
-            lookup_name = lookup_name[:-4]
+        if not is_dir:
+            while True:
+                stripped = False
+                for ext in self.file_extensions:
+                    if lookup_name.lower().endswith(ext):
+                        lookup_name = lookup_name[:-len(ext)]
+                        stripped = True
+                if not stripped:
+                    break
 
         path = f"{self.romartbase}/{self.roms_subdir}/{lookup_name}.png"
         result = self._try_romart(path)
@@ -353,6 +367,8 @@ class RetroGoLauncher(Activity):
         TaskManager.create_task(self.start_game(self.bootfile_prefix, self.bootfile_to_write, gamefile))
 
     async def start_game(self, bootfile_prefix, bootfile_to_write, gamefile):
+        cancel_signal = [False]
+
         intent = Intent(activity_class=StartingActivity)
         original_extras = self.getIntent().extras if self.getIntent() else {}
         if original_extras and "starting_title" in original_extras:
@@ -362,7 +378,13 @@ class RetroGoLauncher(Activity):
         intent.putExtra("game_name", self.game_name)
         intent.putExtra("bootfile_prefix", bootfile_prefix)
         intent.putExtra("gamefile", gamefile)
+        intent.putExtra("_cancel_signal", cancel_signal)
         self.startActivity(intent)
+
+        await TaskManager.sleep(1)
+        if cancel_signal[0]:
+            self._launching = False
+            return
 
         self.mkdir(bootfile_prefix + self.romdir)
         self.mkdir(bootfile_prefix + self.romdir + "/" + self.roms_subdir)
@@ -383,6 +405,10 @@ class RetroGoLauncher(Activity):
             fd.close()
         except Exception as e:
             self.status_label.set_text(f"ERROR: could not write config file: {e}")
+            return
+
+        if cancel_signal[0]:
+            self._launching = False
             return
 
         results = []
@@ -438,7 +464,10 @@ class RetroGoLauncher(Activity):
 
         # Wait a few seconds so the user has time to switch off the device in the "boot to retro-go" state
         # This is useful to capture debug logging, as this triggers a re-init of the USB-to-serial.
-        # await TaskManager.sleep(3)
+        await TaskManager.sleep(3)
+        if cancel_signal[0]:
+            self._launching = False
+            return
 
         try:
             import machine
