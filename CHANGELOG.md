@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.14.2
+======
+
 Builtin Apps:
 - AppStore: use one backend list call to check for updates instead of per-app detail fetches
 
