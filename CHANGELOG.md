@@ -14,7 +14,7 @@ Frameworks:
 - Code cleanups
 
 OS:
-- Reduce max concurrent DNS resolving threads from 4 to 3 to be on the safe side
+- Reduce max concurrent DNS resolving threads from 4 to 2 to be on the safe side
 
 0.14.0
 ======
