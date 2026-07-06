@@ -8,23 +8,23 @@ _ASSET = "M:apps/com.micropythonos.retrocore_launcher/"
 class RetroCoreLauncher(Activity):
     def onCreate(self):
         screen = lv.obj()
-        screen.set_style_pad_all(15, lv.PART.MAIN)
+        screen.set_style_pad_all(5, lv.PART.MAIN)
 
         title_label = lv.label(screen)
         title_label.set_text("Choose your console:")
         title_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
 
         button_list = lv.list(screen)
-        button_list.set_size(lv.pct(100), lv.pct(70))
+        button_list.set_size(lv.pct(100), lv.pct(85))
         button_list.center()
 
         nes_btn = button_list.add_button(
-            _ASSET + "console_nes.png", "NES"
+            _ASSET + "console_nes.png", "Nintendo Entertainment System"
         )
         nes_btn.add_event_cb(
             lambda e: self.launch_retrogo(
                 "nes",
-                "NES",
+                "Nintendo Entertainment System",
                 "Choose your NES ROM:",
                 (".nes", ".fc", ".fds", ".nsf", ".zip"),
             ),
