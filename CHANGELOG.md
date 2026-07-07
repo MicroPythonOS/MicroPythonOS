@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+Board Support:
+- WebAssembly: fix mobile touch input by properly converting SDL's normalized touch coordinates to actual window pixel coordinates by @DrSkunk
+
 Frameworks:
 - App: change 'no icon' log level from warning to info
 
