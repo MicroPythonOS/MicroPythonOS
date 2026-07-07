@@ -13,4 +13,5 @@ class DoomLauncher(Activity):
             .putExtra("boot_name", "doom")
             .putExtra("game_name", "Doom")
             .putExtra("file_extensions", (".wad", ".zip"))
+            .putExtra("skip_crc32", True)
         )

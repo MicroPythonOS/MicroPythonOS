@@ -74,6 +74,7 @@ class RetroGoLauncher(Activity):
         self.boot_name = extras.get("boot_name")
         self.game_name = extras.get("game_name", "Game")
         self.file_extensions = extras.get("file_extensions", (".wad", ".zip"))
+        self.skip_crc32 = extras.get("skip_crc32", False)
 
         self.romdir = "roms"
         self.romartdir = "romart"
@@ -291,7 +292,7 @@ class RetroGoLauncher(Activity):
             gamedir = self.romdir + "/" + self.roms_subdir
             fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
             diskpath = self.bootfile_prefix + fullpath
-            romart = self._find_romart(diskpath, f) if has_romart else None
+            romart = self._find_romart(diskpath, f) if (has_romart and not self.skip_crc32) else None
             button = self.wadlist.add_button(romart, f)
             button.add_event_cb(
                 lambda e, p=fullpath: self._launch_game(p),

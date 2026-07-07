@@ -25,5 +25,6 @@ class DukeLauncher(Activity):
             .putExtra("boot_name", "duke3d")
             .putExtra("game_name", "Duke Nukem 3D")
             .putExtra("file_extensions", (".grp", ".zip"))
+            .putExtra("skip_crc32", True)
             .putExtra("starting_text", help_text)
         )
