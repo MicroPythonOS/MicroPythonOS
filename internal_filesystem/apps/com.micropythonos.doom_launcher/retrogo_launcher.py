@@ -380,7 +380,7 @@ class RetroGoLauncher(Activity):
         intent.putExtra("_cancel_signal", cancel_signal)
         self.startActivity(intent)
 
-        await TaskManager.sleep(1)
+        await TaskManager.sleep_ms(500)
         if cancel_signal[0]:
             self._launching = False
             return
@@ -463,7 +463,7 @@ class RetroGoLauncher(Activity):
 
         # Wait a few seconds so the user has time to switch off the device in the "boot to retro-go" state
         # This is useful to capture debug logging, as this triggers a re-init of the USB-to-serial.
-        await TaskManager.sleep(3)
+        await TaskManager.sleep_ms(1500)
         if cancel_signal[0]:
             self._launching = False
             return
