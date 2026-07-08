@@ -49,6 +49,9 @@ EVENT_KIND_NAMES = {
     13: "NIP17_SEAL",
     14: "NIP17_CHAT",
     15: "NIP17_FILE",
+    40: "CHANNEL_CREATE",
+    41: "CHANNEL_META",
+    42: "CHANNEL_MESSAGE",
     10002: "RELAY_LIST",
     10050: "DM_RELAY_LIST",
     1059: "GIFT_WRAP",
@@ -545,6 +548,77 @@ class NostrManager:
         self.relay_manager.publish_event(event)
         logger.info("NostrManager: published channel message to %s", channel_id[:16])
         return event.id
+
+    def publish_channel_creation(self, name):
+        """Publish a NIP-28 channel creation event (kind 40).
+
+        Returns the channel ID (the event ID of the creation event).
+        """
+        if self._nostr_private_key is None:
+            raise RuntimeError("Identity must be configured before creating channels")
+        if self.relay_manager is None:
+            raise RuntimeError("Relay manager is not ready yet")
+        event = Event(
+            content=json.dumps({"name": name, "about": "", "picture": ""}),
+            public_key=self._nostr_private_key.public_key.hex(),
+            kind=40,
+        )
+        event.__post_init__()
+        self._nostr_private_key.sign_event(event)
+        self.relay_manager.publish_event(event)
+        logger.info("NostrManager: published channel creation '%s' -> %s", name, event.id[:16])
+        return event.id
+
+    def publish_channel_metadata(self, channel_id, name, about="", picture=""):
+        """Publish a NIP-28 channel metadata event (kind 41).
+
+        References the channel creation event (kind 40) via an e-tag.
+        """
+        if self._nostr_private_key is None:
+            raise RuntimeError("Identity must be configured before publishing metadata")
+        if self.relay_manager is None:
+            raise RuntimeError("Relay manager is not ready yet")
+        content = json.dumps({"name": name, "about": about, "picture": picture})
+        event = Event(
+            content=content,
+            public_key=self._nostr_private_key.public_key.hex(),
+            kind=41,
+            tags=[["e", channel_id, "", "root"]],
+        )
+        event.__post_init__()
+        self._nostr_private_key.sign_event(event)
+        self.relay_manager.publish_event(event)
+        logger.info("NostrManager: published channel metadata for %s: %s", channel_id[:16], name)
+        return event.id
+
+    def search_channels(self, search_term, callback, limit=10):
+        """Subscribe to kind 41 events matching a NIP-50 search term.
+
+        The callback receives (channel_id, name, about) for each result.
+        """
+        filters = Filters([Filter(kinds=[41], search=search_term, limit=limit)])
+        sub_name = f"channel-search-{search_term[:16]}"
+        results = set()
+
+        def _wrapper(nostr_event):
+            try:
+                meta = json.loads(nostr_event.content) if nostr_event.content else {}
+                name = meta.get("name", "")
+                about = meta.get("about", "")
+                tags = getattr(nostr_event.event, "tags", []) or []
+                channel_id = None
+                for tag in tags:
+                    if isinstance(tag, (list, tuple)) and len(tag) >= 2 and tag[0] == "e":
+                        channel_id = tag[1]
+                        break
+                if channel_id and channel_id not in results:
+                    results.add(channel_id)
+                    callback(channel_id, name, about)
+            except Exception:
+                pass
+
+        self.add_subscription(sub_name, filters, _wrapper)
+        return sub_name
 
     def _publish_signed_dm(self, private_key, recipient_hex, content, kind=4, reference_event_id=None):
         """Build, sign and publish an encrypted direct message."""

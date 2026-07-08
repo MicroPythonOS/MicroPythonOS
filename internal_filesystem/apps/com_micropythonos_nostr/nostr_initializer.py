@@ -1,3 +1,4 @@
+import json
 import logging
 import time as _time
 
@@ -191,6 +192,7 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
         logger.error("NIP-17 subscription failed: %s", e)
 
     if store is not None:
+        _load_channel_directory(store)
         # Ensure the default public channel exists so boot-time notifications
         # and messages are received even before the user opens the UI.
         store.get_or_create_channel(
@@ -208,3 +210,38 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
                     )
                 except Exception as e:
                     logger.error("Channel subscription failed: %s", e)
+
+
+_CHANNELS_CONFIG_PATH = "prefs/com_micropythonos_nostr/channels.json"
+
+
+def _load_channel_directory(store):
+    """Seed the store with channels from the local channels.json directory."""
+    try:
+        with open(_CHANNELS_CONFIG_PATH, "r") as f:
+            channels = json.load(f)
+    except (OSError, ValueError):
+        return
+    for entry in channels:
+        cid = entry.get("id")
+        name = entry.get("name")
+        if cid and name:
+            store.get_or_create_channel(cid, title=name)
+
+
+def search_channel_directory(search_term):
+    """Return matching channels from the local channels.json directory."""
+    results = []
+    try:
+        with open(_CHANNELS_CONFIG_PATH, "r") as f:
+            channels = json.load(f)
+    except (OSError, ValueError):
+        return results
+    lower = search_term.lower()
+    for entry in channels:
+        name = entry.get("name", "")
+        cid = entry.get("id", "")
+        about = entry.get("about", "")
+        if lower in name.lower():
+            results.append((cid, name, about))
+    return results
