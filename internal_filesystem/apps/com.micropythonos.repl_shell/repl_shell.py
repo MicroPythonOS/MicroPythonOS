@@ -24,10 +24,14 @@ class ReplShell(Activity):
         self.keyboard.add_event_cb(self._on_submit, lv.EVENT.READY, None)
         self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
 
-        self.output = lv.label(main)
+        self.output_container = lv.obj(main)
+        self.output_container.set_width(lv.pct(100))
+        self.output_container.set_flex_grow(1)
+
+        self.output = lv.label(self.output_container)
         self.output.set_text("")
         self.output.set_long_mode(lv.label.LONG_MODE.WRAP)
-        self.output.set_flex_grow(1)
+        self.output.set_width(lv.pct(100))
 
         self.setContentView(main)
 
@@ -62,3 +66,4 @@ class ReplShell(Activity):
     def _append(self, line):
         self.buffer.append(line)
         self.output.set_text("\n".join(self.buffer))
+        self.output_container.scroll_to_y(0x7FFFFFFF, True)
