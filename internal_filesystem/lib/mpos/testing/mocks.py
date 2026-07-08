@@ -1349,6 +1349,27 @@ class MockBluetooth:
         return self._ble
 
 
+def _encode_bleep_advertisement(wave_count, nickname):
+    payload = bytearray()
+    payload.append(3)
+    payload.append(0x03)
+    payload.append(0xE3)
+    payload.append(0xB1)
+    payload.append(4)
+    payload.append(0x16)
+    payload.append(0xE3)
+    payload.append(0xB1)
+    payload.append(wave_count & 0xFF)
+    nickname_bytes = bytes(nickname, "utf-8")
+    max_name = 31 - len(payload) - 2
+    if len(nickname_bytes) > max_name:
+        nickname_bytes = nickname_bytes[:max_name]
+    payload.append(len(nickname_bytes) + 1)
+    payload.append(0x08)
+    payload.extend(nickname_bytes)
+    return bytes(payload)
+
+
 class MockBLE:
     """Mock BLE controller for desktop/simulation testing."""
 
@@ -1358,6 +1379,8 @@ class MockBLE:
     def __init__(self, scan_results=None):
         self._active = False
         self._irq = None
+        self._adv_data = None
+        self._mac_bytes = b"\xde\xad\xbe\xef\xca\xfe"
         if scan_results is None:
             scan_results = [
                 (0, b"\xaa\xbb\xcc\xdd\xee\x01", 0, -42, _encode_advertisement_name("Simulated Phone")),
@@ -1381,3 +1404,14 @@ class MockBLE:
             for result in self._scan_results:
                 self._irq(self.IRQ_SCAN_RESULT, result)
             self._irq(self.IRQ_SCAN_DONE, None)
+
+    def gap_advertise(self, interval_us, adv_data=None, resp_data=None, connectable=True):
+        if interval_us is None:
+            self._adv_data = None
+        else:
+            self._adv_data = adv_data
+
+    def config(self, key):
+        if key == "mac":
+            return (0, self._mac_bytes)
+        raise ValueError("Unknown config key: %s" % key)
