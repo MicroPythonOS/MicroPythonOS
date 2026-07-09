@@ -481,6 +481,7 @@ def _process_gatt_queue():
         if __debug__: logger.debug("_process_gatt_queue: connecting to %s msgs=%s", addr_str, len(msgs))
         _ble.gap_connect(_gatt_target_addr_type, _gatt_target_addr)
         return
+    _gatt_busy = False
 
 
 async def _ble_scan_loop():
