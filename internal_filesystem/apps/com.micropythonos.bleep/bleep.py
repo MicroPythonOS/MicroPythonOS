@@ -19,7 +19,7 @@ _BLEEP_ADV_UUID = const(0xB1E3)
 _BLEEP_GATT_SVC_VAL = 0xB2E4
 _BLEEP_GATT_CHAR_VAL = 0xB2E5
 
-SCAN_DURATION_MS = const(30000)
+SCAN_DURATION_MS = const(10000)
 
 _IRQ_CENTRAL_CONNECT = const(1)
 _IRQ_CENTRAL_DISCONNECT = const(2)
@@ -90,6 +90,7 @@ _info_refresh = None
 _ble_initialized = False
 _gatt_busy = False
 _scan_start_ticks = 0
+_irq_depth = 0
 
 
 def _random_nickname():
@@ -246,8 +247,8 @@ def _init_gatt_server():
 
 def _process_incoming_message(sender_addr, msg):
     t = msg.get("t", "")
-    if __debug__: logger.debug("_process_incoming: from=%s msg=%s old_rel=%s", sender_addr, t, old_rel)
     old_rel = _devices.get(sender_addr, {}).get("relation_state", _REL_STRANGER)
+    if __debug__: logger.debug("_process_incoming: from=%s msg=%s old_rel=%s", sender_addr, t, old_rel)
 
     if t == _MSG_FR:
         if old_rel == _REL_OUTGOING_REQUEST:
@@ -282,6 +283,11 @@ def _process_incoming_message(sender_addr, msg):
 
 
 def _ble_irq_handler(event, data):
+    global _irq_depth
+    _irq_depth += 1
+    if _irq_depth > 8:
+        _irq_depth -= 1
+        return
     try:
         if event == _IRQ_SCAN_RESULT:
             _on_scan_result(data)
@@ -309,6 +315,7 @@ def _ble_irq_handler(event, data):
             _on_write_done(data)
     except Exception as e:
         logger.error("BLE IRQ error: %s", e)
+    _irq_depth -= 1
 
 
 def _on_scan_result(data):
@@ -339,10 +346,11 @@ def _on_scan_result(data):
 
 
 def _on_scan_done():
-    stale = [a for a, d in _devices.items() if d.get("last_seen", 0) < _scan_start_ticks]
+    cutoff = _scan_start_ticks - 3 * (SCAN_DURATION_MS + 500)
+    stale = [a for a, d in _devices.items() if d.get("last_seen", 0) < cutoff]
     for a in stale:
         del _devices[a]
-    if __debug__: logger.debug("scan_done: %s devices (%s removed)", len(_devices), len(stale))
+    if __debug__: logger.debug("scan_done: %s devices (%s removed, cutoff=%s)", len(_devices), len(stale), cutoff)
     if _list_refresh:
         _list_refresh()
     _process_gatt_queue()
@@ -762,9 +770,8 @@ class BLEep(Activity):
         self.startActivity(intent)
 
     def _refresh_list(self):
-        self.info_label.set_text(
-            "Nickname: %s  |  Friends: %s  |  Queued: %s" % (_nickname, len(_friends), sum(len(v) for v in _queue.values()))
-        )
+        self._update_info_label()
+        now = time.ticks_ms()
         items = list(_devices.items())
         items.sort(key=lambda x: x[1]["rssi"], reverse=True)
         parent = self.device_list.get_parent()
@@ -774,7 +781,9 @@ class BLEep(Activity):
         for addr, info in items:
             rel = info["relation_state"]
             prefix = _REL_LABELS.get(rel, "")
-            text = "%s%s %s dBm  F:%s" % (prefix, info["nickname"], info["rssi"], info["friend_count"])
+            age_s = (now - info.get("last_seen", now)) // 1000
+            age_str = "now" if age_s < 1 else ("%ss" % age_s) if age_s < 60 else ("%sm" % (age_s // 60))
+            text = "%s%s %s dBm  F:%s  %s" % (prefix, info["nickname"], info["rssi"], info["friend_count"], age_str)
             btn = self.device_list.add_button(None, text)
             btn.add_event_cb(lambda e, a=addr: self._open_detail(a), lv.EVENT.CLICKED, None)
         old.delete()
