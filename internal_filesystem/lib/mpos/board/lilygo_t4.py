@@ -315,6 +315,9 @@ InputManager.register_indev(indev)
 
 def startup_music():
     try:
+        from mpos import SharedPreferences
+        if SharedPreferences("com.micropythonos.settings").get_string("startup_sound", "on") == "off":
+            return
         startup_jingle = "ShortBeeps:d=32,o=5,b=320:c6,c7"
         player = AudioManager.player(rtttl=startup_jingle, stream_type=AudioManager.STREAM_NOTIFICATION, volume=80, output=buzzer_output)
         player.start()

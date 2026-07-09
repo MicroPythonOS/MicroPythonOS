@@ -99,6 +99,7 @@ class Settings(SettingsActivity):
             {"title": "Haptic feedback", "key": "haptic_feedback", "ui": "radiobuttons", "ui_options":  [("On", "on"), ("Off", "off")], "default_value": "off"}, # TODO: Use https://docs.micropythonos.com/frameworks/setting-activity/#should_show
             {"title": "Light/Dark Theme", "key": "theme_light_dark", "ui": "radiobuttons", "ui_options":  [("Light", "light"), ("Dark", "dark")], "changed_callback": self.theme_changed},
             {"title": "Notification", "key": "notification_sound", "ui": "radiobuttons", "ui_options": NOTIFICATION_SOUND_OPTIONS, "default_value": DEFAULT_NOTIFICATION_SOUND},
+            {"title": "Startup sound", "key": "startup_sound", "ui": "radiobuttons", "ui_options":  [("On", "on"), ("Off", "off")], "default_value": "on"},
             {"title": "Theme Color", "key": "theme_primary_color", "placeholder": "HTML hex color, like: EC048C", "ui": "dropdown", "ui_options": theme_colors, "changed_callback": self.theme_changed, "default_value": AppearanceManager.DEFAULT_PRIMARY_COLOR},
             {"title": "Timezone", "key": "timezone", "ui": "dropdown", "ui_options": [(tz, tz) for tz in TimeZone.get_timezones()], "changed_callback": lambda *args: TimeZone.refresh_timezone_preference()},
             {"title": "Number Format", "key": "number_format", "ui": "dropdown", "ui_options": NumberFormat.get_format_options(), "changed_callback": lambda *args: NumberFormat.refresh_preference(), "default_value": "comma_dot"},
