@@ -87,6 +87,7 @@ _gatt_value_handle = None
 
 _list_refresh = None
 _ble_initialized = False
+_gatt_busy = False
 
 
 def _random_nickname():
@@ -385,7 +386,7 @@ def _on_client_connect(data):
 
 
 def _on_client_disconnect(data):
-    global _gatt_state, _gatt_conn_handle, _gatt_start_handle, _gatt_end_handle, _gatt_value_handle
+    global _gatt_state, _gatt_conn_handle, _gatt_start_handle, _gatt_end_handle, _gatt_value_handle, _gatt_busy
     conn_handle, _, _ = data
     if conn_handle == _gatt_conn_handle:
         if __debug__: logger.debug("client_disconnect: conn=%s", conn_handle)
@@ -394,6 +395,7 @@ def _on_client_disconnect(data):
         _gatt_start_handle = None
         _gatt_end_handle = None
         _gatt_value_handle = None
+        _gatt_busy = False
         _start_advertising()
         _process_gatt_queue()
 
@@ -401,7 +403,7 @@ def _on_client_disconnect(data):
 def _on_service_result(data):
     global _gatt_start_handle, _gatt_end_handle
     conn_handle, start_handle, end_handle, uuid = data
-    if conn_handle == _gatt_conn_handle and uuid == _BLEEP_GATT_SVC_VAL:
+    if conn_handle == _gatt_conn_handle and uuid == _uuid(_BLEEP_GATT_SVC_VAL):
         if __debug__: logger.debug("service_result: start=%s end=%s", start_handle, end_handle)
         _gatt_start_handle = start_handle
         _gatt_end_handle = end_handle
@@ -418,7 +420,7 @@ def _on_service_done(data):
 def _on_char_result(data):
     global _gatt_value_handle
     conn_handle, def_handle, value_handle, properties, uuid = data
-    if conn_handle == _gatt_conn_handle and uuid == _BLEEP_GATT_CHAR_VAL:
+    if conn_handle == _gatt_conn_handle and uuid == _uuid(_BLEEP_GATT_CHAR_VAL):
         if __debug__: logger.debug("char_result: value_handle=%s", value_handle)
         _gatt_value_handle = value_handle
 
@@ -456,9 +458,10 @@ def _on_write_done(data):
 
 
 def _process_gatt_queue():
-    global _gatt_state, _gatt_target_addr, _gatt_target_addr_type
-    if _gatt_state != _GATT_IDLE:
+    global _gatt_state, _gatt_target_addr, _gatt_target_addr_type, _gatt_busy
+    if _gatt_busy or _gatt_state != _GATT_IDLE:
         return
+    _gatt_busy = True
     for addr_str, msgs in list(_queue.items()):
         if not msgs:
             continue
@@ -509,7 +512,7 @@ def _ble_init():
 
 
 def _ble_deinit():
-    global _scanning, _ble_initialized, _gatt_state, _gatt_conn_handle
+    global _scanning, _ble_initialized, _gatt_state, _gatt_conn_handle, _gatt_busy
     global _gatt_start_handle, _gatt_end_handle, _gatt_value_handle
     if __debug__: logger.debug("_ble_deinit")
     _scanning = False
@@ -519,6 +522,7 @@ def _ble_deinit():
     _devices.clear()
     _gatt_connections.clear()
     _gatt_state = _GATT_IDLE
+    _gatt_busy = False
     _gatt_conn_handle = None
     _gatt_start_handle = None
     _gatt_end_handle = None
