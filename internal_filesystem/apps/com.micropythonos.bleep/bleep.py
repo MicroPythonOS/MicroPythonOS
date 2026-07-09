@@ -315,6 +315,8 @@ def _on_scan_result(data):
         return
     friend_count = _decode_adv_friend_count(adv_data)
     nickname = _decode_adv_nickname(adv_data)
+    if nickname == "Unknown":
+        return
     old = _devices.get(addr_str, {})
     rel = old.get("relation_state", _REL_STRANGER)
     if addr_str in _friends and rel != _REL_FRIEND:
@@ -474,6 +476,7 @@ async def _ble_scan_loop():
     global _scanning
     while _scanning:
         if __debug__: logger.debug("_ble_scan_loop: starting scan")
+        _devices.clear()
         _ble.gap_scan(SCAN_DURATION_MS, 30000, 30000, True)
         await TaskManager.sleep_ms(SCAN_DURATION_MS + 500)
 
