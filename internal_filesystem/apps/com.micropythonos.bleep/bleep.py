@@ -86,8 +86,10 @@ _gatt_end_handle = None
 _gatt_value_handle = None
 
 _list_refresh = None
+_info_refresh = None
 _ble_initialized = False
 _gatt_busy = False
+_scan_start_ticks = 0
 
 
 def _random_nickname():
@@ -171,6 +173,7 @@ def _queue_message(addr, msg_type):
 
 def _dequeue_messages(addr):
     if addr in _queue:
+        if __debug__: logger.debug("_dequeue_messages: cleared %s msgs for %s", len(_queue[addr]), addr)
         del _queue[addr]
         _save_queue()
 
@@ -243,7 +246,7 @@ def _init_gatt_server():
 
 def _process_incoming_message(sender_addr, msg):
     t = msg.get("t", "")
-    if __debug__: logger.debug("_process_incoming: from=%s msg=%s", sender_addr, t)
+    if __debug__: logger.debug("_process_incoming: from=%s msg=%s old_rel=%s", sender_addr, t, old_rel)
     old_rel = _devices.get(sender_addr, {}).get("relation_state", _REL_STRANGER)
 
     if t == _MSG_FR:
@@ -311,7 +314,7 @@ def _ble_irq_handler(event, data):
 def _on_scan_result(data):
     addr_type, addr, adv_type, rssi, adv_data = data
     addr_str = _mac_str(addr)
-    if __debug__: logger.debug("scan_result: %s rssi=%s", addr_str, rssi)
+    #if __debug__: logger.debug("scan_result: %s rssi=%s", addr_str, rssi)
     if not _is_bleep_device(adv_data):
         return
     friend_count = _decode_adv_friend_count(adv_data)
@@ -336,7 +339,10 @@ def _on_scan_result(data):
 
 
 def _on_scan_done():
-    if __debug__: logger.debug("scan_done: %s devices", len(_devices))
+    stale = [a for a, d in _devices.items() if d.get("last_seen", 0) < _scan_start_ticks]
+    for a in stale:
+        del _devices[a]
+    if __debug__: logger.debug("scan_done: %s devices (%s removed)", len(_devices), len(stale))
     if _list_refresh:
         _list_refresh()
     _process_gatt_queue()
@@ -447,14 +453,16 @@ def _on_write_done(data):
     conn_handle, value_handle, status = data
     if conn_handle != _gatt_conn_handle:
         return
-    if __debug__: logger.debug("write_done: status=%s", status)
     target_addr_str = _mac_str(_gatt_target_addr)
+    if __debug__: logger.debug("write_done: to=%s status=%s queue_was=%s", target_addr_str, status, len(_queue.get(target_addr_str, [])))
     if target_addr_str in _queue and _queue[target_addr_str]:
         _queue[target_addr_str].pop(0)
         if not _queue[target_addr_str]:
             del _queue[target_addr_str]
         _save_queue()
     _ble.gap_disconnect(_gatt_conn_handle)
+    if _info_refresh:
+        _info_refresh()
 
 
 def _process_gatt_queue():
@@ -476,10 +484,10 @@ def _process_gatt_queue():
 
 
 async def _ble_scan_loop():
-    global _scanning
+    global _scanning, _scan_start_ticks
     while _scanning:
         if __debug__: logger.debug("_ble_scan_loop: starting scan")
-        _devices.clear()
+        _scan_start_ticks = time.ticks_ms()
         _ble.gap_scan(SCAN_DURATION_MS, 30000, 30000, True)
         await TaskManager.sleep_ms(SCAN_DURATION_MS + 500)
 
@@ -620,6 +628,7 @@ class BLEepDetail(Activity):
     def _on_action(self, event):
         info = _devices.get(self.addr, {})
         rel = info.get("relation_state", _REL_STRANGER)
+        if __debug__: logger.debug("_on_action: addr=%s rel=%s -> ", self.addr, rel)
         if rel == _REL_STRANGER:
             if self.addr in _devices:
                 _devices[self.addr]["relation_state"] = _REL_OUTGOING_REQUEST
@@ -646,6 +655,7 @@ class BLEepDetail(Activity):
         self._update_buttons()
 
     def _on_action2(self, event):
+        if __debug__: logger.debug("_on_action2: deny %s", self.addr)
         if self.addr in _devices:
             _devices[self.addr]["relation_state"] = _REL_STRANGER
         _queue_message(self.addr, _MSG_FD)
@@ -709,12 +719,14 @@ class BLEep(Activity):
         self.device_list.set_size(lv.pct(100), lv.pct(75))
 
         _list_refresh = self._refresh_list
+        _info_refresh = self._update_info_label
         self.setContentView(screen)
 
     def onResume(self, screen):
         super().onResume(screen)
-        global _list_refresh
+        global _list_refresh, _info_refresh
         _list_refresh = self._refresh_list
+        _info_refresh = self._update_info_label
         nickname_saved = self.prefs.get_string("nickname", None)
         if nickname_saved:
             global _nickname
@@ -725,11 +737,17 @@ class BLEep(Activity):
 
     def onPause(self, screen):
         super().onPause(screen)
-        global _list_refresh
+        global _list_refresh, _info_refresh
         _list_refresh = None
+        _info_refresh = None
 
     def onDestroy(self, screen):
         _ble_deinit()
+
+    def _update_info_label(self):
+        self.info_label.set_text(
+            "Nickname: %s  |  Friends: %s  |  Queued: %s" % (_nickname, len(_friends), sum(len(v) for v in _queue.values()))
+        )
 
     def _open_settings(self, event):
         setting = {
