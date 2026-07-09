@@ -403,7 +403,6 @@ def _on_client_disconnect(data):
         _gatt_value_handle = None
         _gatt_busy = False
         _start_advertising()
-        _process_gatt_queue()
 
 
 def _on_service_result(data):
@@ -639,8 +638,8 @@ class BLEepDetail(Activity):
             if self.addr in _devices:
                 _devices[self.addr]["relation_state"] = _REL_STRANGER
             _queue_message(self.addr, _MSG_FC)
-            _dequeue_messages(self.addr)
             _process_gatt_queue()
+            _dequeue_messages(self.addr)
         elif rel == _REL_INCOMING_REQUEST:
             _friends[self.addr] = {"nickname": info.get("nickname", "Unknown"), "since": time.time()}
             _save_friends()
