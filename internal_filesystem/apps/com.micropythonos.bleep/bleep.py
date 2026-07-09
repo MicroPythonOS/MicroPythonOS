@@ -658,8 +658,6 @@ class BLEep(Activity):
         if _prefs is None:
             _prefs = self.prefs
 
-        _ble_init()
-
         nickname_saved = self.prefs.get_string("nickname", None)
         if nickname_saved:
             global _nickname
@@ -670,6 +668,8 @@ class BLEep(Activity):
             editor.put_string("nickname", _nickname)
             editor.commit()
         if __debug__: logger.debug("onCreate: nickname=%s", _nickname)
+
+        _ble_init()
 
         _, mac_bytes = _ble.config("mac")
         global _own_mac
