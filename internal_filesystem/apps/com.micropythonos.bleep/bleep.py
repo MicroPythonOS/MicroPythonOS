@@ -478,7 +478,9 @@ async def _ble_scan_loop():
 
 
 def _ble_init():
-    global _ble, _simulation_mode, _scanning, _prefs
+    global _ble, _simulation_mode, _scanning, _prefs, _ble_initialized
+    if _ble_initialized:
+        return
     _prefs = SharedPreferences("com.micropythonos.bleep")
     _simulation_mode = _bt is None
     if _simulation_mode:
@@ -498,15 +500,26 @@ def _ble_init():
     _scanning = True
     _start_advertising()
     TaskManager.create_task(_ble_scan_loop())
+    _ble_initialized = True
     if __debug__: logger.debug("_ble_init: started, simulation=%s friends=%s queue=%s", _simulation_mode, len(_friends), len(_queue))
 
 
 def _ble_deinit():
-    global _scanning
+    global _scanning, _ble_initialized, _gatt_state, _gatt_conn_handle
+    global _gatt_start_handle, _gatt_end_handle, _gatt_value_handle
+    if __debug__: logger.debug("_ble_deinit")
     _scanning = False
     _ble.gap_scan(None)
     _stop_advertising()
     _ble.active(False)
+    _devices.clear()
+    _gatt_connections.clear()
+    _gatt_state = _GATT_IDLE
+    _gatt_conn_handle = None
+    _gatt_start_handle = None
+    _gatt_end_handle = None
+    _gatt_value_handle = None
+    _ble_initialized = False
 
 
 class BLEepDetail(Activity):
@@ -706,6 +719,9 @@ class BLEep(Activity):
         super().onPause(screen)
         global _list_refresh
         _list_refresh = None
+
+    def onDestroy(self, screen):
+        _ble_deinit()
 
     def _open_settings(self, event):
         setting = {
