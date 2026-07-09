@@ -86,6 +86,7 @@ _gatt_end_handle = None
 _gatt_value_handle = None
 
 _list_refresh = None
+_ble_initialized = False
 
 
 def _random_nickname():
