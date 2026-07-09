@@ -374,7 +374,10 @@ import _thread
 
 def startup_wow_effect():
     try:
-        AudioManager.player(rtttl="5_note_startup:d=8,o=6,b=200:c,d,e,g,4c7",stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output).start()
+        from mpos import SharedPreferences
+        startup_sound_enabled = SharedPreferences("com.micropythonos.settings").get_string("startup_sound", "on") != "off"
+        if startup_sound_enabled:
+            AudioManager.player(rtttl="5_note_startup:d=8,o=6,b=200:c,d,e,g,4c7",stream_type=AudioManager.STREAM_NOTIFICATION,volume=60,output=buzzer_output).start()
 
         # Rainbow colors for the 5 LEDs
         rainbow = [
