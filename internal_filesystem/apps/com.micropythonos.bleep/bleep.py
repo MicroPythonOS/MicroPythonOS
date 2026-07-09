@@ -19,7 +19,7 @@ _BLEEP_ADV_UUID = const(0xB1E3)
 _BLEEP_GATT_SVC_VAL = 0xB2E4
 _BLEEP_GATT_CHAR_VAL = 0xB2E5
 
-SCAN_DURATION_MS = const(5000)
+SCAN_DURATION_MS = const(30000)
 
 _IRQ_CENTRAL_CONNECT = const(1)
 _IRQ_CENTRAL_DISCONNECT = const(2)
@@ -526,7 +526,7 @@ def _ble_deinit():
 class BLEepDetail(Activity):
 
     def onCreate(self):
-        self.addr = self.intent.getStringExtra("addr")
+        self.addr = self.intent.extras.get("addr") if self.intent else None
         info = _devices.get(self.addr, {"nickname": "?", "rssi": 0, "friend_count": 0})
         self._info = info
 
