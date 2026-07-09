@@ -1381,6 +1381,12 @@ class MockBLE:
         self._irq = None
         self._adv_data = None
         self._mac_bytes = b"\xde\xad\xbe\xef\xca\xfe"
+        self._conn_handle = None
+        self._gatt_peer_addr = None
+        self._msg_handle = 10
+        self._gatt_write_data = b""
+        self._gatt_buffer = b""
+        self._server_conn = None
         if scan_results is None:
             scan_results = [
                 (0, b"\xaa\xbb\xcc\xdd\xee\x01", 0, -42, _encode_advertisement_name("Simulated Phone")),
@@ -1415,3 +1421,51 @@ class MockBLE:
         if key == "mac":
             return (0, self._mac_bytes)
         raise ValueError("Unknown config key: %s" % key)
+
+    def gatts_register_services(self, services):
+        return ((self._msg_handle,),)
+
+    def gatts_set_buffer(self, handle, size, append):
+        pass
+
+    def gatts_read(self, value_handle):
+        return self._gatt_buffer
+
+    def gatts_write(self, value_handle, data):
+        self._gatt_buffer = data
+
+    def gap_connect(self, addr_type, addr):
+        self._conn_handle = 1
+        self._gatt_peer_addr = bytes(addr)
+        if self._irq:
+            self._irq(7, (1, addr_type, bytes(addr)))
+
+    def gap_disconnect(self, conn_handle):
+        if self._irq:
+            self._irq(8, (conn_handle, 0, self._gatt_peer_addr))
+        self._conn_handle = None
+        self._gatt_peer_addr = None
+        self._server_conn = None
+
+    def gattc_discover_services(self, conn_handle):
+        if self._irq:
+            self._irq(9, (conn_handle, 1, 5, 0xB2E4))
+            self._irq(10, (conn_handle, 0))
+
+    def gattc_discover_characteristics(self, conn_handle, start_handle, end_handle):
+        if self._irq:
+            self._irq(11, (conn_handle, 2, self._msg_handle, 0x0008, 0xB2E5))
+            self._irq(12, (conn_handle, 0))
+
+    def gattc_write(self, conn_handle, value_handle, data, mode=0):
+        self._gatt_buffer = data
+        if self._irq:
+            self._irq(17, (conn_handle, value_handle, 0))
+
+    def _simulate_incoming_message(self, data):
+        if not self._server_conn:
+            self._server_conn = 99
+            if self._irq:
+                self._irq(1, (99, 0, bytes(self._mac_bytes)))
+                self._gatt_buffer = data
+                self._irq(3, (99, self._msg_handle))

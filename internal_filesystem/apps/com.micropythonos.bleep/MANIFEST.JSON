@@ -1,1 +1,25 @@
-{"name": "BLEep", "publisher": "MicroPythonOS", "short_description": "Find nearby BLEep users", "long_description": "Uses BLE to discover other nearby devices running BLEep. Wave to each other and see who has the strongest signal!", "fullname": "com.micropythonos.bleep", "version": "0.1.0", "category": "utility", "activities": [{"entrypoint": "bleep.py", "classname": "BLEep", "intent_filters": [{"action": "main", "category": "launcher"}]}]}
+{
+  "name": "BLEep",
+  "publisher": "MicroPythonOS",
+  "short_description": "Find and befriend nearby BLE users",
+  "long_description": "BLE-powered friend maker. Find nearby users, send friend requests, accept/deny incoming ones, and track your friend count. Unfriend when you drift apart.",
+  "fullname": "com.micropythonos.bleep",
+  "version": "0.2.0",
+  "category": "social",
+  "activities": [
+    {
+      "entrypoint": "bleep.py",
+      "classname": "BLEep",
+      "intent_filters": [
+        {"action": "main", "category": "launcher"}
+      ]
+    },
+    {
+      "entrypoint": "bleep.py",
+      "classname": "BLEepDetail",
+      "intent_filters": [
+        {"action": "view"}
+      ]
+    }
+  ]
+}
