@@ -59,9 +59,11 @@ player = AudioManager.player(
     rtttl="Star Trek:o=4,d=20,b=200:8f.,a#,4d#6.,8d6,a#.,g.,c6.,4f6",
     stream_type=AudioManager.STREAM_NOTIFICATION,
 )
-player.start()
-while player.is_playing():
-    time.sleep(0.1)
+from mpos import SharedPreferences
+if SharedPreferences("com.micropythonos.settings").get_string("startup_sound", "on") != "off":
+    player.start()
+    while player.is_playing():
+        time.sleep(0.1)
 
 
 if __debug__: logger.debug("m5stack_fire.py init IMU")

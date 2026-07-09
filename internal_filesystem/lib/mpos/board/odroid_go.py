@@ -97,10 +97,12 @@ player = AudioManager.player(
     output=buzzer_output,
     on_complete=buzzer_callbacks.mute,
 )
-buzzer_callbacks.unmute()
-player.start()
-while player.is_playing():
-    time.sleep(0.1)
+from mpos import SharedPreferences
+if SharedPreferences("com.micropythonos.settings").get_string("startup_sound", "on") != "off":
+    buzzer_callbacks.unmute()
+    player.start()
+    while player.is_playing():
+        time.sleep(0.1)
 
 if __debug__: logger.debug("odroid_go.py machine.SPI.Bus() initialization")
 try:
