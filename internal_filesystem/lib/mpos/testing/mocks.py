@@ -1349,7 +1349,7 @@ class MockBluetooth:
         return self._ble
 
 
-def _encode_bleep_advertisement(wave_count, nickname):
+def _encode_bleep_advertisement(friend_count, nickname):
     payload = bytearray()
     payload.append(3)
     payload.append(0x03)
@@ -1359,7 +1359,7 @@ def _encode_bleep_advertisement(wave_count, nickname):
     payload.append(0x16)
     payload.append(0xE3)
     payload.append(0xB1)
-    payload.append(wave_count & 0xFF)
+    payload.append(friend_count & 0xFF)
     nickname_bytes = bytes(nickname, "utf-8")
     max_name = 31 - len(payload) - 2
     if len(nickname_bytes) > max_name:
