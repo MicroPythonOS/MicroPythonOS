@@ -52,6 +52,13 @@ Debugging tips:
 - When a user says "it worked at commit X but broke at commit Y", do `git diff X..Y --name-only` first, then `git diff X..Y -- <relevant files>` to read every changed line. Do NOT assume the bug is in the most recently touched file — trace the exact execution path through all changed files. A one-line addition in an unrelated-looking file can break something silently (e.g. `pin.init(Pin.OUT)` added for one board breaking RMT on all boards).
 - Silent failures with no exception and correct-looking log output (e.g. "transmit done" in expected time) usually mean the operation ran but its output was routed/discarded somewhere. For hardware peripherals: check GPIO matrix routing, DMA channel conflicts, and whether a pin was reclaimed by another peripheral since the driver was initialized.
 
+MicroPython BLE tips:
+- BLE advertising data capped at **31 bytes**. Enforced at NimBLE HCI level (`BLE_HCI_MAX_ADV_DATA_LEN = 31` in `lib/mynewt-nimble/nimble/include/nimble/hci_common.h`). Extended advertising NOT compiled in (`MYNEWT_VAL_BLE_EXT_ADV = 0` in `extmod/nimble/syscfg/syscfg.h`). Pack service data + nickname carefully; use short name (0x08) over complete name (0x09) to save bytes. Scan response data has a separate 31-byte budget.
+- BLE IRQ handlers run in the **main MicroPython thread** (NimBLE events dispatched via `mp_bluetooth_nimble_poll()` from VM main loop). LVGL widget manipulation from BLE event handlers is thread-safe — no need for `update_ui_threadsafe_if_foreground()` wrappers.
+- Module-level BLE state machines: **every variable assigned in an IRQ handler needs `global`**. Forgetting it creates a silent local shadow variable (no error, state just disappears). Check every `=` across every handler function. Reading module-level vars without `global` is fine.
+- UUID comparison mismatch mock vs real: mock IRQ events must pass **raw integers** for UUID fields (`uuid == 0xB2E4`), but on real hardware UUIDs are `bluetooth.UUID()` objects. A `_uuid(val)` helper that returns raw int in mock mode and `_bt.UUID(val)` on device handles both paths.
+- `addr = bytes(addr)` after `_IRQ_SCAN_RESULT` / `_IRQ_PERIPHERAL_CONNECT` — the BLE stack **reuses the address buffer** after the IRQ handler returns. Copy with `bytes()` before storing for later use (e.g. in dicts or GATT connect calls).
+
 LVGL tips:
 - the LVGL docs are available in lvgl_micropython/lib/lvgl/docs/ for example lvgl_micropython/lib/lvgl/docs/src/details/widgets/msgbox.rst
 - `lv.OPA` enum only has values at steps of 10: `TRANSP` (0), `_10`, `_20`, ..., `_100`, and `COVER` (255). Values like `_5` do NOT exist — use the nearest step or a raw integer (0–255).
