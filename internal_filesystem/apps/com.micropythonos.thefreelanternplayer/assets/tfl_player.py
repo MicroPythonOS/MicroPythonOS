@@ -3,7 +3,7 @@
 #
 # The Free Lantern Player for MicroPythonOS (ESP32-S3).
 # - Streams 45s WAV fragments from index.html (Song Title<B>Track No<B>Album<B>frag1<B>frag2...)
-# - Keeps a 2-fragment buffer using a background _thread prefetcher
+# - Keeps a 2-fragment buffer using a background prefetch task
 # - Saves playback state every 10s so it can resume after restart
 # - Next/Prev jumps to next/prev SONG (not fragment)
 # - Shows "Buffering..." when waiting for the next fragment
@@ -20,7 +20,6 @@
 import os
 import time
 import gc
-import _thread
 
 try:
     import lvgl as lv
@@ -28,16 +27,11 @@ except Exception:
     lv = None
 
 try:
-    import urequests as requests
-except ImportError:
-    import requests
-
-try:
     import ujson as json
 except ImportError:
     import json
 
-from mpos import Activity, sdcard, AudioManager, WidgetAnimator
+from mpos import Activity, sdcard, AudioManager, WidgetAnimator, DownloadManager, TaskManager
 from mpos.ui.focus import add_focus_border
 from mpos.ui.display_metrics import DisplayMetrics  # noqa: F401
 from mpos import ConnectivityManager
@@ -64,19 +58,18 @@ except Exception:
 # -------------------------
 # Configuration
 # -------------------------
-BASE_URL  = "http://www.thefreelantern.com/micropythonos/audio/"
+BASE_URL  = "https://www.thefreelantern.com/micropythonos/audio/"  # TODO(wasm): confirm https endpoint on thefreelantern.com
 INDEX_URL = BASE_URL + "index.html"
 
 SEP = "<B>"
 FRAGMENT_SECONDS = 45  # estimate for UI
 
-# Downloader tuning for ESP32-S3
-DL_CHUNK_BYTES = 8192
-DL_THROTTLE_MS = 5  # raise to 10 if you get audio stutter; 0 for max speed
-
-# Cache requirements for streaming mode
-CACHE_TARGET_BYTES = 2 * 1024 * 1024  # need >=2MiB free internal storage for caching
-CACHE_DIR = "/cache_audio"
+# Streaming fragment cache. Prefer the SD card when present (far more room),
+# otherwise internal flash. Fragments are small (ADPCM ~250KiB), so only a
+# little free space is needed to keep a short rolling buffer.
+CACHE_DIR = "/cache_audio"                          # internal streaming cache (fallback)
+SD_STREAM_CACHE_DIR = "/sdcard/.tfl_stream_cache"   # streaming cache on SD when present
+STREAM_CACHE_MIN_BYTES = 512 * 1024                 # need ~0.5MiB free on the chosen cache fs
 
 # State file (stored in cache dir)
 STATE_SAVE_INTERVAL = 10
@@ -122,11 +115,27 @@ def free_bytes(path="/"):
     st = os.statvfs(path)
     return st[4] * st[1]
 
-def has_internal_cache_space():
+def has_stream_cache_space(cache_dir):
     try:
-        return free_bytes("/") >= CACHE_TARGET_BYTES
+        return free_bytes(cache_dir) >= STREAM_CACHE_MIN_BYTES
     except Exception:
         return False
+
+def pick_stream_cache_dir(sd_present):
+    # Use the SD card for the streaming fragment cache when a card is present:
+    # it has far more room than internal flash, so streaming works even when
+    # internal storage is nearly full. Fall back to internal otherwise.
+    if sd_present:
+        try:
+            ensure_dir(SD_STREAM_CACHE_DIR)
+            probe = SD_STREAM_CACHE_DIR + "/.__t"
+            with open(probe, "w") as f:
+                f.write("x")
+            rm(probe)
+            return SD_STREAM_CACHE_DIR
+        except Exception:
+            pass
+    return CACHE_DIR
 
 # Choose a writable cache dir (ESP32 prefers /cache_audio; desktop runner may not allow writing to /)
 def init_cache_dir():
@@ -233,18 +242,11 @@ class AlbumIndex:
     def __init__(self):
         self.tracks = []
 
-    def load(self):
+    async def load(self):
         # download index
         try:
-            r = requests.get(INDEX_URL)
-            code = getattr(r, "status_code", None)
-            text = r.text
-            try:
-                r.close()
-            except Exception:
-                pass
-            if (code is not None) and (code != 200):
-                raise Exception("HTTP {}".format(code))
+            data = await DownloadManager.download_url(INDEX_URL)
+            text = data.decode("utf-8") if isinstance(data, bytes) else data
         except Exception as ex:
             raise Exception("Failed to download index.html: {}".format(ex))
 
@@ -288,73 +290,20 @@ class AlbumIndex:
 # -------------------------
 # Download helpers (robust)
 # -------------------------
-def download_streaming(url, dest, progress=None, chunk=DL_CHUNK_BYTES, throttle_ms=DL_THROTTLE_MS,
-                       stop_flag=None):
-    r = None
-    received = 0
-    total = None
+class _DownloadStopped(Exception):
+    pass
+
+async def download_streaming(url, dest, progress=None, stop_flag=None):
+    async def _pcb(pct):
+        if stop_flag and stop_flag():
+            raise _DownloadStopped()
+        if progress:
+            await progress(pct)
+
     try:
-        r = requests.get(url, stream=True)
-
-        try:
-            total = int(r.headers.get("Content-Length", 0)) or None
-        except Exception:
-            total = None
-
-        # Desktop runner often provides full body in .content
-        try:
-            if hasattr(r, "content") and r.content:
-                data = r.content
-                with open(dest, "wb") as f:
-                    f.write(data)
-                received = len(data)
-                if progress:
-                    progress(received, total)
-                return received, total
-        except Exception:
-            pass
-
-        # Streaming path
-        with open(dest, "wb") as f:
-            while True:
-                buf = r.raw.read(chunk)
-                if not buf:
-                    break
-                if stop_flag and stop_flag():
-                    break  # abandon partial download; caller must rm() the .part file
-                f.write(buf)
-                received += len(buf)
-                if progress:
-                    progress(received, total)
-                if throttle_ms:
-                    time.sleep_ms(throttle_ms)
-
-        return received, total
-
-    finally:
-        try:
-            if r:
-                r.close()
-        except Exception:
-            pass
-
-def get_remote_content_length(url):
-    r = None
-    try:
-        r = requests.get(url, stream=True)
-        try:
-            cl = r.headers.get("Content-Length", None)
-            if cl is None:
-                return None
-            return int(cl)
-        except Exception:
-            return None
-    finally:
-        try:
-            if r:
-                r.close()
-        except Exception:
-            pass
+        await DownloadManager.download_url(url, outfile=dest, progress_callback=_pcb)
+    except _DownloadStopped:
+        return  # abandon partial download; caller must rm() the .part file
 
 # -------------------------
 # SD album manager
@@ -421,7 +370,7 @@ class SDAlbumManager:
                 manifest[fn] = None
         return manifest
 
-    def download_all_missing_or_changed(self, index, force_redownload_changed=False, stop_flag=None):
+    async def download_all_missing_or_changed(self, index, force_redownload_changed=False, stop_flag=None):
         self.ensure_dirs()
         self.handle_incomplete_previous_download()
 
@@ -437,16 +386,9 @@ class SDAlbumManager:
             local_path = self.sd_path_for_fragment(album, trackno, title, fn)
 
             need = not exists(local_path)
-
-            if (not need) and force_redownload_changed:
-                remote_len = get_remote_content_length(url)
-                if remote_len is not None:
-                    try:
-                        local_len = os.stat(local_path)[6]
-                        if int(local_len) != int(remote_len):
-                            need = True
-                    except Exception:
-                        need = True
+            # NOTE(tradeoff): DownloadManager has no content-length probe; only
+            # missing files are redownloaded here now -- see verify_online_and_update_if_needed for how
+            # "changed" is still detected at the track-list level
 
             if not need:
                 done_files += 1
@@ -461,18 +403,14 @@ class SDAlbumManager:
 
             self.status("Downloading to SD:\n{}\n{}\n{}".format(album, title, fn))
 
-            def pcb(rcv, tot):
-                if tot:
-                    pct_file = int((rcv * 100) / tot)
-                else:
-                    pct_file = 0
+            async def pcb(pct):
                 overall = int((done_files * 100) / total_files)
-                combined = min(100, overall + int(pct_file / 10))
+                combined = min(100, overall + int(pct / 10))
                 self.progress(combined)
 
             tmp = local_path + ".part"
             rm(tmp)
-            download_streaming(url, tmp, progress=pcb, chunk=DL_CHUNK_BYTES, throttle_ms=0)
+            await download_streaming(url, tmp, progress=pcb)
 
             rm(local_path)
             try:
@@ -503,7 +441,7 @@ class SDAlbumManager:
         self.status("SD download complete.")
         return True
 
-    def verify_online_and_update_if_needed(self, index, stop_flag=None):
+    async def verify_online_and_update_if_needed(self, index, stop_flag=None):
         ts = load_json(SD_TIMESTAMP_FILE)
         if not ts:
             return True
@@ -512,27 +450,16 @@ class SDAlbumManager:
         remote_files = [fn for (_, _, _, fn) in index.all_fragments_flat()]
         old_files = list(old_manifest.keys()) if isinstance(old_manifest, dict) else []
 
+        # NOTE(tradeoff): DownloadManager has no HEAD/content-length probe, so
+        # same-named fragments whose remote bytes changed without a filename change
+        # can no longer be detected cheaply; a full manual re-download would be
+        # required to catch that case, which this plan intentionally does not force
+        # on every 10-day verify (bandwidth tradeoff, see SUMMARY).
         changed = (set(remote_files) != set(old_files))
-
-        if (not changed) and isinstance(old_manifest, dict):
-            self.status("Verifying SD album vs online...")
-            for i, fn in enumerate(remote_files):
-                if stop_flag and stop_flag():
-                    return False
-                url = BASE_URL + fn
-                remote_len = get_remote_content_length(url)
-                if remote_len is None:
-                    continue
-                old_len = old_manifest.get(fn, None)
-                if old_len is None or int(old_len) != int(remote_len):
-                    changed = True
-                    break
-                if i % 10 == 0:
-                    self.progress(int((i * 100) / max(1, len(remote_files))))
 
         if changed:
             self.status("Online album changed. Updating SD...")
-            return self.download_all_missing_or_changed(index, force_redownload_changed=True, stop_flag=stop_flag)
+            return await self.download_all_missing_or_changed(index, force_redownload_changed=True, stop_flag=stop_flag)
 
         self.status("SD verified OK. Refreshing timestamp.")
         local_manifest = self.build_local_manifest(index)
@@ -541,45 +468,43 @@ class SDAlbumManager:
         return True
 
 # -------------------------
-# Prefetcher (_thread)
+# Prefetcher (async task)
 # -------------------------
 class Prefetcher:
     def __init__(self):
-        self.lock = _thread.allocate_lock()
         self.todo = None       # (url, path)
         self.err = None
         self.stop = False
-        _thread.start_new_thread(self._run, ())
+        self._task = TaskManager.create_task(self._run())
 
     def request(self, url, path):
-        with self.lock:
-            self.todo = (url, path)
-            self.err = None
+        self.todo = (url, path)
+        self.err = None
 
     def get_err(self):
-        with self.lock:
-            return self.err
+        return self.err
 
     def clear_err(self):
-        with self.lock:
-            self.err = None
+        self.err = None
 
     def shutdown(self):
         self.stop = True
+        try:
+            self._task.cancel()
+        except Exception:
+            pass
 
-    def _run(self):
+    async def _run(self):
         while not self.stop:
-            job = None
-            with self.lock:
-                job = self.todo
-                self.todo = None
+            job = self.todo
+            self.todo = None
 
             if job:
                 url, path = job
                 try:
                     tmp = path + ".part"
                     rm(tmp)
-                    download_streaming(url, tmp, stop_flag=lambda: self.stop)
+                    await download_streaming(url, tmp, stop_flag=lambda: self.stop)
                     rm(path)
                     try:
                         os.rename(tmp, path)
@@ -593,19 +518,17 @@ class Prefetcher:
                                         break
                                     fdst.write(b)
                         rm(tmp)
-                    with self.lock:
-                        self.err = None
+                    self.err = None
                 except Exception as ex:
-                    with self.lock:
-                        self.err = str(ex)
+                    self.err = str(ex)
             else:
-                time.sleep_ms(50)
+                await TaskManager.sleep_ms(50)
 
 # -------------------------
 # Streaming player
 # -------------------------
 class StreamPlayer:
-    def __init__(self, index, state, status_cb, buffering_cb, stop_flag, command_getter, volume_getter):
+    def __init__(self, index, state, status_cb, buffering_cb, stop_flag, command_getter, volume_getter, cache_dir):
         self.index = index
         self.state = state
         self.status = status_cb
@@ -613,6 +536,7 @@ class StreamPlayer:
         self.stop_flag = stop_flag
         self.command_getter = command_getter
         self.volume_getter = volume_getter
+        self.cache_dir = cache_dir
         self.pref = Prefetcher()
         self._last_gc_ms = 0
         self._last_cleanup_ms = 0
@@ -627,7 +551,7 @@ class StreamPlayer:
     def _cache_path(self, track_idx, frag_idx):
         fn = self.index.tracks[track_idx]["fragments"][frag_idx]
         fn = str(fn).replace("/", "_")
-        return "{}/{}".format(CACHE_DIR, fn)
+        return "{}/{}".format(self.cache_dir, fn)
 
     def _maybe_gc(self):
         # Avoid GC at fragment boundaries; do it occasionally while playing.
@@ -699,13 +623,19 @@ class StreamPlayer:
         print("TFLPlayer audio error:", msg)
         self.status("Audio error.\nSkipping to next song.")
 
-    def play_forever(self):
+    async def play_forever(self):
         if not self.index.tracks:
             self.status("No tracks in index.")
             return
 
         self._wrap_track()
 
+        try:
+            await self._play_loop()
+        finally:
+            self.shutdown()
+
+    async def _play_loop(self):
         while not self.stop_flag():
             self._wrap_track()
             t = self.index.tracks[self.state.track]
@@ -720,8 +650,8 @@ class StreamPlayer:
                 self._apply_next_song()
                 continue
 
-            if not has_internal_cache_space():
-                self.status("Not enough storage to continue.\nInsert an SD card or free ~2 MiB.")
+            if not has_stream_cache_space(self.cache_dir):
+                self.status("Not enough storage to continue.\nFree some space or insert an SD card.")
                 return
 
             song_total = est_song_total_seconds(t)
@@ -740,13 +670,13 @@ class StreamPlayer:
                 ))
                 tmp = cur_path + ".part"
                 rm(tmp)
-                download_streaming(cur_url, tmp)
+                await download_streaming(cur_url, tmp)
                 rm(cur_path)
                 try:
                     os.rename(tmp, cur_path)
                 except Exception:
                     # fall back to direct download
-                    download_streaming(cur_url, cur_path)
+                    await download_streaming(cur_url, cur_path)
                     rm(tmp)
                 self.buffering(False)
 
@@ -795,7 +725,7 @@ class StreamPlayer:
                 for _ in range(15):
                     if self.stop_flag():
                         break
-                    time.sleep_ms(100)
+                    await TaskManager.sleep_ms(100)
                 # jump to next song
                 self.state.fragment = len(frags)
                 self.state.maybe_save()
@@ -835,7 +765,7 @@ class StreamPlayer:
                         fmt_mmss(song_elapsed), fmt_mmss(song_total)
                     ))
 
-                time.sleep_ms(100)
+                await TaskManager.sleep_ms(100)
 
             if self.stop_flag():
                 break
@@ -875,13 +805,11 @@ class StreamPlayer:
                         self.status("Buffering...\n{}\n{}\n(waited {}s)".format(
                             t.get("album", ""), t.get("title", ""), waited
                         ))
-                        time.sleep_ms(250)
+                        await TaskManager.sleep_ms(250)
                     self.buffering(False)
 
             # Opportunistic maintenance while playing; avoid doing it at boundaries.
             # (GC/cleanup runs from the playback loop.)
-
-        self.shutdown()
 
 # -------------------------
 # SD player
@@ -924,7 +852,7 @@ class SDPlayer:
         except Exception:
             pass
 
-    def play_forever(self):
+    async def play_forever(self):
         if not self.index.tracks:
             self.status("No tracks in index.")
             return
@@ -991,7 +919,7 @@ class SDPlayer:
                 for _ in range(15):
                     if self.stop_flag():
                         break
-                    time.sleep_ms(100)
+                    await TaskManager.sleep_ms(100)
                 self._apply_next_song()
                 continue
 
@@ -1018,7 +946,7 @@ class SDPlayer:
                         fmt_mmss(song_elapsed), fmt_mmss(song_total)
                     ))
 
-                time.sleep_ms(100)
+                await TaskManager.sleep_ms(100)
 
             if self.stop_flag():
                 break
@@ -1048,12 +976,10 @@ class AlbumPlayer(Activity):
         self._stop = False
         self._playing = False
 
-        self._cmd_lock = _thread.allocate_lock()
         self._command = None  # "next" | "prev" | None
 
         self._worker_running = False
-        self._worker_lock = _thread.allocate_lock()  # guards check-and-set of _worker_running
-        self._choice_lock = _thread.allocate_lock()
+        self._worker_task = None  # asyncio Task handle for best-effort cancellation in onDestroy
         self._user_choice = None  # "sd" | "stream" | None
 
         # Index/state references kept so next/prev can preview tracks while paused.
@@ -1084,15 +1010,13 @@ class AlbumPlayer(Activity):
         return self._stop
 
     def _set_command(self, cmd):
-        with self._cmd_lock:
-            self._command = cmd
+        self._command = cmd
 
     def _get_command(self, clear=False):
-        with self._cmd_lock:
-            c = self._command
-            if clear:
-                self._command = None
-            return c
+        c = self._command
+        if clear:
+            self._command = None
+        return c
 
     # ----- UI helpers -----
     def ui_set_status(self, txt):
@@ -1421,10 +1345,9 @@ class AlbumPlayer(Activity):
             # while paused (next/prev) resumes correctly.
             self._stop = False
             self._set_command(None)
-            with self._worker_lock:
-                if not self._worker_running:
-                    self._worker_running = True
-                    _thread.start_new_thread(self._worker_main, ())
+            if not self._worker_running:
+                self._worker_running = True
+                self._worker_task = TaskManager.create_task(self._worker_main())
             self._playing = True
             self._show_play_crop(True)
 
@@ -1640,10 +1563,9 @@ class AlbumPlayer(Activity):
         except Exception as ex:
             print("SD mount skipped:", ex)
 
-        with self._worker_lock:
-            if not self._worker_running:
-                self._worker_running = True
-                _thread.start_new_thread(self._worker_main, ())
+        if not self._worker_running:
+            self._worker_running = True
+            self._worker_task = TaskManager.create_task(self._worker_main())
 
     def onPause(self, screen):
         self._request_stop()
@@ -1651,6 +1573,11 @@ class AlbumPlayer(Activity):
 
     def onDestroy(self, screen):
         self._request_stop()
+        if self._worker_task:
+            try:
+                self._worker_task.cancel()
+            except Exception:
+                pass
         super().onDestroy(screen)
         # C-heap-safe teardown: release decoded image buffers (set_src(None)) then gc.collect().
         # Do NOT call screen.delete() -- the framework calls screen.clean() after onDestroy.
@@ -1684,6 +1611,7 @@ class AlbumPlayer(Activity):
         if hasattr(self, 'modal') and self.modal:
             self.modal = None
         self._about_modal = None
+        self._worker_task = None
 
     # ----- buttons -----
     def next_clicked(self):
@@ -1763,13 +1691,11 @@ class AlbumPlayer(Activity):
         add_focus_border(btn_no)
 
         def choose_sd(_e):
-            with self._choice_lock:
-                self._user_choice = "sd"
+            self._user_choice = "sd"
             WidgetAnimator.smooth_hide(self.modal, hide=True, duration=200)
 
         def choose_stream(_e):
-            with self._choice_lock:
-                self._user_choice = "stream"
+            self._user_choice = "stream"
             WidgetAnimator.smooth_hide(self.modal, hide=True, duration=200)
 
         btn_yes.add_event_cb(choose_sd, lv.EVENT.CLICKED, None)
@@ -1790,20 +1716,19 @@ class AlbumPlayer(Activity):
             pass
         WidgetAnimator.smooth_show(self.modal, duration=200)
 
-    def _wait_for_choice(self, timeout_s=60):
+    async def _wait_for_choice(self, timeout_s=60):
         start = time.time()
         while not self._stop_flag():
-            with self._choice_lock:
-                c = self._user_choice
+            c = self._user_choice
             if c in ("sd", "stream"):
                 return c
             if time.time() - start > timeout_s:
                 return "stream"
-            time.sleep_ms(100)
+            await TaskManager.sleep_ms(100)
         return None
 
-    # ----- worker thread -----
-    def _worker_main(self):
+    # ----- worker task -----
+    async def _worker_main(self):
         # D-07/D-08: connectivity pre-check before any network call
         # NEVER use wait_until_online() -- it has a truthy bug (tests bound method, always True)
         try:
@@ -1819,7 +1744,7 @@ class AlbumPlayer(Activity):
         try:
             self.ui_set_status("Loading index...")
             try:
-                idx = AlbumIndex().load()
+                idx = await AlbumIndex().load()
             except Exception as ex:
                 print("TFLPlayer: index load error:", ex)
                 self.ui_set_status("Could not load track list.\n\nCheck your connection and try again.")
@@ -1832,13 +1757,18 @@ class AlbumPlayer(Activity):
             sdman = SDAlbumManager(status_cb=self.ui_set_status, progress_cb=self.ui_set_progress)
 
             sd_present = sdman.sd_present()
-            cache_ok = has_internal_cache_space()
 
-            if (not sd_present) and (not cache_ok):
+            # Where streaming will cache fragments: the SD card when present
+            # (lots of room), otherwise internal flash. Decide up front so the
+            # free-space check matches the filesystem we will actually write to.
+            stream_cache_dir = pick_stream_cache_dir(sd_present)
+            cache_ok = has_stream_cache_space(stream_cache_dir)
+
+            if not cache_ok:
                 self.ui_set_progress(0)
                 self.ui_set_status(
-                    "No SD card and not enough internal storage.\n"
-                    "Insert an SD card (>=70 MiB free) or free ~2 MiB."
+                    "Not enough free storage.\n"
+                    "Insert an SD card or free some space."
                 )
                 self._request_stop()
                 return
@@ -1847,7 +1777,7 @@ class AlbumPlayer(Activity):
             choice = "stream"
             if sdman.sd_ready():
                 self.update_ui_threadsafe_if_foreground(self._show_sd_choice_modal)
-                c = self._wait_for_choice(timeout_s=60)
+                c = await self._wait_for_choice(timeout_s=60)
                 if c:
                     choice = c
 
@@ -1864,33 +1794,26 @@ class AlbumPlayer(Activity):
                 # If timestamp missing but inprogress exists: resume
                 if (not exists(SD_TIMESTAMP_FILE)) and exists(SD_INPROGRESS_FILE):
                     sdman.handle_incomplete_previous_download()
-                    ok = sdman.download_all_missing_or_changed(idx, force_redownload_changed=False, stop_flag=self._stop_flag)
+                    ok = await sdman.download_all_missing_or_changed(idx, force_redownload_changed=False, stop_flag=self._stop_flag)
                     if not ok or self._stop_flag():
                         return
                 else:
                     if exists(SD_TIMESTAMP_FILE) and sdman.should_verify_online():
-                        ok = sdman.verify_online_and_update_if_needed(idx, stop_flag=self._stop_flag)
+                        ok = await sdman.verify_online_and_update_if_needed(idx, stop_flag=self._stop_flag)
                         if not ok or self._stop_flag():
                             return
                     else:
-                        ok = sdman.download_all_missing_or_changed(idx, force_redownload_changed=False, stop_flag=self._stop_flag)
+                        ok = await sdman.download_all_missing_or_changed(idx, force_redownload_changed=False, stop_flag=self._stop_flag)
                         if not ok or self._stop_flag():
                             return
 
                 self.ui_set_status("Playing from SD...")
                 p = SDPlayer(idx, st, self._worker_status_cb, self._stop_flag, self._get_command, lambda: self._volume)
-                p.play_forever()
+                await p.play_forever()
                 return
 
-            # streaming mode
-            if not cache_ok:
-                self.ui_set_status(
-                    "Not enough internal storage for streaming.\n"
-                    "Insert an SD card or free ~2 MiB."
-                )
-                self._request_stop()
-                return
-
+            # streaming mode (fragments cached on stream_cache_dir chosen above:
+            # the SD card when present, else internal flash)
             st.mode = "stream"
             st.maybe_save()
 
@@ -1901,9 +1824,10 @@ class AlbumPlayer(Activity):
                 buffering_cb=self.ui_buffering_banner,
                 stop_flag=self._stop_flag,
                 command_getter=self._get_command,
-                volume_getter=lambda: self._volume
+                volume_getter=lambda: self._volume,
+                cache_dir=stream_cache_dir
             )
-            sp.play_forever()
+            await sp.play_forever()
 
         except Exception as ex:
             print("TFLPlayer: worker fatal error:", ex)
