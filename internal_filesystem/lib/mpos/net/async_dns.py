@@ -25,6 +25,7 @@ Usage:
 import socket
 import _thread
 import sys
+import time
 from mpos.task_manager import TaskManager
 
 # Module-level reference to the getaddrinfo implementation.  Tests replace this
@@ -41,6 +42,31 @@ _getaddrinfo = socket.getaddrinfo
 _MAX_INFLIGHT = 2
 _inflight_lock = _thread.allocate_lock()
 _inflight = 0
+
+# Cache successful resolutions per (host, port, proto, socktype). Apps that
+# fetch many files from one host, or that repeatedly retry a relay connection,
+# would otherwise spawn a fresh resolver thread per lookup; on a thread-starved
+# ESP32-S3 a burst of those can exhaust the thread pool. A short TTL keeps
+# results fresh enough to follow DNS changes. Only successful lookups are cached
+# (errors must re-resolve).
+_DNS_CACHE_TTL_MS = 300_000  # 5 minutes
+_dns_cache = {}  # (host, port, proto, socktype) -> (result, resolved_ticks_ms)
+
+
+def clear_dns_cache():
+    """Drop all cached DNS results (call on network changes; used by tests)."""
+    _dns_cache.clear()
+
+
+def _dns_cache_get(key):
+    entry = _dns_cache.get(key)
+    if entry is None:
+        return None
+    result, ts = entry
+    if time.ticks_diff(time.ticks_ms(), ts) >= _DNS_CACHE_TTL_MS:
+        _dns_cache.pop(key, None)
+        return None
+    return result
 
 
 async def getaddrinfo_async(host, port, proto=0, socktype=None):
@@ -67,12 +93,21 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
     if socktype is None:
         socktype = socket.SOCK_STREAM
 
+    # Serve a cached resolution immediately when still fresh -- no worker thread
+    # (and no event-loop yield) needed. Applies on every platform.
+    key = (host, port, proto, socktype)
+    cached = _dns_cache_get(key)
+    if cached is not None:
+        return cached
+
     # On the unix port _thread is marked 'unsafe'; spawning worker threads for
     # DNS on desktop corrupts the heap and crashes the process. Call getaddrinfo
     # directly there (it is reasonably fast and does not block an LVGL task
     # handler on desktop). On ESP32 keep the off-loop worker thread.
     if sys.platform == "linux":
-        return _getaddrinfo(host, port, proto, socktype)
+        result = _getaddrinfo(host, port, proto, socktype)
+        _dns_cache[key] = (result, time.ticks_ms())
+        return result
 
     global _inflight
 
@@ -120,4 +155,6 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
     if _result["exc"] is not None:
         raise _result["exc"]
 
+    # Cache only successful results so a later lookup can skip the worker thread.
+    _dns_cache[key] = (_result["value"], time.ticks_ms())
     return _result["value"]
