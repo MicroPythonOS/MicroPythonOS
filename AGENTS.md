@@ -58,6 +58,9 @@ MicroPython BLE tips:
 - Module-level BLE state machines: **every variable assigned in an IRQ handler needs `global`**. Forgetting it creates a silent local shadow variable (no error, state just disappears). Check every `=` across every handler function. Reading module-level vars without `global` is fine.
 - UUID comparison mismatch mock vs real: mock IRQ events must pass **raw integers** for UUID fields (`uuid == 0xB2E4`), but on real hardware UUIDs are `bluetooth.UUID()` objects. A `_uuid(val)` helper that returns raw int in mock mode and `_bt.UUID(val)` on device handles both paths.
 - `addr = bytes(addr)` after `_IRQ_SCAN_RESULT` / `_IRQ_PERIPHERAL_CONNECT` — the BLE stack **reuses the address buffer** after the IRQ handler returns. Copy with `bytes()` before storing for later use (e.g. in dicts or GATT connect calls).
+- ESP32 BLE uses **synchronous event dispatch** (`MICROPY_PY_BLUETOOTH_USE_SYNC_EVENTS = 1` in `mpconfigport.h`). `gap_connect()`, `gattc_discover_services()`, `gattc_write()` etc. dispatch IRQ events synchronously inside the call, causing deep re-entrant nesting of `_ble_irq_handler`. Guard with a recursion-depth counter (`_irq_depth`); bail if depth exceeds ~8 to prevent `maximum recursion depth exceeded`.
+- When a BLE peripheral dict (e.g. `_devices`) tracks both **scan data** (rssi, last_seen) and **ephemeral state** (friend-request relation), never `clear()` the dict — it wipes state that must survive between scan cycles. Instead, track `last_seen` timestamps per entry and remove only entries stale for N cycles at `_on_scan_done`.
+- GATT busy-flag deadlock: if a `_process_gatt_queue()` function sets a `_gatt_busy = True` flag at entry and only clears it in a disconnect handler, then any exit path that finds nothing to send leaves the flag stuck True, **permanently blocking all future GATT operations**. Always clear the busy flag at the end of the idle-exit path.
 
 LVGL tips:
 - the LVGL docs are available in lvgl_micropython/lib/lvgl/docs/ for example lvgl_micropython/lib/lvgl/docs/src/details/widgets/msgbox.rst
@@ -105,6 +108,7 @@ MicroPythonOS tips:
 - `self.appFullName` is automatically set by the ActivityNavigator when launching an Activity. Use it instead of hard-coding the app's package name (e.g. for `SharedPreferences(self.appFullName)`).
 - Use `mpos.ui.SettingsActivity` to edit multiple related settings and `mpos.ui.SettingActivity` to edit a single setting. Prefer these shared activities over building custom dialogs or activities.
 - When investigating a UI bug, trust visual reality over the code's intent. Especially with LVGL flex layouts, aligning a column to the bottom of its parent does **not** reverse child paint order: the first child created still renders at the visual top. Inspect the actual widget coordinates — for example with `mpos.get_widget_tree()` — instead of reasoning only from the internal data model. And when a user keeps insisting after an initial disagreement, they are likely seeing something you are missing.
+- Debug-log trap with `__debug__` guards: `if __debug__: logger.debug("x=%s", x)` only compiles away under `-O3` (`__debug__ = False`). When `__debug__` is `True` (default), the statement executes normally — **variables referenced in the format string must be defined before the log line**, not after. Order matters: assign first, log second.
 
 MicroPython compatibility:
 - Soft reset is broken on lvgl_micropython and therefore also on MicroPythonOS. Use `machine.reset()` to do a hard reset.
