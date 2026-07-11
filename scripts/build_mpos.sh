@@ -48,6 +48,7 @@ reset_web_port_changes() {
 	rm -f "$lvgl_dir"/builder/web.py
 	rm -rf "$lvgl_dir"/ext_mod/_webnet
 	rm -rf "$lvgl_dir"/ext_mod/_webterm
+	rm -rf "$lvgl_dir"/ext_mod/_webio
 
 	# Remove stale patch reject files left by earlier failed/forward patch runs.
 	rm -f "$lvgl_dir"/make.py.rej
@@ -475,6 +476,13 @@ elif [ "$target" == "web" ]; then
 	mkdir -p "$codebasedir"/lvgl_micropython/ext_mod/_webterm
 	cp "$web_port_dir"/ext_mod/_webterm/webterm.c "$codebasedir"/lvgl_micropython/ext_mod/_webterm/webterm.c
 	cp "$web_port_dir"/ext_mod/_webterm/micropython.mk "$codebasedir"/lvgl_micropython/ext_mod/_webterm/micropython.mk
+	# 6) _webio native user C module (browser badge-peripheral bridge): NeoPixel
+	#    LED output to on-page dots + button/joystick input from the on-page
+	#    D-pad and X/Y/A/B/MENU controls. Auto-discovered via USER_C_MODULES;
+	#    only built when MPOS_WEB=1.
+	mkdir -p "$codebasedir"/lvgl_micropython/ext_mod/_webio
+	cp "$web_port_dir"/ext_mod/_webio/webio.c "$codebasedir"/lvgl_micropython/ext_mod/_webio/webio.c
+	cp "$web_port_dir"/ext_mod/_webio/micropython.mk "$codebasedir"/lvgl_micropython/ext_mod/_webio/micropython.mk
 
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
@@ -551,6 +559,16 @@ elif [ "$target" == "web" ]; then
 	# aiorepl.task(); on web that resolves to this override from lib/.
 	echo "Injecting web-only aiorepl (REPL-over-_webterm) shim into staged lib/..."
 	cp "$web_port_dir"/staged_lib/aiorepl.py "$staged_fs"/lib/aiorepl.py
+
+	# Web-only badge peripheral emulation backed by the _webio native bridge:
+	# - neopixel.py: drop-in NeoPixel that forwards packed RGB buffers to the
+	#   on-page LED dots (mpos.lights works unchanged).
+	# - web_expander.py: fake Fri3d 2026 expander whose digital/analog
+	#   properties read the on-page joystick + X/Y/A/B/MENU button state, so
+	#   the real Fri3d2026Expander indev driver runs unchanged.
+	echo "Injecting web-only neopixel + web_expander shims into staged lib/..."
+	cp "$web_port_dir"/staged_lib/neopixel.py "$staged_fs"/lib/neopixel.py
+	cp "$web_port_dir"/staged_lib/web_expander.py "$staged_fs"/lib/web_expander.py
 
 	# WebREPL/WebSocket rely on the native `_webrepl` and `websocket` C modules,
 	# which are not built for web and which depend on raw sockets (unavailable
