@@ -19,6 +19,22 @@ disable_native_viper() {
 	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
 }
 
+apply_patch() {
+	# $1 = dir to patch in, $2 = patch file. Fails the build when a required
+	# patch neither applies forward nor is already applied, instead of
+	# silently shipping a build without it (see the _webterm output bridge
+	# incident: `|| true` swallowed a failed unix_mphal.c patch and the
+	# deployed web build had a dead stdout mirror).
+	if patch -p1 --forward -d "$1" --dry-run < "$2" >/dev/null 2>&1; then
+		patch -p1 --forward -d "$1" < "$2"
+	elif patch -p1 --reverse -d "$1" --dry-run < "$2" >/dev/null 2>&1; then
+		echo "Patch $2 already applied, skipping."
+	else
+		echo "FATAL: patch $2 does not apply in $1" >&2
+		exit 1
+	fi
+}
+
 reset_web_port_changes() {
 	# The web build applies web-port-only patches and copies web-only files into
 	# the lvgl_micropython submodule.  These changes must not leak into esp32,
@@ -49,7 +65,6 @@ reset_web_port_changes() {
 	if [ -e "$mp_dir"/.git ]; then
 		git -C "$mp_dir" checkout -- \
 			ports/unix/gccollect.c \
-			ports/unix/unix_mphal.c \
 			2>/dev/null || true
 	fi
 }
@@ -154,19 +169,13 @@ echo "Symlinking c_mpos for unix and macOS builds..."
 ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 
 echo "Applying lvgl_micropython esp32 uart repl enable/disable at runtime patch..."
-pushd "$codebasedir"/lvgl_micropython/lib/micropython
-patch -p1 --forward < ../../esp32_uart_repl_runtime.patch || true
-popd
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_uart_repl_runtime.patch
 
 echo "Applying lvgl_micropython/lib/lvgl bmp scaling fix patch..."
-pushd "$codebasedir"/lvgl_micropython/lib/lvgl
-patch -p1 --forward < ../../lib_lvgl_lv_bmp.c.patch || true
-popd
+apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropython/lib_lvgl_lv_bmp.c.patch
 
 echo "Applying lvgl_micropython/lib/lvgl/src/libs/tjpgd scaling fix patch..."
-pushd "$codebasedir"/lvgl_micropython/lib/lvgl
-patch -p1 --forward < ../../lib_lvgl_src_libs_tjpgd_fix_scaling.patch || true
-popd
+apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropython/lib_lvgl_src_libs_tjpgd_fix_scaling.patch
 
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
@@ -177,9 +186,7 @@ popd
 imgfont_patch="$codebasedir"/lvgl_micropython/imgfont_set_range.patch
 if [ -f "$imgfont_patch" ]; then
 	echo "Applying lvgl_micropython imgfont_set_range patch..."
-	pushd "$codebasedir"/lvgl_micropython/lib/lvgl
-	patch -p1 --forward < "$imgfont_patch" || true
-	popd
+	apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$imgfont_patch"
 fi
 
 echo "Minifying and inlining HTML..."
@@ -240,11 +247,9 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/frozen_mpy 2>/dev/null
 
 	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
-	pushd "$codebasedir"/lvgl_micropython/lib/micropython
-	patch -p1 --forward < ../../esp32_inisetup_warn_and_format.patch || true
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_warn_and_format.patch
 	echo "Applying lvgl_micropython esp32 inisetup readsize/progsize patch..."
-	patch -p1 --forward < ../../esp32_inisetup_readsize_progsize.patch || true
-	popd
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_readsize_progsize.patch
 
 	partition_size="4194304"
 	flash_size="16"
@@ -322,9 +327,7 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
 
 	echo "Applying unix auto-import main patch..."
-	pushd "$codebasedir"/lvgl_micropython/lib/micropython
-	patch -p1 --forward < ../../unix_autoimport_main.patch || true
-	popd
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
 
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
@@ -437,9 +440,7 @@ elif [ "$target" == "web" ]; then
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
 
 	echo "Applying unix auto-import main patch..."
-	pushd "$codebasedir"/lvgl_micropython/lib/micropython
-	patch -p1 --forward < ../../unix_autoimport_main.patch || true
-	popd
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
 
 	# Apply the web-port modifications to the lvgl_micropython submodule. These
 	# live in THIS (MicroPythonOS) repo under scripts/web_port/ so the entire web
@@ -451,17 +452,18 @@ elif [ "$target" == "web" ]; then
 	# 1) Emscripten/WebAssembly build backend consumed by lvgl_micropython's make.py.
 	cp "$web_port_dir"/web.py "$codebasedir"/lvgl_micropython/builder/web.py
 	# 1b) Register the 'web' target in make.py (argparse choices + builder dispatch).
-	patch -p1 --forward -d "$codebasedir"/lvgl_micropython < "$web_port_dir"/make.py.patch || true
+	apply_patch "$codebasedir"/lvgl_micropython "$web_port_dir"/make.py.patch
 	# 1c) Gate lcd_bus SDL flags behind MPOS_WEB=1 so the web build uses Emscripten's
 	#     bundled SDL2 (-sUSE_SDL=2) instead of linking a natively built SDL2.
-	patch -p1 --forward -d "$codebasedir"/lvgl_micropython < "$web_port_dir"/lcd_bus_micropython.mk.patch || true
+	apply_patch "$codebasedir"/lvgl_micropython "$web_port_dir"/lcd_bus_micropython.mk.patch
 	# 2) SDL bus struct-layout fix (32-bit/wasm indirect-call type safety).
-	patch -p1 --forward -d "$codebasedir"/lvgl_micropython < "$web_port_dir"/sdl_bus.h.patch || true
+	apply_patch "$codebasedir"/lvgl_micropython "$web_port_dir"/sdl_bus.h.patch
 	# 3) Conservative-GC stack/register scan for wasm (fixes "memory access out of bounds").
-	patch -p1 --forward -d "$codebasedir"/lvgl_micropython/lib/micropython < "$web_port_dir"/gccollect.c.patch || true
-	# 3b) Mirror unix stdout to the _webterm bridge (lets an external host see all
-	#     REPL/stdout output). Guarded by __EMSCRIPTEN__ so device builds are unaffected.
-	patch -p1 --forward -d "$codebasedir"/lvgl_micropython/lib/micropython < "$web_port_dir"/unix_mphal.c.patch || true
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$web_port_dir"/gccollect.c.patch
+	# 3b) NOTE: the stdout -> host mirror no longer patches unix_mphal.c. It is
+	#     implemented with Emscripten's per-byte Module.stdout hook directly in
+	#     web/shell.html (a tracked file), so it cannot silently disappear when a
+	#     submodule patch fails to apply.
 	# 4) _webnet native user C module (browser fetch() bridge for HTTP networking).
 	#    Auto-discovered via USER_C_MODULES; only built when MPOS_WEB=1.
 	mkdir -p "$codebasedir"/lvgl_micropython/ext_mod/_webnet
@@ -544,7 +546,7 @@ elif [ "$target" == "web" ]; then
 	# a drop-in that reads input from the `_webterm` JS bridge instead, so an
 	# external host (e.g. ViperIDE/Fri3d-IDE) can drive the REPL like a serial
 	# device. Output still goes through sys.stdout, which the web build mirrors
-	# to the host via _webterm (see unix_mphal.c.patch + ext_mod/_webterm).
+	# to the host via the Module.stdout hook in web/shell.html.
 	# AIOReplService (device source, unchanged) imports aiorepl and calls
 	# aiorepl.task(); on web that resolves to this override from lib/.
 	echo "Injecting web-only aiorepl (REPL-over-_webterm) shim into staged lib/..."

@@ -147,8 +147,16 @@ async def task(g=None, prompt=">>> "):
         g = __import__("__main__").__dict__
     micropython.kbd_intr(-1)
     s = _WebStdin()
+    # Only reprint the prompt after an interaction that actually produced
+    # visible activity. Hosts probing with bare CRs during boot (to detect
+    # REPL readiness) would otherwise spam ">>> " into the console log.
+    # (Hosts can also skip probing entirely: Module.__webterm.ready is set
+    # once _webterm.init() has run.)
+    show_prompt = True
     while True:
-        sys.stdout.write(prompt)
+        if show_prompt:
+            sys.stdout.write(prompt)
+        show_prompt = True
         cmd = ""
         paste = False
         while True:
@@ -182,6 +190,11 @@ async def task(g=None, prompt=">>> "):
                     sys.stdout.write("\n")
                     cmd += "\n"
                     continue
+                if not cmd:
+                    # Bare CR/LF with nothing typed: don't echo a newline or a
+                    # fresh prompt (avoids prompt spam from readiness probes).
+                    show_prompt = False
+                    break
                 sys.stdout.write("\n")
                 result = await execute(cmd, g, s)
                 if result is not None:

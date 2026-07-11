@@ -170,6 +170,53 @@
       arguments: ["-X", "heapsize=16M", "-m", "main"],
       print: (text) => { console.log(text); appendLog(text, false); },
       printErr: (text) => { console.error(text); appendLog(text, true); },
+      // Per-byte stdout hook. Must be defined in the static Module object
+      // (TTY ops are bound at runtime init — attaching it later is ignored).
+      //
+      // This is the ONLY path that mirrors MicroPython stdout to an external
+      // host (ViperIDE/Fri3d-IDE) via Module.__webterm.onOutput. Unlike
+      // Module.print (line-buffered, drops raw-REPL control bytes like \x01
+      // and \x04), this hook sees every byte, so the standard raw-REPL
+      // handshake works. It replaces the former unix_mphal.c submodule patch,
+      // which could silently fail to apply and ship a dead bridge.
+      //
+      // Bytes are normalized LF -> CRLF (statefully, never doubling an
+      // existing CRLF) because hosts written for real boards match banners
+      // like "raw REPL; CTRL-B to exit\r\n" that serial drivers emit.
+      stdout: (function () {
+        var outbuf = [];       // normalized bytes pending delivery to the host
+        var linebuf = [];      // decoded text pending a newline, for the log
+        var sched = false;
+        var prevWasCR = false; // CRLF-normalization state
+        var utf8 = new TextDecoder("utf-8");
+        function flush() {
+          sched = false;
+          if (outbuf.length) {
+            var b = new Uint8Array(outbuf);
+            outbuf.length = 0;
+            var H = Module.__webterm;
+            if (H && typeof H.onOutput === "function") {
+              try { H.onOutput(b); } catch (e) { console.error("onOutput failed:", e); }
+            }
+          }
+        }
+        return function (code) {
+          if (code === null || code === undefined) return; // flush marker
+          code &= 0xff;
+          if (code === 0x0a && !prevWasCR) outbuf.push(0x0d); // LF -> CRLF
+          prevWasCR = (code === 0x0d);
+          outbuf.push(code);
+          if (!sched) { sched = true; setTimeout(flush, 0); }
+          // Line-buffered copy into the on-page log/console (Module.print no
+          // longer receives stdout once this hook is installed).
+          if (code === 0x0a) {
+            appendLog(utf8.decode(new Uint8Array(linebuf)), false);
+            linebuf.length = 0;
+          } else if (code !== 0x0d) {
+            linebuf.push(code);
+          }
+        };
+      })(),
       setStatus: (text) => {
         if (statusEl) statusEl.textContent = text;
         if (text === "") statusEl.style.display = "none";

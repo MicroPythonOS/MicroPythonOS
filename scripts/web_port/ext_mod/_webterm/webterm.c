@@ -12,8 +12,10 @@
 //
 // Direction Python -> host (output):
 //   Python calls tx(bytes); the bytes are handed to Module.__webterm.onOutput
-//   (a JS callback the host installs) as a Uint8Array. REPL output (mirrored
-//   from sys.stdout via os.dupterm) flows out this way.
+//   (a JS callback the host installs) as a Uint8Array. Regular sys.stdout
+//   output (REPL framing, boot logs, executed-code output) is mirrored to the
+//   same onOutput callback by the Module.stdout per-byte hook installed in
+//   web/shell.html — no submodule C patch involved.
 //
 // This file is only compiled for the Emscripten/web target (guarded by
 // __EMSCRIPTEN__ and gated to MPOS_WEB=1 in micropython.mk); on every other
@@ -39,6 +41,10 @@ EM_JS(void, webterm_js_init, (void), {
     var H = Module.__webterm || (Module.__webterm = {});
     if (!H.inq) { H.inq = []; }
     if (!H.onOutput) { H.onOutput = null; }
+    // Readiness flag: set once Python has imported _webterm and called init()
+    // (i.e. the web aiorepl is about to start). Hosts can poll this instead of
+    // probing the REPL with CR bytes during boot.
+    H.ready = true;
     if (!H.push) {
         // Accepts a Uint8Array, Array, or single byte number.
         H.push = function (data) {
@@ -64,20 +70,6 @@ EM_JS(void, webterm_js_tx, (const char *buf, int len), {
     // may move/grow), then deliver a fresh Uint8Array to the host callback.
     try { H.onOutput(HEAPU8.slice(buf, buf + len)); } catch (e) {}
 });
-
-// ---------------------------------------------------------------------------
-// Global stdout hook. unix_mphal.c (patched for the web build) calls this from
-// mp_hal_stdout_tx_strn so that ALL MicroPython stdout — boot logs, REPL
-// framing, and the output of code executed over the REPL — is mirrored to the
-// JS host. webterm_js_tx() no-ops when no host onOutput callback is installed,
-// so this is inert until a host (e.g. ViperIDE) attaches.
-// ---------------------------------------------------------------------------
-
-void mp_webterm_stdout(const char *str, size_t len) {
-    if (len > 0) {
-        webterm_js_tx(str, (int)len);
-    }
-}
 
 // ---------------------------------------------------------------------------
 // MicroPython bindings
