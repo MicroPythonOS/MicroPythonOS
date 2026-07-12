@@ -58,8 +58,8 @@ class SettingsActivity(Activity):
             return
 
         for setting in self.settings:
-            should_show = setting.get("should_show")
-            if should_show is not None:
+            if "should_show" in setting:
+                should_show = setting["should_show"]
                 if callable(should_show):
                     should_show = should_show(setting)
                 if not should_show:

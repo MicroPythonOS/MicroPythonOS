@@ -76,8 +76,8 @@ class TestValueLabelFor(unittest.TestCase):
 class TestShouldShow(unittest.TestCase):
 
     def _should_show(self, setting):
-        should_show = setting.get("should_show")
-        if should_show is not None:
+        if "should_show" in setting:
+            should_show = setting["should_show"]
             if callable(should_show):
                 should_show = should_show(setting)
             if not should_show:
@@ -104,6 +104,9 @@ class TestShouldShow(unittest.TestCase):
 
     def test_should_show_false_hides(self):
         self.assertFalse(self._should_show({"should_show": False}))
+
+    def test_should_show_none_hides(self):
+        self.assertFalse(self._should_show({"should_show": None}))
 
     def test_should_show_truthy_object_shows(self):
         self.assertTrue(self._should_show({"should_show": "some_output"}))
