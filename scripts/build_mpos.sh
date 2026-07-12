@@ -252,24 +252,25 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	echo "Applying lvgl_micropython esp32 inisetup readsize/progsize patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_readsize_progsize.patch
 
-	partition_size="4194304"
+	partition_size=3670016 # 3.5MiB is enough and is the maximum for the Fri3d 2024/2026 devices due to the partition table
 	flash_size="16"
 	otasupport="--ota"
 	extra_configs=""
 	if [ "$target" == "esp32" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
+		partition_size=3737600 # esp32 builds are ~65 KiB bigger than esp32s3 builds
 	elif [ "$target" == "esp32-small" ]; then
-        # No PSRAM, so do not set SPIRAM-specific options
+		# No PSRAM, so do not set SPIRAM-specific options
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=
-		partition_size="3800000"
+		partition_size=3737600 # esp32 builds are ~65 KiB bigger than esp32s3 builds
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
 	elif [ "$target" == "lilygo_t4" ]; then
 		BOARD=ESP32_GENERIC
 		BOARD_VARIANT=SPIRAM
-		partition_size="3800000"
+		partition_size=3737600 # esp32 builds are ~65 KiB bigger than esp32s3 builds
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
 	else # esp32s3 or unphone
