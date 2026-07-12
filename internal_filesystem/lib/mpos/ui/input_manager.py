@@ -21,6 +21,8 @@ class InputManager:
     """
     
     _registered_indevs = []  # List of registered input devices
+
+    _has_haptic_feedback = False
     
     @classmethod
     def register_indev(cls, indev):
@@ -76,6 +78,10 @@ class InputManager:
         return cls.has_indev_type(lv.INDEV_TYPE.POINTER)
 
     @classmethod
+    def has_haptic_feedback(cls):
+        return _has_haptic_feedback
+
+    @classmethod
     def set_touch_feedback_cb(cls, cb):
         """Attach cb(event) to every registered pointer indev on LV_EVENT_CLICKED.
 
@@ -90,6 +96,7 @@ class InputManager:
                     indev.add_event_cb(cb, lv.EVENT.CLICKED, None)
             except Exception as e:
                 logger.error("set_touch_feedback_cb: %s", e)
+        cls._has_haptic_feedback = True
 
     @classmethod
     def pointer_xy(cls):

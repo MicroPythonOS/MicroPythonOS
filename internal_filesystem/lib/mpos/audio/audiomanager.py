@@ -255,22 +255,34 @@ class AudioManager:
         except Exception as exc:
             logger.error("Could not persist %s: %s", key, exc)
 
-    def _find_output_by_name(self, name):
+    def find_output_by_name(self, name):
         for output in self._outputs:
             if output.name == name:
                 return output
         return None
 
-    def _find_input_by_name(self, name):
+    def find_input_by_name(self, name):
         for input_device in self._inputs:
             if input_device.name == name:
                 return input_device
         return None
 
+    def find_output_by_kind(self, kind):
+        for output in self._outputs:
+            if output.kind == kind:
+                return output
+        return None
+
+    def find_input_by_kind(self, kind):
+        for input in self._inputs:
+            if input.kind == kind:
+                return input
+        return None
+
     def _resolve_default_output(self):
         stored_name = self._audio_prefs.get_string("output_device", "")
         if stored_name:
-            output = self._find_output_by_name(stored_name)
+            output = self.find_output_by_name(stored_name)
             if output:
                 self._default_output = output
                 return output
@@ -284,7 +296,7 @@ class AudioManager:
     def _resolve_default_input(self):
         stored_name = self._audio_prefs.get_string("input_device", "")
         if stored_name:
-            input_device = self._find_input_by_name(stored_name)
+            input_device = self.find_input_by_name(stored_name)
             if input_device:
                 self._default_input = input_device
                 return input_device

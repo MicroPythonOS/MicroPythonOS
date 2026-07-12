@@ -8,6 +8,14 @@ Board Support:
 
 Frameworks:
 - App: change 'no icon' log level from warning to info
+- AudioManager: add find_input_by_kind() and find_output_by_kind()
+- AudioManager: add find_input_by_name() and find_put_by_kind()
+- InputManager: add has_haptic_feedback() class method
+
+OS:
+- Settings: add setting to mute bootup buzzer sound by @DrSkunk
+- Settings: gate 'Startup sound' setting by AudioManager having a 'buzzer' output
+- Settings: gate 'Haptic feedback' setting by InputManager having haptic feedback support
 
 0.14.2
 ======

@@ -353,19 +353,10 @@ class Sorter(Activity):
         else:
             self.score_best_label.set_style_text_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
 
-    def _find_buzzer_output(self):
-        try:
-            for output in AudioManager.get_outputs():
-                if output.kind == "buzzer":
-                    return output
-        except Exception:
-            pass
-        return None
-
     def _play_rtttl(self, rtttl):
         if not self.sound_effects:
             return
-        output = self._find_buzzer_output()
+        output = AudioManager.find_output_by_kind("buzzer")
         if output is None:
             return
         try:
