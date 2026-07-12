@@ -4,6 +4,7 @@ Future release (next version)
 Put unreleased changes here!
 
 Board Support:
+- About app: show correct netmask
 - WebAssembly: fix mobile touch input by properly converting SDL's normalized touch coordinates to actual window pixel coordinates by @DrSkunk
 
 Frameworks:
@@ -11,11 +12,12 @@ Frameworks:
 - AudioManager: add find_input_by_kind() and find_output_by_kind()
 - AudioManager: add find_input_by_name() and find_input_by_kind()
 - InputManager: add has_haptic_feedback() class method
+- WifiService: fix get_ipv4_netmask to get the netmask (not the address) by @lebeno
 
 OS:
-- Settings: add setting to mute bootup buzzer sound by @DrSkunk
-- Settings: gate 'Startup sound' setting by AudioManager having a 'buzzer' output
-- Settings: gate 'Haptic feedback' setting by InputManager having haptic feedback support
+- Settings: add 'Startup sound' to mute bootup buzzer by @DrSkunk
+- Settings: gate 'Startup sound' by AudioManager having a 'buzzer' output
+- Settings: gate 'Haptic feedback' by InputManager having haptic feedback support
 
 0.14.2
 ======
