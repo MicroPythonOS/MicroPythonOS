@@ -12,10 +12,8 @@ Usage:
 
 import unittest
 
-import lvgl as lv
-
 from mpos import AppManager, InputActivity, wait_for_render
-from mpos.ui.testing import click_button, find_label_with_text
+from mpos.ui.testing import click_button, wait_for_text
 from mpos.ui.view import screen_stack
 
 
@@ -48,11 +46,9 @@ class TestTextEditorSaveAsInput(unittest.TestCase):
 
         self.assertIsInstance(screen_stack[-1][0], InputActivity)
 
-        label = find_label_with_text(lv.screen_active(), "Save As")
-        self.assertIsNotNone(label)
-
-        self.assertIsNotNone(find_label_with_text(lv.screen_active(), "Save"))
-        self.assertIsNotNone(find_label_with_text(lv.screen_active(), "Cancel"))
+        self.assertTrue(wait_for_text("Save As"))
+        self.assertTrue(wait_for_text("Save"))
+        self.assertTrue(wait_for_text("Cancel"))
 
 
 if __name__ == "__main__":
