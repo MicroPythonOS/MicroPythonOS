@@ -39,6 +39,70 @@
       font-size: 12px;
       min-height: 14px;
     }
+    /* Emulated badge NeoPixels (painted by Module.__webio.onLeds). */
+    #leds {
+      display: flex;
+      gap: 10px;
+    }
+    .led {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      background: #222;
+      border: 1px solid #345;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+    }
+    /* Emulated badge controls: joystick (left) + buttons (right). */
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 48px;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #joystick {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: #1a2230;
+      border: 1px solid #345;
+      touch-action: none;
+    }
+    #joystick-nub {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 40px;
+      height: 40px;
+      margin: -20px 0 0 -20px;
+      border-radius: 50%;
+      background: #345;
+      border: 1px solid #58a;
+      cursor: grab;
+    }
+    #buttons {
+      display: grid;
+      grid-template-areas:
+        ".    x    ."
+        "y    menu a"
+        ".    b    .";
+      gap: 6px;
+    }
+    .pad-button {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      color: #9ad;
+      background: #1a2230;
+      border: 1px solid #345;
+      font: 14px/1 ui-monospace, monospace;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .pad-button:active, .pad-button.pressed { background: #58a; color: #fff; }
+    .pad-button[data-button="menu"] { font-size: 10px; }
     #log {
       position: fixed;
       left: 0;
@@ -74,9 +138,22 @@
 <body>
   <div id="app">
     <div id="status">Loading MicroPythonOS…</div>
+    <!-- Emulated badge NeoPixels; count adapts to Module.__webio.onLeds data. -->
+    <div id="leds"></div>
     <!-- LVGL display size; MicroPythonOS default profile is 320x240. -->
     <canvas id="canvas" width="320" height="240" tabindex="0"
             oncontextmenu="event.preventDefault()"></canvas>
+    <!-- Emulated Fri3d 2026 badge controls: analog joystick + X/Y/A/B/MENU. -->
+    <div id="controls">
+      <div id="joystick"><div id="joystick-nub"></div></div>
+      <div id="buttons">
+        <button class="pad-button" data-button="x" style="grid-area: x" type="button">X</button>
+        <button class="pad-button" data-button="y" style="grid-area: y" type="button">Y</button>
+        <button class="pad-button" data-button="menu" style="grid-area: menu" type="button">MENU</button>
+        <button class="pad-button" data-button="a" style="grid-area: a" type="button">A</button>
+        <button class="pad-button" data-button="b" style="grid-area: b" type="button">B</button>
+      </div>
+    </div>
   </div>
   <button id="log-toggle" type="button" aria-expanded="false">Log</button>
   <pre id="log" class="hidden"></pre>
@@ -163,13 +240,150 @@
       });
     }
 
+    // --- Emulated badge peripherals (_webio bridge) ------------------------
+    // Python side: staged neopixel shim calls _webio.leds_write() ->
+    // Module.__webio.onLeds(Uint8Array of packed RGB); the fake WebExpander
+    // polls Module.__webio.buttons (bitmask, bit positions == Fri3d 2026
+    // expander digital tuple indices) and joy_x/joy_y (0..4095, 2048 center).
+    var webio = { buttons: 0, joy_x: 2048, joy_y: 2048, onLeds: null };
+
+    // NeoPixel dots. LED count adapts to the buffer length on first write.
+    var ledsEl = document.getElementById("leds");
+    // Pre-create 5 placeholder LEDs (badge default) so the row is visible
+    // even before Python writes any colors.
+    for (var _i = 0; _i < 5; _i++) {
+      var _dot = document.createElement("span");
+      _dot.className = "led";
+      ledsEl.appendChild(_dot);
+    }
+    webio.onLeds = function (rgb) {
+      var n = Math.floor(rgb.length / 3);
+      while (ledsEl.children.length < n) {
+        var dot = document.createElement("span");
+        dot.className = "led";
+        ledsEl.appendChild(dot);
+      }
+      for (var i = 0; i < n; i++) {
+        var r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
+        var el = ledsEl.children[i];
+        el.style.background = "rgb(" + r + "," + g + "," + b + ")";
+        el.style.boxShadow = (r || g || b)
+          ? "0 0 10px 2px rgba(" + r + "," + g + "," + b + ",0.9)"
+          : "0 0 6px rgba(0,0,0,0.8)";
+      }
+    };
+
+    // Buttons: bit positions match the expander digital tuple
+    // (1 joy_right, 2 joy_left, 3 joy_down, 4 joy_up,
+    //  5 menu, 6 b, 7 a, 8 y, 9 x).
+    var BUTTON_BITS = { menu: 5, b: 6, a: 7, y: 8, x: 9 };
+    document.querySelectorAll(".pad-button").forEach(function (btn) {
+      var bit = BUTTON_BITS[btn.dataset.button];
+      function down(e) { e.preventDefault(); btn.classList.add("pressed"); webio.buttons |= (1 << bit); }
+      function up() { btn.classList.remove("pressed"); webio.buttons &= ~(1 << bit); }
+      btn.addEventListener("pointerdown", down);
+      btn.addEventListener("pointerup", up);
+      btn.addEventListener("pointerleave", up);
+      btn.addEventListener("pointercancel", up);
+    });
+
+    // Joystick: draggable nub. Sets analog joy_x/joy_y AND the digital
+    // direction bits (threshold at ~40% deflection) that the expander indev
+    // driver maps to arrow keys.
+    (function () {
+      var pad = document.getElementById("joystick");
+      var nub = document.getElementById("joystick-nub");
+      var JOY_BITS = { right: 1, left: 2, down: 3, up: 4 };
+      var dragging = false;
+      function setJoy(dx, dy) { // dx/dy in -1..1
+        nub.style.transform = "translate(" + (dx * 28) + "px," + (dy * 28) + "px)";
+        webio.joy_x = Math.round(2048 + dx * 2047);
+        webio.joy_y = Math.round(2048 + dy * 2047);
+        var bits = webio.buttons & ~((1 << JOY_BITS.right) | (1 << JOY_BITS.left) | (1 << JOY_BITS.down) | (1 << JOY_BITS.up));
+        if (dx > 0.4) bits |= (1 << JOY_BITS.right);
+        if (dx < -0.4) bits |= (1 << JOY_BITS.left);
+        if (dy > 0.4) bits |= (1 << JOY_BITS.down);
+        if (dy < -0.4) bits |= (1 << JOY_BITS.up);
+        webio.buttons = bits;
+      }
+      function move(e) {
+        if (!dragging) return;
+        var rect = pad.getBoundingClientRect();
+        var dx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        var dy = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+        var mag = Math.sqrt(dx * dx + dy * dy);
+        if (mag > 1) { dx /= mag; dy /= mag; }
+        setJoy(dx, dy);
+      }
+      pad.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        dragging = true;
+        pad.setPointerCapture(e.pointerId);
+        move(e);
+      });
+      pad.addEventListener("pointermove", move);
+      function release() { dragging = false; setJoy(0, 0); }
+      pad.addEventListener("pointerup", release);
+      pad.addEventListener("pointercancel", release);
+    })();
+
     var Module = {
       canvas: canvas,
+      // Emulated badge peripherals; read/written by the _webio C module
+      // (webio_js_init merges into this object at first Python access).
+      __webio: webio,
       // Run MicroPythonOS: import the frozen main module. No -i so the
       // browser is not blocked on an interactive REPL read.
       arguments: ["-X", "heapsize=16M", "-m", "main"],
       print: (text) => { console.log(text); appendLog(text, false); },
       printErr: (text) => { console.error(text); appendLog(text, true); },
+      // Per-byte stdout hook. Must be defined in the static Module object
+      // (TTY ops are bound at runtime init — attaching it later is ignored).
+      //
+      // This is the ONLY path that mirrors MicroPython stdout to an external
+      // host (ViperIDE/Fri3d-IDE) via Module.__webterm.onOutput. Unlike
+      // Module.print (line-buffered, drops raw-REPL control bytes like \x01
+      // and \x04), this hook sees every byte, so the standard raw-REPL
+      // handshake works. It replaces the former unix_mphal.c submodule patch,
+      // which could silently fail to apply and ship a dead bridge.
+      //
+      // Bytes are normalized LF -> CRLF (statefully, never doubling an
+      // existing CRLF) because hosts written for real boards match banners
+      // like "raw REPL; CTRL-B to exit\r\n" that serial drivers emit.
+      stdout: (function () {
+        var outbuf = [];       // normalized bytes pending delivery to the host
+        var linebuf = [];      // decoded text pending a newline, for the log
+        var sched = false;
+        var prevWasCR = false; // CRLF-normalization state
+        var utf8 = new TextDecoder("utf-8");
+        function flush() {
+          sched = false;
+          if (outbuf.length) {
+            var b = new Uint8Array(outbuf);
+            outbuf.length = 0;
+            var H = Module.__webterm;
+            if (H && typeof H.onOutput === "function") {
+              try { H.onOutput(b); } catch (e) { console.error("onOutput failed:", e); }
+            }
+          }
+        }
+        return function (code) {
+          if (code === null || code === undefined) return; // flush marker
+          code &= 0xff;
+          if (code === 0x0a && !prevWasCR) outbuf.push(0x0d); // LF -> CRLF
+          prevWasCR = (code === 0x0d);
+          outbuf.push(code);
+          if (!sched) { sched = true; setTimeout(flush, 0); }
+          // Line-buffered copy into the on-page log/console (Module.print no
+          // longer receives stdout once this hook is installed).
+          if (code === 0x0a) {
+            appendLog(utf8.decode(new Uint8Array(linebuf)), false);
+            linebuf.length = 0;
+          } else if (code !== 0x0d) {
+            linebuf.push(code);
+          }
+        };
+      })(),
       setStatus: (text) => {
         if (statusEl) statusEl.textContent = text;
         if (text === "") statusEl.style.display = "none";

@@ -128,8 +128,39 @@ AudioManager.add(AudioManager.Output("speaker", "i2s", i2s_pins=output_i2s_pins)
 AudioManager.add(AudioManager.Input("mic", "i2s", i2s_pins=input_i2s_pins))
 
 # === LED HARDWARE ===
-# Note: Desktop builds have no LED hardware
-# LightsManager will not be initialized (functions will return False)
+# Desktop builds have no LED hardware; the web (Emscripten) build emulates
+# 5 NeoPixels on the page via the _webio bridge + staged neopixel shim.
+# On native unix/macOS `_webio` doesn't exist, so this stays a no-op and
+# LightsManager functions return False.
+try:
+    import _webio
+except ImportError:
+    _webio = None
+
+if _webio:
+    import mpos.lights as LightsManager
+    LightsManager.init(neopixel_pin=12)
+    LightsManager.set_led_num(5)
+
+# === WEB BADGE BUTTONS + JOYSTICK ===
+# The web page (shell.html) renders a Fri3d-2026-style joystick and
+# X/Y/A/B/MENU buttons. Their state is exposed through _webio as an
+# expander-compatible `digital` tuple, so the REAL badge indev driver
+# (Fri3d2026Expander) runs unchanged: same key mapping, long-press repeat
+# and navigation hooks as physical hardware.
+if _webio:
+    try:
+        from web_expander import WebExpander
+        from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
+
+        web_buttons_indev = Fri3d2026Expander(WebExpander())
+        group = lv.group_get_default()
+        if group:
+            web_buttons_indev.set_group(group)
+        web_buttons_indev.enable(True)
+        InputManager.register_indev(web_buttons_indev)
+    except Exception as e:
+        logger.error("web badge buttons init got exception: %s" % (e))
 
 # === SENSOR HARDWARE ===
 from mpos import SensorManager

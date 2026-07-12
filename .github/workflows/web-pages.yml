@@ -56,6 +56,14 @@ jobs:
       - name: Build web (WebAssembly/Emscripten) target
         run: ./scripts/build_mpos.sh web
 
+      - name: Smoke-test the _webterm stdio bridge on the built artifact
+        # Boots the built export headless, installs Module.__webterm.onOutput,
+        # sends the raw-REPL handshake and asserts the CRLF banner arrives.
+        # Catches a dead stdout mirror or wrong line endings before deploy.
+        run: |
+          npm install --no-save puppeteer
+          node tests/web_bridge_smoke.mjs web
+
       - name: Upload built web export as a regular artifact
         uses: actions/upload-artifact@v4
         with:
