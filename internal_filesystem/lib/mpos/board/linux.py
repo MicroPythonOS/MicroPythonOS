@@ -153,12 +153,41 @@ if _webio:
         from web_expander import WebExpander
         from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
 
-        web_buttons_indev = Fri3d2026Expander(WebExpander())
+        web_expander = WebExpander()
+        web_buttons_indev = Fri3d2026Expander(web_expander)
         group = lv.group_get_default()
         if group:
             web_buttons_indev.set_group(group)
         web_buttons_indev.enable(True)
         InputManager.register_indev(web_buttons_indev)
+
+        # START button: on the physical badge this is GPIO 0 (not on the
+        # expander) mapped to lv.KEY.END by a separate keypad indev.
+        # Mirror that here using the web expander's start_button property.
+        _web_start_last_key = None
+
+        def _web_start_read_cb(indev, data):
+            global _web_start_last_key
+            data.continue_reading = False
+            if web_expander.start_button:
+                data.key = lv.KEY.END
+                data.state = lv.INDEV_STATE.PRESSED
+                _web_start_last_key = lv.KEY.END
+            else:
+                data.key = _web_start_last_key if _web_start_last_key is not None else lv.KEY.ENTER
+                data.state = lv.INDEV_STATE.RELEASED
+                _web_start_last_key = None
+
+        web_start_indev = lv.indev_create()
+        web_start_indev.set_type(lv.INDEV_TYPE.KEYPAD)
+        web_start_indev.set_read_cb(_web_start_read_cb)
+        if group:
+            web_start_indev.set_group(group)
+        web_start_indev.set_display(lv.display_get_default())
+        web_start_indev.enable(True)
+        web_start_indev.set_long_press_time(400)
+        web_start_indev.set_long_press_repeat_time(100)
+        InputManager.register_indev(web_start_indev)
     except Exception as e:
         logger.error("web badge buttons init got exception: %s" % (e))
 
