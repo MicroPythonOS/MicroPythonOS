@@ -73,6 +73,7 @@ from . import sensor_manager
 from . import camera_manager
 from . import sdcard
 from . import audio
+from . import lights
 
 __all__ = (
     # Core framework
@@ -118,7 +119,7 @@ __all__ = (
     "retry_action_until", "wait_for_focus",
     # Submodules
     "ui", "shared_preferences", "net", "content", "time", "sensor_manager",
-    "camera_manager", "sdcard", "audio",
+    "camera_manager", "sdcard", "audio", "lights",
     # Timezone utilities
     "TimeZone"
 )
