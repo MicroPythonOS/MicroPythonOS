@@ -513,7 +513,7 @@ class WifiService:
 
 
     @staticmethod
-    def _get_ipv4_value(network_module, ap_index, sta_key, desktop_value, label):
+    def _get_ipv4_value(network_module, ap_index, sta_key, desktop_value, label, tuple_index=0):
         if WifiService.wifi_busy:
             return None
 
@@ -528,7 +528,7 @@ class WifiService:
             wlan = WifiService._get_sta_wlan(net)
             value = wlan.ipconfig(sta_key)
             if isinstance(value, tuple):
-                return value[0] if value else None
+                return value[tuple_index] if len(value) > tuple_index else None
             return value
         except Exception as e:
             logger.error("Error retrieving ipv4 %s: %s", label, e)
@@ -552,6 +552,7 @@ class WifiService:
             sta_key="addr4",
             desktop_value="255.255.255.0",
             label="netmask",
+            tuple_index=1, # netmask is the second element in the tuple returned by wlan.ipconfig('addr4')
         )
 
     @staticmethod
