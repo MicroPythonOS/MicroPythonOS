@@ -86,10 +86,27 @@
       display: grid;
       grid-template-areas:
         ".    x    ."
-        "y    menu a"
+        "y    .    a"
         ".    b    .";
       gap: 6px;
     }
+    #middle-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pill-button {
+      width: 56px;
+      height: 24px;
+      border-radius: 12px;
+      color: #9ad;
+      background: #1a2230;
+      border: 1px solid #345;
+      font: 10px/1 ui-monospace, monospace;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .pill-button:active, .pill-button.pressed { background: #58a; color: #fff; }
     .pad-button {
       width: 44px;
       height: 44px;
@@ -102,7 +119,7 @@
       touch-action: none;
     }
     .pad-button:active, .pad-button.pressed { background: #58a; color: #fff; }
-    .pad-button[data-button="menu"] { font-size: 10px; }
+
     #log {
       position: fixed;
       left: 0;
@@ -133,6 +150,20 @@
       cursor: pointer;
     }
     #log-toggle:hover { background: rgba(20, 30, 45, 0.9); }
+    #reset-storage {
+      position: fixed;
+      top: 8px;
+      right: 64px;
+      z-index: 10;
+      padding: 4px 10px;
+      color: #d99;
+      background: rgba(0, 0, 0, 0.78);
+      border: 1px solid #534;
+      border-radius: 4px;
+      font: 12px/1.2 ui-monospace, monospace;
+      cursor: pointer;
+    }
+    #reset-storage:hover { background: rgba(45, 20, 20, 0.9); }
   </style>
 </head>
 <body>
@@ -143,19 +174,24 @@
     <!-- LVGL display size; MicroPythonOS default profile is 320x240. -->
     <canvas id="canvas" width="320" height="240" tabindex="0"
             oncontextmenu="event.preventDefault()"></canvas>
-    <!-- Emulated Fri3d 2026 badge controls: analog joystick + X/Y/A/B/MENU. -->
+    <!-- Emulated Fri3d 2026 badge controls: joystick + MENU/START (middle,
+         like the physical badge) + X/Y/A/B. -->
     <div id="controls">
       <div id="joystick"><div id="joystick-nub"></div></div>
+      <div id="middle-buttons">
+        <button class="pill-button pad-button" data-button="menu" type="button">MENU</button>
+        <button class="pill-button pad-button" data-button="start" type="button">START</button>
+      </div>
       <div id="buttons">
         <button class="pad-button" data-button="x" style="grid-area: x" type="button">X</button>
         <button class="pad-button" data-button="y" style="grid-area: y" type="button">Y</button>
-        <button class="pad-button" data-button="menu" style="grid-area: menu" type="button">MENU</button>
         <button class="pad-button" data-button="a" style="grid-area: a" type="button">A</button>
         <button class="pad-button" data-button="b" style="grid-area: b" type="button">B</button>
       </div>
     </div>
   </div>
   <button id="log-toggle" type="button" aria-expanded="false">Log</button>
+  <button id="reset-storage" type="button" title="Delete persistent /data and /apps storage and reload">Reset storage</button>
   <pre id="log" class="hidden"></pre>
 
   <script>
@@ -240,6 +276,24 @@
       });
     }
 
+    // --- Reset persistent storage -----------------------------------------
+    // Deletes the IndexedDB databases backing the /data and /apps IDBFS
+    // mounts (Emscripten names them after the mount point), then reloads.
+    document.getElementById("reset-storage").addEventListener("click", function () {
+      if (!confirm("Delete all locally stored data (/data and /apps) and reload?")) return;
+      if (_persistTimer) { clearInterval(_persistTimer); _persistTimer = null; }
+      _persistInFlight = true; // block any further flushes re-creating the DBs
+      var names = ["/data", "/apps"];
+      var pending = names.length;
+      function done() { if (--pending === 0) location.reload(); }
+      names.forEach(function (name) {
+        var req = indexedDB.deleteDatabase(name);
+        req.onsuccess = done;
+        req.onerror = function () { console.error("delete failed for " + name); done(); };
+        req.onblocked = done;
+      });
+    });
+
     // --- Emulated badge peripherals (_webio bridge) ------------------------
     // Python side: staged neopixel shim calls _webio.leds_write() ->
     // Module.__webio.onLeds(Uint8Array of packed RGB); the fake WebExpander
@@ -275,8 +329,10 @@
 
     // Buttons: bit positions match the expander digital tuple
     // (1 joy_right, 2 joy_left, 3 joy_down, 4 joy_up,
-    //  5 menu, 6 b, 7 a, 8 y, 9 x).
-    var BUTTON_BITS = { menu: 5, b: 6, a: 7, y: 8, x: 9 };
+    //  5 menu, 6 b, 7 a, 8 y, 9 x). START is not on the physical expander
+    //  (it's GPIO 0 on the badge), so it uses bit 12 — outside the 12-entry
+    //  digital tuple — and is read separately by the web START indev.
+    var BUTTON_BITS = { menu: 5, b: 6, a: 7, y: 8, x: 9, start: 12 };
     document.querySelectorAll(".pad-button").forEach(function (btn) {
       var bit = BUTTON_BITS[btn.dataset.button];
       function down(e) { e.preventDefault(); btn.classList.add("pressed"); webio.buttons |= (1 << bit); }
