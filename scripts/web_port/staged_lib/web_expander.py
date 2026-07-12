@@ -32,3 +32,9 @@ class WebExpander:
         # (ain0, battery_monitor, usb_monitor, joystick_y, joystick_x)
         x, y = _webio.joystick()
         return (0, 2048, 0, y, x)
+
+    @property
+    def start_button(self):
+        # Web-only: START is GPIO 0 on the physical badge (not on the
+        # expander); the page exposes it as bit 12 of the buttons bitmask.
+        return bool(_webio.buttons() & (1 << 12))
