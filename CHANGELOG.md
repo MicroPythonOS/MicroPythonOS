@@ -9,7 +9,7 @@ Board Support:
 Frameworks:
 - App: change 'no icon' log level from warning to info
 - AudioManager: add find_input_by_kind() and find_output_by_kind()
-- AudioManager: add find_input_by_name() and find_put_by_kind()
+- AudioManager: add find_input_by_name() and find_input_by_kind()
 - InputManager: add has_haptic_feedback() class method
 
 OS:

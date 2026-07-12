@@ -73,5 +73,47 @@ class TestValueLabelFor(unittest.TestCase):
         self.assertEqual(_value_label_for(setting, "x"), "First")
 
 
+class TestShouldShow(unittest.TestCase):
+
+    def _should_show(self, setting):
+        should_show = setting.get("should_show")
+        if should_show is not None:
+            if callable(should_show):
+                should_show = should_show(setting)
+            if not should_show:
+                return False
+        return True
+
+    def test_callable_returns_true(self):
+        self.assertTrue(self._should_show({"should_show": lambda s: True}))
+
+    def test_callable_returns_false(self):
+        self.assertFalse(self._should_show({"should_show": lambda s: False}))
+
+    def test_callable_returns_truthy_object(self):
+        self.assertTrue(self._should_show({"should_show": lambda s: "buzzer"}))
+
+    def test_callable_returns_none(self):
+        self.assertFalse(self._should_show({"should_show": lambda s: None}))
+
+    def test_no_should_show_key_shows(self):
+        self.assertTrue(self._should_show({}))
+
+    def test_should_show_true_shows(self):
+        self.assertTrue(self._should_show({"should_show": True}))
+
+    def test_should_show_false_hides(self):
+        self.assertFalse(self._should_show({"should_show": False}))
+
+    def test_should_show_truthy_object_shows(self):
+        self.assertTrue(self._should_show({"should_show": "some_output"}))
+
+    def test_callable_receives_setting_dict(self):
+        captured = []
+        self._should_show({"should_show": lambda s: captured.append(s) or True, "key": "mykey"})
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0]["key"], "mykey")
+
+
 if __name__ == "__main__":
     unittest.main()

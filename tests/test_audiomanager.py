@@ -257,3 +257,51 @@ class TestAudioManagerPreferences(unittest.TestCase):
         default_input = AudioManager.get_default_input()
         self.assertIsNotNone(default_input)
         self.assertEqual(default_input.name, "mic")
+
+
+class TestAudioManagerFindMethods(unittest.TestCase):
+    def setUp(self):
+        AudioManager._instance = None
+        MockSharedPreferences.reset_all()
+        AudioManager()
+        AudioManager.add(AudioManager.Output("speaker", "i2s", i2s_pins={"sck": 2, "ws": 47, "sd": 16}))
+        AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=46))
+        AudioManager.add(AudioManager.Input("mic", "i2s", i2s_pins={"sck": 2, "ws": 47, "sd_in": 15}))
+        AudioManager.add(AudioManager.Input("linein", "adc", adc_mic_pin=4))
+
+    def tearDown(self):
+        AudioManager.stop()
+
+    def test_find_output_by_name_success(self):
+        output = AudioManager.find_output_by_name("buzzer")
+        self.assertIsNotNone(output)
+        self.assertEqual(output.name, "buzzer")
+        self.assertEqual(output.kind, "buzzer")
+
+    def test_find_output_by_name_not_found(self):
+        self.assertIsNone(AudioManager.find_output_by_name("nonexistent"))
+
+    def test_find_input_by_name_success(self):
+        input = AudioManager.find_input_by_name("linein")
+        self.assertIsNotNone(input)
+        self.assertEqual(input.name, "linein")
+        self.assertEqual(input.kind, "adc")
+
+    def test_find_input_by_name_not_found(self):
+        self.assertIsNone(AudioManager.find_input_by_name("nonexistent"))
+
+    def test_find_output_by_kind_success(self):
+        output = AudioManager.find_output_by_kind("buzzer")
+        self.assertIsNotNone(output)
+        self.assertEqual(output.name, "buzzer")
+
+    def test_find_output_by_kind_not_found(self):
+        self.assertIsNone(AudioManager.find_output_by_kind("pdmi2s"))
+
+    def test_find_input_by_kind_success(self):
+        input = AudioManager.find_input_by_kind("adc")
+        self.assertIsNotNone(input)
+        self.assertEqual(input.name, "linein")
+
+    def test_find_input_by_kind_not_found(self):
+        self.assertIsNone(AudioManager.find_input_by_kind("pdmi2s"))

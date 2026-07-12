@@ -59,10 +59,11 @@ class SettingsActivity(Activity):
 
         for setting in self.settings:
             should_show = setting.get("should_show")
-            if callable(should_show):
-                should_show = should_show(setting)
-            if not should_show:
-                continue
+            if should_show is not None:
+                if callable(should_show):
+                    should_show = should_show(setting)
+                if not should_show:
+                    continue
             # Container for each setting
             setting_cont = lv.obj(screen)
             setting_cont.set_width(lv.pct(100))

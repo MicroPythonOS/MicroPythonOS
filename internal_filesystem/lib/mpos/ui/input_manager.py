@@ -79,7 +79,7 @@ class InputManager:
 
     @classmethod
     def has_haptic_feedback(cls):
-        return _has_haptic_feedback
+        return cls._has_haptic_feedback
 
     @classmethod
     def set_touch_feedback_cb(cls, cb):
