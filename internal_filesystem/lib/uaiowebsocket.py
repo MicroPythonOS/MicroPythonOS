@@ -54,6 +54,16 @@ class WebSocketConnectionClosedException(WebSocketException):
 class WebSocketTimeoutException(WebSocketException):
     pass
 
+# Reconnect backoff ceiling (seconds): a failing relay must not be retried in a
+# tight loop (each attempt spawns a DNS _thread; the ESP32 pool is tiny) (#191).
+_RECONNECT_MAX_S = 300
+
+def _next_backoff(current, connected_ok, min_s, max_s=_RECONNECT_MAX_S):
+    """Reset to min after a live connection closed, else grow toward max."""
+    if connected_ok:
+        return min_s
+    return min(current * 2, max_s)
+
 # Queue for callback dispatching
 _callback_queue = ucollections.deque((), 100)  # Empty tuple, maxlen=100
 
@@ -289,6 +299,12 @@ class WebSocketApp:
         except Exception as e:
             logger.error("websocket create_task(_process_callbacks_async()) exception: %s", e)
 
+        # Exponential backoff seeded from reconnect_interval. Waiting before
+        # EVERY reconnect (not just after an exception) closes the tight loop
+        # where a relay that accepts then drops the socket returns without
+        # raising; connected_ok resets the delay after a live session so an
+        # unreachable relay backs off instead of hammering the pool (#191).
+        backoff = reconnect_interval or 3
         while self.running:
             _log_debug("Main loop iteration: self.running=True")
             if not _network_available():
@@ -299,19 +315,24 @@ class WebSocketApp:
                     )
                 await asyncio.sleep(reconnect_interval or 3)
                 continue
+            connected_ok = False
             try:
                 await self._connect_and_run() # keep waiting for it, until finished
+                connected_ok = True
             except Exception as e:
                 _log_error(f"_async_main's await self._connect_and_run() for {self.url} got exception: {e}")
                 self.has_errored = True
                 _run_callback(self.on_error, self, e)
-                if reconnect_interval <= 0:
-                    _log_debug("No reconnect configured, breaking loop")
-                    break
-                _log_debug(f"Reconnecting after error in {reconnect_interval}s")
-                await asyncio.sleep(reconnect_interval)
-                if self.on_reconnect:
-                    _run_callback(self.on_reconnect, self)
+            if not self.running:
+                break
+            if reconnect_interval <= 0:
+                _log_debug("No reconnect configured, breaking loop")
+                break
+            backoff = _next_backoff(backoff, connected_ok, reconnect_interval)
+            _log_debug(f"Reconnecting to {self.url} in {backoff}s")
+            await asyncio.sleep(backoff)
+            if self.on_reconnect:
+                _run_callback(self.on_reconnect, self)
 
         # Cleanup
         _log_debug("Initiating cleanup")
