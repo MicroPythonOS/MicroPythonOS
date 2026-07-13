@@ -6,12 +6,14 @@ Put unreleased changes here!
 Board Support:
 - About app: show correct netmask
 - WebAssembly: fix mobile touch input by properly converting SDL's normalized touch coordinates to actual window pixel coordinates by @DrSkunk
+- WebAssembly: Add fake machine.Pin and machine peripherals for WebAssembly build by @DrSkunk
 
 Frameworks:
 - App: change 'no icon' log level from warning to info
 - AudioManager: add find_input_by_kind() and find_output_by_kind()
 - AudioManager: add find_input_by_name() and find_input_by_kind()
 - InputManager: add has_haptic_feedback() class method
+- Lights: re-export mpos.lights from the top-level mpos package by @tjorim
 - WifiService: fix get_ipv4_netmask to get the netmask (not the address) by @lebeno
 
 OS:
