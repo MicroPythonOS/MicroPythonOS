@@ -608,6 +608,8 @@ elif [ "$target" == "web" ]; then
 	# provides the same surface and is injected into the native `machine`
 	# module at boot (see the staged main.py patch below).
 	cp "$web_port_dir"/staged_lib/_web_machine_timer.py "$staged_fs"/lib/_web_machine_timer.py
+	cp "$web_port_dir"/staged_lib/_web_machine_pin.py "$staged_fs"/lib/_web_machine_pin.py
+	cp "$web_port_dir"/staged_lib/_web_machine_hw.py "$staged_fs"/lib/_web_machine_hw.py
 
 	# Inject machine.Timer into the native `machine` module at the very start of
 	# boot, before any MicroPythonOS code runs. Patch the STAGED copy of main.py
