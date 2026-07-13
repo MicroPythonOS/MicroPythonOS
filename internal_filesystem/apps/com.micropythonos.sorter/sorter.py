@@ -176,10 +176,7 @@ def _level_params(level):
 
 
 class Sorter(Activity):
-    SELECT_COLOR = lv.color_hex(0xF1C40F)
-    TUBE_BG = lv.color_hex(0x34495E)
     TUBE_BORDER = lv.color_hex(0x5D6D7E)
-    WHITE = lv.color_hex(0xFFFFFF)
 
     SOUND_EFFECTS_SETTING = {
         "title": "Sound effects",
@@ -302,12 +299,12 @@ class Sorter(Activity):
             border.set_size(tube_width, tube_height)
             border.set_pos(tube_x, start_y)
             border.set_style_bg_opa(lv.OPA.TRANSP, 0)
-            border.set_style_border_color(self.SELECT_COLOR if self.selected == idx else self.TUBE_BORDER, 0)
+            border.set_style_border_color(self.TUBE_BORDER, 0)
             border.set_style_border_width(2, 0)
             border.set_style_radius(4, 0)
             border.add_flag(lv.obj.FLAG.CLICKABLE)
             border.add_event_cb(lambda e, i=idx: self.on_tube(e, i), lv.EVENT.CLICKED, None)
-            mpos.ui.add_focus_border(border, width=4)
+            mpos.ui.add_focus_border(border, mode="bg")
             self.tube_borders.append(border)
 
             emoji_x = tube_x + (tube_width - emoji_sz) // 2
@@ -344,13 +341,6 @@ class Sorter(Activity):
         anim.set_custom_exec_cb(lambda a, v: top.set_y(int(v)))
         anim.start()
         self._anim = anim
-
-    def _update_selection(self):
-        for i, border in enumerate(self.tube_borders):
-            if self.selected == i:
-                border.set_style_border_color(self.SELECT_COLOR, 0)
-            else:
-                border.set_style_border_color(self.TUBE_BORDER, 0)
 
     def _restore_focus(self, idx):
         if idx < 0 or idx >= len(self.tube_widgets):
@@ -524,7 +514,6 @@ class Sorter(Activity):
             if self.tubes[idx]:
                 self.selected = idx
                 self._last_ts = now
-                self._update_selection()
                 self._animate_top_emoji(idx, True)
                 self._play_rtttl(_RTTTL_SELECT)
             return
@@ -533,7 +522,6 @@ class Sorter(Activity):
             self._animate_top_emoji(idx, False)
             self.selected = -1
             self._last_ts = now
-            self._update_selection()
             return
 
         src = self.tubes[self.selected]
@@ -553,7 +541,6 @@ class Sorter(Activity):
             self._animate_top_emoji(self.selected, False)
             self.selected = -1
             self._last_ts = now
-            self._update_selection()
             self._play_rtttl(_RTTTL_INVALID)
 
     def on_win(self):
