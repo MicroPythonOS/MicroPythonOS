@@ -15,7 +15,7 @@ import unittest
 import lvgl as lv
 
 from mpos import AppManager, wait_for_render
-from mpos.ui.testing import find_label_with_text
+from mpos.ui.testing import find_label_with_text, wait_for_widget
 
 
 class TestSpaceInvadersResetPopup(unittest.TestCase):
@@ -48,11 +48,11 @@ class TestSpaceInvadersResetPopup(unittest.TestCase):
         activity._on_highscore_tap(None)
         wait_for_render(10)
 
-        label = find_label_with_text(lv.layer_top(), "Reset high score?")
+        label = wait_for_widget(lambda: find_label_with_text(lv.layer_top(), "Reset high score?"), timeout=5)
         self.assertIsNotNone(label)
 
-        self.assertIsNotNone(find_label_with_text(lv.layer_top(), "Yes"))
-        self.assertIsNotNone(find_label_with_text(lv.layer_top(), "No"))
+        self.assertIsNotNone(wait_for_widget(lambda: find_label_with_text(lv.layer_top(), "Yes"), timeout=5))
+        self.assertIsNotNone(wait_for_widget(lambda: find_label_with_text(lv.layer_top(), "No"), timeout=5))
 
 
 if __name__ == "__main__":

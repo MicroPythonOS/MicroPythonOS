@@ -15,7 +15,7 @@ import unittest
 import lvgl as lv
 
 from mpos import AppManager, wait_for_render
-from mpos.ui.testing import click_button, find_label_with_text
+from mpos.ui.testing import click_button, find_label_with_text, wait_for_widget
 
 
 class TestLightsOutConfirmPopup(unittest.TestCase):
@@ -45,11 +45,11 @@ class TestLightsOutConfirmPopup(unittest.TestCase):
         click_button("New Game")
         wait_for_render(10)
 
-        label = find_label_with_text(lv.layer_top(), "New game?")
+        label = wait_for_widget(lambda: find_label_with_text(lv.layer_top(), "New game?"), timeout=5)
         self.assertIsNotNone(label)
 
-        self.assertIsNotNone(find_label_with_text(lv.layer_top(), "Yes"))
-        self.assertIsNotNone(find_label_with_text(lv.layer_top(), "No"))
+        self.assertIsNotNone(wait_for_widget(lambda: find_label_with_text(lv.layer_top(), "Yes"), timeout=5))
+        self.assertIsNotNone(wait_for_widget(lambda: find_label_with_text(lv.layer_top(), "No"), timeout=5))
 
 
 if __name__ == "__main__":

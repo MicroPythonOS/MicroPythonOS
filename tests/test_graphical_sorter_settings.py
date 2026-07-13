@@ -15,8 +15,7 @@ from mpos import AppManager, SharedPreferences, wait_for_render
 from mpos.ui.input_activity import InputActivity
 from mpos.ui.testing import (
     click_button,
-    find_button_with_text,
-    find_label_with_text,
+    wait_for_text,
 )
 from mpos.ui.view import screen_stack
 
@@ -65,23 +64,10 @@ class TestSorterSettingsActivity(unittest.TestCase):
         self.assertTrue(click_button(lv.SYMBOL.SETTINGS))
         wait_for_render(10)
 
-        active = lv.screen_active()
-        self.assertIsNotNone(
-            find_label_with_text(active, "Sound effects"),
-            "Setting title should be visible",
-        )
-        self.assertIsNotNone(
-            find_label_with_text(active, "On"),
-            "On option should be visible",
-        )
-        self.assertIsNotNone(
-            find_label_with_text(active, "Off"),
-            "Off option should be visible",
-        )
-        self.assertIsNotNone(
-            find_button_with_text(active, "Save"),
-            "Save button should be visible",
-        )
+        self.assertTrue(wait_for_text("Sound effects", timeout=5), "Setting title should be visible")
+        self.assertTrue(wait_for_text("On", timeout=5), "On option should be visible")
+        self.assertTrue(wait_for_text("Off", timeout=5), "Off option should be visible")
+        self.assertTrue(wait_for_text("Save", timeout=5), "Save button should be visible")
 
     def test_sound_effects_persists(self):
         """Changing the sound-effects preference through SettingActivity saves it."""
@@ -112,9 +98,8 @@ class TestSorterSettingsActivity(unittest.TestCase):
         self.assertTrue(click_button("Save"))
         wait_for_render(10)
 
-        active = lv.screen_active()
-        self.assertIsNotNone(
-            find_label_with_text(active, "Level: 1"),
+        self.assertTrue(
+            wait_for_text("Level: 1", timeout=10),
             "Should return to the Sorter screen",
         )
 

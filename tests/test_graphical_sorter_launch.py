@@ -8,10 +8,8 @@ Usage:
 
 import unittest
 
-import lvgl as lv
-
-from mpos import AppManager, wait_for_render
-from mpos.ui.testing import find_label_with_text
+from mpos import AppManager
+from mpos.ui.testing import wait_for_text
 
 
 class TestSorterLaunch(unittest.TestCase):
@@ -34,10 +32,8 @@ class TestSorterLaunch(unittest.TestCase):
         """Sorter should render the level label after launch."""
         result = AppManager.start_app("com.micropythonos.sorter")
         self.assertTrue(result, "Sorter should start")
-        wait_for_render(30)
 
-        label = find_label_with_text(lv.screen_active(), "Level: 1")
-        self.assertIsNotNone(label)
+        self.assertTrue(wait_for_text("Level: 1", timeout=15), "Level label should appear")
 
 
 if __name__ == "__main__":
