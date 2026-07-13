@@ -361,6 +361,8 @@ class Sorter(Activity):
 
         self.tube_widgets = self.tube_borders
         self._emoji_sz = emoji_sz
+        if self.tube_borders:
+            lv.group_focus_obj(self.tube_borders[0])
 
     def _animate_top_emoji(self, tube_idx, up):
         imgs = self.emoji_images[tube_idx]
