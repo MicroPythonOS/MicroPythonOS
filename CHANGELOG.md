@@ -3,13 +3,15 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.15.0
+======
 
 Board Support:
-- About app: show correct netmask
 - WebAssembly: fix mobile touch input by properly converting SDL's normalized touch coordinates to actual window pixel coordinates by @DrSkunk
 - WebAssembly: Add fake machine.Pin and machine peripherals for WebAssembly build by @DrSkunk
 
 Builtin Apps:
+- About: show correct netmask (thanks @lebeno !)
 - About, HowTo, Launcher, WiFi Settings: migrate to add_focus_highlight()
 
 Frameworks:

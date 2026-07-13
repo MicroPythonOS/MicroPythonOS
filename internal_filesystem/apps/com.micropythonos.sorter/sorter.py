@@ -138,12 +138,47 @@ def _solve(tubes, capacity, max_states=3000):
     return False
 
 
+def _solve_path(tubes, capacity, max_states=5000):
+    """Return list of (src, tgt) moves that solve this state or []."""
+    if _is_solved(tubes):
+        return []
+    start = tuple(tuple(t) for t in tubes)
+    parent = {start: (None, None, None)}
+    queue = [start]
+    idx = 0
+    while idx < len(queue) and len(parent) < max_states:
+        state = queue[idx]
+        idx += 1
+        current = [list(t) for t in state]
+        for i, src in enumerate(current):
+            if not src:
+                continue
+            for j, tgt in enumerate(current):
+                if i == j:
+                    continue
+                if _can_move(src, tgt, capacity):
+                    new_tubes = [list(t) for t in state]
+                    _apply_move(new_tubes[i], new_tubes[j], capacity)
+                    new_state = tuple(tuple(t) for t in new_tubes)
+                    if new_state not in parent:
+                        parent[new_state] = (state, i, j)
+                        if _is_solved(new_tubes):
+                            path = [(i, j)]
+                            cur = state
+                            while parent[cur][0] is not None:
+                                _, s, t = parent[cur]
+                                path.append((s, t))
+                                cur = parent[cur][0]
+                            path.reverse()
+                            return path
+                        queue.append(new_state)
+    return []
+
+
 def _generate_level(filled, capacity, extra, max_retries=30):
     """Generate a mixed, guaranteed-solvable water-sort level.
 
-    We fill tubes randomly and then verify solvability with a bounded BFS.
-    Reverse valid water-sort moves cannot create mixed tubes, so random
-    fill + verification is the practical way to honour the solvability goal.
+    Random fill + BFS solver to produce (tubes, solution_moves).
     """
     balls = []
     for i in range(filled):
@@ -160,11 +195,11 @@ def _generate_level(filled, capacity, extra, max_retries=30):
             tubes.append([])
         if _is_solved(tubes):
             continue
-        if _solve(tubes, capacity):
-            return tubes
-    # Last resort: return the most recent random state even if unverified.
-    # This prevents the app from hanging; such a fallback is extremely rare.
-    return tubes
+        solution = _solve_path(tubes, capacity)
+        if solution:
+            return tubes, solution
+
+    return tubes, []
 
 
 def _level_params(level):
@@ -200,6 +235,7 @@ class Sorter(Activity):
         self.tubes = []
         self.capacity = 0
         self.emoji_order = []
+        self.shuffle_moves = []
         self._anim = None
         self.prefs = SharedPreferences(self.appFullName)
         self.highscore = self.prefs.get_int("highscore", 0)
@@ -223,7 +259,7 @@ class Sorter(Activity):
         self.capacity = capacity
         self.moves = 0
         self.selected = -1
-        self.tubes = _generate_level(filled, capacity, extra)
+        self.tubes, self.shuffle_moves = _generate_level(filled, capacity, extra)
         self.initial_tubes = [list(t) for t in self.tubes]
 
     def create_ui(self):
@@ -248,10 +284,16 @@ class Sorter(Activity):
         settings_btn.add_event_cb(self.on_settings, lv.EVENT.CLICKED, None)
         mpos.ui.add_focus_border(settings_btn)
 
+        help_btn = lv.button(self.screen)
+        help_label = lv.label(help_btn)
+        help_label.set_text("?")
+        help_btn.align_to(settings_btn, lv.ALIGN.OUT_RIGHT_MID, 4, 0)
+        help_btn.add_event_cb(self.on_help, lv.EVENT.CLICKED, None)
+
         refresh_btn = lv.button(self.screen)
         refresh_label = lv.label(refresh_btn)
         refresh_label.set_text(lv.SYMBOL.REFRESH)
-        refresh_btn.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        refresh_btn.align_to(help_btn, lv.ALIGN.OUT_RIGHT_MID, 4, 0)
         refresh_btn.add_event_cb(self.on_refresh, lv.EVENT.CLICKED, None)
 
         reset_btn = lv.button(self.screen)
@@ -487,6 +529,29 @@ class Sorter(Activity):
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("setting", self.SOUND_EFFECTS_SETTING)
         self.startActivity(intent)
+
+    def on_help(self, event):
+        self._close_popup()
+        if not self.shuffle_moves:
+            return
+
+        lines = [f"Level {self.level} Solution:"]
+        for i, (src, tgt) in enumerate(self.shuffle_moves, 1):
+            lines.append(f"{i}: from {src + 1} to {tgt + 1}")
+
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(85))
+        mbox.add_title("Help")
+        mbox.add_text("\n".join(lines))
+
+        content = mbox.get_content()
+        content.set_height(DisplayMetrics.pct_of_height(55))
+        content.add_flag(lv.obj.FLAG.SCROLLABLE)
+
+        close_btn = mbox.add_footer_button("Close")
+        close_btn.add_event_cb(self._close_popup, lv.EVENT.CLICKED, None)
+
+        self.popup_modal = mbox
 
     def onResume(self, screen):
         self.sound_effects = self._load_sound_effects()
