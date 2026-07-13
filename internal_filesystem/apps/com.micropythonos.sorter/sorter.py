@@ -203,6 +203,7 @@ class Sorter(Activity):
         self.tubes = []
         self.capacity = 0
         self.emoji_order = []
+        self._anim = None
         self.prefs = SharedPreferences(self.appFullName)
         self.highscore = self.prefs.get_int("highscore", 0)
         self.sound_effects = self._load_sound_effects()
@@ -325,6 +326,32 @@ class Sorter(Activity):
             img.set_scale(scale)
 
         return tube_obj
+
+    def _animate_top_emoji(self, tube_idx, up):
+        tube_obj = self.tube_widgets[tube_idx]
+        if tube_obj.get_child_count() == 0:
+            return
+        top = tube_obj.get_child(0)
+        cur = top.get_y()
+        offset = int(top.get_height() * 0.75)
+
+        if up:
+            top.add_flag(lv.obj.FLAG.FLOATING)
+            target = cur - offset
+        else:
+            target = cur + offset
+
+        anim = lv.anim_t()
+        anim.init()
+        anim.set_var(top)
+        anim.set_values(cur, target)
+        anim.set_duration(150)
+        anim.set_path_cb(lv.anim_t.path_ease_in_out)
+        anim.set_custom_exec_cb(lambda a, v: top.set_y(int(v)))
+        if not up:
+            anim.set_completed_cb(lambda *a: top.remove_flag(lv.obj.FLAG.FLOATING))
+        anim.start()
+        self._anim = anim
 
     def _update_selection(self):
         for i, tube in enumerate(self.tube_widgets):
@@ -506,10 +533,12 @@ class Sorter(Activity):
                 self.selected = idx
                 self._last_ts = now
                 self._update_selection()
+                self._animate_top_emoji(idx, True)
                 self._play_rtttl(_RTTTL_SELECT)
             return
 
         if self.selected == idx:
+            self._animate_top_emoji(idx, False)
             self.selected = -1
             self._last_ts = now
             self._update_selection()
@@ -529,6 +558,7 @@ class Sorter(Activity):
             if _is_solved(self.tubes):
                 self.on_win()
         else:
+            self._animate_top_emoji(self.selected, False)
             self.selected = -1
             self._last_ts = now
             self._update_selection()
