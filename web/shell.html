@@ -319,7 +319,10 @@
       }
       for (var i = 0; i < n; i++) {
         var r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
-        var el = ledsEl.children[i];
+        // Physical badge counts LEDs from the left as index n-1..0 (see
+        // board/fri3d_2026.py: set_led(4, ...) is the leftmost LED), so
+        // paint index i into the mirrored dot to match hardware order.
+        var el = ledsEl.children[n - 1 - i];
         el.style.background = "rgb(" + r + "," + g + "," + b + ")";
         el.style.boxShadow = (r || g || b)
           ? "0 0 10px 2px rgba(" + r + "," + g + "," + b + ",0.9)"
