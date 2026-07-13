@@ -2,7 +2,7 @@ import math
 import time
 from mpos import DeviceManager
 import lvgl as lv
-from mpos import Activity, DisplayMetrics
+from mpos import Activity, DisplayMetrics, LightsManager
 
 _ADC_MAX = 4095
 
@@ -73,6 +73,7 @@ class DJAddonActivity(Activity):
         self.bar_left   = None
         self.bar_right  = None
         self.slider_mid = None
+        self._prev_led = -1
         self.pad_buttons = []
         self.pad_button_states = []  # 0=off, 1=R, 2=G, 3=B cycles on each click
 
@@ -281,6 +282,18 @@ class DJAddonActivity(Activity):
         self.bar_left.set_value(_ADC_MAX - analog[_CH_SLIDER_LEFT], False)
         self.bar_right.set_value(_ADC_MAX - analog[_CH_SLIDER_RIGHT], False)
         self.slider_mid.set_value(analog[_CH_SLIDER_MID], False)
+        self._update_crossfader_led(analog[_CH_SLIDER_MID])
+
+    def _update_crossfader_led(self, value):
+        led_idx = min(4, int(value * 5 // (_ADC_MAX + 1)))
+        if led_idx == self._prev_led:
+            return
+        color = lv.theme_get_color_primary(None)
+        if self._prev_led >= 0:
+            LightsManager.set_led(self._prev_led, 0, 0, 0)
+        LightsManager.set_led(led_idx, color.red, color.green, color.blue)
+        LightsManager.write()
+        self._prev_led = led_idx
 
     # --- lifecycle ---
 
@@ -302,6 +315,10 @@ class DJAddonActivity(Activity):
         if self.midi_timer:
             self.midi_timer.delete()
             self.midi_timer = None
+        if self._prev_led >= 0:
+            LightsManager.set_led(self._prev_led, 0, 0, 0)
+            LightsManager.write()
+            self._prev_led = -1
         if self.dj is not None:
             for idx in range(len(self.pad_buttons)):
                 self.dj.set_led(idx, 0, 0, 0)
