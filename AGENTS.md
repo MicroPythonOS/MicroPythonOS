@@ -127,7 +127,7 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - Two backends: `MPOSController()` for local desktop process, `MPOSController(backend="serial", port="/dev/ttyACM0")` for physical device.
 - Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.save_screenshot(path)`, `mpos.screenshot_pixels()`, `mpos.screenshot_image()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.click_button("text")`, `mpos.find_widget(type=..., text=...)`, `mpos.press_widget(type=..., text=...)`, `mpos.wait_for_text("text")`, `mpos.expect_text("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
 - `exec()` and `exec_multiline()` both use **paste mode** (Ctrl-E / Ctrl-D) internally — multi-line code, quotes, and special chars need no escaping. They're equivalent; use whichever is convenient.
-- `get_visible_text()` uses `exec_multiline()` iterating individual `repr()` prints — critical for serial where `print(repr(big_list))` corrupts for large lists with escape sequences.
+- `get_visible_text()` uses `exec_multiline()` iterating individual `repr()` prints — critical for serial where `print(repr(big_list))` corrupts for large lists with escape sequences. **Only extracts text from `lv.screen_active()`, not `lv.layer_top()`.** Popup/msgbox text is invisible to this method; use `get_widget_tree()` (which includes layer_top) or `screenshot(all_layers=True)` with ppq-vision instead.
 - `exec()` auto-drains input buffer before sending then enters paste mode (Ctrl-E).
 - `SerialBackend.wait_for_boot()` uses Ctrl-C to break into aioREPL (device may be running apps).
 - The CLI supports `--serial-port <port>` and `--baudrate <rate>` for serial connections. To pipe code without quoting: `cat <<'EOF' | python3 scripts/mpos_controller.py --serial-port /dev/ttyACM0 exec`
@@ -169,7 +169,7 @@ with MPOSController(backend='process') as mpos:
 ### Analyzing screenshots (preferred techniques)
 - **PIL + numpy** is the most reliable technique. Load the BMP, convert to numpy array, then check specific pixel coordinates for exact RGB values.
 - **Widget tree** (`mpos.get_widget_tree()`): gives layout, types, text, coordinates, states, flags for every widget. Use this FIRST to understand screen structure.
-- **Visible text** (`mpos.get_visible_text()`): extracts all text from all labels on screen. Use for text-content verification.
+- **Visible text** (`mpos.get_visible_text()`): extracts text from all labels on `lv.screen_active()`. Does NOT see `lv.layer_top()` popups/msgboxes. When a user reports text your tools don't capture (especially dialog prompts), trust visual reality over tool output.
 - **PPQ vision skill** (`ppq-vision`): use for reading text content from screenshots or understanding visual layout when coordinates alone are insufficient.
 - **ASCII art conversion**: NOT reliable for precise color analysis. Only use for quick visual structure checks when other methods aren't available.
 
