@@ -285,7 +285,7 @@ class Sorter(Activity):
         lift_space = int(emoji_sz * 0.75)
 
         total_w = num_tubes * tube_width + (num_tubes - 1) * gap
-        start_x = (DisplayMetrics.width() - total_w) // 2
+        start_x = 0
         total_h = tube_height + lift_space
         start_y = (game_h - total_h) // 2 + lift_space
 
