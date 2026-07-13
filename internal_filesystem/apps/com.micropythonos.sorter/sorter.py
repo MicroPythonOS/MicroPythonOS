@@ -271,6 +271,7 @@ class Sorter(Activity):
         self.container.set_size(DisplayMetrics.width(), DisplayMetrics.pct_of_height(75))
         self.container.align(lv.ALIGN.CENTER, 0, 0)
         self.container.set_style_pad_all(0, 0)
+        self.container.set_style_border_width(0, 0)
         self.container.set_style_bg_opa(lv.OPA.TRANSP, 0)
         self.container.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
