@@ -58,12 +58,20 @@ class TestSorterHelp(unittest.TestCase):
         wait_for_render(3)
         self.assertIsNone(act.popup_modal, "Help msgbox should be closed")
 
+    def _wait_for_help_label(self, timeout_ms=5000):
+        deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            label = find_label_with_text(lv.screen_active(), "?")
+            if label is not None:
+                return label
+            wait_for_render(1)
+        return None
+
     def test_help_button_exists(self):
         result = AppManager.start_app(APP_NAME)
         self.assertTrue(result, "Sorter should start")
-        wait_for_render(10)
 
-        help_label = find_label_with_text(lv.screen_active(), "?")
+        help_label = self._wait_for_help_label()
         self.assertIsNotNone(help_label, "Help button ('?') should be on screen")
 
 
