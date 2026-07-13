@@ -270,13 +270,13 @@ class Sorter(Activity):
         self.container = lv.obj(self.screen)
         self.container.set_size(DisplayMetrics.width(), DisplayMetrics.pct_of_height(75))
         self.container.align(lv.ALIGN.CENTER, 0, 0)
+        self.container.set_style_pad_all(0, 0)
         self.container.set_style_bg_opa(lv.OPA.TRANSP, 0)
         self.container.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         num_tubes = len(self.tubes)
         gap = 4
-        usable_w = DisplayMetrics.width() - (num_tubes - 1) * gap
-        tube_width = max(28, usable_w // num_tubes)
+        tube_width = max(28, (DisplayMetrics.width() - (num_tubes - 1) * gap) // num_tubes)
         game_h = DisplayMetrics.pct_of_height(75)
         max_tube_h = DisplayMetrics.pct_of_height(65)
         emoji_sz = max(14, min(32, tube_width - 4, int(max_tube_h // (self.capacity * 1.3))))
