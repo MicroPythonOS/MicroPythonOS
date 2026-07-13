@@ -266,80 +266,74 @@ class Sorter(Activity):
     def build_board(self):
         if self.container:
             self.container.delete()
+
         self.container = lv.obj(self.screen)
-        self.container.set_size(lv.pct(100), DisplayMetrics.pct_of_height(75))
-        self.container.align(lv.ALIGN.CENTER, 0, 0)
-        self.container.set_flex_flow(lv.FLEX_FLOW.ROW_WRAP)
-        self.container.set_flex_align(lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
-        self.container.set_style_pad_row(6, 0)
-        self.container.set_style_pad_column(6, 0)
-        self.container.set_style_radius(0, 0)
+        self.container.set_size(DisplayMetrics.width(), DisplayMetrics.pct_of_height(82))
+        self.container.align(lv.ALIGN.CENTER, 0, 2)
+        self.container.set_style_bg_opa(lv.OPA.TRANSP, 0)
         self.container.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
-        self.tube_widgets = []
         num_tubes = len(self.tubes)
-        gap = 6
-        available_width = DisplayMetrics.width() - ((num_tubes - 1) * gap)
-        tight_width = available_width // max(1, num_tubes)
-        tube_width = max(28, int(tight_width * 0.85))
-        # Scale emojis down as tubes get deeper so everything fits.
-        max_tube_height = DisplayMetrics.pct_of_height(55)
-        emoji_size_from_height = int(max_tube_height // (self.capacity * 1.35))
-        emoji_size = max(14, min(32, tube_width - 8, emoji_size_from_height))
-        tube_height = int(emoji_size * 1.35 * self.capacity)
+        margin = 6
+        gap = 4
+        usable_w = DisplayMetrics.width() - 2 * margin - (num_tubes - 1) * gap
+        tube_width = max(28, usable_w // num_tubes)
+        game_h = DisplayMetrics.pct_of_height(82)
+        max_tube_h = DisplayMetrics.pct_of_height(65)
+        emoji_sz = max(14, min(32, tube_width - 4, int(max_tube_h // (self.capacity * 1.3))))
+        spacing = int(emoji_sz * 1.3)
+        tube_height = spacing * self.capacity
+        lift_space = int(emoji_sz * 0.75)
+
+        total_w = num_tubes * tube_width + (num_tubes - 1) * gap
+        start_x = (DisplayMetrics.width() - total_w) // 2
+        total_h = tube_height + lift_space
+        start_y = (game_h - total_h) // 2 + lift_space
+
+        scale = int(256 * emoji_sz / 32)
+
+        self.tube_borders = []
+        self.emoji_images = []
 
         for idx in range(num_tubes):
-            tube = self._build_tube_widget(idx, tube_width, tube_height, emoji_size)
-            self.tube_widgets.append(tube)
+            tube_x = start_x + idx * (tube_width + gap)
 
-    def _build_tube_widget(self, idx, tube_width, tube_height, emoji_size):
-        tube_obj = lv.obj(self.container)
-        tube_obj.set_size(tube_width, tube_height)
-        # Pack icons at the bottom so empty tubes look empty at the top.
-        tube_obj.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        tube_obj.set_flex_align(lv.FLEX_ALIGN.END, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.CENTER)
-        tube_obj.set_style_pad_all(2, lv.PART.MAIN)
-        tube_obj.set_style_pad_column(2, lv.PART.MAIN)
-        tube_obj.set_style_radius(4, lv.PART.MAIN)
-        tube_obj.set_style_bg_color(self.TUBE_BG, lv.PART.MAIN)
-        tube_obj.set_style_border_color(self.TUBE_BORDER, lv.PART.MAIN)
-        tube_obj.set_style_border_width(2, lv.PART.MAIN)
-        tube_obj.add_flag(lv.obj.FLAG.CLICKABLE)
-        tube_obj.add_event_cb(lambda e, i=idx: self.on_tube(e, i), lv.EVENT.CLICKED, None)
-        mpos.ui.add_focus_border(tube_obj, width=4)
+            border = lv.obj(self.container)
+            border.set_size(tube_width, tube_height)
+            border.set_pos(tube_x, start_y)
+            border.set_style_bg_opa(lv.OPA.TRANSP, 0)
+            border.set_style_border_color(self.SELECT_COLOR if self.selected == idx else self.TUBE_BORDER, 0)
+            border.set_style_border_width(2, 0)
+            border.set_style_radius(4, 0)
+            border.add_flag(lv.obj.FLAG.CLICKABLE)
+            border.add_event_cb(lambda e, i=idx: self.on_tube(e, i), lv.EVENT.CLICKED, None)
+            mpos.ui.add_focus_border(border, width=4)
+            self.tube_borders.append(border)
 
-        if self.selected == idx:
-            tube_obj.set_style_bg_color(self.SELECT_COLOR, 0)
-        else:
-            tube_obj.set_style_bg_color(self.TUBE_BG, 0)
+            emoji_x = tube_x + (tube_width - emoji_sz) // 2
+            items = self.tubes[idx]
+            imgs = []
+            for i, item in enumerate(items):
+                emoji_y = start_y + tube_height - (i + 1) * spacing + (spacing - emoji_sz) // 2
+                img = lv.image(self.container)
+                img.set_src(_EMOJI_DIR + _EMOJIS[self.emoji_order[item]])
+                img.set_size(emoji_sz, emoji_sz)
+                img.set_scale(scale)
+                img.set_pos(emoji_x, emoji_y)
+                imgs.append(img)
+            self.emoji_images.append(imgs)
 
-        items = self.tubes[idx]
-        # Items are stored bottom..top, but LVGL lays out children in
-        # creation order with the first child at the visual top. Reverse the
-        # render order so the top emoji appears at the top of the tube while
-        # the whole column is still aligned to the tube bottom.
-        scale = int(256 * emoji_size / 32)
-        for item in reversed(items):
-            img = lv.image(tube_obj)
-            img.set_src(_EMOJI_DIR + _EMOJIS[self.emoji_order[item]])
-            img.set_size(emoji_size, emoji_size)
-            img.set_scale(scale)
-
-        return tube_obj
+        self.tube_widgets = self.tube_borders
+        self._emoji_sz = emoji_sz
 
     def _animate_top_emoji(self, tube_idx, up):
-        tube_obj = self.tube_widgets[tube_idx]
-        if tube_obj.get_child_count() == 0:
+        imgs = self.emoji_images[tube_idx]
+        if not imgs:
             return
-        top = tube_obj.get_child(0)
+        top = imgs[-1]
         cur = top.get_y()
-        offset = int(top.get_height() * 0.75)
-
-        if up:
-            top.add_flag(lv.obj.FLAG.FLOATING)
-            target = cur - offset
-        else:
-            target = cur + offset
+        offset = int(self._emoji_sz * 0.75)
+        target = cur - offset if up else cur + offset
 
         anim = lv.anim_t()
         anim.init()
@@ -348,17 +342,15 @@ class Sorter(Activity):
         anim.set_duration(150)
         anim.set_path_cb(lv.anim_t.path_ease_in_out)
         anim.set_custom_exec_cb(lambda a, v: top.set_y(int(v)))
-        if not up:
-            anim.set_completed_cb(lambda *a: top.remove_flag(lv.obj.FLAG.FLOATING))
         anim.start()
         self._anim = anim
 
     def _update_selection(self):
-        for i, tube in enumerate(self.tube_widgets):
+        for i, border in enumerate(self.tube_borders):
             if self.selected == i:
-                tube.set_style_bg_color(self.SELECT_COLOR, 0)
+                border.set_style_border_color(self.SELECT_COLOR, 0)
             else:
-                tube.set_style_bg_color(self.TUBE_BG, 0)
+                border.set_style_border_color(self.TUBE_BORDER, 0)
 
     def _restore_focus(self, idx):
         if idx < 0 or idx >= len(self.tube_widgets):
