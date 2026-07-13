@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+0.15.1
+======
+
 Frameworks:
 - LightsManager: simplify API to 'from mpos import LightsManager'
 
