@@ -8,7 +8,7 @@ Usage:
 
 import unittest
 
-from mpos import AppManager
+from mpos import AppManager, wait_for_render
 from mpos.ui.testing import wait_for_text
 
 
