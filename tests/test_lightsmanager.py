@@ -39,7 +39,7 @@ sys.modules['neopixel'] = type('module', (), {'NeoPixel': MockNeoPixel})()
 
 
 # Now import the module to test
-import mpos.lights as LightsManager
+from mpos import LightsManager
 
 
 class TestLightsManager(unittest.TestCase):

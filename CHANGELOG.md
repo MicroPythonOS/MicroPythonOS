@@ -1,7 +1,8 @@
 Future release (next version)
 =====
 
-Put unreleased changes here!
+Frameworks:
+- LightsManager: convert to class-based singleton; canonical import is now `from mpos import LightsManager` (was `import mpos.lights as LightsManager`)
 
 0.15.0
 ======

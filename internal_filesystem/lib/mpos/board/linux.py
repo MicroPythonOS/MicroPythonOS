@@ -138,7 +138,7 @@ except ImportError:
     _webio = None
 
 if _webio:
-    import mpos.lights as LightsManager
+    from mpos import LightsManager
     LightsManager.init(neopixel_pin=12)
     LightsManager.set_led_num(5)
 

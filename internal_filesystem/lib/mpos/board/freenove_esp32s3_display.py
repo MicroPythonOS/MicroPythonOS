@@ -213,7 +213,7 @@ mpos.sdcard.init(cmd_pin=40, clk_pin=38, d0_pin=39, d1_pin=41, d2_pin=48, d3_pin
 # Step 6: NeoPixel (WS2812B, 1 LED, GPIO 42)
 # ==============================
 if __debug__: logger.debug("freenove_esp32s3_display.py: init NeoPixel")
-import mpos.lights as LightsManager
+from mpos import LightsManager
 LightsManager.init(neopixel_pin=42, num_leds=1)
 
 # ==============================

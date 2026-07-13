@@ -2,8 +2,7 @@
 
 from mpos import DeviceManager
 import lvgl as lv
-from mpos import Activity, DisplayMetrics
-import mpos.lights as LightsManager
+from mpos import Activity, DisplayMetrics, LightsManager
 
 from vl53l5cx import DATA_DISTANCE_MM, DATA_TARGET_STATUS
 from vl53l5cx import RESOLUTION_4X4, RESOLUTION_8X8, STATUS_VALID

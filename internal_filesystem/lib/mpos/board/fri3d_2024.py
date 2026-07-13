@@ -312,7 +312,7 @@ DeviceManager.registerBus(i2c_bus=imu_i2c) # register because Communicator needs
 SensorManager.init(imu_i2c, address=0x6B, mounted_position=SensorManager.FACING_EARTH)
 
 # === LED HARDWARE ===
-import mpos.lights as LightsManager
+from mpos import LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12)
 LightsManager.set_led_num(5)

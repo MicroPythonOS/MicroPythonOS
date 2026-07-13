@@ -41,7 +41,7 @@ import mpos.ui.focus_direction
 from mpos import InputManager, IRManager, DeviceManager
 
 # === LED HARDWARE ===
-import mpos.lights as LightsManager
+from mpos import LightsManager
 # Initialize 5 NeoPixel LEDs (GPIO 12)
 LightsManager.init(neopixel_pin=12)
 LightsManager.set_led_num(5)

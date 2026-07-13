@@ -22,6 +22,7 @@ from .lora_manager import LoRaManager
 from .ir_manager import IRManager
 from .gps_manager import GPSManager
 from .device_manager import DeviceManager
+from .lights import LightsManager
 
 # Battery manager (imported early for UI dependencies)
 from .battery_manager import BatteryManager
@@ -73,7 +74,6 @@ from . import sensor_manager
 from . import camera_manager
 from . import sdcard
 from . import audio
-from . import lights
 
 __all__ = (
     # Core framework
@@ -84,7 +84,7 @@ __all__ = (
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
     "NotificationManager", "Notification",
-    "LoRaManager", "IRManager", "GPSManager", "DeviceManager",
+    "LoRaManager", "IRManager", "GPSManager", "DeviceManager", "LightsManager",
     # Device and build info
     "DeviceInfo", "BuildInfo",
     # Common activities
@@ -119,7 +119,7 @@ __all__ = (
     "retry_action_until", "wait_for_focus",
     # Submodules
     "ui", "shared_preferences", "net", "content", "time", "sensor_manager",
-    "camera_manager", "sdcard", "audio", "lights",
+    "camera_manager", "sdcard", "audio",
     # Timezone utilities
     "TimeZone"
 )
