@@ -240,7 +240,6 @@ class Sorter(Activity):
         self.prefs = SharedPreferences(self.appFullName)
         self.highscore = self.prefs.get_int("highscore", 0)
         self.sound_effects = self._load_sound_effects()
-        self._new_game()
         self.create_ui()
         self.setContentView(self.screen)
         self._check_autoload()
@@ -250,7 +249,6 @@ class Sorter(Activity):
         self.level = 1
         self.score = 0
         self.emoji_order = _generate_emoji_order()
-        self._autosave()
         self._start_level()
 
     def _start_level(self):
@@ -275,7 +273,6 @@ class Sorter(Activity):
         self.moves_label.align(lv.ALIGN.TOP_RIGHT, -10, 10)
 
         self.refresh_labels()
-        self.build_board()
 
         settings_btn = lv.button(self.screen)
         settings_label = lv.label(settings_btn)
@@ -447,8 +444,14 @@ class Sorter(Activity):
         saved_level = prefs.get_int("autosave_level", 0)
         saved_score = prefs.get_int("autosave_score", 0)
         if saved_level == 0 and saved_score == 0:
+            self._new_game()
+            self.build_board()
+            self.refresh_labels()
             return
         if saved_level == 1 and saved_score == 0:
+            self._new_game()
+            self.build_board()
+            self.refresh_labels()
             return
 
         mbox = lv.msgbox()
@@ -497,6 +500,9 @@ class Sorter(Activity):
 
     def _on_autoload_no(self, event):
         self._close_popup()
+        self._new_game()
+        self.build_board()
+        self.refresh_labels()
 
     def on_highscore_tap(self, event):
         self._show_confirm_popup("Reset highscore?", self._on_reset_highscore_yes, self._on_reset_highscore_no)
