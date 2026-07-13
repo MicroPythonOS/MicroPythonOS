@@ -3,6 +3,9 @@ Future release (next version)
 
 Put unreleased changes here!
 
+0.15.0
+======
+
 Board Support:
 - About app: show correct netmask
 - WebAssembly: fix mobile touch input by properly converting SDL's normalized touch coordinates to actual window pixel coordinates by @DrSkunk
