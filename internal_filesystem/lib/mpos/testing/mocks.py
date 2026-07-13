@@ -456,7 +456,7 @@ class MockNetwork:
             """Return IP configuration details, mirroring network.WLAN.ipconfig."""
             config = self.ifconfig()
             mapping = {
-                'addr4': config[0],
+                'addr4': config,
                 'netmask4': config[1],
                 'gateway4': config[2],
                 'dns4': config[3],

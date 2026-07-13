@@ -695,6 +695,43 @@ class TestWifiServiceIPv4Info(unittest.TestCase):
         self.assertEqual(address, "127.0.0.1")
         self.assertEqual(gateway, "")
 
+    def test_get_ipv4_netmask_returns_none_when_busy(self):
+        WifiService.wifi_busy = True
+        self.assertIsNone(WifiService.get_ipv4_netmask(network_module=HotspotMockNetwork()))
+
+    def test_get_ipv4_netmask_desktop_mode(self):
+        self.assertEqual(WifiService.get_ipv4_netmask(network_module=None), "255.255.255.0")
+
+    def test_get_ipv4_value_tuple_index_sta_mode(self):
+        WifiService.hotspot_enabled = False
+        mock_network = MockNetwork(connected=True)
+        mock_network.WLAN(mock_network.AP_IF).active(False)
+
+        self.assertEqual(WifiService._get_ipv4_value(
+            network_module=mock_network, ap_index=0, sta_key="addr4",
+            desktop_value="127.0.0.1", label="address", tuple_index=0,
+        ), "192.168.1.100")
+
+        self.assertEqual(WifiService._get_ipv4_value(
+            network_module=mock_network, ap_index=0, sta_key="addr4",
+            desktop_value="127.0.0.1", label="netmask", tuple_index=1,
+        ), "255.255.255.0")
+
+        self.assertEqual(WifiService._get_ipv4_value(
+            network_module=mock_network, ap_index=0, sta_key="addr4",
+            desktop_value="127.0.0.1", label="gateway", tuple_index=2,
+        ), "192.168.1.1")
+
+    def test_get_ipv4_netmask_from_ap_when_hotspot_enabled(self):
+        mock_network = HotspotMockNetwork()
+        ap_wlan = mock_network.WLAN(mock_network.AP_IF)
+        ap_wlan.active(True)
+        ap_wlan.ifconfig(("10.0.0.1", "255.255.0.0", "10.0.0.1", "8.8.8.8"))
+        WifiService.hotspot_enabled = True
+
+        netmask = WifiService.get_ipv4_netmask(network_module=mock_network)
+        self.assertEqual(netmask, "255.255.0.0")
+
 
 class TestWifiServiceDisconnect(unittest.TestCase):
     """Test WifiService.disconnect() method."""
