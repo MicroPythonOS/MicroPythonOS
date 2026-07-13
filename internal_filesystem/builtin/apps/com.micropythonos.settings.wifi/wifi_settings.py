@@ -3,7 +3,7 @@ import logging
 import lvgl as lv
 import _thread
 
-from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager, add_focus_border
+from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager, add_focus_highlight
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +295,7 @@ class EditNetwork(Activity):
         label.add_event_cb(self.hidden_clicked,lv.EVENT.CLICKED,None)
         label.add_flag(lv.obj.FLAG.CLICKABLE)
         label.set_style_pad_all(2, lv.PART.MAIN)
-        add_focus_border(label, width=2, opacity=lv.OPA._50, radius=5)
+        add_focus_highlight(label, width=2, opacity=lv.OPA._50, radius=5)
         lv.group_get_default().add_obj(label)
 
         if known_hidden:

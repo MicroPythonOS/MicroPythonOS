@@ -3,7 +3,7 @@ import lvgl as lv
 import math
 import time
 
-from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics, add_focus_border
+from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics, add_focus_highlight
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ class Launcher(Activity):
 
             # ----- events --------------------------------------------------
             app_cont.add_event_cb(lambda e, fullname=app.fullname: self._launch_app(fullname), lv.EVENT.CLICKED, None)
-            add_focus_border(app_cont)
+            add_focus_highlight(app_cont)
 
             self._app_cont_map[app.fullname] = app_cont
 

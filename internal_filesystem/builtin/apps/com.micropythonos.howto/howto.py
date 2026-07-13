@@ -1,6 +1,6 @@
 import logging
 
-from mpos import Activity, SharedPreferences, DisplayMetrics, add_focus_border
+from mpos import Activity, SharedPreferences, DisplayMetrics, add_focus_highlight
 import lvgl as lv
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class HowTo(Activity):
         label.set_width(lv.pct(100))
         label.set_text(text)
         label.set_long_mode(lv.label.LONG_MODE.WRAP)
-        add_focus_border(label)
+        add_focus_highlight(label)
         lv.group_get_default().add_obj(label)
         if is_header:
             label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)

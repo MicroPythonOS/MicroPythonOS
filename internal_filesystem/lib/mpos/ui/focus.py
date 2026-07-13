@@ -53,7 +53,7 @@ def _defocus_bg_handler(event):
     target.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
 
-def add_focus_border(widget, width=1, color=None, opacity=None, radius=None, mode="border"):
+def add_focus_highlight(widget, width=1, color=None, opacity=None, radius=None, mode="border"):
     """Register focus/defocus callbacks that highlight a widget.
 
     mode='border' (default): draws a border around the widget on focus.
@@ -62,7 +62,9 @@ def add_focus_border(widget, width=1, color=None, opacity=None, radius=None, mod
     The widget is always added to the focus group, but the highlight stays
     invisible until the user navigates by direction (see enable_focus_borders
     / move_focus_direction) — keeping the highlight off touch-only UIs while
-    preserving it for keypad/encoder navigation."""
+    preserving it for keypad/encoder navigation.
+
+    Added in MPOS 0.15.0."""
     if color is None:
         color = lv.theme_get_color_primary(None)
     if mode == "bg":
@@ -82,6 +84,14 @@ def add_focus_border(widget, width=1, color=None, opacity=None, radius=None, mod
     focusgroup = lv.group_get_default()
     if focusgroup:
         focusgroup.add_obj(widget)
+
+
+# Compatibility wrapper — add_focus_border was the API in MPOS 0.14.2 and
+# earlier. It is kept so existing callers don't break. New code should use
+# add_focus_highlight() instead, which is the canonical name from 0.15.0
+# onwards and supports mode='bg' for background-based focus indication.
+def add_focus_border(widget, width=1, color=None, opacity=None, radius=None, mode="border"):
+    return add_focus_highlight(widget, width=width, color=color, opacity=opacity, radius=radius, mode=mode)
 
 
 def move_focusgroup_objects(fromgroup, togroup):

@@ -4,7 +4,7 @@ import time
 
 import lvgl as lv
 
-from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo, FontManager, add_focus_border
+from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo, FontManager, add_focus_highlight
 import mpos
 
 class About(Activity):
@@ -214,7 +214,7 @@ class About(Activity):
         label.set_text(text)
         label.set_width(lv.pct(98))
         # Make labels focusable to allow scroll on devices without touch screen
-        add_focus_border(label)
+        add_focus_highlight(label)
         lv.group_get_default().add_obj(label)
         if is_header:
             primary_color = lv.theme_get_color_primary(None)

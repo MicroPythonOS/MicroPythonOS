@@ -6,7 +6,7 @@ from .view import (
 from .gesture_navigation import handle_back_swipe, handle_top_swipe
 from .appearance_manager import AppearanceManager
 from .topmenu import open_bar, close_bar, open_drawer, drawer_open
-from .focus import save_and_clear_current_focusgroup, add_focus_border
+from .focus import save_and_clear_current_focusgroup, add_focus_highlight, add_focus_border
 from .display_metrics import DisplayMetrics
 from .event import get_event_name, print_event
 from .input_activity import InputActivity
@@ -53,7 +53,7 @@ __all__ = [
     "handle_back_swipe", "handle_top_swipe",
     "AppearanceManager",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
-    "save_and_clear_current_focusgroup", "add_focus_border",
+    "save_and_clear_current_focusgroup", "add_focus_highlight", "add_focus_border",
     "DisplayMetrics",
     "get_event_name", "print_event",
     "get_foreground_app",

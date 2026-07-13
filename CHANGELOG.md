@@ -9,8 +9,11 @@ Board Support:
 - WebAssembly: fix mobile touch input by properly converting SDL's normalized touch coordinates to actual window pixel coordinates by @DrSkunk
 - WebAssembly: Add fake machine.Pin and machine peripherals for WebAssembly build by @DrSkunk
 
+Builtin Apps:
+- About, HowTo, Launcher, WiFi Settings: migrate to add_focus_highlight()
+
 Frameworks:
-- Focus: add mode='bg' to add_focus_border() so widgets with borders can show focus via background tint instead
+- Focus: rename add_focus_border() to add_focus_highlight(), add mode='bg' so widgets with borders can show focus via background tint instead; keep old name as compatibility wrapper
 - Focus: don't clear borders when focus-nav was never active
 - App: change 'no icon' log level from warning to info
 - AudioManager: add find_input_by_kind() and find_output_by_kind()
