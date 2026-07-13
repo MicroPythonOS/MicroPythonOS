@@ -32,25 +32,53 @@ def _focus_border_handler(event, width, color, opacity, radius):
 
 
 def _defocus_border_handler(event):
+    if not _focus_nav_active:
+        return
     target = event.get_target_obj()
     target.set_style_border_width(0, lv.PART.MAIN)
 
 
-def add_focus_border(widget, width=1, color=None, opacity=None, radius=None):
-    """Register focus/defocus callbacks that draw a border around a widget.
+def _focus_bg_handler(event, color):
+    if not _focus_nav_active:
+        return
+    target = event.get_target_obj()
+    target.set_style_bg_color(color, lv.PART.MAIN)
+    target.set_style_bg_opa(lv.OPA._30, lv.PART.MAIN)
 
-    The widget is always added to the focus group, but the border stays
+
+def _defocus_bg_handler(event):
+    if not _focus_nav_active:
+        return
+    target = event.get_target_obj()
+    target.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+
+
+def add_focus_border(widget, width=1, color=None, opacity=None, radius=None, mode="border"):
+    """Register focus/defocus callbacks that highlight a widget.
+
+    mode='border' (default): draws a border around the widget on focus.
+    mode='bg': tints the widget's background on focus, leaving borders intact.
+
+    The widget is always added to the focus group, but the highlight stays
     invisible until the user navigates by direction (see enable_focus_borders
     / move_focus_direction) — keeping the highlight off touch-only UIs while
     preserving it for keypad/encoder navigation."""
     if color is None:
         color = lv.theme_get_color_primary(None)
-    widget.add_event_cb(
-        lambda e, w=width, c=color, o=opacity, r=radius: _focus_border_handler(e, w, c, o, r),
-        lv.EVENT.FOCUSED,
-        None,
-    )
-    widget.add_event_cb(_defocus_border_handler, lv.EVENT.DEFOCUSED, None)
+    if mode == "bg":
+        widget.add_event_cb(
+            lambda e, c=color: _focus_bg_handler(e, c),
+            lv.EVENT.FOCUSED,
+            None,
+        )
+        widget.add_event_cb(_defocus_bg_handler, lv.EVENT.DEFOCUSED, None)
+    else:
+        widget.add_event_cb(
+            lambda e, w=width, c=color, o=opacity, r=radius: _focus_border_handler(e, w, c, o, r),
+            lv.EVENT.FOCUSED,
+            None,
+        )
+        widget.add_event_cb(_defocus_border_handler, lv.EVENT.DEFOCUSED, None)
     focusgroup = lv.group_get_default()
     if focusgroup:
         focusgroup.add_obj(widget)

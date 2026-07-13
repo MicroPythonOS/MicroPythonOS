@@ -3,8 +3,6 @@ Future release (next version)
 
 Put unreleased changes here!
 
-0.15.0
-======
 
 Board Support:
 - About app: show correct netmask
@@ -12,6 +10,8 @@ Board Support:
 - WebAssembly: Add fake machine.Pin and machine peripherals for WebAssembly build by @DrSkunk
 
 Frameworks:
+- Focus: add mode='bg' to add_focus_border() so widgets with borders can show focus via background tint instead
+- Focus: don't clear borders when focus-nav was never active
 - App: change 'no icon' log level from warning to info
 - AudioManager: add find_input_by_kind() and find_output_by_kind()
 - AudioManager: add find_input_by_name() and find_input_by_kind()
