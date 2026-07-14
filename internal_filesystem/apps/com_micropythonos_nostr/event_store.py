@@ -269,6 +269,13 @@ class EventStore:
             self._save_index()
         return chat
 
+    def update_chat_title(self, chat_id, title):
+        entry = self._index.get("chats", {}).get(chat_id)
+        if entry is None:
+            return
+        entry["title"] = title
+        self._save_index()
+
     def get_or_create_nip17_group(self, participants, title=None):
         """Return or create a NIP-17 group chat for the given participants."""
         chat_id = nip17_group_chat_id(participants)

@@ -67,6 +67,12 @@ class _FakeStore:
     def get_chats(self):
         return self._chats
 
+    def get_chat(self, chat_id):
+        for c in self._chats:
+            if c.chat_id == chat_id:
+                return c
+        return None
+
     def get_or_create_channel(self, channel_id, title=None):
         self.created_channels.append((channel_id, title))
         chat_id = f"channel_{channel_id}"
@@ -74,6 +80,9 @@ class _FakeStore:
         if not any(c.chat_id == chat_id for c in self._chats):
             self._chats.append(chat)
         return chat
+
+    def update_chat_title(self, chat_id, title):
+        pass
 
 
 class TestConfigureNostrManager(unittest.TestCase):

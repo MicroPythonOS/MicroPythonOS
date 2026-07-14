@@ -8,6 +8,7 @@ from .chat_model import (
     KIND_CHANNEL_MESSAGE,
     KIND_DM,
     KIND_NIP17_CHAT,
+    channel_chat_id,
 )
 from .event_store import _current_nostr_ts
 
@@ -193,6 +194,14 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
 
     if store is not None:
         _load_channel_directory(store)
+        # Migration (v0.15.1): fix stale "#MicroPythonOS" title leftover from
+        # earlier versions that incorrectly prefixed the default channel name
+        # with "#". Remove after 2026-08-20.
+        chat_id = channel_chat_id(DEFAULT_CHANNEL_ID)
+        chat = store.get_chat(chat_id)
+        if chat is not None and chat.title == f"#{DEFAULT_CHANNEL_NAME}":
+            store.update_chat_title(chat_id, DEFAULT_CHANNEL_NAME)
+
         # Ensure the default public channel exists so boot-time notifications
         # and messages are received even before the user opens the UI.
         store.get_or_create_channel(
