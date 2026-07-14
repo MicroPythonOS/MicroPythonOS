@@ -1,4 +1,4 @@
-"""Regression tests for NIP-17 live updates in ChatActivity."""
+"""Regression tests for NIP-17 and DM live event handling in ChatActivity."""
 import unittest
 
 import sys
@@ -33,8 +33,15 @@ class _FakeManager:
 
 
 class _FakeStore:
+    def __init__(self):
+        self.messages = {}
+
     def add_message(self, chat_id, message, mark_unread=False):
+        self.messages.setdefault(chat_id, []).append(message)
         return True
+
+    def load_messages(self, chat_id, limit=None):
+        return self.messages.get(chat_id, [])
 
     def get_chat(self, chat_id):
         return None
@@ -113,8 +120,8 @@ class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
             KIND_DM,
         )
         act._sent_event_ids.add("gw1")
-        appended = []
-        act._append_message_row = lambda msg: appended.append(msg)
+        rendered = []
+        act._load_and_render = lambda: rendered.append(True)
 
         echo = _FakeNostrEvent(
             public_key="own123",
@@ -124,15 +131,15 @@ class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
         )
         act._on_event(echo)
 
-        self.assertEqual(appended, [])
+        self.assertEqual(rendered, [])
 
-    def test_on_event_renders_self_authored_channel_message(self):
-        """Own messages sent from another client must still show in a channel."""
+    def test_on_event_persists_and_triggers_render(self):
+        """Incoming message is persisted to the store and triggers a re-render."""
         channel_id = "chan42"
         chat_id = channel_chat_id(channel_id)
         act = self._activity("own123", chat_id, KIND_CHANNEL_MESSAGE)
-        appended = []
-        act._append_message_row = lambda msg: appended.append(msg)
+        rendered = []
+        act._load_and_render = lambda: rendered.append(True)
 
         own_channel_event = _FakeNostrEvent(
             public_key="own123",
@@ -143,8 +150,10 @@ class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
         )
         act._on_event(own_channel_event)
 
-        self.assertEqual(len(appended), 1)
-        self.assertEqual(appended[0].content, "from amethyst")
+        self.assertEqual(len(rendered), 1)
+        stored = act._store.load_messages(chat_id)
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].content, "from amethyst")
 
     def test_on_event_marks_own_nip17_as_outgoing_after_recreation(self):
         """A relay echo from the local key must show as outgoing even when the
@@ -154,10 +163,9 @@ class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
         peer = "peer456"
         chat_id = dm_chat_id(own, peer)
         act = self._activity(own, chat_id, KIND_DM)
-        # Simulate a fresh activity: no recently-sent ids recorded.
         act._sent_event_ids = set()
-        appended = []
-        act._append_message_row = lambda msg: appended.append(msg)
+        rendered = []
+        act._load_and_render = lambda: rendered.append(True)
 
         echo = _FakeNostrEvent(
             public_key=own,
@@ -168,9 +176,11 @@ class TestChatActivityIgnoresOwnEvents(unittest.TestCase):
         )
         act._on_event(echo)
 
-        self.assertEqual(len(appended), 1)
-        self.assertTrue(appended[0].outgoing)
-        self.assertEqual(appended[0].content, "from mpy")
+        self.assertEqual(len(rendered), 1)
+        stored = act._store.load_messages(chat_id)
+        self.assertEqual(len(stored), 1)
+        self.assertTrue(stored[0].outgoing)
+        self.assertEqual(stored[0].content, "from mpy")
 
 
 if __name__ == "__main__":

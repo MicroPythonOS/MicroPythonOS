@@ -575,7 +575,6 @@ class ChatActivity(Activity):
             self._store.add_message(self._chat_id, message, mark_unread=False)
             # If it hasn't been rendered yet:
             if self._rendered_ids is None or message.event_id not in self._rendered_ids:
-                self._append_message_row(message)
-                self._request_scroll_to_bottom()
+                self._load_and_render()
         except Exception as e:
             logger.error("Error handling chat event: %s", e)
