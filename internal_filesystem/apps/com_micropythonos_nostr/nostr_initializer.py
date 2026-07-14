@@ -150,7 +150,7 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
         manager.start()
 
     nsec = ensure_identity(prefs)
-    relay = prefs.get_string("nostr_relay") or DEFAULT_RELAYS
+    relay = prefs.get_string("nostr_relay") or ", ".join(DEFAULT_RELAYS)
     try:
         manager.configure_identity(nsec, relays=relay)
     except Exception as e:

@@ -33,7 +33,7 @@ from .chat_model import (
 
 from .event_store import DEFAULT_MAX_MESSAGES_PER_CHAT, EventStore, _current_nostr_ts
 from .new_chat_activity import NewChatActivity
-from .nostr_initializer import DEFAULT_RELAY, configure_nostr_manager
+from .nostr_initializer import DEFAULT_RELAYS, configure_nostr_manager
 from .nostr_service import NostrManager
 from .show_nsec_qr import ShowNsecQRActivity
 from .show_npub_qr import ShowNpubQRActivity
@@ -340,7 +340,7 @@ class ChatListActivity(Activity):
         intent.putExtra("prefs", self._prefs)
         intent.putExtra("settings", [
             {"title": "Nostr Private Key (nsec)", "key": "nostr_nsec", "placeholder": "nsec1...", "should_show": self._should_show_setting},
-            {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": DEFAULT_RELAY, "should_show": self._should_show_setting},
+            {"title": "Nostr Relay", "key": "nostr_relay", "placeholder": "wss://relay1.com, wss://relay2.com (comma-separated)", "default_value": ", ".join(DEFAULT_RELAYS), "should_show": self._should_show_setting},
             {"title": "Connect at boot", "key": "connect_at_boot", "ui": "radiobuttons", "ui_options": [("On", "1"), ("Off", "0")], "default_value": "1", "should_show": self._should_show_setting},
             {"title": "Show My Public Key (npub)", "key": "show_npub_qr", "ui": "activity", "activity_class": ShowNpubQRActivity, "dont_persist": True, "should_show": self._should_show_setting},
             {"title": "Show My Private Key (nsec)", "key": "show_nsec_qr", "ui": "activity", "activity_class": ShowNsecQRActivity, "dont_persist": True, "should_show": self._should_show_setting},

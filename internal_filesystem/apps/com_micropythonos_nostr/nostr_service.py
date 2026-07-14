@@ -201,7 +201,7 @@ def _normalize_relays(relays):
     if relays is None:
         return []
     if isinstance(relays, str):
-        relays = [relays]
+        relays = [r.strip() for r in relays.split(",") if r.strip()]
     seen = set()
     out = []
     for url in relays:
