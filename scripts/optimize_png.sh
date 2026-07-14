@@ -2,9 +2,16 @@
 
 dir="$1"
 if [ -z "$dir" ]; then
-	#dir="internal_filesystem/"
-	echo "Usage: $0 dir/"
+	echo "Usage: $0 dir/ or file.png"
 	exit 1
+fi
+
+if [ -f "$dir" ]; then
+	echo "$dir"
+	convert "$dir" -strip "$dir"
+	optipng -o7 "$dir"
+	~/software/zopfli/zopflipng   --iterations=500 --filters=01234mepb --lossy_8bit --lossy_transparent -y "$dir" "$dir"
+	exit 0
 fi
 
 cd "$dir"
