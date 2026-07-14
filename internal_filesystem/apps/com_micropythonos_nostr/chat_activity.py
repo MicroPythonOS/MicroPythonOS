@@ -35,9 +35,6 @@ from .profile_cache import ProfileCache
 
 logger = logging.getLogger(__name__)
 
-# Toggle the per-message protocol label (NIP-04 / NIP-17 / NIP-28).
-_SHOW_PROTOCOL_LABELS = True
-
 
 class ChatActivity(Activity):
 
@@ -267,25 +264,38 @@ class ChatActivity(Activity):
             sender = f"{sender} (queued)"
 
         align = lv.TEXT_ALIGN.RIGHT if message.outgoing else lv.TEXT_ALIGN.LEFT
+        avatar_size = round(DisplayMetrics.pct_of_width(7))
 
         if not message.outgoing and not message.pubkey == (self._manager.get_own_pubkey_hex() or ""):
             try:
                 profile = ProfileCache.get_instance().get_profile(message.pubkey)
                 if profile and profile.get("picture_path"):
-                    avatar = lv.image(row)
-                    avatar_size = round(DisplayMetrics.pct_of_width(7))
+                    avatar_row = lv.obj(row)
+                    avatar_row.set_width(lv.pct(100))
+                    avatar_row.set_height(lv.SIZE_CONTENT)
+                    avatar_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+                    avatar_row.set_style_border_width(0, lv.PART.MAIN)
+                    avatar_row.set_style_pad_all(0, lv.PART.MAIN)
+
+                    avatar = lv.image(avatar_row)
                     avatar.set_size(avatar_size, avatar_size)
                     avatar.set_src(profile["picture_path"])
-            except Exception:
-                pass
+                    _scale_avatar(avatar, avatar_size)
 
-        meta = lv.label(row)
-        meta.set_text(f"{sender} · {self._format_time(message.ts)}")
-        meta.set_style_text_font(
-            FontManager.getFont(size=10, emoji=True), lv.PART.MAIN
-        )
-        meta.set_width(lv.pct(100))
-        meta.set_style_text_align(align, lv.PART.MAIN)
+                    meta = lv.label(avatar_row)
+                    meta.set_text(f"{sender} · {self._format_time(message.ts)}")
+                    meta.set_style_text_font(
+                        FontManager.getFont(size=10, emoji=True), lv.PART.MAIN
+                    )
+                    meta.set_flex_grow(1)
+                    meta.set_style_pad_left(DisplayMetrics.pct_of_width(1), lv.PART.MAIN)
+                    meta.set_style_text_align(align, lv.PART.MAIN)
+                else:
+                    meta = self._make_meta_label(row, sender, message, align)
+            except Exception:
+                meta = self._make_meta_label(row, sender, message, align)
+        else:
+            meta = self._make_meta_label(row, sender, message, align)
 
         body = lv.label(row)
         body.set_text(message.content)
@@ -294,7 +304,7 @@ class ChatActivity(Activity):
         body.set_long_mode(lv.label.LONG_MODE.WRAP)
         body.set_style_text_align(align, lv.PART.MAIN)
 
-        if _SHOW_PROTOCOL_LABELS:
+        if self._should_show_protocol_labels():
             proto_label = PROTOCOL_LABELS.get(message.kind)
             if proto_label:
                 proto = lv.label(row)
@@ -305,6 +315,22 @@ class ChatActivity(Activity):
                 proto.set_style_text_color(lv.color_hex(0x888888), lv.PART.MAIN)
                 proto.set_width(lv.pct(100))
                 proto.set_style_text_align(align, lv.PART.MAIN)
+
+    def _make_meta_label(self, parent, sender, message, align):
+        meta = lv.label(parent)
+        meta.set_text(f"{sender} · {self._format_time(message.ts)}")
+        meta.set_style_text_font(
+            FontManager.getFont(size=10, emoji=True), lv.PART.MAIN
+        )
+        meta.set_width(lv.pct(100))
+        meta.set_style_text_align(align, lv.PART.MAIN)
+        return meta
+
+    def _should_show_protocol_labels(self):
+        try:
+            return self._prefs.get_string("show_technical_details", "0") == "1"
+        except Exception:
+            return False
 
     def _on_message_clicked(self, message):
         own = self._manager.get_own_pubkey_hex()
@@ -590,3 +616,18 @@ class ChatActivity(Activity):
                 self._load_and_render()
         except Exception as e:
             logger.error("Error handling chat event: %s", e)
+
+
+def _scale_avatar(image, target_size):
+    try:
+        header = lv.image_header_t()
+        image.decoder_get_info(image.get_src(), header)
+        image_w = header.w
+        image_h = header.h
+        if image_w == 0 or image_h == 0:
+            return
+        scale_w = round(target_size * 256 / image_w)
+        scale_h = round(target_size * 256 / image_h)
+        image.set_scale(min(scale_w, scale_h))
+    except Exception:
+        pass

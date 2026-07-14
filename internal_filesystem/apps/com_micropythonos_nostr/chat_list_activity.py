@@ -350,6 +350,7 @@ class ChatListActivity(Activity):
             {"title": "Max messages per chat", "key": "max_messages_per_chat", "default_value": str(DEFAULT_MAX_MESSAGES_PER_CHAT), "should_show": self._should_show_setting},
             {"title": "Edit My Profile", "key": "edit_profile", "ui": "activity", "activity_class": ProfileActivity, "dont_persist": True, "should_show": self._should_show_setting},
             {"title": "Profile cache size", "key": "max_profiles", "default_value": str(DEFAULT_MAX_PROFILES), "should_show": self._should_show_setting},
+            {"title": "Show technical details (NIPs etc)", "key": "show_technical_details", "ui": "radiobuttons", "ui_options": [("On", "1"), ("Off", "0")], "default_value": "0", "should_show": self._should_show_setting},
         ])
         self.startActivity(intent)
 
