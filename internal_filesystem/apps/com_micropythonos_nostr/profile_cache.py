@@ -49,7 +49,6 @@ class ProfileCache:
             self._max_profiles = max_profiles
         self._ensure_dirs()
         self._load()
-        self._ensure_maintainer()
         self._register_handler()
         self._loaded = True
         if __debug__:
@@ -87,13 +86,6 @@ class ProfileCache:
         except OSError as e:
             logger.error("Failed to save profiles: %s", e)
 
-    def _ensure_maintainer(self):
-        if MAINTAINER_HEX not in self._profiles:
-            profile = dict(MAINTAINER_PROFILE)
-            profile["added_at"] = 0
-            self._profiles[MAINTAINER_HEX] = profile
-            self._save()
-
     def _register_handler(self):
         self._manager.register_event_handler(0, self._on_metadata_event)
 
@@ -124,14 +116,14 @@ class ProfileCache:
     def _prune_if_needed(self):
         while len(self._profiles) > self._max_profiles:
             oldest_key = min(self._profiles, key=lambda k: self._profiles[k].get("added_at", 0))
-            if oldest_key == MAINTAINER_HEX:
-                break
             del self._profiles[oldest_key]
 
     def get_display_name(self, pubkey):
         hex_pubkey = self._to_hex(pubkey)
         if not hex_pubkey:
             return None
+        if hex_pubkey == MAINTAINER_HEX:
+            return MAINTAINER_PROFILE.get("display_name") or MAINTAINER_PROFILE.get("name")
         profile = self._profiles.get(hex_pubkey)
         if profile:
             return profile.get("display_name") or profile.get("name")
@@ -142,6 +134,8 @@ class ProfileCache:
         hex_pubkey = self._to_hex(pubkey)
         if not hex_pubkey:
             return None
+        if hex_pubkey == MAINTAINER_HEX:
+            return MAINTAINER_PROFILE
         profile = self._profiles.get(hex_pubkey)
         if profile:
             return profile
