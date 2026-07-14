@@ -35,6 +35,8 @@ from .event_store import DEFAULT_MAX_MESSAGES_PER_CHAT, EventStore, _current_nos
 from .new_chat_activity import NewChatActivity
 from .nostr_initializer import DEFAULT_RELAYS, configure_nostr_manager
 from .nostr_service import NostrManager
+from .profile_activity import ProfileActivity
+from .profile_cache import DEFAULT_MAX_PROFILES, ProfileCache
 from .show_nsec_qr import ShowNsecQRActivity
 from .show_npub_qr import ShowNpubQRActivity
 
@@ -346,6 +348,8 @@ class ChatListActivity(Activity):
             {"title": "Show My Private Key (nsec)", "key": "show_nsec_qr", "ui": "activity", "activity_class": ShowNsecQRActivity, "dont_persist": True, "should_show": self._should_show_setting},
             {"title": "New chats protocol", "key": "new_chats_protocol", "ui": "radiobuttons", "ui_options": [("nip17", "nip17"), ("nip4", "nip4")], "default_value": DEFAULT_DM_PROTOCOL, "should_show": self._should_show_setting},
             {"title": "Max messages per chat", "key": "max_messages_per_chat", "default_value": str(DEFAULT_MAX_MESSAGES_PER_CHAT), "should_show": self._should_show_setting},
+            {"title": "Edit My Profile", "key": "edit_profile", "ui": "activity", "activity_class": ProfileActivity, "dont_persist": True, "should_show": self._should_show_setting},
+            {"title": "Profile cache size", "key": "max_profiles", "default_value": str(DEFAULT_MAX_PROFILES), "should_show": self._should_show_setting},
         ])
         self.startActivity(intent)
 
@@ -354,7 +358,12 @@ class ChatListActivity(Activity):
             max_msgs = self._prefs.get_int("max_messages_per_chat", DEFAULT_MAX_MESSAGES_PER_CHAT)
             self._store.set_max_messages(max_msgs)
         except Exception as e:
-            logger.warning("Could not sync settings: %s", e)
+            logger.warning("Could not sync settings (messages): %s", e)
+        try:
+            max_profiles = self._prefs.get_int("max_profiles", DEFAULT_MAX_PROFILES)
+            ProfileCache.get_instance().set_max_profiles(max_profiles)
+        except Exception as e:
+            logger.warning("Could not sync settings (profiles): %s", e)
 
     def _should_show_setting(self, setting):
         return True

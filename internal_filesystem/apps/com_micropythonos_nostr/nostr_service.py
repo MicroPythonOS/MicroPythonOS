@@ -22,6 +22,8 @@ except ImportError:
     decrypt_gift_wrap_to_rumor = None
     make_nip17_messages = None
 
+KIND_SET_METADATA = 0
+
 # NIP-65 relay list metadata and NIP-17 DM relay list / private messages.
 KIND_RELAY_LIST = 10002
 KIND_DM_RELAY_LIST = 10050
@@ -461,10 +463,10 @@ class NostrManager:
         filters = Filters([Filter(kinds=[42], event_refs=[channel_id], since=since, limit=limit)])
         self.add_subscription(sub_name, filters, callback)
 
-    def subscribe_profile(self, pubkey_or_npub, callback=None, since=None, limit=None):
-        """Subscribe to events published by a single profile."""
+    def subscribe_metadata(self, pubkey_or_npub, callback=None, since=None, limit=None):
+        """Subscribe to kind 0 metadata events for a single profile."""
         hex_pubkey = _pubkey_to_hex(pubkey_or_npub)
-        filters = Filters([Filter(authors=[hex_pubkey], since=since, limit=limit)])
+        filters = Filters([Filter(kinds=[KIND_SET_METADATA], authors=[hex_pubkey], since=since, limit=limit)])
         self.add_subscription(f"profile-{hex_pubkey[:16]}", filters, callback)
 
     def subscribe_dms(self, callback=None, since=None, limit=None):
@@ -567,6 +569,23 @@ class NostrManager:
         self._nostr_private_key.sign_event(event)
         self.relay_manager.publish_event(event)
         logger.info("NostrManager: published channel creation '%s' -> %s", name, event.id[:16])
+        return event.id
+
+    def publish_metadata(self, content):
+        """Publish a kind 0 metadata event for the configured identity."""
+        if self._nostr_private_key is None:
+            raise RuntimeError("Identity must be configured before publishing metadata")
+        if self.relay_manager is None:
+            raise RuntimeError("Relay manager is not ready yet")
+        event = Event(
+            content=content,
+            public_key=self._nostr_private_key.public_key.hex(),
+            kind=KIND_SET_METADATA,
+        )
+        event.__post_init__()
+        self._nostr_private_key.sign_event(event)
+        self.relay_manager.publish_event(event)
+        logger.info("NostrManager: published metadata profile")
         return event.id
 
     def publish_channel_metadata(self, channel_id, name, about="", picture=""):

@@ -31,6 +31,7 @@ from .chat_model import (
 from .event_store import EventStore, _current_nostr_ts
 from .nostr_initializer import _chat_lookback_seconds, configure_nostr_manager
 from .nostr_service import NostrManager
+from .profile_cache import ProfileCache
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +267,17 @@ class ChatActivity(Activity):
             sender = f"{sender} (queued)"
 
         align = lv.TEXT_ALIGN.RIGHT if message.outgoing else lv.TEXT_ALIGN.LEFT
+
+        if not message.outgoing and not message.pubkey == (self._manager.get_own_pubkey_hex() or ""):
+            try:
+                profile = ProfileCache.get_instance().get_profile(message.pubkey)
+                if profile and profile.get("picture_path"):
+                    avatar = lv.image(row)
+                    avatar_size = round(DisplayMetrics.pct_of_width(7))
+                    avatar.set_size(avatar_size, avatar_size)
+                    avatar.set_src(profile["picture_path"])
+            except Exception:
+                pass
 
         meta = lv.label(row)
         meta.set_text(f"{sender} · {self._format_time(message.ts)}")

@@ -229,6 +229,13 @@ class Message:
 def _short_name(pubkey):
     if not pubkey:
         return "?"
+    try:
+        from .profile_cache import ProfileCache
+        display_name = ProfileCache.get_instance().get_display_name(pubkey)
+        if display_name:
+            return display_name
+    except Exception:
+        pass
     if pubkey.lower().startswith("npub1"):
         return pubkey[:12]
     if len(pubkey) == 64 and all(c in "0123456789abcdef" for c in pubkey):
@@ -243,6 +250,13 @@ def _short_name(pubkey):
 def _display_title(title):
     if not title:
         return "?"
+    try:
+        from .profile_cache import ProfileCache
+        display_name = ProfileCache.get_instance().get_display_name(title)
+        if display_name:
+            return display_name
+    except Exception:
+        pass
     if title.lower().startswith("npub1"):
         return title[:12]
     if len(title) == 64 and all(c in "0123456789abcdef" for c in title.lower()):

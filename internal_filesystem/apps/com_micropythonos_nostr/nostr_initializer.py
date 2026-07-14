@@ -10,6 +10,7 @@ from .chat_model import (
     KIND_NIP17_CHAT,
     channel_chat_id,
 )
+from .profile_cache import ProfileCache
 from .event_store import _current_nostr_ts
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,14 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
     except Exception as e:
         logger.error("Failed to configure identity: %s", e)
         return
+
+    try:
+        max_profiles = prefs.get_int("max_profiles", 0)
+        if not max_profiles:
+            max_profiles = None
+    except Exception:
+        max_profiles = None
+    ProfileCache.get_instance().init(prefs.appname, manager, max_profiles=max_profiles)
 
     dm_settings = _dm_fetch_settings(prefs)
     group_settings = _group_fetch_settings(prefs)

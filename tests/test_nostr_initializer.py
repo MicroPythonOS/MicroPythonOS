@@ -16,6 +16,7 @@ from com_micropythonos_nostr.chat_model import (
     KIND_DM,
 )
 from com_micropythonos_nostr.nostr_initializer import configure_nostr_manager
+from com_micropythonos_nostr.profile_cache import ProfileCache
 
 
 class _FakePrefs:
@@ -24,15 +25,26 @@ class _FakePrefs:
             "nostr_nsec": nsec,
             "nostr_relay": relay,
         }
+        self.appname = "com_micropythonos_nostr"
 
     def get_string(self, key):
         return self._data.get(key)
+
+    def get_int(self, key, default=0):
+        val = self._data.get(key)
+        if val is not None:
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                pass
+        return default
 
 
 class _FakeManager:
     def __init__(self):
         self.running = False
         self.calls = []
+        self._event_handlers = {}
 
     def is_running(self):
         return self.running
@@ -57,6 +69,9 @@ class _FakeManager:
             "since": since,
             "limit": limit,
         }))
+
+    def register_event_handler(self, kind, callback):
+        pass
 
 
 class _FakeStore:
@@ -90,9 +105,11 @@ class TestConfigureNostrManager(unittest.TestCase):
         self.original_current_nostr_ts = nostr_initializer._current_nostr_ts
         self.now = 1_800_000_000
         nostr_initializer._current_nostr_ts = lambda: self.now
+        ProfileCache._instance = None
 
     def tearDown(self):
         nostr_initializer._current_nostr_ts = self.original_current_nostr_ts
+        ProfileCache._instance = None
 
     def _make_nsec(self):
         return PrivateKey().bech32()
