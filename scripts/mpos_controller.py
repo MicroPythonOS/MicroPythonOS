@@ -55,6 +55,51 @@ def _resolve_cwd():
     return os.path.normpath(os.path.join(d, "..", "internal_filesystem"))
 
 
+def _build_test_code(test_path, tests_dir=None):
+    with open(test_path) as f:
+        test_content = f.read()
+    code = "import sys\n"
+    code += "sys.path.insert(0, 'lib')\n"
+    if tests_dir:
+        code += "sys.path.append(%r)\n" % tests_dir
+    code += "import mpos; mpos.TaskManager.disable()\n"
+    code += "import unittest\n"
+    code += test_content + "\n"
+    # The aioREPL runs in a custom namespace, not __main__.__dict__,
+    # so unittest.main(module="__main__") misses the test classes.
+    # Copy TestCase subclasses into __main__ before running.
+    code += """\
+_main_mod = sys.modules['__main__']
+for _k in dir():
+    _v = globals()[_k]
+    if isinstance(_v, type) and _k not in _main_mod.__dict__:
+        try:
+            if issubclass(_v, unittest.TestCase):
+                _main_mod.__dict__[_k] = _v
+        except Exception:
+            pass
+result = unittest.main()
+"""
+    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+             "else 'TEST WAS A FAILURE')\n")
+    return code
+
+
+def _build_import_runner_code(tests_dir=None):
+    code = "import sys\n"
+    code += "sys.path.insert(0, 'lib')\n"
+    if tests_dir:
+        code += "sys.path.append(%r)\n" % tests_dir
+    code += "import mpos; mpos.TaskManager.disable()\n"
+    code += ("sys.modules.pop('tests._runner_test', None)\n"
+             "import tests._runner_test as _test_mod\n")
+    code += "import unittest\n"
+    code += "result = unittest.main(module=_test_mod)\n"
+    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+             "else 'TEST WAS A FAILURE')\n")
+    return code
+
+
 def _build_bmp(width, height, rgb888_pixels):
     row_stride = (width * 3 + 3) // 4 * 4
     pixel_data_size = row_stride * height
@@ -505,11 +550,11 @@ class ProcessBackend:
 
     # -- REPL ----------------------------------------------------------
 
-    def exec(self, code):
-        return self.repl.exec(code)
+    def exec(self, code, timeout=30):
+        return self.repl.exec(code, timeout=timeout)
 
-    def exec_multiline(self, code):
-        return self.repl.exec_multiline(code)
+    def exec_multiline(self, code, timeout=30):
+        return self.repl.exec_multiline(code, timeout=timeout)
 
     def eval(self, expr):
         return self.repl.eval(expr)
@@ -716,6 +761,30 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
+    def run_test_file(self, test_path, tests_dir=None, timeout=300):
+        dest_dir = os.path.join(self.cwd, "tests")
+        dest_path = os.path.join(dest_dir, "_runner_test.py")
+        os.makedirs(dest_dir, exist_ok=True)
+        with open(test_path) as f:
+            content = f.read()
+        with open(dest_path, "w") as f:
+            f.write(content)
+        try:
+            code = _build_import_runner_code(tests_dir)
+            out = self.exec_multiline(code, timeout=timeout)
+            out_str = out.decode("utf-8", errors="replace")
+            passed = "TEST WAS A SUCCESS" in out_str
+            return passed, out
+        finally:
+            try:
+                os.remove(dest_path)
+            except OSError:
+                pass
+            try:
+                os.rmdir(dest_dir)
+            except OSError:
+                pass
+
 
 # ── Serial Backend ─────────────────────────────────────────────────
 
@@ -794,11 +863,11 @@ class SerialBackend:
     def __exit__(self, *args):
         self.stop()
 
-    def exec(self, code):
-        return self.repl.exec(code)
+    def exec(self, code, timeout=30):
+        return self.repl.exec(code, timeout=timeout)
 
-    def exec_multiline(self, code):
-        return self.repl.exec_multiline(code)
+    def exec_multiline(self, code, timeout=30):
+        return self.repl.exec_multiline(code, timeout=timeout)
 
     def eval(self, expr):
         return self.repl.eval(expr)
@@ -1047,6 +1116,13 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
+    def run_test_file(self, test_path, tests_dir=None, timeout=300):
+        code = _build_test_code(test_path, tests_dir)
+        out = self.exec_multiline(code, timeout=timeout)
+        out_str = out.decode("utf-8", errors="replace")
+        passed = "TEST WAS A SUCCESS" in out_str
+        return passed, out
+
 
 # ── MPOSController ──────────────────────────────────────────────────
 
@@ -1204,6 +1280,9 @@ class MPOSController:
 
     def find_text(self, text):
         return self._backend.find_text(text)
+
+    def run_test_file(self, test_path, tests_dir=None, timeout=300):
+        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout)
 
     @property
     def display_size(self):

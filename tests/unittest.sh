@@ -3,21 +3,23 @@
 mydir=$(readlink -f "$0")
 mydir=$(dirname "$mydir")
 testdir="$mydir"
-#testdir=/home/user/projects/MicroPythonOS/claude/MicroPythonOS/tests2
 scriptdir=$(readlink -f "$mydir"/../scripts/)
 fs="$mydir"/../internal_filesystem/
-mpremote="$mydir"/../lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py
-#heapsize=8M
-#heapsize=16M # on desktop, a bit more is warranted (different C library etc)
-heapsize=32M # on desktop, a bit more is warranted (different C library etc)
+heapsize=32M
 
 # Parse arguments
 ondevice=""
 onetest=""
+PORT="${MPOS_TEST_PORT:-/dev/ttyACM0}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --ondevice)
+            ondevice="yes"
+            ;;
+        --port)
+            shift
+            PORT="$1"
             ondevice="yes"
             ;;
         *)
@@ -27,13 +29,11 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# print os and set binary
 os_name=$(uname -s)
 if [ "$os_name" = "Darwin" ]; then
         echo "Running on macOS"
         binary="$scriptdir"/../lvgl_micropython/build/lvgl_micropy_macOS
 else
-        # other cases can be added here
         echo "Running on $os_name"
         binary="$scriptdir"/../lvgl_micropython/build/lvgl_micropy_unix
 fi
@@ -41,7 +41,6 @@ fi
 binary=$(readlink -f "$binary")
 chmod +x "$binary"
 
-# make sure no autostart is configured:
 rm -f "$scriptdir"/../internal_filesystem/prefs/com.micropythonos.settings/config.json
 
 one_test() {
@@ -50,18 +49,12 @@ one_test() {
 		echo "ERROR: $file is not a regular, existing file!"
 		exit 1
 	fi
-	pushd "$fs"
 	echo "Testing $file"
 
-	# Detect if this is a graphical test (filename contains "graphical")
-	# Always expose the tests directory on sys.path so tests can share helpers.
 	tests_abs_path=$(readlink -f "$testdir")
-	if echo "$file" | grep -q "graphical"; then
-		echo "Detected graphical test - including boot and main files"
-		is_graphical=1
-	else
-		is_graphical=0
-	fi
+	cleanname=$(echo "$file" | sed "s#/#_#g")
+	testlog=/tmp/"$cleanname".log
+	echo "logging to $testlog"
 
 	max_attempts=3
 	for attempt in $(seq 1 $max_attempts); do
@@ -70,72 +63,33 @@ one_test() {
 		fi
 
 		if [ -z "$ondevice" ]; then
-			# Desktop execution
-			if [ $is_graphical -eq 1 ]; then
-				echo "Graphical test: include main.py"
-				"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
-$(cat $file)
-result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
-		           result=$?
-			else
-				echo "Regular test: no boot files"
-				"$binary" -X heapsize=$heapsize -c "import sys ; sys.path.insert(0, 'lib') ; sys.path.append(\"$tests_abs_path\") ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
-$(cat $file)
-result = unittest.main() ; sys.exit(0 if result.wasSuccessful() else 1) "
-		           result=$?
-			fi
+			python3 "$scriptdir/unified_test_runner.py" \
+				--backend process \
+				--binary "$binary" \
+				--heapsize "$heapsize" \
+				--test-file "$file" \
+				--tests-dir "$tests_abs_path" \
+				| tee "$testlog"
+			result=$?
 		else
-			if [ ! -z "$ondevice" ]; then
-				echo "Hack: reset the device to make sure no previous UnitTest classes have been registered..."
-				"$mpremote" reset
-				sleep 30
-			fi
-
-			echo "Device execution"
-			# NOTE: On device, the OS is already running with boot.py and main.py executed,
-			# so we don't need to (and shouldn't) re-run them. The system is already initialized.
-			cleanname=$(echo "$file" | sed "s#/#_#g")
-			testlog=/tmp/"$cleanname".log
-			echo "$test logging to $testlog"
-			if [ $is_graphical -eq 1 ]; then
-				# Graphical test: system already initialized, just add test paths
-				"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
-$(cat $file)
-result = unittest.main()
-if result.wasSuccessful():
-		  print('TEST WAS A SUCCESS')
-else:
-		  print('TEST WAS A FAILURE')
-" | tee "$testlog"
-			else
-				# Regular test: no boot files
-				"$mpremote" exec "import sys ; sys.path.insert(0, 'lib') ; sys.path.append('tests') ; import mpos ; mpos.TaskManager.disable() ; $(cat main.py)
-$(cat $file)
-result = unittest.main()
-if result.wasSuccessful():
-		  print('TEST WAS A SUCCESS')
-else:
-		  print('TEST WAS A FAILURE')
-" | tee "$testlog"
-			fi
-			grep -q "TEST WAS A SUCCESS" "$testlog"
+			python3 "$scriptdir/unified_test_runner.py" \
+				--backend serial \
+				--port "$PORT" \
+				--test-file "$file" \
+				--tests-dir "$tests_abs_path" \
+				| tee "$testlog"
 			result=$?
 		fi
 
-		# Success — no retry needed
 		if [ $result -eq 0 ]; then
 			break
 		fi
-
-		# Only retry on crash/signal exit codes (>= 128), not on test failures
 		if [ $result -lt 128 ]; then
 			break
 		fi
-
 		echo "Test crashed with exit code $result — retrying..."
 	done
 
-	popd
 	return "$result"
 }
 
@@ -143,14 +97,15 @@ failed=0
 ran=0
 
 if [ -z "$onetest" ]; then
-	echo "Usage: $0 [one_test_to_run.py] [--ondevice]"
+	echo "Usage: $0 [one_test_to_run.py] [--ondevice] [--port <port>]"
 	echo "Example: $0 tests/simple.py"
 	echo "Example: $0 tests/simple.py --ondevice"
-	echo "Example: $0 --ondevice"
+	echo "Example: $0 tests/simple.py --ondevice --port /dev/pts/5"
+	echo "Example: $0 --ondevice --port /dev/ttyACM0"
+	echo "  MPOS_TEST_PORT env var sets default serial port (default: /dev/ttyACM0)"
 	echo
 	echo "If no test is specified: run all tests from $testdir on local machine."
 	echo
-	echo "The '--ondevice' flag will run the test(s) on a connected device using mpremote.py (should be on the PATH) over a serial connection."
 	files=$(find "$testdir" -iname "test_*.py" )
 	for file in $files; do
 		one_test "$file"
