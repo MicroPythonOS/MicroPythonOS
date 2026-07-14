@@ -76,8 +76,8 @@ class TestChatModelNip17(unittest.TestCase):
     def test_chat_nip17_group_title_defaults_to_participants(self):
         chat = Chat.nip17_group(["b" * 64, "c" * 64])
         self.assertEqual(chat.kind, KIND_NIP17_CHAT)
-        self.assertIn("bbbbbbbb", chat.title)
-        self.assertIn("cccccccc", chat.title)
+        self.assertTrue(chat.title.startswith("npub1"))
+        self.assertIn(", npub1", chat.title)
 
     def test_chat_nip17_group_keeps_explicit_title(self):
         chat = Chat.nip17_group(["b" * 64], title="Direct NIP-17")

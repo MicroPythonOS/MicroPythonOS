@@ -231,7 +231,13 @@ def _short_name(pubkey):
         return "?"
     if pubkey.lower().startswith("npub1"):
         return pubkey[:12]
-    return f"npub{pubkey[:8]}"
+    if len(pubkey) == 64 and all(c in "0123456789abcdef" for c in pubkey):
+        try:
+            from nostr.key import PublicKey
+            return PublicKey(bytes.fromhex(pubkey)).bech32()[:12]
+        except Exception:
+            return f"{pubkey[:8]}..."
+    return f"{pubkey[:8]}..."
 
 
 def _display_title(title):
@@ -239,8 +245,12 @@ def _display_title(title):
         return "?"
     if title.lower().startswith("npub1"):
         return title[:12]
-    if len(title) == 8 and all(c in "0123456789abcdef" for c in title.lower()):
-        return f"npub{title}"
+    if len(title) == 64 and all(c in "0123456789abcdef" for c in title.lower()):
+        try:
+            from nostr.key import PublicKey
+            return PublicKey(bytes.fromhex(title)).bech32()[:12]
+        except Exception:
+            return f"{title[:8]}..."
     return title
 
 
