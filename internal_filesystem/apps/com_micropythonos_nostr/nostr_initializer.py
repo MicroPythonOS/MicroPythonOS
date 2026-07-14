@@ -196,7 +196,7 @@ def configure_nostr_manager(prefs, manager, store=None, dm_since=None):
         # Ensure the default public channel exists so boot-time notifications
         # and messages are received even before the user opens the UI.
         store.get_or_create_channel(
-            DEFAULT_CHANNEL_ID, title=f"#{DEFAULT_CHANNEL_NAME}"
+            DEFAULT_CHANNEL_ID, title=DEFAULT_CHANNEL_NAME
         )
         for chat in store.get_chats():
             if chat.kind == KIND_CHANNEL_MESSAGE and chat.channel_id:

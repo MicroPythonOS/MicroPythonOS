@@ -183,7 +183,7 @@ class ChatListActivity(Activity):
 
     def _auto_join_default_channel(self):
         if not self._store.get_chat(channel_chat_id(DEFAULT_CHANNEL_ID)):
-            self._store.get_or_create_channel(DEFAULT_CHANNEL_ID, title=f"#{DEFAULT_CHANNEL_NAME}")
+            self._store.get_or_create_channel(DEFAULT_CHANNEL_ID, title=DEFAULT_CHANNEL_NAME)
 
     def _on_event(self, nostr_event):
         """Handle an incoming kind 4, kind 14, or kind 42 event."""

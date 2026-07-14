@@ -68,7 +68,7 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
 
         # Pre-populate the store with a default-channel message.
         store = EventStore(APP_FULLNAME)
-        store.get_or_create_channel(DEFAULT_CHANNEL_ID, title=f"#{DEFAULT_CHANNEL_NAME}")
+        store.get_or_create_channel(DEFAULT_CHANNEL_ID, title=DEFAULT_CHANNEL_NAME)
         message = Message(
             event_id="a" * 64,
             ts=1780516202,
@@ -117,7 +117,7 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
 
         # The chat activity should show the title and the message history.
         self.assertIsNotNone(
-            find_label_with_text(lv.screen_active(), "#MicroPythonOS"),
+            find_label_with_text(lv.screen_active(), "MicroPythonOS"),
             "Chat screen should show the channel title",
         )
         self.assertIsNotNone(
@@ -199,7 +199,7 @@ class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
         self.assertTrue(result, "Nostr app should start")
         wait_for_render(10)
         self.assertTrue(
-            wait_for_text("#MicroPythonOS", timeout=20),
+            wait_for_text("MicroPythonOS", timeout=20),
             "Default public channel should appear on first open",
         )
 

@@ -140,7 +140,7 @@ class TestConfigureNostrManager(unittest.TestCase):
         configure_nostr_manager(prefs, manager, store=store)
 
         self.assertIn(
-            (DEFAULT_CHANNEL_ID, f"#{DEFAULT_CHANNEL_NAME}"),
+            (DEFAULT_CHANNEL_ID, DEFAULT_CHANNEL_NAME),
             store.created_channels,
         )
         channel_calls = [
