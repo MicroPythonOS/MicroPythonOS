@@ -4,10 +4,10 @@ Run with:
     ./tests/unittest.sh --ondevice tests/manual_test_benchmark_audio_volume.py
 
 Compares 7 methods of reducing 16-bit stereo audio volume:
-  1. i2s.shift(buf, bits=16, shift=-3)             — hardware bit-shift
-  2-4. bit-test add (plain / @native / @viper)      — replaces multiply with 16 adds
-  5-6. multiply+divide (@native / @viper)           — sample * scale // 32768
-  7. powers_of_2 (@viper)                           — sign-extend OR + double-shift trick
+  1. i2s.shift(buf, bits=16, shift=-3)           — C software bit-shift (extmod/machine_i2s.c)
+  2-4. _scale_audio_optimized (plain/native/viper) — bit-test add
+  5-6. _scale_audio (native/viper)                — multiply + divide
+  7. _scale_audio_powers_of_2 (viper)             — shift via double-shift trick
 
 Buffer: 22050 Hz stereo 16-bit, ~4120 bytes (~2060 samples).
 """
@@ -24,7 +24,7 @@ _CHANNELS = 2
 _CHUNK_SECONDS = 1.0 / 10.7
 _CHUNK_SAMPLES = int(_SAMPLE_RATE * _CHUNK_SECONDS)
 _CHUNK_BYTES = _CHUNK_SAMPLES * _CHANNELS * 2
-_ITERATIONS = 10
+_ITERATIONS = 100 if sys.platform != "esp32" else 10
 _SHIFT = -3
 _SHIFT_POS = abs(_SHIFT)  # 3 — for powers_of_2
 _SCALE_FIXED = 32768 >> _SHIFT_POS  # 4096
@@ -231,9 +231,9 @@ except (SyntaxError, NameError, TypeError):
 
 # ---- benchmark harness ----------------------------------------------------
 
-def _ms(start, end=None):
+def _us(start, end=None):
     if end is None:
-        end = time.ticks_ms()
+        end = time.ticks_us()
     return time.ticks_diff(end, start)
 
 
@@ -268,31 +268,31 @@ class BenchmarkI2SShift(unittest.TestCase):
                 ibuf=8192,
             )
             shift_func = lambda b: i2s.shift(buf=b, bits=16, shift=_SHIFT)
-            platform_label = "esp32 (hw)"
+            platform_label = "esp32 (C)"
         else:
             shift_func = lambda b: _shift_16_native(b, _SHIFT)
-            platform_label = "desktop (@native)"
+            platform_label = "desktop (@native equiv)"
 
         run = self._run_one
 
         run("i2s.shift %-13s" % platform_label, shift_func, _make_buf())
 
-        print("--- bit-test add (optimized) ---")
-        run("  plain        ", lambda b: _scale_opt_none(b, len(b), _SCALE_FIXED), _make_buf())
-        run("  @native      ", lambda b: _scale_opt_native(b, len(b), _SCALE_FIXED), _make_buf())
+        print("--- _scale_audio_optimized (bit-test add) ---")
+        run("  _scale_opt_none     ", lambda b: _scale_opt_none(b, len(b), _SCALE_FIXED), _make_buf())
+        run("  _scale_opt_native   ", lambda b: _scale_opt_native(b, len(b), _SCALE_FIXED), _make_buf())
         if _HAS_VIPER:
-            run("  @viper       ", lambda b: _scale_opt_viper(b, len(b), _SCALE_FIXED), _make_buf())
+            run("  _scale_opt_viper    ", lambda b: _scale_opt_viper(b, len(b), _SCALE_FIXED), _make_buf())
 
-        print("--- multiply + divide ---")
-        run("  @native      ", lambda b: _scale_mul_native(b, len(b), _SCALE_FIXED), _make_buf())
+        print("--- _scale_audio (multiply + divide) ---")
+        run("  _scale_mul_native   ", lambda b: _scale_mul_native(b, len(b), _SCALE_FIXED), _make_buf())
         if _HAS_VIPER:
-            run("  @viper       ", lambda b: _scale_mul_viper(b, len(b), _SCALE_FIXED), _make_buf())
+            run("  _scale_mul_viper    ", lambda b: _scale_mul_viper(b, len(b), _SCALE_FIXED), _make_buf())
 
-        print("--- powers_of_2 (OR sign-extend + double-shift) ---")
+        print("--- _scale_audio_powers_of_2 ---")
         if _HAS_VIPER:
-            run("  @viper       ", lambda b: _scale_powers_of_2(b, len(b), _SHIFT_POS), _make_buf())
+            run("  _scale_powers_of_2  ", lambda b: _scale_powers_of_2(b, len(b), _SHIFT_POS), _make_buf())
         else:
-            print("  @viper       : not available")
+            print("  _scale_powers_of_2  : not available")
 
         if not _HAS_VIPER:
             print("(@viper not available on this platform)")
@@ -304,12 +304,12 @@ class BenchmarkI2SShift(unittest.TestCase):
         self.assertTrue(True)
 
     def _run_one(self, label, func, buf):
-        start = time.ticks_ms()
+        start = time.ticks_us()
         for _ in range(_ITERATIONS):
             func(buf)
-        elapsed = _ms(start)
-        avg_ms = elapsed / _ITERATIONS
-        print("%s: %d ms total, %.2f ms/call" % (label, elapsed, avg_ms))
+        elapsed_us = _us(start)
+        avg_us = elapsed_us / _ITERATIONS
+        print("%s: %d µs total, %.0f µs/call" % (label, elapsed_us, avg_us))
 
 
 if __name__ == "__main__":
