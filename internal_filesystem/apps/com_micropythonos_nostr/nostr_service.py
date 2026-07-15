@@ -1095,6 +1095,16 @@ class NostrManager:
                     if notice and hasattr(notice, 'content') and self._error_cb:
                         self._error_cb("Relay: {}".format(notice.content))
 
+                if self.relay_manager.message_pool.has_closed_messages():
+                    closed = self.relay_manager.message_pool.get_closed_message()
+                    if __debug__:
+                        logger.debug(
+                            "NostrManager: CLOSED from %s sub=%s reason=%s",
+                            closed.url,
+                            closed.subscription_id[:16],
+                            closed.reason,
+                        )
+
                 if self.relay_manager.message_pool.has_ok_messages():
                     ok = self.relay_manager.message_pool.get_ok_message()
                     if __debug__:
