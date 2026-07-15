@@ -1135,12 +1135,28 @@ for s in t:
         return self._width, self._height
 
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
-        import subprocess
+        import subprocess, re
         code = _build_test_code(test_path, tests_dir)
         mpremote = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..",
             "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
         )
+        host_test_dir = os.path.dirname(os.path.abspath(test_path))
+        mpk_names = set(re.findall(r"\.\./tests/(com\.micropythonos\.ziptest_[^\"]+\.mpk)", code))
+        if mpk_names:
+            subprocess.run(
+                ["python3", mpremote, "connect", self.port, "exec",
+                 "import os; os.mkdir('tests')"],
+                capture_output=True, timeout=15,
+            )
+            for name in sorted(mpk_names):
+                host_mpk = os.path.join(host_test_dir, name)
+                subprocess.run(
+                    ["python3", mpremote, "connect", self.port, "cp",
+                     host_mpk, ":tests/{}".format(name)],
+                    capture_output=True, timeout=60,
+                )
+            code = code.replace("../tests/", "tests/")
         result = subprocess.run(
             ["python3", mpremote, "connect", self.port, "exec", code],
             capture_output=True, timeout=timeout + 60,
