@@ -3,6 +3,7 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, DownloadManager, AppManager, TaskManager
+from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,9 @@ class AppDetail(Activity):
             self.app._icon_dsc = dsc
             self.app._icon_buf = None
         else:
-            dsc, buf = self.appstore._generate_raw_app_icon(self.app.fullname)
+            dsc, buf = blurhash_to_image_dsc(self.app.blur_hash, 64, 64)
+            if dsc is None:
+                dsc, buf = generate_raw_app_icon(self.app.fullname, 64)
             self.app._icon_dsc = dsc
             self.app._icon_buf = buf
         self.icon_image.set_src(dsc)

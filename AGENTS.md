@@ -122,6 +122,16 @@ MicroPython compatibility:
 - MicroPython's `_thread` module is cooperative: a tight loop in a secondary thread can prevent the main thread (and therefore LVGL's `lv_timer_handler`) from running. Long-running secondary-thread loops should yield occasionally, e.g. `time.sleep_ms(1)`. Do not use `time.sleep_us()` for this — it busy-waits and does not yield.
 - MicroPython does NOT support `bytearray * int` (e.g. `b = bytearray(4); b * 3` raises `TypeError: unsupported types for __mul__`). To repeat a `bytearray`, create a new one and extend it in a loop: `out = bytearray(); [out.extend(buf) for _ in range(n)]`. (`bytes * int` works in CPython but is also not guaranteed on MicroPython; prefer an explicit loop.)
 
+MicroPython @native / @viper tips:
+- `@micropython.viper` is a compile-time transform, not a runtime attribute. `hasattr(micropython, "viper")` returns `False` even though the decorator works. Check availability with `hasattr(micropython, "native")` as proxy, or `try: import micropython` then decorate unconditionally.
+- When applying decorators programmatically (e.g. `micropython.native(func)`), guard with `if hasattr(micropython, "native"):` — desktop builds may lack the `native` attribute at runtime while ESP32 has it.
+- `mpy-cross` needs `-march=x64` when compiling native/viper code for x86-64 desktop targets. Syntax tests (`./tests/syntax.sh`) use `mpy-cross` without this flag — native/viper files may fail syntax if the arch doesn't match. Either exclude them from syntax checks or add the flag.
+- Viper bytearray subscript (`ba[i]`) returns `object` type, not `int`. Always wrap in explicit `int()` cast before arithmetic: `v = int(buf[idx])`.
+- Viper int16 sign extension from unsigned byte pairs: `v = int(ba[idx]) | (int(ba[idx+1]) << 8); if v & 0x8000: v -= 65536` (no ternary, no `if/else` expression in viper).
+- Viper fixed-point DC component: compute once, add once. The DCT inverse formula already includes DC in the sum; don't add it again afterward.
+- Non-graphical unit tests don't initialize LVGL. Files importing `lvgl` must do so lazily (inside functions, not at module level) to avoid `ImportError` in non-graphical test runners.
+- Test files under `tests/` run with CWD = `internal_filesystem/`, not repo root. `sys.path.insert(0, ".")` and imports should assume `internal_filesystem/` is the root.
+
 MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
 - **`MPOSController()` does NOT auto-start a subprocess.** Call `mpos.start()` to launch `run_desktop.sh`, then wait at least `~8s` for boot before calling `startapp()` or any other method. Without `.start()` the internal `repl` is `None` and you get `AttributeError: 'NoneType' object has no attribute 'exec'`.

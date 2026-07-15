@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 
@@ -7,6 +6,7 @@ import lvgl as lv
 from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
 
 from app_detail import AppDetail
+from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
 
@@ -440,64 +440,12 @@ class AppStore(Activity):
             app._icon_dsc = dsc
             app._icon_buf = None
         else:
-            dsc, buf = self._generate_raw_app_icon(app.fullname)
+            dsc, buf = blurhash_to_image_dsc(app.blur_hash, AppStore._ICON_SIZE, AppStore._ICON_SIZE)
+            if dsc is None:
+                dsc, buf = generate_raw_app_icon(app.fullname, AppStore._ICON_SIZE)
             app._icon_dsc = dsc
             app._icon_buf = buf
         widget.set_src(dsc)
-
-    @staticmethod
-    def _generate_raw_app_icon(app_name):
-        size = AppStore._ICON_SIZE
-        digest = hashlib.sha1(app_name.encode()).digest()
-        bg = AppStore._rgb565_from_bytes(digest[0], digest[1], digest[2])
-        fg = AppStore._rgb565_from_bytes(digest[3], digest[4], digest[5])
-        buf = AppStore._fill_rgb565_icon_buffer(size, digest[6:14], bg, fg)
-        stride = size * 2
-        try:
-            dsc = lv.image_dsc_t({
-                "header": {
-                    "magic": lv.IMAGE_HEADER_MAGIC,
-                    "w": size,
-                    "h": size,
-                    "stride": stride,
-                    "cf": lv.COLOR_FORMAT.RGB565,
-                },
-                "data_size": len(buf),
-                "data": buf,
-            })
-        except Exception:
-            dsc = lv.image_dsc_t()
-            dsc.data = buf
-            dsc.header.magic = lv.IMAGE_HEADER_MAGIC
-            dsc.header.w = size
-            dsc.header.h = size
-            dsc.header.stride = stride
-            dsc.header.cf = lv.COLOR_FORMAT.RGB565
-            dsc.data_size = len(buf)
-        return dsc, buf
-
-    @staticmethod
-    @micropython.viper
-    def _fill_rgb565_icon_buffer(size: int, bits, bg: int, fg: int):
-        buf = bytearray(size * size * 2)
-        cell = size // 8
-        for row in range(8):
-            b = int(bits[row])
-            for col in range(8):
-                color = fg if (b & (1 << col)) else bg
-                low = color & 0xFF
-                high = color >> 8
-                for y in range(row * cell, (row + 1) * cell):
-                    base = y * size * 2
-                    for x in range(col * cell, (col + 1) * cell):
-                        i = base + x * 2
-                        buf[i] = low
-                        buf[i + 1] = high
-        return buf
-
-    @staticmethod
-    def _rgb565_from_bytes(r, g, b):
-        return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
@@ -530,12 +478,13 @@ class AppStore(Activity):
             icon_url = bhapp.get("icon_map", {}).get("64x64", {}).get("url")
         except Exception:
             if __debug__: logger.debug("could not find icon_map 64x64 url")
+        blur_hash = bhapp.get("blur_hash")
         category = None
         try:
             category = bhapp.get("categories", [None])[0]
         except Exception:
             if __debug__: logger.debug("could not parse category")
-        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None)
+        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash)
 
     @staticmethod
     def get_backend_pref_string(index):
