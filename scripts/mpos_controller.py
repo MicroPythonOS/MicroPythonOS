@@ -55,36 +55,6 @@ def _resolve_cwd():
     return os.path.normpath(os.path.join(d, "..", "internal_filesystem"))
 
 
-def _build_test_code(test_path, tests_dir=None):
-    with open(test_path) as f:
-        test_content = f.read()
-    code = "import sys\n"
-    code += "sys.path.insert(0, 'lib')\n"
-    if tests_dir:
-        code += "sys.path.append(%r)\n" % tests_dir
-    code += "import mpos; mpos.TaskManager.disable()\n"
-    code += "import unittest\n"
-    code += test_content + "\n"
-    # The aioREPL runs in a custom namespace, not __main__.__dict__,
-    # so unittest.main(module="__main__") misses the test classes.
-    # Copy TestCase subclasses into __main__ before running.
-    code += """\
-_main_mod = sys.modules['__main__']
-for _k in dir():
-    _v = globals()[_k]
-    if isinstance(_v, type) and _k not in _main_mod.__dict__:
-        try:
-            if issubclass(_v, unittest.TestCase):
-                _main_mod.__dict__[_k] = _v
-        except Exception:
-            pass
-result = unittest.main()
-"""
-    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
-             "else 'TEST WAS A FAILURE')\n")
-    return code
-
-
 def _build_import_runner_code(tests_dir=None):
     code = "import sys\n"
     code += "sys.path.insert(0, 'lib')\n"
@@ -196,7 +166,8 @@ class _SerialStream:
         return self.ser.read(n) or b""
 
     def write(self, data):
-        self.ser.write(data)
+        for i in range(0, len(data), 256):
+            self.ser.write(data[i:i + 256])
 
     def fileno(self):
         return self.ser.fileno()
@@ -1115,8 +1086,6 @@ for s in t:
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
         self.stop()
         self._mpremote_cp(test_path)
-        self._mpremote_reset()
-        time.sleep(30)
         self.start()
         try:
             code = _build_import_runner_code(tests_dir)
@@ -1139,21 +1108,16 @@ for s in t:
             os.path.dirname(os.path.abspath(__file__)), "..",
             "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
         )
-        subprocess.run(
+        result = subprocess.run(
             ["python3", mpremote, "connect", self.port, "cp", local_path, dest],
             capture_output=True, timeout=60,
         )
-
-    def _mpremote_reset(self):
-        import subprocess
-        mpremote = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
-        )
-        subprocess.run(
-            ["python3", mpremote, "connect", self.port, "reset"],
-            capture_output=True, timeout=30,
-        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "mpremote cp failed: {}".format(
+                    result.stderr.decode("utf-8", errors="replace").strip()
+                )
+            )
 
 
 # ── MPOSController ──────────────────────────────────────────────────
