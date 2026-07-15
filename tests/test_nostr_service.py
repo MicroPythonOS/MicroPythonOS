@@ -178,14 +178,14 @@ class TestNostrManagerSubscriptions(unittest.TestCase):
 
     def test_subscribe_profile_creates_author_filter(self):
         key = PrivateKey()
-        self.mgr.subscribe_profile(key.public_key.bech32())
+        self.mgr.subscribe_metadata(key.public_key.bech32())
         self.assertEqual(len(self.mgr._subscriptions), 1)
         filt = self._subscription_json()
         self.assertEqual(filt.get("authors"), [key.public_key.hex()])
 
     def test_subscribe_profile_accepts_hex_pubkey(self):
         key = PrivateKey()
-        self.mgr.subscribe_profile(key.public_key.hex())
+        self.mgr.subscribe_metadata(key.public_key.hex())
         filt = self._subscription_json()
         self.assertEqual(filt.get("authors"), [key.public_key.hex()])
 
@@ -232,6 +232,7 @@ class TestNostrManagerPublish(unittest.TestCase):
         self.mgr._default_relays = []
         self.mgr._nostr_configured = False
         self.mgr._nostr_private_key = None
+        self.mgr.connected = False
         self.mgr.relay_manager = None
         self.mgr.configure_identity(PrivateKey().bech32())
         self.mgr.relay_manager = _FakeRelayManager()
