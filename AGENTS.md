@@ -14,9 +14,9 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 - Unix/macOS builds rely on symlinks created by `build_mpos.sh` in `lvgl_micropython/ext_mod/` for `c_mpos` and `secp256k1-embedded-ecdh` because `USER_C_MODULE` is unreliable on those targets.
 - Syntax tests run via `./tests/syntax.sh` and compile every `internal_filesystem/**/*.py` with `mpy-cross` but remove the .mpy files afterwards; failing files are reported by path.
 - `mpy-cross` binary lives at `./lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross`.
-- Unit tests run via `./tests/unittest.sh [test_file] [--ondevice]`; runner injects `main.py` and disables `mpos.TaskManager` for desktop, but on-device runs must NOT re-run boot/main (the script handles this).
+- Unit tests run via `./tests/unittest.sh [test_file] [--ondevice] [--port <port>]`; uses `scripts/unified_test_runner.py` under the hood for both desktop and device. Sets `MPOS_TEST_PORT` env var to default the serial port.
 - Running all unit tests takes a very long time (20 to 35 minutes) so better to run a broad selection of what might be impacted by the change. The build server will run all of them upon git push anyway.
-- Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files.
+- Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files. (Desktop binary boots with `-m main` via `ProcessBackend`, so OS/LVGL are already initialized; device tests deploy the file via `mpremote cp` and import it.)
 - To run a single test, pass a file path to `./tests/unittest.sh` (absolute path is resolved inside the script).
 - Testing workflow details and examples live in `tests/README.md`; check it before adding new tests.
 - To install an app on a physical device: `./scripts/install.sh com.micropythonos.appname`
@@ -127,6 +127,9 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - **`MPOSController()` does NOT auto-start a subprocess.** Call `mpos.start()` to launch `run_desktop.sh`, then wait at least `~8s` for boot before calling `startapp()` or any other method. Without `.start()` the internal `repl` is `None` and you get `AttributeError: 'NoneType' object has no attribute 'exec'`.
 - Two backends: `MPOSController()` for local desktop process, `MPOSController(backend="serial", port="/dev/ttyACM0")` for physical device.
 - Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.save_screenshot(path)`, `mpos.screenshot_pixels()`, `mpos.screenshot_image()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.click_button("text")`, `mpos.find_widget(type=..., text=...)`, `mpos.press_widget(type=..., text=...)`, `mpos.wait_for_text("text")`, `mpos.expect_text("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
+- `exec(code, timeout=30)` and `exec_multiline(code, timeout=30)` accept an optional timeout in seconds for long-running code.
+- `mpos.run_test_file("/path/to/test.py", tests_dir="/path/to/tests", timeout=300)` runs a MicroPython unittest file on the backend. ProcessBackend deploys it to host filesystem and imports it; SerialBackend copies the file via `mpremote cp` first. Returns `(passed: bool, output: bytes)`.
+- `scripts/unified_test_runner.py` is the CLI entry point used by `unittest.sh`. Supports `--backend process|serial`, `--port`, `--baudrate`, `--test-file`, `--tests-dir`, `--timeout`.
 - `exec()` and `exec_multiline()` both use **paste mode** (Ctrl-E / Ctrl-D) internally — multi-line code, quotes, and special chars need no escaping. They're equivalent; use whichever is convenient.
 - `get_visible_text()` uses `exec_multiline()` iterating individual `repr()` prints — critical for serial where `print(repr(big_list))` corrupts for large lists with escape sequences. **Only extracts text from `lv.screen_active()`, not `lv.layer_top()`.** Popup/msgbox text is invisible to this method; use `get_widget_tree()` (which includes layer_top) or `screenshot(all_layers=True)` with ppq-vision instead.
 - `exec()` auto-drains input buffer before sending then enters paste mode (Ctrl-E).
