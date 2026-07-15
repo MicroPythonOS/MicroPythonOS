@@ -14,7 +14,7 @@ from blurhash import (
 _TEST_HASH = "UBMOZfK1GG%LBBNG,;Rj2skq=eE1s9n4S5Na"
 _BADGEHUB_HASH = "LfNnURxu}]xvxvj[X3j@}wj[EdfP"
 
-_ITERATIONS = 10
+_ITERATIONS = 3 if sys.platform == "esp32" else 10
 
 
 def _benchmark(func, hash_str, width, height):
