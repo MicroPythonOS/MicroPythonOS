@@ -215,6 +215,7 @@ class _SerialStream:
 # ── aioREPL Client ──────────────────────────────────────────────────
 
 SENTINEL = "~~~MPOS~~~"
+END_MARKER = "~~~MPOS_END~~~"
 
 
 class AIOREPLClient:
@@ -313,25 +314,36 @@ class AIOREPLClient:
         Execute *code* and return stdout output.
 
         Uses paste mode (Ctrl-E / Ctrl-D) so multi-line code
-        works without escaping.  A sentinel ``print()`` is prepended
-        to delimit output from REPL chatter.
+        works without escaping.  Sentinels bracket the output so
+        ``>>>`` in user code cannot trigger premature truncation.
         """
         self._drain(0.1)
 
-        # Enter paste mode and wait for it to engage
         self.stream.write(b"\x05")
         time.sleep(0.2)
         self._drain(0.5)
 
-        payload = "print('{}')\n".format(SENTINEL) + code.rstrip()
+        payload = ("print('{}')\n".format(SENTINEL)
+                   + code.rstrip()
+                   + "\nprint('{}')".format(END_MARKER))
         self.stream.write(payload.encode("utf-8"))
         self.stream.write(b"\x04")
-        data = self.read_until(b">>> ", timeout=timeout)
-        result = data[:-4]
-        marker = SENTINEL.encode()
-        idx = result.rfind(marker)
+
+        # aiorepl echoes all paste-mode input, so ``>>>`` in source
+        # strings could fool read_until.  Use the printed END_MARKER
+        # (which is followed by a newline) as the end sentinel — the
+        # echoed code has ``')`` after it, so read_until skips that.
+        data = self.read_until(END_MARKER.encode() + b"\n", timeout=timeout)
+        self._drain(0.5)
+        result = data
+        start_marker = SENTINEL.encode()
+        idx = result.rfind(start_marker)
         if idx >= 0:
-            result = result[idx + len(marker):]
+            result = result[idx + len(start_marker):]
+        end_marker = END_MARKER.encode()
+        idx = result.rfind(end_marker)
+        if idx >= 0:
+            result = result[:idx]
         return result.strip()
 
     def exec_multiline(self, code, timeout=30):
