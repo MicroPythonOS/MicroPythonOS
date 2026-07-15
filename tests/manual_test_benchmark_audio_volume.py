@@ -244,6 +244,16 @@ def _make_buf():
     return buf
 
 
+def _decode_s16(buf, idx):
+    sample_idx = idx * 2
+    lo = buf[sample_idx]
+    hi = buf[sample_idx + 1]
+    val = lo | (hi << 8)
+    if hi & 0x80:
+        val -= 0x10000
+    return val
+
+
 class BenchmarkI2SShift(unittest.TestCase):
     def test_benchmark_shift(self):
         print(
@@ -304,12 +314,28 @@ class BenchmarkI2SShift(unittest.TestCase):
         self.assertTrue(True)
 
     def _run_one(self, label, func, buf):
+        _CHECK_COUNT = min(10, _CHUNK_SAMPLES)
+        check_buf = bytearray(buf)
+        pre = [_decode_s16(check_buf, i) for i in range(_CHECK_COUNT)]
+        func(check_buf)
+        ok = self._verify_scaled(check_buf, pre, label)
+
         start = time.ticks_us()
         for _ in range(_ITERATIONS):
             func(buf)
         elapsed_us = _us(start)
         avg_us = elapsed_us / _ITERATIONS
-        print("%s: %d µs total, %.0f µs/call" % (label, elapsed_us, avg_us))
+        status = "OK" if ok else "FAIL"
+        print("%s: %d µs total, %.0f µs/call [%s]" % (label, elapsed_us, avg_us, status))
+
+    def _verify_scaled(self, buf, pre, label):
+        for i, original in enumerate(pre):
+            actual = _decode_s16(buf, i)
+            expected = original >> 3  # arithmetic shift by _SHIFT_POS=3
+            if actual != expected:
+                print("  SANITY FAIL sample[%d]: orig=%d, expected=%d, actual=%d" % (i, original, expected, actual))
+                return False
+        return True
 
 
 if __name__ == "__main__":

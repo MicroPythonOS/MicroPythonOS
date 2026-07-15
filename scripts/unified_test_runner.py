@@ -60,7 +60,6 @@ def main():
             kwargs["binary"] = args.binary
         backend = ProcessBackend(**kwargs)
 
-    backend.start()
     try:
         passed, out = backend.run_test_file(
             args.test_file,

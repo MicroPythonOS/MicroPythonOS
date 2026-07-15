@@ -91,8 +91,8 @@ def _build_import_runner_code(tests_dir=None):
     if tests_dir:
         code += "sys.path.append(%r)\n" % tests_dir
     code += "import mpos; mpos.TaskManager.disable()\n"
-    code += ("sys.modules.pop('tests._runner_test', None)\n"
-             "import tests._runner_test as _test_mod\n")
+    code += ("sys.modules.pop('_runner_test', None)\n"
+             "import _runner_test as _test_mod\n")
     code += "import unittest\n"
     code += "result = unittest.main(module=_test_mod)\n"
     code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
@@ -762,9 +762,9 @@ for s in t:
         return self._width, self._height
 
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
-        dest_dir = os.path.join(self.cwd, "tests")
-        dest_path = os.path.join(dest_dir, "_runner_test.py")
-        os.makedirs(dest_dir, exist_ok=True)
+        if self.repl is None:
+            self.start()
+        dest_path = os.path.join(self.cwd, "_runner_test.py")
         with open(test_path) as f:
             content = f.read()
         with open(dest_path, "w") as f:
@@ -778,10 +778,6 @@ for s in t:
         finally:
             try:
                 os.remove(dest_path)
-            except OSError:
-                pass
-            try:
-                os.rmdir(dest_dir)
             except OSError:
                 pass
 
@@ -1117,11 +1113,47 @@ for s in t:
         return self._width, self._height
 
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
-        code = _build_test_code(test_path, tests_dir)
-        out = self.exec_multiline(code, timeout=timeout)
-        out_str = out.decode("utf-8", errors="replace")
-        passed = "TEST WAS A SUCCESS" in out_str
-        return passed, out
+        self.stop()
+        self._mpremote_cp(test_path)
+        self._mpremote_reset()
+        time.sleep(30)
+        self.start()
+        try:
+            code = _build_import_runner_code(tests_dir)
+            out = self.exec_multiline(code, timeout=timeout)
+            self.exec(
+                "import os\n"
+                "try:\n os.remove('/_runner_test.py')\n"
+                "except: pass\n"
+            )
+            out_str = out.decode("utf-8", errors="replace")
+            passed = "TEST WAS A SUCCESS" in out_str
+            return passed, out
+        finally:
+            self.stop()
+
+    def _mpremote_cp(self, local_path):
+        import subprocess
+        dest = ":/_runner_test.py"
+        mpremote = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..",
+            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
+        )
+        subprocess.run(
+            ["python3", mpremote, "connect", self.port, "cp", local_path, dest],
+            capture_output=True, timeout=60,
+        )
+
+    def _mpremote_reset(self):
+        import subprocess
+        mpremote = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..",
+            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
+        )
+        subprocess.run(
+            ["python3", mpremote, "connect", self.port, "reset"],
+            capture_output=True, timeout=30,
+        )
 
 
 # ── MPOSController ──────────────────────────────────────────────────
