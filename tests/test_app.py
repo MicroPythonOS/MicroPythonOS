@@ -19,13 +19,17 @@ class _ListHandler(logging.Handler):
 
 class TestAppManifestAndIcon(unittest.TestCase):
     APP_DIR = "apps/com.micropythonos.test_app_flat"
-    ICON_SRC = "apps/com.micropythonos.helloworld/icon_64x64.png"
+    ICON_SRC = "data/_test_icon.png"
 
     def setUp(self):
         self._rm(self.APP_DIR)
+        self._mkdirs("data")
+        with open(self.ICON_SRC, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0bIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
 
     def tearDown(self):
         self._rm(self.APP_DIR)
+        self._rm(self.ICON_SRC)
         AppManager.clear()
 
     def _rm(self, path):
