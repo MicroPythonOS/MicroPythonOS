@@ -131,7 +131,7 @@ class TestLaunchAllApps(unittest.TestCase):
                     passed_apps.append(app_info)
 
                 # Navigate back to exit the app
-                mpos.ui.back_screen()
+                ui.back_screen()
                 wait_for_render(iterations=3)
 
             except Exception as e:
@@ -244,7 +244,7 @@ class TestLaunchSpecificApps(unittest.TestCase):
                 error_message = "App failed to start (execute_script returned False)"
 
             # Navigate back
-            mpos.ui.back_screen()
+            ui.back_screen()
             wait_for_render(iterations=3)
 
         except Exception as e:
