@@ -10,8 +10,6 @@ Covers:
 - End-to-end rendering: labels using composed emoji fonts render without crashing
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_font_manager.py
-    Device:  ./tests/unittest.sh tests/test_graphical_font_manager.py --ondevice
 """
 
 import unittest

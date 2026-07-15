@@ -11,8 +11,6 @@ row using `ui: "radiobuttons"` — the value_label was rendering
 "lightningpiggy" before this helper was added.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_settings_activity_label_mapping.py
-    Device:  ./tests/unittest.sh tests/test_settings_activity_label_mapping.py --ondevice
 """
 
 import unittest

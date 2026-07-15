@@ -18,7 +18,7 @@ syntax-tests: ## Run syntax tests
 
 .PHONY: unittest-tests
 unittest-tests: ## Run unit tests (Needs to build MicroPythonOS for unix first)
-	./tests/unittest.sh
+	./scripts/test_runner.py
 
 .PHONY: tests
 tests: syntax-tests unittest-tests ## Run all tests (Needs to build MicroPythonOS for unix first)

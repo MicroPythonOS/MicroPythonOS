@@ -10,8 +10,6 @@ This is a proof of concept for graphical testing that:
 3. Works on both desktop and device
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_about_app.py
-    Device:  ./tests/unittest.sh tests/test_graphical_about_app.py --ondevice
 """
 
 import unittest

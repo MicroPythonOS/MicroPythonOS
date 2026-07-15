@@ -5,8 +5,6 @@ This test launches the hotspot settings app, verifies the hotspot is initially
 stopped, clicks the "Start" button, then verifies the hotspot is running.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_hotspot_then_station.py
-    Device:  ./tests/unittest.sh tests/test_graphical_hotspot_then_station.py --ondevice
 """
 
 import unittest

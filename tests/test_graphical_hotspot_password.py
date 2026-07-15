@@ -5,8 +5,6 @@ This test verifies that the hotspot settings screen shows the
 "(defaults to none)" value under the "Auth Mode" setting.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_hotspot_password.py
-    Device:  ./tests/unittest.sh tests/test_graphical_hotspot_password.py --ondevice
 """
 
 import unittest

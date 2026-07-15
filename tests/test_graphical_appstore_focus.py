@@ -13,8 +13,6 @@ Regression tests:
   overlap + beam priority instead, so it reaches the button correctly.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_appstore_focus.py
-    Device:  ./tests/unittest.sh tests/test_graphical_appstore_focus.py --ondevice
 """
 
 import time

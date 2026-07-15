@@ -5,8 +5,6 @@ Tests keyboard visual appearance, text input via simulated button presses,
 and mode switching.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_custom_keyboard.py
-    Device:  ./tests/unittest.sh tests/test_graphical_custom_keyboard.py --ondevice
 """
 
 import unittest

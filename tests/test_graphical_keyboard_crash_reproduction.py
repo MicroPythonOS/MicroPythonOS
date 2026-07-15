@@ -4,7 +4,6 @@ Test to reproduce the lv_strcmp crash during keyboard mode switching.
 The crash happens in buttonmatrix drawing code when map_p[txt_i] is NULL.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_crash_reproduction.py
 """
 
 import unittest

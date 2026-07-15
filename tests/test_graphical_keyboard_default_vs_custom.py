@@ -5,7 +5,6 @@ This test helps identify the differences between the two keyboard types
 so we can properly detect when the bug occurs (switching to default instead of custom).
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_default_vs_custom.py
 """
 
 import unittest

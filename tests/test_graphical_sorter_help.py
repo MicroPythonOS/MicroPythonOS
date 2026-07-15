@@ -2,7 +2,6 @@
 Test that Sorter's help button shows solution moves.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_sorter_help.py
 """
 
 import time

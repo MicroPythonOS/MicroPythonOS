@@ -5,8 +5,6 @@ This test verifies that the ScanBluetooth app can start and render its
 simulation-mode UI on platforms without a real bluetooth module.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_scan_bluetooth.py
-    Device:  ./tests/unittest.sh tests/test_graphical_scan_bluetooth.py --ondevice
 """
 
 import unittest

@@ -6,8 +6,6 @@ popup with the message "Reset high score?" and Yes/No buttons, implemented
 as an lv.msgbox() on the top layer.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_space_invaders_popup.py
-    Device:  ./tests/unittest.sh tests/test_graphical_space_invaders_popup.py --ondevice
 """
 
 import unittest

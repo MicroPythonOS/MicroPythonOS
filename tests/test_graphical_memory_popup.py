@@ -6,8 +6,6 @@ confirmation popup with the message "New game?" and Yes/No buttons,
 implemented as an lv.msgbox() on the top layer.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_memory_popup.py
-    Device:  ./tests/unittest.sh tests/test_graphical_memory_popup.py --ondevice
 """
 
 import unittest

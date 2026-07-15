@@ -8,8 +8,6 @@ The user-reported scenario:
 - Buggy behavior: source kept A and target received B,B.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_sorter_moves.py
-    Device:  ./tests/unittest.sh tests/test_graphical_sorter_moves.py --ondevice
 """
 
 import time

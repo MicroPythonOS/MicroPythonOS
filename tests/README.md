@@ -2,17 +2,22 @@
 
 This directory contains the test suite for MicroPythonOS. Tests can run on both desktop (for fast iteration) and on-device (for hardware verification).
 
-## Quick Start
+## How to Run Tests
 
 ```bash
-# Run all tests
-./tests/unittest.sh
+# Run all tests on desktop
+python3 scripts/test_runner.py
 
-# Run a specific test
-./tests/unittest.sh tests/test_graphical_keyboard_q_button_bug.py
+# Run a single test on desktop
+python3 scripts/test_runner.py tests/test_adpcm_ima.py
 
-# Run on device
-./tests/unittest.sh tests/test_graphical_keyboard_q_button_bug.py --ondevice
+# Run a single test on device
+python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice
+
+# Run on device with custom port
+python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --port /dev/pts/5
+
+# MPOS_TEST_PORT env var sets default serial port
 ```
 
 ## Test Architecture
@@ -23,7 +28,6 @@ This directory contains the test suite for MicroPythonOS. Tests can run on both 
 tests/
 ├── screenshots/             # Captured screenshots for visual regression
 ├── test_*.py               # Test files
-├── unittest.sh             # Test runner script
 └── README.md               # This file
 ```
 
@@ -195,7 +199,7 @@ MockTimer.trigger_all()
 ## Test Naming Conventions
 
 - `test_*.py` - Standard unit tests
-- `test_graphical_*.py` - Tests requiring LVGL/UI (detected by unittest.sh)
+- `test_graphical_*.py` - Tests requiring LVGL/UI
 - `manual_test_*.py` - Manual tests (not run automatically)
 
 ## Writing New Tests
@@ -278,7 +282,7 @@ class TestNetworkFeature(unittest.TestCase):
 
 ```bash
 # Run with verbose output
-./tests/unittest.sh tests/test_my_test.py
+python3 scripts/test_runner.py tests/test_my_test.py
 
 # Run with GDB (desktop only)
 gdb --args ./lvgl_micropython/build/lvgl_micropy_unix -X heapsize=8M tests/test_my_test.py

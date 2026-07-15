@@ -13,8 +13,6 @@ This specifically tests the fixes for:
 - Buffer size mismatches
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_camera_settings.py
-    Device:  ./tests/unittest.sh tests/test_graphical_camera_settings.py --ondevice
 """
 
 import unittest

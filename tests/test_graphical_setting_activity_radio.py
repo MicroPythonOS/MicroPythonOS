@@ -13,8 +13,6 @@ CHECKED state so the selection sticks. Changing the pick by clicking a
 different option works exactly as before.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_setting_activity_radio.py
-    Device:  ./tests/unittest.sh tests/test_graphical_setting_activity_radio.py --ondevice
 """
 
 import unittest

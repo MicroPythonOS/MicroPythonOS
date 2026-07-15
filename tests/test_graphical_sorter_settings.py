@@ -3,8 +3,6 @@ Test that Sorter's settings button opens the SettingActivity screen for the
 sound-effects setting and that changes to the preference are persisted.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_sorter_settings.py
-    Device:  ./tests/unittest.sh tests/test_graphical_sorter_settings.py --ondevice
 """
 
 import unittest

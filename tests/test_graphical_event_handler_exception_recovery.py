@@ -2,8 +2,6 @@
 Test that LVGL event callback exceptions do not prevent other callbacks from working.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_event_handler_exception_recovery.py
-    Device:  ./tests/unittest.sh tests/test_graphical_event_handler_exception_recovery.py --ondevice
 """
 
 import time

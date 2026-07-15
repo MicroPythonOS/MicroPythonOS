@@ -5,8 +5,6 @@ This test reproduces the issue where clicking the "Abc" button in numbers mode
 goes to the wrong (default LVGL) keyboard layout instead of our custom lowercase layout.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_layout_switching.py
-    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_layout_switching.py --ondevice
 """
 
 import unittest

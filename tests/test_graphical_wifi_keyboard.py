@@ -5,8 +5,6 @@ This test reproduces the issue where typing on the keyboard in the WiFi
 password page results in double characters being added to the textarea.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_wifi_keyboard.py
-    Device:  ./tests/unittest.sh tests/test_graphical_wifi_keyboard.py --ondevice
 """
 
 import unittest

@@ -8,7 +8,6 @@ are enabled on the first move_focus_direction() via enable_focus_borders();
 _focus_border_handler() is a no-op until then.
 
 Usage:
-    ./tests/unittest.sh tests/test_focus_border_deferred.py
 """
 
 import unittest

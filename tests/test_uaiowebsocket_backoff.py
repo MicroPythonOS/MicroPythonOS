@@ -7,7 +7,6 @@ unreachable, and snaps back to the minimum once a live connection closes.
 Network-free: only imports the pure helper, no sockets or event loop.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_uaiowebsocket_backoff.py
 """
 
 import sys

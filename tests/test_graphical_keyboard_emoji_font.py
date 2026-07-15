@@ -7,8 +7,6 @@ Checks that:
 - Textarea font is switched to an emoji-capable composed font
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_emoji_font.py
-    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_emoji_font.py --ondevice
 """
 
 import unittest

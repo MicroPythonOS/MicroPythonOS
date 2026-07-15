@@ -7,8 +7,6 @@ are reachable via directional navigation, and the close button finishes
 the activity.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_howto_app.py
-    Device:  ./tests/unittest.sh tests/test_graphical_howto_app.py --ondevice
 """
 
 import time

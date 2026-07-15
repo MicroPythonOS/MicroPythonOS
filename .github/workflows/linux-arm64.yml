@@ -85,7 +85,7 @@ jobs:
 
       - name: Run unit tests on unix
         run: |
-          ./tests/unittest.sh
+          ./scripts/test_runner.py
 
 
 

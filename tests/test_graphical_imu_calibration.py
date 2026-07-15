@@ -5,8 +5,6 @@ Tests both CheckIMUCalibrationActivity and CalibrateIMUActivity
 with mock data on desktop.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_imu_calibration.py
-    Device:  ./tests/unittest.sh tests/test_graphical_imu_calibration.py --ondevice
 """
 
 import unittest

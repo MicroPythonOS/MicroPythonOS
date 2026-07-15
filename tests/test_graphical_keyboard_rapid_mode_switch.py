@@ -6,7 +6,6 @@ This test reproduces:
 2. Intermittent crashes when rapidly clicking mode switch buttons
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_rapid_mode_switch.py
 """
 
 import unittest

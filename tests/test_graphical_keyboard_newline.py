@@ -2,7 +2,6 @@
 Test that MposKeyboard only shows the NEW_LINE key for multi-line textareas.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_newline.py
 """
 
 import unittest

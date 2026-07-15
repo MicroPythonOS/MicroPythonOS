@@ -5,8 +5,6 @@ This test reproduces the crash that occurs when clicking the UP arrow
 to switch to uppercase mode in MposKeyboard.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_mode_switch.py
-    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_mode_switch.py --ondevice
 """
 
 import unittest

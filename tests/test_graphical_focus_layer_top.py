@@ -15,8 +15,6 @@ Expected behaviour (Android-style "first keypress redirects"):
   6. Once the overlay is removed, focus returns to normal-screen navigation.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_focus_layer_top.py
-    Device:  ./tests/unittest.sh tests/test_graphical_focus_layer_top.py --ondevice
 """
 
 import time

@@ -2,8 +2,6 @@
 Test that Sorter launches and exits without errors.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_sorter_launch.py
-    Device:  ./tests/unittest.sh tests/test_graphical_sorter_launch.py --ondevice
 """
 
 import unittest

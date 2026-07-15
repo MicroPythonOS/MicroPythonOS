@@ -6,8 +6,6 @@ InputActivity save-as screen with a "Save As" title and Save/Cancel
 buttons.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_texteditor_popup.py
-    Device:  ./tests/unittest.sh tests/test_graphical_texteditor_popup.py --ondevice
 """
 
 import unittest

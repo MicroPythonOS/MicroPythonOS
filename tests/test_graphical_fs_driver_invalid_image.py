@@ -14,8 +14,6 @@ Key behaviors tested:
 4. Multiple invalid loads don't corrupt the driver for new widgets
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_fs_driver_invalid_image.py
-    Device:  ./tests/unittest.sh tests/test_graphical_fs_driver_invalid_image.py --ondevice
 """
 
 import unittest

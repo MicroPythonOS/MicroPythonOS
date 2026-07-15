@@ -4,7 +4,6 @@ Automated test that simulates clicking the abc button and shows debug output.
 This will show us exactly what's happening when the abc button is clicked.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_abc_button_debug.py
 """
 
 import unittest

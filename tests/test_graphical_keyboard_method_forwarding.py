@@ -5,7 +5,6 @@ This demonstrates the __getattr__ magic method works correctly and that
 MposKeyboard supports any LVGL keyboard method without manual wrapping.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_keyboard_method_forwarding.py
 """
 
 import unittest

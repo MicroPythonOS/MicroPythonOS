@@ -1,7 +1,5 @@
 """Manual benchmark for NIP-17 DM creation.
 
-Run with:
-    ./tests/unittest.sh tests/manual_test_nostr_benchmarks.py
 
 This is a test purely for timing; it always passes so CI is not broken,
 but it prints the per-operation timings used to judge speed-ups.

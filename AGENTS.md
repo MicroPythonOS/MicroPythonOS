@@ -14,10 +14,10 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 - Unix/macOS builds rely on symlinks created by `build_mpos.sh` in `lvgl_micropython/ext_mod/` for `c_mpos` and `secp256k1-embedded-ecdh` because `USER_C_MODULE` is unreliable on those targets.
 - Syntax tests run via `./tests/syntax.sh` and compile every `internal_filesystem/**/*.py` with `mpy-cross` but remove the .mpy files afterwards; failing files are reported by path.
 - `mpy-cross` binary lives at `./lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross`.
-- Unit tests run via `./tests/unittest.sh [test_file] [--ondevice] [--port <port>]`; uses `scripts/unified_test_runner.py` under the hood for both desktop and device. Sets `MPOS_TEST_PORT` env var to default the serial port.
+- Unit tests run via `./scripts/test_runner.py [test_file] [--ondevice] [--port <port>]`; uses `scripts/test_runner.py` under the hood for both desktop and device. Sets `MPOS_TEST_PORT` env var to default the serial port.
 - Running all unit tests takes a very long time (20 to 35 minutes) so better to run a broad selection of what might be impacted by the change. The build server will run all of them upon git push anyway.
 - Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files. (Desktop binary boots with `-m main` via `ProcessBackend`, so OS/LVGL are already initialized; device tests paste the file content over serial via paste mode, no file-system writes needed.)
-- To run a single test, pass a file path to `./tests/unittest.sh` (absolute path is resolved inside the script).
+- To run a single test, pass a file path to `./scripts/test_runner.py` (absolute path is resolved inside the script).
 - Testing workflow details and examples live in `tests/README.md`; check it before adding new tests.
 - To install an app on a physical device: `./scripts/install.sh com.micropythonos.appname`
 - After installing an app, call `AppManager.refresh_apps()` to reload the app registry before `start_app()` can find it.
@@ -27,7 +27,7 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
 - Every code change must pass `make lint`.
-- If you modify a test, run it with `./tests/unittest.sh tests/<test_file>` to verify it still passes.
+- If you modify a test, run it with `./scripts/test_runner.py tests/<test_file>` to verify it still passes.
 - Never add, remove or modify inline comments or docstrings on your own initiative, unless the task explicitly asks for it. Comments and docstrings preserve intent and are treated as critical documentation. Refactoring or logging-conversion tasks must target only the specific code elements they're asked about and leave all other content untouched.
 - Danger: batch-editing agents that operate on many files at once MUST be strictly constrained to only touch the specific patterns requested. Without tight boundary rules (e.g. "only edit lines matching `print(`"), agents may delete unrelated code: docstrings, constant definitions, function bodies, inline comments, imports, etc. If damage occurs, the safest fix might be restoring from git and running a precise targeted script, but request user confirmation before doing so.
 - Debug logging: use `if __debug__: logger.debug("fmt %s", var)` (one line, `ruff.toml` ignores E701). `mpy-cross -O3` eliminates these blocks entirely at compile time — strings AND bytecode gone. Use `logger.warning/error/critical` without `__debug__` guard. Always `import logging; logger = logging.getLogger(__name__)` per file. Prefer `%s` formatting over f-strings for lazy eval.
@@ -129,7 +129,7 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - Use `mpos.exec("code")`, `mpos.eval("expr")`, `mpos.screenshot()`, `mpos.save_screenshot(path)`, `mpos.screenshot_pixels()`, `mpos.screenshot_image()`, `mpos.press(x,y)`, `mpos.press_key("text")`, `mpos.click_button("text")`, `mpos.find_widget(type=..., text=...)`, `mpos.press_widget(type=..., text=...)`, `mpos.wait_for_text("text")`, `mpos.expect_text("text")`, `mpos.get_visible_text()`, `mpos.get_widget_tree()`, `mpos.read_file(path)`, `mpos.write_file(path, data)`.
 - `exec(code, timeout=30)` and `exec_multiline(code, timeout=30)` accept an optional timeout in seconds for long-running code.
 - `mpos.run_test_file("/path/to/test.py", tests_dir="/path/to/tests", timeout=300)` runs a MicroPython unittest file on the backend. ProcessBackend deploys it to host filesystem and imports it; SerialBackend pastes the file content over serial via paste mode. Returns `(passed: bool, output: bytes)`.
-- `scripts/unified_test_runner.py` is the CLI entry point used by `unittest.sh`. Supports `--backend process|serial`, `--port`, `--baudrate`, `--test-file`, `--tests-dir`, `--timeout`.
+- `scripts/test_runner.py` is the CLI entry point used by `test_runner.py`. Supports `--backend process|serial`, `--port`, `--baudrate`, `--test-file`, `--tests-dir`, `--timeout`.
 - `exec()` and `exec_multiline()` both use **paste mode** (Ctrl-E / Ctrl-D) internally — multi-line code, quotes, and special chars need no escaping. They're equivalent; use whichever is convenient.
 - `get_visible_text()` uses `exec_multiline()` iterating individual `repr()` prints — critical for serial where `print(repr(big_list))` corrupts for large lists with escape sequences. **Only extracts text from `lv.screen_active()`, not `lv.layer_top()`.** Popup/msgbox text is invisible to this method; use `get_widget_tree()` (which includes layer_top) or `screenshot(all_layers=True)` with ppq-vision instead.
 - `exec()` auto-drains input buffer before sending then enters paste mode (Ctrl-E).
@@ -149,7 +149,7 @@ MPOS Controller (`scripts/mpos_controller.py`):
 - `mpos.screenshot_image()` returns a PIL `Image` (requires `pillow`), and `mpos.screenshot_pixels()` returns `(width, height, rgb888_bytes)` for direct pixel checks.
 - The CLI also supports `startapp <appname>` (launches an app) and `checkfreespace` (reports free disk space and whether a screenshot fits).
 - All tests pass covering exec, eval, screenshot, input simulation, screen introspection, file I/O, and physical device control.
-- Host-side controller tests in `tests/cpython_mpos_controller.py` run via `python3 tests/cpython_mpos_controller.py` (desktop) or `python3 tests/cpython_mpos_controller.py --serial /dev/ttyACM0` (device); they are NOT run by `unittest.sh` (which targets MicroPython-side tests).
+- Host-side controller tests in `tests/cpython_mpos_controller.py` run via `python3 tests/cpython_mpos_controller.py` (desktop) or `python3 tests/cpython_mpos_controller.py --serial /dev/ttyACM0` (device); they are NOT run by `test_runner.py` (which targets MicroPython-side tests).
 
 ## Debugging with MPOS Controller
 

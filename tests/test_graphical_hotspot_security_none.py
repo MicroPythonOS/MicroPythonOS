@@ -6,8 +6,6 @@ This test verifies:
 2) Starting hotspot with an invalid WPA2 password fails and leaves hotspot disabled.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_hotspot_security_none.py
-    Device:  ./tests/unittest.sh tests/test_graphical_hotspot_security_none.py --ondevice
 """
 
 import unittest

@@ -5,8 +5,6 @@ This test reproduces the bug where MposKeyboard is missing methods
 required by WidgetAnimator.smooth_show() and smooth_hide().
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_animation.py
-    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_animation.py --ondevice
 """
 
 import unittest

@@ -7,8 +7,6 @@ prefs object hit AttributeError. These tests pin down the corrected
 edit/put_string/commit write path and the expected on-disk values.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_appearance_manager.py
-    Device:  ./tests/unittest.sh tests/test_appearance_manager.py --ondevice
 """
 
 import os

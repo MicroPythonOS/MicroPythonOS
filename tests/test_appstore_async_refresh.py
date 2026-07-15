@@ -14,7 +14,6 @@ Regression tests:
 - _trigger_update_recheck must refresh apps before scheduling recheck.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_appstore_async_refresh.py
 """
 
 import json

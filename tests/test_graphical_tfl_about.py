@@ -3,7 +3,6 @@
 Starts the app, opens the About modal via the running activity, and writes a
 raw RGB565 screenshot to tests/screenshots/tfl_about.raw for visual iteration.
 
-Usage: ./tests/unittest.sh tests/test_graphical_tfl_about.py
 """
 
 import unittest

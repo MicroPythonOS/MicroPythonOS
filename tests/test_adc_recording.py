@@ -1,6 +1,5 @@
 # Test ADC Recording Integration
 # Tests the new ADCRecordStream with adaptive frequency control
-# Run with: ./MicroPythonOS/tests/unittest.sh MicroPythonOS/tests/test_adc_recording.py
 
 import unittest
 import time

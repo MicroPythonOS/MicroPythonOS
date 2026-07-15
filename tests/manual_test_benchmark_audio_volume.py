@@ -1,7 +1,5 @@
 """Manual benchmark for audio volume scaling performance.
 
-Run with:
-    ./tests/unittest.sh --ondevice tests/manual_test_benchmark_audio_volume.py
 
 Compares 7 methods of reducing 16-bit stereo audio volume:
   1. i2s.shift(buf, bits=16, shift=-3)           — C software bit-shift (extmod/machine_i2s.c)

@@ -12,7 +12,6 @@ Key regression scenario covered:
   the Android algorithm selects it correctly.
 
 Usage:
-    ./tests/unittest.sh tests/test_focus_direction.py
 """
 
 import unittest

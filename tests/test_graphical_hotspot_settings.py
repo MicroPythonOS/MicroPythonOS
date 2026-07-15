@@ -6,8 +6,6 @@ This test verifies:
 2) SSID changes in settings are reflected on the hotspot overview.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_hotspot_settings.py
-    Device:  ./tests/unittest.sh tests/test_graphical_hotspot_settings.py --ondevice
 """
 
 import unittest

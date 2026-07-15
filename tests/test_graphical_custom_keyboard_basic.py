@@ -4,8 +4,6 @@ Functional tests for MposKeyboard.
 Tests keyboard creation, mode switching, text input, and API compatibility.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_custom_keyboard.py
-    Device:  ./tests/unittest.sh tests/test_custom_keyboard.py --ondevice
 """
 
 import unittest

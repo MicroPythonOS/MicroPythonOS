@@ -7,8 +7,6 @@ square.  This exercises the raw RGB565 image descriptor path used by
 AppStore._generate_raw_app_icon.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_appstore_placeholder_icon.py
-    Device:  ./tests/unittest.sh tests/test_graphical_appstore_placeholder_icon.py --ondevice
 """
 
 import time

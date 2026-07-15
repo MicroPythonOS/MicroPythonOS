@@ -8,8 +8,6 @@ Works on both desktop and ESP32 by using the standard boot/main
 initialization pattern.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_start_app.py
-    Device:  ./tests/unittest.sh tests/test_graphical_start_app.py --ondevice
 """
 
 import unittest

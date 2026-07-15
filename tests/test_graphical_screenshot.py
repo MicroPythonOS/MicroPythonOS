@@ -4,8 +4,6 @@ Graphical test for screenshot capture.
 This test focuses on screenshot capture for visual regression testing.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_screenshot.py
-    Device:  ./tests/unittest.sh tests/test_screenshot.py --ondevice
 """
 
 import os

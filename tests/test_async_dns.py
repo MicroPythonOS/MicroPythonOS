@@ -9,7 +9,6 @@ the async_dns module exposes a module-level _getaddrinfo reference that tests
 can replace. tearDown restores the original to avoid test pollution.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_async_dns.py
 """
 
 import sys

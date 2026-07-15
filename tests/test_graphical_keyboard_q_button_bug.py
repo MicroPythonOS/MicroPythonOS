@@ -9,8 +9,6 @@ The bug was: `if not button:` would return True when button index was 0,
 causing the 'q' key to be ignored. Fixed by changing to `if button is None:`.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_q_button_bug.py
-    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_q_button_bug.py --ondevice
 """
 
 import unittest

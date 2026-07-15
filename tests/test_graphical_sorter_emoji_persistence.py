@@ -7,8 +7,6 @@ This test verifies that:
 - Starting a new game generates a different emoji order.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_sorter_emoji_persistence.py
-    Device:  ./tests/unittest.sh tests/test_graphical_sorter_emoji_persistence.py --ondevice
 """
 
 import unittest

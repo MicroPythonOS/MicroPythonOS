@@ -11,8 +11,6 @@ button background colors.
 This test should INITIALLY FAIL, demonstrating the bug before the fix is applied.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_graphical_keyboard_styling.py
-    Device:  ./tests/unittest.sh tests/test_graphical_keyboard_styling.py --ondevice
 """
 
 import unittest

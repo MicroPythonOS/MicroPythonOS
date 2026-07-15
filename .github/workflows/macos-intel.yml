@@ -94,4 +94,4 @@ jobs:
 
       - name: Run unit tests on macOS
         run: |
-          ./tests/unittest.sh
+          ./scripts/test_runner.py

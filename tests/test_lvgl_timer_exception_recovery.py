@@ -2,8 +2,6 @@
 Ensure LVGL timer callback exceptions do not stall the scheduler and other timers continue.
 
 Usage:
-    Desktop: ./tests/unittest.sh tests/test_lvgl_timer_exception_recovery.py
-    Device:  ./tests/unittest.sh tests/test_lvgl_timer_exception_recovery.py --ondevice
 """
 
 import time
