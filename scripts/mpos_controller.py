@@ -55,6 +55,44 @@ def _resolve_cwd():
     return os.path.normpath(os.path.join(d, "..", "internal_filesystem"))
 
 
+def _build_test_code(test_path, tests_dir=None):
+    with open(test_path) as f:
+        test_content = f.read()
+    code = "import sys\n"
+    code += "sys.path.insert(0, 'lib')\n"
+    if tests_dir:
+        code += "sys.path.append(%r)\n" % tests_dir
+    code += "try:\n import mpos; mpos.TaskManager.disable()\n"
+    code += "except Exception:\n pass\n"
+    code += "import unittest\n"
+    code += """\
+for _k in list(globals().keys()):
+    _v = globals()[_k]
+    if isinstance(_v, type):
+        try:
+            if issubclass(_v, unittest.TestCase) and _k != 'TestCase':
+                del globals()[_k]
+        except Exception:
+            pass
+"""
+    code += test_content + "\n"
+    code += """\
+suite = unittest.TestSuite()
+for _k in dir():
+    _v = globals()[_k]
+    if isinstance(_v, type):
+        try:
+            if issubclass(_v, unittest.TestCase):
+                suite.addTest(_v)
+        except Exception:
+            pass
+result = unittest.TextTestRunner().run(suite)
+"""
+    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+             "else 'TEST WAS A FAILURE')\n")
+    return code
+
+
 def _build_import_runner_code(tests_dir=None):
     code = "import sys\n"
     code += "sys.path.insert(0, 'lib')\n"
@@ -168,6 +206,7 @@ class _SerialStream:
     def write(self, data):
         for i in range(0, len(data), 256):
             self.ser.write(data[i:i + 256])
+            time.sleep(0.1)
 
     def fileno(self):
         return self.ser.fileno()
@@ -780,7 +819,7 @@ class SerialBackend:
             port=self.port,
             baudrate=self.baudrate,
             timeout=0.05,
-            write_timeout=1,
+            write_timeout=5,
         )
         if self.reset:
             self.ser.dtr = False
@@ -1084,40 +1123,20 @@ for s in t:
         return self._width, self._height
 
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
-        self.stop()
-        self._mpremote_cp(test_path)
-        self.start()
-        try:
-            code = _build_import_runner_code(tests_dir)
-            out = self.exec_multiline(code, timeout=timeout)
-            self.exec(
-                "import os\n"
-                "try:\n os.remove('/_runner_test.py')\n"
-                "except: pass\n"
-            )
-            out_str = out.decode("utf-8", errors="replace")
-            passed = "TEST WAS A SUCCESS" in out_str
-            return passed, out
-        finally:
-            self.stop()
-
-    def _mpremote_cp(self, local_path):
         import subprocess
-        dest = ":/_runner_test.py"
+        code = _build_test_code(test_path, tests_dir)
         mpremote = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..",
             "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
         )
         result = subprocess.run(
-            ["python3", mpremote, "connect", self.port, "cp", local_path, dest],
-            capture_output=True, timeout=60,
+            ["python3", mpremote, "connect", self.port, "exec", code],
+            capture_output=True, timeout=timeout + 60,
         )
-        if result.returncode != 0:
-            raise RuntimeError(
-                "mpremote cp failed: {}".format(
-                    result.stderr.decode("utf-8", errors="replace").strip()
-                )
-            )
+        out = result.stdout
+        out_str = out.decode("utf-8", errors="replace")
+        passed = "TEST WAS A SUCCESS" in out_str
+        return passed, out
 
 
 # ── MPOSController ──────────────────────────────────────────────────
