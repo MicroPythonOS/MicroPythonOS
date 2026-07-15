@@ -361,7 +361,7 @@ def blurhash_to_image_dsc(blurhash, width, height):
     if not blurhash:
         return None, None
     try:
-        pixels = decode_blurhash_native(blurhash, width, height)
+        pixels = decode_blurhash_viper(blurhash, width, height)
     except Exception:
         return None, None
     buf = pixels_to_rgb565(pixels)
