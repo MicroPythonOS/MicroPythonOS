@@ -909,7 +909,7 @@ class SerialBackend:
             subprocess.run(["bash", attach_script], capture_output=True, timeout=10)
             time.sleep(1)
 
-        # 3. Wait for port, open, wait for REPL, stabilize, close
+        # 3. Wait for port, then retry boot until stable
         deadline = time.monotonic() + timeout
         while not os.path.exists(self.port):
             if time.monotonic() > deadline:
@@ -918,18 +918,27 @@ class SerialBackend:
                 )
             time.sleep(0.1)
 
-        ser = _serial.Serial(
-            self.port, self.baudrate, timeout=0.5, write_timeout=2,
+        # USB/IP can be flaky right after re-attach — retry a few times
+        last_err = None
+        for attempt in range(5):
+            try:
+                ser = _serial.Serial(
+                    self.port, self.baudrate, timeout=0.5, write_timeout=2,
+                )
+                try:
+                    stream = _SerialStream(ser)
+                    repl = AIOREPLClient(stream)
+                    repl.wait_for_boot(timeout=min(timeout, 30))
+                    time.sleep(10)
+                    return True
+                finally:
+                    ser.close()
+            except (OSError, _serial.SerialException) as e:
+                last_err = e
+                time.sleep(2)
+        raise RuntimeError(
+            "Device at {} not reachable after reset: {}".format(self.port, last_err)
         )
-        try:
-            stream = _SerialStream(ser)
-            repl = AIOREPLClient(stream)
-            repl.wait_for_boot(timeout=min(timeout, 30))
-            time.sleep(10)
-        finally:
-            ser.close()
-
-        return True
 
     def soft_reset(self):
         """Ctrl-D soft reset via existing serial connection, wait for REPL."""
