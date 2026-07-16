@@ -872,7 +872,7 @@ class SerialBackend:
             self.repl = None
 
     def hard_reset(self, timeout=60):
-        """Hard-reset the device via DTR toggle, wait for REPL and stabilization.
+        """Hard-reset the device via machine.reset(), wait for USB re-enumeration and REPL.
 
         On native-USB boards (ESP32-S2/S3) the port disappears during reset; on
         external-UART boards (ESP32 with CP210x/CH340) the port stays but data resets.
@@ -885,15 +885,16 @@ class SerialBackend:
             self.ser = None
             self.repl = None
 
-        # 1. Toggle DTR to hard-reset the chip
+        # 1. Reach REPL and send machine.reset() (like mpremote reset does)
         ser = _serial.Serial(
             self.port, self.baudrate, timeout=0.5, write_timeout=2,
         )
         try:
-            ser.dtr = False
-            time.sleep(0.1)
-            ser.dtr = True
-            time.sleep(0.1)
+            stream = _SerialStream(ser)
+            repl = AIOREPLClient(stream)
+            repl.wait_for_boot(timeout=15)
+            ser.write(b"import machine; machine.reset()\r\n")
+            time.sleep(0.5)
         finally:
             try:
                 ser.close()
