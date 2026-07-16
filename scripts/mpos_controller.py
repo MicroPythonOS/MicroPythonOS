@@ -872,10 +872,10 @@ class SerialBackend:
             self.repl = None
 
     def hard_reset(self, timeout=60):
-        """Hard-reset the device via machine.reset(), wait for USB re-enumeration and REPL.
+        """Hard-reset the device via machine.reset(), re-attach USB/IP after reset.
 
-        On native-USB boards (ESP32-S2/S3) the port disappears during reset; on
-        external-UART boards (ESP32 with CP210x/CH340) the port stays but data resets.
+        ESP32 reset causes USB disconnect. On USB/IP passthrough (KVM) the VM
+        must re-attach before the serial port works again.
         """
         if self.ser:
             try:
@@ -885,7 +885,7 @@ class SerialBackend:
             self.ser = None
             self.repl = None
 
-        # 1. Reach REPL and send machine.reset() (like mpremote reset does)
+        # 1. Reach REPL and send machine.reset()
         ser = _serial.Serial(
             self.port, self.baudrate, timeout=0.5, write_timeout=2,
         )
@@ -894,32 +894,30 @@ class SerialBackend:
             repl = AIOREPLClient(stream)
             repl.wait_for_boot(timeout=15)
             ser.write(b"import machine; machine.reset()\r\n")
-            time.sleep(0.5)
         finally:
             try:
                 ser.close()
             except Exception:
                 pass
 
-        # 2. Wait for port to disappear (native USB) or timeout (external UART)
+        # 2. Re-attach USB/IP (no-op if running directly)
+        attach_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "..", "..", "kvm_usb", "vm", "esp32-usbip-attach.sh",
+        )
+        if os.path.exists(attach_script):
+            subprocess.run(["bash", attach_script], capture_output=True, timeout=10)
+            time.sleep(1)
+
+        # 3. Wait for port, open, wait for REPL, stabilize, close
         deadline = time.monotonic() + timeout
-        port_gone = False
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < 5:
-            if not os.path.exists(self.port):
-                port_gone = True
-                break
+        while not os.path.exists(self.port):
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    "Device at {} did not reappear after reset".format(self.port)
+                )
             time.sleep(0.1)
 
-        if port_gone:
-            while not os.path.exists(self.port):
-                if time.monotonic() > deadline:
-                    raise TimeoutError(
-                        "Device at {} did not reappear after reset".format(self.port)
-                    )
-                time.sleep(0.1)
-
-        # 3. Open serial, wait for REPL, stabilize, close
         ser = _serial.Serial(
             self.port, self.baudrate, timeout=0.5, write_timeout=2,
         )
