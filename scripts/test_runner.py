@@ -62,11 +62,28 @@ def _cleanup_config():
         pass
 
 
+def _serial_reset(port):
+    import serial
+    import time
+    time.sleep(2)
+    for attempt in range(5):
+        try:
+            ser = serial.Serial(port, 115200, timeout=0.5, write_timeout=0.5)
+            ser.dtr = False
+            time.sleep(0.1)
+            ser.close()
+            break
+        except Exception:
+            time.sleep(3)
+    time.sleep(4)
+
+
 def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
     """Run a single test file. Returns (passed, output)."""
     backend_kwargs = {}
     if backend == "serial":
         port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
+        _serial_reset(port)
         backend_kwargs = {"port": port, "reset": False}
     else:
         backend_kwargs = {"heapsize": "32M"}
@@ -109,12 +126,13 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path):
 
 
 def _batch_run(backend, tests_dir, timeout):
-    files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+    all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+    files = [f for f in all_files if not os.path.basename(f).startswith("notondevice_")]
     if not files:
         print("No test files found in {}".format(TESTS_DIR))
         return True
 
-    failed = 0
+    failed = []
     for f in files:
         print("=== {} ===".format(os.path.basename(f)))
         log_path = os.path.join(
@@ -123,9 +141,13 @@ def _batch_run(backend, tests_dir, timeout):
         )
         ok = _run_with_retry(f, backend, tests_dir, timeout, log_path)
         if not ok:
-            failed += 1
+            failed.append(f)
             print("WARNING: {} failed!".format(f))
-            return False
+    if failed:
+        print("FAILED: {}/{} tests".format(len(failed), len(files)))
+        for f in failed:
+            print("  {}".format(f))
+        return False
     print("GOOD: all {} tests passed".format(len(files)))
     return True
 
