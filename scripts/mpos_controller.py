@@ -932,6 +932,16 @@ class SerialBackend:
                     stream = _SerialStream(ser)
                     repl = AIOREPLClient(stream)
                     repl.wait_for_boot(timeout=min(timeout, 30))
+                    ser.write(b"\x04")
+                    t0 = time.monotonic()
+                    data = b""
+                    while time.monotonic() - t0 < 60:
+                        chunk = ser.read(4096)
+                        if chunk:
+                            data += chunk
+                            if b"Starting asyncio REPL..." in data:
+                                return True
+                        time.sleep(0.1)
                     time.sleep(10)
                     return True
                 finally:
