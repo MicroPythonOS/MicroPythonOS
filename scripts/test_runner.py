@@ -83,12 +83,11 @@ def _serial_reset(port):
     time.sleep(4)
 '''
 
-def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
+def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False):
     """Run a single test file. Returns (passed, output)."""
     backend_kwargs = {}
     if backend == "serial":
         port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
-        #_serial_reset(port) # not needed but kept just in case
         backend_kwargs = {"port": port, "reset": False}
     else:
         backend_kwargs = {"heapsize": "32M"}
@@ -100,6 +99,9 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
         be = ProcessBackend(**backend_kwargs)
 
     try:
+        if reset and backend == "serial":
+            print("Hard-resetting device...")
+            be.hard_reset()
         passed, out = be.run_test_file(
             test_path, tests_dir=tests_dir, timeout=timeout,
         )
@@ -113,12 +115,12 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
     return passed, out
 
 
-def _run_with_retry(test_path, backend, tests_dir, timeout, log_path):
+def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False):
     for attempt in range(1, MAX_RETRIES + 1):
         if attempt > 1:
             print("Retry attempt {} for {}".format(attempt, test_path))
 
-        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path)
+        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset)
         out_str = out.decode("utf-8", errors="replace")
         sys.stdout.write(out_str)
 
@@ -130,7 +132,7 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path):
     return False
 
 
-def _batch_run(backend, tests_dir, timeout):
+def _batch_run(backend, tests_dir, timeout, reset=False):
     all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
     # Skip test files prefixed with notondevice_ — these are known to fail
     # on physical hardware (e.g. need desktop-only features or specific HW).
@@ -146,7 +148,7 @@ def _batch_run(backend, tests_dir, timeout):
             tempfile.gettempdir(),
             f.replace("/", "_").lstrip("_") + ".log",
         )
-        ok = _run_with_retry(f, backend, tests_dir, timeout, log_path)
+        ok = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset)
         if not ok:
             failed.append(f)
             print("WARNING: {} failed!".format(f))
@@ -183,7 +185,14 @@ def main():
         "--timeout", type=int, default=300,
         help="Test execution timeout in seconds",
     )
+    parser.add_argument(
+        "--reset", action="store_true",
+        help="Hard-reset the device before each test (--ondevice only)",
+    )
     args = parser.parse_args()
+
+    if args.reset and not args.ondevice:
+        print("WARNING: --reset has no effect without --ondevice, ignoring")
 
     if args.port:
         os.environ["MPOS_TEST_PORT"] = args.port
@@ -192,6 +201,7 @@ def main():
 
     backend = "serial" if args.ondevice else "process"
     tests_dir = args.tests_dir or TESTS_DIR
+    do_reset = args.reset and args.ondevice
 
     _cleanup_config()
 
@@ -204,13 +214,13 @@ def main():
             tempfile.gettempdir(),
             test_path.replace("/", "_").lstrip("_") + ".log",
         )
-        ok = _run_with_retry(test_path, backend, tests_dir, args.timeout, log_path)
+        ok = _run_with_retry(test_path, backend, tests_dir, args.timeout, log_path, do_reset)
     else:
         if not args.ondevice:
             print("Running all tests on desktop...")
         else:
             print("Running all tests on device...")
-        ok = _batch_run(backend, tests_dir, args.timeout)
+        ok = _batch_run(backend, tests_dir, args.timeout, do_reset)
 
     sys.exit(0 if ok else 1)
 
