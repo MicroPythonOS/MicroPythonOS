@@ -214,7 +214,8 @@ mpos.sdcard.init(cmd_pin=40, clk_pin=38, d0_pin=39, d1_pin=41, d2_pin=48, d3_pin
 # ==============================
 if __debug__: logger.debug("freenove_esp32s3_display.py: init NeoPixel")
 from mpos import LightsManager
-LightsManager.init(neopixel_pin=42, num_leds=1)
+LightsManager.init(neopixel_pin=42)
+LightsManager.set_led_num(1)
 
 # ==============================
 # Step 7: Audio (ES8311 codec + FM8002E amplifier)
