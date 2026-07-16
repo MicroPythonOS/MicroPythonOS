@@ -61,6 +61,11 @@ def _cleanup_config():
     except OSError:
         pass
 
+'''
+Unused because on serial, no explicit reset is performed.  mpremote's ``exec`` command
+already handles its own reset cycle (DTR on serial-open + Ctrl-D
+soft-reset).  An extra reset here would triple the boot count per test
+and cause race conditions where Ctrl-C hits the OS mid-boot.
 
 def _serial_reset(port):
     import serial
@@ -76,14 +81,14 @@ def _serial_reset(port):
         except Exception:
             time.sleep(3)
     time.sleep(4)
-
+'''
 
 def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
     """Run a single test file. Returns (passed, output)."""
     backend_kwargs = {}
     if backend == "serial":
         port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
-        _serial_reset(port)
+        #_serial_reset(port) # not needed but kept just in case
         backend_kwargs = {"port": port, "reset": False}
     else:
         backend_kwargs = {"heapsize": "32M"}
@@ -127,6 +132,8 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path):
 
 def _batch_run(backend, tests_dir, timeout):
     all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+    # Skip test files prefixed with notondevice_ — these are known to fail
+    # on physical hardware (e.g. need desktop-only features or specific HW).
     files = [f for f in all_files if not os.path.basename(f).startswith("notondevice_")]
     if not files:
         print("No test files found in {}".format(TESTS_DIR))
