@@ -19,8 +19,8 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 - Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files. (Desktop binary boots with `-m main` via `ProcessBackend`, so OS/LVGL are already initialized; device tests paste the file content over serial via paste mode, no file-system writes needed.)
 - To run a single test, pass a file path to `./scripts/test_runner.py` (absolute path is resolved inside the script).
 - `--reset` flag hard-resets the device before each test (--ondevice only). Uses `SerialBackend.hard_reset()` which sends `machine.reset()` via REPL, then waits for `main.py` to fully boot by scanning serial output for "Starting asyncio REPL...".
-- When resetting an ESP32 for testing, you MUST wait for "Starting asyncio REPL..." on the serial output — not just a `>>>` prompt.
-- On USB/IP passthrough (KVM), `machine.reset()` detaches USB from the bus entirely. The serial fd must be closed before reset; after reset, run the USB/IP attach script and wait for the port to reappear. The port can flap — retry the open+wait_for_boot cycle up to 20 times (3s apart).
+- When resetting an ESP32 for testing, you MUST wait for "Starting asyncio REPL..." on the serial output — not just a `>>>` prompt. `wait_for_boot()` sends Ctrl-C after 2s of silence, which interrupts `main.py` mid-boot. After a hard reset, don't use `wait_for_boot()`; just read serial output directly until the sentinel confirms `main.py` finished.
+- On USB/IP passthrough (KVM), `machine.reset()` detaches USB from the bus entirely. The serial fd must be closed before reset; after reset, run the USB/IP attach script and wait for the port to reappear. The port can flap — retry the open+boot-read cycle up to 20 times (3s apart).
 - Boot time after reset varies widely (2-40s) depending on BLE init, app count, and filesystem state.
 - Testing workflow details and examples live in `tests/README.md`; check it before adding new tests.
 - To install an app on a physical device: `./scripts/install.sh com.micropythonos.appname`
@@ -238,5 +238,3 @@ When editing docs:
 # Questionable
 
 Not sure this is correct, so take with a grain of salt:
-
-- mpos_controller.py's `wait_for_boot()` sends Ctrl-C after 2s of silence, which interrupts `main.py` mid-boot. The `>>>` prompt after Ctrl-C does NOT mean singletons (AudioManager, etc.) are initialized. Always Ctrl-D soft-reset after `wait_for_boot()` then read until the "Starting asyncio REPL..." sentinel appears.
