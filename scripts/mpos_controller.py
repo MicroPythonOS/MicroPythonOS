@@ -872,7 +872,7 @@ class SerialBackend:
             self.repl = None
 
     def hard_reset(self, timeout=60):
-        """Hard-reset the device via machine.reset(), wait for USB re-enumeration and REPL prompt.
+        """Hard-reset the device via DTR toggle, wait for REPL and stabilization.
 
         On native-USB boards (ESP32-S2/S3) the port disappears during reset; on
         external-UART boards (ESP32 with CP210x/CH340) the port stays but data resets.
@@ -885,25 +885,26 @@ class SerialBackend:
             self.ser = None
             self.repl = None
 
-        # 1. Reach REPL (serial open may trigger DTR reset on ESP32; wait_for_boot handles it)
+        # 1. Toggle DTR to hard-reset the chip
         ser = _serial.Serial(
             self.port, self.baudrate, timeout=0.5, write_timeout=2,
         )
         try:
-            stream = _SerialStream(ser)
-            repl = AIOREPLClient(stream)
-            repl.wait_for_boot(timeout=15)
-            ser.write(b"import machine; machine.reset()\r\n")
-            time.sleep(0.5)
+            ser.dtr = False
+            time.sleep(0.1)
+            ser.dtr = True
+            time.sleep(0.1)
         finally:
-            ser.close()
+            try:
+                ser.close()
+            except Exception:
+                pass
 
         # 2. Wait for port to disappear (native USB) or timeout (external UART)
         deadline = time.monotonic() + timeout
-        time.sleep(0.5)
         port_gone = False
         t0 = time.monotonic()
-        while time.monotonic() - t0 < 3:
+        while time.monotonic() - t0 < 5:
             if not os.path.exists(self.port):
                 port_gone = True
                 break
@@ -916,10 +917,8 @@ class SerialBackend:
                         "Device at {} did not reappear after reset".format(self.port)
                     )
                 time.sleep(0.1)
-        else:
-            time.sleep(3)
 
-        # 3. Wait for REPL prompt, then close — mpremote handles its own connect
+        # 3. Open serial, wait for REPL, stabilize, close
         ser = _serial.Serial(
             self.port, self.baudrate, timeout=0.5, write_timeout=2,
         )
@@ -927,6 +926,7 @@ class SerialBackend:
             stream = _SerialStream(ser)
             repl = AIOREPLClient(stream)
             repl.wait_for_boot(timeout=min(timeout, 30))
+            time.sleep(10)
         finally:
             ser.close()
 
