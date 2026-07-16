@@ -918,9 +918,12 @@ class SerialBackend:
                 )
             time.sleep(0.1)
 
-        # USB/IP can be flaky right after re-attach — retry a few times
+        # ponytail: boot can take 2-40s, retry loop covers worst case
         last_err = None
-        for attempt in range(5):
+        for _ in range(20):
+            if not os.path.exists(self.port):
+                time.sleep(3)
+                continue
             try:
                 ser = _serial.Serial(
                     self.port, self.baudrate, timeout=0.5, write_timeout=2,
@@ -935,7 +938,7 @@ class SerialBackend:
                     ser.close()
             except (OSError, _serial.SerialException) as e:
                 last_err = e
-                time.sleep(2)
+                time.sleep(3)
         raise RuntimeError(
             "Device at {} not reachable after reset: {}".format(self.port, last_err)
         )
