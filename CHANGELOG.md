@@ -11,7 +11,7 @@ Builtin Apps:
 
 Frameworks:
 - LightsManager: simplify API to 'from mpos import LightsManager'
-- DownloadManager: reduce log level of missing Content-Length from warning to info
+- DownloadManager: reduce log level of missing Content-Length from warning to info to avoid polluting REPL
 
 0.15.0
 ======
