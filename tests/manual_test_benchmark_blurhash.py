@@ -32,44 +32,49 @@ class TestBlurhashBenchmark(unittest.TestCase):
         native = _benchmark(decode_blurhash_native, _TEST_HASH, 32, 32)
         viper = _benchmark(decode_blurhash_viper, _TEST_HASH, 32, 32)
 
+        pa, na, va = pure // _ITERATIONS, native // _ITERATIONS, viper // _ITERATIONS
+
         self.assertTrue(pure > 0)
         self.assertTrue(native > 0)
         self.assertTrue(viper > 0)
 
-        print("\n32x32 (%d iterations):" % _ITERATIONS)
-        print("  pure:   %d us (%.1fx)" % (pure, 1.0))
-        print("  native: %d us (%.1fx)" % (native, pure / native))
-        print("  viper:  %d us (%.1fx)" % (viper, pure / viper))
+        print("\n32x32 (avg of %d iterations):" % _ITERATIONS)
+        print("  pure:   %d us (%.1fx)" % (pa, 1.0))
+        print("  native: %d us (%.1fx)" % (na, pa / na))
+        print("  viper:  %d us (%.1fx)" % (va, pa / va))
 
     def test_benchmark_64x64(self):
         pure = _benchmark(decode_blurhash, _TEST_HASH, 64, 64)
         native = _benchmark(decode_blurhash_native, _TEST_HASH, 64, 64)
         viper = _benchmark(decode_blurhash_viper, _TEST_HASH, 64, 64)
 
-        print("\n64x64 (%d iterations):" % _ITERATIONS)
-        print("  pure:   %d us (%.1fx)" % (pure, 1.0))
-        print("  native: %d us (%.1fx)" % (native, pure / native))
-        print("  viper:  %d us (%.1fx)" % (viper, pure / viper))
+        pa, na, va = pure // _ITERATIONS, native // _ITERATIONS, viper // _ITERATIONS
+        print("\n64x64 (avg of %d iterations):" % _ITERATIONS)
+        print("  pure:   %d us (%.1fx)" % (pa, 1.0))
+        print("  native: %d us (%.1fx)" % (na, pa / na))
+        print("  viper:  %d us (%.1fx)" % (va, pa / va))
 
     def test_benchmark_badgehub_64x64(self):
         pure = _benchmark(decode_blurhash, _BADGEHUB_HASH, 64, 64)
         native = _benchmark(decode_blurhash_native, _BADGEHUB_HASH, 64, 64)
         viper = _benchmark(decode_blurhash_viper, _BADGEHUB_HASH, 64, 64)
 
-        print("\nBadgeHub 64x64 (%d iterations):" % _ITERATIONS)
-        print("  pure:   %d us (%.1fx)" % (pure, 1.0))
-        print("  native: %d us (%.1fx)" % (native, pure / native))
-        print("  viper:  %d us (%.1fx)" % (viper, pure / viper))
+        pa, na, va = pure // _ITERATIONS, native // _ITERATIONS, viper // _ITERATIONS
+        print("\nBadgeHub 64x64 (avg of %d iterations):" % _ITERATIONS)
+        print("  pure:   %d us (%.1fx)" % (pa, 1.0))
+        print("  native: %d us (%.1fx)" % (na, pa / na))
+        print("  viper:  %d us (%.1fx)" % (va, pa / va))
 
     def test_benchmark_16x16(self):
         pure = _benchmark(decode_blurhash, _TEST_HASH, 16, 16)
         native = _benchmark(decode_blurhash_native, _TEST_HASH, 16, 16)
         viper = _benchmark(decode_blurhash_viper, _TEST_HASH, 16, 16)
 
-        print("\n16x16 (%d iterations):" % _ITERATIONS)
-        print("  pure:   %d us (%.1fx)" % (pure, 1.0))
-        print("  native: %d us (%.1fx)" % (native, pure / native))
-        print("  viper:  %d us (%.1fx)" % (viper, pure / viper))
+        pa, na, va = pure // _ITERATIONS, native // _ITERATIONS, viper // _ITERATIONS
+        print("\n16x16 (avg of %d iterations):" % _ITERATIONS)
+        print("  pure:   %d us (%.1fx)" % (pa, 1.0))
+        print("  native: %d us (%.1fx)" % (na, pa / na))
+        print("  viper:  %d us (%.1fx)" % (va, pa / va))
 
 
 if __name__ == "__main__":
