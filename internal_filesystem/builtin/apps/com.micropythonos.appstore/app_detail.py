@@ -176,14 +176,17 @@ class AppDetail(Activity):
 
     def onResume(self, screen):
         self._sync_open_button()
-        if not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
-            self._icon_download_started = True
-            TaskManager.create_task(self._download_icon())
         backend_type = self.appstore.get_backend_type_from_settings()
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
         else:
             if __debug__: logger.debug("no need to fetch app details (index already complete)")
+            self._start_icon_download()
+
+    def _start_icon_download(self):
+        if not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
+            self._icon_download_started = True
+            lv.timer_create(lambda t: (t.delete(), TaskManager.create_task(self._download_icon())), 500, None)
 
     def add_action_buttons(self, buttoncont, app):
         buttoncont.clean()
@@ -213,6 +216,7 @@ class AppDetail(Activity):
         self.publisher_label.set_text(self.app.publisher)
         self.add_action_buttons(self.buttoncont, self.app)
         self._sync_open_button()
+        self._start_icon_download()
 
     def set_install_label(self, app_fullname):
         # Figure out whether to show:
