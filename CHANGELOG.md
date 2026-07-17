@@ -4,9 +4,9 @@ Future release (next version)
 0.15.1
 ======
 
-
 Builtin Apps:
-- Show blurhash of app (if available)
+- AppStore: show blurhash of app (if available) as icon in list view
+- AppStore: show 'Loading details...' instead of 'Unknown...' while loading app details
 
 Frameworks:
 - LightsManager: simplify API to 'from mpos import LightsManager'

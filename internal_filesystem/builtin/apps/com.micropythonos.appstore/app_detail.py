@@ -134,10 +134,7 @@ class AppDetail(Activity):
         name_label.set_text(self.app.name)
         name_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         self.publisher_label = lv.label(detail_cont)
-        if self.app.publisher:
-            self.publisher_label.set_text(self.app.publisher)
-        else:
-            self.publisher_label.set_text("Unknown publisher")
+        self.publisher_label.set_text(self.app.publisher or "Loading details...")
         self.publisher_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
 
         self.progress_bar = lv.bar(app_detail_screen)
@@ -154,18 +151,12 @@ class AppDetail(Activity):
         # version label:
         self.version_label = lv.label(app_detail_screen)
         self.version_label.set_width(lv.pct(100))
-        if self.app.version:
-            self.version_label.set_text(f"Latest version: {self.app.version}") # would be nice to make this bold if this is newer than the currently installed one
-        else:
-            self.version_label.set_text(f"Unknown version")
+        self.version_label.set_text(self.app.version and f"Latest version: {self.app.version}" or "Loading details...")
         self.version_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.version_label.align_to(self.install_button, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
         self.long_desc_label = lv.label(app_detail_screen)
         self.long_desc_label.align_to(self.version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
-        if self.app.long_description:
-            self.long_desc_label.set_text(self.app.long_description)
-        else:
-            self.long_desc_label.set_text(self.app.short_description)
+        self.long_desc_label.set_text(self.app.long_description or self.app.short_description or "Loading details...")
         self.long_desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.long_desc_label.set_width(lv.pct(100))
 
