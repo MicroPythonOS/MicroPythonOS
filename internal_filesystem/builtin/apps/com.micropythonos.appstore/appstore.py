@@ -58,9 +58,10 @@ class AppStore(Activity):
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self._refresh_in_progress = False
         self._data_loaded = False
-        self._blurhash_timer = None
+        self._icon_queue = []
+        self._raw_timer = None
         self._blurhash_queue = []
-        self._blurhash_idx = 0
+        self._blurhash_timer = None
         self.main_screen = lv.obj()
 
         # ---- top bar ----
@@ -118,22 +119,19 @@ class AppStore(Activity):
         if not self._data_loaded:
             self.refresh_list()
         elif self._data_loaded and hasattr(self, "apps_list") and self.apps_list:
-            self._blurhash_idx = 0
-            self._blurhash_queue = [a for a in self.apps if a.blur_hash and not a.icon_data]
+            self._stop_all_timers()
+            self._icon_queue.clear()
+            self._blurhash_queue.clear()
             for app in self.apps:
                 if app.icon_data:
                     self._set_icon_widget(app)
                 else:
-                    self._set_raw_icon(app)
-            if self._blurhash_queue:
-                self._blurhash_timer = lv.timer_create(self._process_next_blurhash, 1000, None)
+                    self._icon_queue.append(app)
+            if self._icon_queue:
+                self._raw_timer = lv.timer_create(self._process_raw_icons, 250, None)
 
     def onPause(self, screen):
-        if self._blurhash_timer:
-            self._blurhash_timer.delete()
-            self._blurhash_timer = None
-        self._blurhash_queue.clear()
-        self._blurhash_idx = 0
+        self._stop_all_timers()
         try:
             from appstore_core import AppUpdateManager
             AppUpdateManager.get_instance().clear_state_callback()
@@ -334,11 +332,9 @@ class AppStore(Activity):
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
 
-        if self._blurhash_timer:
-            self._blurhash_timer.delete()
-            self._blurhash_timer = None
+        self._stop_all_timers()
+        self._icon_queue.clear()
         self._blurhash_queue.clear()
-        self._blurhash_idx = 0
 
         if __debug__: logger.debug("hiding please wait label")
         self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
@@ -374,9 +370,7 @@ class AppStore(Activity):
             if app.icon_data:
                 self._set_icon_widget(app)
             else:
-                self._set_raw_icon(app)
-                if app.blur_hash:
-                    self._blurhash_queue.append(app)
+                self._icon_queue.append(app)
             label_cont = lv.obj(cont)
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -397,8 +391,8 @@ class AppStore(Activity):
             update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
             update_label.add_flag(lv.obj.FLAG.HIDDEN)
             self._update_labels[app.fullname] = update_label
-        if self._blurhash_queue:
-            self._blurhash_timer = lv.timer_create(self._process_next_blurhash, 1000, None)
+        if self._icon_queue:
+            self._raw_timer = lv.timer_create(self._process_raw_icons, 250, None)
         if __debug__: logger.debug("create_apps_list done")
 
     def _find_sorted_insert_index(self, app):
@@ -431,11 +425,9 @@ class AppStore(Activity):
         if app.icon_data:
             self._set_icon_widget(app)
         else:
-            self._set_raw_icon(app)
-            if app.blur_hash:
-                self._blurhash_queue.append(app)
-                if not self._blurhash_timer:
-                    self._blurhash_timer = lv.timer_create(self._process_next_blurhash, 1000, None)
+            self._icon_queue.append(app)
+            if not self._raw_timer:
+                self._raw_timer = lv.timer_create(self._process_raw_icons, 250, None)
         label_cont = lv.obj(cont)
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -458,17 +450,37 @@ class AppStore(Activity):
         self._update_labels[app.fullname] = update_label
         item.move_to_index(index)
 
-    def _process_next_blurhash(self, timer):
-        if not hasattr(self, '_blurhash_queue') or self._blurhash_idx >= len(self._blurhash_queue):
-            if self._blurhash_timer:
-                self._blurhash_timer.delete()
-                self._blurhash_timer = None
+    def _stop_all_timers(self):
+        if self._raw_timer:
+            self._raw_timer.delete()
+            self._raw_timer = None
+        if self._blurhash_timer:
+            self._blurhash_timer.delete()
+            self._blurhash_timer = None
+
+    def _process_raw_icons(self, timer):
+        if not self._icon_queue:
+            self._raw_timer.delete()
+            self._raw_timer = None
+            if self._blurhash_queue:
+                if self._blurhash_timer:
+                    self._blurhash_timer.delete()
+                self._blurhash_timer = lv.timer_create(self._process_next_blurhash, 1000, None)
             return
-        app = self._blurhash_queue[self._blurhash_idx]
-        self._blurhash_idx += 1
+        app = self._icon_queue.pop(0)
+        self._set_raw_icon(app)
+        if app.blur_hash:
+            self._blurhash_queue.append(app)
+
+    def _process_next_blurhash(self, timer):
+        if not self._blurhash_queue:
+            self._blurhash_timer.delete()
+            self._blurhash_timer = None
+            return
+        app = self._blurhash_queue.pop(0)
         if not app.blur_hash or app.icon_data:
             return
-        dsc, buf = blurhash_to_image_dsc(app.blur_hash, 32, 32)
+        dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
         if dsc is None:
             return
         app._icon_dsc = dsc
@@ -479,7 +491,7 @@ class AppStore(Activity):
             return
         if widget:
             widget.set_src(dsc)
-            widget.set_scale(2 * 256)
+            widget.set_scale(4 * 256)
 
     def _set_raw_icon(self, app):
         try:
@@ -512,7 +524,7 @@ class AppStore(Activity):
             app._icon_buf = None
             widget.set_scale(256)
         else:
-            dsc, buf = blurhash_to_image_dsc(app.blur_hash, 32, 32)
+            dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
             if dsc is None:
                 dsc, buf = generate_raw_app_icon(app.fullname, AppStore._ICON_SIZE)
                 app._icon_dsc = dsc
@@ -523,7 +535,7 @@ class AppStore(Activity):
             app._icon_dsc = dsc
             app._icon_buf = buf
             widget.set_src(dsc)
-            widget.set_scale(2 * 256)
+            widget.set_scale(4 * 256)
             return
         widget.set_src(dsc)
 
