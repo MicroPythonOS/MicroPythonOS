@@ -29,6 +29,10 @@ class AppStore(Activity):
     _TOP_BAR_BUTTON_SIZE = 34
     _UPDATE_BUTTON_HEIGHT = 40
 
+    _GENERATE_APP_ICON_BENCHMARK = 11 # ms
+    _BLURHASH_APP_ICON_BENCHMARK = 76 # ms
+    _WAIT_FACTOR_APP_ICON = 7 # 85% idle time
+
     # Hardcoded list for now:
     backends = [
         ("BadgeHub.eu", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
@@ -128,7 +132,7 @@ class AppStore(Activity):
                 else:
                     self._icon_queue.append(app)
             if self._icon_queue:
-                self._raw_timer = lv.timer_create(self._process_raw_icons, 250, None)
+                self._raw_timer = lv.timer_create(self._process_raw_icons, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
 
     def onPause(self, screen):
         self._stop_all_timers()
@@ -465,7 +469,7 @@ class AppStore(Activity):
             if self._blurhash_queue:
                 if self._blurhash_timer:
                     self._blurhash_timer.delete()
-                self._blurhash_timer = lv.timer_create(self._process_next_blurhash, 1000, None)
+                self._blurhash_timer = lv.timer_create(self._process_next_blurhash, self._BLURHASH_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
             return
         app = self._icon_queue.pop(0)
         self._set_raw_icon(app)
