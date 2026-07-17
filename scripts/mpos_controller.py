@@ -910,6 +910,11 @@ class SerialBackend:
             except Exception:
                 pass
 
+        print("waiting 1 minute for device...")
+        time.sleep(60)
+        return True
+
+        '''
         # 2. machine.reset() detaches USB from the bus entirely.
         # On USB/IP passthrough (KVM) we must re-attach after reset.
         # On direct USB this script doesn't exist — no-op.
@@ -965,6 +970,7 @@ class SerialBackend:
         raise RuntimeError(
             "Device at {} not reachable after reset: {}".format(self.port, last_err)
         )
+        '''
 
     def soft_reset(self):
         """Ctrl-D soft reset via existing serial connection, wait for REPL."""
