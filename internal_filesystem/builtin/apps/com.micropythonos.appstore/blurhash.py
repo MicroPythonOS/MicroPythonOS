@@ -1,5 +1,7 @@
 import math
 import hashlib
+import sys
+import time
 
 try:
     import micropython
@@ -364,6 +366,8 @@ def blurhash_to_image_dsc(blurhash, width, height):
         pixels = decode_blurhash_viper(blurhash, width, height)
     except Exception:
         return None, None
+    if sys.platform != "esp32":
+        time.sleep_ms(width * height // 2)  # ponytail: desktop blurhash runs too fast; 2 px/ms simulates real HW delay
     buf = pixels_to_rgb565(pixels)
     stride = width * 2
     try:

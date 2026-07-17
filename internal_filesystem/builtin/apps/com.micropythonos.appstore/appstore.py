@@ -432,8 +432,10 @@ class AppStore(Activity):
             self._set_icon_widget(app)
         else:
             self._set_raw_icon(app)
-            if app.blur_hash and self._blurhash_timer:
+            if app.blur_hash:
                 self._blurhash_queue.append(app)
+                if not self._blurhash_timer:
+                    self._blurhash_timer = lv.timer_create(self._process_next_blurhash, 1000, None)
         label_cont = lv.obj(cont)
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)

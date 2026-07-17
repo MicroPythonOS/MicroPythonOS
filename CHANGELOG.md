@@ -4,6 +4,10 @@ Future release (next version)
 0.15.1
 ======
 
+
+Builtin Apps:
+- Show blurhash of app (if available)
+
 Frameworks:
 - LightsManager: simplify API to 'from mpos import LightsManager'
 
