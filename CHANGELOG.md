@@ -5,6 +5,7 @@ Future release (next version)
 ======
 
 Builtin Apps:
+- AppStore: download detail view icon after a small 500ms delay
 - AppStore: show blurhash of app (if available) as icon in list view
 - AppStore: show 'Loading details...' instead of 'Unknown...' while loading app details
 
