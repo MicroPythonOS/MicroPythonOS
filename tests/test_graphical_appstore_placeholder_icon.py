@@ -48,7 +48,7 @@ def _inject_fake_apps(activity):
             None, "http://example.com/b.mpk", "com.test.beta", "1.0.0", "test", []),
     ]
     activity.create_apps_list()
-    _wait_ms(200)
+    _wait_ms(600)
 
 
 def _is_icon(widget):

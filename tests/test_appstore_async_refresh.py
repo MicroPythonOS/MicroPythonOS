@@ -144,6 +144,10 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
         store.main_screen = MockLabel()
+        store._raw_timer = None
+        store._blurhash_timer = None
+        store._icon_queue = []
+        store._blurhash_queue = []
         return store
 
     # ------------------------------------------------------------------
@@ -202,6 +206,7 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         import asyncio
 
         store = self._make_store()
+        store.create_apps_list = lambda: None
         # Provide a dummy JSON string that parses into one app.
         json_data = '[{"name":"Test","publisher":"T","short_description":"sd","long_description":"ld","icon_url":"http://i.png","download_url":"http://a.zip","fullname":"com.test.a","version":"1","category":"test","activities":[]}]'
 
