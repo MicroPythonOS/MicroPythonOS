@@ -1,22 +1,25 @@
 Future release (next version)
 =====
 
-- AppStore: report installs to BadgeHub API for download statistics
-- DownloadManager: add post_url() for HTTP POST requests
-
-0.15.1
-======
-
 Builtin Apps:
 - AppStore: download detail view icon after a small 500ms delay
+- AppStore: report installs to BadgeHub API for download statistics
 - AppStore: show blurhash of app (if available) as icon in list view
-- AppStore: show 'Loading details...' instead of 'Unknown...' while loading app details
+- AppStore: show 'Loading details...' instead of 'Unknown' while loading app details
 - AppStore: speed up app list by skipping pointless icon search
 
 Frameworks:
 - App: don't search for local icons if app isn't installed locally
-- LightsManager: simplify API to 'from mpos import LightsManager'
+- DownloadManager: add post_url() for HTTP POST requests
 - DownloadManager: reduce log level of missing Content-Length from warning to info to avoid polluting REPL
+
+OS:
+- aiowebsocket: add exponential reconnect backoff so unreachable relays stop exhausting the thread pool (#191)
+
+0.15.1
+======
+
+- LightsManager: simplify API to 'from mpos import LightsManager'
 
 0.15.0
 ======
