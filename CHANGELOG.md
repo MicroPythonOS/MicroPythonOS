@@ -8,8 +8,10 @@ Builtin Apps:
 - AppStore: download detail view icon after a small 500ms delay
 - AppStore: show blurhash of app (if available) as icon in list view
 - AppStore: show 'Loading details...' instead of 'Unknown...' while loading app details
+- AppStore: speed up app list by skipping pointless icon search
 
 Frameworks:
+- App: don't search for local icons if app isn't installed locally
 - LightsManager: simplify API to 'from mpos import LightsManager'
 - DownloadManager: reduce log level of missing Content-Length from warning to info to avoid polluting REPL
 
