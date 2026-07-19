@@ -3,6 +3,7 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, DownloadManager, AppManager, TaskManager
+from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +51,21 @@ class AppDetail(Activity):
             })
             self.app._icon_dsc = dsc
             self.app._icon_buf = None
+            self.icon_image.set_src(dsc)
+            self.icon_image.set_scale(256)
         else:
-            dsc, buf = self.appstore._generate_raw_app_icon(self.app.fullname)
+            dsc, buf = blurhash_to_image_dsc(self.app.blur_hash, 16, 16)
+            if dsc is None:
+                dsc, buf = generate_raw_app_icon(self.app.fullname, 64)
+                self.app._icon_dsc = dsc
+                self.app._icon_buf = buf
+                self.icon_image.set_src(dsc)
+                self.icon_image.set_scale(256)
+                return
             self.app._icon_dsc = dsc
             self.app._icon_buf = buf
-        self.icon_image.set_src(dsc)
+            self.icon_image.set_src(dsc)
+            self.icon_image.set_scale(4 * 256)
 
     async def _download_icon(self):
         if not self.app.icon_url:
@@ -123,10 +134,7 @@ class AppDetail(Activity):
         name_label.set_text(self.app.name)
         name_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         self.publisher_label = lv.label(detail_cont)
-        if self.app.publisher:
-            self.publisher_label.set_text(self.app.publisher)
-        else:
-            self.publisher_label.set_text("Unknown publisher")
+        self.publisher_label.set_text(self.app.publisher or "Loading details...")
         self.publisher_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
 
         self.progress_bar = lv.bar(app_detail_screen)
@@ -143,18 +151,12 @@ class AppDetail(Activity):
         # version label:
         self.version_label = lv.label(app_detail_screen)
         self.version_label.set_width(lv.pct(100))
-        if self.app.version:
-            self.version_label.set_text(f"Latest version: {self.app.version}") # would be nice to make this bold if this is newer than the currently installed one
-        else:
-            self.version_label.set_text(f"Unknown version")
+        self.version_label.set_text(self.app.version and f"Latest version: {self.app.version}" or "Loading details...")
         self.version_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.version_label.align_to(self.install_button, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
         self.long_desc_label = lv.label(app_detail_screen)
         self.long_desc_label.align_to(self.version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
-        if self.app.long_description:
-            self.long_desc_label.set_text(self.app.long_description)
-        else:
-            self.long_desc_label.set_text(self.app.short_description)
+        self.long_desc_label.set_text(self.app.long_description or self.app.short_description or "Loading details...")
         self.long_desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.long_desc_label.set_width(lv.pct(100))
 
@@ -174,14 +176,17 @@ class AppDetail(Activity):
 
     def onResume(self, screen):
         self._sync_open_button()
-        if not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
-            self._icon_download_started = True
-            TaskManager.create_task(self._download_icon())
         backend_type = self.appstore.get_backend_type_from_settings()
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
         else:
             if __debug__: logger.debug("no need to fetch app details (index already complete)")
+            self._start_icon_download()
+
+    def _start_icon_download(self):
+        if not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
+            self._icon_download_started = True
+            lv.timer_create(lambda t: (t.delete(), TaskManager.create_task(self._download_icon())), 500, None)
 
     def add_action_buttons(self, buttoncont, app):
         buttoncont.clean()
@@ -211,6 +216,7 @@ class AppDetail(Activity):
         self.publisher_label.set_text(self.app.publisher)
         self.add_action_buttons(self.buttoncont, self.app)
         self._sync_open_button()
+        self._start_icon_download()
 
     def set_install_label(self, app_fullname):
         # Figure out whether to show:

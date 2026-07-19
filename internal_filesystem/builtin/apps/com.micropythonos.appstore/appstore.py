@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 
@@ -7,6 +6,7 @@ import lvgl as lv
 from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
 
 from app_detail import AppDetail
+from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,10 @@ class AppStore(Activity):
     _TOP_BAR_HEIGHT = 44
     _TOP_BAR_BUTTON_SIZE = 34
     _UPDATE_BUTTON_HEIGHT = 40
+
+    _GENERATE_APP_ICON_BENCHMARK = 11 # ms
+    _BLURHASH_APP_ICON_BENCHMARK = 76 # ms
+    _WAIT_FACTOR_APP_ICON = 7 # 85% idle time
 
     # Hardcoded list for now:
     backends = [
@@ -58,6 +62,10 @@ class AppStore(Activity):
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self._refresh_in_progress = False
         self._data_loaded = False
+        self._icon_queue = []
+        self._raw_timer = None
+        self._blurhash_queue = []
+        self._blurhash_timer = None
         self.main_screen = lv.obj()
 
         # ---- top bar ----
@@ -115,10 +123,19 @@ class AppStore(Activity):
         if not self._data_loaded:
             self.refresh_list()
         elif self._data_loaded and hasattr(self, "apps_list") and self.apps_list:
+            self._stop_all_timers()
+            self._icon_queue.clear()
+            self._blurhash_queue.clear()
             for app in self.apps:
-                self._set_icon_widget(app)
+                if app.icon_data:
+                    self._set_icon_widget(app)
+                else:
+                    self._icon_queue.append(app)
+            if self._icon_queue:
+                self._raw_timer = lv.timer_create(self._process_raw_icons, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
 
     def onPause(self, screen):
+        self._stop_all_timers()
         try:
             from appstore_core import AppUpdateManager
             AppUpdateManager.get_instance().clear_state_callback()
@@ -319,6 +336,10 @@ class AppStore(Activity):
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
 
+        self._stop_all_timers()
+        self._icon_queue.clear()
+        self._blurhash_queue.clear()
+
         if __debug__: logger.debug("hiding please wait label")
         self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
 
@@ -350,7 +371,10 @@ class AppStore(Activity):
             icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
             self._add_click_handler(icon_spacer, self.show_app_detail, app)
             app.image_icon_widget = icon_spacer
-            self._set_icon_widget(app)
+            if app.icon_data:
+                self._set_icon_widget(app)
+            else:
+                self._icon_queue.append(app)
             label_cont = lv.obj(cont)
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -371,6 +395,8 @@ class AppStore(Activity):
             update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
             update_label.add_flag(lv.obj.FLAG.HIDDEN)
             self._update_labels[app.fullname] = update_label
+        if self._icon_queue:
+            self._raw_timer = lv.timer_create(self._process_raw_icons, 250, None)
         if __debug__: logger.debug("create_apps_list done")
 
     def _find_sorted_insert_index(self, app):
@@ -400,7 +426,12 @@ class AppStore(Activity):
         icon_spacer.set_size(self._ICON_SIZE, self._ICON_SIZE)
         self._add_click_handler(icon_spacer, self.show_app_detail, app)
         app.image_icon_widget = icon_spacer
-        self._set_icon_widget(app)
+        if app.icon_data:
+            self._set_icon_widget(app)
+        else:
+            self._icon_queue.append(app)
+            if not self._raw_timer:
+                self._raw_timer = lv.timer_create(self._process_raw_icons, 250, None)
         label_cont = lv.obj(cont)
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -421,8 +452,64 @@ class AppStore(Activity):
         update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
         update_label.add_flag(lv.obj.FLAG.HIDDEN)
         self._update_labels[app.fullname] = update_label
-        # Move to correct sorted position
         item.move_to_index(index)
+
+    def _stop_all_timers(self):
+        if self._raw_timer:
+            self._raw_timer.delete()
+            self._raw_timer = None
+        if self._blurhash_timer:
+            self._blurhash_timer.delete()
+            self._blurhash_timer = None
+
+    def _process_raw_icons(self, timer):
+        if not self._icon_queue:
+            self._raw_timer.delete()
+            self._raw_timer = None
+            if self._blurhash_queue:
+                if self._blurhash_timer:
+                    self._blurhash_timer.delete()
+                self._blurhash_timer = lv.timer_create(self._process_next_blurhash, self._BLURHASH_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
+            return
+        app = self._icon_queue.pop(0)
+        self._set_raw_icon(app)
+        if app.blur_hash:
+            self._blurhash_queue.append(app)
+
+    def _process_next_blurhash(self, timer):
+        if not self._blurhash_queue:
+            self._blurhash_timer.delete()
+            self._blurhash_timer = None
+            return
+        app = self._blurhash_queue.pop(0)
+        if not app.blur_hash or app.icon_data:
+            return
+        dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
+        if dsc is None:
+            return
+        app._icon_dsc = dsc
+        app._icon_buf = buf
+        try:
+            widget = app.image_icon_widget
+        except Exception:
+            return
+        if widget:
+            widget.set_src(dsc)
+            widget.set_scale(4 * 256)
+
+    def _set_raw_icon(self, app):
+        try:
+            widget = app.image_icon_widget
+        except Exception as e:
+            if __debug__: logger.debug("no icon widget for %s: %s", app.fullname, e)
+            return
+        if not widget:
+            return
+        dsc, buf = generate_raw_app_icon(app.fullname, AppStore._ICON_SIZE)
+        app._icon_dsc = dsc
+        app._icon_buf = buf
+        widget.set_src(dsc)
+        widget.set_scale(256)
 
     def _set_icon_widget(self, app):
         try:
@@ -439,65 +526,22 @@ class AppStore(Activity):
             })
             app._icon_dsc = dsc
             app._icon_buf = None
+            widget.set_scale(256)
         else:
-            dsc, buf = self._generate_raw_app_icon(app.fullname)
+            dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
+            if dsc is None:
+                dsc, buf = generate_raw_app_icon(app.fullname, AppStore._ICON_SIZE)
+                app._icon_dsc = dsc
+                app._icon_buf = buf
+                widget.set_src(dsc)
+                widget.set_scale(256)
+                return
             app._icon_dsc = dsc
             app._icon_buf = buf
+            widget.set_src(dsc)
+            widget.set_scale(4 * 256)
+            return
         widget.set_src(dsc)
-
-    @staticmethod
-    def _generate_raw_app_icon(app_name):
-        size = AppStore._ICON_SIZE
-        digest = hashlib.sha1(app_name.encode()).digest()
-        bg = AppStore._rgb565_from_bytes(digest[0], digest[1], digest[2])
-        fg = AppStore._rgb565_from_bytes(digest[3], digest[4], digest[5])
-        buf = AppStore._fill_rgb565_icon_buffer(size, digest[6:14], bg, fg)
-        stride = size * 2
-        try:
-            dsc = lv.image_dsc_t({
-                "header": {
-                    "magic": lv.IMAGE_HEADER_MAGIC,
-                    "w": size,
-                    "h": size,
-                    "stride": stride,
-                    "cf": lv.COLOR_FORMAT.RGB565,
-                },
-                "data_size": len(buf),
-                "data": buf,
-            })
-        except Exception:
-            dsc = lv.image_dsc_t()
-            dsc.data = buf
-            dsc.header.magic = lv.IMAGE_HEADER_MAGIC
-            dsc.header.w = size
-            dsc.header.h = size
-            dsc.header.stride = stride
-            dsc.header.cf = lv.COLOR_FORMAT.RGB565
-            dsc.data_size = len(buf)
-        return dsc, buf
-
-    @staticmethod
-    @micropython.viper
-    def _fill_rgb565_icon_buffer(size: int, bits, bg: int, fg: int):
-        buf = bytearray(size * size * 2)
-        cell = size // 8
-        for row in range(8):
-            b = int(bits[row])
-            for col in range(8):
-                color = fg if (b & (1 << col)) else bg
-                low = color & 0xFF
-                high = color >> 8
-                for y in range(row * cell, (row + 1) * cell):
-                    base = y * size * 2
-                    for x in range(col * cell, (col + 1) * cell):
-                        i = base + x * 2
-                        buf[i] = low
-                        buf[i + 1] = high
-        return buf
-
-    @staticmethod
-    def _rgb565_from_bytes(r, g, b):
-        return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
     def show_app_detail(self, app):
         intent = Intent(activity_class=AppDetail)
@@ -530,12 +574,13 @@ class AppStore(Activity):
             icon_url = bhapp.get("icon_map", {}).get("64x64", {}).get("url")
         except Exception:
             if __debug__: logger.debug("could not find icon_map 64x64 url")
+        blur_hash = bhapp.get("blur_hash")
         category = None
         try:
             category = bhapp.get("categories", [None])[0]
         except Exception:
             if __debug__: logger.debug("could not parse category")
-        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None)
+        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash)
 
     @staticmethod
     def get_backend_pref_string(index):

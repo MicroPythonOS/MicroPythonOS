@@ -48,7 +48,7 @@ def _inject_fake_apps(activity):
             None, "http://example.com/b.mpk", "com.test.beta", "1.0.0", "test", []),
     ]
     activity.create_apps_list()
-    _wait_ms(200)
+    _wait_ms(600)
 
 
 def _is_icon(widget):
@@ -96,9 +96,18 @@ class TestAppStorePlaceholderIcon(unittest.TestCase):
 
     # ------------------------------------------------------------------
 
+    def _wait_for_icons(self, min_count=2, timeout_ms=5000):
+        deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            icons = _find_icons(get_screen_widget_tree(lv.screen_active()))
+            if len(icons) >= min_count:
+                return icons
+            wait_for_render(2)
+        return _find_icons(get_screen_widget_tree(lv.screen_active()))
+
     def test_placeholder_icon_is_not_white(self):
         """Generated placeholder icons must contain at least one non-white pixel."""
-        icons = _find_icons(get_screen_widget_tree(lv.screen_active()))
+        icons = self._wait_for_icons()
         self.assertTrue(len(icons) >= 2, "Expected at least two app icons on screen")
 
         buf = capture_screenshot(width=320, height=240)
@@ -112,7 +121,7 @@ class TestAppStorePlaceholderIcon(unittest.TestCase):
 
     def test_placeholder_icons_differ_between_apps(self):
         """Different app names must produce visibly different placeholders."""
-        icons = _find_icons(get_screen_widget_tree(lv.screen_active()))
+        icons = self._wait_for_icons()
         self.assertTrue(len(icons) >= 2, "Expected at least two app icons on screen")
 
         buf = capture_screenshot(width=320, height=240)

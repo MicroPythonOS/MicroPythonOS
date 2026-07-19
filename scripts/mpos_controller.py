@@ -871,6 +871,116 @@ class SerialBackend:
             self.ser = None
             self.repl = None
 
+    def hard_reset(self, timeout=60):
+        """Hard-reset the device and wait for full boot (main.py completion).
+
+        Flow:
+        1. Connect via serial, reach REPL, send machine.reset()
+        2. machine.reset() causes USB disconnect — close serial immediately
+           (keeping the fd open over USB/IP passthrough corrupts it)
+        3. Re-attach USB/IP if running in a KVM (no-op for direct USB)
+        4. Poll for the serial port to reappear
+        5. Reconnect and read serial output until "Starting asyncio REPL..."
+           appears, confirming main.py ran to completion (BLE, LVGL,
+           AudioManager singleton, etc. all initialized).
+           Do NOT use wait_for_boot() here — it sends Ctrl-C after 2s of
+           silence, which interrupts main.py mid-boot.
+        6. The serial port can flap on USB/IP — retry up to 20 times.
+        """
+        if self.ser:
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+            self.ser = None
+            self.repl = None
+
+        # 1. Reach REPL and send machine.reset() (same as mpremote reset command)
+        ser = _serial.Serial(
+            self.port, self.baudrate, timeout=0.5, write_timeout=2,
+        )
+        try:
+            stream = _SerialStream(ser)
+            repl = AIOREPLClient(stream)
+            repl.wait_for_boot(timeout=15)
+            ser.write(b"import machine; machine.reset()\r\n")
+        finally:
+            try:
+                ser.close()
+            except Exception:
+                pass
+
+        print("waiting 1 minute for device...")
+        time.sleep(60)
+        return True
+
+        '''
+        # 2. machine.reset() detaches USB from the bus entirely.
+        # On USB/IP passthrough (KVM) we must re-attach after reset.
+        # On direct USB this script doesn't exist — no-op.
+        attach_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "..", "..", "kvm_usb", "vm", "esp32-usbip-attach.sh",
+        )
+        if os.path.exists(attach_script):
+            subprocess.run(["bash", attach_script], capture_output=True, timeout=10)
+            time.sleep(1)
+
+        # 3. Wait for the serial port to reappear after USB re-enumeration
+        deadline = time.monotonic() + timeout
+        while not os.path.exists(self.port):
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    "Device at {} did not reappear after reset".format(self.port)
+                )
+            time.sleep(0.1)
+
+        # 4. Reconnect and wait for main.py to finish booting.
+        # USB/IP ports can flap — retry up to 20 times (3s apart = ~60s window).
+        # ESP32 boot takes 2-40s depending on apps and BLE init.
+        # Don't use wait_for_boot() here — it sends Ctrl-C after 2s which
+        # interrupts main.py mid-boot. Instead, read serial output directly
+        # until the "Starting asyncio REPL..." sentinel confirms full boot.
+        last_err = None
+        for _ in range(20):
+            if not os.path.exists(self.port):
+                time.sleep(3)
+                continue
+            try:
+                ser = _serial.Serial(
+                    self.port, self.baudrate, timeout=0.5, write_timeout=2,
+                )
+                try:
+                    t0 = time.monotonic()
+                    data = b""
+                    while time.monotonic() - t0 < min(timeout, 60):
+                        chunk = ser.read(4096)
+                        if chunk:
+                            data += chunk
+                            if b"Starting asyncio REPL..." in data:
+                                return True
+                        time.sleep(0.1)
+                    time.sleep(10) # seems needed to make tests/test_adc_recording.py work?
+                    return True
+                finally:
+                    ser.close()
+            except (OSError, _serial.SerialException) as e:
+                last_err = e
+                time.sleep(3)
+        raise RuntimeError(
+            "Device at {} not reachable after reset: {}".format(self.port, last_err)
+        )
+        '''
+
+    def soft_reset(self):
+        """Ctrl-D soft reset via existing serial connection, wait for REPL."""
+        if not self.ser:
+            raise RuntimeError("Not connected — call start() first")
+        self.ser.write(b"\x04")
+        time.sleep(0.5)
+        self.repl.wait_for_boot(timeout=15)
+        return True
+
     def __del__(self):
         self.stop()
 
@@ -1135,12 +1245,28 @@ for s in t:
         return self._width, self._height
 
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
-        import subprocess
+        import subprocess, re
         code = _build_test_code(test_path, tests_dir)
         mpremote = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "..",
             "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
         )
+        host_test_dir = os.path.dirname(os.path.abspath(test_path))
+        mpk_names = set(re.findall(r"\.\./tests/(com\.micropythonos\.ziptest_[^\"]+\.mpk)", code))
+        if mpk_names:
+            subprocess.run(
+                ["python3", mpremote, "connect", self.port, "exec",
+                 "import os; os.mkdir('tests')"],
+                capture_output=True, timeout=15,
+            )
+            for name in sorted(mpk_names):
+                host_mpk = os.path.join(host_test_dir, name)
+                subprocess.run(
+                    ["python3", mpremote, "connect", self.port, "cp",
+                     host_mpk, ":tests/{}".format(name)],
+                    capture_output=True, timeout=60,
+                )
+            code = code.replace("../tests/", "tests/")
         result = subprocess.run(
             ["python3", mpremote, "connect", self.port, "exec", code],
             capture_output=True, timeout=timeout + 60,

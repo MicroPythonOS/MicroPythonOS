@@ -265,7 +265,7 @@ class DownloadManager:
                             except (AttributeError, TypeError, ValueError, IndexError) as e:
                                 logger.error("Could not parse Content-Range/Content-Length: %s", e)
                             if total_size is None:
-                                logger.warning("Unable to determine total_size, assuming %s bytes", _DEFAULT_TOTAL_SIZE)
+                                logger.info("Unable to determine total_size, assuming %s bytes", _DEFAULT_TOTAL_SIZE)
                                 total_size = _DEFAULT_TOTAL_SIZE
 
                         # Setup output

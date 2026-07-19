@@ -20,6 +20,7 @@ class App:
         installed_path=None,
         icon_path="builtin/default_icon_64x64.png",
         icon_data=None,
+        blur_hash=None,
     ):
         self.name = name
         self.publisher = publisher
@@ -33,8 +34,11 @@ class App:
         self.activities = activities or []
         self.services = services or []
         self.installed_path = installed_path
+        self.blur_hash = blur_hash
+        self.icon_data = icon_data
+        self.icon_path = icon_path
         self.main_launcher_activity = self._find_main_launcher_activity()
-        if self.fullname != "Unknown":
+        if self.fullname != "Unknown" and self.installed_path:
             self._load_icon_data()
 
     def __str__(self):

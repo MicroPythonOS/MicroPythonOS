@@ -18,6 +18,10 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 - Running all unit tests takes a very long time (20 to 35 minutes) so better to run a broad selection of what might be impacted by the change. The build server will run all of them upon git push anyway.
 - Graphical tests are detected by filename containing `graphical` and run with LVGL boot/main injected; non-graphical tests run without boot files. (Desktop binary boots with `-m main` via `ProcessBackend`, so OS/LVGL are already initialized; device tests paste the file content over serial via paste mode, no file-system writes needed.)
 - To run a single test, pass a file path to `./scripts/test_runner.py` (absolute path is resolved inside the script).
+- `--reset` flag hard-resets the device before each test (--ondevice only). Uses `SerialBackend.hard_reset()` which sends `machine.reset()` via REPL, then waits for `main.py` to fully boot by scanning serial output for "Starting asyncio REPL...".
+- When resetting an ESP32 for testing, you MUST wait for "Starting asyncio REPL..." on the serial output — not just a `>>>` prompt. `wait_for_boot()` sends Ctrl-C after 2s of silence, which interrupts `main.py` mid-boot. After a hard reset, don't use `wait_for_boot()`; just read serial output directly until the sentinel confirms `main.py` finished.
+- On USB/IP passthrough (KVM), `machine.reset()` detaches USB from the bus entirely. The serial fd must be closed before reset; after reset, run the USB/IP attach script and wait for the port to reappear. The port can flap — retry the open+boot-read cycle up to 20 times (3s apart).
+- Boot time after reset varies widely (2-40s) depending on BLE init, app count, and filesystem state.
 - Testing workflow details and examples live in `tests/README.md`; check it before adding new tests.
 - To install an app on a physical device: `./scripts/install.sh com.micropythonos.appname`
 - After installing an app, call `AppManager.refresh_apps()` to reload the app registry before `start_app()` can find it.
@@ -122,6 +126,16 @@ MicroPython compatibility:
 - MicroPython's `_thread` module is cooperative: a tight loop in a secondary thread can prevent the main thread (and therefore LVGL's `lv_timer_handler`) from running. Long-running secondary-thread loops should yield occasionally, e.g. `time.sleep_ms(1)`. Do not use `time.sleep_us()` for this — it busy-waits and does not yield.
 - MicroPython does NOT support `bytearray * int` (e.g. `b = bytearray(4); b * 3` raises `TypeError: unsupported types for __mul__`). To repeat a `bytearray`, create a new one and extend it in a loop: `out = bytearray(); [out.extend(buf) for _ in range(n)]`. (`bytes * int` works in CPython but is also not guaranteed on MicroPython; prefer an explicit loop.)
 
+MicroPython @native / @viper tips:
+- `@micropython.viper` is a compile-time transform, not a runtime attribute. `hasattr(micropython, "viper")` returns `False` even though the decorator works. Check availability with `hasattr(micropython, "native")` as proxy, or `try: import micropython` then decorate unconditionally.
+- When applying decorators programmatically (e.g. `micropython.native(func)`), guard with `if hasattr(micropython, "native"):` — desktop builds may lack the `native` attribute at runtime while ESP32 has it.
+- `mpy-cross` needs `-march=x64` when compiling native/viper code for x86-64 desktop targets. Syntax tests (`./tests/syntax.sh`) use `mpy-cross` without this flag — native/viper files may fail syntax if the arch doesn't match. Either exclude them from syntax checks or add the flag.
+- Viper bytearray subscript (`ba[i]`) returns `object` type, not `int`. Always wrap in explicit `int()` cast before arithmetic: `v = int(buf[idx])`.
+- Viper int16 sign extension from unsigned byte pairs: `v = int(ba[idx]) | (int(ba[idx+1]) << 8); if v & 0x8000: v -= 65536` (no ternary, no `if/else` expression in viper).
+- Viper fixed-point DC component: compute once, add once. The DCT inverse formula already includes DC in the sum; don't add it again afterward.
+- Non-graphical unit tests don't initialize LVGL. Files importing `lvgl` must do so lazily (inside functions, not at module level) to avoid `ImportError` in non-graphical test runners.
+- Test files under `tests/` run with CWD = `internal_filesystem/`, not repo root. `sys.path.insert(0, ".")` and imports should assume `internal_filesystem/` is the root.
+
 MPOS Controller (`scripts/mpos_controller.py`):
 - `MPOSController` drives MicroPythonOS from CPython via PTY/aioREPL or serial/UART.
 - **`MPOSController()` does NOT auto-start a subprocess.** Call `mpos.start()` to launch `run_desktop.sh`, then wait at least `~8s` for boot before calling `startapp()` or any other method. Without `.start()` the internal `repl` is `None` and you get `AttributeError: 'NoneType' object has no attribute 'exec'`.
@@ -219,3 +233,8 @@ When editing docs:
   - `compiling.md` is included by `linux.md` and `macos.md`.
   - `running-on-desktop.md` is included by `linux.md` and `macos.md`.
 - This is why `mkdocs build` warns "The following pages exist ... but are not included in the nav" for those files. Do not add them to `nav` unless explicitly requested.
+
+
+# Questionable
+
+Not sure this is correct, so take with a grain of salt:

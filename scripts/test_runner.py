@@ -61,8 +61,29 @@ def _cleanup_config():
     except OSError:
         pass
 
+'''
+Unused because on serial, no explicit reset is performed.  mpremote's ``exec`` command
+already handles its own reset cycle (DTR on serial-open + Ctrl-D
+soft-reset).  An extra reset here would triple the boot count per test
+and cause race conditions where Ctrl-C hits the OS mid-boot.
 
-def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
+def _serial_reset(port):
+    import serial
+    import time
+    time.sleep(2)
+    for attempt in range(5):
+        try:
+            ser = serial.Serial(port, 115200, timeout=0.5, write_timeout=0.5)
+            ser.dtr = False
+            time.sleep(0.1)
+            ser.close()
+            break
+        except Exception:
+            time.sleep(3)
+    time.sleep(4)
+'''
+
+def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False):
     """Run a single test file. Returns (passed, output)."""
     backend_kwargs = {}
     if backend == "serial":
@@ -78,6 +99,9 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
         be = ProcessBackend(**backend_kwargs)
 
     try:
+        if reset and backend == "serial":
+            print("Hard-resetting device...")
+            be.hard_reset()
         passed, out = be.run_test_file(
             test_path, tests_dir=tests_dir, timeout=timeout,
         )
@@ -91,12 +115,12 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path):
     return passed, out
 
 
-def _run_with_retry(test_path, backend, tests_dir, timeout, log_path):
+def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False):
     for attempt in range(1, MAX_RETRIES + 1):
         if attempt > 1:
             print("Retry attempt {} for {}".format(attempt, test_path))
 
-        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path)
+        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset)
         out_str = out.decode("utf-8", errors="replace")
         sys.stdout.write(out_str)
 
@@ -108,24 +132,31 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path):
     return False
 
 
-def _batch_run(backend, tests_dir, timeout):
-    files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+def _batch_run(backend, tests_dir, timeout, reset=False):
+    all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+    # Skip test files prefixed with notondevice_ — these are known to fail
+    # on physical hardware (e.g. need desktop-only features or specific HW).
+    files = [f for f in all_files if not os.path.basename(f).startswith("notondevice_")]
     if not files:
         print("No test files found in {}".format(TESTS_DIR))
         return True
 
-    failed = 0
+    failed = []
     for f in files:
         print("=== {} ===".format(os.path.basename(f)))
         log_path = os.path.join(
             tempfile.gettempdir(),
             f.replace("/", "_").lstrip("_") + ".log",
         )
-        ok = _run_with_retry(f, backend, tests_dir, timeout, log_path)
+        ok = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset)
         if not ok:
-            failed += 1
+            failed.append(f)
             print("WARNING: {} failed!".format(f))
-            return False
+    if failed:
+        print("FAILED: {}/{} tests".format(len(failed), len(files)))
+        for f in failed:
+            print("  {}".format(f))
+        return False
     print("GOOD: all {} tests passed".format(len(files)))
     return True
 
@@ -154,7 +185,14 @@ def main():
         "--timeout", type=int, default=300,
         help="Test execution timeout in seconds",
     )
+    parser.add_argument(
+        "--reset", action="store_true",
+        help="Hard-reset the device before each test (--ondevice only)",
+    )
     args = parser.parse_args()
+
+    if args.reset and not args.ondevice:
+        print("WARNING: --reset has no effect without --ondevice, ignoring")
 
     if args.port:
         os.environ["MPOS_TEST_PORT"] = args.port
@@ -163,6 +201,7 @@ def main():
 
     backend = "serial" if args.ondevice else "process"
     tests_dir = args.tests_dir or TESTS_DIR
+    do_reset = args.reset and args.ondevice
 
     _cleanup_config()
 
@@ -175,13 +214,13 @@ def main():
             tempfile.gettempdir(),
             test_path.replace("/", "_").lstrip("_") + ".log",
         )
-        ok = _run_with_retry(test_path, backend, tests_dir, args.timeout, log_path)
+        ok = _run_with_retry(test_path, backend, tests_dir, args.timeout, log_path, do_reset)
     else:
         if not args.ondevice:
             print("Running all tests on desktop...")
         else:
             print("Running all tests on device...")
-        ok = _batch_run(backend, tests_dir, args.timeout)
+        ok = _batch_run(backend, tests_dir, args.timeout, do_reset)
 
     sys.exit(0 if ok else 1)
 
