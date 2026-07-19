@@ -765,6 +765,28 @@ class TestBadgehubReportInstall(unittest.TestCase):
         self.assertEqual(expected_url,
                          "https://badgehub.eu/api/v3/projects/com.test.app/rev42/report/install?mac=52:54:00:5e:e8:ab&id=54df76309001b5b859eecf1b3832aba97b3a4587")
 
+    def test_get_device_mac_and_id_real_sha1(self):
+        import appstore_core
+        import sys
+
+        class FakeMachine:
+            @staticmethod
+            def unique_id():
+                return bytes([0x52, 0x54, 0x00, 0x5E, 0xE8, 0xAB])
+
+        orig_machine = sys.modules.get('machine')
+        sys.modules['machine'] = FakeMachine()
+        try:
+            mac, sha1_id = appstore_core._get_device_mac_and_id()
+        finally:
+            if orig_machine is not None:
+                sys.modules['machine'] = orig_machine
+            else:
+                del sys.modules['machine']
+
+        self.assertEqual(mac, "52:54:00:5e:e8:ab")
+        self.assertEqual(sha1_id, "54df76309001b5b859eecf1b3832aba97b3a4587")
+
     def test_download_and_install_reports_on_success(self):
         import asyncio
         import mpos

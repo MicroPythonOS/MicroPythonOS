@@ -127,15 +127,40 @@ async def fetch_badgehub_project_details(details_url):
     return result
 
 
+def _sha1_hex(data):
+    from ubinascii import hexlify
+    return hexlify(hashlib.sha1(data).digest()).decode()
+
+
 def _get_device_mac_and_id():
     try:
         import machine
         unique_id = machine.unique_id()
         mac = ':'.join('%02x' % b for b in unique_id)
-        sha1_id = hashlib.sha1(mac.encode()).hexdigest()
-        return mac, sha1_id
+        return mac, _sha1_hex(mac.encode())
     except Exception:
-        return None, None
+        pass
+    # ponytail: Linux fallback via /sys/class/net/; hostname fallback covers the rest
+    try:
+        import os
+        for iface in os.listdir('/sys/class/net'):
+            if iface == 'lo':
+                continue
+            with open('/sys/class/net/%s/address' % iface) as f:
+                mac = f.read().strip().lower()
+            if mac and mac != '00:00:00:00:00:00':
+                return mac, _sha1_hex(mac.encode())
+    except Exception as e:
+        if __debug__: logger.debug("/sys/class/net/ fallback failed: %s", e)
+    # ponytail: hostname as pseudo-id, stable and works everywhere
+    try:
+        import os
+        hostname = os.getenv('HOSTNAME', '') or os.getenv('HOST', '')
+        if hostname:
+            return hostname, _sha1_hex(hostname.encode())
+    except Exception as e:
+        if __debug__: logger.debug("hostname fallback failed: %s", e)
+    return None, None
 
 
 async def report_badgehub_install(fullname, revision):

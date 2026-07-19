@@ -8,6 +8,7 @@ This repo contains MicroPythonOS, a graphical user interface and operating syste
 The main code is in the internal_filesystem/ folder, which is a one-to-one filesystem layout.
 It's built on top of the lvgl_micropython/ submodule project, with itself builds on submodules like lvgl_micropython/lib/lvgl and lvgl_micropython/lib/micropython
 MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mpos/
+- **Desktop builds run MicroPython, NOT CPython.** The Unix/macOS build (`run_desktop.sh`, `make build-mpos-unix`) produces a `lvgl_micropy_unix` binary that runs MicroPython (the unix port). `sys.implementation.name == 'micropython'`, stdlib modules like `uuid` may be absent or minimal, and `machine` may lack hardware functions like `unique_id()`. Do not assume CPython stdlib availability.
 
 - Build is driven by `./scripts/build_mpos.sh <target>`; it mutates tracked files (patches `lvgl_micropython/lib/micropython/ports/esp32/main/idf_component.yml`, appends include to `micropython-camera-API/src/manifest.py`). Re-run builds expecting these edits to persist unless reverted.
 - A root `Makefile` now provides the preferred entry points for common tasks. Prefer these targets over direct script calls when an equivalent target exists: `make build-mpos-unix`, `make syntax-tests`, `make unittest-tests`, `make tests`, `make lint`, `make lint-fix` (use `make help` to list all targets).
@@ -117,6 +118,8 @@ MicroPythonOS tips:
 
 MicroPython compatibility:
 - Soft reset is broken on lvgl_micropython and therefore also on MicroPythonOS. Use `machine.reset()` to do a hard reset.
+- `hashlib.sha1(...).hexdigest()` does NOT exist in MicroPython's hashlib. Use `ubinascii.hexlify(hashlib.sha1(data).digest()).decode()` instead.
+- `os.uname()` does NOT exist on all MicroPython builds (absent on the desktop Unix port). Use `os.getenv('HOSTNAME', '')` or `socket.gethostname()` as portable alternatives.
 
 MicroPython compatibility:
 - Some builds ship a minimal `random` module without `random.Random` or `random.shuffle`. For shuffling, implement Fisher-Yates manually with `random.randint`.
