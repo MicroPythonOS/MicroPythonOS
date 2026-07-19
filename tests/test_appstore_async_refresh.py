@@ -699,3 +699,164 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
             app_obj.download_url,
         )
         self.assertEqual(app_obj.download_url_size, 309363)
+
+
+class TestBadgehubReportInstall(unittest.TestCase):
+    """Verify that installing an app from BadgeHub reports the install."""
+
+    def setUp(self):
+        import asyncio
+        asyncio.new_event_loop()
+
+        class MockBtn:
+            def add_state(self, s): pass
+            def remove_state(self, s): pass
+        class MockLbl:
+            def set_text(self, t): pass
+        class MockBar:
+            def add_flag(self, f): pass
+            def remove_flag(self, f): pass
+            def set_value(self, v, w): pass
+        self.MockBtn = MockBtn
+        self.MockLbl = MockLbl
+        self.MockBar = MockBar
+
+    def test_fetch_badgehub_details_includes_revision(self):
+        import asyncio
+        import mpos.net.download_manager as dm
+        from appstore_core import fetch_badgehub_project_details
+
+        fixture = (
+            '{"slug":"com.test.app",'
+            '"version":{'
+            '"revision":42,'
+            '"files":[{"name":"app.mpk","ext":".mpk","full_path":"app.mpk",'
+            '"url":"https://badgehub.eu/rev/files/app.mpk","size_of_content":1000}],'
+            '"app_metadata":{"version":"1.0","author":"Test","long_description":"desc"}}}'
+        )
+
+        async def fake_download(url, **kwargs):
+            return fixture
+
+        orig = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(fake_download)
+        try:
+            loop = asyncio.get_event_loop()
+            result = loop.run_until_complete(fetch_badgehub_project_details("https://example.com/projects/com.test.app"))
+        finally:
+            dm.DownloadManager.download_url = orig
+
+        self.assertEqual(result["revision"], 42)
+        self.assertEqual(result["version"], "1.0")
+
+    def test_report_badgehub_install_constructs_correct_url(self):
+        import appstore_core
+
+        orig_get = appstore_core._get_device_mac_and_id
+        appstore_core._get_device_mac_and_id = lambda: ("52:54:00:5e:e8:ab", "54df76309001b5b859eecf1b3832aba97b3a4587")
+        try:
+            mac, sha1_id = appstore_core._get_device_mac_and_id()
+        finally:
+            appstore_core._get_device_mac_and_id = orig_get
+
+        self.assertEqual(mac, "52:54:00:5e:e8:ab")
+        self.assertEqual(sha1_id, "54df76309001b5b859eecf1b3832aba97b3a4587")
+        expected_url = "https://badgehub.eu/api/v3/projects/com.test.app/rev42/report/install?mac=%s&id=%s" % (mac, sha1_id)
+        self.assertEqual(expected_url,
+                         "https://badgehub.eu/api/v3/projects/com.test.app/rev42/report/install?mac=52:54:00:5e:e8:ab&id=54df76309001b5b859eecf1b3832aba97b3a4587")
+
+    def test_download_and_install_reports_on_success(self):
+        import asyncio
+        import mpos
+        from app_detail import AppDetail
+
+        report_calls = []
+
+        async def fake_report(fullname, revision):
+            report_calls.append((fullname, revision))
+
+        async def fake_download_and_install(url, fullname, **kwargs):
+            pass
+
+        orig_report = __import__("appstore_core").report_badgehub_install
+        orig_dl = mpos.AppManager.download_and_install_package
+        orig_create = mpos.TaskManager.create_task
+        mpos.AppManager.download_and_install_package = fake_download_and_install
+
+        tasks = []
+        mpos.TaskManager.create_task = lambda c: tasks.append(c) or asyncio.get_event_loop().run_until_complete(c)
+
+        try:
+            detail = AppDetail()
+            detail.app = type("App", (), {
+                "fullname": "com.test.app",
+                "download_url": "https://badgehub.eu/file.mpk",
+                "revision": 42,
+            })()
+            detail.appstore = type("AppStore", (), {
+                "get_backend_type_from_settings": lambda self: "badgehub",
+                "_BACKEND_API_BADGEHUB": "badgehub",
+            })()
+
+            detail.install_button = self.MockBtn()
+            detail.install_label = self.MockLbl()
+            detail.progress_bar = self.MockBar()
+
+            # inject our fake report function
+            import appstore_core
+            appstore_core.report_badgehub_install = fake_report
+
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(detail.download_and_install(detail.app, "apps/com.test.app"))
+        finally:
+            mpos.AppManager.download_and_install_package = orig_dl
+            mpos.TaskManager.create_task = orig_create
+            appstore_core.report_badgehub_install = orig_report
+
+        self.assertEqual(len(report_calls), 1)
+        self.assertEqual(report_calls[0], ("com.test.app", 42))
+
+    def test_download_and_install_skips_report_when_no_revision(self):
+        import asyncio
+        import mpos
+        from app_detail import AppDetail
+
+        report_calls = []
+
+        async def fake_report(fullname, revision):
+            report_calls.append((fullname, revision))
+
+        async def fake_download_and_install(url, fullname, **kwargs):
+            pass
+
+        orig_dl = mpos.AppManager.download_and_install_package
+        orig_create = mpos.TaskManager.create_task
+        mpos.AppManager.download_and_install_package = fake_download_and_install
+        mpos.TaskManager.create_task = lambda c: asyncio.get_event_loop().run_until_complete(c)
+
+        try:
+            import appstore_core
+            orig_report = appstore_core.report_badgehub_install
+            appstore_core.report_badgehub_install = fake_report
+
+            detail = AppDetail()
+            detail.app = type("App", (), {
+                "fullname": "com.test.app",
+                "download_url": "https://badgehub.eu/file.mpk",
+            })()
+            detail.appstore = type("AppStore", (), {
+                "get_backend_type_from_settings": lambda self: "badgehub",
+                "_BACKEND_API_BADGEHUB": "badgehub",
+            })()
+            detail.install_button = self.MockBtn()
+            detail.install_label = self.MockLbl()
+            detail.progress_bar = self.MockBar()
+
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(detail.download_and_install(detail.app, "apps/com.test.app"))
+        finally:
+            mpos.AppManager.download_and_install_package = orig_dl
+            mpos.TaskManager.create_task = orig_create
+            appstore_core.report_badgehub_install = orig_report
+
+        self.assertEqual(len(report_calls), 0)

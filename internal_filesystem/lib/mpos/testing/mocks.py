@@ -828,6 +828,28 @@ class MockDownloadManager:
     def set_fail_after_bytes(self, bytes_count):
         """Configure network failure after specified bytes."""
         self.fail_after_bytes = bytes_count
+
+    async def post_url(self, url, data=None, headers=None, redact_url=False):
+        """Mock async POST to a URL."""
+        from mpos.net.download_manager import DownloadManager
+
+        headers = DownloadManager._merge_headers(headers)
+        self.url_received = url
+        self.headers_received = headers
+        self.post_data_received = data
+        self.redact_url_received = redact_url
+
+        self.call_history.append({
+            'method': 'POST',
+            'url': url,
+            'data': data,
+            'headers': headers,
+            'redact_url': redact_url,
+        })
+
+        if self.should_fail:
+            return None
+        return self.download_data
     
     def clear_history(self):
         """Clear the call history."""

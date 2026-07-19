@@ -931,3 +931,40 @@ class TestDownloadResumeOnConnectionDrop(unittest.TestCase):
         with open(outfile, "rb") as f:
             got = f.read()
         self.assertEqual(got, payload)
+
+
+class TestPostUrl(unittest.TestCase):
+    """Test DownloadManager.post_url with MockDownloadManager."""
+
+    def setUp(self):
+        import asyncio
+        asyncio.new_event_loop()
+
+    def test_post_url_sends_data_and_returns_response(self):
+        import asyncio
+        from mpos.testing.mocks import MockDownloadManager
+
+        async def run_test():
+            mock = MockDownloadManager()
+            mock.set_download_data(b'{"ok":true}')
+            body = await mock.post_url("https://example.com/api/report", data=b"hello")
+            self.assertEqual(body, b'{"ok":true}')
+            self.assertEqual(mock.url_received, "https://example.com/api/report")
+            self.assertEqual(mock.post_data_received, b"hello")
+            post_calls = [c for c in mock.call_history if c.get("method") == "POST"]
+            self.assertEqual(len(post_calls), 1)
+            self.assertEqual(post_calls[0]["url"], "https://example.com/api/report")
+
+        asyncio.run(run_test())
+
+    def test_post_url_handles_failure(self):
+        import asyncio
+        from mpos.testing.mocks import MockDownloadManager
+
+        async def run_test():
+            mock = MockDownloadManager()
+            mock.set_should_fail(True)
+            body = await mock.post_url("https://example.com/api/report")
+            self.assertIsNone(body)
+
+        asyncio.run(run_test())

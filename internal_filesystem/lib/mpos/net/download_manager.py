@@ -404,6 +404,62 @@ class DownloadManager:
             return 0
 
 
+    @classmethod
+    async def _post_url_async(cls, url, data=None, headers=None, redact_url=False):
+        """POST to a URL and return the response body as bytes."""
+        log_url = cls._safe_url(url) if redact_url else url
+
+        import aiohttp
+        session = aiohttp.ClientSession()
+        sslctx = None
+        if url.lower().startswith("https"):
+            import ssl
+            sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            sslctx.verify_mode = ssl.CERT_OPTIONAL
+
+        headers = cls._merge_headers(headers)
+
+        try:
+            async with session.post(url, data=data, headers=headers, ssl=sslctx, timeout=_CHUNK_TIMEOUT_SECONDS) as response:
+                if response.status < 200 or response.status >= 400:
+                    raise RuntimeError("HTTP %s" % response.status)
+                body = await response.content.read()
+                return body
+        except Exception as e:
+            err_str = str(e)
+            if redact_url and url in err_str:
+                err_str = err_str.replace(url, log_url)
+            logger.error("POST failed: %s", err_str)
+            raise
+
+    @classmethod
+    def post_url(cls, url, data=None, headers=None, redact_url=False):
+        """POST data to a URL and return the response body as bytes.
+
+        Args:
+            url (str): URL to POST to (required)
+            data (bytes, optional): Request body
+            headers (dict, optional): HTTP headers
+            redact_url (bool, optional): Redact sensitive URL parts from logs
+
+        Returns:
+            bytes: Response body
+            coroutine: If called from async context, returns awaitable
+
+        Raises:
+            RuntimeError: On HTTP errors
+        """
+        try:
+            import asyncio
+            try:
+                asyncio.current_task()
+                return cls._post_url_async(url, data, headers, redact_url)
+            except RuntimeError:
+                return asyncio.run(cls._post_url_async(url, data, headers, redact_url))
+        except ImportError:
+            raise ImportError("asyncio module not available")
+
+
 # Module-level exports for convenience
 is_network_error = DownloadManager.is_network_error
 get_resume_position = DownloadManager.get_resume_position

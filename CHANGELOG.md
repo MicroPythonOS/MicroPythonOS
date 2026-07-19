@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+- AppStore: report installs to BadgeHub API for download statistics
+- DownloadManager: add post_url() for HTTP POST requests
+
 0.15.1
 ======
 

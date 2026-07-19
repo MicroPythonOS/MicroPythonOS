@@ -318,7 +318,12 @@ class AppDetail(Activity):
             self.install_button.remove_state(lv.STATE.DISABLED)
             self._hide_progress_bar()
             return
-        # TODO: report the install if badgehub /report/install is fixed
+        backend_type = self.appstore.get_backend_type_from_settings()
+        if backend_type == self.appstore._BACKEND_API_BADGEHUB:
+            revision = getattr(app_obj, "revision", None)
+            if revision is not None:
+                from appstore_core import report_badgehub_install
+                TaskManager.create_task(report_badgehub_install(app_obj.fullname, revision))
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self.set_install_label(app_fullname)
@@ -355,3 +360,5 @@ class AppDetail(Activity):
             app_obj.publisher = result["publisher"]
         if result.get("long_description"):
             app_obj.long_description = result["long_description"]
+        if result.get("revision") is not None:
+            app_obj.revision = result["revision"]

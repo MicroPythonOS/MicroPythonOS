@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 
@@ -102,6 +103,10 @@ async def fetch_badgehub_project_details(details_url):
         app_metadata = version_obj.get("app_metadata") or {}
         files = version_obj.get("files")
 
+        revision = version_obj.get("revision")
+        if revision is not None:
+            result["revision"] = revision
+
         result["version"] = app_metadata.get("version")
         result["publisher"] = app_metadata.get("author")
         result["long_description"] = app_metadata.get("long_description")
@@ -120,6 +125,31 @@ async def fetch_badgehub_project_details(details_url):
         logger.warning("could not parse app details: %s", e)
 
     return result
+
+
+def _get_device_mac_and_id():
+    try:
+        import machine
+        unique_id = machine.unique_id()
+        mac = ':'.join('%02x' % b for b in unique_id)
+        sha1_id = hashlib.sha1(mac.encode()).hexdigest()
+        return mac, sha1_id
+    except Exception:
+        return None, None
+
+
+async def report_badgehub_install(fullname, revision):
+    mac, sha1_id = _get_device_mac_and_id()
+    if not mac or not sha1_id:
+        if __debug__: logger.debug("cannot report install: no device id available")
+        return
+    url = "https://badgehub.eu/api/v3/projects/%s/rev%s/report/install?mac=%s&id=%s" % (
+        fullname, revision, mac, sha1_id,
+    )
+    try:
+        await DownloadManager.post_url(url, data=b'', headers={'Accept': 'application/json'}, redact_url=True)
+    except Exception as e:
+        if __debug__: logger.debug("report install failed for %s: %s", fullname, e)
 
 
 class AppUpdateState:
