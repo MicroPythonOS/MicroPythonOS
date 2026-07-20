@@ -65,10 +65,7 @@ class AppStore(Activity):
         self._data_loaded = False
         self._icon_queue = []
         self._raw_timer = None
-        self._blurhash_queue = []
-        self._download_queue = []
         self._download_in_progress = False
-        self._icon_state = 'raw'
         self.main_screen = lv.obj()
 
         # ---- top bar ----
@@ -128,12 +125,11 @@ class AppStore(Activity):
         elif self._data_loaded and hasattr(self, "apps_list") and self.apps_list:
             self._stop_all_timers()
             self._icon_queue.clear()
-            self._blurhash_queue.clear()
             for app in self.apps:
                 if app.icon_data:
                     self._set_icon_widget(app)
                 else:
-                    self._icon_queue.append(app)
+                    self._icon_queue.append((app, 'raw'))
             if self._icon_queue:
                 self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
 
@@ -341,8 +337,6 @@ class AppStore(Activity):
 
         self._stop_all_timers()
         self._icon_queue.clear()
-        self._blurhash_queue.clear()
-        self._download_queue.clear()
         self._download_in_progress = False
 
         if __debug__: logger.debug("hiding please wait label")
@@ -379,7 +373,7 @@ class AppStore(Activity):
             if app.icon_data:
                 self._set_icon_widget(app)
             else:
-                self._icon_queue.append(app)
+                self._icon_queue.append((app, 'raw'))
             label_cont = lv.obj(cont)
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -434,12 +428,9 @@ class AppStore(Activity):
         if app.icon_data:
             self._set_icon_widget(app)
         else:
-            self._icon_queue.append(app)
+            self._icon_queue.append((app, 'raw'))
             if not self._raw_timer:
                 self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
-            elif self._icon_state == 'blurhash':
-                self._icon_state = 'raw'
-                self._raw_timer.set_period(self._GENERATE_APP_ICON_BENCHMARK * self._WAIT_FACTOR_APP_ICON)
         label_cont = lv.obj(cont)
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -466,56 +457,42 @@ class AppStore(Activity):
         if self._raw_timer:
             self._raw_timer.delete()
             self._raw_timer = None
-        self._icon_state = 'raw'
 
     def _process_icon_queue(self, timer):
-        if self._icon_state == 'raw':
-            if self._icon_queue:
-                idx = self._find_visible_app_index(self._icon_queue)
-                app = self._icon_queue.pop(idx)
-                self._set_raw_icon(app)
-                if app.blur_hash:
-                    self._blurhash_queue.append(app)
-                return
-            if self._blurhash_queue:
-                self._icon_state = 'blurhash'
-                timer.set_period(self._BLURHASH_APP_ICON_BENCHMARK * self._WAIT_FACTOR_APP_ICON)
+        if not self._icon_queue:
+            if self._download_in_progress:
                 return
             self._raw_timer.delete()
             self._raw_timer = None
             return
-        if self._icon_state == 'blurhash':
-            if self._blurhash_queue:
-                idx = self._find_visible_app_index(self._blurhash_queue)
-                app = self._blurhash_queue.pop(idx)
-                if not app.blur_hash or app.icon_data:
-                    return
+        idx = self._find_best_app_index(self._icon_queue)
+        app, stage = self._icon_queue.pop(idx)
+        if stage == 'raw':
+            self._set_raw_icon(app)
+            if app.blur_hash and not app.icon_data:
+                self._icon_queue.append((app, 'blurhash'))
+            elif app.icon_url and not app.icon_data:
+                self._icon_queue.append((app, 'download'))
+        elif stage == 'blurhash':
+            if app.blur_hash and not app.icon_data:
                 dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
-                if dsc is None:
-                    return
-                app._icon_dsc = dsc
-                app._icon_buf = buf
-                try:
-                    widget = app.image_icon_widget
-                except Exception:
-                    return
-                if widget:
-                    widget.set_src(dsc)
-                    widget.set_scale(4 * 256)
+                if dsc is not None:
+                    app._icon_dsc = dsc
+                    app._icon_buf = buf
+                    widget = getattr(app, 'image_icon_widget', None)
+                    if widget:
+                        widget.set_src(dsc)
+                        widget.set_scale(4 * 256)
+            if app.icon_url and not app.icon_data:
+                self._icon_queue.append((app, 'download'))
+        elif stage == 'download':
+            if self._download_in_progress:
+                self._icon_queue.append((app, 'download'))
                 return
-            self._download_queue = [a for a in self.apps if a.icon_url and not a.icon_data and hasattr(a, 'image_icon_widget')]
-            if self._download_queue:
-                self._icon_state = 'download'
-                timer.set_period(self._DOWNLOAD_ICON_INTERVAL)
+            if app.icon_data or not app.icon_url:
                 return
-            self._raw_timer.delete()
-            self._raw_timer = None
-            return
-        if self._icon_state == 'download':
-            self._process_download_queue()
-            if not self._download_queue and not self._download_in_progress:
-                self._raw_timer.delete()
-                self._raw_timer = None
+            self._download_in_progress = True
+            TaskManager.create_task(self._do_download(app))
 
     def _set_raw_icon(self, app):
         try:
@@ -531,18 +508,6 @@ class AppStore(Activity):
         widget.set_src(dsc)
         widget.set_scale(256)
 
-    def _process_download_queue(self):
-        if self._download_in_progress:
-            return
-        while self._download_queue:
-            idx = self._find_visible_app_index(self._download_queue)
-            app = self._download_queue.pop(idx)
-            if app.icon_data or not app.icon_url:
-                continue
-            self._download_in_progress = True
-            TaskManager.create_task(self._do_download(app))
-            return
-
     async def _do_download(self, app):
         try:
             app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
@@ -555,18 +520,31 @@ class AppStore(Activity):
             except Exception:
                 pass
 
-    def _find_visible_app_index(self, queue):
+    def _find_best_app_index(self, queue):
         try:
             scroll_y = self.apps_list.get_scroll_y()
             list_h = self.apps_list.get_height()
-            for i, app in enumerate(queue):
-                idx = self.apps.index(app)
-                item_y = idx * self._ICON_SIZE
-                if item_y + self._ICON_SIZE > scroll_y and item_y < scroll_y + list_h:
-                    return i
         except Exception:
-            pass
-        return 0
+            return 0
+        best_i = 0
+        best_dist = 999999
+        for i, entry in enumerate(queue):
+            app = entry[0]
+            try:
+                list_idx = self.apps.index(app)
+            except ValueError:
+                continue
+            item_y = list_idx * self._ICON_SIZE
+            if item_y + self._ICON_SIZE > scroll_y and item_y < scroll_y + list_h:
+                return i
+            if item_y + self._ICON_SIZE <= scroll_y:
+                dist = scroll_y - (item_y + self._ICON_SIZE)
+            else:
+                dist = item_y - (scroll_y + list_h)
+            if dist < best_dist:
+                best_dist = dist
+                best_i = i
+        return best_i
 
     def _set_icon_widget(self, app):
         try:
