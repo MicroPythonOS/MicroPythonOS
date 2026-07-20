@@ -101,6 +101,26 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertEqual(_count_list_widgets(), 1,
                          "Only one list widget should exist after reset")
 
+    def test_no_stale_widgets_after_filter_and_resume(self):
+        dropdown, options = self._get_category_options()
+
+        if len(options) <= 1:
+            print("No categories available, skipping")
+            return
+
+        wait_for_render(iterations=60)
+
+        target = options[1]
+        select_dropdown_option_by_text(dropdown, target)
+        wait_for_render(iterations=10)
+
+        AppManager.start_app("com.micropythonos.about")
+        wait_for_render(iterations=10)
+
+        from mpos.ui import back_screen
+        back_screen()
+        wait_for_render(iterations=10)
+
     def test_category_filtering_and_reset(self):
         dropdown, options = self._get_category_options()
 

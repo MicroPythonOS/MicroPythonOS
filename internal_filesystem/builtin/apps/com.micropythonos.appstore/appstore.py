@@ -414,6 +414,8 @@ class AppStore(Activity):
         list_top = self._TOP_BAR_HEIGHT + (self._UPDATE_BUTTON_HEIGHT + 8 if button_visible else 0)
 
         if hasattr(self, "apps_list") and self.apps_list:
+            for app in self.apps:
+                app.image_icon_widget = None
             self.apps_list.delete()
         self.apps_list = lv.list(self.main_screen)
         self._apply_default_styles(self.apps_list)
