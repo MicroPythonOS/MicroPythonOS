@@ -3,8 +3,9 @@ Graphical test for AppStore category dropdown filtering.
 
 Verifies that the category dropdown filters the app list and
 that selecting "All Categories" shows all apps again.
-Also verifies category names are title-cased, deduped, and
-that "Adult" appears at the bottom if present.
+Also verifies category names are title-cased, deduped,
+"Adult" appears at the bottom, and no orphaned list widgets
+linger after filtering (focus group correctness).
 """
 
 import unittest
@@ -23,6 +24,14 @@ from mpos.ui.testing import (
 
 def _title_case(s):
     return s[0].upper() + s[1:].lower()
+
+
+def _count_list_widgets():
+    tree = get_screen_widget_tree()
+    return sum(
+        1 for w in tree
+        if w.get("type") == "list" and w.get("layer") == "active" and not w.get("hidden")
+    )
 
 
 def _count_list_items():
@@ -73,6 +82,24 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         if "Adult" in categories:
             self.assertEqual(categories[-1], "Adult",
                              "'Adult' should be at the bottom")
+
+    def test_no_orphaned_list_widgets(self):
+        dropdown, options = self._get_category_options()
+
+        if len(options) <= 1:
+            print("No categories available, skipping")
+            return
+
+        target = options[1]
+        select_dropdown_option_by_text(dropdown, target)
+        wait_for_render(iterations=10)
+        self.assertEqual(_count_list_widgets(), 1,
+                         "Only one list widget should exist after filtering")
+
+        select_dropdown_option_by_text(dropdown, "All Categories", allow_partial=False)
+        wait_for_render(iterations=10)
+        self.assertEqual(_count_list_widgets(), 1,
+                         "Only one list widget should exist after reset")
 
     def test_category_filtering_and_reset(self):
         dropdown, options = self._get_category_options()
