@@ -69,7 +69,8 @@ $mpremote fs cp -r builtin :/
 
 $mpremote fs mkdir :/prefs
 $mpremote fs mkdir :/prefs/com.micropythonos.system.wifiservice
-$mpremote fs cp ../internal_filesystem_excluded/prefs/com.micropythonos.system.wifiservice/config.json :/prefs/com.micropythonos.system.wifiservice/
+#$mpremote fs cp ../internal_filesystem_excluded/prefs/com.micropythonos.system.wifiservice/config.json :/prefs/com.micropythonos.system.wifiservice/
+$mpremote fs cp ../internal_filesystem/data/prefs/com.micropythonos.system.wifiservice/config.json :/prefs/com.micropythonos.system.wifiservice/
 
 $mpremote fs mkdir :/apps
 
