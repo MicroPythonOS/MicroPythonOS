@@ -47,7 +47,6 @@ if [ ! -z "$appname" ]; then
         $mpremote fs cp -r "$appdir" :/"$target"
     fi
     echo "start_app(\"/$appdir\")"
-    $mpremote
     popd
     exit
 fi

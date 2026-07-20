@@ -535,7 +535,8 @@ class AppStore(Activity):
         if self._download_in_progress:
             return
         while self._download_queue:
-            app = self._download_queue.pop(0)
+            idx = self._find_visible_app_index(self._download_queue)
+            app = self._download_queue.pop(idx)
             if app.icon_data or not app.icon_url:
                 continue
             self._download_in_progress = True
