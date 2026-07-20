@@ -64,6 +64,8 @@ class AppStore(Activity):
         self._data_loaded = False
         self._icon_queue = []
         self._raw_timer = None
+        self._blurhash_queue = []
+        self._icon_state = 'raw'
         self.main_screen = lv.obj()
 
         # ---- top bar ----
@@ -123,13 +125,14 @@ class AppStore(Activity):
         elif self._data_loaded and hasattr(self, "apps_list") and self.apps_list:
             self._stop_all_timers()
             self._icon_queue.clear()
+            self._blurhash_queue.clear()
             for app in self.apps:
                 if app.icon_data:
                     self._set_icon_widget(app)
                 else:
                     self._icon_queue.append(app)
             if self._icon_queue:
-                self._raw_timer = lv.timer_create(self._process_icon_queue, self._BLURHASH_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
+                self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
 
     def onPause(self, screen):
         self._stop_all_timers()
@@ -335,6 +338,7 @@ class AppStore(Activity):
 
         self._stop_all_timers()
         self._icon_queue.clear()
+        self._blurhash_queue.clear()
 
         if __debug__: logger.debug("hiding please wait label")
         self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
@@ -392,7 +396,7 @@ class AppStore(Activity):
             update_label.add_flag(lv.obj.FLAG.HIDDEN)
             self._update_labels[app.fullname] = update_label
         if self._icon_queue:
-            self._raw_timer = lv.timer_create(self._process_icon_queue, self._BLURHASH_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
+            self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
         if __debug__: logger.debug("create_apps_list done")
 
     def _find_sorted_insert_index(self, app):
@@ -427,7 +431,10 @@ class AppStore(Activity):
         else:
             self._icon_queue.append(app)
             if not self._raw_timer:
-                self._raw_timer = lv.timer_create(self._process_icon_queue, self._BLURHASH_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
+                self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
+            elif self._icon_state == 'blurhash':
+                self._icon_state = 'raw'
+                self._raw_timer.set_period(self._GENERATE_APP_ICON_BENCHMARK * self._WAIT_FACTOR_APP_ICON)
         label_cont = lv.obj(cont)
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
@@ -454,14 +461,71 @@ class AppStore(Activity):
         if self._raw_timer:
             self._raw_timer.delete()
             self._raw_timer = None
+        self._icon_state = 'raw'
 
     def _process_icon_queue(self, timer):
-        if not self._icon_queue:
+        if self._icon_state == 'raw':
+            if self._icon_queue:
+                idx = self._find_visible_app_index(self._icon_queue)
+                app = self._icon_queue.pop(idx)
+                self._set_raw_icon(app)
+                if app.blur_hash:
+                    self._blurhash_queue.append(app)
+                return
+            if self._blurhash_queue:
+                self._icon_state = 'blurhash'
+                timer.set_period(self._BLURHASH_APP_ICON_BENCHMARK * self._WAIT_FACTOR_APP_ICON)
+                return
             self._raw_timer.delete()
             self._raw_timer = None
             return
-        app = self._icon_queue.pop(0)
-        self._set_icon_widget(app)
+        if self._blurhash_queue:
+            idx = self._find_visible_app_index(self._blurhash_queue)
+            app = self._blurhash_queue.pop(idx)
+            if not app.blur_hash or app.icon_data:
+                return
+            dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
+            if dsc is None:
+                return
+            app._icon_dsc = dsc
+            app._icon_buf = buf
+            try:
+                widget = app.image_icon_widget
+            except Exception:
+                return
+            if widget:
+                widget.set_src(dsc)
+                widget.set_scale(4 * 256)
+        else:
+            self._raw_timer.delete()
+            self._raw_timer = None
+
+    def _set_raw_icon(self, app):
+        try:
+            widget = app.image_icon_widget
+        except Exception as e:
+            if __debug__: logger.debug("no icon widget for %s: %s", app.fullname, e)
+            return
+        if not widget:
+            return
+        dsc, buf = generate_raw_app_icon(app.fullname, AppStore._ICON_SIZE)
+        app._icon_dsc = dsc
+        app._icon_buf = buf
+        widget.set_src(dsc)
+        widget.set_scale(256)
+
+    def _find_visible_app_index(self, queue):
+        try:
+            scroll_y = self.apps_list.get_scroll_y()
+            list_h = self.apps_list.get_height()
+            for i, app in enumerate(queue):
+                idx = self.apps.index(app)
+                item_y = idx * self._ICON_SIZE
+                if item_y + self._ICON_SIZE > scroll_y and item_y < scroll_y + list_h:
+                    return i
+        except Exception:
+            pass
+        return 0
 
     def _set_icon_widget(self, app):
         try:
