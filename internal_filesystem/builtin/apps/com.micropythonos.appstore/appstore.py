@@ -3,7 +3,7 @@ import logging
 
 import lvgl as lv
 
-from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingActivity, SharedPreferences, TaskManager
+from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingsActivity, SharedPreferences, TaskManager
 
 from app_detail import AppDetail
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
@@ -33,6 +33,9 @@ class AppStore(Activity):
     _BLURHASH_APP_ICON_BENCHMARK = 76 # ms
     _WAIT_FACTOR_APP_ICON = 7 # 85% idle time
     _DOWNLOAD_ICON_INTERVAL = 3000 # ms between icon downloads
+
+    _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
+    _DEFAULT_ICON_PIPELINE = 'blurhash'
 
     # Hardcoded list for now:
     backends = [
@@ -66,6 +69,7 @@ class AppStore(Activity):
         self._icon_queue = []
         self._raw_timer = None
         self._download_in_progress = False
+        self._icon_pipeline = self.prefs.get_string("icon_pipeline", self._DEFAULT_ICON_PIPELINE)
         self.main_screen = lv.obj()
 
         # ---- top bar ----
@@ -250,19 +254,56 @@ class AppStore(Activity):
         TaskManager.create_task(self._download_app_index_wrapper(self.get_backend_list_url_from_settings()))
 
     def settings_button_tap(self, event):
-        intent = Intent(activity_class=SettingActivity)
+        intent = Intent(activity_class=SettingsActivity)
         intent.putExtra("prefs", self.prefs)
-        intent.putExtra("setting", {"title": "AppStore Backend",
-                                    "key": "backend",
-                                    "ui": "radiobuttons",
-                                    "default_value": self._DEFAULT_BACKEND,
-                                    "ui_options":  [(backend[0], AppStore.get_backend_pref_string(index)) for index, backend in enumerate(AppStore.backends)],
-                                    "changed_callback": self.backend_changed})
+        intent.putExtra("settings", [
+            {"title": "AppStore Backend",
+             "key": "backend",
+             "ui": "radiobuttons",
+             "default_value": self._DEFAULT_BACKEND,
+             "ui_options": [(backend[0], AppStore.get_backend_pref_string(index)) for index, backend in enumerate(AppStore.backends)],
+             "changed_callback": self.backend_changed},
+            {"title": "App List Icons",
+             "key": "icon_pipeline",
+             "ui": "radiobuttons",
+             "default_value": self._DEFAULT_ICON_PIPELINE,
+             "ui_options": [
+                 ("None", "none"),
+                 ("Blocky", "raw"),
+                 ("Blocky, then blurhash", "blurhash"),
+                 ("Blocky, blurhash, then download", "download"),
+             ],
+             "changed_callback": self._icon_pipeline_changed},
+        ])
         self.startActivity(intent)
 
     def backend_changed(self, new_value):
         if __debug__: logger.debug("backend changed to %s", new_value)
         self.refresh_list()
+
+    def _icon_pipeline_changed(self, new_value):
+        self._icon_pipeline = new_value
+        self._stop_all_timers()
+        self._icon_queue.clear()
+        self._download_in_progress = False
+        if new_value != 'none' and hasattr(self, "apps_list") and self.apps_list:
+            for app in self.apps:
+                if not app.icon_data:
+                    self._icon_queue.append((app, 'raw'))
+            if self._icon_queue:
+                self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
+
+    def _advance(self, app, from_stage):
+        if self._icon_pipeline == 'none' or app.icon_data:
+            return
+        if from_stage == 'raw':
+            if self._STAGE_RANK['blurhash'] <= self._STAGE_RANK[self._icon_pipeline] and app.blur_hash:
+                self._icon_queue.append((app, 'blurhash'))
+            elif self._STAGE_RANK['download'] <= self._STAGE_RANK[self._icon_pipeline] and app.icon_url:
+                self._icon_queue.append((app, 'download'))
+        elif from_stage == 'blurhash':
+            if self._STAGE_RANK['download'] <= self._STAGE_RANK[self._icon_pipeline] and app.icon_url:
+                self._icon_queue.append((app, 'download'))
 
     async def _download_app_index_wrapper(self, json_url):
         try:
@@ -372,7 +413,7 @@ class AppStore(Activity):
             app.image_icon_widget = icon_spacer
             if app.icon_data:
                 self._set_icon_widget(app)
-            else:
+            elif self._icon_pipeline != 'none':
                 self._icon_queue.append((app, 'raw'))
             label_cont = lv.obj(cont)
             self._apply_default_styles(label_cont)
@@ -427,7 +468,7 @@ class AppStore(Activity):
         app.image_icon_widget = icon_spacer
         if app.icon_data:
             self._set_icon_widget(app)
-        else:
+        elif self._icon_pipeline != 'none':
             self._icon_queue.append((app, 'raw'))
             if not self._raw_timer:
                 self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
@@ -469,10 +510,7 @@ class AppStore(Activity):
         app, stage = self._icon_queue.pop(idx)
         if stage == 'raw':
             self._set_raw_icon(app)
-            if app.blur_hash and not app.icon_data:
-                self._icon_queue.append((app, 'blurhash'))
-            elif app.icon_url and not app.icon_data:
-                self._icon_queue.append((app, 'download'))
+            self._advance(app, 'raw')
         elif stage == 'blurhash':
             if app.blur_hash and not app.icon_data:
                 dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
@@ -483,8 +521,7 @@ class AppStore(Activity):
                     if widget:
                         widget.set_src(dsc)
                         widget.set_scale(4 * 256)
-            if app.icon_url and not app.icon_data:
-                self._icon_queue.append((app, 'download'))
+            self._advance(app, 'blurhash')
         elif stage == 'download':
             if self._download_in_progress:
                 self._icon_queue.append((app, 'download'))

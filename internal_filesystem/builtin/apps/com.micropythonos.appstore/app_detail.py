@@ -107,6 +107,7 @@ class AppDetail(Activity):
         if __debug__: logger.debug("creating app detail screen")
         self.app = self.getIntent().extras.get("app")
         self.appstore = self.getIntent().extras.get("appstore")
+        self._action_in_progress = False
         app_detail_screen = lv.obj()
         app_detail_screen.set_style_pad_all(5, lv.PART.MAIN)
         app_detail_screen.set_size(lv.pct(100), lv.pct(100))
@@ -210,7 +211,8 @@ class AppDetail(Activity):
         self.version_label.set_text(self.app.version)
         self.long_desc_label.set_text(self.app.long_description)
         self.publisher_label.set_text(self.app.publisher)
-        self.add_action_buttons(self.buttoncont, self.app)
+        if not self._action_in_progress:
+            self.add_action_buttons(self.buttoncont, self.app)
         self._sync_open_button()
         self._start_icon_download()
 
@@ -248,10 +250,19 @@ class AppDetail(Activity):
         if __debug__: logger.debug("with %s and fullname %s", download_url, fullname)
         label_text = self.install_label.get_text()
         if label_text == self.action_label_install:
+            if not download_url:
+                if __debug__: logger.debug("no download_url yet, ignoring")
+                return
             if __debug__: logger.debug("starting install task")
+            self._action_in_progress = True
+            self.install_button.add_state(lv.STATE.DISABLED)
+            self.install_label.set_text("Please wait...")
             TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
         elif label_text == self.action_label_uninstall or label_text == self.action_label_restore:
             if __debug__: logger.debug("starting uninstall task")
+            self._action_in_progress = True
+            self.install_button.add_state(lv.STATE.DISABLED)
+            self.install_label.set_text("Please wait...")
             TaskManager.create_task(self.uninstall_app(fullname))
     
     def update_button_click(self, app_obj):
@@ -260,11 +271,11 @@ class AppDetail(Activity):
         if __debug__: logger.debug("update button clicked for %s and fullname %s", download_url, fullname)
         self.update_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.install_button.set_size(lv.pct(100), 40)
+        self.install_button.add_state(lv.STATE.DISABLED)
+        self.install_label.set_text("Please wait...")
         TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
 
     async def uninstall_app(self, app_fullname):
-        self.install_button.add_state(lv.STATE.DISABLED)
-        self.install_label.set_text("Please wait...")
         self._show_progress_bar()
         await self._update_progress(21)
         await self._update_progress(42)
@@ -274,6 +285,7 @@ class AppDetail(Activity):
         self.set_install_label(app_fullname)
         self._sync_open_button()
         self.install_button.remove_state(lv.STATE.DISABLED)
+        self._action_in_progress = False
         self._trigger_update_recheck()
         if AppManager.is_builtin_app(app_fullname):
             self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -292,8 +304,6 @@ class AppDetail(Activity):
     async def download_and_install(self, app_obj, dest_folder):
         app_fullname = app_obj.fullname
         download_url_size = getattr(app_obj, "download_url_size", None)
-        self.install_button.add_state(lv.STATE.DISABLED)
-        self.install_label.set_text("Please wait...")
         self._show_progress_bar()
         await self._update_progress(5)
         try:
@@ -312,6 +322,7 @@ class AppDetail(Activity):
             else:
                 self.install_label.set_text(f"Download failed: {str(e)[:30]}")
             self.install_button.remove_state(lv.STATE.DISABLED)
+            self._action_in_progress = False
             self._hide_progress_bar()
             return
         backend_type = self.appstore.get_backend_type_from_settings()
@@ -325,7 +336,7 @@ class AppDetail(Activity):
         self.set_install_label(app_fullname)
         self._sync_open_button()
         self.install_button.remove_state(lv.STATE.DISABLED)
-        # Notify AppUpdateManager that an app was installed so it can refresh its state
+        self._action_in_progress = False
         self._trigger_update_recheck()
 
     def _trigger_update_recheck(self):
