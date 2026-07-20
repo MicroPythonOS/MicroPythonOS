@@ -4,7 +4,7 @@ Future release (next version)
 Builtin Apps:
 - AppStore: download detail view icon after a small 500ms delay
 - AppStore: report installs to BadgeHub API for download statistics
-- AppStore: show blurhash of app (if available) as icon in list view
+- AppStore: prioritize visible icons (icon_data then blurhash then SHA1) and simplify lazy queue
 - AppStore: show 'Loading details...' instead of 'Unknown' while loading app details
 - AppStore: speed up app list by skipping pointless icon search
 

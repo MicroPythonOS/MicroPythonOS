@@ -49,23 +49,19 @@ class AppDetail(Activity):
                 'data_size': len(self.app.icon_data),
                 'data': self.app.icon_data
             })
-            self.app._icon_dsc = dsc
-            self.app._icon_buf = None
-            self.icon_image.set_src(dsc)
-            self.icon_image.set_scale(256)
+            scale = 256
+            buf = None
         else:
             dsc, buf = blurhash_to_image_dsc(self.app.blur_hash, 16, 16)
             if dsc is None:
                 dsc, buf = generate_raw_app_icon(self.app.fullname, 64)
-                self.app._icon_dsc = dsc
-                self.app._icon_buf = buf
-                self.icon_image.set_src(dsc)
-                self.icon_image.set_scale(256)
-                return
-            self.app._icon_dsc = dsc
-            self.app._icon_buf = buf
-            self.icon_image.set_src(dsc)
-            self.icon_image.set_scale(4 * 256)
+                scale = 256
+            else:
+                scale = 4 * 256
+        self.app._icon_dsc = dsc
+        self.app._icon_buf = buf
+        self.icon_image.set_src(dsc)
+        self.icon_image.set_scale(scale)
 
     async def _download_icon(self):
         if not self.app.icon_url:
