@@ -32,6 +32,7 @@ class AppStore(Activity):
     _GENERATE_APP_ICON_BENCHMARK = 11 # ms
     _BLURHASH_APP_ICON_BENCHMARK = 76 # ms
     _WAIT_FACTOR_APP_ICON = 7 # 85% idle time
+    _DOWNLOAD_ICON_INTERVAL = 3000 # ms between icon downloads
 
     # Hardcoded list for now:
     backends = [
@@ -65,6 +66,8 @@ class AppStore(Activity):
         self._icon_queue = []
         self._raw_timer = None
         self._blurhash_queue = []
+        self._download_queue = []
+        self._download_in_progress = False
         self._icon_state = 'raw'
         self.main_screen = lv.obj()
 
@@ -339,6 +342,8 @@ class AppStore(Activity):
         self._stop_all_timers()
         self._icon_queue.clear()
         self._blurhash_queue.clear()
+        self._download_queue.clear()
+        self._download_in_progress = False
 
         if __debug__: logger.debug("hiding please wait label")
         self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
@@ -479,26 +484,38 @@ class AppStore(Activity):
             self._raw_timer.delete()
             self._raw_timer = None
             return
-        if self._blurhash_queue:
-            idx = self._find_visible_app_index(self._blurhash_queue)
-            app = self._blurhash_queue.pop(idx)
-            if not app.blur_hash or app.icon_data:
+        if self._icon_state == 'blurhash':
+            if self._blurhash_queue:
+                idx = self._find_visible_app_index(self._blurhash_queue)
+                app = self._blurhash_queue.pop(idx)
+                if not app.blur_hash or app.icon_data:
+                    return
+                dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
+                if dsc is None:
+                    return
+                app._icon_dsc = dsc
+                app._icon_buf = buf
+                try:
+                    widget = app.image_icon_widget
+                except Exception:
+                    return
+                if widget:
+                    widget.set_src(dsc)
+                    widget.set_scale(4 * 256)
                 return
-            dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
-            if dsc is None:
+            self._download_queue = [a for a in self.apps if a.icon_url and not a.icon_data and hasattr(a, 'image_icon_widget')]
+            if self._download_queue:
+                self._icon_state = 'download'
+                timer.set_period(self._DOWNLOAD_ICON_INTERVAL)
                 return
-            app._icon_dsc = dsc
-            app._icon_buf = buf
-            try:
-                widget = app.image_icon_widget
-            except Exception:
-                return
-            if widget:
-                widget.set_src(dsc)
-                widget.set_scale(4 * 256)
-        else:
             self._raw_timer.delete()
             self._raw_timer = None
+            return
+        if self._icon_state == 'download':
+            self._process_download_queue()
+            if not self._download_queue and not self._download_in_progress:
+                self._raw_timer.delete()
+                self._raw_timer = None
 
     def _set_raw_icon(self, app):
         try:
@@ -513,6 +530,29 @@ class AppStore(Activity):
         app._icon_buf = buf
         widget.set_src(dsc)
         widget.set_scale(256)
+
+    def _process_download_queue(self):
+        if self._download_in_progress:
+            return
+        while self._download_queue:
+            app = self._download_queue.pop(0)
+            if app.icon_data or not app.icon_url:
+                continue
+            self._download_in_progress = True
+            TaskManager.create_task(self._do_download(app))
+            return
+
+    async def _do_download(self, app):
+        try:
+            app.icon_data = await TaskManager.wait_for(DownloadManager.download_url(app.icon_url), 5)
+        except Exception:
+            pass
+        self._download_in_progress = False
+        if app.icon_data:
+            try:
+                self._set_icon_widget(app)
+            except Exception:
+                pass
 
     def _find_visible_app_index(self, queue):
         try:
