@@ -293,7 +293,7 @@ class AppStore(Activity):
         cats = set()
         for app in self.apps:
             if app.category:
-                cats.add(app.category.capitalize())
+                cats.add(AppStore._normalize_category(app.category))
         sorted_cats = sorted(cats)
         if "Adult" in sorted_cats:
             sorted_cats.remove("Adult")
@@ -421,8 +421,9 @@ class AppStore(Activity):
         self._update_labels = {}
         if __debug__: logger.debug("create_apps_list iterating")
         for app in self.apps:
-            if self._selected_category and app.category != self._selected_category:
-                continue
+            if self._selected_category:
+                if not app.category or AppStore._normalize_category(app.category) != self._selected_category:
+                    continue
             if __debug__: logger.debug(app)
             item = self.apps_list.add_button(None, "")
             item.set_style_pad_all(0, lv.PART.MAIN)
@@ -693,6 +694,10 @@ class AppStore(Activity):
     @staticmethod
     def backend_pref_string_to_backend(string):
         return string.split(",")
+
+    @staticmethod
+    def _normalize_category(category):
+        return category[0].upper() + category[1:].lower()
 
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):

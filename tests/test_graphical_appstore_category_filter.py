@@ -3,7 +3,8 @@ Graphical test for AppStore category dropdown filtering.
 
 Verifies that the category dropdown filters the app list and
 that selecting "All Categories" shows all apps again.
-Also verifies category names are title-cased and consistent.
+Also verifies category names are title-cased, deduped, and
+that "Adult" appears at the bottom if present.
 """
 
 import unittest
@@ -18,6 +19,10 @@ from mpos.ui.testing import (
     select_dropdown_option_by_text,
     wait_for_render,
 )
+
+
+def _title_case(s):
+    return s[0].upper() + s[1:].lower()
 
 
 def _count_list_items():
@@ -40,16 +45,37 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         except Exception:
             pass
 
-    def test_category_filtering_and_reset(self):
+    def _get_category_options(self):
         AppManager.start_app("com.micropythonos.appstore")
         wait_for_render(iterations=40)
-
         dropdown = find_dropdown_widget(lv.screen_active())
         self.assertIsNotNone(dropdown, "Category dropdown should exist")
-
         options = get_dropdown_options(dropdown)
         self.assertEqual(options[0], "All Categories",
                          "First option should be 'All Categories'")
+        return dropdown, options
+
+    def test_categories_are_title_cased_and_deduped(self):
+        _, options = self._get_category_options()
+        categories = options[1:]
+
+        self.assertEqual(len(categories), len(set(categories)),
+                         f"Duplicate categories found: {categories}")
+
+        for cat in categories:
+            self.assertEqual(cat, _title_case(cat),
+                             f"Category '{cat}' should be title-cased")
+
+    def test_adult_at_bottom(self):
+        _, options = self._get_category_options()
+        categories = options[1:]
+
+        if "Adult" in categories:
+            self.assertEqual(categories[-1], "Adult",
+                             "'Adult' should be at the bottom")
+
+    def test_category_filtering_and_reset(self):
+        dropdown, options = self._get_category_options()
 
         if len(options) <= 1:
             print("No categories available, skipping filter test")
@@ -59,9 +85,6 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertGreater(all_count, 0, "App list should have items")
 
         target = options[1]
-        self.assertEqual(target, target[0].upper() + target[1:].lower(),
-                         f"Category '{target}' should be title-cased")
-
         result = select_dropdown_option_by_text(dropdown, target)
         self.assertTrue(result, f"Should select category '{target}'")
         wait_for_render(iterations=10)
