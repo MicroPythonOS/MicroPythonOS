@@ -2,6 +2,7 @@ Future release (next version)
 =====
 
 Builtin Apps:
+- AppStore: add category filter
 - AppStore: download detail view icon after a small 500ms delay
 - AppStore: report installs to BadgeHub API for download statistics
 - AppStore: prioritize visible icons (icon_data then blurhash then SHA1) and simplify lazy queue

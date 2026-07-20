@@ -2,7 +2,8 @@
 Graphical test for AppStore category dropdown filtering.
 
 Verifies that the category dropdown filters the app list and
-that selecting "Category" shows all apps again.
+that selecting "All Categories" shows all apps again.
+Also verifies category names are title-cased and consistent.
 """
 
 import unittest
@@ -47,8 +48,8 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertIsNotNone(dropdown, "Category dropdown should exist")
 
         options = get_dropdown_options(dropdown)
-        self.assertEqual(options[0], "Category",
-                         "First option should be 'Category'")
+        self.assertEqual(options[0], "All Categories",
+                         "First option should be 'All Categories'")
 
         if len(options) <= 1:
             print("No categories available, skipping filter test")
@@ -58,6 +59,9 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertGreater(all_count, 0, "App list should have items")
 
         target = options[1]
+        self.assertEqual(target, target[0].upper() + target[1:].lower(),
+                         f"Category '{target}' should be title-cased")
+
         result = select_dropdown_option_by_text(dropdown, target)
         self.assertTrue(result, f"Should select category '{target}'")
         wait_for_render(iterations=10)
@@ -66,8 +70,8 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertLessEqual(filtered_count, all_count,
                             f"Filtered count {filtered_count} > all {all_count}")
 
-        result = select_dropdown_option_by_text(dropdown, "Category", allow_partial=False)
-        self.assertTrue(result, "Should select 'Category' to reset")
+        result = select_dropdown_option_by_text(dropdown, "All Categories", allow_partial=False)
+        self.assertTrue(result, "Should select 'All Categories' to reset")
         wait_for_render(iterations=10)
 
         reset_count = _count_list_items()

@@ -93,9 +93,9 @@ class AppStore(Activity):
         self.category_dropdown = lv.dropdown(self.top_bar)
         self.category_dropdown.set_size(lv.pct(75), self._TOP_BAR_HEIGHT - 6)
         self.category_dropdown.align_to(self.settings_button, lv.ALIGN.OUT_RIGHT_MID, 8, 0)
-        self.category_dropdown.set_options("Category")
+        self.category_dropdown.set_options("All Categories")
         self.category_dropdown.add_event_cb(self._category_changed, lv.EVENT.VALUE_CHANGED, None)
-        self._category_options = ["Category"]
+        self._category_options = ["All Categories"]
         self._selected_category = None
 
         # ---- "Update N App(s)" button (hidden until updates are found) ----
@@ -293,12 +293,12 @@ class AppStore(Activity):
         cats = set()
         for app in self.apps:
             if app.category:
-                cats.add(app.category)
+                cats.add(app.category.capitalize())
         sorted_cats = sorted(cats)
         if "Adult" in sorted_cats:
             sorted_cats.remove("Adult")
             sorted_cats.append("Adult")
-        self._category_options = ["Category"] + sorted_cats
+        self._category_options = ["All Categories"] + sorted_cats
         selected = self.category_dropdown.get_selected()
         self.category_dropdown.set_options("\n".join(self._category_options))
         if selected < len(self._category_options):
