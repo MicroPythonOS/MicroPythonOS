@@ -96,18 +96,33 @@ class TestAppStorePlaceholderIcon(unittest.TestCase):
 
     # ------------------------------------------------------------------
 
-    def _wait_for_icons(self, min_count=2, timeout_ms=5000):
+    def _wait_for_icons_rendered(self, min_count=2, timeout_ms=10000):
+        """Poll until icons exist and their center pixels are non-white."""
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+        icons = []
         while time.ticks_diff(deadline, time.ticks_ms()) > 0:
             icons = _find_icons(get_screen_widget_tree(lv.screen_active()))
-            if len(icons) >= min_count:
+            if len(icons) < min_count:
+                wait_for_render(2)
+                continue
+            wait_for_render(5)
+            buf = capture_screenshot(width=320, height=240)
+            white = 0xFFFF
+            all_rendered = True
+            for icon in icons:
+                cx = (icon["x1"] + icon["x2"]) // 2
+                cy = (icon["y1"] + icon["y2"]) // 2
+                if _pixel_rgb565(buf, 320, cx, cy) == white:
+                    all_rendered = False
+                    break
+            if all_rendered:
                 return icons
             wait_for_render(2)
-        return _find_icons(get_screen_widget_tree(lv.screen_active()))
+        return icons
 
     def test_placeholder_icon_is_not_white(self):
         """Generated placeholder icons must contain at least one non-white pixel."""
-        icons = self._wait_for_icons()
+        icons = self._wait_for_icons_rendered()
         self.assertTrue(len(icons) >= 2, "Expected at least two app icons on screen")
 
         buf = capture_screenshot(width=320, height=240)
@@ -121,7 +136,7 @@ class TestAppStorePlaceholderIcon(unittest.TestCase):
 
     def test_placeholder_icons_differ_between_apps(self):
         """Different app names must produce visibly different placeholders."""
-        icons = self._wait_for_icons()
+        icons = self._wait_for_icons_rendered()
         self.assertTrue(len(icons) >= 2, "Expected at least two app icons on screen")
 
         buf = capture_screenshot(width=320, height=240)

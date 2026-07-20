@@ -46,6 +46,7 @@ class TestGraphicalCameraSettings(unittest.TestCase):
                 import camera
                 self.has_webcam = False
             except:
+                print("SKIP: No camera module available (webcam or internal)")
                 self.skipTest("No camera module available (webcam or internal)")
 
     def tearDown(self):

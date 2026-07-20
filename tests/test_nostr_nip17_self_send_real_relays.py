@@ -38,6 +38,11 @@ _DEFAULT_RELAYS = [
     "live-relay integration test; depends on external relay uptime. "
     "Set MPOS_RUN_NETWORK_TESTS=1 to run.",
 )
+if not os.getenv("MPOS_RUN_NETWORK_TESTS"):
+    print(
+        "SKIP: test_nostr_nip17_self_send_real_relays requires "
+        "MPOS_RUN_NETWORK_TESTS=1 (depends on live relay uptime)"
+    )
 class TestNip17SelfSendRealRelays(unittest.TestCase):
     """Send a NIP-17 message to yourself over the internet and verify receipt."""
 
