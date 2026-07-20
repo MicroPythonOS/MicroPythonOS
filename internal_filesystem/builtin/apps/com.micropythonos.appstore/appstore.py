@@ -56,7 +56,7 @@ class AppStore(Activity):
     progress_bar = None
     settings_button = None
     top_bar = None
-    title_label = None
+    category_dropdown = None
     update_all_button = None
     update_all_label = None
     _update_labels = {}
@@ -90,10 +90,13 @@ class AppStore(Activity):
         settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
 
-        self.title_label = lv.label(self.top_bar)
-        self.title_label.set_text("App Store")
-        self.title_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-        self.title_label.center()
+        self.category_dropdown = lv.dropdown(self.top_bar)
+        self.category_dropdown.set_size(lv.pct(75), self._TOP_BAR_HEIGHT - 6)
+        self.category_dropdown.align_to(self.settings_button, lv.ALIGN.OUT_RIGHT_MID, 8, 0)
+        self.category_dropdown.set_options("Category")
+        self.category_dropdown.add_event_cb(self._category_changed, lv.EVENT.VALUE_CHANGED, None)
+        self._category_options = ["Category"]
+        self._selected_category = None
 
         # ---- "Update N App(s)" button (hidden until updates are found) ----
         self.update_all_button = lv.button(self.main_screen)
@@ -281,6 +284,26 @@ class AppStore(Activity):
         if __debug__: logger.debug("backend changed to %s", new_value)
         self.refresh_list()
 
+    def _category_changed(self, event):
+        idx = self.category_dropdown.get_selected()
+        self._selected_category = self._category_options[idx] if idx > 0 else None
+        self.create_apps_list()
+
+    def _update_category_dropdown(self):
+        cats = set()
+        for app in self.apps:
+            if app.category:
+                cats.add(app.category)
+        sorted_cats = sorted(cats)
+        if "Adult" in sorted_cats:
+            sorted_cats.remove("Adult")
+            sorted_cats.append("Adult")
+        self._category_options = ["Category"] + sorted_cats
+        selected = self.category_dropdown.get_selected()
+        self.category_dropdown.set_options("\n".join(self._category_options))
+        if selected < len(self._category_options):
+            self.category_dropdown.set_selected(selected)
+
     def _icon_pipeline_changed(self, new_value):
         self._icon_pipeline = new_value
         self._stop_all_timers()
@@ -324,6 +347,7 @@ class AppStore(Activity):
             self.apps.append(installed_app)
         self._data_loaded = True
         self.create_apps_list()
+        self._update_category_dropdown()
 
         # Phase 2: download store index and merge in new apps
         try:
@@ -373,6 +397,8 @@ class AppStore(Activity):
             self.apps.insert(idx, app)
             self._insert_app_list_item(app, idx)
 
+        self._update_category_dropdown()
+
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
 
@@ -395,6 +421,8 @@ class AppStore(Activity):
         self._update_labels = {}
         if __debug__: logger.debug("create_apps_list iterating")
         for app in self.apps:
+            if self._selected_category and app.category != self._selected_category:
+                continue
             if __debug__: logger.debug(app)
             item = self.apps_list.add_button(None, "")
             item.set_style_pad_all(0, lv.PART.MAIN)
