@@ -133,8 +133,12 @@ class AppStore(Activity):
             self._stop_all_timers()
             self._icon_queue.clear()
             for app in self.apps:
+                if not app.image_icon_widget:
+                    continue
                 if app.icon_data:
                     self._set_icon_widget(app)
+                elif self._restore_cached_icon(app, app.image_icon_widget):
+                    pass
                 else:
                     self._icon_queue.append((app, 'raw'))
             if self._icon_queue:
@@ -446,6 +450,8 @@ class AppStore(Activity):
             app.image_icon_widget = icon_spacer
             if app.icon_data:
                 self._set_icon_widget(app)
+            elif self._restore_cached_icon(app, icon_spacer):
+                pass
             elif self._icon_pipeline != 'none':
                 self._icon_queue.append((app, 'raw'))
             label_cont = lv.obj(cont)
@@ -507,6 +513,8 @@ class AppStore(Activity):
         app.image_icon_widget = icon_spacer
         if app.icon_data:
             self._set_icon_widget(app)
+        elif self._restore_cached_icon(app, icon_spacer):
+            pass
         elif self._icon_pipeline != 'none':
             self._icon_queue.append((app, 'raw'))
             if not self._raw_timer:
@@ -621,6 +629,18 @@ class AppStore(Activity):
                 best_dist = dist
                 best_i = i
         return best_i
+
+    def _restore_cached_icon(self, app, widget):
+        if hasattr(app, '_icon_dsc') and app._icon_dsc is not None:
+            dsc = app._icon_dsc
+            if dsc.header.w == self._ICON_SIZE:
+                scale = 256
+            else:
+                scale = 4 * 256
+            widget.set_src(dsc)
+            widget.set_scale(scale)
+            return True
+        return False
 
     def _set_icon_widget(self, app):
         try:

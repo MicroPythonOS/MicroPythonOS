@@ -114,12 +114,20 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         select_dropdown_option_by_text(dropdown, target)
         wait_for_render(iterations=10)
 
+        filtered_count = _count_list_items()
+
         AppManager.start_app("com.micropythonos.about")
         wait_for_render(iterations=10)
 
         from mpos.ui import back_screen
         back_screen()
         wait_for_render(iterations=10)
+
+        resumed_count = _count_list_items()
+        self.assertEqual(resumed_count, filtered_count,
+                         f"List items changed after resume: {filtered_count} -> {resumed_count}")
+        self.assertEqual(_count_list_widgets(), 1,
+                         "Only one list widget should exist after resume")
 
     def test_list_position_after_filter_reset(self):
         dropdown, options = self._get_category_options()
