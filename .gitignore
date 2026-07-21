@@ -2,7 +2,9 @@
 !.editorconfig
 !.gitignore
 
+# AI stuff
 .planning/
+.opencode
 
 # generated:
 web/.preload_bundled_apps/
