@@ -1,21 +1,22 @@
 Future release (next version)
 =====
 
+0.16.0
+======
+
 Builtin Apps:
 - AppStore: add category filter
-- AppStore: download detail view icon after a small 500ms delay
-- AppStore: report installs to BadgeHub API for download statistics
-- AppStore: prioritize visible icons (icon_data then blurhash then SHA1) and simplify lazy queue
+- AppStore: report app install to BadgeHub report/install API for statistics
+- AppStore: optimize icon display and add blurhash support
 - AppStore: show 'Loading details...' instead of 'Unknown' while loading app details
-- AppStore: speed up app list by skipping pointless icon search
 
 Frameworks:
-- App: don't search for local icons if app isn't installed locally
-- DownloadManager: add post_url() for HTTP POST requests
+- App: don't search for local icons if app isn't installed locally to reduce storage access time
+- DownloadManager: add post_url() for HTTP POST requests (needed for BadgeHub report/install API call)
 - DownloadManager: reduce log level of missing Content-Length from warning to info to avoid polluting REPL
 
 OS:
-- aiowebsocket: add exponential reconnect backoff so unreachable relays stop exhausting the thread pool (#191)
+- aiowebsocket: add exponential reconnect backoff so unreachable relays stop exhausting the thread pool (#191) by @jnuyens
 
 0.15.1
 ======
