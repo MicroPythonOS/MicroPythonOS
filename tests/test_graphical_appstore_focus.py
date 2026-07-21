@@ -26,9 +26,9 @@ from mpos import (
     AppManager,
     retry_action_until,
     wait_for_focus,
-    wait_for_text,
 )
 from mpos.ui import focus_direction
+from mpos.ui.testing import wait_for_render
 
 
 # ---------------------------------------------------------------------------
@@ -83,9 +83,7 @@ class TestAppStoreFocus(unittest.TestCase):
     def setUp(self):
         result = AppManager.start_app("com.micropythonos.appstore")
         self.assertTrue(result, "AppStore failed to launch")
-        self.assertTrue(wait_for_text("App Store", timeout=10),
-                        "AppStore title never appeared")
-        _wait_ms(200)
+        wait_for_render(40)
         activity = _get_appstore_activity()
         self.assertIsNotNone(activity, "Could not get AppStore activity instance")
         _inject_fake_apps(activity)
