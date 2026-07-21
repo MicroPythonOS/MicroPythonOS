@@ -470,6 +470,12 @@ class AppStore(Activity):
             self._update_labels[app.fullname] = update_label
         if self._icon_queue:
             self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
+        try:
+            from appstore_core import AppUpdateManager
+            um = AppUpdateManager.get_instance()
+            self._sync_update_banner(um.current_state, um.updatable_apps)
+        except Exception:
+            pass
         if __debug__: logger.debug("create_apps_list done")
 
     def _find_sorted_insert_index(self, app):

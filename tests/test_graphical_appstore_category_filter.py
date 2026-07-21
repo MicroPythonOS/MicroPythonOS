@@ -121,6 +121,31 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         back_screen()
         wait_for_render(iterations=10)
 
+    def test_list_position_after_filter_reset(self):
+        dropdown, options = self._get_category_options()
+
+        if len(options) <= 1:
+            print("No categories available, skipping")
+            return
+
+        tree = get_screen_widget_tree()
+        lists = [w for w in tree if w.get("type") == "list" and w.get("layer") == "active" and not w.get("hidden")]
+        self.assertEqual(len(lists), 1)
+        initial_y = lists[0].get("y1", -1)
+
+        target = options[1]
+        select_dropdown_option_by_text(dropdown, target)
+        wait_for_render(iterations=10)
+
+        select_dropdown_option_by_text(dropdown, "All Categories", allow_partial=False)
+        wait_for_render(iterations=10)
+
+        tree = get_screen_widget_tree()
+        lists = [w for w in tree if w.get("type") == "list" and w.get("layer") == "active" and not w.get("hidden")]
+        self.assertEqual(len(lists), 1)
+        self.assertEqual(lists[0].get("y1", -1), initial_y,
+                         f"List Y moved: {initial_y} -> {lists[0].get('y1', -1)}")
+
     def test_category_filtering_and_reset(self):
         dropdown, options = self._get_category_options()
 
