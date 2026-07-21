@@ -294,6 +294,8 @@ class AppStore(Activity):
         self.create_apps_list()
 
     def _update_category_dropdown(self):
+        if self.category_dropdown is None:
+            return
         cats = set()
         for app in self.apps:
             if app.category:
