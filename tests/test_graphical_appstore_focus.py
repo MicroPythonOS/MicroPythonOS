@@ -28,7 +28,7 @@ from mpos import (
     wait_for_focus,
 )
 from mpos.ui import focus_direction
-from mpos.ui.testing import wait_for_render
+from mpos.ui.testing import find_dropdown_widget, wait_for_widget
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,11 @@ class TestAppStoreFocus(unittest.TestCase):
     def setUp(self):
         result = AppManager.start_app("com.micropythonos.appstore")
         self.assertTrue(result, "AppStore failed to launch")
-        wait_for_render(40)
+        dropdown = wait_for_widget(
+            lambda: find_dropdown_widget(lv.screen_active()),
+            timeout=10,
+        )
+        self.assertIsNotNone(dropdown, "AppStore category dropdown never appeared")
         activity = _get_appstore_activity()
         self.assertIsNotNone(activity, "Could not get AppStore activity instance")
         _inject_fake_apps(activity)
