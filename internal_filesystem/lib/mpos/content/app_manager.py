@@ -366,6 +366,10 @@ class AppManager:
                         logger.error("parsing %s failed: %s", full_path, e)
                         continue
 
+                    if app.fullname == "Unknown":
+                        logger.warning("skipping %s: missing or invalid MANIFEST.JSON", full_path)
+                        continue
+
                     # ---- store in both containers ---------------------------
                     cls._app_list.append(app)
                     cls._by_fullname[fullname] = app
