@@ -11,8 +11,6 @@ class AppDetail(Activity):
 
     action_label_install = "Install"
     action_label_uninstall = "Uninstall"
-    action_label_restore = "Restore Built-in"
-    action_label_nothing = "Disable" # This could mark builtin apps as "Disabled" somehow and also allow for "Enable" then
 
     # Widgets:
     install_button = None
@@ -37,8 +35,7 @@ class AppDetail(Activity):
     def _sync_open_button(self):
         if self._open_button is None:
             return
-        installed = AppManager.is_installed_by_name(self.app.fullname)
-        if installed:
+        if AppManager.is_installed_by_name(self.app.fullname):
             self._open_button.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             self._open_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -157,17 +154,6 @@ class AppDetail(Activity):
         self.long_desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.long_desc_label.set_width(lv.pct(100))
 
-        self._open_button = lv.button(app_detail_screen)
-        self._apply_default_styles(self._open_button)
-        self._open_button.set_size(60, 42)
-        self._open_button.align(lv.ALIGN.TOP_RIGHT, -4, 0)
-        self._open_button.add_flag(lv.obj.FLAG.FLOATING)
-        self._open_button.add_event_cb(lambda e, a=self.app: self._open_app(a.fullname), lv.EVENT.CLICKED, None)
-        open_label = lv.label(self._open_button)
-        open_label.set_text("Open")
-        open_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-        open_label.center()
-
         if __debug__: logger.debug("loading app detail screen")
         self.setContentView(app_detail_screen)
 
@@ -189,21 +175,31 @@ class AppDetail(Activity):
         buttoncont.clean()
         if __debug__: logger.debug("adding (un)install button for url: %s", self.app.download_url)
         self.install_button = lv.button(buttoncont)
-        self.install_button.set_style_margin_all(5, lv.PART.MAIN) # without margin, the focus board isnt visible
+        self.install_button.set_style_margin_all(5, lv.PART.MAIN)
+        self.install_button.set_flex_grow(1)
         self.install_button.add_event_cb(lambda e, a=self.app: self.toggle_install(a), lv.EVENT.CLICKED, None)
-        self.install_button.set_size(lv.pct(100), 40)
         self.install_label = lv.label(self.install_button)
         self.install_label.center()
         self.set_install_label(self.app.fullname)
+        self.update_button = None
         if app.version and AppManager.is_update_available(self.app.fullname, app.version):
-            self.install_button.set_size(lv.pct(47), 40) # make space for update button
             if __debug__: logger.debug("update available, adding update button")
             self.update_button = lv.button(buttoncont)
-            self.update_button.set_size(lv.pct(47), 40)
+            self.update_button.set_style_margin_all(5, lv.PART.MAIN)
+            self.update_button.set_flex_grow(1)
             self.update_button.add_event_cb(lambda e, a=self.app: self.update_button_click(a), lv.EVENT.CLICKED, None)
             update_label = lv.label(self.update_button)
             update_label.set_text("Update")
             update_label.center()
+        self._open_button = lv.button(buttoncont)
+        self._open_button.set_style_margin_all(5, lv.PART.MAIN)
+        self._open_button.set_size(lv.SIZE_CONTENT, 40)
+        self._open_button.add_event_cb(lambda e, a=self.app: self._open_app(a.fullname), lv.EVENT.CLICKED, None)
+        open_label = lv.label(self._open_button)
+        open_label.set_text("Open")
+        open_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        open_label.center()
+        self._sync_open_button()
 
     async def fetch_and_set_app_details(self):
         await self.fetch_badgehub_app_details(self.app)
@@ -217,28 +213,8 @@ class AppDetail(Activity):
         self._start_icon_download()
 
     def set_install_label(self, app_fullname):
-        # Figure out whether to show:
-        # - "install" option if not installed
-        # - "update" option if already installed and new version
-        # - "uninstall" option if already installed and not builtin
-        # - "restore builtin" option if it's an overridden builtin app
-        # So:
-        # - install, uninstall and restore builtin can be same button, always shown
-        # - update is separate button, only shown if already installed and new version
-        is_installed = True
-        update_available = False
-        builtin_app = AppManager.is_builtin_app(app_fullname)
-        overridden_builtin_app = AppManager.is_overridden_builtin_app(app_fullname)
-        if not overridden_builtin_app:
-            is_installed = AppManager.is_installed_by_name(app_fullname)
-        if is_installed:
-            if builtin_app:
-                if overridden_builtin_app:
-                    action_label = self.action_label_restore
-                else:
-                    action_label = self.action_label_nothing
-            else:
-                action_label = self.action_label_uninstall
+        if AppManager.is_installed_by_name(app_fullname):
+            action_label = self.action_label_uninstall
         else:
             action_label = self.action_label_install
         self.install_label.set_text(action_label)
@@ -258,7 +234,7 @@ class AppDetail(Activity):
             self.install_button.add_state(lv.STATE.DISABLED)
             self.install_label.set_text("Please wait...")
             TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
-        elif label_text == self.action_label_uninstall or label_text == self.action_label_restore:
+        elif label_text == self.action_label_uninstall:
             if __debug__: logger.debug("starting uninstall task")
             self._action_in_progress = True
             self.install_button.add_state(lv.STATE.DISABLED)
@@ -269,8 +245,8 @@ class AppDetail(Activity):
         download_url = app_obj.download_url
         fullname = app_obj.fullname
         if __debug__: logger.debug("update button clicked for %s and fullname %s", download_url, fullname)
+        self._action_in_progress = True
         self.update_button.add_flag(lv.obj.FLAG.HIDDEN)
-        self.install_button.set_size(lv.pct(100), 40)
         self.install_button.add_state(lv.STATE.DISABLED)
         self.install_label.set_text("Please wait...")
         TaskManager.create_task(self.download_and_install(app_obj, f"apps/{fullname}"))
@@ -282,14 +258,9 @@ class AppDetail(Activity):
         AppManager.uninstall_app(app_fullname)
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
-        self.set_install_label(app_fullname)
-        self._sync_open_button()
-        self.install_button.remove_state(lv.STATE.DISABLED)
         self._action_in_progress = False
+        self.add_action_buttons(self.buttoncont, self.app)
         self._trigger_update_recheck()
-        if AppManager.is_builtin_app(app_fullname):
-            self.update_button.remove_flag(lv.obj.FLAG.HIDDEN)
-            self.install_button.set_size(lv.pct(47), 40) # if a builtin app was removed, then it was overridden, and a new version is available, so make space for update button
 
     async def pcb(self, percent):
         if __debug__: logger.debug("pcb: %s", percent)
@@ -333,10 +304,8 @@ class AppDetail(Activity):
                 TaskManager.create_task(report_badgehub_install(app_obj.fullname, revision))
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
-        self.set_install_label(app_fullname)
-        self._sync_open_button()
-        self.install_button.remove_state(lv.STATE.DISABLED)
         self._action_in_progress = False
+        self.add_action_buttons(self.buttoncont, self.app)
         self._trigger_update_recheck()
 
     def _trigger_update_recheck(self):

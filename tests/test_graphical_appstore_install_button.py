@@ -1,11 +1,13 @@
 """
-Unit test for AppDetail install button double-click guard.
+Unit test for AppDetail install button double-click guard and button visibility.
 
 Verifies:
 - Missing download_url is ignored
-- Install/uninstall/restore button is disabled immediately on click
+- Install/uninstall button is disabled immediately on click
 - Second click while action is in progress is rejected
 - fetch_and_set_app_details skips button rebuild during action
+- Button visibility combinations (Install/Uninstall/Update/Open)
+- update_button_click sets _action_in_progress
 """
 
 import sys
@@ -17,12 +19,13 @@ import app_detail
 AppDetail = app_detail.AppDetail
 
 from mpos.ui.testing import wait_for_render
-from mpos import TaskManager
+from mpos import TaskManager, AppManager
 
 
 class _MockApp:
     download_url = None
     fullname = "com.test.app"
+    version = None
 
 
 class TestAppDetailInstallButton(unittest.TestCase):
@@ -38,7 +41,6 @@ class TestAppDetailInstallButton(unittest.TestCase):
         self.detail._action_in_progress = False
         self.detail.action_label_install = "Install"
         self.detail.action_label_uninstall = "Uninstall"
-        self.detail.action_label_restore = "Restore Built-in"
 
         self.app = _MockApp()
         self.app.download_url = "https://example.com/app.zip"
@@ -100,16 +102,7 @@ class TestAppDetailInstallButton(unittest.TestCase):
             "uninstall button must be disabled immediately",
         )
 
-    def test_restore_disables_button_immediately(self):
-        self.detail.install_label.set_text("Restore Built-in")
-        self._call_toggle()
-        self.assertTrue(
-            bool(self.detail.install_button.get_state() & lv.STATE.DISABLED),
-            "restore button must be disabled immediately",
-        )
-
     def test_fetch_details_skips_rebuild_during_action(self):
-        """fetch_and_set_app_details must not call add_action_buttons during install/uninstall."""
         self.detail._action_in_progress = True
         self.detail.app = self.app
         self.detail.version_label = lv.label(self.screen)
@@ -129,4 +122,160 @@ class TestAppDetailInstallButton(unittest.TestCase):
         self.assertFalse(
             self._add_action_called,
             "fetch_and_set_app_details must skip add_action_buttons during action",
+        )
+
+
+class TestAppDetailButtonVisibility(unittest.TestCase):
+    """Tests add_action_buttons output for all button visibility combinations."""
+
+    def setUp(self):
+        self.screen = lv.obj()
+        self.screen.set_size(320, 240)
+        lv.screen_load(self.screen)
+
+        self.buttoncont = lv.obj(self.screen)
+        self.buttoncont.set_flex_flow(lv.FLEX_FLOW.ROW)
+        self.buttoncont.set_size(lv.pct(100), lv.SIZE_CONTENT)
+
+        self.detail = type("MockDetail", (), {})()
+        self.detail.action_label_install = "Install"
+        self.detail.action_label_uninstall = "Uninstall"
+        self.detail.install_button = None
+        self.detail.install_label = None
+        self.detail.update_button = None
+        self.detail._open_button = None
+        self.detail.app = _MockApp()
+        self.detail.app.fullname = "com.test.app"
+
+        self._orig_is_installed = AppManager.is_installed_by_name
+        self._orig_is_update = AppManager.is_update_available
+
+        wait_for_render(2)
+
+    def tearDown(self):
+        AppManager.is_installed_by_name = self._orig_is_installed
+        AppManager.is_update_available = self._orig_is_update
+        lv.screen_load(lv.obj())
+        wait_for_render(2)
+
+    def _assert_install_label(self, expected):
+        self.assertEqual(self.detail.install_label.get_text(), expected)
+
+    def _button_visible(self, button):
+        return not bool(button.get_state() & lv.obj.FLAG.HIDDEN.value) if button else False
+
+    def test_not_installed_no_version(self):
+        """Not installed, no version info -> only Install button, Open hidden, no Update."""
+        AppManager.is_installed_by_name = lambda fn: False
+        AppManager.is_update_available = lambda fn, v: False
+        self.detail.app.version = None
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+
+        self._assert_install_label("Install")
+        self.assertIsNotNone(self.detail.install_button)
+        self.assertIsNone(self.detail.update_button)
+        self.assertFalse(self._button_visible(self.detail._open_button))
+
+    def test_not_installed_but_version_available_no_update(self):
+        """Not installed, version fetched, no update -> Install only, Open hidden."""
+        AppManager.is_installed_by_name = lambda fn: False
+        AppManager.is_update_available = lambda fn, v: False
+        self.detail.app.version = "2.0"
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+
+        self._assert_install_label("Install")
+        self.assertIsNone(self.detail.update_button)
+        self.assertFalse(self._button_visible(self.detail._open_button))
+
+    def test_installed_no_update(self):
+        """Installed, no update -> Uninstall + Open, no Update."""
+        AppManager.is_installed_by_name = lambda fn: True
+        AppManager.is_update_available = lambda fn, v: False
+        self.detail.app.version = "1.0"
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+
+        self._assert_install_label("Uninstall")
+        self.assertIsNone(self.detail.update_button)
+        self.assertTrue(self._button_visible(self.detail._open_button))
+
+    def test_installed_with_update(self):
+        """Installed, update available -> Uninstall + Update + Open."""
+        AppManager.is_installed_by_name = lambda fn: True
+        AppManager.is_update_available = lambda fn, v: True
+        self.detail.app.version = "2.0"
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+
+        self._assert_install_label("Uninstall")
+        self.assertIsNotNone(self.detail.update_button)
+        self.assertTrue(self._button_visible(self.detail.update_button))
+        self.assertTrue(self._button_visible(self.detail._open_button))
+
+    def test_install_button_label_changes_after_install_simulation(self):
+        """After install completes, add_action_buttons shows Uninstall + Open."""
+        AppManager.is_installed_by_name = lambda fn: False
+        AppManager.is_update_available = lambda fn, v: False
+        self.detail.app.version = "2.0"
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+        self._assert_install_label("Install")
+        self.assertFalse(self._button_visible(self.detail._open_button))
+
+        AppManager.is_installed_by_name = lambda fn: True
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+        self._assert_install_label("Uninstall")
+        self.assertTrue(self._button_visible(self.detail._open_button))
+
+    def test_labels_after_uninstall(self):
+        """After uninstall, add_action_buttons shows Install, Open hidden."""
+        AppManager.is_installed_by_name = lambda fn: True
+        AppManager.is_update_available = lambda fn, v: False
+        self.detail.app.version = "2.0"
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+        self._assert_install_label("Uninstall")
+        self.assertTrue(self._button_visible(self.detail._open_button))
+
+        AppManager.is_installed_by_name = lambda fn: False
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+        self._assert_install_label("Install")
+        self.assertFalse(self._button_visible(self.detail._open_button))
+
+    def test_open_button_in_same_container(self):
+        """Open button is a child of buttoncont, not a floating widget."""
+        AppManager.is_installed_by_name = lambda fn: True
+        AppManager.is_update_available = lambda fn, v: False
+        self.detail.app.version = "1.0"
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+
+        parent = self.detail._open_button.get_parent()
+        self.assertIs(parent, self.buttoncont, "Open button must be child of buttoncont")
+
+    def test_update_button_click_sets_action_in_progress(self):
+        """update_button_click must set _action_in_progress to prevent
+        fetch_and_set_app_details from rebuilding buttons mid-update."""
+        self.detail._action_in_progress = False
+        self.detail.install_button = lv.button(self.screen)
+        self.detail.install_label = lv.label(self.detail.install_button)
+        self.detail.update_button = lv.button(self.screen)
+        self.detail.update_button.add_flag = lambda f: None
+
+        app = _MockApp()
+        app.download_url = "https://example.com/app.zip"
+        app.fullname = "com.test.app"
+
+        orig = TaskManager.create_task
+        TaskManager.create_task = lambda c: None
+        try:
+            AppDetail.update_button_click(self.detail, app)
+        finally:
+            TaskManager.create_task = orig
+
+        self.assertTrue(
+            self.detail._action_in_progress,
+            "update_button_click must set _action_in_progress = True",
         )
