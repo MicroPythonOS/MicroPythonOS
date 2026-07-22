@@ -480,6 +480,100 @@ class TestAppStoreDataFlow(unittest.TestCase):
         )
 
 
+class TestAppStoreHideWip(unittest.TestCase):
+    """Verify hide_wip setting filters BadgeHub work_in_progress apps."""
+
+    def setUp(self):
+        import mpos
+        import asyncio
+        asyncio.new_event_loop()
+
+    def _make_store(self, hide_wip):
+        from appstore import AppStore
+
+        store = AppStore()
+        store.prefs = MockPrefs(
+            backend="badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0,https://badgehub.eu/api/v3/projects"
+        )
+        store._DEFAULT_BACKEND = store.prefs.get_string("backend")
+        store._hide_wip = hide_wip
+        store.please_wait_label = MockLabel()
+        store._refresh_in_progress = False
+        store._data_loaded = False
+        store.update_all_button = MockLabel()
+        store.main_screen = MockLabel()
+        store.create_apps_list = lambda: None
+        store._update_category_dropdown = lambda: None
+        store._builtin_fullnames = set()
+        return store
+
+    def test_hide_wip_filters_work_in_progress(self):
+        import json
+        import asyncio
+        import mpos.net.download_manager as dm
+        from mpos import AppManager
+
+        json_data = json.dumps([
+            {"slug": "com.test.stable", "name": "StableApp", "description": "",
+             "development_status": "stable"},
+            {"slug": "com.test.wip", "name": "WipApp", "description": "",
+             "development_status": "work_in_progress"},
+        ])
+
+        async def _fake_download(url):
+            return json_data
+
+        orig_list = AppManager._app_list
+        AppManager._app_list = []
+        orig_dl = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_fake_download)
+        try:
+            store = self._make_store(hide_wip=True)
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0")
+            )
+            fullnames = [a.fullname for a in store.apps]
+            self.assertIn("com.test.stable", fullnames)
+            self.assertTrue("com.test.wip" not in fullnames, "work_in_progress app should be filtered out")
+        finally:
+            dm.DownloadManager.download_url = orig_dl
+            AppManager._app_list = orig_list
+
+    def test_show_wip_includes_work_in_progress(self):
+        import json
+        import asyncio
+        import mpos.net.download_manager as dm
+        from mpos import AppManager
+
+        json_data = json.dumps([
+            {"slug": "com.test.stable", "name": "StableApp", "description": "",
+             "development_status": "stable"},
+            {"slug": "com.test.wip", "name": "WipApp", "description": "",
+             "development_status": "work_in_progress"},
+        ])
+
+        async def _fake_download(url):
+            return json_data
+
+        orig_list = AppManager._app_list
+        AppManager._app_list = []
+        orig_dl = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_fake_download)
+        try:
+            store = self._make_store(hide_wip=False)
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0")
+            )
+            fullnames = [a.fullname for a in store.apps]
+            self.assertIn("com.test.stable", fullnames)
+            self.assertIn("com.test.wip", fullnames)
+        finally:
+            dm.DownloadManager.download_url = orig_dl
+            AppManager._app_list = orig_list
+
+
 class TestAppDetailUpdateRecheck(unittest.TestCase):
     """Ensure AppDetail._trigger_update_recheck refreshes AppManager first."""
 
