@@ -73,6 +73,7 @@ class AppStore(Activity):
         self._download_in_progress = False
         self._icon_pipeline = self.prefs.get_string("icon_pipeline", self._DEFAULT_ICON_PIPELINE)
         self.main_screen = lv.obj()
+        self.main_screen.remove_flag(lv.obj.FLAG.SCROLLABLE)
 
         # ---- top bar ----
         self.top_bar = lv.obj(self.main_screen)
