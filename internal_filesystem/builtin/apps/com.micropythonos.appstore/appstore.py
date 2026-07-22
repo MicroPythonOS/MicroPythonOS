@@ -36,6 +36,7 @@ class AppStore(Activity):
 
     _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
     _DEFAULT_ICON_PIPELINE = 'blurhash'
+    _DEFAULT_HIDE_WIP = True
 
     # Hardcoded list for now:
     backends = [
@@ -64,6 +65,7 @@ class AppStore(Activity):
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
+        self._hide_wip = self.prefs.get_string("hide_wip", "true") == "true"
         self._refresh_in_progress = False
         self._data_loaded = False
         self._icon_queue = []
@@ -281,11 +283,24 @@ class AppStore(Activity):
                  ("Blocky, blurhash, then download", "download"),
              ],
              "changed_callback": self._icon_pipeline_changed},
+            {"title": "Hide 'Work in Progress' Apps",
+             "key": "hide_wip",
+             "ui": "radiobuttons",
+             "default_value": "true",
+             "ui_options": [
+                 ("Hide", "true"),
+                 ("Show", "false"),
+             ],
+             "changed_callback": self._hide_wip_changed},
         ])
         self.startActivity(intent)
 
     def backend_changed(self, new_value):
         if __debug__: logger.debug("backend changed to %s", new_value)
+        self.refresh_list()
+
+    def _hide_wip_changed(self, new_value):
+        self._hide_wip = new_value == "true"
         self.refresh_list()
 
     def _category_changed(self, event):
@@ -382,6 +397,8 @@ class AppStore(Activity):
                     if app_data.get("slug") in installed_by_fullname:
                         continue
                     if app_data.get("slug") in self._builtin_fullnames:
+                        continue
+                    if self._hide_wip and app_data.get("development_status") == "work_in_progress":
                         continue
                     new_apps.append(AppStore.badgehub_app_to_mpos_app(app_data))
                 else:
