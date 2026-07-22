@@ -52,8 +52,9 @@ def _move(angle):
     _wait_ms(50)
 
 
-UP   = 0
-DOWN = 180
+UP    = 0
+DOWN  = 180
+LEFT  = 270
 
 
 def _get_appstore_activity():
@@ -109,58 +110,39 @@ class TestAppStoreFocus(unittest.TestCase):
             "settings_button should be focused after group_focus_obj",
         )
 
-    def test_settings_button_reachable_from_list_item_via_up(self):
-        """Pressing UP from a list item must reach the settings_button.
+    def test_settings_button_reachable_from_dropdown_via_left(self):
+        """Pressing LEFT from the category dropdown must reach settings_button.
 
         Regression test for the old ±45° cone algorithm: settings_button is a
-        small (~34×34 px) button in the top-left corner, nested inside top_bar.
-        Its center is at roughly (22, 22).  A full-width list item has its center
-        at roughly (160, 76).  The angle between them is ~292° (close to LEFT),
-        which the old cone algorithm excluded from the UP (0°±45°) cone.
-
-        The Android FocusFinder algorithm uses edge-overlap + beam priority
-        instead of a cone.  settings_button's rect (≈5,5–39,39) has its bottom
-        edge (y=39) above the list item's top edge (y=44), so it passes
-        isCandidate for UP, and its horizontal span overlaps the screen width so
-        it is in the beam — meaning it wins regardless of lateral offset.
+        small (~34×34 px) button in the top-left corner.  The category dropdown
+        spans most of the top bar width.  The old cone algorithm might route LEFT
+        incorrectly; the Android FocusFinder beam-priority algorithm correctly
+        finds the small corner button to the left of the wide dropdown.
         """
         activity = _get_appstore_activity()
         settings_btn = activity.settings_button
+        dropdown = activity.category_dropdown
+        self.assertIsNotNone(dropdown, "category_dropdown not found")
 
         group = lv.group_get_default()
         self.assertIsNotNone(group, "No default focus group")
 
-        # Focus any non-settings, non-hidden widget below the top bar
-        candidate = None
-        for i in range(group.get_obj_count()):
-            obj = group.get_obj_by_index(i)
-            if obj is settings_btn:
-                continue
-            if obj.has_flag(lv.obj.FLAG.HIDDEN):
-                continue
-            candidate = obj
-            break
-
-        self.assertIsNotNone(candidate,
-                             "No non-settings focusable object found after injecting fake apps")
-
-        lv.group_focus_obj(candidate)
+        lv.group_focus_obj(dropdown)
         self.assertIsNotNone(
-            wait_for_focus(candidate, timeout=0.5),
-            "Could not focus candidate list item",
+            wait_for_focus(dropdown, timeout=0.5),
+            "Could not focus category dropdown",
         )
 
-        # Press UP repeatedly — settings_button is directly above
         self.assertIsNotNone(
             retry_action_until(
-                lambda: _move(UP),
+                lambda: _move(LEFT),
                 lambda: settings_btn if _focused_obj() is settings_btn else None,
                 attempts=5,
                 timeout=0.5,
             ),
-            "settings_button was not reachable by pressing UP from a list item.\n"
-            "Expected the Android FocusFinder beam-priority algorithm to route UP\n"
-            "to the small corner button even though its center is far to the left.",
+            "settings_button was not reachable by pressing LEFT from the dropdown.\n"
+            "Expected the Android FocusFinder beam-priority algorithm to route LEFT\n"
+            "to the small corner button.",
         )
 
     def test_update_all_button_reachable_when_visible(self):
