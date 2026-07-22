@@ -144,8 +144,16 @@ class TestAppDetailButtonVisibility(unittest.TestCase):
         self.detail.install_label = None
         self.detail.update_button = None
         self.detail._open_button = None
+        self.detail._sync_open_button = lambda: AppDetail._sync_open_button(self.detail)
+        self.detail.set_install_label = self._mock_set_install_label
         self.detail.app = _MockApp()
         self.detail.app.fullname = "com.test.app"
+
+    def _mock_set_install_label(self, app_fullname):
+        if AppManager.is_installed_by_name(app_fullname):
+            self.detail.install_label.set_text("Uninstall")
+        else:
+            self.detail.install_label.set_text("Install")
 
         self._orig_is_installed = AppManager.is_installed_by_name
         self._orig_is_update = AppManager.is_update_available
@@ -162,7 +170,7 @@ class TestAppDetailButtonVisibility(unittest.TestCase):
         self.assertEqual(self.detail.install_label.get_text(), expected)
 
     def _button_visible(self, button):
-        return not bool(button.get_state() & lv.obj.FLAG.HIDDEN.value) if button else False
+        return button is not None and not button.has_flag(lv.obj.FLAG.HIDDEN)
 
     def test_not_installed_no_version(self):
         """Not installed, no version info -> only Install button, Open hidden, no Update."""
@@ -256,13 +264,13 @@ class TestAppDetailButtonVisibility(unittest.TestCase):
         self.assertIs(parent, self.buttoncont, "Open button must be child of buttoncont")
 
     def test_update_button_click_sets_action_in_progress(self):
-        """update_button_click must set _action_in_progress to prevent
-        fetch_and_set_app_details from rebuilding buttons mid-update."""
         self.detail._action_in_progress = False
         self.detail.install_button = lv.button(self.screen)
         self.detail.install_label = lv.label(self.detail.install_button)
         self.detail.update_button = lv.button(self.screen)
-        self.detail.update_button.add_flag = lambda f: None
+        async def _noop(*args, **kwargs):
+            pass
+        self.detail.download_and_install = _noop
 
         app = _MockApp()
         app.download_url = "https://example.com/app.zip"
