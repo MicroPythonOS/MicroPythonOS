@@ -104,7 +104,7 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
     # DNS on desktop corrupts the heap and crashes the process. Call getaddrinfo
     # directly there (it is reasonably fast and does not block an LVGL task
     # handler on desktop). On ESP32 keep the off-loop worker thread.
-    if sys.platform == "linux":
+    if False and sys.platform == "linux":
         result = _getaddrinfo(host, port, proto, socktype)
         _dns_cache[key] = (result, time.ticks_ms())
         return result

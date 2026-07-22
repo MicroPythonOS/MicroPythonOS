@@ -296,17 +296,23 @@ class AppStore(Activity):
     def _update_category_dropdown(self):
         if self.category_dropdown is None:
             return
-        cats = set()
+        cat_counts = {}
+        total = 0
         for app in self.apps:
             if app.category:
-                cats.add(AppStore._normalize_category(app.category))
-        sorted_cats = sorted(cats)
+                cat = AppStore._normalize_category(app.category)
+                cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            total += 1
+        sorted_cats = sorted(cat_counts.keys())
         if "Adult" in sorted_cats:
             sorted_cats.remove("Adult")
             sorted_cats.append("Adult")
         self._category_options = ["All Categories"] + sorted_cats
+        display = ["All Categories (%d)" % total]
+        for cat_name in sorted_cats:
+            display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
         selected = self.category_dropdown.get_selected()
-        self.category_dropdown.set_options("\n".join(self._category_options))
+        self.category_dropdown.set_options("\n".join(display))
         if selected < len(self._category_options):
             self.category_dropdown.set_selected(selected)
 
