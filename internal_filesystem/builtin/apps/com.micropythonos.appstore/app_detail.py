@@ -177,6 +177,7 @@ class AppDetail(Activity):
         self.install_button = lv.button(buttoncont)
         self.install_button.set_style_margin_all(5, lv.PART.MAIN)
         self.install_button.set_flex_grow(1)
+        self.install_button.set_height(40)
         self.install_button.add_event_cb(lambda e, a=self.app: self.toggle_install(a), lv.EVENT.CLICKED, None)
         self.install_label = lv.label(self.install_button)
         self.install_label.center()
@@ -187,6 +188,7 @@ class AppDetail(Activity):
             self.update_button = lv.button(buttoncont)
             self.update_button.set_style_margin_all(5, lv.PART.MAIN)
             self.update_button.set_flex_grow(1)
+            self.update_button.set_height(40)
             self.update_button.add_event_cb(lambda e, a=self.app: self.update_button_click(a), lv.EVENT.CLICKED, None)
             update_label = lv.label(self.update_button)
             update_label.set_text("Update")
@@ -197,7 +199,6 @@ class AppDetail(Activity):
         self._open_button.add_event_cb(lambda e, a=self.app: self._open_app(a.fullname), lv.EVENT.CLICKED, None)
         open_label = lv.label(self._open_button)
         open_label.set_text("Open")
-        open_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
         open_label.center()
         self._sync_open_button()
 
