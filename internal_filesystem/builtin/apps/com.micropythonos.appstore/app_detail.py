@@ -173,9 +173,11 @@ class AppDetail(Activity):
 
     def add_action_buttons(self, buttoncont, app):
         buttoncont.clean()
+        buttoncont.set_style_pad_all(4, lv.PART.MAIN)
+        buttoncont.set_style_pad_column(3, lv.PART.MAIN)
         if __debug__: logger.debug("adding (un)install button for url: %s", self.app.download_url)
         self.install_button = lv.button(buttoncont)
-        self.install_button.set_style_pad_all(0, lv.PART.MAIN)
+        self.install_button.set_style_pad_hor(3, lv.PART.MAIN)
         self.install_button.set_flex_grow(1)
         self.install_button.set_height(40)
         self.install_button.add_event_cb(lambda e, a=self.app: self.toggle_install(a), lv.EVENT.CLICKED, None)
@@ -186,7 +188,7 @@ class AppDetail(Activity):
         if app.version and AppManager.is_update_available(self.app.fullname, app.version):
             if __debug__: logger.debug("update available, adding update button")
             self.update_button = lv.button(buttoncont)
-            self.update_button.set_style_pad_all(0, lv.PART.MAIN)
+            self.update_button.set_style_pad_hor(3, lv.PART.MAIN)
             self.update_button.set_flex_grow(1)
             self.update_button.set_height(40)
             self.update_button.add_event_cb(lambda e, a=self.app: self.update_button_click(a), lv.EVENT.CLICKED, None)
@@ -194,11 +196,11 @@ class AppDetail(Activity):
             update_label.set_text("Update")
             update_label.center()
         self._open_button = lv.button(buttoncont)
-        self._open_button.set_style_pad_all(0, lv.PART.MAIN)
+        self._open_button.set_style_pad_hor(3, lv.PART.MAIN)
         self._open_button.set_size(lv.SIZE_CONTENT, 40)
         self._open_button.add_event_cb(lambda e, a=self.app: self._open_app(a.fullname), lv.EVENT.CLICKED, None)
         open_label = lv.label(self._open_button)
-        open_label.set_text("Open")
+        open_label.set_text(" Open ")
         open_label.center()
         self._sync_open_button()
 
