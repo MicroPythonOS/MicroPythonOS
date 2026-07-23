@@ -100,13 +100,13 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
     if cached is not None:
         return cached
 
-    # .local TLD triggers mDNS (libnss_mdns4_minimal on Linux) which is not
-    # thread-safe when called from MicroPython's _thread workers — it segfaults.
-    # Raise the same OSError that an unresolvable host would produce, without
-    # ever calling getaddrinfo (and thus without spawning a thread or loading
-    # the unsafe NSS module).
-    if host.lower().endswith(".local"):
-        raise OSError(-2, "Name does not resolve")
+    # .local TLD triggers mDNS (libnss_mdns4_minimal on Linux) which segfaults
+    # when called from a _thread worker. Resolve synchronously on the main
+    # thread on desktop where getaddrinfo is fast and mDNS is thread-safe.
+    if host.lower().endswith(".local") and sys.platform == "linux":
+        result = _getaddrinfo(host, port, proto, socktype)
+        _dns_cache[key] = (result, time.ticks_ms())
+        return result
 
     global _inflight
 

@@ -18,6 +18,7 @@ Frameworks:
 
 OS:
 - aiowebsocket: add exponential reconnect backoff so unreachable relays stop exhausting the thread pool (#191) by @jnuyens
+- async_dns.py: fix .local handling
 
 0.15.1
 ======
