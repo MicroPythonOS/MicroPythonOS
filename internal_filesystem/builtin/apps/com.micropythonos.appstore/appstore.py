@@ -37,6 +37,7 @@ class AppStore(Activity):
     _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
     _DEFAULT_ICON_PIPELINE = 'blurhash'
     _DEFAULT_HIDE_WIP = True
+    _SPECIAL_CATEGORIES = {"Work In Progress"}
 
     # Hardcoded list for now:
     backends = [
@@ -320,19 +321,20 @@ class AppStore(Activity):
                 cat = AppStore._normalize_category(app.category)
                 cat_counts[cat] = cat_counts.get(cat, 0) + 1
             total += 1
-        sorted_cats = sorted(cat_counts.keys())
-        if "Adult" in sorted_cats:
-            sorted_cats.remove("Adult")
-            sorted_cats.append("Adult")
+        sorted_cats = [c for c in sorted(cat_counts.keys()) if c != "Adult" and c not in AppStore._SPECIAL_CATEGORIES]
+        top_cats = []
         if self._wip_apps:
-            sorted_cats.append("Work In Progress")
-        self._category_options = ["All Categories"] + sorted_cats
+            top_cats.append("Work In Progress")
+        self._category_options = ["All Categories"] + top_cats + sorted_cats
+        if "Adult" in cat_counts:
+            self._category_options.append("Adult")
         display = ["All Categories (%d)" % total]
+        for cat_name in top_cats:
+            display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
         for cat_name in sorted_cats:
-            if cat_name == "Work In Progress":
-                display.append("Work In Progress (%d)" % len(self._wip_apps))
-            else:
-                display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
+            display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
+        if "Adult" in cat_counts:
+            display.append("Adult (%d)" % cat_counts["Adult"])
         selected = self.category_dropdown.get_selected()
         self.category_dropdown.set_options("\n".join(display))
         if selected < len(self._category_options):
