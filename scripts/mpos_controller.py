@@ -797,6 +797,14 @@ for s in t:
             out_str = out.decode("utf-8", errors="replace")
             passed = "TEST WAS A SUCCESS" in out_str
             return passed, out
+        except OSError:
+            msg = ("\nPROCESS CRASHED — MicroPython binary died (PTY closed). "
+                   "Check for segfault (exit 139), "
+                   "import error, or LVGL misuse (passing non-LVGL object "
+                   "to widget constructor). "
+                   "Run the binary directly to see the crash:\n"
+                   "  lvgl_micropy_unix -X heapsize=32M -c '...'\n")
+            return False, msg.encode()
         finally:
             try:
                 os.remove(dest_path)
