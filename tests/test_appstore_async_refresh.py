@@ -811,14 +811,9 @@ class TestBadgehubReportInstall(unittest.TestCase):
             def add_flag(self, f): pass
             def remove_flag(self, f): pass
             def set_value(self, v, w): pass
-        class MockCont:
-            def clean(self): pass
-            def set_style_pad_all(self, v, p): pass
-            def set_style_pad_column(self, v, p): pass
         self.MockBtn = MockBtn
         self.MockLbl = MockLbl
         self.MockBar = MockBar
-        self.MockCont = MockCont
 
     def test_fetch_badgehub_details_includes_revision(self):
         import asyncio
@@ -922,7 +917,7 @@ class TestBadgehubReportInstall(unittest.TestCase):
             detail.install_button = self.MockBtn()
             detail.install_label = self.MockLbl()
             detail.progress_bar = self.MockBar()
-            detail.buttoncont = self.MockCont()
+            detail.add_action_buttons = lambda *a: None
 
             # inject our fake report function
             import appstore_core
@@ -973,7 +968,7 @@ class TestBadgehubReportInstall(unittest.TestCase):
             detail.install_button = self.MockBtn()
             detail.install_label = self.MockLbl()
             detail.progress_bar = self.MockBar()
-            detail.buttoncont = self.MockCont()
+            detail.add_action_buttons = lambda *a: None
 
             loop = asyncio.get_event_loop()
             loop.run_until_complete(detail.download_and_install(detail.app, "apps/com.test.app"))
