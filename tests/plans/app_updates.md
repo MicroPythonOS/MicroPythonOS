@@ -1,5 +1,17 @@
 # App Store "Updates Available" Flow — Test Coverage Analysis
 
+Do we have good test coverage for the com.micropythonos.appstore "updates available" flow?
+It's quite complex with these aspects, maybe more:
+- "boot_completed" event which launches the update checker service somehow
+- checking for updates (this has different network interactions; network available before checking, during checking, after checking, how are these handled? are these tested?)
+- displaying "App updates available" notification
+- when the notification is clicked, opening the AppStore app
+- when updates are available, AppStore app has "Update N Apps" button
+- clicking the "Update N Apps" button updates those N apps one by one
+- after the updates, the "Update N Apps" button is hidden
+- after the "Update N Apps" button is hidden, the UI behaves normally, so the list still scrolls normally and displays apps normally
+
+
 ## Summary (Updated)
 
 The six serious gaps from the previous analysis now have test coverage via `tests/test_appstore_update_flow.py` (32 new tests). Coverage improved from 4/40 (10%) to 30/40 (75%). The remaining gaps are mostly lifecycle/integration concerns.
