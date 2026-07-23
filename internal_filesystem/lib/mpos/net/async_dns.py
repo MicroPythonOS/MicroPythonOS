@@ -100,10 +100,11 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
     if cached is not None:
         return cached
 
-    # .local TLD triggers mDNS (libnss_mdns4_minimal on Linux) which segfaults
-    # when called from a _thread worker. Resolve synchronously on the main
-    # thread on desktop where getaddrinfo is fast and mDNS is thread-safe.
-    if host.lower().endswith(".local") and sys.platform == "linux":
+    # .local TLD triggers mDNS (libnss_mdns4_minimal on Linux, Bonjour on
+    # macOS) which segfaults when called from a _thread worker. Resolve
+    # synchronously on the main thread on desktop where getaddrinfo is fast
+    # and mDNS is thread-safe.
+    if host.lower().endswith(".local") and sys.platform in ("linux", "darwin"):
         result = _getaddrinfo(host, port, proto, socktype)
         _dns_cache[key] = (result, time.ticks_ms())
         return result

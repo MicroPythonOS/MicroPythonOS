@@ -18,7 +18,7 @@ Frameworks:
 
 OS:
 - aiowebsocket: add exponential reconnect backoff so unreachable relays stop exhausting the thread pool (#191) by @jnuyens
-- async_dns.py: fix .local handling
+- async_dns: resolve .local domains synchronously on desktop because mDNS is not thread safe
 
 0.15.1
 ======

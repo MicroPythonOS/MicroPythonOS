@@ -6,7 +6,10 @@
 # python3 make.py "$target" LV_CFLAGS="-g -O0 -ggdb" STRIP=  DISPLAY=sdl_display INDEV=sdl_pointer INDEV=sdl_keyboard "$manifest"
 
 ulimit -c unlimited
-sudo sysctl -w kernel.core_pattern=/tmp/core.%p
+
+# by default, the core dump will be in the CWD so for ./scripts/run_desktop.sh that will be in ./internal_filesystem/core
+
+#sudo sysctl -w kernel.core_pattern=/tmp/core.%p
 
 # Now run it as usual (with run_desktop.sh)
 # And when it crashes, the core will be dumped in /tmp/core.XXXXX
