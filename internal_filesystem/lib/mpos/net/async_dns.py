@@ -100,17 +100,13 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
     if cached is not None:
         return cached
 
-    # On the unix port _thread is marked 'unsafe'; spawning worker threads for
-    # DNS on desktop corrupts the heap and crashes the process. Call getaddrinfo
-    # directly there (it is reasonably fast and does not block an LVGL task
-    # handler on desktop). On ESP32 keep the off-loop worker thread.
-    # Not sure this is needed, and it does make the system hang regularly
-    # when running on desktop without internet access, so disabled it for
-    # now by adding at 'False and' to the condition:
-    if False and sys.platform == "linux":
-        result = _getaddrinfo(host, port, proto, socktype)
-        _dns_cache[key] = (result, time.ticks_ms())
-        return result
+    # .local TLD triggers mDNS (libnss_mdns4_minimal on Linux) which is not
+    # thread-safe when called from MicroPython's _thread workers — it segfaults.
+    # Raise the same OSError that an unresolvable host would produce, without
+    # ever calling getaddrinfo (and thus without spawning a thread or loading
+    # the unsafe NSS module).
+    if host.lower().endswith(".local"):
+        raise OSError(-2, "Name does not resolve")
 
     global _inflight
 

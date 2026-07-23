@@ -276,10 +276,8 @@ class TestDownloadManager(unittest.TestCase):
         import asyncio
 
         async def run_test():
-            mock_dm = MockDownloadManager()
-            mock_dm.set_should_fail(True)
-            data = await mock_dm.download_url("http://invalid-url-that-does-not-exist.local/")
-            self.assertIsNone(data)
+            with self.assertRaises(OSError):
+                await DownloadManager.download_url("http://invalid-url-that-does-not-exist.local/")
 
         asyncio.run(run_test())
 
