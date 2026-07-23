@@ -66,6 +66,7 @@ class AppStore(Activity):
         self.prefs = SharedPreferences(self.appFullName)
         self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self._hide_wip = self.prefs.get_string("hide_wip", "true") == "true"
+        self._wip_apps = []
         self._refresh_in_progress = False
         self._data_loaded = False
         self._icon_queue = []
@@ -323,10 +324,15 @@ class AppStore(Activity):
         if "Adult" in sorted_cats:
             sorted_cats.remove("Adult")
             sorted_cats.append("Adult")
+        if self._wip_apps:
+            sorted_cats.append("Work In Progress")
         self._category_options = ["All Categories"] + sorted_cats
         display = ["All Categories (%d)" % total]
         for cat_name in sorted_cats:
-            display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
+            if cat_name == "Work In Progress":
+                display.append("Work In Progress (%d)" % len(self._wip_apps))
+            else:
+                display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
         selected = self.category_dropdown.get_selected()
         self.category_dropdown.set_options("\n".join(display))
         if selected < len(self._category_options):
@@ -367,6 +373,7 @@ class AppStore(Activity):
 
         # Phase 1: always show installed apps first (no network needed)
         self.apps.clear()
+        self._wip_apps.clear()
         self._builtin_fullnames = set()
         for installed_app in AppManager.get_app_list():
             if installed_app.installed_path and "builtin" in installed_app.installed_path:
@@ -396,12 +403,17 @@ class AppStore(Activity):
             try:
                 if backend_type == self._BACKEND_API_BADGEHUB:
                     if app_data.get("slug") in installed_by_fullname:
+                        if app_data.get("development_status") == "work_in_progress":
+                            self._wip_apps.append(installed_by_fullname[app_data.get("slug")])
                         continue
                     if app_data.get("slug") in self._builtin_fullnames:
                         continue
-                    if self._hide_wip and app_data.get("development_status") == "work_in_progress":
-                        continue
-                    new_apps.append(AppStore.badgehub_app_to_mpos_app(app_data))
+                    app = AppStore.badgehub_app_to_mpos_app(app_data)
+                    if app_data.get("development_status") == "work_in_progress":
+                        self._wip_apps.append(app)
+                        if self._hide_wip:
+                            continue
+                    new_apps.append(app)
                 else:
                     fullname = app_data["fullname"]
                     if fullname in self._builtin_fullnames:
@@ -454,9 +466,12 @@ class AppStore(Activity):
         self._icon_widgets = {}
         self._update_labels = {}
         if __debug__: logger.debug("create_apps_list iterating")
-        for app in self.apps:
+        apps_to_show = self._wip_apps if self._selected_category == "Work In Progress" else self.apps
+        for app in apps_to_show:
             if self._selected_category:
-                if not app.category or AppStore._normalize_category(app.category) != self._selected_category:
+                if self._selected_category == "Work In Progress":
+                    pass
+                elif not app.category or AppStore._normalize_category(app.category) != self._selected_category:
                     continue
             if __debug__: logger.debug(app)
             item = self.apps_list.add_button(None, "")

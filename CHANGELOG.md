@@ -6,6 +6,7 @@ Future release (next version)
 
 Builtin Apps:
 - AppStore: add category filter
+- AppStore: add "Work in Progress" filter
 - AppStore: hide work_in_progress apps by default (toggle with setting)
 - AppStore: report app install to BadgeHub report/install API for statistics
 - AppStore: optimize icon display and add blurhash support
