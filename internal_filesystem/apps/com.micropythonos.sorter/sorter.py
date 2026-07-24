@@ -184,6 +184,7 @@ def _generate_level(filled, capacity, extra, max_retries=30):
     for i in range(filled):
         balls.extend([i] * capacity)
 
+    max_states = 5000 if filled <= 5 else 20000
     for _ in range(max_retries):
         _shuffle(balls)
         tubes = []
@@ -195,7 +196,7 @@ def _generate_level(filled, capacity, extra, max_retries=30):
             tubes.append([])
         if _is_solved(tubes):
             continue
-        solution = _solve_path(tubes, capacity)
+        solution = _solve_path(tubes, capacity, max_states=max_states)
         if solution:
             return tubes, solution
 
