@@ -1,0 +1,1 @@
+{"name":"Confetti","publisher":"MicroPythonOS","short_description":"Just shows confetti","long_description":"Nothing special, just a demo.","fullname":"com.micropythonos.confetti","version":"0.3.3","category":"game","activities":[{"entrypoint":"confetti_app.py","classname":"ConfettiApp","intent_filters":[{"action":"main","category":"launcher"}]}]}

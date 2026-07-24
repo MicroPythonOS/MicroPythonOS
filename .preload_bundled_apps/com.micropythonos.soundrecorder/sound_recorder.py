@@ -1,0 +1,450 @@
+# Sound Recorder App - Record audio from I2S microphone to WAV files
+import os
+import time
+
+import lvgl as lv
+
+from mpos import Activity, AppManager, AudioManager
+
+
+def _makedirs(path):
+    """
+    Create directory and all parent directories (like os.makedirs).
+    MicroPython doesn't have os.makedirs, so we implement it manually.
+    """
+    if not path:
+        return
+
+    parts = path.split('/')
+    current = ''
+
+    for part in parts:
+        if not part:
+            continue
+        current = current + '/' + part if current else part
+        try:
+            os.mkdir(current)
+        except OSError:
+            pass  # Directory may already exist
+
+
+class SoundRecorder(Activity):
+    """
+    Sound Recorder app for recording audio from I2S microphone.
+    Saves recordings as WAV files that can be played with Music Player.
+    """
+
+    # Constants
+    RECORDINGS_DIR = "data/recordings"
+    SAMPLE_RATE = 16000  # 16kHz
+    BYTES_PER_SAMPLE = 2  # 16-bit audio
+    BYTES_PER_SECOND = SAMPLE_RATE * BYTES_PER_SAMPLE  # 32000 bytes/sec
+    MIN_DURATION_MS = 5000  # Minimum 5 seconds
+    MAX_DURATION_MS = 3600000  # Maximum 1 hour (absolute cap)
+    SAFETY_MARGIN = 0.80  # Use only 80% of available space
+
+    # UI Widgets
+    _status_label = None
+    _timer_label = None
+    _record_button = None
+    _record_button_label = None
+    _play_button = None
+    _play_button_label = None
+    _delete_button = None
+    _last_file_label = None
+
+    # State
+    _is_recording = False
+    _last_recording = None
+    _timer_task = None
+    _record_start_time = 0
+    _recorder = None
+    _player = None
+
+    def onCreate(self):
+        screen = lv.obj()
+
+        # Calculate max duration based on available storage
+        self._current_max_duration_ms = self._calculate_max_duration()
+
+        # Settings button (top-right)
+        self._settings_button = lv.button(screen)
+        settings_margin = 15
+        settings_size = 44
+        self._settings_button.set_size(settings_size, settings_size)
+        self._settings_button.align(lv.ALIGN.TOP_RIGHT, -settings_margin, 10)
+        self._settings_button.add_event_cb(self._open_settings, lv.EVENT.CLICKED, None)
+        settings_label = lv.label(self._settings_button)
+        settings_label.set_text(lv.SYMBOL.SETTINGS)
+        settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        settings_label.center()
+
+        # Status label (shows microphone availability)
+        self._status_label = lv.label(screen)
+        self._status_label.align(lv.ALIGN.TOP_LEFT, 20, 20)
+
+        # Timer display
+        self._timer_label = lv.label(screen)
+        self._timer_label.set_text(self._format_timer_text(0))
+        self._timer_label.align(lv.ALIGN.CENTER, 0, -30)
+        self._timer_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+
+        # Record button
+        self._record_button = lv.button(screen)
+        self._record_button.set_size(120, 50)
+        self._record_button.align(lv.ALIGN.CENTER, 0, 30)
+        self._record_button.add_event_cb(self._on_record_clicked, lv.EVENT.CLICKED, None)
+
+        self._record_button_label = lv.label(self._record_button)
+        self._record_button_label.set_text(lv.SYMBOL.AUDIO + " Record")
+        self._record_button_label.center()
+
+        # Last recording info
+        self._last_file_label = lv.label(screen)
+        self._last_file_label.align(lv.ALIGN.BOTTOM_MID, 0, -70)
+        self._last_file_label.set_text("No recordings yet")
+        self._last_file_label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
+        self._last_file_label.set_width(lv.pct(90))
+
+        # Play button
+        self._play_button = lv.button(screen)
+        self._play_button.set_size(80, 40)
+        self._play_button.align(lv.ALIGN.BOTTOM_LEFT, 20, -20)
+        self._play_button.add_event_cb(self._on_play_clicked, lv.EVENT.CLICKED, None)
+        self._play_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+        self._play_button_label = lv.label(self._play_button)
+        self._play_button_label.set_text(lv.SYMBOL.PLAY + " Play")
+        self._play_button_label.center()
+
+        # Delete button
+        self._delete_button = lv.button(screen)
+        self._delete_button.set_size(80, 40)
+        self._delete_button.align(lv.ALIGN.BOTTOM_RIGHT, -20, -20)
+        self._delete_button.add_event_cb(self._on_delete_clicked, lv.EVENT.CLICKED, None)
+        self._delete_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+        delete_label = lv.label(self._delete_button)
+        delete_label.set_text(lv.SYMBOL.TRASH + " Delete")
+        delete_label.center()
+
+        self.setContentView(screen)
+
+    def onResume(self, screen):
+        super().onResume(screen)
+        # Recalculate max duration (storage may have changed)
+        self._current_max_duration_ms = self._calculate_max_duration()
+        self._timer_label.set_text(self._format_timer_text(0))
+        self._update_status()
+        self._find_last_recording()
+
+    def onPause(self, screen):
+        super().onPause(screen)
+        # Stop recording if app goes to background
+        if self._is_recording:
+            self._stop_recording()
+
+    def _update_status(self):
+        """Update status label based on microphone availability."""
+        default_input = AudioManager.get_default_input()
+        default_output = AudioManager.get_default_output()
+        input_name = default_input.name if default_input else "None"
+        output_name = default_output.name if default_output else "None"
+        if default_input is not None:
+            self._status_label.set_text(
+                f"Input: {input_name}\nPlayback to {output_name}"
+            )
+            self._status_label.set_style_text_color(lv.color_hex(0x00AA00), lv.PART.MAIN)
+            self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._status_label.set_text(
+                f"No input device\nPlayback to {output_name}"
+            )
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+            self._record_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _find_last_recording(self):
+        """Find the most recent recording file."""
+        try:
+            # Ensure recordings directory exists
+            _makedirs(self.RECORDINGS_DIR)
+
+            # List recordings
+            files = os.listdir(self.RECORDINGS_DIR)
+            wav_files = [f for f in files if f.endswith('.wav')]
+
+            if wav_files:
+                # Sort by name (which includes timestamp)
+                wav_files.sort(reverse=True)
+                self._last_recording = f"{self.RECORDINGS_DIR}/{wav_files[0]}"
+                self._last_file_label.set_text(f"Last: {wav_files[0]}")
+                self._play_button.remove_flag(lv.obj.FLAG.HIDDEN)
+                self._delete_button.remove_flag(lv.obj.FLAG.HIDDEN)
+            else:
+                self._last_recording = None
+                self._last_file_label.set_text("No recordings yet")
+                self._play_button.add_flag(lv.obj.FLAG.HIDDEN)
+                self._delete_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+        except Exception as e:
+            print(f"SoundRecorder: Error finding recordings: {e}")
+            self._last_recording = None
+
+    def _calculate_max_duration(self):
+        """
+        Calculate maximum recording duration based on available storage.
+        Returns duration in milliseconds.
+        """
+        try:
+            # Ensure recordings directory exists
+            _makedirs(self.RECORDINGS_DIR)
+
+            # Get filesystem stats for the recordings directory
+            stat = os.statvfs(self.RECORDINGS_DIR)
+
+            # Calculate free space in bytes
+            # f_bavail = free blocks available to non-superuser
+            # f_frsize = fragment size (fundamental block size)
+            free_bytes = stat[0] * stat[4]  # f_frsize * f_bavail
+
+            # Apply safety margin (use only 80% of available space)
+            usable_bytes = int(free_bytes * self.SAFETY_MARGIN)
+
+            # Calculate max duration in seconds
+            max_seconds = usable_bytes // self.BYTES_PER_SECOND
+
+            # Convert to milliseconds
+            max_ms = max_seconds * 1000
+
+            # Clamp to min/max bounds
+            max_ms = max(self.MIN_DURATION_MS, min(max_ms, self.MAX_DURATION_MS))
+
+            print(f"SoundRecorder: Free space: {free_bytes} bytes, "
+                  f"usable: {usable_bytes} bytes, max duration: {max_ms // 1000}s")
+
+            return max_ms
+
+        except Exception as e:
+            print(f"SoundRecorder: Error calculating max duration: {e}")
+            # Fall back to a conservative 60 seconds
+            return 60000
+
+    def _format_timer_text(self, elapsed_ms):
+        """Format timer display text showing elapsed / max time."""
+        elapsed_sec = elapsed_ms // 1000
+        max_sec = self._current_max_duration_ms // 1000
+
+        elapsed_min = elapsed_sec // 60
+        elapsed_sec_display = elapsed_sec % 60
+        max_min = max_sec // 60
+        max_sec_display = max_sec % 60
+
+        return f"{elapsed_min:02d}:{elapsed_sec_display:02d} / {max_min:02d}:{max_sec_display:02d}"
+
+    def _generate_filename(self):
+        """Generate a timestamped filename for the recording."""
+        # Get current time
+        t = time.localtime()
+        timestamp = f"{t[0]:04d}-{t[1]:02d}-{t[2]:02d}_{t[3]:02d}-{t[4]:02d}-{t[5]:02d}"
+        return f"{self.RECORDINGS_DIR}/{timestamp}.wav"
+
+    def _on_record_clicked(self, event):
+        """Handle record button click."""
+        print(f"SoundRecorder: _on_record_clicked called, _is_recording={self._is_recording}")
+        if self._is_recording:
+            print("SoundRecorder: Stopping recording...")
+            self._stop_recording()
+        else:
+            print("SoundRecorder: Starting recording...")
+            self._start_recording()
+
+    def _start_recording(self):
+        """Start recording audio."""
+        print("SoundRecorder: _start_recording called")
+        default_input = AudioManager.get_default_input()
+        print(f"SoundRecorder: default input = {default_input}")
+
+        if default_input is None:
+            print("SoundRecorder: No microphone available - aborting")
+            return
+
+        # Generate filename
+        file_path = self._generate_filename()
+        print(f"SoundRecorder: Generated filename: {file_path}")
+
+        # Recalculate max duration before starting (storage may have changed)
+        self._current_max_duration_ms = self._calculate_max_duration()
+
+        if self._current_max_duration_ms < self.MIN_DURATION_MS:
+            print("SoundRecorder: Not enough storage space")
+            self._status_label.set_text("Not enough storage space")
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+            return
+
+        # Start recording
+        print(f"SoundRecorder: Calling AudioManager.recorder()")
+        print(f"  file_path: {file_path}")
+        print(f"  duration_ms: {self._current_max_duration_ms}")
+        print(f"  sample_rate: {self.SAMPLE_RATE}")
+
+        try:
+            self._recorder = AudioManager.recorder(
+                file_path=file_path,
+                duration_ms=self._current_max_duration_ms,
+                on_complete=self._on_recording_complete,
+                sample_rate=self.SAMPLE_RATE,
+                input=default_input,
+            )
+            self._recorder.start()
+            success = True
+        except Exception as exc:
+            print(f"SoundRecorder: recorder start failed: {exc}")
+            success = False
+
+        print(f"SoundRecorder: recorder started: {success}")
+
+        if success:
+            self._is_recording = True
+            self._record_start_time = time.ticks_ms()
+            self._last_recording = file_path
+            print("SoundRecorder: Recording started successfully")
+
+            # Update UI
+            self._record_button_label.set_text(lv.SYMBOL.STOP + " Stop")
+            self._record_button.set_style_bg_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+            self._status_label.set_text("Recording...")
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+
+            # Hide play/delete buttons during recording
+            self._play_button.add_flag(lv.obj.FLAG.HIDDEN)
+            self._delete_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+            # Start timer update
+            self._start_timer_update()
+        else:
+            print("SoundRecorder: recorder failed!")
+            self._status_label.set_text("Failed to start recording")
+            self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+
+    def _stop_recording(self):
+        """Stop recording audio."""
+        if self._recorder:
+            self._recorder.stop()
+        self._recorder = None
+        self._is_recording = False
+
+        # Show "Saving..." status immediately (file finalization takes time on SD card)
+        self._status_label.set_text("Saving...")
+        self._status_label.set_style_text_color(lv.color_hex(0xFF8800), lv.PART.MAIN)  # Orange
+
+        # Disable record button while saving
+        self._record_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+        # Stop timer update but keep the elapsed time visible
+        if self._timer_task:
+            self._timer_task.delete()
+            self._timer_task = None
+
+    def _on_recording_complete(self, message):
+        """Callback when recording finishes."""
+        print(f"SoundRecorder: {message}")
+
+        # Update UI on main thread
+        self.update_ui_threadsafe_if_foreground(self._recording_finished, message)
+
+    def _recording_finished(self, message):
+        """Update UI after recording finishes (called on main thread)."""
+        self._is_recording = False
+
+        # Re-enable and reset record button
+        self._record_button.remove_flag(lv.obj.FLAG.HIDDEN)
+        self._record_button_label.set_text(lv.SYMBOL.AUDIO + " Record")
+        self._record_button.set_style_bg_color(lv.theme_get_color_primary(None), lv.PART.MAIN)
+
+        # Update status and find recordings
+        self._update_status()
+        self._find_last_recording()
+
+        # Reset timer display
+        self._timer_label.set_text(self._format_timer_text(0))
+
+    def _start_timer_update(self):
+        """Start updating the timer display."""
+        # Use LVGL timer for periodic updates
+        self._timer_task = lv.timer_create(self._update_timer, 100, None)
+
+    def _stop_timer_update(self):
+        """Stop updating the timer display."""
+        if self._timer_task:
+            self._timer_task.delete()
+            self._timer_task = None
+        self._timer_label.set_text(self._format_timer_text(0))
+
+    def _update_timer(self, timer):
+        """Update timer display (called periodically)."""
+        if not self._is_recording:
+            return
+
+        elapsed_ms = time.ticks_diff(time.ticks_ms(), self._record_start_time)
+        self._timer_label.set_text(self._format_timer_text(elapsed_ms))
+
+    def _on_play_clicked(self, event):
+        """Handle play button click."""
+        if self._last_recording and not self._is_recording:
+            # Stop any current playback
+            if self._player:
+                self._player.stop()
+            time.sleep_ms(100)
+
+            output = AudioManager.get_default_output()
+            if output is None:
+                self._status_label.set_text("Playback failed")
+                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+                return
+
+            # Play the recording
+            try:
+                self._player = AudioManager.player(
+                    file_path=self._last_recording,
+                    stream_type=AudioManager.STREAM_MUSIC,
+                    on_complete=self._on_playback_complete,
+                    volume=100,
+                    output=output,
+                )
+                self._player.start()
+                success = True
+            except Exception as exc:
+                print(f"SoundRecorder: playback failed: {exc}")
+                success = False
+
+            if success:
+                self._status_label.set_text("Playing...")
+                self._status_label.set_style_text_color(lv.color_hex(0x0000AA), lv.PART.MAIN)
+            else:
+                self._status_label.set_text("Playback failed")
+                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+
+    def _on_playback_complete(self, message):
+        """Callback when playback finishes."""
+        self.update_ui_threadsafe_if_foreground(self._update_status)
+
+    def _on_delete_clicked(self, event):
+        """Handle delete button click."""
+        if self._last_recording and not self._is_recording:
+            try:
+                os.remove(self._last_recording)
+                print(f"SoundRecorder: Deleted {self._last_recording}")
+                self._find_last_recording()
+
+                # Recalculate max duration (more space available now)
+                self._current_max_duration_ms = self._calculate_max_duration()
+                self._timer_label.set_text(self._format_timer_text(0))
+
+                self._status_label.set_text("Recording deleted")
+            except Exception as e:
+                print(f"SoundRecorder: Delete failed: {e}")
+                self._status_label.set_text("Delete failed")
+                self._status_label.set_style_text_color(lv.color_hex(0xAA0000), lv.PART.MAIN)
+
+    def _open_settings(self, event):
+        AppManager.start_app("com.micropythonos.settings.audio")

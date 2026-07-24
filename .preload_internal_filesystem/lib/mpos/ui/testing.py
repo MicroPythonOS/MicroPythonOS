@@ -1,0 +1,1803 @@
+"""
+Graphical testing utilities for MicroPythonOS.
+
+This module provides utilities for graphical/visual testing and UI automation
+that work on both desktop (unix/macOS) and device (ESP32). These functions can
+be used by:
+- Unit tests for verifying UI behavior
+- Apps that want to implement automation or testing features
+- Integration tests and end-to-end testing
+
+Important: Functions in this module assume the display, theme, and UI
+infrastructure are already initialized (boot.py and main.py executed).
+
+Usage in tests:
+    from mpos.ui.testing import wait_for_render, capture_screenshot
+    from mpos import AppManager
+
+    # Start your app
+    AppManager.start_app("com.example.myapp")
+
+    # Wait for UI to render
+    wait_for_render()
+
+    # Verify content
+    assert verify_text_present(lv.screen_active(), "Expected Text")
+
+    # Capture screenshot
+    capture_screenshot("tests/screenshots/mytest.raw")
+
+    # Simulate user interaction
+    simulate_click(160, 120)  # Click at center of 320x240 screen
+
+Usage in apps:
+    from mpos.ui.testing import simulate_click, find_label_with_text
+
+    # Automated demo mode
+    label = find_label_with_text(self.screen, "Start")
+    if label:
+        area = lv.area_t()
+        label.get_coords(area)
+        simulate_click(area.x1 + 10, area.y1 + 10)
+"""
+
+import logging
+import lvgl as lv
+import sys
+import time
+
+logger = logging.getLogger(__name__)
+
+try:
+    import unittest  # noqa: F401
+except ImportError:  # pragma: no cover - fallback for device builds without unittest
+    unittest = None
+
+# Simulation globals for touch input
+_touch_x = 0
+_touch_y = 0
+_touch_pressed = False
+_touch_indev = None
+
+
+class GraphicalTestCase(unittest.TestCase if unittest else object):
+    """
+    Base class for graphical tests.
+
+    Provides:
+    - Automatic screen creation and cleanup
+    - Common UI testing utilities
+
+    Class Attributes:
+        SCREEN_WIDTH: Default screen width (320)
+        SCREEN_HEIGHT: Default screen height (240)
+        DEFAULT_RENDER_ITERATIONS: Default iterations for wait_for_render (5)
+
+    Instance Attributes:
+        screen: The LVGL screen object for the test
+    """
+
+    SCREEN_WIDTH = 320
+    SCREEN_HEIGHT = 240
+    DEFAULT_RENDER_ITERATIONS = 5
+
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        self.screen = lv.obj()
+        self.screen.set_size(self.SCREEN_WIDTH, self.SCREEN_HEIGHT)
+        lv.screen_load(self.screen)
+        self.wait_for_render()
+
+    def tearDown(self):
+        """Clean up after each test method."""
+        lv.screen_load(lv.obj())
+        self.wait_for_render()
+
+    def wait_for_render(self, iterations=None):
+        """Wait for LVGL to render."""
+        if iterations is None:
+            iterations = self.DEFAULT_RENDER_ITERATIONS
+        wait_for_render(iterations)
+
+    def find_label_with_text(self, text, parent=None):
+        """Find a label containing the specified text."""
+        if parent is None:
+            parent = lv.screen_active()
+        return find_label_with_text(parent, text)
+
+    def verify_text_present(self, text, parent=None):
+        """Verify that text is present on screen."""
+        if parent is None:
+            parent = lv.screen_active()
+        return verify_text_present(parent, text)
+
+    def print_screen_labels(self, parent=None):
+        """Print all labels on screen (for debugging)."""
+        if parent is None:
+            parent = lv.screen_active()
+        print_screen_labels(parent)
+
+    def click_button(self, text, use_send_event=True):
+        """Click a button by its text."""
+        return click_button(text, use_send_event=use_send_event)
+
+    def click_label(self, text, use_send_event=True):
+        """Click a label by its text."""
+        return click_label(text, use_send_event=use_send_event)
+
+    def simulate_click(self, x, y):
+        """Simulate a click at specific coordinates."""
+        simulate_click(x, y)
+        self.wait_for_render()
+
+    def simulate_drag(self, start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
+        """Simulate a drag gesture from start to end coordinates."""
+        simulate_drag(start_x, start_y, end_x, end_y, steps=steps, step_delay_ms=step_delay_ms)
+        self.wait_for_render()
+
+    def assertTextPresent(self, text, msg=None):
+        """Assert that text is present on screen."""
+        if msg is None:
+            msg = f"Text '{text}' not found on screen"
+        self.assertTrue(self.verify_text_present(text), msg)
+
+    def assertTextNotPresent(self, text, msg=None):
+        """Assert that text is NOT present on screen."""
+        if msg is None:
+            msg = f"Text '{text}' should not be on screen"
+        self.assertFalse(self.verify_text_present(text), msg)
+
+
+class KeyboardTestCase(GraphicalTestCase):
+    """
+    Base class for keyboard tests.
+
+    Extends GraphicalTestCase with keyboard-specific functionality.
+
+    Instance Attributes:
+        keyboard: The MposKeyboard instance (after create_keyboard_scene)
+        textarea: The textarea widget (after create_keyboard_scene)
+    """
+
+    DEFAULT_RENDER_ITERATIONS = 10
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        self.keyboard = None
+        self.textarea = None
+
+    def create_keyboard_scene(self, initial_text="", textarea_width=200, textarea_height=30):
+        """
+        Create a standard keyboard test scene with textarea and keyboard.
+
+        Args:
+            initial_text: Initial text in the textarea
+            textarea_width: Width of the textarea
+            textarea_height: Height of the textarea
+
+        Returns:
+            tuple: (keyboard, textarea)
+        """
+        from mpos import MposKeyboard
+
+        self.textarea = lv.textarea(self.screen)
+        self.textarea.set_size(textarea_width, textarea_height)
+        self.textarea.set_one_line(True)
+        self.textarea.align(lv.ALIGN.TOP_MID, 0, 10)
+        self.textarea.set_text(initial_text)
+        self.wait_for_render()
+
+        self.keyboard = MposKeyboard(self.screen)
+        self.keyboard.set_textarea(self.textarea)
+        self.keyboard.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.wait_for_render()
+
+        return self.keyboard, self.textarea
+
+    def click_keyboard_button(self, button_text):
+        """
+        Click a keyboard button by its text.
+
+        Args:
+            button_text: The text of the button to click (e.g., "q", "a", "Enter")
+
+        Returns:
+            bool: True if button was clicked successfully
+        """
+        if self.keyboard is None:
+            raise RuntimeError("No keyboard created. Call create_keyboard_scene() first.")
+
+        return click_keyboard_button(self.keyboard, button_text)
+
+    def get_textarea_text(self):
+        """Get the current text in the textarea."""
+        if self.textarea is None:
+            raise RuntimeError("No textarea created. Call create_keyboard_scene() first.")
+        return self.textarea.get_text()
+
+    def set_textarea_text(self, text):
+        """Set the textarea text."""
+        if self.textarea is None:
+            raise RuntimeError("No textarea created. Call create_keyboard_scene() first.")
+        self.textarea.set_text(text)
+        self.wait_for_render()
+
+    def clear_textarea(self):
+        """Clear the textarea."""
+        self.set_textarea_text("")
+
+    def type_text(self, text):
+        """Type a string by clicking each character on the keyboard."""
+        for char in text:
+            if not self.click_keyboard_button(char):
+                return False
+        return True
+
+    def assertTextareaText(self, expected, msg=None):
+        """Assert that the textarea contains the expected text."""
+        actual = self.get_textarea_text()
+        if msg is None:
+            msg = f"Textarea text mismatch. Expected '{expected}', got '{actual}'"
+        self.assertEqual(actual, expected, msg)
+
+    def assertTextareaEmpty(self, msg=None):
+        """Assert that the textarea is empty."""
+        if msg is None:
+            msg = f"Textarea should be empty, but contains '{self.get_textarea_text()}'"
+        self.assertEqual(self.get_textarea_text(), "", msg)
+
+    def assertTextareaContains(self, substring, msg=None):
+        """Assert that the textarea contains a substring."""
+        actual = self.get_textarea_text()
+        if msg is None:
+            msg = f"Textarea should contain '{substring}', but has '{actual}'"
+        self.assertIn(substring, actual, msg)
+
+    def get_keyboard_button_text(self, index):
+        """Get the text of a keyboard button by index."""
+        if self.keyboard is None:
+            raise RuntimeError("No keyboard created. Call create_keyboard_scene() first.")
+
+        try:
+            return self.keyboard.get_button_text(index)
+        except:
+            return None
+
+    def find_keyboard_button_index(self, button_text):
+        """Find the index of a keyboard button by its text."""
+        for i in range(100):
+            text = self.get_keyboard_button_text(i)
+            if text is None:
+                break
+            if text == button_text:
+                return i
+        return None
+
+    def get_all_keyboard_buttons(self):
+        """Get all keyboard buttons as a list of (index, text) tuples."""
+        buttons = []
+        for i in range(100):
+            text = self.get_keyboard_button_text(i)
+            if text is None:
+                break
+            if text:
+                buttons.append((i, text))
+        return buttons
+
+
+def wait_for_render(iterations=10):
+    """
+    Wait for LVGL to process UI events and render.
+
+    This processes the LVGL task handler multiple times to ensure
+    all UI updates, animations, and layout changes are complete.
+    Essential for tests to avoid race conditions.
+
+    Args:
+        iterations: Number of task handler iterations to run (default: 10)
+
+    Example:
+        from mpos import AppManager
+        AppManager.start_app("com.example.myapp")
+        wait_for_render()  # Ensure UI is ready
+        assert verify_text_present(lv.screen_active(), "Welcome")
+    """
+    import time
+    task_handler_running = False
+    try:
+        import mpos
+
+        task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
+        if task_handler is not None:
+            task_handler_running = task_handler.is_running()
+    except Exception:
+        task_handler_running = False
+
+    if task_handler_running:
+        for _ in range(iterations):
+            time.sleep(0.01)
+        return
+
+    for _ in range(iterations):
+        lv.task_handler()
+        time.sleep(0.01)  # Small delay between iterations
+
+
+def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565, all_layers=False):
+    """
+    Capture screenshot of current screen using LVGL snapshot.
+
+    The screenshot is saved as raw binary data in the specified color format.
+    Useful for visual regression testing or documentation.
+
+    To convert RGB565 to PNG:
+        ffmpeg -vcodec rawvideo -f rawvideo -pix_fmt rgb565 -s 320x240 -i file.raw file.png
+
+    Or use the conversion script:
+        cd tests/screenshots
+        ./convert_to_png.sh
+
+    Args:
+        filepath: Path where to save the raw screenshot data
+        width: Screen width in pixels (default: 320)
+        height: Screen height in pixels (default: 240)
+        color_format: LVGL color format (default: RGB565 for memory efficiency)
+        all_layers: If True, composite lv.layer_top() widgets onto the screenshot.
+                    This is slower but captures overlays like notifications.
+                    (default: False)
+
+    Returns:
+        bytearray: The screenshot buffer
+
+    Raises:
+        Exception: If screenshot capture fails
+
+    Example:
+        from mpos.ui.testing import capture_screenshot
+        capture_screenshot("tests/screenshots/home.raw")
+    """
+    if filepath:
+        if __debug__: logger.debug("capture_screenshot writing to %s", filepath)
+
+    # Calculate buffer size based on color format
+    if color_format == lv.COLOR_FORMAT.RGB565:
+        bytes_per_pixel = 2
+    elif color_format == lv.COLOR_FORMAT.RGB888:
+        bytes_per_pixel = 3
+    else:
+        bytes_per_pixel = 4  # ARGB8888
+
+    size = width * height * bytes_per_pixel
+    buffer = bytearray(size)
+    image_dsc = lv.image_dsc_t()
+
+    # Take snapshot of active screen
+    lv.snapshot_take_to_buf(lv.screen_active(), color_format, image_dsc, buffer, size)
+
+    # Composite visible top layer children onto the screenshot (slower)
+    if all_layers:
+        _composite_top_layer(buffer, width, height, bytes_per_pixel, color_format)
+
+    if filepath:
+        with open(filepath, "wb") as f:
+            f.write(buffer)
+
+    return buffer
+
+
+def _composite_top_layer(dst, w, h, bpp, fmt):
+    """Composite visible lv.layer_top() children onto dst buffer."""
+    top = lv.layer_top()
+    n = top.get_child_count()
+    for i in range(n):
+        c = top.get_child(i)
+        if c.has_flag(lv.obj.FLAG.HIDDEN):
+            continue
+        ox, oy = c.get_x(), c.get_y()
+        cw, ch = c.get_width(), c.get_height()
+        if ox + cw <= 0 or oy + ch <= 0 or ox >= w or oy >= h:
+            continue
+        tb = bytearray(w * h * 4)
+        td = lv.image_dsc_t()
+        lv.snapshot_take_to_buf(c, lv.COLOR_FORMAT.ARGB8888, td, tb, w * h * 4)
+        _blend_child(dst, tb, ox, oy, cw, ch, w, h, bpp, fmt)
+
+
+def _blend_child(dst, src_argb, ox, oy, cw, ch, w, h, bpp, fmt):
+    """Blend ARGB8888 child snapshot onto dst at offset (ox, oy). Byte order: B,G,R,A."""
+    px0 = max(0, -ox)
+    px1 = min(cw, w - ox)
+    py0 = max(0, -oy)
+    py1 = min(ch, h - oy)
+    for py in range(py0, py1):
+        sy = oy + py
+        for px in range(px0, px1):
+            sx = ox + px
+            si = (py * w + px) * 4
+            a = src_argb[si + 3]
+            if a == 0:
+                continue
+            di = (sy * w + sx) * bpp
+            if fmt == lv.COLOR_FORMAT.RGB888 and a >= 254:
+                dst[di] = src_argb[si]
+                dst[di + 1] = src_argb[si + 1]
+                dst[di + 2] = src_argb[si + 2]
+            elif fmt == lv.COLOR_FORMAT.RGB565 and a >= 254:
+                r = src_argb[si + 2]
+                g = src_argb[si + 1]
+                b = src_argb[si]
+                v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+                dst[di] = v & 0xFF
+                dst[di + 1] = (v >> 8) & 0xFF
+            elif fmt == lv.COLOR_FORMAT.ARGB8888 and a >= 254:
+                dst[di] = src_argb[si]
+                dst[di + 1] = src_argb[si + 1]
+                dst[di + 2] = src_argb[si + 2]
+                dst[di + 3] = 255
+            else:
+                ai = 255 - a
+                if fmt == lv.COLOR_FORMAT.RGB888:
+                    dst[di] = (src_argb[si] * a + dst[di] * ai) // 255
+                    dst[di + 1] = (src_argb[si + 1] * a + dst[di + 1] * ai) // 255
+                    dst[di + 2] = (src_argb[si + 2] * a + dst[di + 2] * ai) // 255
+                elif fmt == lv.COLOR_FORMAT.RGB565:
+                    cur = dst[di] | (dst[di + 1] << 8)
+                    rd = ((cur >> 11) & 0x1F) << 3
+                    gd = ((cur >> 5) & 0x3F) << 2
+                    bd = (cur & 0x1F) << 3
+                    r = (src_argb[si + 2] * a + rd * ai) // 255
+                    g = (src_argb[si + 1] * a + gd * ai) // 255
+                    b = (src_argb[si] * a + bd * ai) // 255
+                    v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
+                    dst[di] = v & 0xFF
+                    dst[di + 1] = (v >> 8) & 0xFF
+                elif fmt == lv.COLOR_FORMAT.ARGB8888:
+                    ad = dst[di + 3]
+                    rd = dst[di + 2]
+                    gd = dst[di + 1]
+                    bd = dst[di]
+                    oa = a + ad * ai // 255
+                    if oa:
+                        dst[di] = (src_argb[si] * a + bd * ad * ai // 255) // oa
+                        dst[di + 1] = (src_argb[si + 1] * a + gd * ad * ai // 255) // oa
+                        dst[di + 2] = (src_argb[si + 2] * a + rd * ad * ai // 255) // oa
+                    dst[di + 3] = oa
+
+
+def get_all_widgets_with_text(obj, widgets=None):
+    """
+    Recursively find all widgets that have text in the object hierarchy.
+
+    This traverses the entire widget tree starting from obj and
+    collects all widgets that have a get_text() method and return
+    non-empty text. This includes labels, checkboxes, buttons with
+    text, etc.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        widgets: Internal accumulator list (leave as None)
+
+    Returns:
+        list: List of all widgets with text found in the hierarchy
+
+    Example:
+        widgets = get_all_widgets_with_text(lv.screen_active())
+        print(f"Found {len(widgets)} widgets with text")
+    """
+    if widgets is None:
+        widgets = []
+
+    # Check if this object has text
+    try:
+        if hasattr(obj, 'get_text'):
+            text = obj.get_text()
+            if text:  # Only add if text is non-empty
+                widgets.append(obj)
+    except:
+        pass  # Error getting text or no get_text method
+
+    # Recursively check children
+    try:
+        child_count = obj.get_child_count()
+        for i in range(child_count):
+            child = obj.get_child(i)
+            get_all_widgets_with_text(child, widgets)
+    except:
+        pass  # No children or error accessing them
+
+    return widgets
+
+
+def get_all_labels(obj, labels=None):
+    """
+    Recursively find all label widgets in the object hierarchy.
+
+    DEPRECATED: Use get_all_widgets_with_text() instead for better
+    compatibility with all text-containing widgets (labels, checkboxes, etc.)
+
+    This traverses the entire widget tree starting from obj and
+    collects all LVGL label objects. Useful for comprehensive
+    text verification or debugging.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        labels: Internal accumulator list (leave as None)
+
+    Returns:
+        list: List of all label objects found in the hierarchy
+
+    Example:
+        labels = get_all_labels(lv.screen_active())
+        print(f"Found {len(labels)} labels")
+    """
+    # For backwards compatibility, use the new function
+    return get_all_widgets_with_text(obj, labels)
+
+
+def find_label_with_text(obj, search_text):
+    """
+    Find a widget containing specific text.
+
+    Searches the entire widget hierarchy for any widget (label, checkbox,
+    button, etc.) whose text contains the search string (substring match).
+    Returns the first match found.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        search_text: Text to search for (can be substring)
+
+    Returns:
+        LVGL widget object if found, None otherwise
+
+    Example:
+        widget = find_label_with_text(lv.screen_active(), "Settings")
+        if widget:
+            print(f"Found Settings widget at {widget.get_coords()}")
+    """
+    widgets = get_all_widgets_with_text(obj)
+    for widget in widgets:
+        try:
+            text = widget.get_text()
+            if search_text in text:
+                return widget
+        except:
+            pass  # Error getting text from this widget
+    return None
+
+
+def get_screen_text_content(obj):
+    """
+    Extract all text content from all widgets on screen.
+
+    Useful for debugging or comprehensive text verification.
+    Returns a list of all text strings found in any widgets with text
+    (labels, checkboxes, buttons, etc.).
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+
+    Returns:
+        list: List of all text strings found in widgets
+
+    Example:
+        texts = get_screen_text_content(lv.screen_active())
+        assert "Welcome" in texts
+        assert "Version 1.0" in texts
+    """
+    widgets = get_all_widgets_with_text(obj)
+    texts = []
+    for widget in widgets:
+        try:
+            text = widget.get_text()
+            if text:
+                texts.append(text)
+        except:
+            pass  # Error getting text
+    return texts
+
+def verify_text_present(obj, expected_text):
+    """
+    Verify that expected text is present somewhere on screen.
+
+    This is the primary verification method for graphical tests.
+    It searches all labels for the expected text (substring match).
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        expected_text: Text that should be present (can be substring)
+
+    Returns:
+        bool: True if text found, False otherwise
+
+    Example:
+        assert verify_text_present(lv.screen_active(), "Settings")
+        assert verify_text_present(lv.screen_active(), "Version")
+    """
+    return find_label_with_text(obj, expected_text) is not None
+
+
+def find_setting_value_label(obj, setting_title_text):
+    """
+    Find the value label associated with a SettingsActivity setting title.
+
+    SettingsActivity renders each setting as a container with two labels:
+    a title label (large) and a value label (smaller) directly below it.
+    This helper finds the title label, then returns the sibling value label.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        setting_title_text: Text of the setting title (exact or substring)
+
+    Returns:
+        LVGL label object for the value if found, None otherwise
+
+    Example:
+        value_label = find_setting_value_label(lv.screen_active(), "Auth Mode")
+        if value_label:
+            assert value_label.get_text() == "(defaults to none)"
+    """
+    title_label = find_label_with_text(obj, setting_title_text)
+    if not title_label:
+        return None
+    try:
+        parent = title_label.get_parent()
+        if not parent:
+            return None
+        child_count = parent.get_child_count()
+        for i in range(child_count):
+            child = parent.get_child(i)
+            if child is title_label:
+                continue
+            try:
+                if hasattr(child, "get_text"):
+                    text = child.get_text()
+                    if text:
+                        return child
+            except:
+                pass
+    except:
+        pass
+    return None
+
+
+def get_setting_value_text(obj, setting_title_text):
+    """
+    Get the value text associated with a SettingsActivity setting title.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        setting_title_text: Text of the setting title (exact or substring)
+
+    Returns:
+        str or None: The value label text if found
+    """
+    value_label = find_setting_value_label(obj, setting_title_text)
+    if value_label:
+        try:
+            return value_label.get_text()
+        except:
+            return None
+    return None
+
+
+def verify_setting_value_text(obj, setting_title_text, expected_text):
+    """
+    Verify a SettingsActivity value label matches expected text.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        setting_title_text: Text of the setting title (exact or substring)
+        expected_text: Expected text for the value label (exact match)
+
+    Returns:
+        bool: True if value label text matches expected, False otherwise
+    """
+    value_text = get_setting_value_text(obj, setting_title_text)
+    return value_text == expected_text
+
+
+
+def text_to_hex(text):
+    """
+    Convert text to hex representation for debugging.
+
+    Useful for identifying Unicode symbols like lv.SYMBOL.SETTINGS
+    which may not display correctly in terminal output.
+
+    Args:
+        text: String to convert
+
+    Returns:
+        str: Hex representation of the text bytes (UTF-8 encoded)
+
+    Example:
+        >>> text_to_hex("⚙")  # lv.SYMBOL.SETTINGS
+        'e29a99'
+    """
+    try:
+        return text.encode('utf-8').hex()
+    except:
+        return "<encoding error>"
+
+
+def print_screen_labels(obj):
+    """
+    Debug helper: Print all text found on screen from any widget.
+
+    Useful for debugging tests to see what text is actually present.
+    Prints to stdout with numbered list. Includes text from labels,
+    checkboxes, buttons, and any other widgets with text.
+
+    For each text, also prints the hex representation to help identify
+    Unicode symbols (like lv.SYMBOL.SETTINGS) that may not display
+    correctly in terminal output.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+
+    Example:
+        # When a test fails, use this to see what's on screen
+        print_screen_labels(lv.screen_active())
+        # Output:
+        # Found 5 text widgets on screen:
+        #   0: MicroPythonOS (hex: 4d6963726f507974686f6e4f53)
+        #   1: Version 0.3.3 (hex: 56657273696f6e20302e332e33)
+        #   2: ⚙ (hex: e29a99)  <- lv.SYMBOL.SETTINGS
+        #   3: Force Update (hex: 466f7263652055706461746)
+        #   4: WiFi (hex: 57694669)
+    """
+    texts = get_screen_text_content(obj)
+    if __debug__: logger.debug("Found %s text widgets on screen:", len(texts))
+    for i, text in enumerate(texts):
+        hex_repr = text_to_hex(text)
+        if __debug__: logger.debug("  %s: %s (hex: %s)", i, text, hex_repr)
+
+
+def get_widget_coords(widget):
+    """
+    Get the coordinates of a widget.
+
+    Returns the bounding box coordinates of the widget, useful for
+    clicking on it or verifying its position.
+
+    Args:
+        widget: LVGL widget object
+
+    Returns:
+        dict: Dictionary with keys 'x1', 'y1', 'x2', 'y2', 'center_x', 'center_y'
+              Returns None if widget is invalid or has no coordinates
+
+    Example:
+        # Find and click on a button
+        button = find_label_with_text(lv.screen_active(), "Submit")
+        if button:
+            coords = get_widget_coords(button.get_parent())  # Get parent button
+            if coords:
+                simulate_click(coords['center_x'], coords['center_y'])
+    """
+    try:
+        area = lv.area_t()
+        widget.get_coords(area)
+        return {
+            'x1': area.x1,
+            'y1': area.y1,
+            'x2': area.x2,
+            'y2': area.y2,
+            'center_x': (area.x1 + area.x2) // 2,
+            'center_y': (area.y1 + area.y2) // 2,
+            'width': area.x2 - area.x1,
+            'height': area.y2 - area.y1,
+        }
+    except:
+        return None
+
+
+def find_button_with_text(obj, search_text):
+    """
+    Find a button widget containing specific text in its label.
+
+    This is specifically for finding buttons (which contain labels as children)
+    rather than just labels. Very useful for testing UI interactions.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+        search_text: Text to search for in button labels (can be substring)
+
+    Returns:
+        LVGL button object if found, None otherwise
+
+    Example:
+        submit_btn = find_button_with_text(lv.screen_active(), "Submit")
+        if submit_btn:
+            coords = get_widget_coords(submit_btn)
+            simulate_click(coords['center_x'], coords['center_y'])
+    """
+    # Find the label first
+    label = find_label_with_text(obj, search_text)
+    if label:
+        # Try to get the parent button
+        try:
+            parent = label.get_parent()
+            # Check if parent is a button
+            if parent.get_class() == lv.button_class:
+                return parent
+            # Sometimes there's an extra container layer
+            grandparent = parent.get_parent()
+            if grandparent and grandparent.get_class() == lv.button_class:
+                return grandparent
+        except:
+            pass
+    return None
+
+
+def find_dropdown_widget(obj):
+    """
+    Find a dropdown widget in the object hierarchy.
+
+    Args:
+        obj: LVGL object to search (typically lv.screen_active())
+
+    Returns:
+        LVGL dropdown object if found, None otherwise
+    """
+    def find_dropdown_recursive(node):
+        try:
+            if node.__class__.__name__ == "dropdown" or hasattr(node, "get_selected"):
+                if hasattr(node, "get_options"):
+                    return node
+        except:
+            pass
+
+        try:
+            child_count = node.get_child_count()
+        except:
+            return None
+
+        for i in range(child_count):
+            child = node.get_child(i)
+            result = find_dropdown_recursive(child)
+            if result:
+                return result
+        return None
+
+    return find_dropdown_recursive(obj)
+
+
+def get_dropdown_options(dropdown):
+    """
+    Get dropdown options as a list of strings.
+
+    Args:
+        dropdown: LVGL dropdown widget
+
+    Returns:
+        list: List of option strings (order preserved)
+    """
+    try:
+        options = dropdown.get_options()
+        if options:
+            lines = options.split("\n")
+            return [line for line in lines if line]
+    except:
+        pass
+    return []
+
+
+def find_dropdown_option_index(dropdown, option_text, allow_partial=True):
+    """
+    Find the index of an option in a dropdown by text.
+
+    Args:
+        dropdown: LVGL dropdown widget
+        option_text: Text to search for
+        allow_partial: If True, match substring (default: True)
+
+    Returns:
+        int or None: Index of matching option
+    """
+    options = get_dropdown_options(dropdown)
+    if options:
+        for idx, text in enumerate(options):
+            if (allow_partial and option_text in text) or (not allow_partial and option_text == text):
+                return idx
+        return None
+
+    try:
+        option_count = dropdown.get_option_count()
+    except:
+        option_count = 0
+
+    for idx in range(option_count):
+        try:
+            text = dropdown.get_option_text(idx)
+            if (allow_partial and option_text in text) or (not allow_partial and option_text == text):
+                return idx
+        except:
+            pass
+
+    return None
+
+
+def select_dropdown_option_by_text(dropdown, option_text, allow_partial=True):
+    """
+    Select a dropdown option by its text.
+
+    Args:
+        dropdown: LVGL dropdown widget
+        option_text: Text to select
+        allow_partial: If True, match substring (default: True)
+
+    Returns:
+        bool: True if option was found and selected
+    """
+    idx = find_dropdown_option_index(dropdown, option_text, allow_partial=allow_partial)
+    if idx is None:
+        return False
+    try:
+        dropdown.set_selected(idx)
+        return True
+    except:
+        return False
+
+
+def get_keyboard_button_coords(keyboard, button_text):
+    """
+    Get the coordinates of a specific button on an LVGL keyboard/buttonmatrix.
+
+    This function calculates the exact center position of a keyboard button
+    by finding its index and computing its position based on the keyboard's
+    layout, control widths, and actual screen coordinates.
+
+    Args:
+        keyboard: LVGL keyboard widget (or MposKeyboard wrapper)
+        button_text: Text of the button to find (e.g., "q", "a", "1")
+
+    Returns:
+        dict with 'center_x' and 'center_y', or None if button not found
+
+    Example:
+        from mpos.ui.keyboard import MposKeyboard
+        keyboard = MposKeyboard(screen)
+        coords = get_keyboard_button_coords(keyboard, "q")
+        if coords:
+            simulate_click(coords['center_x'], coords['center_y'])
+    """
+    # Get the underlying LVGL keyboard if this is a wrapper
+    if hasattr(keyboard, '_keyboard'):
+        lvgl_keyboard = keyboard._keyboard
+    else:
+        lvgl_keyboard = keyboard
+
+    # Find the button index
+    button_idx = None
+    for i in range(100):  # Check up to 100 buttons
+        try:
+            text = lvgl_keyboard.get_button_text(i)
+            if text == button_text:
+                button_idx = i
+                break
+        except:
+            break  # No more buttons
+
+    if button_idx is None:
+        return None
+
+    # Get keyboard widget coordinates
+    area = lv.area_t()
+    lvgl_keyboard.get_coords(area)
+    kb_x = area.x1
+    kb_y = area.y1
+    kb_width = area.x2 - area.x1
+    kb_height = area.y2 - area.y1
+
+    # Parse the keyboard layout to find button position
+    # Note: LVGL get_button_text() skips '\n' markers, so they're not in the indices
+    # Standard keyboard layout (from MposKeyboard):
+    # Row 0: 10 buttons (q w e r t y u i o p)
+    # Row 1: 9 buttons (a s d f g h j k l)
+    # Row 2: 9 buttons (shift z x c v b n m backspace)
+    # Row 3: 6 buttons (?123, comma, space, dot, OK, newline)
+
+    # Define row lengths for standard keyboard
+    row_lengths = [10, 9, 9, 6]
+
+    # Find which row our button is in
+    row = 0
+    buttons_before = 0
+    for row_len in row_lengths:
+        if button_idx < buttons_before + row_len:
+            # Button is in this row
+            col = button_idx - buttons_before
+            buttons_this_row = row_len
+            break
+        buttons_before += row_len
+        row += 1
+    else:
+        # Button not found in standard layout, use row 0
+        row = 0
+        col = button_idx
+        buttons_this_row = 10
+
+    # Calculate position
+    # Approximate: divide keyboard into equal rows and columns
+    # (This is simplified - actual LVGL uses control widths, but this is good enough)
+    num_rows = 4  # Typical keyboard has 4 rows
+    button_height = kb_height / num_rows
+    button_width = kb_width / max(buttons_this_row, 1)
+
+    # Calculate center position
+    center_x = int(kb_x + (col * button_width) + (button_width / 2))
+    center_y = int(kb_y + (row * button_height) + (button_height / 2))
+
+    return {
+        'center_x': center_x,
+        'center_y': center_y,
+        'button_idx': button_idx,
+        'row': row,
+        'col': col
+    }
+
+
+def _touch_read_cb(indev_drv, data):
+    """
+    Internal callback for simulated touch input device.
+
+    This callback is registered with LVGL and provides touch state
+    when simulate_click() is used. Not intended for direct use.
+
+    Args:
+        indev_drv: Input device driver (LVGL internal)
+        data: Input device data structure to fill
+    """
+    global _touch_x, _touch_y, _touch_pressed
+    data.point.x = _touch_x
+    data.point.y = _touch_y
+    if _touch_pressed:
+        data.state = lv.INDEV_STATE.PRESSED
+    else:
+        data.state = lv.INDEV_STATE.RELEASED
+
+
+def _ensure_touch_indev():
+    """
+    Ensure that the simulated touch input device is created.
+
+    This is called automatically by simulate_click() on first use.
+    Creates a pointer-type input device that uses _touch_read_cb.
+    Not intended for direct use.
+    """
+    global _touch_indev
+    if _touch_indev is None:
+        _touch_indev = lv.indev_create()
+        _touch_indev.set_type(lv.INDEV_TYPE.POINTER)
+        _touch_indev.set_read_cb(_touch_read_cb)
+        if __debug__: logger.debug("Created simulated touch input device")
+
+
+def simulate_click(x, y, press_duration_ms=100):
+    """
+    Simulate a touch/click at the specified coordinates.
+
+    This creates a simulated touch press at (x, y) and automatically
+    releases it after press_duration_ms milliseconds. The touch is
+    processed through LVGL's normal input handling, so it triggers
+    click events, focus changes, scrolling, etc. just like real input.
+
+    Useful for:
+    - Automated testing of UI interactions
+    - Demo modes in apps
+    - Accessibility automation
+    - Integration testing
+
+    To find object coordinates for clicking:
+        obj_area = lv.area_t()
+        obj.get_coords(obj_area)
+        center_x = (obj_area.x1 + obj_area.x2) // 2
+        center_y = (obj_area.y1 + obj_area.y2) // 2
+        simulate_click(center_x, center_y)
+
+    Args:
+        x: X coordinate to click (in pixels)
+        y: Y coordinate to click (in pixels)
+        press_duration_ms: How long to hold the press (default: 100ms)
+
+    Example:
+        from mpos.ui.testing import simulate_click, wait_for_render
+
+        # Click at screen center (320x240)
+        simulate_click(160, 120)
+        wait_for_render()
+
+        # Click on a specific button
+        button_area = lv.area_t()
+        my_button.get_coords(button_area)
+        simulate_click(button_area.x1 + 10, button_area.y1 + 10)
+        wait_for_render()
+    """
+    global _touch_x, _touch_y, _touch_pressed
+
+    # Ensure the touch input device exists
+    _ensure_touch_indev()
+
+    # Set touch position and press state
+    _touch_x = x
+    _touch_y = y
+    _touch_pressed = True
+
+    # Process the press event via direct indev read (reliable, doesn't depend
+    # on indev read timer period alignment with lv.task_handler)
+    _touch_indev.read()
+    time.sleep(0.02)
+    _touch_indev.read()
+
+    # Wait for press duration
+    time.sleep(press_duration_ms / 1000.0)
+
+    # Release the touch
+    _touch_pressed = False
+
+    # Process the release event via direct indev read
+    _touch_indev.read()
+    time.sleep(0.02)
+    _touch_indev.read()
+    time.sleep(0.02)
+    _touch_indev.read()
+
+
+def simulate_drag(start_x, start_y, end_x, end_y, steps=5, step_delay_ms=20):
+    """
+    Simulate a drag gesture from start to end coordinates.
+
+    On desktop (Linux/macOS/Windows), uses a stepped approach with
+    discrete click+render at each interpolated point, which is proven
+    reliable with the LVGL unix port.  On device (ESP32), uses a
+    continuous press-and-drag for real touch input.
+
+    Args:
+        start_x: Starting X coordinate.
+        start_y: Starting Y coordinate.
+        end_x: Ending X coordinate.
+        end_y: Ending Y coordinate.
+        steps: Number of intermediate steps to simulate (default: 5).
+        step_delay_ms: Delay between steps in milliseconds (default: 20).
+    """
+    if sys.platform in ("linux", "darwin", "win32"):
+        global _touch_x, _touch_y, _touch_pressed
+
+        _ensure_touch_indev()
+        n = max(steps, 1)
+
+        _touch_x = start_x
+        _touch_y = start_y
+        _touch_pressed = True
+
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        time.sleep(step_delay_ms / 1000.0)
+
+        for i in range(1, n + 1):
+            _touch_x = start_x + (end_x - start_x) * i // n
+            _touch_y = start_y + (end_y - start_y) * i // n
+            _touch_indev.read()
+            time.sleep(0.01)
+            _touch_indev.read()
+            time.sleep(step_delay_ms / 1000.0)
+
+        _touch_pressed = False
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        time.sleep(0.01)
+        _touch_indev.read()
+        return
+
+    global _touch_x, _touch_y, _touch_pressed
+
+    _ensure_touch_indev()
+
+    _touch_x = start_x
+    _touch_y = start_y
+    _touch_pressed = True
+
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+    time.sleep(step_delay_ms / 1000.0)
+
+    if steps < 1:
+        steps = 1
+    dx = (end_x - start_x) / steps
+    dy = (end_y - start_y) / steps
+
+    for step in range(1, steps + 1):
+        _touch_x = int(start_x + dx * step)
+        _touch_y = int(start_y + dy * step)
+        lv.task_handler()
+        time.sleep(0.02)
+        lv.task_handler()
+        time.sleep(step_delay_ms / 1000.0)
+
+    _touch_pressed = False
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+    time.sleep(0.02)
+    lv.task_handler()
+
+def click_button(button_text, timeout=5, use_send_event=True):
+    """Find and click a button with given text.
+
+    Args:
+        button_text: Text to search for in button labels
+        timeout: Maximum time to wait for button to appear (default: 5s)
+        use_send_event: If True, use send_event() which is more reliable for
+                        triggering button actions. If False, use simulate_click()
+                        which simulates actual touch input. (default: True)
+
+    Returns:
+        True if button was found and clicked, False otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        button = find_button_with_text(lv.screen_active(), button_text)
+        if button:
+            coords = get_widget_coords(button)
+            if coords:
+                if __debug__: logger.debug("Clicking button '%s' at (%s, %s)", button_text, coords['center_x'], coords['center_y'])
+                if use_send_event:
+                    # Use send_event for more reliable button triggering
+                    button.send_event(lv.EVENT.CLICKED, None)
+                else:
+                    # Use simulate_click for actual touch simulation
+                    simulate_click(coords['center_x'], coords['center_y'])
+                wait_for_render(iterations=20)
+                return True
+        wait_for_render(iterations=5)
+    logger.error("Button '%s' not found after %ss", button_text, timeout)
+    return False
+
+def click_label(label_text, timeout=5, use_send_event=True):
+    """Find a label with given text and click on it (or its clickable parent).
+
+    This function finds a label, scrolls it into view (with multiple attempts
+    if needed), verifies it's within the visible viewport, and then clicks it.
+    If the label itself is not clickable, it will try clicking the parent container.
+
+    Args:
+        label_text: Text to search for in labels
+        timeout: Maximum time to wait for label to appear (default: 5s)
+        use_send_event: If True, use send_event() on clickable parent which is more
+                        reliable. If False, use simulate_click(). (default: True)
+
+    Returns:
+        True if label was found and clicked, False otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        label = find_label_with_text(lv.screen_active(), label_text)
+        if label:
+            # Get screen dimensions for viewport check
+            screen = lv.screen_active()
+            screen_coords = get_widget_coords(screen)
+            if not screen_coords:
+                screen_coords = {'x1': 0, 'y1': 0, 'x2': 320, 'y2': 240}
+
+            # Try scrolling multiple times to ensure label is fully visible
+            max_scroll_attempts = 5
+            for scroll_attempt in range(max_scroll_attempts):
+                if __debug__: logger.debug("Scrolling label to view (attempt %s/%s)...", scroll_attempt + 1, max_scroll_attempts)
+                label.scroll_to_view_recursive(True)
+                wait_for_render(iterations=50)  # needs quite a bit of time for scroll animation
+
+                # Get updated coordinates after scroll
+                coords = get_widget_coords(label)
+                if not coords:
+                    break
+
+                # Check if label center is within visible viewport
+                # Account for some margin (e.g., status bar at top, nav bar at bottom)
+                # Use a larger bottom margin to ensure the element is fully clickable
+                viewport_top = screen_coords['y1'] + 30  # Account for status bar
+                viewport_bottom = screen_coords['y2'] - 30  # Larger margin at bottom for clickability
+                viewport_left = screen_coords['x1']
+                viewport_right = screen_coords['x2']
+
+                center_x = coords['center_x']
+                center_y = coords['center_y']
+
+                is_visible = (viewport_left <= center_x <= viewport_right and
+                              viewport_top <= center_y <= viewport_bottom)
+
+                if is_visible:
+                    if __debug__: logger.debug("Label '%s' is visible at (%s, %s)", label_text, center_x, center_y)
+
+                    # Try to find a clickable parent (container) - many UIs have clickable containers
+                    # with non-clickable labels inside. We'll click on the label's position but
+                    # the event should bubble up to the clickable parent.
+                    click_target = label
+                    clickable_parent = None
+                    click_coords = coords
+                    try:
+                        parent = label.get_parent()
+                        if parent and parent.has_flag(lv.obj.FLAG.CLICKABLE):
+                            # The parent is clickable - we can use send_event on it
+                            clickable_parent = parent
+                            parent_coords = get_widget_coords(parent)
+                            if parent_coords:
+                                if __debug__: logger.debug("Found clickable parent container: (%s, %s) to (%s, %s)", parent_coords['x1'], parent_coords['y1'], parent_coords['x2'], parent_coords['y2'])
+                                # Use label's x but ensure y is within parent bounds
+                                click_x = center_x
+                                click_y = center_y
+                                # Clamp to parent bounds with some margin
+                                if click_y < parent_coords['y1'] + 5:
+                                    click_y = parent_coords['y1'] + 5
+                                if click_y > parent_coords['y2'] - 5:
+                                    click_y = parent_coords['y2'] - 5
+                                click_coords = {'center_x': click_x, 'center_y': click_y}
+                    except Exception as e:
+                        logger.error("Could not check parent clickability: %s", e)
+
+                    if __debug__: logger.debug("Clicking label '%s' at (%s, %s)", label_text, click_coords['center_x'], click_coords['center_y'])
+                    if use_send_event and clickable_parent:
+                        # Use send_event on the clickable parent for more reliable triggering
+                        if __debug__: logger.debug("Using send_event on clickable parent")
+                        clickable_parent.send_event(lv.EVENT.CLICKED, None)
+                    else:
+                        # Use simulate_click for actual touch simulation
+                        simulate_click(click_coords['center_x'], click_coords['center_y'])
+                    wait_for_render(iterations=20)
+                    return True
+                else:
+                    if __debug__: logger.debug("Label '%s' at (%s, %s) not fully visible (viewport: y=%s-%s), scrolling more...", label_text, center_x, center_y, viewport_top, viewport_bottom)
+                    # Additional scroll - try scrolling the parent container
+                    try:
+                        parent = label.get_parent()
+                        if parent:
+                            # Try to find a scrollable ancestor
+                            scrollable = parent
+                            for _ in range(5):  # Check up to 5 levels up
+                                try:
+                                    grandparent = scrollable.get_parent()
+                                    if grandparent:
+                                        scrollable = grandparent
+                                except:
+                                    break
+
+                            # Scroll by a fixed amount to bring label more into view
+                            current_scroll = scrollable.get_scroll_y()
+                            if center_y > viewport_bottom:
+                                # Need to scroll down (increase scroll_y)
+                                scrollable.scroll_to_y(current_scroll + 60, True)
+                            elif center_y < viewport_top:
+                                # Need to scroll up (decrease scroll_y)
+                                scrollable.scroll_to_y(max(0, current_scroll - 60), True)
+                            wait_for_render(iterations=30)
+                    except Exception as e:
+                        logger.error("Additional scroll failed: %s", e)
+
+            # If we exhausted scroll attempts, try clicking anyway
+            coords = get_widget_coords(label)
+            if coords:
+                # Try to find a clickable parent even for fallback click
+                click_coords = coords
+                try:
+                    parent = label.get_parent()
+                    if parent and parent.has_flag(lv.obj.FLAG.CLICKABLE):
+                        parent_coords = get_widget_coords(parent)
+                        if parent_coords:
+                            click_coords = parent_coords
+                            if __debug__: logger.debug("Using clickable parent for fallback click")
+                except:
+                    pass
+
+                if __debug__: logger.debug("Clicking at (%s, %s) after max scroll attempts", click_coords['center_x'], click_coords['center_y'])
+                # Try to use send_event if we have a clickable parent
+                try:
+                    parent = label.get_parent()
+                    if use_send_event and parent and parent.has_flag(lv.obj.FLAG.CLICKABLE):
+                        if __debug__: logger.debug("Using send_event on clickable parent for fallback")
+                        parent.send_event(lv.EVENT.CLICKED, None)
+                    else:
+                        simulate_click(click_coords['center_x'], click_coords['center_y'])
+                except:
+                    simulate_click(click_coords['center_x'], click_coords['center_y'])
+                wait_for_render(iterations=20)
+                return True
+
+        wait_for_render(iterations=5)
+    logger.error("Label '%s' not found after %ss", label_text, timeout)
+    return False
+
+def find_text_on_screen(text):
+    """Check if text is present on screen."""
+    return find_label_with_text(lv.screen_active(), text) is not None
+
+
+def get_screen_widget_tree(obj=None, depth=0):
+    """
+    Dump the full widget tree with positions, text, types, and states.
+
+    Returns a JSON-serializable list of dicts describing every widget
+    in the tree. Useful for test assertions and screen understanding.
+    When called without arguments, dumps both lv.screen_active() and
+    lv.layer_top() with a \"layer\" key to distinguish them.
+
+    Args:
+        obj: Root LVGL object (default: None — dumps all layers)
+        depth: Current recursion depth (internal)
+
+    Returns:
+        list: List of widget dicts with keys:
+              - type: widget class name (str)
+              - text: text content (str or None)
+              - x1, y1, x2, y2: bounding box coordinates
+              - center_x, center_y: midpoint coordinates
+              - w, h: width and height
+              - clickable: bool (has FLAG.CLICKABLE)
+              - hidden: bool (has FLAG.HIDDEN)
+              - state: list of active state names
+              - children: list of child widget dicts
+              - depth: nesting depth
+              - layer: "active" or "top" (only when called without args)
+
+    Example:
+        from mpos.ui.testing import get_screen_widget_tree
+        import json
+        tree = get_screen_widget_tree()
+        print(json.dumps(tree))
+        # Find all clickable buttons with text:
+        buttons = [w for w in tree if w.get('clickable') and w.get('text')]
+    """
+    if obj is None:
+        result = []
+        for layer_name, layer_obj in (
+            ("active", lv.screen_active()),
+            ("top", lv.layer_top()),
+        ):
+            for entry in _dump_widget_tree(layer_obj, 0):
+                entry["layer"] = layer_name
+                result.append(entry)
+        return result
+    return _dump_widget_tree(obj, depth)
+
+
+ALL_FLAGS = (
+    "CLICKABLE", "CLICK_FOCUSABLE", "ADV_HITTEST", "PRESS_LOCK",
+    "SCROLLABLE", "SCROLL_CHAIN", "SCROLL_ELASTIC", "SCROLL_MOMENTUM",
+    "SCROLL_ONE", "SCROLL_WITH_ARROW", "SNAPPABLE", "FLOATING",
+    "EVENT_BUBBLE", "HIDDEN", "IGNORE_LAYOUT",
+)
+ALL_STATES = (
+    "CHECKED", "DISABLED", "FOCUSED", "FOCUS_KEY",
+    "EDITED", "PRESSED", "SCROLLED",
+    "USER_1", "USER_2", "USER_3", "USER_4", "USER_5", "USER_6",
+)
+
+
+def _dump_widget_tree(obj, depth):
+    """Recursive helper that dumps a single object tree branch."""
+    info = {"depth": depth}
+
+    # Widget type / class name
+    try:
+        info["type"] = obj.__class__.__name__
+    except Exception:
+        info["type"] = "unknown"
+
+    # Text content
+    try:
+        if hasattr(obj, "get_text"):
+            t = obj.get_text()
+            if t:
+                info["text"] = t
+    except Exception:
+        pass
+
+    # Coordinates
+    try:
+        area = lv.area_t()
+        obj.get_coords(area)
+        info["x1"] = area.x1
+        info["y1"] = area.y1
+        info["x2"] = area.x2
+        info["y2"] = area.y2
+        info["w"] = area.x2 - area.x1
+        info["h"] = area.y2 - area.y1
+        info["center_x"] = (area.x1 + area.x2) // 2
+        info["center_y"] = (area.y1 + area.y2) // 2
+    except Exception:
+        pass
+
+    # All flags
+    flag_names = []
+    for n in ALL_FLAGS:
+        try:
+            fl = getattr(lv.obj.FLAG, n, None)
+            if fl is not None and obj.has_flag(fl):
+                flag_names.append(n.lower())
+        except Exception:
+            pass
+    if flag_names:
+        info["flags"] = flag_names
+    info["clickable"] = "clickable" in flag_names
+    info["hidden"] = "hidden" in flag_names
+    info["scrollable"] = "scrollable" in flag_names
+    info["floating"] = "floating" in flag_names
+    info["event_bubble"] = "event_bubble" in flag_names
+
+    # All states
+    state_names = []
+    for n in ALL_STATES:
+        try:
+            fl = getattr(lv.STATE, n, None)
+            if fl is not None and obj.has_state(fl):
+                state_names.append(n.lower())
+        except Exception:
+            pass
+    if state_names:
+        info["state"] = state_names
+
+    # Scroll position
+    try:
+        sx = obj.get_scroll_x()
+        sy = obj.get_scroll_y()
+        if sx or sy:
+            info["scroll_x"] = sx
+            info["scroll_y"] = sy
+    except Exception:
+        pass
+
+    # Opacity
+    try:
+        opa = obj.get_style_opa(lv.PART.MAIN)
+        if opa != lv.OPA.COVER:
+            info["opa"] = opa
+    except Exception:
+        pass
+
+    # Widget-specific fields
+    t = info.get("type", "")
+    try:
+        if t in ("slider", "arc", "bar", "meter"):
+            info["value"] = obj.get_value()
+    except Exception:
+        pass
+    try:
+        if t == "dropdown":
+            info["selected"] = obj.get_selected()
+            info["options"] = obj.get_options()
+    except Exception:
+        pass
+    try:
+        if t == "textarea":
+            info["one_line"] = obj.get_one_line()
+            info["cursor_pos"] = obj.get_cursor_pos()
+    except Exception:
+        pass
+    try:
+        if t == "buttonmatrix":
+            info["selected_btn"] = obj.get_selected_button()
+    except Exception:
+        pass
+
+    # Children
+    try:
+        n = obj.get_child_count()
+        if n:
+            children = []
+            for i in range(n):
+                child = obj.get_child(i)
+                children.extend(_dump_widget_tree(child, depth + 1))
+            info["children"] = children
+    except Exception:
+        pass
+
+    return [info]
+
+
+def click_keyboard_button(keyboard, button_text, use_direct=True):
+    """
+    Click a keyboard button reliably.
+
+    This function handles the complexity of clicking keyboard buttons.
+    For MposKeyboard, it directly manipulates the textarea (most reliable).
+    For raw lv.keyboard, it uses simulate_click with coordinates.
+
+    Args:
+        keyboard: MposKeyboard instance or lv.keyboard widget
+        button_text: Text of the button to click (e.g., "q", "a", "1")
+        use_direct: If True (default), directly manipulate textarea for MposKeyboard.
+                   If False, use simulate_click with coordinates.
+
+    Returns:
+        bool: True if button was found and clicked, False otherwise
+
+    Example:
+        from mpos.ui.keyboard import MposKeyboard
+        from mpos.ui.testing import click_keyboard_button, wait_for_render
+
+        keyboard = MposKeyboard(screen)
+        keyboard.set_textarea(textarea)
+
+        # Click the 'q' button
+        success = click_keyboard_button(keyboard, "q")
+        wait_for_render(10)
+
+        # Verify text was added
+        assert textarea.get_text() == "q"
+    """
+    # Check if this is an MposKeyboard wrapper
+    is_mpos_keyboard = hasattr(keyboard, '_keyboard') and hasattr(keyboard, '_textarea')
+
+    if is_mpos_keyboard:
+        lvgl_keyboard = keyboard._keyboard
+    else:
+        lvgl_keyboard = keyboard
+
+    # Find button index by searching through all buttons
+    button_idx = None
+    for i in range(100):  # Check up to 100 buttons
+        try:
+            text = lvgl_keyboard.get_button_text(i)
+            if text == button_text:
+                button_idx = i
+                break
+        except:
+            break  # No more buttons
+
+    if button_idx is None:
+        logger.warning("click_keyboard_button: Button '%s' not found on keyboard", button_text)
+        return False
+
+    if use_direct and is_mpos_keyboard:
+        # For MposKeyboard, run through its event handler logic so behavior
+        # matches real typing (including mode switching and emoji font updates).
+        class _SyntheticKeyboardTarget:
+            def __init__(self, idx, text):
+                self._idx = idx
+                self._text = text
+
+            def get_selected_button(self):
+                return self._idx
+
+            def get_button_text(self, idx):
+                if idx == self._idx:
+                    return self._text
+                return None
+
+        class _SyntheticKeyboardEvent:
+            def __init__(self, target):
+                self._target = target
+
+            def get_code(self):
+                return lv.EVENT.VALUE_CHANGED
+
+            def get_target_obj(self):
+                return self._target
+
+        target = _SyntheticKeyboardTarget(button_idx, button_text)
+        event = _SyntheticKeyboardEvent(target)
+        keyboard._handle_events(event)
+        wait_for_render(10)
+        if __debug__: logger.debug("click_keyboard_button: Clicked '%s' at index %s using direct handler simulation", button_text, button_idx)
+    else:
+        # Use coordinate-based clicking
+        coords = get_keyboard_button_coords(keyboard, button_text)
+        if coords:
+            simulate_click(coords['center_x'], coords['center_y'])
+            wait_for_render(20)  # More time for event processing
+            if __debug__: logger.debug("click_keyboard_button: Clicked '%s' at (%s, %s) using simulate_click", button_text, coords['center_x'], coords['center_y'])
+        else:
+            logger.warning("click_keyboard_button: Could not get coordinates for '%s'", button_text)
+            return False
+
+    return True
+
+
+def get_all_children(parent):
+    result = []
+    count = parent.get_child_count()
+    for i in range(count):
+        child = parent.get_child(i)
+        result.append(child)
+        result.extend(get_all_children(child))
+    return result
+
+
+def simulate_long_press(x, y, duration_ms=1000):
+    simulate_click(x, y, press_duration_ms=duration_ms)
+
+
+def find_label_on_any_layer(text):
+    """Search for text on both lv.screen_active() and lv.layer_top().
+
+    Useful for finding text in popups/dialogs created on the top layer.
+    Returns the widget if found on either layer, None otherwise.
+    """
+    result = find_label_with_text(lv.screen_active(), text)
+    if result:
+        return result
+    return find_label_with_text(lv.layer_top(), text)
+
+
+def verify_text_on_any_layer(text):
+    """Check if text is present on either the active screen or top layer."""
+    return find_label_on_any_layer(text) is not None
+
+
+def wait_for_text(text, timeout=10, interval=0.1):
+    """
+    Wait for text to appear on screen, polling periodically.
+
+    More robust than wait_for_render(N) because it actually checks
+    for the desired condition instead of waiting a fixed amount of time.
+    Handles slow CI machines gracefully — returns as soon as text appears.
+
+    Args:
+        text: Text to search for (substring match via verify_text_present)
+        timeout: Maximum time to wait in seconds (default: 10)
+        interval: Time between checks in seconds (default: 0.1)
+
+    Returns:
+        True if text found within timeout, False otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        if verify_text_present(lv.screen_active(), text):
+            return True
+        wait_for_render(5)
+        time.sleep(interval)
+    logger.warning("wait_for_text: '%s' not found after %ss", text, timeout)
+    return False
+
+
+def wait_for_widget(find_func, timeout=10, interval=0.1):
+    """
+    Wait for a widget condition, polling periodically.
+
+    find_func should be a callable that returns a widget or truthy value
+    when the condition is met, and None/falsy otherwise.  For example::
+
+        btn = wait_for_widget(
+            lambda: find_button_with_text(lv.screen_active(), "Submit"),
+            timeout=5
+        )
+
+    Args:
+        find_func: Callable that returns a widget or truthy value
+        timeout: Maximum time to wait in seconds (default: 10)
+        interval: Time between checks in seconds (default: 0.1)
+
+    Returns:
+        The result of find_func if found within timeout, None otherwise
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        result = find_func()
+        if result:
+            return result
+        wait_for_render(5)
+        time.sleep(interval)
+    logger.warning("wait_for_widget: condition not met after %ss", timeout)
+    return None
+
+
+def retry_action_until(action_func, find_func, attempts=3, timeout=1.0, interval=0.05):
+    for _ in range(attempts):
+        action_func()
+        result = wait_for_widget(find_func, timeout=timeout, interval=interval)
+        if result is not None:
+            return result
+    return None
+
+
+def wait_for_focus(target, timeout=1.0, interval=0.05):
+    return wait_for_widget(
+        lambda: target if lv.group_get_default() and lv.group_get_default().get_focused() is target else None,
+        timeout=timeout,
+        interval=interval,
+    )

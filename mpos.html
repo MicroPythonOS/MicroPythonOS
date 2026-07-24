@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>MicroPythonOS Web</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #111;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+    }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    canvas {
+      image-rendering: pixelated;
+      background: black;
+      outline: none;
+      box-shadow: 0 0 24px rgba(0, 0, 0, 0.6);
+      /* Stop the browser from treating touch drags on the canvas as page
+         scroll / zoom / pull-to-refresh so vertical swipes reach LVGL. Without
+         this, Android Chrome scrolls/gestures on a swipe and in-app scrolling
+         in the LVGL display feels broken. */
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    #status {
+      color: #9ad;
+      font-size: 12px;
+      min-height: 14px;
+    }
+    /* Emulated badge NeoPixels (painted by Module.__webio.onLeds). */
+    #leds {
+      display: flex;
+      gap: 10px;
+    }
+    .led {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      background: #222;
+      border: 1px solid #345;
+      box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+    }
+    /* Emulated badge controls: joystick (left) + buttons (right). */
+    #controls {
+      display: flex;
+      align-items: center;
+      gap: 48px;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #joystick {
+      position: relative;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      background: #1a2230;
+      border: 1px solid #345;
+      touch-action: none;
+    }
+    #joystick-nub {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 40px;
+      height: 40px;
+      margin: -20px 0 0 -20px;
+      border-radius: 50%;
+      background: #345;
+      border: 1px solid #58a;
+      cursor: grab;
+    }
+    #buttons {
+      display: grid;
+      grid-template-areas:
+        ".    x    ."
+        "y    .    a"
+        ".    b    .";
+      gap: 6px;
+    }
+    #middle-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .pill-button {
+      width: 56px;
+      height: 24px;
+      border-radius: 12px;
+      color: #9ad;
+      background: #1a2230;
+      border: 1px solid #345;
+      font: 10px/1 ui-monospace, monospace;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .pill-button:active, .pill-button.pressed { background: #58a; color: #fff; }
+    .pad-button {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      color: #9ad;
+      background: #1a2230;
+      border: 1px solid #345;
+      font: 14px/1 ui-monospace, monospace;
+      cursor: pointer;
+      touch-action: none;
+    }
+    .pad-button:active, .pad-button.pressed { background: #58a; color: #fff; }
+
+    #log {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 28vh;
+      margin: 0;
+      overflow: auto;
+      color: #ddd;
+      background: rgba(0, 0, 0, 0.78);
+      font: 12px/1.4 ui-monospace, monospace;
+      padding: 8px;
+      white-space: pre-wrap;
+    }
+    /* Log is a toggleable panel, closed by default. */
+    #log.hidden { display: none; }
+    #log-toggle {
+      position: fixed;
+      top: 8px;
+      right: 8px;
+      z-index: 10;
+      padding: 4px 10px;
+      color: #9ad;
+      background: rgba(0, 0, 0, 0.78);
+      border: 1px solid #345;
+      border-radius: 4px;
+      font: 12px/1.2 ui-monospace, monospace;
+      cursor: pointer;
+    }
+    #log-toggle:hover { background: rgba(20, 30, 45, 0.9); }
+    #reset-storage {
+      position: fixed;
+      top: 8px;
+      right: 64px;
+      z-index: 10;
+      padding: 4px 10px;
+      color: #d99;
+      background: rgba(0, 0, 0, 0.78);
+      border: 1px solid #534;
+      border-radius: 4px;
+      font: 12px/1.2 ui-monospace, monospace;
+      cursor: pointer;
+    }
+    #reset-storage:hover { background: rgba(45, 20, 20, 0.9); }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="status">Loading MicroPythonOS…</div>
+    <!-- Emulated badge NeoPixels; count adapts to Module.__webio.onLeds data. -->
+    <div id="leds"></div>
+    <!-- LVGL display size; MicroPythonOS default profile is 320x240. -->
+    <canvas id="canvas" width="320" height="240" tabindex="0"
+            oncontextmenu="event.preventDefault()"></canvas>
+    <!-- Emulated Fri3d 2026 badge controls: joystick + MENU/START (middle,
+         like the physical badge) + X/Y/A/B. -->
+    <div id="controls">
+      <div id="joystick"><div id="joystick-nub"></div></div>
+      <div id="middle-buttons">
+        <button class="pill-button pad-button" data-button="menu" type="button">MENU</button>
+        <button class="pill-button pad-button" data-button="start" type="button">START</button>
+      </div>
+      <div id="buttons">
+        <button class="pad-button" data-button="x" style="grid-area: x" type="button">X</button>
+        <button class="pad-button" data-button="y" style="grid-area: y" type="button">Y</button>
+        <button class="pad-button" data-button="a" style="grid-area: a" type="button">A</button>
+        <button class="pad-button" data-button="b" style="grid-area: b" type="button">B</button>
+      </div>
+    </div>
+  </div>
+  <button id="log-toggle" type="button" aria-expanded="false">Log</button>
+  <button id="reset-storage" type="button" title="Delete persistent /data and /apps storage and reload">Reset storage</button>
+  <pre id="log" class="hidden"></pre>
+
+  <script>
+    const logEl = document.getElementById("log");
+    const logToggle = document.getElementById("log-toggle");
+    const statusEl = document.getElementById("status");
+    const canvas = document.getElementById("canvas");
+
+    // Toggleable log panel (closed by default).
+    logToggle.addEventListener("click", () => {
+      const open = logEl.classList.toggle("hidden") === false;
+      logToggle.setAttribute("aria-expanded", String(open));
+      logToggle.textContent = open ? "Hide log" : "Log";
+      if (open) logEl.scrollTop = logEl.scrollHeight;
+    });
+
+    function appendLog(text, isErr) {
+      logEl.textContent += (isErr ? "[err] " : "") + text + "\n";
+      if (!logEl.classList.contains("hidden")) logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // --- Persistent filesystem helpers (IDBFS / IndexedDB) -----------------
+    // /data and /apps are mounted from IndexedDB so app preferences and
+    // user-installed apps survive page reloads. The functions below run inside
+    // the Emscripten runtime once `FS` exists (preRun / onRuntimeInitialized).
+
+    function copyRecursive(src, dst) {
+      var entries = FS.readdir(src);
+      for (var i = 0; i < entries.length; i++) {
+        var name = entries[i];
+        if (name === "." || name === "..") continue;
+        var s = src + "/" + name;
+        var d = dst + "/" + name;
+        var mode;
+        try {
+          mode = FS.stat(s).mode;
+        } catch (e) {
+          continue;
+        }
+        if (FS.isDir(mode)) {
+          try { FS.mkdir(d); } catch (e) {}
+          copyRecursive(s, d);
+        } else {
+          // Regular files (and any symlink resolved by readFile).
+          try {
+            FS.writeFile(d, FS.readFile(s));
+          } catch (e) {
+            console.error("seed copy failed for " + s + ":", e);
+          }
+        }
+      }
+    }
+
+    // Copy the bundled demo apps into the persistent /apps store, but only
+    // once. The marker file makes user uninstalls of bundled apps stick across
+    // reloads instead of being re-seeded every boot.
+    function seedBundledApps() {
+      var marker = "/apps/.seeded";
+      try { FS.stat(marker); return; } catch (e) {}
+      try { FS.stat("/.bundled_apps"); } catch (e) { return; }
+      copyRecursive("/.bundled_apps", "/apps");
+      try { FS.writeFile(marker, "1"); } catch (e) {}
+      flushPersist();
+    }
+
+    var _persistInFlight = false;
+    var _persistTimer = null;
+    function flushPersist() {
+      if (_persistInFlight) return;
+      _persistInFlight = true;
+      FS.syncfs(false, function (err) {
+        _persistInFlight = false;
+        if (err) console.error("IDBFS flush failed:", err);
+      });
+    }
+    function startPersistFlush() {
+      if (_persistTimer) return;
+      _persistTimer = setInterval(flushPersist, 4000);
+      window.addEventListener("pagehide", flushPersist);
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") flushPersist();
+      });
+    }
+
+    // --- Reset persistent storage -----------------------------------------
+    // Deletes the IndexedDB databases backing the /data and /apps IDBFS
+    // mounts (Emscripten names them after the mount point), then reloads.
+    document.getElementById("reset-storage").addEventListener("click", function () {
+      if (!confirm("Delete all locally stored data (/data and /apps) and reload?")) return;
+      if (_persistTimer) { clearInterval(_persistTimer); _persistTimer = null; }
+      _persistInFlight = true; // block any further flushes re-creating the DBs
+      var names = ["/data", "/apps"];
+      var pending = names.length;
+      function done() { if (--pending === 0) location.reload(); }
+      names.forEach(function (name) {
+        var req = indexedDB.deleteDatabase(name);
+        req.onsuccess = done;
+        req.onerror = function () { console.error("delete failed for " + name); done(); };
+        req.onblocked = done;
+      });
+    });
+
+    // --- Emulated badge peripherals (_webio bridge) ------------------------
+    // Python side: staged neopixel shim calls _webio.leds_write() ->
+    // Module.__webio.onLeds(Uint8Array of packed RGB); the fake WebExpander
+    // polls Module.__webio.buttons (bitmask, bit positions == Fri3d 2026
+    // expander digital tuple indices) and joy_x/joy_y (0..4095, 2048 center).
+    var webio = { buttons: 0, joy_x: 2048, joy_y: 2048, onLeds: null };
+
+    // NeoPixel dots. LED count adapts to the buffer length on first write.
+    var ledsEl = document.getElementById("leds");
+    // Pre-create 5 placeholder LEDs (badge default) so the row is visible
+    // even before Python writes any colors.
+    for (var _i = 0; _i < 5; _i++) {
+      var _dot = document.createElement("span");
+      _dot.className = "led";
+      ledsEl.appendChild(_dot);
+    }
+    webio.onLeds = function (rgb) {
+      var n = Math.floor(rgb.length / 3);
+      while (ledsEl.children.length < n) {
+        var dot = document.createElement("span");
+        dot.className = "led";
+        ledsEl.appendChild(dot);
+      }
+      for (var i = 0; i < n; i++) {
+        var r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
+        // Physical badge counts LEDs from the left as index n-1..0 (see
+        // board/fri3d_2026.py: set_led(4, ...) is the leftmost LED), so
+        // paint index i into the mirrored dot to match hardware order.
+        var el = ledsEl.children[n - 1 - i];
+        el.style.background = "rgb(" + r + "," + g + "," + b + ")";
+        el.style.boxShadow = (r || g || b)
+          ? "0 0 10px 2px rgba(" + r + "," + g + "," + b + ",0.9)"
+          : "0 0 6px rgba(0,0,0,0.8)";
+      }
+    };
+
+    // Buttons: bit positions match the expander digital tuple
+    // (1 joy_right, 2 joy_left, 3 joy_down, 4 joy_up,
+    //  5 menu, 6 b, 7 a, 8 y, 9 x). START is not on the physical expander
+    //  (it's GPIO 0 on the badge), so it uses bit 12 — outside the 12-entry
+    //  digital tuple — and is read separately by the web START indev.
+    var BUTTON_BITS = { menu: 5, b: 6, a: 7, y: 8, x: 9, start: 12 };
+    document.querySelectorAll(".pad-button").forEach(function (btn) {
+      var bit = BUTTON_BITS[btn.dataset.button];
+      function down(e) { e.preventDefault(); btn.classList.add("pressed"); webio.buttons |= (1 << bit); }
+      function up() { btn.classList.remove("pressed"); webio.buttons &= ~(1 << bit); }
+      btn.addEventListener("pointerdown", down);
+      btn.addEventListener("pointerup", up);
+      btn.addEventListener("pointerleave", up);
+      btn.addEventListener("pointercancel", up);
+    });
+
+    // Joystick: draggable nub. Sets analog joy_x/joy_y AND the digital
+    // direction bits (threshold at ~40% deflection) that the expander indev
+    // driver maps to arrow keys.
+    (function () {
+      var pad = document.getElementById("joystick");
+      var nub = document.getElementById("joystick-nub");
+      var JOY_BITS = { right: 1, left: 2, down: 3, up: 4 };
+      var dragging = false;
+      function setJoy(dx, dy) { // dx/dy in -1..1
+        nub.style.transform = "translate(" + (dx * 28) + "px," + (dy * 28) + "px)";
+        webio.joy_x = Math.round(2048 + dx * 2047);
+        webio.joy_y = Math.round(2048 + dy * 2047);
+        var bits = webio.buttons & ~((1 << JOY_BITS.right) | (1 << JOY_BITS.left) | (1 << JOY_BITS.down) | (1 << JOY_BITS.up));
+        if (dx > 0.4) bits |= (1 << JOY_BITS.right);
+        if (dx < -0.4) bits |= (1 << JOY_BITS.left);
+        if (dy > 0.4) bits |= (1 << JOY_BITS.down);
+        if (dy < -0.4) bits |= (1 << JOY_BITS.up);
+        webio.buttons = bits;
+      }
+      function move(e) {
+        if (!dragging) return;
+        var rect = pad.getBoundingClientRect();
+        var dx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        var dy = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+        var mag = Math.sqrt(dx * dx + dy * dy);
+        if (mag > 1) { dx /= mag; dy /= mag; }
+        setJoy(dx, dy);
+      }
+      pad.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        dragging = true;
+        pad.setPointerCapture(e.pointerId);
+        move(e);
+      });
+      pad.addEventListener("pointermove", move);
+      function release() { dragging = false; setJoy(0, 0); }
+      pad.addEventListener("pointerup", release);
+      pad.addEventListener("pointercancel", release);
+    })();
+
+    var Module = {
+      canvas: canvas,
+      // Emulated badge peripherals; read/written by the _webio C module
+      // (webio_js_init merges into this object at first Python access).
+      __webio: webio,
+      // Run MicroPythonOS: import the frozen main module. No -i so the
+      // browser is not blocked on an interactive REPL read.
+      arguments: ["-X", "heapsize=16M", "-m", "main"],
+      print: (text) => { console.log(text); appendLog(text, false); },
+      printErr: (text) => { console.error(text); appendLog(text, true); },
+      // Per-byte stdout hook. Must be defined in the static Module object
+      // (TTY ops are bound at runtime init — attaching it later is ignored).
+      //
+      // This is the ONLY path that mirrors MicroPython stdout to an external
+      // host (ViperIDE/Fri3d-IDE) via Module.__webterm.onOutput. Unlike
+      // Module.print (line-buffered, drops raw-REPL control bytes like \x01
+      // and \x04), this hook sees every byte, so the standard raw-REPL
+      // handshake works. It replaces the former unix_mphal.c submodule patch,
+      // which could silently fail to apply and ship a dead bridge.
+      //
+      // Bytes are normalized LF -> CRLF (statefully, never doubling an
+      // existing CRLF) because hosts written for real boards match banners
+      // like "raw REPL; CTRL-B to exit\r\n" that serial drivers emit.
+      stdout: (function () {
+        var outbuf = [];       // normalized bytes pending delivery to the host
+        var linebuf = [];      // decoded text pending a newline, for the log
+        var sched = false;
+        var prevWasCR = false; // CRLF-normalization state
+        var utf8 = new TextDecoder("utf-8");
+        function flush() {
+          sched = false;
+          if (outbuf.length) {
+            var b = new Uint8Array(outbuf);
+            outbuf.length = 0;
+            var H = Module.__webterm;
+            if (H && typeof H.onOutput === "function") {
+              try { H.onOutput(b); } catch (e) { console.error("onOutput failed:", e); }
+            }
+          }
+        }
+        return function (code) {
+          if (code === null || code === undefined) return; // flush marker
+          code &= 0xff;
+          if (code === 0x0a && !prevWasCR) outbuf.push(0x0d); // LF -> CRLF
+          prevWasCR = (code === 0x0d);
+          outbuf.push(code);
+          if (!sched) { sched = true; setTimeout(flush, 0); }
+          // Line-buffered copy into the on-page log/console (Module.print no
+          // longer receives stdout once this hook is installed).
+          if (code === 0x0a) {
+            appendLog(utf8.decode(new Uint8Array(linebuf)), false);
+            linebuf.length = 0;
+          } else if (code !== 0x0d) {
+            linebuf.push(code);
+          }
+        };
+      })(),
+      setStatus: (text) => {
+        if (statusEl) statusEl.textContent = text;
+        if (text === "") statusEl.style.display = "none";
+      },
+      preRun: [
+        function () {
+          // Keep keyboard focus on the canvas for SDL keyboard events.
+          canvas.addEventListener("click", () => canvas.focus());
+
+          // Mount the persistent filesystem (IndexedDB) before the runtime
+          // starts. /data holds app preferences/config and /apps holds
+          // user-installed apps; both are kept disjoint from the read-only
+          // preload package so they survive reloads. The boot is gated on the
+          // initial syncfs so Python sees the persisted contents.
+          var IDB = FS.filesystems.IDBFS;
+          try { FS.mkdir("/data"); } catch (e) {}
+          try { FS.mkdir("/apps"); } catch (e) {}
+          FS.mount(IDB, {}, "/data");
+          FS.mount(IDB, {}, "/apps");
+          addRunDependency("idbfs-load");
+          FS.syncfs(true, function (err) {
+            if (err) console.error("IDBFS initial load failed:", err);
+            removeRunDependency("idbfs-load");
+          });
+        }
+      ],
+      onRuntimeInitialized: function () {
+        statusEl.textContent = "";
+        canvas.focus();
+        // Seed bundled apps into /apps on first run (after preload + syncfs),
+        // then start flushing writes back to IndexedDB periodically.
+        try { seedBundledApps(); } catch (e) { console.error("seedBundledApps failed:", e); }
+        startPersistFlush();
+      }
+    };
+  </script>
+
+  <script async type="text/javascript" src="micropython.js"></script>
+</body>
+</html>

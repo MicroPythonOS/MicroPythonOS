@@ -1,0 +1,450 @@
+import logging
+
+import lvgl as lv
+import _thread
+
+from mpos import Activity, Intent, MposKeyboard, WifiService, CameraActivity, DisplayMetrics, CameraManager, TaskManager, add_focus_highlight
+
+logger = logging.getLogger(__name__)
+
+class WiFiSettings(Activity):
+    """
+    WiFi settings app for MicroPythonOS.
+    
+    This is a pure UI layer - all WiFi operations are delegated to WifiService.
+    """
+
+    last_tried_ssid = ""
+    last_tried_result = ""
+
+    scan_button_scan_text = "Rescan"
+    scan_button_scanning_text = "Scanning..."
+
+    scanned_ssids = []
+    busy_scanning = False
+    busy_connecting = False
+    error_timer = None
+
+    # Widgets:
+    aplist = None
+    error_label = None
+    scan_button = None
+    scan_button_label = None
+
+    def onCreate(self):
+        if __debug__: logger.debug("onCreate")
+        main_screen = lv.obj()
+        main_screen.set_style_pad_all(5, lv.PART.MAIN)
+        self.aplist = lv.list(main_screen)
+        self.aplist.set_size(lv.pct(100), lv.pct(75))
+        self.aplist.align(lv.ALIGN.TOP_MID, 0, 0)
+        self.error_label = lv.label(main_screen)
+        self.error_label.set_text("THIS IS ERROR TEXT THAT WILL BE SET LATER")
+        self.error_label.align_to(self.aplist, lv.ALIGN.OUT_BOTTOM_LEFT, 0, 0)
+        self.error_label.add_flag(lv.obj.FLAG.HIDDEN)
+        self.add_network_button = lv.button(main_screen)
+        self.add_network_button.set_size(lv.SIZE_CONTENT, lv.pct(15))
+        self.add_network_button.align(lv.ALIGN.BOTTOM_LEFT, 0, 0)
+        self.add_network_button.add_event_cb(self.add_network_callback, lv.EVENT.CLICKED, None)
+        self.add_network_button_label = lv.label(self.add_network_button)
+        self.add_network_button_label.set_text("Add network")
+        self.add_network_button_label.center()
+        self.scan_button = lv.button(main_screen)
+        self.scan_button.set_size(lv.SIZE_CONTENT, lv.pct(15))
+        self.scan_button.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+        self.scan_button.add_event_cb(self.scan_cb, lv.EVENT.CLICKED, None)
+        self.scan_button_label = lv.label(self.scan_button)
+        self.scan_button_label.set_text(self.scan_button_scan_text)
+        self.scan_button_label.center()
+        self.setContentView(main_screen)
+
+    def onResume(self, screen):
+        if __debug__: logger.debug("onResume")
+        super().onResume(screen)
+
+        # Ensure WifiService has loaded saved networks
+        WifiService.get_saved_networks()
+
+        if len(self.scanned_ssids) == 0:
+            if not WifiService.is_busy():
+                self.start_scan_networks()
+            else:
+                self.show_error("Wifi is busy, please try again later.")
+
+    def show_error(self, message):
+        # Schedule UI updates because different thread
+        if __debug__: logger.debug("show_error: %s", message)
+        self.update_ui_threadsafe_if_foreground(self.error_label.set_text, message)
+        self.update_ui_threadsafe_if_foreground(self.error_label.remove_flag, lv.obj.FLAG.HIDDEN)
+        self.error_timer = lv.timer_create(self.hide_error, 5000, None)
+        self.error_timer.set_repeat_count(1)
+
+    def hide_error(self, timer):
+        self.update_ui_threadsafe_if_foreground(self.error_label.add_flag, lv.obj.FLAG.HIDDEN)
+
+    def scan_networks_thread(self):
+        if __debug__: logger.debug("scanning for Wi-Fi networks")
+        try:
+            self.scanned_ssids = WifiService.scan_networks()
+            if __debug__: logger.debug("found networks: %s", self.scanned_ssids)
+        except Exception as e:
+            logger.warning("scan failed: %s", e)
+            self.show_error("Wi-Fi scan failed")
+        # scan done - WifiService.scan_networks() manages wifi_busy flag internally
+        self.busy_scanning = False
+        self.update_ui_threadsafe_if_foreground(self.scan_button_label.set_text, self.scan_button_scan_text)
+        self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
+        self.update_ui_threadsafe_if_foreground(self.refresh_list)
+
+    def start_scan_networks(self):
+        if self.busy_scanning:
+            if __debug__: logger.debug("not scanning, already busy")
+            return
+        self.busy_scanning = True
+        self.scan_button.add_state(lv.STATE.DISABLED)
+        self.scan_button_label.set_text(self.scan_button_scanning_text)
+        _thread.stack_size(TaskManager.good_stack_size())
+        _thread.start_new_thread(self.scan_networks_thread, ())
+
+    def refresh_list(self):
+        if __debug__: logger.debug("clearing current list")
+        self.aplist.clean()  # this causes an issue with lost taps if an ssid is clicked that has been removed
+        if __debug__: logger.debug("populating list with scanned networks")
+        
+        # Combine scanned SSIDs with saved networks
+        saved_networks = WifiService.get_saved_networks()
+        all_ssids = set(self.scanned_ssids + saved_networks)
+        
+        for ssid in all_ssids:
+            if len(ssid) < 1 or len(ssid) > 32:
+                if __debug__: logger.debug("skipping invalid SSID: %s", ssid)
+                continue
+            if __debug__: logger.debug("adding SSID: %s", ssid)
+            button = self.aplist.add_button(None, ssid)
+            button.add_event_cb(lambda e, s=ssid: self.select_ssid_cb(s), lv.EVENT.CLICKED, None)
+            
+            # Determine status
+            status = ""
+            current_ssid = WifiService.get_current_ssid()
+            if current_ssid == ssid:
+                status = "connected"
+            elif self.last_tried_ssid == ssid:
+                # Show last connection attempt result
+                status = self.last_tried_result
+            elif ssid in saved_networks:
+                status = "saved"
+            
+            label = lv.label(button)
+            label.set_text(status)
+            label.align(lv.ALIGN.RIGHT_MID, 0, 0)
+
+    def add_network_callback(self, event):
+        if __debug__: logger.debug("add_network clicked")
+        intent = Intent(activity_class=EditNetwork)
+        intent.putExtra("selected_ssid", None)
+        self.startActivityForResult(intent, self.edit_network_result_callback)
+
+    def scan_cb(self, event):
+        if __debug__: logger.debug("scan button clicked")
+        self.start_scan_networks()
+
+    def select_ssid_cb(self, ssid):
+        if __debug__: logger.debug("SSID selected: %s", ssid)
+        intent = Intent(activity_class=EditNetwork)
+        intent.putExtra("selected_ssid", ssid)
+        intent.putExtra("known_password", WifiService.get_network_password(ssid))
+        intent.putExtra("hidden", WifiService.get_network_hidden(ssid))
+        self.startActivityForResult(intent, self.edit_network_result_callback)
+
+    def edit_network_result_callback(self, result):
+        # Redact the password field from the dict dump — `result["data"]`
+        # contains the WiFi password in plaintext and gets printed to
+        # serial/REPL every time the user saves an EditNetwork screen.
+        _redacted = dict(result) if isinstance(result, dict) else result
+        if isinstance(_redacted, dict) and isinstance(_redacted.get("data"), dict):
+            _redacted["data"] = dict(_redacted["data"])
+            if "password" in _redacted["data"]:
+                _redacted["data"]["password"] = "***"
+        if __debug__: logger.debug("EditNetwork finished, result: %s", _redacted)
+        if result.get("result_code") is True:
+            data = result.get("data")
+            if data:
+                ssid = data.get("ssid")
+                forget = data.get("forget")
+                if forget:
+                    WifiService.forget_network(ssid)
+                    self.refresh_list()
+                else:
+                    # Save or update the network
+                    password = data.get("password")
+                    hidden = data.get("hidden")
+                    WifiService.save_network(ssid, password, hidden)
+                    self.start_attempt_connecting(ssid, password)
+
+    def start_attempt_connecting(self, ssid, password):
+        # Log only the SSID — the password is sensitive and was being
+        # printed to serial/REPL on every connect attempt.
+        if __debug__: logger.debug("attempting to connect to SSID '%s'", ssid)
+        self.scan_button.add_state(lv.STATE.DISABLED)
+        self.scan_button_label.set_text("Connecting...")
+        if self.busy_connecting:
+            if __debug__: logger.debug("not connecting, already busy")
+        else:
+            self.busy_connecting = True
+            _thread.stack_size(TaskManager.good_stack_size())
+            _thread.start_new_thread(self.attempt_connecting_thread, (ssid, password))
+
+    def attempt_connecting_thread(self, ssid, password):
+        if __debug__: logger.debug("attempting to connect to SSID '%s'", ssid)
+        result = "connected"
+        try:
+            if WifiService.attempt_connecting(ssid, password):
+                result = "connected"
+            else:
+                result = "timeout"
+        except Exception as e:
+            logger.warning("connection error: %s", e)
+            result = f"{e}"
+            self.show_error(f"Connecting to {ssid} failed!")
+        
+        if __debug__: logger.debug("connecting to %s got result: %s", ssid, result)
+        self.last_tried_ssid = ssid
+        self.last_tried_result = result
+        
+        # Note: Time sync is handled by WifiService.attempt_connecting()
+        
+        self.busy_connecting = False
+        self.update_ui_threadsafe_if_foreground(self.scan_button_label.set_text, self.scan_button_scan_text)
+        self.update_ui_threadsafe_if_foreground(self.scan_button.remove_state, lv.STATE.DISABLED)
+        self.update_ui_threadsafe_if_foreground(self.refresh_list)
+
+
+class EditNetwork(Activity):
+
+    selected_ssid = None
+
+    # Widgets:
+    ssid_ta = None
+    password_ta = None
+    hidden_cb = None
+    keyboard = None
+    connect_button = None
+    cancel_button = None
+    forget_button = None
+
+    action_button_label_forget = "Forget"
+    action_button_label_scanqr = "Scan QR"
+
+    def onCreate(self):
+        password_page = lv.obj()
+        password_page.set_style_pad_all(0, lv.PART.MAIN)
+        password_page.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self.selected_ssid = self.getIntent().extras.get("selected_ssid")
+        known_password = self.getIntent().extras.get("known_password")
+        known_hidden = self.getIntent().extras.get("hidden", False)
+
+        # SSID:
+        if self.selected_ssid is None:
+            if __debug__: logger.debug("no SSID selected, user must fill it out")
+            label = lv.label(password_page)
+            label.set_text(f"Network name:")
+            self.ssid_ta = lv.textarea(password_page)
+            self.ssid_ta.set_width(lv.pct(100))
+            self.ssid_ta.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+            self.ssid_ta.set_style_margin_right(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+            self.ssid_ta.set_one_line(True)
+            self.ssid_ta.set_placeholder_text("Enter the SSID")
+            self.keyboard = MposKeyboard(password_page)
+            self.keyboard.set_textarea(self.ssid_ta)
+            self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+
+        # Password:
+        label = lv.label(password_page)
+        if self.selected_ssid is None:
+            label.set_text("Password:")
+        else:
+            label.set_text(f"Password for '{self.selected_ssid}':")
+        self.password_ta = lv.textarea(password_page)
+        self.password_ta.set_width(lv.pct(100))
+        self.password_ta.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+        self.password_ta.set_style_margin_right(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+        self.password_ta.set_one_line(True)
+        if known_password:
+            self.password_ta.set_text(known_password)
+        self.password_ta.set_placeholder_text("Password")
+        self.keyboard = MposKeyboard(password_page)
+        self.keyboard.set_textarea(self.password_ta)
+        self.keyboard.add_flag(lv.obj.FLAG.HIDDEN)
+
+        # Hidden network:
+        hidden_cont = lv.obj(password_page)
+        hidden_cont.set_width(lv.pct(100))
+        hidden_cont.set_height(lv.SIZE_CONTENT)
+        hidden_cont.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+        hidden_cont.set_style_border_width(0, lv.PART.MAIN)
+        hidden_cont.set_style_pad_all(0, lv.PART.MAIN)
+        hidden_cont.remove_flag(lv.obj.FLAG.SCROLLABLE)
+        self.hidden_cb = lv.checkbox(hidden_cont)
+        self.hidden_cb.set_text("")
+        self.hidden_cb.align(lv.ALIGN.LEFT_MID, 0, 0)
+        label = lv.label(hidden_cont)
+        label.set_text("Hidden network (always try connecting)")
+        label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        label.set_width(lv.pct(85))
+        label.align_to(self.hidden_cb, lv.ALIGN.OUT_RIGHT_MID, 0, 0)
+        label.add_event_cb(self.hidden_clicked,lv.EVENT.CLICKED,None)
+        label.add_flag(lv.obj.FLAG.CLICKABLE)
+        label.set_style_pad_all(2, lv.PART.MAIN)
+        add_focus_highlight(label, width=2, opacity=lv.OPA._50, radius=5)
+        lv.group_get_default().add_obj(label)
+
+        if known_hidden:
+            self.hidden_cb.set_state(lv.STATE.CHECKED, True)
+
+        # Action buttons:
+        buttons = lv.obj(password_page)
+        buttons.set_width(lv.pct(100))
+        buttons.set_height(lv.SIZE_CONTENT)
+        buttons.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+        buttons.set_style_border_width(0, lv.PART.MAIN)
+        buttons.set_style_pad_all(0, lv.PART.MAIN)
+        # Forget / Scan QR button
+        self.forget_button = lv.button(buttons)
+        self.forget_button.align(lv.ALIGN.LEFT_MID, 0, 0)
+        self.forget_button.add_event_cb(self.forget_cb, lv.EVENT.CLICKED, None)
+        label = lv.label(self.forget_button)
+        label.center()
+        if self.selected_ssid:
+            label.set_text(self.action_button_label_forget)
+        else:
+            if CameraManager.has_camera():
+                label.set_text(self.action_button_label_scanqr)
+            else:
+                self.forget_button.add_flag(lv.obj.FLAG.HIDDEN)
+        # Close button
+        self.cancel_button = lv.button(buttons)
+        self.cancel_button.center()
+        self.cancel_button.set_style_margin_top(5, lv.PART.MAIN)
+        self.cancel_button.set_style_margin_bottom(5, lv.PART.MAIN)
+        self.cancel_button.add_event_cb(lambda *args: self.finish(), lv.EVENT.CLICKED, None)
+        label = lv.label(self.cancel_button)
+        label.set_text("Close")
+        label.center()
+        # Connect button
+        self.connect_button = lv.button(buttons)
+        self.connect_button.align(lv.ALIGN.RIGHT_MID, 0, 0)
+        self.connect_button.add_event_cb(self.connect_cb, lv.EVENT.CLICKED, None)
+        label = lv.label(self.connect_button)
+        label.set_text("Connect")
+        label.center()
+
+        self.setContentView(password_page)
+
+    def hidden_clicked(self, event):
+        if __debug__: logger.debug("hidden clicked")
+        checked = self.hidden_cb.get_state() & lv.STATE.CHECKED
+        self.hidden_cb.set_state(lv.STATE.CHECKED, not checked)
+
+    def connect_cb(self, event):
+        # Validate the form
+        if self.selected_ssid is None:
+            new_ssid = self.ssid_ta.get_text()
+            if not new_ssid:
+                self.ssid_ta.set_style_bg_color(lv.color_hex(0xff8080), lv.PART.MAIN)
+                return
+            else:
+                self.selected_ssid = new_ssid
+        # If a password is filled, then it should be at least 8 characters:
+        pwd = self.password_ta.get_text()
+        if pwd and len(pwd) < 8:
+            self.password_ta.set_style_bg_color(lv.color_hex(0xff8080), lv.PART.MAIN)
+            return
+
+        # Return the result
+        hidden_checked = bool(self.hidden_cb.get_state() & lv.STATE.CHECKED)
+        self.setResult(True, {"ssid": self.selected_ssid, "password": pwd, "hidden": hidden_checked})
+        self.finish()
+
+    def forget_cb(self, event):
+        label = self.forget_button.get_child(0)
+        if not label:
+            return
+        action = label.get_text()
+        if __debug__: logger.debug("%s button clicked", action)
+        if action == self.action_button_label_forget:
+            if __debug__: logger.debug("closing Activity")
+            self.setResult(True, {"ssid": self.selected_ssid, "forget": True})
+            self.finish()
+        else:
+            if __debug__: logger.debug("opening CameraApp")
+            self.startActivityForResult(Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True), self.gotqr_result_callback)
+
+    def gotqr_result_callback(self, result):
+        # Don't print the raw result — a WiFi QR code's payload
+        # (`WIFI:T:...;S:SSID;P:password;H:...;;`) contains the password
+        # in plaintext and this runs every time a QR is scanned.
+        if __debug__: logger.debug("QR capture finished, result_code=%s", result.get("result_code") if isinstance(result, dict) else None)
+        if result.get("result_code"):
+            data = result.get("data")
+            # Not logging `data` either — same reason: it's the raw QR.
+            authentication_type, ssid, password, hidden = self.decode_wifi_qr_code(data)
+            if ssid and self.ssid_ta: # not always present
+                self.ssid_ta.set_text(ssid)
+            if password:
+                self.password_ta.set_text(password)
+            if hidden:
+                self.hidden_cb.set_state(lv.STATE.CHECKED, True)
+            else:
+                self.hidden_cb.remove_state(lv.STATE.CHECKED)
+
+    @staticmethod
+    def decode_wifi_qr_code(to_decode):
+        """
+        Decode a WiFi QR code string in the format:
+        WIFI:T:WPA;S:SSID;P:PASSWORD;H:hidden;
+        
+        Returns: (authentication_type, ssid, password, hidden)
+        """
+        if __debug__: logger.debug("decoding %s", to_decode)
+        
+        # Initialize return values
+        authentication_type = "WPA"
+        ssid = None
+        password = None
+        hidden = False
+        
+        try:
+            # Remove the "WIFI:" prefix if present
+            if to_decode.startswith("WIFI:"):
+                to_decode = to_decode[5:]
+            
+            # Split by semicolon to get key-value pairs
+            pairs = to_decode.split(";")
+            
+            for pair in pairs:
+                if not pair:  # Skip empty strings
+                    continue
+                
+                # Split by colon to get key and value
+                if ":" not in pair:
+                    continue
+                
+                key, value = pair.split(":", 1)
+                
+                if key == "T":
+                    # Authentication type (WPA, WEP, nopass, etc.)
+                    authentication_type = value
+                elif key == "S":
+                    # SSID (network name)
+                    ssid = value
+                elif key == "P":
+                    # Password
+                    password = value
+                elif key == "H":
+                    # Hidden network (true/false)
+                    hidden = value.lower() in ("true", "1", "yes")
+        
+        except Exception as e:
+            logger.warning("error decoding WiFi QR code: %s", e)
+        
+        return authentication_type, ssid, password, hidden

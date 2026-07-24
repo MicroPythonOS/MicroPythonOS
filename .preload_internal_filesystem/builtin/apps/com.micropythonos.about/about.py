@@ -1,0 +1,239 @@
+import sys
+import logging
+import time
+
+import lvgl as lv
+
+from mpos import Activity, DisplayMetrics, BuildInfo, DeviceInfo, FontManager, add_focus_highlight
+import mpos
+
+class About(Activity):
+
+    logger = logging.getLogger(__file__)
+    logger.setLevel(logging.DEBUG) # default is WARNING
+
+    def onCreate(self):
+        self._uptime_label = None
+        self._timer = None
+        self._header_font = FontManager.getFont(size=14, family="Montserrat")
+        self._body_font = FontManager.getFont(size=12, family="Montserrat")
+        screen = lv.obj()
+        screen.set_style_border_width(0, lv.PART.MAIN)
+        screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        screen.set_style_pad_all(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
+
+        # Logo
+        img = lv.image(screen)
+        img.set_src("M:builtin/res/MicroPythonOS-logo-white-long-w296.png") # from the MPOS-logo repo
+        img.set_blend_mode(lv.BLEND_MODE.DIFFERENCE)
+
+        # Basic OS info
+        self._add_label(screen, f"{lv.SYMBOL.HOME} Build Information", is_header=True, margin_top=0) # close to logo
+        self._add_label(screen, f"Release version: {BuildInfo.version.release}")
+        self._add_label(screen, f"API Level: {BuildInfo.version.api_level}")
+        self._add_label(screen, f"Hardware ID: {DeviceInfo.hardware_id}")
+        self._add_label(screen, f"LVGL version: {lv.version_major()}.{lv.version_minor()}.{lv.version_patch()}")
+        self._add_label(screen, f"sys.version: {sys.version}")
+        self._add_label(screen, f"sys.implementation: {sys.implementation}")
+        self._add_label(screen, f"sys.byteorder: {sys.byteorder}")
+        self._add_label(screen, f"sys.maxsize of integer: {sys.maxsize}")
+
+        # Platform info
+        self._add_label(screen, f"{lv.SYMBOL.FILE} Platform", is_header=True)
+        self._add_label(screen, f"sys.platform: {sys.platform}")
+        self._add_label(screen, f"sys.path: {sys.path}")
+
+        # MPY version info
+        self._add_label(screen, f"{lv.SYMBOL.SETTINGS} Binary MPY Format", is_header=True)
+        sys_mpy = sys.implementation._mpy
+        self._add_label(screen, f'mpy version: {sys_mpy & 0xff}')
+        self._add_label(screen, f'mpy sub-version: {sys_mpy >> 8 & 3}')
+        arch = [None, 'x86', 'x64',
+            'armv6', 'armv6m', 'armv7m', 'armv7em', 'armv7emsp', 'armv7emdp',
+            'xtensa', 'xtensawin', 'rv32imc', 'rv64imc'][(sys_mpy >> 10) & 0x0F]
+        flags = ""
+        if arch:
+            flags += ' -march=' + arch
+        if (sys_mpy >> 16) != 0:
+            flags += ' -march-flags=' + (sys_mpy >> 16)
+        if len(flags) > 0:
+            self._add_label(screen, 'mpy flags: ' + flags)
+
+        # MicroPython and memory info
+        self._add_label(screen, f"{lv.SYMBOL.DRIVE} Memory & Performance", is_header=True)
+        import micropython
+        self._add_label(screen, f"micropython.opt_level(): {micropython.opt_level()}")
+        import gc
+        self._add_label(screen, f"Memory: {gc.mem_free()} free, {gc.mem_alloc()} allocated, {gc.mem_alloc()+gc.mem_free()} total")
+        self._add_label(screen, f"mpos.__path__: {mpos.__path__}") # this will show .frozen if the /lib folder is frozen (prod build)
+
+        # ESP32 hardware info
+        if sys.platform == "esp32":
+            try:
+                self._add_label(screen, f"{lv.SYMBOL.SETTINGS} ESP32 Hardware", is_header=True)
+                import esp32
+                self._add_label(screen, f"Temperature: {esp32.mcu_temperature()} °C")
+            except Exception as e:
+                self.logger.warning(f"Could not get ESP32 hardware info: {e}")
+
+            # Machine info
+            try:
+                if __debug__: self.logger.debug("Trying to find out additional board info, not available on every platform...")
+                self._add_label(screen, f"{lv.SYMBOL.POWER} Machine Info", is_header=True)
+                import machine
+                self._add_label(screen, f"machine.freq: {machine.freq()}")
+                # Format unique_id as MAC address (AA:BB:CC:DD:EE:FF)
+                unique_id = machine.unique_id()
+                mac_address = ':'.join(f'{b:02X}' for b in unique_id)
+                self._add_label(screen, f"machine.unique_id(): {mac_address}")
+                self._add_label(screen, f"machine.wake_reason(): {machine.wake_reason()}")
+                self._add_label(screen, f"machine.reset_cause(): {machine.reset_cause()}")
+            except Exception as e:
+                error = f"Could not find machine info because: {e}\nIt's normal to get this error on desktop."
+                self.logger.warning(error)
+                self._add_label(screen, error)
+
+            # Partition info (ESP32 only)
+            try:
+                self._add_label(screen, f"{lv.SYMBOL.SD_CARD} Partition Info", is_header=True)
+                from mpos.partitions import get_next_update_partition
+                from esp32 import Partition
+                current = Partition(Partition.RUNNING)
+                self._add_label(screen, f"Partition.RUNNING: {current}")
+                next_partition = get_next_update_partition()
+                self._add_label(screen, f"Next update partition: {next_partition}")
+            except Exception as e:
+                error = f"Could not find partition info because: {e}\nIt's normal to get this error on desktop."
+                self.logger.warning(error)
+                self._add_label(screen, error)
+
+        # Network info
+        try:
+            self._add_label(screen, f"{lv.SYMBOL.WIFI} Network Info", is_header=True)
+            from mpos import WifiService
+            ipv4_address = WifiService.get_ipv4_address() or "127.0.0.1"
+            ipv4_netmask = WifiService.get_ipv4_netmask() or "255.255.255.0"
+            ipv4_gateway = WifiService.get_ipv4_gateway() or ""
+            self._add_label(screen, f"IPv4 Address: {ipv4_address}")
+            self._add_label(screen, f"IPv4 Netmask: {ipv4_netmask}")
+            self._add_label(screen, f"IPv4 Gateway: {ipv4_gateway}")
+        except Exception as e:
+            error = f"Could not find network info because: {e}"
+            self.logger.warning(error)
+            self._add_label(screen, error)
+
+
+        # Freezefs info (production builds only)
+        try:
+            if __debug__: self.logger.debug("Trying to find out freezefs info")
+            self._add_label(screen, f"{lv.SYMBOL.DOWNLOAD} Frozen Filesystem", is_header=True)
+            import freezefs_mount_builtin
+            self._add_label(screen, f"freezefs_mount_builtin.date_frozen: {freezefs_mount_builtin.date_frozen}")
+            self._add_label(screen, f"freezefs_mount_builtin.files_folders: {freezefs_mount_builtin.files_folders}")
+            self._add_label(screen, f"freezefs_mount_builtin.sum_size: {freezefs_mount_builtin.sum_size}")
+            self._add_label(screen, f"freezefs_mount_builtin.version: {freezefs_mount_builtin.version}")
+        except Exception as e:
+            # This will throw an EEXIST exception if there is already a "/builtin" folder present
+            # It will throw "no module named 'freezefs_mount_builtin'" if there is no frozen filesystem
+            # It's possible that the user had a dev build with a non-frozen /buitin folder in the vfat storage partition,
+            # and then they install a prod build (with OSUpdate) that then is unable to mount the freezefs into /builtin
+            # BUT which will still have the frozen-inside /lib folder. So the user will be able to install apps into /builtin
+            # but they will not be able to install libraries into /lib.
+            error = f"Could not get freezefs_mount_builtin info because: {e}\nIt's normal to get an exception if the internal storage partition contains an overriding /builtin folder."
+            self.logger.warning(error)
+            self._add_label(screen, error)
+
+        # Display info
+        try:
+            self._add_label(screen, f"{lv.SYMBOL.IMAGE} Display", is_header=True)
+            hor_res = DisplayMetrics.width()
+            ver_res = DisplayMetrics.height()
+            self._add_label(screen, f"Resolution: {hor_res}x{ver_res}")
+            dpi = DisplayMetrics.dpi()
+            self._add_label(screen, f"Dots Per Inch (dpi): {dpi}")
+        except Exception as e:
+            self.logger.warning(f"Could not get display info: {e}")
+
+        # Disk usage info
+        self._add_label(screen, f"{lv.SYMBOL.DRIVE} Storage", is_header=True)
+        self._add_disk_info(screen, '/')
+        self._add_disk_info(screen, '/sdcard')
+
+        # System uptime
+        self._add_label(screen, f"{lv.SYMBOL.REFRESH} System Uptime", is_header=True)
+        self._uptime_label = self._add_label(screen, f"Uptime: {self._get_uptime_str()}", margin_top=0)
+
+        self.setContentView(screen)
+
+    def onResume(self, screen):
+        if self._timer is None:
+            self._timer = lv.timer_create(self._update_uptime, 1000, None)
+
+    def onPause(self, screen):
+        if self._timer is not None:
+            self._timer.delete()
+            self._timer = None
+
+    def _get_uptime_str(self):
+        ms = time.ticks_ms()
+        total_seconds = ms // 1000
+
+        years = total_seconds // (365 * 24 * 3600)
+        remaining = total_seconds % (365 * 24 * 3600)
+
+        months = remaining // (30 * 24 * 3600)
+        remaining %= (30 * 24 * 3600)
+
+        days = remaining // (24 * 3600)
+        remaining %= (24 * 3600)
+
+        hours = remaining // 3600
+        remaining %= 3600
+
+        minutes = remaining // 60
+        seconds = remaining % 60
+
+        parts = []
+        if years > 0:
+            parts.append(f"{years}y, {months}mo, {days}d")
+        elif months > 0:
+            parts.append(f"{months}mo, {days}d")
+        elif days > 0:
+            parts.append(f"{days}d")
+
+        parts.append(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        return " ".join(parts)
+
+    def _update_uptime(self, event=None):
+        if self._uptime_label is not None:
+            self._uptime_label.set_text(f"Uptime: {self._get_uptime_str()}")
+
+    def _add_label(self, parent, text, is_header=False, margin_top=DisplayMetrics.pct_of_height(5)):
+        """Helper to create and add a label with text."""
+        label = lv.label(parent)
+        label.set_text(text)
+        label.set_width(lv.pct(98))
+        # Make labels focusable to allow scroll on devices without touch screen
+        add_focus_highlight(label)
+        lv.group_get_default().add_obj(label)
+        if is_header:
+            primary_color = lv.theme_get_color_primary(None)
+            label.set_style_text_color(primary_color, lv.PART.MAIN)
+            label.set_style_text_font(self._header_font, lv.PART.MAIN)
+            label.set_style_margin_top(margin_top, lv.PART.MAIN)
+            label.set_style_margin_bottom(DisplayMetrics.pct_of_height(2), lv.PART.MAIN)
+        else:
+            label.set_style_text_font(self._body_font, lv.PART.MAIN)
+            label.set_style_margin_bottom(2, lv.PART.MAIN)
+        return label
+
+    def _add_disk_info(self, screen, path):
+        """Helper to add disk usage info for a given path."""
+        import shutil
+        try:
+            usage = shutil.disk_usage(path)
+            self._add_label(screen, f"Total space {path}: {usage.total} bytes")
+            self._add_label(screen, f"Free space {path}: {usage.free} bytes")
+            self._add_label(screen, f"Used space {path}: {usage.used} bytes")
+        except Exception as e:
+            self.logger.warning(f"About app could not get info on {path} filesystem: {e}")

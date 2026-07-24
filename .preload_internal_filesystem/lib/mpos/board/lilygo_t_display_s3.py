@@ -1,0 +1,166 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+if __debug__: logger.debug("lilygo_t_display_s3.py running")
+
+import lcd_bus
+import lvgl as lv
+import machine
+import time
+
+if __debug__: logger.debug("lilygo_t_display_s3.py display bus initialization")
+try:
+    display_bus = lcd_bus.I80Bus(
+        dc=7,
+        wr=8,
+        cs=6,
+        data0=39,
+        data1=40,
+        data2=41,
+        data3=42,
+        data4=45,
+        data5=46,
+        data6=47,
+        data7=48,
+        #reverse_color_bits=False # doesnt seem to do anything?
+    )
+except Exception as e:
+    logger.error("Error initializing display bus: %s" % (e))
+    if __debug__: logger.debug("Attempting hard reset in 3sec...")
+    time.sleep(3)
+    machine.reset()
+
+_BUFFER_SIZE = const(320 * 170 * 2 + 1) # + 1 is needed to avoid render_mode = lv.DISPLAY_RENDER_MODE.FULL which is buggy
+fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+
+import drivers.display.st7789 as st7789
+import mpos.ui
+mpos.ui.main_display = st7789.ST7789(
+    data_bus=display_bus,
+    frame_buffer1=fb1,
+    # frame_buffer2 doesn't seem to improve anything
+    display_width=170,
+    display_height=320,
+    color_space=lv.COLOR_FORMAT.RGB565,
+    # color_space=lv.COLOR_FORMAT.RGB888, # not supported on qemu
+    color_byte_order=st7789.BYTE_ORDER_BGR, # QEMU needs RGB?!
+    # rgb565_byte_swap=False, # always False is data_bus.get_lane_count() == 8
+    power_pin=9, # Must set RD pin to high, otherwise blank screen as soon as LVGL's task_handler starts
+    reset_pin=5,
+    reset_state=st7789.STATE_LOW, # needs low: high will not enable the display
+    backlight_pin=38, # needed
+    backlight_on_state=st7789.STATE_PWM,
+    offset_x=0,
+    offset_y=35
+) # this will trigger lv.init()
+mpos.ui.main_display.set_power(True) # set RD pin to high before the rest, otherwise garbled output
+mpos.ui.main_display.init()
+mpos.ui.main_display.set_backlight(100) # works
+
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+#mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180) # doesnt suffer from the qemu full buffer issue
+mpos.ui.main_display.set_color_inversion(True)
+
+# Button handling code:
+from machine import Pin
+btn_a = Pin(0, Pin.IN, Pin.PULL_UP)
+btn_b = Pin(14, Pin.IN, Pin.PULL_UP)
+
+COMBO_GRACE_MS = 90  # Accept near-simultaneous A+B as ENTER
+REPEAT_PREV_BECOMES_BACK = 700  # Long previous press becomes back button
+last_key = None
+key_press_start = 0
+last_a_down_time = 0
+last_b_down_time = 0
+last_a_pressed = False
+last_b_pressed = False
+back_fired = False
+
+# Read callback
+# Warning: This gets called several times per second, and if it outputs continuous debugging on the serial line,
+# that will break tools like mpremote from working properly to upload new files over the serial line, thus needing a reflash.
+def keypad_read_cb(indev, data):
+    global last_key, key_press_start, last_a_down_time, last_b_down_time
+    global last_a_pressed, last_b_pressed, back_fired
+
+    current_time = time.ticks_ms()
+    btn_a_pressed = btn_a.value() == 0
+    btn_b_pressed = btn_b.value() == 0
+    if btn_a_pressed and not last_a_pressed:
+        last_a_down_time = current_time
+    if btn_b_pressed and not last_b_pressed:
+        last_b_down_time = current_time
+    last_a_pressed = btn_a_pressed
+    last_b_pressed = btn_b_pressed
+
+    near_simul = False
+    if btn_a_pressed and btn_b_pressed:
+        near_simul = True
+    elif btn_a_pressed and last_b_down_time and time.ticks_diff(current_time, last_b_down_time) <= COMBO_GRACE_MS:
+        near_simul = True
+    elif btn_b_pressed and last_a_down_time and time.ticks_diff(current_time, last_a_down_time) <= COMBO_GRACE_MS:
+        near_simul = True
+
+    single_press_wait = False
+    if btn_a_pressed ^ btn_b_pressed:
+        if btn_a_pressed and time.ticks_diff(current_time, last_a_down_time) < COMBO_GRACE_MS:
+            single_press_wait = True
+        elif btn_b_pressed and time.ticks_diff(current_time, last_b_down_time) < COMBO_GRACE_MS:
+            single_press_wait = True
+
+    # While in an on-screen keyboard, PREV button is LEFT and NEXT button is RIGHT
+    focus_keyboard = False
+    if isinstance(lv.group_get_default().get_focused(), lv.keyboard):
+        focus_keyboard = True
+
+    if near_simul:
+        current_key = lv.KEY.ENTER
+    elif single_press_wait:
+        current_key = None
+    elif btn_a_pressed:
+        current_key = lv.KEY.LEFT if focus_keyboard else lv.KEY.PREV
+    elif btn_b_pressed:
+        current_key = lv.KEY.RIGHT if focus_keyboard else lv.KEY.NEXT
+    else:
+        current_key = None
+
+    if current_key is None:
+        data.key = last_key if last_key else -1
+        data.state = lv.INDEV_STATE.RELEASED
+        last_key = None
+        key_press_start = 0
+        back_fired = False
+    elif last_key is None or current_key != last_key:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        last_key = current_key
+        key_press_start = current_time
+        back_fired = False
+    else:
+        data.key = current_key
+        data.state = lv.INDEV_STATE.PRESSED
+        # Long PREV press becomes ESC (back)
+        if current_key == lv.KEY.PREV and not back_fired:
+            elapsed = time.ticks_diff(current_time, key_press_start)
+            if elapsed >= REPEAT_PREV_BECOMES_BACK:
+                data.key = lv.KEY.ESC
+                back_fired = True
+
+    # Handle ESC for back navigation
+    if data.state == lv.INDEV_STATE.PRESSED and data.key == lv.KEY.ESC:
+        mpos.ui.back_screen()
+
+
+# Create and set up the input device
+indev = lv.indev_create()
+indev.set_type(lv.INDEV_TYPE.KEYPAD)
+indev.set_read_cb(keypad_read_cb)
+indev.set_group(lv.group_get_default())
+disp = lv.display_get_default()  # NOQA
+indev.set_display(disp)  # different from display
+indev.enable(True)  # NOQA
+from mpos import InputManager
+InputManager.register_indev(indev)
+
+if __debug__: logger.debug("lilygo_t_display_s3.py finished")

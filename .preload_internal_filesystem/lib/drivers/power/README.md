@@ -1,0 +1,1 @@
+- AXP2101.py and I2CInterface.py are sourced from https://github.com/lewisxhe/XPowersLib/tree/master/Micropython/src commit 830eb6b (pre-release V0.3.4)

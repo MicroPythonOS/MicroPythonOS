@@ -1,0 +1,757 @@
+import logging
+import lvgl as lv
+import os
+
+logger = logging.getLogger(__name__)
+
+
+CP_VARIATION_SELECTOR_TEXT = 0xFE0E
+CP_VARIATION_SELECTOR_EMOJI = 0xFE0F
+
+_EMOJI_DIR_PATH = "builtin/res/emojis/32x32"
+_EMOJI_SRC_PREFIX = "M:" + _EMOJI_DIR_PATH + "/"
+
+
+class FontManager:
+    _DEFAULT_SIZE = 12
+    _DEBUG = False
+    _UNKNOWN_EMOJI_LOG_THRESHOLD = 0x203C
+
+    # Multiple caches are intentional here: emoji rendering on ESP32 is very
+    # expensive, so we avoid repeated filesystem scans, repeated image decode
+    # probes, and repeated per-codepoint fallback walks.
+    _emoji_map = None  # dict of hex-key -> src path, populated on first use
+    _emoji_strings = None  # list of complete emoji strings, populated on first use
+    _builtin_font_records = None
+    _composed_font_cache = {}
+    _ttf_font_cache = {}
+    _imgfont_scaled_src_cache = {}
+    _imgfont_source_size_cache = {}
+    _imgfont_empty_src_cache = {}
+    _emoji_src_lookup_cache = {}
+    _emoji_sequence_lookup_cache = {}
+    _unknown_emoji_codepoints_logged = {}
+    _emoji_similarity_group_members_by_cp = None
+    _emoji_cp_bounds = None
+
+    # Paste/update emoji similarity groups here as CSV with header: group_id,emoji
+    _EMOJI_SIMILARITY_GROUPS_CSV = """group_id,emoji
+hearts,❤
+hearts,♥
+hearts,❣
+hearts,💞
+hearts,💖
+hearts,💗
+hearts,💓
+hearts,💘
+hearts,💝
+hearts,💕
+hearts,💔
+hearts,💙
+hearts,💜
+hearts,💚
+hearts,💛
+hearts,🖤
+tears_laughing,😂
+tears_laughing,🤣
+good_hand,👍
+good_hand,👏
+good_hand,👌
+good_hand,🙌
+smile_grin,😀
+smile_grin,😃
+smile_beam,😁
+smile_beam,😄
+smile_love,😍
+smile_love,😻
+smile_love,😹
+smile_love,😈
+tongue_group,😋
+tongue_group,😛
+sad_cry,😢
+sad_cry,😥
+sad_cry,😪
+sad_cry,😓
+music_group,🎶
+music_group,🎵
+checkmarks,✅
+checkmarks,✔
+exclamation,‼
+exclamation,❗
+angry,🔴
+angry,😡
+angry,😤
+flower_group,🌹
+flower_group,🌸
+flower_group,🌷
+flower_group,🎊
+flower_group,🌺
+flower_group,🌼
+flower_group,🌻
+flower_group,🍀
+birthday_cakes,🎂
+birthday_cakes,👑
+pigs,🐷
+pigs,🐖
+droplet_sweat,💦
+droplet_sweat,💧
+lips,💋
+lips,👄
+lips,🫦
+"""
+
+    @classmethod
+    def getFont(cls, size=None, ttf=None, family=None, emoji=False):
+        target_size = cls._normalize_size(size)
+
+        if ttf is None:
+            base_font = cls._get_builtin_font(target_size, family)
+        else:
+            base_font = cls._get_ttf_font(ttf, target_size)
+
+        if not emoji:
+            return base_font
+
+        return cls._get_composed_font(base_font)
+
+    @classmethod
+    def normalizeEmojiText(cls, text):
+        text = text.replace(chr(CP_VARIATION_SELECTOR_TEXT), "")
+        text = text.replace(chr(CP_VARIATION_SELECTOR_EMOJI), "")
+        return text
+
+    @classmethod
+    def _normalize_size(cls, size):
+        if size is None:
+            return cls._DEFAULT_SIZE
+        try:
+            return max(1, int(size))
+        except Exception:
+            return cls._DEFAULT_SIZE
+
+    @classmethod
+    def _get_builtin_font(cls, size, family=None):
+        builtin_fonts = cls._get_builtin_font_records()
+        search_fonts = []
+
+        if family is not None:
+            for record in builtin_fonts:
+                if record["family"] == family:
+                    search_fonts.append(record)
+
+        if not search_fonts:
+            montserrat_fonts = []
+            for record in builtin_fonts:
+                if record["family"] == "Montserrat":
+                    montserrat_fonts.append(record)
+            search_fonts = montserrat_fonts if montserrat_fonts else builtin_fonts
+
+        if search_fonts:
+            best = search_fonts[0]
+            best_key = (abs(best["size"] - size), 1 if best["size"] > size else 0)
+            for candidate in search_fonts[1:]:
+                key = (abs(candidate["size"] - size), 1 if candidate["size"] > size else 0)
+                if key < best_key:
+                    best_key = key
+                    best = candidate
+            return best["font"]
+        fallback_records = cls._get_builtin_font_records()
+        if fallback_records:
+            return fallback_records[0]["font"]
+        return lv.font_montserrat_12
+
+    @classmethod
+    def listFonts(cls, emojis=False):
+        fonts = []
+        for record in cls._get_builtin_font_records():
+            font = record["font"]
+            if emojis:
+                font = cls._get_composed_font(font)
+            fonts.append(
+                {
+                    "name": "{} {}".format(record["family"], record["size"]),
+                    "family": record["family"],
+                    "size": record["size"],
+                    "font": font,
+                    "base_font": record["font"],
+                }
+            )
+        return fonts
+
+    @classmethod
+    def _get_builtin_font_records(cls):
+        if cls._builtin_font_records is not None:
+            return cls._builtin_font_records
+
+        candidates = (
+            ("Montserrat", 8, "font_montserrat_8"),
+            ("Montserrat", 10, "font_montserrat_10"),
+            ("Montserrat", 12, "font_montserrat_12"),
+            ("Montserrat", 14, "font_montserrat_14"),
+            ("Montserrat", 16, "font_montserrat_16"),
+            ("Montserrat", 18, "font_montserrat_18"),
+            ("Montserrat", 20, "font_montserrat_20"),
+            ("Montserrat", 24, "font_montserrat_24"),
+            ("Montserrat", 28, "font_montserrat_28"),
+            ("Unscii", 8, "font_unscii_8"),
+            ("Unscii", 16, "font_unscii_16"),
+        )
+
+        records = []
+        for family, size, attr in candidates:
+            if hasattr(lv, attr):
+                records.append(
+                    {
+                        "family": family,
+                        "size": size,
+                        "font": getattr(lv, attr),
+                    }
+                )
+
+        cls._builtin_font_records = records
+        return cls._builtin_font_records
+
+    @classmethod
+    def _get_composed_font(cls, base_font, size=None):
+        if base_font is None:
+            return None
+
+        font_id = cls._font_identity(base_font)
+        emoji_size = size if size is not None else cls._font_pixel_height(base_font)
+        cache_key = (font_id, int(emoji_size))
+        if cache_key in cls._composed_font_cache:
+            return cls._composed_font_cache[cache_key]
+
+        emoji_font = cls._create_emoji_font(emoji_size)
+        if emoji_font is None:
+            return base_font
+
+        try:
+            # Keep imgfont as primary and route unknown glyphs to the base font.
+            # This avoids mutating builtin fonts, which may be readonly.
+            emoji_font.fallback = base_font
+            emoji_font.base_line = cls._font_base_line(base_font)
+            emoji_font.underline_position = cls._font_underline_position(base_font)
+            emoji_font.underline_thickness = cls._font_underline_thickness(base_font)
+        except Exception as err:
+            cls._debug("compose fallback set failed: " + repr(err))
+            return base_font
+
+        cls._composed_font_cache[cache_key] = emoji_font
+        return emoji_font
+
+    @classmethod
+    def _font_identity(cls, font):
+        try:
+            return int(id(font))
+        except Exception:
+            return repr(font)
+
+    @classmethod
+    def _debug(cls, message):
+        if cls._DEBUG:
+            logger.debug(message)
+
+    @classmethod
+    def _get_ttf_font(cls, ttf_path, size):
+        key = (ttf_path, size)
+        if key in cls._ttf_font_cache:
+            return cls._ttf_font_cache[key]
+
+        cls._assert_ttf_exists(ttf_path)
+        font = lv.tiny_ttf_create_file(ttf_path, size)
+        cls._ttf_font_cache[key] = font
+        return font
+
+    @classmethod
+    def _assert_ttf_exists(cls, ttf_path):
+        path = ttf_path
+        if isinstance(path, str) and path.startswith("M:"):
+            path = path[2:]
+        try:
+            os.stat(path)
+        except OSError:
+            raise OSError("TTF file not found: {}".format(ttf_path))
+
+    @classmethod
+    def getEmojiCodepoints(cls):
+        cls._ensure_emoji_map()
+        all_cps = set()
+        for key in cls._emoji_map:
+            try:
+                cp = int(key.split("-")[0], 16)
+                all_cps.add(cp)
+            except Exception:
+                pass
+        return sorted(all_cps)
+
+    @classmethod
+    def getEmojiStrings(cls):
+        cls._ensure_emoji_map()
+        return list(cls._emoji_strings or [])
+
+    @classmethod
+    def _create_emoji_font(cls, size):
+        size = max(1, int(size))
+        cls._ensure_emoji_map()
+
+        try:
+            font = lv.imgfont_create(size, cls._imgfont_path_cb, None)
+        except Exception:
+            return None
+        if font is None:
+            return None
+
+        # Push the same codepoint accept/exclude ranges that _get_emoji_src
+        # checks down into the C-level imgfont. Once set, LVGL stops calling
+        # our Python _imgfont_path_cb for codepoints that are guaranteed to
+        # have no emoji glyph (ASCII, CJK, PUA, etc.) — turning the per-glyph
+        # cost from "Python call + return" into a pair of int compares in C.
+        # This is the actual fix for the scrolling slowdown: composed-font
+        # text where most glyphs are non-emoji now stays in C end-to-end.
+        try:
+            cp_min, cp_max = cls._emoji_codepoint_bounds()
+            lv.imgfont_set_range(font, cp_min, cp_max, 0xE000, 0xF8FF)
+        except AttributeError:
+            # Older LVGL build without lv_imgfont_set_range — that's OK, the
+            # fast path is just a nice-to-have. Behaviour falls back to the
+            # pre-patch composed-font path (correct, just slower).
+            cls._debug("imgfont_set_range unavailable — emoji filter not applied")
+        except Exception as err:
+            cls._debug("imgfont_set_range failed: " + repr(err))
+
+        return font
+
+    @classmethod
+    def _emoji_codepoint_bounds(cls):
+        """Smallest / largest codepoint in the emoji map.
+        Cached after first computation — the map is immutable after init.
+        Falls back to a safe wide range if no emojis are loaded yet."""
+        if cls._emoji_cp_bounds is not None:
+            return cls._emoji_cp_bounds
+        lo = None
+        hi = None
+        for key in cls._emoji_map or {}:
+            try:
+                cp = int(key.split("-")[0], 16)
+            except Exception:
+                continue
+            if lo is None or cp < lo: lo = cp
+            if hi is None or cp > hi: hi = cp
+        if lo is None:
+            # No emojis loaded — accept everything so behaviour matches the
+            # unpatched code path. Caller should re-create the font once
+            # the map is populated.
+            return (0, 0xFFFFFFFF)
+        cls._emoji_cp_bounds = (lo, hi)
+        return cls._emoji_cp_bounds
+
+    @classmethod
+    def _ensure_emoji_map(cls):
+        if cls._emoji_map is None:
+            cls._emoji_map = cls._build_emoji_map()
+
+    @classmethod
+    def _build_emoji_map(cls):
+        emoji_map = {}
+        emoji_strings = set()
+
+        entries = cls._list_dir_names(_EMOJI_DIR_PATH)
+        if entries is None:
+            try:
+                cwd = os.getcwd()
+            except Exception:
+                cwd = "?"
+            logger.warning("could not list emoji dir '%s' (cwd=%s)", _EMOJI_DIR_PATH, cwd)
+            cls._emoji_strings = []
+            return emoji_map
+
+        for name in entries:
+            if not name.lower().endswith(".png"):
+                continue
+
+            name_without_ext = name[:-4]
+            segments = name_without_ext.split("-")
+            valid = True
+            for seg in segments:
+                try:
+                    int(seg, 16)
+                except Exception:
+                    valid = False
+                    break
+            if not valid:
+                logger.warning("skip non-hex emoji file: %s", name)
+                continue
+
+            # Build the full renderable emoji string (e.g. flag sequences, variation selectors).
+            try:
+                emoji_string = "".join(chr(int(seg, 16)) for seg in segments)
+                emoji_strings.add(emoji_string)
+            except Exception:
+                pass
+
+            base_key = segments[0].upper()
+            full_key = name_without_ext.upper()
+
+            if full_key not in emoji_map:
+                emoji_map[full_key] = _EMOJI_SRC_PREFIX + name
+
+            # Also register under the base key (without trailing modifiers)
+            # so a plain codepoint lookup (e.g. U+203C) finds "203C-FE0F.png".
+            if base_key not in emoji_map:
+                emoji_map[base_key] = _EMOJI_SRC_PREFIX + name
+
+        if __debug__: logger.debug("loaded %s emoji png mappings from %s", len(emoji_map), _EMOJI_DIR_PATH)
+        cls._emoji_strings = sorted(emoji_strings)
+        return emoji_map
+
+    @classmethod
+    def _get_emoji_src(cls, codepoint, target_height):
+        if isinstance(codepoint, int):
+            if codepoint < cls._UNKNOWN_EMOJI_LOG_THRESHOLD:
+                return None
+            if 0xE000 <= codepoint <= 0xF8FF:
+                return None
+            key = "{:X}".format(int(codepoint))
+        else:
+            key = str(codepoint).upper()
+
+        cls._ensure_emoji_map()
+
+        if key in cls._emoji_src_lookup_cache:
+            return cls._emoji_src_lookup_cache[key]
+
+        src = cls._lookup_emoji_src_by_key(key)
+        if src is not None:
+            cls._emoji_src_lookup_cache[key] = src
+            return src
+
+        # Only attempt similarity fallback for single-codepoint lookups
+        if "-" not in key:
+            try:
+                cp = int(key, 16)
+            except Exception:
+                cp = None
+            if cp is not None:
+                cls._ensure_emoji_similarity_groups()
+                similar_codepoints = cls._emoji_similarity_group_members_by_cp.get(cp)
+                if similar_codepoints is not None:
+                    for fallback_cp in similar_codepoints:
+                        if fallback_cp == cp:
+                            continue
+                        src = cls._lookup_emoji_src_by_key("{:X}".format(int(fallback_cp)))
+                        if src is not None:
+                            cls._debug(
+                                "emoji fallback 0x{:X} -> 0x{:X}".format(cp, fallback_cp)
+                            )
+                            cls._emoji_src_lookup_cache[key] = src
+                            return src
+
+        cls._emoji_src_lookup_cache[key] = None
+        return None
+
+    @classmethod
+    def _lookup_emoji_src_by_key(cls, key):
+        key = key.upper()
+        parts = key.split("-")
+        emoji_map = cls._emoji_map or {}
+        for i in range(len(parts), 0, -1):
+            candidate = "-".join(parts[:i])
+            if candidate in emoji_map:
+                return emoji_map[candidate]
+        return None
+
+    @classmethod
+    def _ensure_emoji_similarity_groups(cls):
+        if cls._emoji_similarity_group_members_by_cp is not None:
+            return
+
+        groups = {}
+        for raw_line in cls._EMOJI_SIMILARITY_GROUPS_CSV.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            parts = line.split(",", 1)
+            if len(parts) != 2:
+                continue
+
+            group_id = parts[0].strip()
+            emoji_text = parts[1].strip()
+            if group_id == "group_id" and emoji_text == "emoji":
+                continue
+
+            emoji_text = cls.normalizeEmojiText(emoji_text)
+            if len(emoji_text) != 1:
+                continue
+
+            codepoint = ord(emoji_text)
+            group = groups.get(group_id)
+            if group is None:
+                group = []
+                groups[group_id] = group
+
+            if codepoint not in group:
+                group.append(codepoint)
+
+        members_by_cp = {}
+        for group_members in groups.values():
+            members_tuple = tuple(group_members)
+            for codepoint in group_members:
+                members_by_cp[codepoint] = members_tuple
+
+        cls._emoji_similarity_group_members_by_cp = members_by_cp
+
+    @classmethod
+    def _list_dir_names(cls, path):
+        # FAT32 (SD card) rejects directory paths ending with '/' for ilistdir()/listdir().
+        clean_path = path.rstrip("/") or "/"
+        try:
+            names = []
+            for entry in os.ilistdir(clean_path):
+                if isinstance(entry, tuple):
+                    names.append(entry[0])
+                else:
+                    names.append(entry)
+            return names
+        except Exception:
+            pass
+
+        try:
+            return os.listdir(clean_path)
+        except Exception:
+            return None
+
+    @classmethod
+    def _is_emoji_modifier(cls, codepoint):
+        if codepoint is None or codepoint == 0:
+            return False
+        return (
+            (0x1F3FB <= codepoint <= 0x1F3FF)
+            or codepoint == 0x200D
+            or (0xE0020 <= codepoint <= 0xE007F)
+            or (0x1F1E6 <= codepoint <= 0x1F1FF)
+            or codepoint == 0x20E3
+            or (0x1F9B0 <= codepoint <= 0x1F9B3)
+            or codepoint in (0x2640, 0x2642, 0x2695, 0x2696)
+        )
+
+    @classmethod
+    def _is_regional_indicator(cls, codepoint):
+        if codepoint is None or codepoint == 0:
+            return False
+        return 0x1F1E6 <= codepoint <= 0x1F1FF
+
+    @classmethod
+    def _imgfont_path_cb(cls, font, unicode_cp, unicode_next, offset_y, user_data):
+        baseline = cls._font_base_line(font)
+        if unicode_cp == CP_VARIATION_SELECTOR_TEXT or unicode_cp == CP_VARIATION_SELECTOR_EMOJI:
+            offset_y.__dereference__(-baseline)
+            return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
+
+        # Regional indicators form a flag only when paired with another
+        # regional indicator. Handle that before the general modifier early
+        # return because a regional indicator is itself classified as a modifier.
+        if cls._is_regional_indicator(unicode_cp):
+            target_height = cls._font_pixel_height(font)
+            if cls._is_regional_indicator(unicode_next):
+                candidate_key = "{:X}-{:X}".format(int(unicode_cp), int(unicode_next))
+                if candidate_key in cls._emoji_sequence_lookup_cache:
+                    src = cls._emoji_sequence_lookup_cache[candidate_key]
+                else:
+                    src = cls._lookup_emoji_src_by_key(candidate_key)
+                    cls._emoji_sequence_lookup_cache[candidate_key] = src
+
+                if src is not None:
+                    offset_y.__dereference__(-baseline)
+                    return cls._get_scaled_imgfont_src(src, target_height)
+            offset_y.__dereference__(-baseline)
+            return cls._get_empty_imgfont_src(target_height)
+
+        # Emoji modifiers / continuation codepoints should not render as separate glyphs
+        if cls._is_emoji_modifier(unicode_cp):
+            offset_y.__dereference__(-baseline)
+            return cls._get_empty_imgfont_src(cls._font_pixel_height(font))
+
+        target_height = cls._font_pixel_height(font)
+
+        # Try combined sequence when next codepoint is a modifier
+        if unicode_next and cls._is_emoji_modifier(unicode_next):
+            candidate_key = "{:X}-{:X}".format(int(unicode_cp), int(unicode_next))
+            if candidate_key in cls._emoji_sequence_lookup_cache:
+                src = cls._emoji_sequence_lookup_cache[candidate_key]
+            else:
+                src = cls._lookup_emoji_src_by_key(candidate_key)
+                cls._emoji_sequence_lookup_cache[candidate_key] = src
+
+            if src is not None:
+                offset_y.__dereference__(-baseline)
+                return cls._get_scaled_imgfont_src(src, target_height)
+
+        src = cls._get_emoji_src(unicode_cp, target_height)
+        if src is not None:
+            offset_y.__dereference__(-baseline)
+            return cls._get_scaled_imgfont_src(src, target_height)
+
+        cls._log_unknown_emoji_codepoint(unicode_cp)
+        return None
+
+    @classmethod
+    def _log_unknown_emoji_codepoint(cls, unicode_cp):
+        if unicode_cp < cls._UNKNOWN_EMOJI_LOG_THRESHOLD:
+            return
+        if unicode_cp in cls._unknown_emoji_codepoints_logged:
+            return
+
+        cls._unknown_emoji_codepoints_logged[unicode_cp] = True
+
+    @classmethod
+    def _get_empty_imgfont_src(cls, target_height):
+        target_height = max(1, int(target_height))
+        if target_height in cls._imgfont_empty_src_cache:
+            return cls._imgfont_empty_src_cache[target_height]
+
+        buf = bytearray(4)
+        dsc = cls._build_argb8888_dsc(buf, 1, target_height)
+
+        cls._imgfont_empty_src_cache[target_height] = dsc
+        return dsc
+
+    @classmethod
+    def _build_argb8888_dsc(cls, buf, width, height):
+        width = int(width)
+        height = int(height)
+        stride = width * 4
+        try:
+            return lv.image_dsc_t(
+                {
+                    "header": {
+                        "magic": lv.IMAGE_HEADER_MAGIC,
+                        "w": width,
+                        "h": height,
+                        "stride": stride,
+                        "cf": lv.COLOR_FORMAT.ARGB8888,
+                    },
+                    "data_size": len(buf),
+                    "data": buf,
+                }
+            )
+        except Exception:
+            dsc = lv.image_dsc_t()
+            dsc.data = buf
+            dsc.header.w = width
+            dsc.header.h = height
+            dsc.header.cf = lv.COLOR_FORMAT.ARGB8888
+            return dsc
+
+    @classmethod
+    def _font_pixel_height(cls, font):
+        try:
+            return max(1, int(font.get_line_height()))
+        except Exception:
+            pass
+        try:
+            return max(1, int(font.line_height))
+        except Exception:
+            return 1
+
+    @classmethod
+    def _font_base_line(cls, font):
+        try:
+            return int(font.base_line)
+        except Exception:
+            return 0
+
+    @classmethod
+    def _font_underline_position(cls, font):
+        try:
+            return int(font.underline_position)
+        except Exception:
+            return 0
+
+    @classmethod
+    def _font_underline_thickness(cls, font):
+        try:
+            return int(font.underline_thickness)
+        except Exception:
+            return 0
+
+    @classmethod
+    def _get_scaled_imgfont_src(cls, src, target_height):
+        key = (src, target_height)
+        cached = cls._imgfont_scaled_src_cache.get(key)
+        if cached is not None:
+            return cached[0]
+
+        try:
+            src_w, src_h = cls._get_image_size(src)
+            if src_h <= 0:
+                return src
+
+            if target_height == src_h and target_height == src_w:
+                cls._imgfont_scaled_src_cache[key] = (src, None)
+                return src
+
+            target_width = max(1, round(src_w * target_height / src_h))
+            dsc, buf = cls._render_scaled_image_src(src, src_w, src_h, target_width, target_height)
+            if dsc is not None:
+                cls._imgfont_scaled_src_cache[key] = (dsc, buf)
+                return dsc
+        except Exception:
+            pass
+
+        return src
+
+    @classmethod
+    def _get_image_size(cls, src):
+        if src in cls._imgfont_source_size_cache:
+            return cls._imgfont_source_size_cache[src]
+
+        probe = lv.image(lv.layer_top())
+        try:
+            header = lv.image_header_t()
+            probe.decoder_get_info(src, header)
+            size = (int(header.w), int(header.h))
+        finally:
+            probe.delete()
+
+        cls._imgfont_source_size_cache[src] = size
+        return size
+
+    @classmethod
+    def _render_scaled_image_src(cls, src, src_w, src_h, target_width, target_height):
+        container = lv.obj(lv.layer_top())
+        renderer = lv.image(container)
+
+        try:
+            # Container is needed, otherwise lv.snapshot_take_to_buf() doesn't see that the image has been scaled
+            container.add_flag(lv.obj.FLAG.HIDDEN)
+            container.set_size(target_width, target_height)
+            container.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+            container.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
+            container.set_style_border_width(0, lv.PART.MAIN)
+
+            renderer.center()
+            renderer.set_src(src)
+            renderer.set_size(target_width, target_height)
+
+            if abs(target_width - src_w) > 1 or abs(target_height - src_h) > 1:
+                # Only scale if they're not (almost) the same size
+                renderer.set_scale(256 * target_width // src_w)
+
+            buflen = target_width * target_height * 4  # 4 bytes per pixel (ARGB8888)
+            buf = bytearray(buflen)
+            dsc = lv.image_dsc_t()
+            lv.snapshot_take_to_buf(container, lv.COLOR_FORMAT.ARGB8888, dsc, buf, buflen)
+
+            if int(dsc.header.w) <= 0 or int(dsc.header.h) <= 0:
+                logger.error("returning none!")
+                return None, None
+
+            return dsc, buf
+        except Exception as e:
+            # This doesn't seem to get caught, instead if fails silently, probably because it's LVGL C code calling this...
+            logger.error("_render_scaled_image_src got exception: %s", e)
+        finally:
+            renderer.delete()
+            container.delete()
