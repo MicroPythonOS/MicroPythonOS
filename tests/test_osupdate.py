@@ -614,6 +614,8 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
         self.app.status_label = MockLVGLLabel()
         self.mock_um = MockUpdateManager()
         self.app._um = self.mock_um
+        self.app.changelog_container = MockLVGLButton(initial_disabled=False)
+        self.app._populate_changelog = lambda *a: None
 
     def test_button_initially_disabled(self):
         self.assertTrue(self.mock_button.is_disabled())

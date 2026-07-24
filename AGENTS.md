@@ -32,6 +32,7 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
 - Every code change must pass `make lint`.
+- After every code change, identify and run the relevant unit tests. Use `grep` to find test files that import or reference the modules you changed, then run with `./scripts/test_runner.py tests/<test_file>`. Do NOT skip this step.
 - If you modify a test, run it with `./scripts/test_runner.py tests/<test_file>` to verify it still passes.
 - Never add, remove or modify inline comments or docstrings on your own initiative, unless the task explicitly asks for it. Comments and docstrings preserve intent and are treated as critical documentation. Refactoring or logging-conversion tasks must target only the specific code elements they're asked about and leave all other content untouched.
 - Danger: batch-editing agents that operate on many files at once MUST be strictly constrained to only touch the specific patterns requested. Without tight boundary rules (e.g. "only edit lines matching `print(`"), agents may delete unrelated code: docstrings, constant definitions, function bodies, inline comments, imports, etc. If damage occurs, the safest fix might be restoring from git and running a precise targeted script, but request user confirmation before doing so.
