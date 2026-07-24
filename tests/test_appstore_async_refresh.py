@@ -148,6 +148,7 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         store._blurhash_timer = None
         store._icon_queue = []
         store._blurhash_queue = []
+        store._wip_apps = []
         return store
 
     # ------------------------------------------------------------------
@@ -344,6 +345,7 @@ class TestAppStoreDataFlow(unittest.TestCase):
         store._data_loaded = False
         store.update_all_button = MockLabel()
         store.main_screen = MockLabel()
+        store._wip_apps = []
         # Bypass LVGL UI creation — these tests verify data flow, not rendering
         store.create_apps_list = lambda: None
         return store
@@ -505,6 +507,7 @@ class TestAppStoreHideWip(unittest.TestCase):
         store.create_apps_list = lambda: None
         store._update_category_dropdown = lambda: None
         store._builtin_fullnames = set()
+        store._wip_apps = []
         return store
 
     def test_hide_wip_filters_work_in_progress(self):
