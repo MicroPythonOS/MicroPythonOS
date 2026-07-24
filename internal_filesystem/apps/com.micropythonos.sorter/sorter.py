@@ -158,7 +158,7 @@ def _solve_path(tubes, capacity, max_states):
     return []
 
 
-def _generate_level(filled, capacity, extra, rand_int, max_retries=30):
+def _generate_level(filled, capacity, extra, rand_int, max_retries=30, progress_cb=None):
     balls = []
     for i in range(filled):
         balls.extend([i] * capacity)
@@ -166,7 +166,9 @@ def _generate_level(filled, capacity, extra, rand_int, max_retries=30):
     num_tubes = filled + extra
     max_states = filled * 5000
 
-    for _ in range(max_retries):
+    for attempt in range(1, max_retries + 1):
+        if progress_cb:
+            progress_cb(attempt)
         _shuffle_seeded(balls, rand_int)
         tubes = []
         pos = 0
@@ -242,13 +244,32 @@ class Sorter(Activity):
         for val in self.emoji_order:
             s = (s * 31 + val) & 0x7FFFFFFF
         rand = _make_lcg(s + self.level * 10007)
-        self.tubes, self.shuffle_moves = _generate_level(filled, capacity, extra, rand)
+
+        overlay = lv.obj(lv.layer_top())
+        overlay.set_size(lv.pct(100), lv.pct(100))
+        overlay.set_style_bg_opa(lv.OPA._20, 0)
+        overlay.set_style_bg_color(lv.color_hex(0x000000), 0)
+        label = lv.label(overlay)
+        label.set_text("Generating level...")
+        label.center()
+        label.set_style_text_color(lv.color_hex(0xFFFFFF), 0)
+        lv.timer_handler()
+
+        def on_attempt(n):
+            label.set_text(f"Generating level, attempt {n}...")
+            lv.timer_handler()
+
+        self.tubes, self.shuffle_moves = _generate_level(
+            filled, capacity, extra, rand, progress_cb=on_attempt
+        )
         self.initial_tubes = [list(t) for t in self.tubes]
-        if __debug__:
-            import logging
-            _logger = logging.getLogger(__name__)
-            if not self.shuffle_moves:
-                _logger.warning("no solution found for level %d", self.level)
+
+        if not self.shuffle_moves:
+            label.set_text("Could not generate a solvable level!")
+            lv.timer_handler()
+            time.sleep(2)
+
+        overlay.delete()
 
     def create_ui(self):
         self.score_best_label = lv.label(self.screen)
@@ -531,6 +552,12 @@ class Sorter(Activity):
     def on_help(self, event):
         self._close_popup()
         if not self.shuffle_moves:
+            mbox = lv.msgbox()
+            mbox.set_width(DisplayMetrics.pct_of_width(75))
+            mbox.add_text("No solution recorded for this level.")
+            close_btn = mbox.add_footer_button("Close")
+            close_btn.add_event_cb(self._close_popup, lv.EVENT.CLICKED, None)
+            self.popup_modal = mbox
             return
 
         mbox = lv.msgbox()
