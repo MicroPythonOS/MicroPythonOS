@@ -105,41 +105,24 @@ def _is_solved(tubes):
     return True
 
 
-def _solve(tubes, capacity, max_states=3000):
-    """Return True if this water-sort state is solvable.
+def _make_lcg(seed):
+    state = seed & 0x7FFFFFFF
 
-    Bounded BFS; max_states caps memory/time on microcontrollers.
-    """
-    if _is_solved(tubes):
-        return True
-    start = tuple(tuple(t) for t in tubes)
-    visited = {start}
-    queue = [start]
-    idx = 0
-    while idx < len(queue) and len(visited) < max_states:
-        state = queue[idx]
-        idx += 1
-        current = [list(t) for t in state]
-        for i, src in enumerate(current):
-            if not src:
-                continue
-            for j, tgt in enumerate(current):
-                if i == j:
-                    continue
-                if _can_move(src, tgt, capacity):
-                    new_tubes = [list(t) for t in state]
-                    _apply_move(new_tubes[i], new_tubes[j], capacity)
-                    if _is_solved(new_tubes):
-                        return True
-                    new_state = tuple(tuple(t) for t in new_tubes)
-                    if new_state not in visited:
-                        visited.add(new_state)
-                        queue.append(new_state)
-    return False
+    def rand():
+        nonlocal state
+        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        return state
+
+    return rand
 
 
-def _solve_path(tubes, capacity, max_states=5000):
-    """Return list of (src, tgt) moves that solve this state or []."""
+def _shuffle_seeded(lst, rand_int):
+    for i in range(len(lst) - 1, 0, -1):
+        j = rand_int() % (i + 1)
+        lst[i], lst[j] = lst[j], lst[i]
+
+
+def _solve_path(tubes, capacity, max_states):
     if _is_solved(tubes):
         return []
     start = tuple(tuple(t) for t in tubes)
@@ -175,18 +158,16 @@ def _solve_path(tubes, capacity, max_states=5000):
     return []
 
 
-def _generate_level(filled, capacity, extra, max_retries=30):
-    """Generate a mixed, guaranteed-solvable water-sort level.
-
-    Random fill + BFS solver to produce (tubes, solution_moves).
-    """
+def _generate_level(filled, capacity, extra, rand_int, max_retries=30):
     balls = []
     for i in range(filled):
         balls.extend([i] * capacity)
 
-    max_states = 5000 if filled <= 5 else 20000
+    num_tubes = filled + extra
+    max_states = filled * 5000
+
     for _ in range(max_retries):
-        _shuffle(balls)
+        _shuffle_seeded(balls, rand_int)
         tubes = []
         pos = 0
         for _ in range(filled):
@@ -196,7 +177,7 @@ def _generate_level(filled, capacity, extra, max_retries=30):
             tubes.append([])
         if _is_solved(tubes):
             continue
-        solution = _solve_path(tubes, capacity, max_states=max_states)
+        solution = _solve_path(tubes, capacity, max_states)
         if solution:
             return tubes, solution
 
@@ -253,13 +234,21 @@ class Sorter(Activity):
         self._start_level()
 
     def _start_level(self):
-        """Generate tubes for the current level, keeping the current emoji order."""
         filled, capacity, extra = _level_params(self.level)
         self.capacity = capacity
         self.moves = 0
         self.selected = -1
-        self.tubes, self.shuffle_moves = _generate_level(filled, capacity, extra)
+        s = 0
+        for val in self.emoji_order:
+            s = (s * 31 + val) & 0x7FFFFFFF
+        rand = _make_lcg(s + self.level * 10007)
+        self.tubes, self.shuffle_moves = _generate_level(filled, capacity, extra, rand)
         self.initial_tubes = [list(t) for t in self.tubes]
+        if __debug__:
+            import logging
+            _logger = logging.getLogger(__name__)
+            if not self.shuffle_moves:
+                _logger.warning("no solution found for level %d", self.level)
 
     def create_ui(self):
         self.score_best_label = lv.label(self.screen)
