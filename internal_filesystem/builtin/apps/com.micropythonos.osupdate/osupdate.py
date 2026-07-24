@@ -2,7 +2,7 @@ import logging
 
 import lvgl as lv
 
-from mpos import Activity, DisplayMetrics, TaskManager, BuildInfo
+from mpos import Activity, DisplayMetrics, TaskManager, BuildInfo, add_focus_highlight
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +68,15 @@ class OSUpdate(Activity):
         self.status_label.set_width(lv.pct(100))
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.align_to(button_row, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(2))
+
+        self.changelog_container = lv.obj(self.main_screen)
+        self.changelog_container.set_width(lv.pct(100))
+        self.changelog_container.set_height(DisplayMetrics.pct_of_height(35))
+        self.changelog_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self.changelog_container.set_style_pad_all(4, lv.PART.MAIN)
+        self.changelog_container.align_to(self.status_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(1))
+        self.changelog_container.add_flag(lv.obj.FLAG.HIDDEN)
+        self.changelog_container.add_flag(lv.obj.FLAG.SCROLLABLE)
         self.setContentView(self.main_screen)
 
     def onResume(self, screen):
@@ -93,6 +102,8 @@ class OSUpdate(Activity):
     def _sync_ui(self, state):
         from osupdate_core import UpdateState
 
+        self.changelog_container.add_flag(lv.obj.FLAG.HIDDEN)
+
         if state == UpdateState.IDLE:
             self.status_label.set_text("Checking for OS updates...")
             self.check_again_button.remove_flag(lv.obj.FLAG.HIDDEN)
@@ -110,8 +121,10 @@ class OSUpdate(Activity):
                 self.status_label.set_text(
                     f"Update version: {info['version']}\n"
                     "Update version is newer.\n\n"
-                    f"Details:\n\n{info['changelog']}"
+                    "Details:"
                 )
+                self._populate_changelog(info["changelog"])
+                self.changelog_container.remove_flag(lv.obj.FLAG.HIDDEN)
             else:
                 self.status_label.set_text("Update available!")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -123,8 +136,10 @@ class OSUpdate(Activity):
                 self.status_label.set_text(
                     f"Version: {info['version']}\n"
                     f"This version is {info['comparison']}.\n\n"
-                    f"Details:\n\n{info['changelog']}"
+                    "Details:"
                 )
+                self._populate_changelog(info["changelog"])
+                self.changelog_container.remove_flag(lv.obj.FLAG.HIDDEN)
             else:
                 self.status_label.set_text("No updates available.")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -138,6 +153,20 @@ class OSUpdate(Activity):
         elif state == UpdateState.ERROR:
             self.status_label.set_text("Failed to check for updates. Check your connection and tap 'Check Again' to retry.")
             self.check_again_button.remove_flag(lv.obj.FLAG.HIDDEN)
+
+    def _populate_changelog(self, changelog_text):
+        while self.changelog_container.get_child_count() > 0:
+            self.changelog_container.get_child(0).delete()
+
+        if not changelog_text:
+            return
+
+        for line in changelog_text.split("\n"):
+            label = lv.label(self.changelog_container)
+            label.set_text(line if line else " ")
+            label.set_width(lv.pct(100))
+            label.set_long_mode(lv.label.LONG_MODE.WRAP)
+            add_focus_highlight(label)
 
     def _update_install_button(self, comparison):
         if comparison == "newer":

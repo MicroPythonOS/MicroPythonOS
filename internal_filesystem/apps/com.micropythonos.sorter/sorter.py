@@ -1,4 +1,4 @@
-from mpos import Activity, AppearanceManager, AudioManager, DisplayMetrics, Intent, SettingActivity, SharedPreferences
+from mpos import Activity, AppearanceManager, AudioManager, DisplayMetrics, Intent, SettingActivity, SharedPreferences, add_focus_highlight
 import mpos.ui
 import lvgl as lv
 import os
@@ -267,7 +267,7 @@ class Sorter(Activity):
         self.score_best_label.add_event_cb(self.on_highscore_tap, lv.EVENT.CLICKED, None)
 
         self.level_label = lv.label(self.screen)
-        self.level_label.align(lv.ALIGN.TOP_MID, 0, 10)
+        self.level_label.align(lv.ALIGN.TOP_MID, DisplayMetrics.pct_of_width(10), 10)
 
         self.moves_label = lv.label(self.screen)
         self.moves_label.align(lv.ALIGN.TOP_RIGHT, -10, 10)
@@ -543,18 +543,25 @@ class Sorter(Activity):
         if not self.shuffle_moves:
             return
 
+        mbox = lv.msgbox()
+        mbox.set_width(DisplayMetrics.pct_of_width(85))
+        mbox.add_title("Help")
+
+        content = mbox.get_content()
+        content.set_height(DisplayMetrics.pct_of_height(55))
+        content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        content.add_flag(lv.obj.FLAG.SCROLLABLE)
+
         lines = [f"Level {self.level} Solution:"]
         for i, (src, tgt) in enumerate(self.shuffle_moves, 1):
             lines.append(f"{i}: from {src + 1} to {tgt + 1}")
 
-        mbox = lv.msgbox()
-        mbox.set_width(DisplayMetrics.pct_of_width(85))
-        mbox.add_title("Help")
-        mbox.add_text("\n".join(lines))
-
-        content = mbox.get_content()
-        content.set_height(DisplayMetrics.pct_of_height(55))
-        content.add_flag(lv.obj.FLAG.SCROLLABLE)
+        for line in lines:
+            label = lv.label(content)
+            label.set_text(line)
+            label.set_width(lv.pct(100))
+            label.set_long_mode(lv.label.LONG_MODE.WRAP)
+            add_focus_highlight(label)
 
         close_btn = mbox.add_footer_button("Close")
         close_btn.add_event_cb(self._close_popup, lv.EVENT.CLICKED, None)
