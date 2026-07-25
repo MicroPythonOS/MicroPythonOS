@@ -25,7 +25,9 @@ from mpos.ui.testing import wait_for_render
 
 _BASE_BLURHASH = "L6PZfSi_.AyE_3t7t7R**0o#DgR4"
 _B83 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~"
-_SIZES = [50, 100, 200, 400, 800, 1600]
+#_SIZES = [50, 100, 200, 400, 800, 1600]
+#_SIZES = [50, 100, 200]
+_SIZES = [50, 100, 200, 400]
 
 
 def _wait_ms(ms):
