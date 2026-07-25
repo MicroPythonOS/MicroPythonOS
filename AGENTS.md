@@ -8,6 +8,7 @@ This repo contains MicroPythonOS, a graphical user interface and operating syste
 The main code is in the internal_filesystem/ folder, which is a one-to-one filesystem layout.
 It's built on top of the lvgl_micropython/ submodule project, with itself builds on submodules like lvgl_micropython/lib/lvgl and lvgl_micropython/lib/micropython
 MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mpos/
+
 - **Desktop builds run MicroPython, NOT CPython.** The Unix/macOS build (`run_desktop.sh`, `make build-mpos-unix`) produces a `lvgl_micropy_unix` binary that runs MicroPython (the unix port). `sys.implementation.name == 'micropython'`, stdlib modules like `uuid` may be absent or minimal, and `machine` may lack hardware functions like `unique_id()`. Do not assume CPython stdlib availability.
 
 - Build is driven by `./scripts/build_mpos.sh <target>`; it mutates tracked files (patches `lvgl_micropython/lib/micropython/ports/esp32/main/idf_component.yml`, appends include to `micropython-camera-API/src/manifest.py`). Re-run builds expecting these edits to persist unless reverted.
@@ -31,6 +32,7 @@ MicroPythonOS also contains some C/C++ modules with MicroPython bindings in c_mp
 
 Guidelines:
 - If something is incomplete or lacks functionality that is needed to finish the task, then implement the missing functionality, rather than working around it.
+- Use test-driven development principles whenever possible: first make an automatic test to show there's a problem (so the test fails), then fix the code, then check that the test now succeeds.
 - Every code change must pass `make lint`.
 - After every code change, identify and run the relevant unit tests. Use `grep` to find test files that import or reference the modules you changed, then run with `./scripts/test_runner.py tests/<test_file>`. Do NOT skip this step.
 - If you modify a test, run it with `./scripts/test_runner.py tests/<test_file>` to verify it still passes.
@@ -243,6 +245,3 @@ When editing docs:
 - This is why `mkdocs build` warns "The following pages exist ... but are not included in the nav" for those files. Do not add them to `nav` unless explicitly requested.
 
 
-# Questionable
-
-Not sure this is correct, so take with a grain of salt:
