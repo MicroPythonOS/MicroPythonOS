@@ -13,10 +13,9 @@ on:
 permissions:
   contents: write
 
-# Only one concurrent deployment; don't cancel an in-progress run so a
-# half-published site is never left behind.
+# One deployment per ref; don't cancel in-progress runs.
 concurrency:
-  group: gh-pages
+  group: web-pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -82,3 +81,17 @@ jobs:
           # Export contains files/dirs starting with "_" (preloaded fs).
           enable_jekyll: false
           force_orphan: true # single squashed commit, no history
+
+      - name: Deploy preview to Netlify
+        if: github.event_name == 'pull_request'
+        uses: nwtgck/actions-netlify@v3
+        with:
+          publish-dir: ./web
+          production-deploy: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          enable-pull-request-comment: true
+          enable-commit-comment: false
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        timeout-minutes: 5
