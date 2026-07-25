@@ -365,5 +365,69 @@ class TestAppManagerPackageLoading(unittest.TestCase):
         self.assertEqual(cls2.X, 2)
 
 
+class TestAppManagerUninstallApp(unittest.TestCase):
+    APP_FULLNAME = "com.micropythonos.uninstalltest"
+
+    def setUp(self):
+        AppManager.clear()
+        self._remove_path(f"apps/{self.APP_FULLNAME}")
+        self._remove_path(f"prefs/{self.APP_FULLNAME}")
+        self._remove_path(f"cache/{self.APP_FULLNAME}")
+
+    def tearDown(self):
+        AppManager.clear()
+        self._remove_path(f"apps/{self.APP_FULLNAME}")
+        self._remove_path(f"prefs/{self.APP_FULLNAME}")
+        self._remove_path(f"cache/{self.APP_FULLNAME}")
+
+    def _remove_path(self, path):
+        try:
+            st = os.stat(path)
+        except OSError:
+            return
+        if st[0] & 0x4000:
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+
+    def _mkdir(self, path):
+        try:
+            os.mkdir(path)
+        except OSError:
+            pass
+
+    def _exists(self, path):
+        try:
+            os.stat(path)
+            return True
+        except OSError:
+            return False
+
+    def _make_dummy_dirs(self):
+        self._mkdir("apps")
+        self._mkdir(f"apps/{self.APP_FULLNAME}")
+        self._mkdir(f"apps/{self.APP_FULLNAME}/assets")
+        self._mkdir("prefs")
+        self._mkdir(f"prefs/{self.APP_FULLNAME}")
+        self._mkdir("cache")
+        self._mkdir(f"cache/{self.APP_FULLNAME}")
+
+    def test_uninstall_removes_app_prefs_cache(self):
+        self._make_dummy_dirs()
+        AppManager.uninstall_app(self.APP_FULLNAME)
+        self.assertFalse(self._exists(f"apps/{self.APP_FULLNAME}"))
+        self.assertFalse(self._exists(f"prefs/{self.APP_FULLNAME}"))
+        self.assertFalse(self._exists(f"cache/{self.APP_FULLNAME}"))
+
+    def test_uninstall_works_without_prefs_or_cache(self):
+        self._mkdir("apps")
+        self._mkdir(f"apps/{self.APP_FULLNAME}")
+        self._mkdir(f"apps/{self.APP_FULLNAME}/assets")
+        self.assertFalse(self._exists(f"prefs/{self.APP_FULLNAME}"))
+        self.assertFalse(self._exists(f"cache/{self.APP_FULLNAME}"))
+        AppManager.uninstall_app(self.APP_FULLNAME)
+        self.assertFalse(self._exists(f"apps/{self.APP_FULLNAME}"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,7 @@ Builtin Apps:
 
 Frameworks:
 - App: don't search for local icons if app isn't installed locally to reduce storage access time
+- AppManager: cleanup /prefs/appfullname and /cache/appfullname when uninstalling app
 - DownloadManager: add post_url() for HTTP POST requests (needed for BadgeHub report/install API call)
 - DownloadManager: reduce log level of missing Content-Length from warning to info to avoid polluting REPL
 

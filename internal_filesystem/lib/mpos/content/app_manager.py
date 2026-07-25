@@ -505,11 +505,21 @@ class AppManager:
 
     @staticmethod
     def uninstall_app(app_fullname):
+        import shutil
         try:
-            import shutil
             shutil.rmtree(f"apps/{app_fullname}") # never in builtin/apps because those can't be uninstalled
         except Exception as e:
             logger.error("Removing app_folder apps/%s got error: %s", app_fullname, e)
+        try:
+            shutil.rmtree(f"prefs/{app_fullname}")
+        except Exception as e:
+            if __debug__:
+                logger.debug("Removing prefs/%s got error: %s", app_fullname, e)
+        try:
+            shutil.rmtree(f"cache/{app_fullname}")
+        except Exception as e:
+            if __debug__:
+                logger.debug("Removing cache/%s got error: %s", app_fullname, e)
         AppManager.refresh_apps()
 
     @staticmethod
