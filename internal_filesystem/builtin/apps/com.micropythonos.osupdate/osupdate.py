@@ -71,10 +71,10 @@ class OSUpdate(Activity):
 
         self.changelog_container = lv.obj(self.main_screen)
         self.changelog_container.set_width(lv.pct(100))
-        self.changelog_container.set_height(DisplayMetrics.pct_of_height(35))
         self.changelog_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         self.changelog_container.set_style_pad_all(4, lv.PART.MAIN)
         self.changelog_container.align_to(self.status_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(1))
+        self.changelog_container.set_height(DisplayMetrics.pct_of_height(60))
         self.changelog_container.add_flag(lv.obj.FLAG.HIDDEN)
         self.changelog_container.add_flag(lv.obj.FLAG.SCROLLABLE)
         self.setContentView(self.main_screen)
@@ -157,6 +157,11 @@ class OSUpdate(Activity):
     def _populate_changelog(self, changelog_text):
         while self.changelog_container.get_child_count() > 0:
             self.changelog_container.get_child(0).delete()
+
+        changelog_y = self.status_label.get_y() + self.status_label.get_height() + DisplayMetrics.pct_of_height(1)
+        remaining = DisplayMetrics.height() - changelog_y - DisplayMetrics.pct_of_height(2)
+        self.changelog_container.set_y(changelog_y)
+        self.changelog_container.set_height(remaining)
 
         if not changelog_text:
             return
