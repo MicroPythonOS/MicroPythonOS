@@ -13,6 +13,7 @@ Builtin Apps:
 - AppStore: report app install to BadgeHub report/install API for statistics
 - AppStore: optimize icon display and add blurhash support
 - AppStore: show 'Loading details...' instead of 'Unknown' while loading app details
+- OSUpdate: make long changelog scrollable with arrow keys
 
 Frameworks:
 - App: don't search for local icons if app isn't installed locally to reduce storage access time
