@@ -1,7 +1,6 @@
 Future release (next version)
 =====
 
-- AppStore: ignore punctuation when alphabetically sorting apps
 
 0.16.0
 ======
@@ -10,6 +9,7 @@ Builtin Apps:
 - AppStore: add category filter
 - AppStore: add "Work in Progress" filter
 - AppStore: hide work_in_progress apps by default (toggle with setting)
+- AppStore: ignore punctuation when alphabetically sorting apps
 - AppStore: report app install to BadgeHub report/install API for statistics
 - AppStore: optimize icon display and add blurhash support
 - AppStore: show 'Loading details...' instead of 'Unknown' while loading app details
