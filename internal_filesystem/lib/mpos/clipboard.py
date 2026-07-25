@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 copied = None
 
 def add(tocopy):
+    global copied
     copied = tocopy
 
 def get():
