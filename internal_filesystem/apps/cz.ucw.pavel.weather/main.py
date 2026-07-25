@@ -130,10 +130,9 @@ class Daily(WData):
         return self.time[8:10] + ". "
 
 class Weather:
-    name = "Prague"
-    # LKPR airport
-    lat = 50 + 6/60.
-    lon = 14 + 15/60.
+    name = "Brussel"
+    lat = 50.85
+    lon = 4.35
     
     def __init__(self):
         self.now = None
