@@ -166,8 +166,41 @@ class TestAppStoreStress(unittest.TestCase):
             "t_scroll_ms": t_scroll,
         }
 
-    def _print_header(self):
+    def _print_legend(self):
         print()
+        print("LEGEND")
+        print("======")
+        print("n             — number of fake apps created (blurhash + raw icons).")
+        print("free_start    — gc.mem_free() BEFORE creating the LVGL list (bytes).")
+        print("alloc_start   — gc.mem_alloc() BEFORE creating the LVGL list (bytes).")
+        print("free_list     — gc.mem_free() AFTER create_apps_list() builds widgets.")
+        print("alloc_list    — gc.mem_alloc() AFTER create_apps_list() builds widgets.")
+        print("free_icons    — gc.mem_free() AFTER all raw+blurhash icons are rendered,")
+        print("                 or after 300s timeout (whatever came first).")
+        print("alloc_icons   — gc.mem_alloc() AFTER icon pipeline finished/timed out.")
+        print("t_list_ms     — wall-clock time for create_apps_list() alone (ms).")
+        print("t_icons_ms    — wall-clock time from start of create_apps_list() until")
+        print("                 the icon queue emptied (or 300s timeout).  Includes")
+        print("                 t_list_ms.  Subtract them to get pure icon-render time.")
+        print("icons?        — 'yes' = pipeline finished, 'TIMEOUT' = hit 300s limit,")
+        print("                 'no' = pipeline still running after 300s (unlikely).")
+        print("scroll_ms     — time for a 400px scroll_to_y + 100ms settle, -1 if")
+        print("                 icons? is not 'yes', -2 if scroll raised an exception.")
+        print()
+        print("Relationships:")
+        print("  memory used by list widgets = alloc_list - alloc_start")
+        print("  memory used by icons        = alloc_icons - alloc_list")
+        print("  total memory increase       = alloc_icons - alloc_start")
+        print("  pure icon-render time (ms)  = t_icons_ms - t_list_ms")
+        print("  total wall-clock per batch  = t_icons_ms + ~500ms cleanup + 200ms settle")
+        print()
+        print("Flow per batch:")
+        print("  1. generate N App() objects  2. create_apps_list()  3. wait for icon")
+        print("     pipeline (raw→blurhash per app, one at a time) or 300s timeout")
+        print("  4. scroll test  5. delete all widgets, clear queues, gc")
+        print()
+
+    def _print_header(self):
         print(" n    | free_start | alloc_start | free_list  | alloc_list | free_icons | alloc_icons | t_list_ms | t_icons_ms | icons? | scroll_ms")
         print("------+------------+-------------+------------+------------+------------+-------------+-----------+------------+--------+-----------")
 
@@ -194,6 +227,7 @@ class TestAppStoreStress(unittest.TestCase):
         ))
 
     def test_stress(self):
+        self._print_legend()
         self._print_header()
         for n in _SIZES:
             print("\nBatch n=%d:" % n)
