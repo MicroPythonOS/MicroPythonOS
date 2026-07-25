@@ -527,12 +527,10 @@ class AppStore(Activity):
             pass
         if __debug__: logger.debug("create_apps_list done")
 
+    _SORT_STRIP = "!\"'?:;.,@#$%^&*()-_=+[]{}\\|`~<>/"
+
     def _sort_key(self, name):
-        out = ""
-        for ch in name:
-            if ch.isalpha() or ch.isdigit() or ch.isspace():
-                out += ch
-        return out.lower()
+        return name.lstrip(self._SORT_STRIP).lower()
 
     def _find_sorted_insert_index(self, app):
         app_key = self._sort_key(app.name)
