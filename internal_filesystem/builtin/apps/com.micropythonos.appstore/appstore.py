@@ -527,11 +527,17 @@ class AppStore(Activity):
             pass
         if __debug__: logger.debug("create_apps_list done")
 
+    def _sort_key(self, name):
+        out = ""
+        for ch in name:
+            if ch.isalpha() or ch.isdigit() or ch.isspace():
+                out += ch
+        return out.lower()
+
     def _find_sorted_insert_index(self, app):
-        """Find the index where app should be inserted to maintain alphabetical order."""
-        app_key = app.name.lower()
+        app_key = self._sort_key(app.name)
         for i, existing in enumerate(self.apps):
-            if app_key < existing.name.lower():
+            if app_key < self._sort_key(existing.name):
                 return i
         return len(self.apps)
 

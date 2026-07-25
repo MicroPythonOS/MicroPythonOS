@@ -1,6 +1,8 @@
 Future release (next version)
 =====
 
+- AppStore: ignore punctuation when alphabetically sorting apps
+
 0.16.0
 ======
 
