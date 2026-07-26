@@ -1,0 +1,101 @@
+name: Publish MicroPythonOS for ESP32S3 to BadgeHub
+
+on:
+  release:
+    types:
+      - published
+
+env:
+  BADGEHUB_API_URL: ${{ vars.BADGEHUB_API_URL || 'https://badgehub.eu/api/v3' }}
+  BADGEHUB_APP_ID: ${{ vars.BADGEHUB_APP_ID || 'com.micropythonos.esp32s3' }}
+  BADGEHUB_PROJECT_TOKEN: ${{ secrets.BADGEHUB_PROJECT_TOKEN }}
+  FIRMWARE_VERSION: ${{ github.event.release.tag_name }}
+  FIRMWARE_FILENAME_IN_RELEASE: MicroPythonOS_esp32s3_${{ github.event.release.tag_name }}.bin
+  # Note: We use a stable filename in BadgeHub so clients that want to download latest firmware can always use the same url.
+  FIRMWARE_FILENAME_IN_BADGEHUB: MicroPythonOS_esp32s3.bin
+
+jobs:
+  publish-esp32s3-badgehub:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Validate BADGEHUB_PROJECT_TOKEN is sent in
+        if: ${{ env.BADGEHUB_PROJECT_TOKEN == '' }}
+        run: |
+          echo "::error::BADGEHUB_PROJECT_TOKEN is required."
+          exit 1
+
+      - name: Download release firmware asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+          echo "Downloading release asset '${FIRMWARE_FILENAME_IN_RELEASE}' from release '${FIRMWARE_VERSION}'..."
+          gh release download "${FIRMWARE_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "${FIRMWARE_FILENAME_IN_RELEASE}" \
+            --dir release-assets
+
+          echo "Downloaded firmware asset: ${FIRMWARE_FILENAME_IN_RELEASE}"
+
+      - name: Download draft metadata from BadgeHub
+        run: |
+          set -euo pipefail
+
+          metadata_url="${BADGEHUB_API_URL}/projects/${BADGEHUB_APP_ID}/draft/files/metadata.json"
+          echo "Downloading draft metadata.json from ${metadata_url}..."
+          curl --fail-with-body --show-error --silent \
+            --header "badgehub-api-token: Bearer ${BADGEHUB_PROJECT_TOKEN}" \
+            --output metadata.json \
+            "${metadata_url}"
+
+          echo "Downloaded draft metadata.json."
+
+      - name: Update metadata version
+        run: |
+          set -euo pipefail
+
+          echo "Updating metadata.json version to '${FIRMWARE_VERSION}'..."
+          jq --arg version "${FIRMWARE_VERSION}" '.version = $version' metadata.json > metadata.updated.json
+          echo "Updated metadata.json version:"
+          jq -r '.version' metadata.updated.json
+
+      - name: Upload firmware and metadata to BadgeHub
+        run: |
+          set -euo pipefail
+
+          firmware_url="${BADGEHUB_API_URL}/projects/${BADGEHUB_APP_ID}/draft/files/${FIRMWARE_FILENAME_IN_BADGEHUB}"
+          metadata_url="${BADGEHUB_API_URL}/projects/${BADGEHUB_APP_ID}/draft/metadata"
+
+          echo "Uploading firmware asset '${FIRMWARE_FILENAME_IN_RELEASE}' to Badgehub as '${FIRMWARE_FILENAME_IN_BADGEHUB}'"
+          curl --fail-with-body --show-error --silent \
+            --request POST \
+            --header "badgehub-api-token: Bearer ${BADGEHUB_PROJECT_TOKEN}" \
+            --form "file=@release-assets/${FIRMWARE_FILENAME_IN_RELEASE};filename=${FIRMWARE_FILENAME_IN_BADGEHUB}" \
+            "${firmware_url}"
+          echo "Uploaded firmware as ${FIRMWARE_FILENAME_IN_BADGEHUB}."
+
+          echo "Uploading updated metadata.json to ${metadata_url}..."
+          curl --fail-with-body --show-error --silent \
+            --request PATCH \
+            --header "badgehub-api-token: Bearer ${BADGEHUB_PROJECT_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data-binary @metadata.updated.json \
+            "${metadata_url}"
+          echo "Uploaded updated metadata.json."
+
+      - name: Publish new revision on BadgeHub
+        run: |
+          set -euo pipefail
+
+          publish_url="${BADGEHUB_API_URL}/projects/${BADGEHUB_APP_ID}/publish"
+          echo "Publishing BadgeHub draft at ${publish_url}..."
+          curl --fail-with-body --show-error --silent \
+            --request PATCH \
+            --header "badgehub-api-token: Bearer ${BADGEHUB_PROJECT_TOKEN}" \
+            "${publish_url}"
+          echo "Published BadgeHub project '${BADGEHUB_APP_ID}' for release '${FIRMWARE_VERSION}'."
