@@ -315,8 +315,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
+	ccache_arg=""
+	[ "${MPOS_CCACHE:-0}" = "1" ] && ccache_arg="--ccache"
 	set -x
-	python3 make.py $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
 		CONFIG_ADC_MIC_TASK_CORE=1 \

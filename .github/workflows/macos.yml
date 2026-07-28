@@ -1,4 +1,4 @@
-name: Build LVGL MicroPython for MacOS arm64 (M1), esp32 and esp32s3
+name: Build LVGL MicroPython for macOS arm64 (M1)
 
 on:
   push:
@@ -9,16 +9,28 @@ on:
       - main
   workflow_dispatch: # allow manual workflow starts
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-14 # 15 was giving a blank screen for some MacOS users
+    timeout-minutes: 60
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_ANALYTICS: 1
+      LDFLAGS: -L/opt/homebrew/opt/libffi/lib
+      CPPFLAGS: -I/opt/homebrew/opt/libffi/include
+      PKG_CONFIG_PATH: /opt/homebrew/opt/libffi/lib/pkgconfig
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_NOHASHDIR: true
 
     steps:
       - name: Checkout repository with submodules
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
@@ -26,11 +38,21 @@ jobs:
         run: |
           xcode-select --install || true # already installed on github
           #brew install pkg-config libffi ninja make SDL2 error 404 on https://formulae.brew.sh/api/formula/sdl2.json
-          brew install pkg-config libffi ninja make sdl2-compat
-          # After brew install libffi make sdl2 etc.
-          export LDFLAGS="-L/opt/homebrew/opt/libffi/lib"
-          export CPPFLAGS="-I/opt/homebrew/opt/libffi/include"
-          export PKG_CONFIG_PATH="/opt/homebrew/opt/libffi/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+          brew install pkg-config libffi ninja make sdl2-compat ccache
+
+      - name: Restore compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-macos-arm64-${{ github.sha }}
+          restore-keys: |
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-macos-arm64-
+
+      - name: Configure compiler cache
+        run: |
+          echo "$(brew --prefix ccache)/libexec" >> "$GITHUB_PATH"
+          ccache --max-size 1G
+          ccache --zero-stats
 
       - name: Show version numbers
         run: |
@@ -44,53 +66,13 @@ jobs:
             echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
             echo "Extracted version: $OS_VERSION"
 
-      - name: Build LVGL MicroPython esp32
-        run: |
-          ./scripts/build_mpos.sh esp32
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC-SPIRAM-16.bin lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
-          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
-          retention-days: 7
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
-          retention-days: 7
-
-      - name: Build LVGL MicroPython esp32s3
-        run: |
-          ./scripts/build_mpos.sh esp32s3
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
-          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
-          retention-days: 7
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
-          retention-days: 7
-
       - name: Build LVGL MicroPython for macOS dev
         run: |
           ./scripts/build_mpos.sh macOS
           cp lvgl_micropython/build/lvgl_micropy_macOS lvgl_micropython/build/MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_arm64_macOS_${{ steps.version.outputs.OS_VERSION }}.bin
@@ -103,3 +85,7 @@ jobs:
       - name: Run unit tests on macOS
         run: |
           ./scripts/test_runner.py
+
+      - name: Show compiler cache statistics
+        if: always()
+        run: ccache --show-stats
