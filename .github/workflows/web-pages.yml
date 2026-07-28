@@ -12,6 +12,10 @@ on:
 # Allow the GITHUB_TOKEN to force-push the built site to the gh-pages branch.
 permissions:
   contents: write
+  pull-requests: write
+  issues: write
+  deployments: write
+  statuses: write
 
 # One deployment per ref; don't cancel in-progress runs.
 concurrency:
@@ -21,6 +25,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository with submodules
@@ -28,15 +33,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libffi-dev \
-            pkg-config \
-            cmake \
-            ninja-build
+      - name: Install and cache APT dependencies
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9
+        with:
+          packages: build-essential libffi-dev pkg-config cmake ninja-build
+          version: 1.0-${{ runner.os }}-${{ runner.arch }}
+          execute_install_scripts: true
 
       - name: Set up Emscripten SDK
         # Puts emcc/em++/emar on PATH so build_mpos.sh skips its in-tree
@@ -55,12 +57,20 @@ jobs:
       - name: Build web (WebAssembly/Emscripten) target
         run: ./scripts/build_mpos.sh web
 
+      - name: Cache Puppeteer dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-25.4.0
+
       - name: Smoke-test the _webterm stdio bridge on the built artifact
         # Boots the built export headless, installs Module.__webterm.onOutput,
         # sends the raw-REPL handshake and asserts the CRLF banner arrives.
         # Catches a dead stdout mirror or wrong line endings before deploy.
         run: |
-          npm install --no-save puppeteer
+          npm install --no-save --prefer-offline puppeteer@25.4.0
           node tests/web_bridge_smoke.mjs web
 
       - name: Upload built web export as a regular artifact
@@ -84,7 +94,7 @@ jobs:
 
       - name: Deploy preview to Netlify
         if: github.event_name == 'pull_request'
-        uses: nwtgck/actions-netlify@v3
+        uses: nwtgck/actions-netlify@v4
         with:
           publish-dir: ./web
           production-deploy: false

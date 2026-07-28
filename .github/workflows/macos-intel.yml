@@ -1,4 +1,4 @@
-name: Build LVGL MicroPython for MacOS Intel, esp32 and esp32s3
+name: Build LVGL MicroPython for macOS Intel
 
 on:
   push:
@@ -9,9 +9,17 @@ on:
       - main
   workflow_dispatch: # allow manual workflow starts
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-15-intel
+    timeout-minutes: 60
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_ANALYTICS: 1
 
     steps:
       - name: Checkout repository with submodules
@@ -35,46 +43,6 @@ jobs:
             OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
             echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
             echo "Extracted version: $OS_VERSION"
-
-      - name: Build LVGL MicroPython esp32
-        run: |
-          ./scripts/build_mpos.sh esp32
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC-SPIRAM-16.bin lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
-          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
-          retention-days: 7
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
-          retention-days: 7
-
-      - name: Build LVGL MicroPython esp32s3
-        run: |
-          ./scripts/build_mpos.sh esp32s3
-          mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
-          mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
-          path: lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
-          retention-days: 7
-
-      - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
-          path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
-          retention-days: 7
 
       - name: Build LVGL MicroPython for macOS dev
         run: |
