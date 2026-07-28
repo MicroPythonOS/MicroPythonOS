@@ -8,6 +8,7 @@ OS:
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
 
 Development:
+- build_mpos.sh: restore @micropython.native/@micropython.viper decorators after desktop/web builds (via EXIT trap) so local builds no longer leave the working tree modified
 - Add Python-level line coverage via sys.settrace (mpcov build variant)
 - Add `--coverage` flag to test_runner.py for collecting per-file line coverage
 - Add `make build-mpos-unix-coverage` target
