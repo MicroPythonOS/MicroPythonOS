@@ -545,6 +545,24 @@ class MockLVGLButton:
      def remove_flag(self, flag):
          """Remove a flag."""
          self.hidden = False
+
+     def has_flag(self, flag):
+         return self.hidden
+
+     def get_y(self):
+         return 0
+
+     def get_height(self):
+         return 10
+
+     def align_to(self, ref, align, x, y):
+         pass
+
+     def set_y(self, y):
+         pass
+
+     def set_height(self, h):
+         pass
      
      def get_child(self, index):
          """Get child widget by index."""

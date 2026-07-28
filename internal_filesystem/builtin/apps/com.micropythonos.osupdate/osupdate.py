@@ -130,6 +130,7 @@ class OSUpdate(Activity):
                 )
                 self._populate_changelog(info["changelog"])
                 self.changelog_container.remove_flag(lv.obj.FLAG.HIDDEN)
+                self._reposition_changelog()
             else:
                 self.status_label.set_text("Update available!")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -145,6 +146,7 @@ class OSUpdate(Activity):
                 )
                 self._populate_changelog(info["changelog"])
                 self.changelog_container.remove_flag(lv.obj.FLAG.HIDDEN)
+                self._reposition_changelog()
             else:
                 self.status_label.set_text("No updates available.")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
@@ -162,8 +164,6 @@ class OSUpdate(Activity):
     def _populate_changelog(self, changelog_text):
         while self.changelog_container.get_child_count() > 0:
             self.changelog_container.get_child(0).delete()
-
-        self._reposition_changelog()
 
         if not changelog_text:
             return
