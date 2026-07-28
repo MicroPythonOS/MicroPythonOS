@@ -2,6 +2,7 @@ import lvgl as lv
 from micropython import const  # NOQA
 import micropython  # NOQA  # NOQA
 import keypad_framework
+import mpos.clipboard
 
 KEY_UNKNOWN = 0
 KEY_BACKSPACE = 8  # LV_KEY_BACKSPACE
@@ -216,6 +217,28 @@ class MposSDLKeyboard(keypad_framework.KeypadDriver):
         else:
             _, state, key, mod = args
         #print(f"mpos_sdl_keyboard.py _keypad_cb got {_}, {state} {key} {mod}")
+
+        if state == 1 and mod & MOD_KEY_CTRL and self.paste_text_callback:
+            if key == 99:
+                focusgroup = lv.group_get_default()
+                if focusgroup:
+                    focused = focusgroup.get_focused()
+                    if focused and isinstance(focused, lv.textarea):
+                        try:
+                            label = focused.get_label()
+                            start = label.get_text_selection_start()
+                            end = label.get_text_selection_end()
+                            if start != 0xFFFF and end != 0xFFFF:
+                                selected = focused.get_text()[start:end]
+                                mpos.clipboard.add(selected)
+                        except Exception:
+                            pass
+                return
+            if key == 118:
+                clipboard_text = mpos.clipboard.get()
+                if clipboard_text:
+                    self.paste_text_callback(clipboard_text)
+                return
 
         # Skip modifier keys and SDL-specific large keycodes (>= 2^30), except keypad, nav, and func keys
         if (key in {KEY_LSHIFT, KEY_RSHIFT, KEY_LCTRL, KEY_RCTRL, KEY_LALT, KEY_RALT,
