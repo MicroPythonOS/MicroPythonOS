@@ -19,6 +19,21 @@ disable_native_viper() {
 	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
 }
 
+restore_native_viper() {
+	# Reverse of disable_native_viper: uncomment the decorators it commented
+	# out, so a desktop/web build doesn't leave every native/viper-using file
+	# in the working tree modified. Invoked via an EXIT trap so the restore
+	# also runs when the build fails or is interrupted.
+	echo "Restoring @micropython.native/@micropython.viper decorators..."
+	find -L "$1" -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+		if [ -L "$f" ]; then
+			continue
+		fi
+		sed -i.bak -E 's/^([[:space:]]*)#(@micropython\.(native|viper)[[:space:]]*)$/\1\2/' "$f"
+	done
+	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
+}
+
 apply_patch() {
 	# $1 = dir to patch in, $2 = patch file. Fails the build when a required
 	# patch neither applies forward nor is already applied, instead of
@@ -210,6 +225,11 @@ if [ "$target" == "unix" -o "$target" == "macOS" -o "$target" == "web" ]; then
 	# Native/viper decorators are unsupported by the WASM/native emitter used for
 	# the web port, so disable them before freezing.
 	disable_native_viper "$codebasedir/internal_filesystem"
+	# The decorators are baked out of the frozen bytecode above; once the
+	# build ends the source tree should go back to normal. EXIT trap covers
+	# success, build failure, and CTRL-C — without this, every desktop/web
+	# build left the native/viper-using files modified in git.
+	trap 'restore_native_viper "$codebasedir/internal_filesystem"' EXIT
 fi
 
 if [ ! -f "$codebasedir"/lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross ]; then
