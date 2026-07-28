@@ -27,3 +27,7 @@ tests: syntax-tests unittest-tests ## Run all tests (Needs to build MicroPythonO
 .PHONY: build-mpos-unix
 build-mpos-unix: ## Build MicroPythonOS for unix
 	./scripts/build_mpos.sh unix
+
+.PHONY: build-mpos-unix-coverage
+build-mpos-unix-coverage: ## Build MicroPythonOS for unix with sys.settrace coverage support
+	./scripts/build_mpos.sh unix coverage

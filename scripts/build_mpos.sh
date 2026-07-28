@@ -328,6 +328,15 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# Full cleanup: old .o from upstream MicroPython builds would cause link errors
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
 
+	if [ "$buildtype" == "coverage" ]; then
+		rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-mpcov/ 2>/dev/null
+		mpcov_dir="$codebasedir"/lvgl_micropython/lib/micropython/ports/unix/variants/mpcov
+		mkdir -p "$mpcov_dir"
+		cp "$codebasedir"/scripts/coverage_variant/mpconfigvariant.h "$mpcov_dir"/
+		cp "$codebasedir"/scripts/coverage_variant/mpconfigvariant.mk "$mpcov_dir"/
+		cp "$codebasedir"/scripts/coverage_variant/manifest.py "$mpcov_dir"/
+	fi
+
 	echo "Applying unix auto-import main patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
 
@@ -398,7 +407,12 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 		x86_64|i686|i386|armv6l|riscv64) mpy_cross_arch="host" ;;
 	esac
 	[ -n "$mpy_cross_arch" ] && mpy_cross_flags="-O3 -march=$mpy_cross_arch" || mpy_cross_flags="-O3"
+	variant_arg=""
+	if [ "$buildtype" == "coverage" ]; then
+		variant_arg="VARIANT=mpcov"
+	fi
 	python3 make.py "$target" \
+		$variant_arg \
 		LV_CFLAGS="-g -O0 -ggdb" \
 		STRIP= \
 		DISPLAY=sdl_display \

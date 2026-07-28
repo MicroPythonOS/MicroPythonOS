@@ -7,6 +7,11 @@ Builtin Apps:
 OS:
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
 
+Development:
+- Add Python-level line coverage via sys.settrace (mpcov build variant)
+- Add `--coverage` flag to test_runner.py for collecting per-file line coverage
+- Add `make build-mpos-unix-coverage` target
+
 0.16.0
 ======
 

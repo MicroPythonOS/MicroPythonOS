@@ -93,18 +93,33 @@ result = unittest.TextTestRunner().run(suite)
     return code
 
 
-def _build_import_runner_code(tests_dir=None):
+def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=None):
     code = "import sys\n"
     code += "sys.path.insert(0, 'lib')\n"
     if tests_dir:
         code += "sys.path.append(%r)\n" % tests_dir
     code += "import mpos; mpos.TaskManager.disable()\n"
+    if coverage:
+        code += "import mpos.coverage\n"
+        code += "mpos.coverage.start()\n"
     code += ("sys.modules.pop('_runner_test', None)\n"
              "import _runner_test as _test_mod\n")
     code += "import unittest\n"
     code += "result = unittest.main(module=_test_mod)\n"
     code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
+    if coverage:
+        code += "import mpos.coverage\n"
+        code += "mpos.coverage.stop()\n"
+        code += "import ujson as _cov_json\n"
+        code += ("_cov_rpt = {}\n"
+                 "try:\n"
+                 "    _cov_rpt = mpos.coverage._tracker.report_json()\n"
+                 "except Exception:\n"
+                 "    pass\n")
+        code += "print('=== COVERAGE_DATA ===')\n"
+        code += "print(_cov_rpt)\n"
+        code += "print('=== END_COVERAGE_DATA ===')\n"
     return code
 
 
@@ -783,7 +798,7 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300):
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
         if self.repl is None:
             self.start()
         dest_path = os.path.join(self.cwd, "_runner_test.py")
@@ -792,7 +807,7 @@ for s in t:
         with open(dest_path, "w") as f:
             f.write(content)
         try:
-            code = _build_import_runner_code(tests_dir)
+            code = _build_import_runner_code(tests_dir, coverage=coverage)
             out = self.exec_multiline(code, timeout=timeout)
             out_str = out.decode("utf-8", errors="replace")
             passed = "TEST WAS A SUCCESS" in out_str
@@ -1442,8 +1457,8 @@ class MPOSController:
     def find_text(self, text):
         return self._backend.find_text(text)
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300):
-        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout)
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
+        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage)
 
     @property
     def display_size(self):
