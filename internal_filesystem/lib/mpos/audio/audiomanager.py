@@ -5,6 +5,7 @@ import _thread
 import logging
 import math
 import os
+import sys
 
 from ..shared_preferences import SharedPreferences
 from ..task_manager import TaskManager
@@ -726,38 +727,90 @@ class Player:
             else:
                 self._play_wav()
         finally:
-            if self._buzzer:
-                try:
-                    self._buzzer.deinit()
-                except Exception:
-                    pass
-            self._manager._session_finished(self)
+            if not (self._stream and getattr(self._stream, "runs_async", False)):
+                if self._buzzer:
+                    try:
+                        self._buzzer.deinit()
+                    except Exception:
+                        pass
+                self._manager._session_finished(self)
 
     def _play_rtttl(self):
-        from mpos.audio.stream_rtttl import RTTTLStream
+        from mpos.audio.stream_rtttl import DesktopRTTTLStream, RTTTLStream, WebRTTTLStream
+
+        is_web = False
+        if sys.platform != "esp32":
+            try:
+                __import__("_webio")
+                is_web = True
+            except ImportError:
+                pass
+
+        if sys.platform != "esp32" and not is_web:
+            self._stream = DesktopRTTTLStream(
+                rtttl_string=self.rtttl,
+                stream_type=self.stream_type,
+                volume=self.volume if self.volume is not None else self._manager._volume,
+                on_complete=self.on_complete,
+            )
+            self._stream.set_repeat(self._repeat_count)
+            self._stream.play()
+            return
+
         from machine import Pin, PWM
 
         self._buzzer = PWM(Pin(self.output.buzzer_pin, Pin.OUT))
         self._buzzer.duty_u16(0)
 
-        self._stream = RTTTLStream(
+        on_complete = self.on_complete
+        stream_class = RTTTLStream
+        if is_web:
+            stream_class = WebRTTTLStream
+
+            def on_complete(message):
+                try:
+                    if self.on_complete:
+                        self.on_complete(message)
+                finally:
+                    if self._buzzer:
+                        try:
+                            self._buzzer.deinit()
+                        except Exception:
+                            pass
+                    self._manager._session_finished(self)
+
+        self._stream = stream_class(
             rtttl_string=self.rtttl,
             stream_type=self.stream_type,
             volume=self.volume if self.volume is not None else self._manager._volume,
             buzzer_instance=self._buzzer,
-            on_complete=self.on_complete,
+            on_complete=on_complete,
         )
+        self._stream.set_repeat(self._repeat_count)
         self._stream.play()
 
     def _play_wav(self):
         from mpos.audio.stream_wav import WAVStream
+
+        on_complete = self.on_complete
+        try:
+            __import__("_webio")
+
+            def on_complete(message):
+                try:
+                    if self.on_complete:
+                        self.on_complete(message)
+                finally:
+                    self._manager._session_finished(self)
+        except ImportError:
+            pass
 
         self._stream = WAVStream(
             file_path=self.file_path,
             stream_type=self.stream_type,
             volume=self.volume if self.volume is not None else self._manager._volume,
             i2s_pins=self.output.i2s_pins,
-            on_complete=self.on_complete,
+            on_complete=on_complete,
             requested_sample_rate=self.sample_rate,
             on_open=getattr(self.output, "on_open", None),
             on_close=getattr(self.output, "on_close", None),

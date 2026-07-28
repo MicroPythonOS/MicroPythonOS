@@ -7,6 +7,8 @@
 
 import time
 
+import _webio
+
 
 def unique_id():
     return b"webbuild"
@@ -51,28 +53,38 @@ class PWM:
         self._pin = pin
         self._freq = freq
         self._duty = duty_u16
+        self._audio = getattr(pin, "_id", None) == -1
+        self._update_audio()
+
+    def _update_audio(self):
+        if self._audio:
+            _webio.tone(self._freq, self._duty)
 
     def freq(self, value=None):
         if value is None:
             return self._freq
         self._freq = value
+        self._update_audio()
 
     def duty(self, value=None):
         if value is None:
             return self._duty >> 6
         self._duty = value << 6
+        self._update_audio()
 
     def duty_u16(self, value=None):
         if value is None:
             return self._duty
         self._duty = value
+        self._update_audio()
 
     def duty_ns(self, value=None):
         if value is None:
             return 0
 
     def deinit(self):
-        pass
+        if self._audio:
+            _webio.tone_stop()
 
 
 class ADC:

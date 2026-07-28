@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout repository with submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -74,14 +74,14 @@ jobs:
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
@@ -94,14 +94,14 @@ jobs:
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
@@ -113,7 +113,7 @@ jobs:
           cp lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
           path: lvgl_micropython/build/MicroPythonOS_x64_linux_${{ steps.version.outputs.OS_VERSION }}.elf

@@ -14,7 +14,6 @@ import mpos.ui
 from mpos import (
     AppManager,
     click_label,
-    wait_for_render,
     wait_for_text,
 )
 from mpos.activity_navigator import get_foreground_app
@@ -42,7 +41,10 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
         os.mkdir(self.test_path)
         for name in ("sample.wav", "sample.png", "sample.txt", "sample.rtttl"):
             with open("{}/{}".format(self.test_path, name), "wb") as f:
-                f.write(b"dummy")
+                if name == "sample.rtttl":
+                    f.write(b"sample:d=4,o=5,b=120:c")
+                else:
+                    f.write(b"dummy")
 
     def tearDown(self):
         """Go back to the launcher and remove the temporary files."""
@@ -84,14 +86,14 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
             "Foreground app is not Music Player",
         )
 
-    def test_rtttl_file_opens_music_player_without_buzzer(self):
-        """Clicking a .rtttl file should launch Music Player and report the missing buzzer output."""
+    def test_rtttl_file_opens_music_player(self):
+        """Clicking a .rtttl file should launch the Music Player app."""
         self._start_file_manager()
 
         self.assertTrue(click_label("sample.rtttl"), "Could not click sample.rtttl")
         self.assertTrue(
-            wait_for_text("RTTTL requires a buzzer output", timeout=10),
-            "Music Player did not show buzzer-required error",
+            wait_for_text("Stop", timeout=10),
+            "Music Player did not open",
         )
         self.assertEqual(
             get_foreground_app(),
