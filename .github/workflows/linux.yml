@@ -55,9 +55,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
-          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.workflow }}-${{ github.sha }}
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-${{ github.sha }}
           restore-keys: |
-            ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ github.workflow }}-
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-
 
       - name: Configure compiler cache
         run: |
