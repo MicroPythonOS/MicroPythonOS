@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- OSUpdate: improve update progress UI
+
 OS:
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
 

@@ -14,6 +14,8 @@ class OSUpdate(Activity):
     install_button = None
     check_again_button = None
     main_screen = None
+    changelog_container = None
+    progress_container = None
     progress_label = None
     progress_bar = None
     speed_label = None
@@ -158,10 +160,7 @@ class OSUpdate(Activity):
         while self.changelog_container.get_child_count() > 0:
             self.changelog_container.get_child(0).delete()
 
-        changelog_y = self.status_label.get_y() + self.status_label.get_height() + DisplayMetrics.pct_of_height(1)
-        remaining = DisplayMetrics.height() - changelog_y - DisplayMetrics.pct_of_height(2)
-        self.changelog_container.set_y(changelog_y)
-        self.changelog_container.set_height(remaining)
+        self._reposition_changelog()
 
         if not changelog_text:
             return
@@ -172,6 +171,16 @@ class OSUpdate(Activity):
             label.set_width(lv.pct(100))
             label.set_long_mode(lv.label.LONG_MODE.WRAP)
             add_focus_highlight(label)
+
+    def _reposition_changelog(self):
+        if not self.changelog_container or self.changelog_container.has_flag(lv.obj.FLAG.HIDDEN):
+            return
+        ref = self.progress_container or self.status_label
+        self.changelog_container.align_to(ref, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(1))
+        remaining = DisplayMetrics.height() - self.changelog_container.get_y() - DisplayMetrics.pct_of_height(2)
+        if remaining < 0:
+            remaining = 0
+        self.changelog_container.set_height(remaining)
 
     def _update_install_button(self, comparison):
         if comparison == "newer":
@@ -196,19 +205,26 @@ class OSUpdate(Activity):
 
         self.install_button.add_state(lv.STATE.DISABLED)
 
-        self.progress_label = lv.label(self.main_screen)
+        self.progress_container = lv.obj(self.main_screen)
+        self.progress_container.set_width(lv.pct(100))
+        self.progress_container.set_height(lv.SIZE_CONTENT)
+        self.progress_container.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self.progress_container.set_style_pad_all(5, lv.PART.MAIN)
+        self.progress_container.set_style_border_width(0, lv.PART.MAIN)
+        self.progress_container.align_to(self.status_label, lv.ALIGN.OUT_BOTTOM_LEFT, 0, DisplayMetrics.pct_of_height(1))
+
+        self.progress_label = lv.label(self.progress_container)
         self.progress_label.set_text("OS Update: 0.00%")
-        self.progress_label.align(lv.ALIGN.CENTER, 0, -15)
 
-        self.speed_label = lv.label(self.main_screen)
+        self.speed_label = lv.label(self.progress_container)
         self.speed_label.set_text("Speed: -- KB/s")
-        self.speed_label.align(lv.ALIGN.CENTER, 0, 10)
 
-        self.progress_bar = lv.bar(self.main_screen)
-        self.progress_bar.set_size(lv.pct(80), lv.pct(10))
-        self.progress_bar.align(lv.ALIGN.BOTTOM_MID, 0, -50)
+        self.progress_bar = lv.bar(self.progress_container)
+        self.progress_bar.set_size(lv.pct(80), DisplayMetrics.pct_of_height(6))
         self.progress_bar.set_range(0, 100)
         self.progress_bar.set_value(0, False)
+
+        self._reposition_changelog()
 
         TaskManager.create_task(self._run_download(url))
 
@@ -250,6 +266,11 @@ class OSUpdate(Activity):
         else:
             return f"An error occurred:\n{str(error)}\n\nPlease try again."
 
+    def _hide_progress(self):
+        if self.progress_container:
+            self.progress_container.add_flag(lv.obj.FLAG.HIDDEN)
+        self._reposition_changelog()
+
     async def _run_download(self, url):
         result = await self._um.start_download(
             url,
@@ -259,6 +280,7 @@ class OSUpdate(Activity):
         )
 
         if not self.has_foreground():
+            self._hide_progress()
             return
 
         if result['success']:
@@ -277,7 +299,10 @@ class OSUpdate(Activity):
                     f"{friendly_message}"
                 )
                 self.install_button.remove_state(lv.STATE.DISABLED)
+                self._hide_progress()
             return
+
+        self._hide_progress()
 
         bytes_written = result.get('bytes_written', 0)
         total_size = result.get('total_size', 0)
