@@ -140,6 +140,7 @@ class ChatActivity(Activity):
         input_row.set_style_flex_main_place(lv.FLEX_ALIGN.SPACE_BETWEEN, lv.PART.MAIN)
 
         self._input_textarea = lv.textarea(input_row)
+        self._input_textarea.set_text_selection(True)
         self._input_textarea.set_one_line(True)
         self._input_textarea.set_width(lv.pct(75))
         self._input_textarea.set_placeholder_text("Type a message...")

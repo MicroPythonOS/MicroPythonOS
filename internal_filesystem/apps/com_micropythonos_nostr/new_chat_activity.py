@@ -91,6 +91,7 @@ class NewChatActivity(Activity):
         self._hint_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
 
         self._textarea = lv.textarea(self._screen)
+        self._textarea.set_text_selection(True)
         self._textarea.set_one_line(True)
         self._textarea.set_width(lv.pct(100))
         self._textarea.set_max_length(200)

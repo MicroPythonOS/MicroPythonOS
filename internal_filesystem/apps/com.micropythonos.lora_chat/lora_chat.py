@@ -40,6 +40,7 @@ class LoRaChat(Activity):
         main_content.set_style_pad_gap(10, 0)
 
         self.input_textarea = lv.textarea(main_content)
+        self.input_textarea.set_text_selection(True)
         self.input_textarea.set_placeholder_text("Message input...")
         self.input_textarea.set_one_line(True)
         self.input_textarea.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)

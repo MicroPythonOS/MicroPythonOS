@@ -34,6 +34,7 @@ class ProfileActivity(Activity):
         name_lbl.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
 
         self._name_ta = lv.textarea(screen)
+        self._name_ta.set_text_selection(True)
         self._name_ta.set_width(lv.pct(100))
         self._name_ta.set_height(DisplayMetrics.pct_of_height(6))
         self._name_ta.set_placeholder_text("Your name")
@@ -48,6 +49,7 @@ class ProfileActivity(Activity):
         about_lbl.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
 
         self._about_ta = lv.textarea(screen)
+        self._about_ta.set_text_selection(True)
         self._about_ta.set_width(lv.pct(100))
         self._about_ta.set_height(DisplayMetrics.pct_of_height(12))
         self._about_ta.set_placeholder_text("A short bio")

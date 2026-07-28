@@ -14,6 +14,7 @@ class ReplShell(Activity):
         main.set_style_pad_gap(10, 0)
 
         self.input_area = lv.textarea(main)
+        self.input_area.set_text_selection(True)
         self.input_area.set_placeholder_text("Python code...")
         self.input_area.set_one_line(True)
         self.input_area.set_width(lv.pct(100))

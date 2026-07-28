@@ -249,6 +249,7 @@ class EditNetwork(Activity):
             label = lv.label(password_page)
             label.set_text(f"Network name:")
             self.ssid_ta = lv.textarea(password_page)
+            self.ssid_ta.set_text_selection(True)
             self.ssid_ta.set_width(lv.pct(100))
             self.ssid_ta.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
             self.ssid_ta.set_style_margin_right(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
@@ -265,6 +266,7 @@ class EditNetwork(Activity):
         else:
             label.set_text(f"Password for '{self.selected_ssid}':")
         self.password_ta = lv.textarea(password_page)
+        self.password_ta.set_text_selection(True)
         self.password_ta.set_width(lv.pct(100))
         self.password_ta.set_style_margin_left(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)
         self.password_ta.set_style_margin_right(DisplayMetrics.pct_of_width(2), lv.PART.MAIN)

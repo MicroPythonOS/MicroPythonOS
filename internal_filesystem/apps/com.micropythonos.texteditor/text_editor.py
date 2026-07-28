@@ -83,6 +83,7 @@ class TextEditor(Activity):
         self._textarea.set_placeholder_text("Type your text here...")
         self._textarea.set_width(lv.pct(100))
         self._textarea.set_flex_grow(1)
+        self._textarea.set_text_selection(True)
         self._textarea.add_event_cb(self._on_text_changed, lv.EVENT.VALUE_CHANGED, None)
         self._textarea.add_event_cb(self._show_keyboard, lv.EVENT.CLICKED, None)
 
