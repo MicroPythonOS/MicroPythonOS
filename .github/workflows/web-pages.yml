@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout repository with submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -42,7 +42,7 @@ jobs:
       - name: Set up Emscripten SDK
         # Puts emcc/em++/emar on PATH so build_mpos.sh skips its in-tree
         # emsdk lookup. Bump the version if the build needs a newer toolchain.
-        uses: mymindstorm/setup-emsdk@v14
+        uses: mymindstorm/setup-emsdk@v16
         with:
           version: 6.0.0
 
@@ -65,7 +65,7 @@ jobs:
           node tests/web_bridge_smoke.mjs web
 
       - name: Upload built web export as a regular artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: MicroPythonOS_web_${{ steps.version.outputs.OS_VERSION }}.zip
           path: web/
