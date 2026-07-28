@@ -1,6 +1,8 @@
 Future release (next version)
 =====
 
+OS:
+- sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
 
 0.16.0
 ======
