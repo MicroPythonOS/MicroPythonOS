@@ -16,7 +16,26 @@ import path from "node:path";
 import puppeteer from "puppeteer";
 
 const webDir = path.resolve(process.argv[2] || "web");
+const dataDir = path.resolve("internal_filesystem_data");
 const TIMEOUT_MS = 120000; // wasm boot in CI can be slow
+
+function readDataFiles(dir, prefix = "") {
+  const files = new Map();
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const relativePath = path.posix.join(prefix, entry.name);
+    const sourcePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      for (const [nestedPath, contents] of readDataFiles(sourcePath, relativePath)) {
+        files.set(nestedPath, contents);
+      }
+    } else if (entry.isFile()) {
+      files.set(relativePath, fs.readFileSync(sourcePath));
+    }
+  }
+  return files;
+}
+
+const expectedDataFiles = readDataFiles(dataDir);
 
 const MIME = {
   ".html": "text/html",
@@ -63,6 +82,20 @@ server.listen(0, "127.0.0.1", async () => {
       { timeout: TIMEOUT_MS },
     );
     console.log("Runtime up, __webterm.ready = true");
+
+    const bundledDataFiles = await page.evaluate((relativePaths) => {
+      return relativePaths.map((relativePath) => ({
+        relativePath,
+        contents: Array.from(FS.readFile("/data/" + relativePath)),
+      }));
+    }, Array.from(expectedDataFiles.keys()));
+    for (const file of bundledDataFiles) {
+      const expected = expectedDataFiles.get(file.relativePath);
+      if (!expected.equals(Buffer.from(file.contents))) {
+        fail("bundled data differs: /data/" + file.relativePath);
+      }
+    }
+    console.log(`Bundled data present, ${bundledDataFiles.length} files matched`);
 
     // Install onOutput and send the raw-REPL handshake, then wait for banner.
     const result = await page.evaluate(
