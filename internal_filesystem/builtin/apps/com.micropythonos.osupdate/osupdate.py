@@ -20,6 +20,9 @@ class OSUpdate(Activity):
     progress_bar = None
     speed_label = None
 
+    _downloading = False
+    _cancel_requested = False
+
     def __init__(self):
         super().__init__()
         self._um = None
@@ -147,7 +150,7 @@ class OSUpdate(Activity):
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
             lv.group_focus_obj(self.install_button)
         elif state == UpdateState.DOWNLOADING:
-            self.status_label.set_text("Update in progress.\nNavigate away to cancel.")
+            self.status_label.set_text("Update in progress.\nNavigating away will cancel the update.")
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         elif state == UpdateState.DOWNLOAD_PAUSED:
             self.status_label.set_text("Download paused - waiting for WiFi...")
@@ -195,6 +198,10 @@ class OSUpdate(Activity):
         self.install_button.remove_state(lv.STATE.DISABLED)
 
     def install_button_click(self):
+        if self._downloading:
+            self._cancel_requested = True
+            return
+
         info = self._um.get_update_info()
         if not info:
             if __debug__: logger.debug("install clicked but no update info")
@@ -203,7 +210,12 @@ class OSUpdate(Activity):
         url = info["download_url"]
         if __debug__: logger.debug("install button click for url %s", url)
 
-        self.install_button.add_state(lv.STATE.DISABLED)
+        self._downloading = True
+        self._cancel_requested = False
+
+        install_label = self.install_button.get_child(0)
+        install_label.set_text("Cancel update")
+        install_label.center()
 
         self.progress_container = lv.obj(self.main_screen)
         self.progress_container.set_width(lv.pct(100))
@@ -271,13 +283,24 @@ class OSUpdate(Activity):
             self.progress_container.add_flag(lv.obj.FLAG.HIDDEN)
         self._reposition_changelog()
 
+    def _should_continue(self):
+        return self.has_foreground() and not self._cancel_requested
+
+    def _restore_install_button(self):
+        info = self._um.get_update_info()
+        comparison = info["comparison"] if info else "newer"
+        self._update_install_button(comparison)
+
     async def _run_download(self, url):
         result = await self._um.start_download(
             url,
             progress_callback=self.async_progress_callback,
             speed_callback=self.async_speed_callback,
-            should_continue_callback=self.has_foreground
+            should_continue_callback=self._should_continue
         )
+
+        self._downloading = False
+        self._cancel_requested = False
 
         if not self.has_foreground():
             self._hide_progress()
@@ -298,38 +321,32 @@ class OSUpdate(Activity):
                     f"Raw error: {raw_error}\n\n"
                     f"{friendly_message}"
                 )
-                self.install_button.remove_state(lv.STATE.DISABLED)
+                self._restore_install_button()
                 self._hide_progress()
             return
 
         self._hide_progress()
+        self._restore_install_button()
 
         bytes_written = result.get('bytes_written', 0)
         total_size = result.get('total_size', 0)
 
         if result.get('timeout'):
-            msg = (f"Network timeout during download.\n"
-                   f"{bytes_written}/{total_size} bytes written.\n"
-                   "Press 'Update OS' to retry.")
-            self.status_label.set_text(msg)
-            self.install_button.remove_state(lv.STATE.DISABLED)
+            self.status_label.set_text(
+                f"Network timeout during download.\n"
+                f"{bytes_written}/{total_size} bytes written."
+            )
             return
 
         if result.get('cancelled'):
-            msg = (f"Update cancelled by user.\n\n"
-                   f"{bytes_written}/{total_size} bytes downloaded.\n"
-                   "Press 'Update OS' to resume.")
-            self.status_label.set_text(msg)
-            self.install_button.remove_state(lv.STATE.DISABLED)
+            self.status_label.set_text(
+                f"Update cancelled by user.\n\n"
+                f"{bytes_written}/{total_size} bytes downloaded."
+            )
             return
 
         error_msg = result.get('error', 'Unknown error')
-        friendly_msg = self._get_user_friendly_error(Exception(error_msg))
-        progress_info = f"\n\nProgress: {bytes_written}/{total_size} bytes"
-        if bytes_written > 0:
-            progress_info += "\n\nPress 'Update OS' to resume."
-        self.status_label.set_text(friendly_msg + progress_info)
-        self.install_button.remove_state(lv.STATE.DISABLED)
+        self.status_label.set_text(self._get_user_friendly_error(Exception(error_msg)))
 
     async def async_progress_callback(self, percent):
         if self.has_foreground() and self.progress_bar:

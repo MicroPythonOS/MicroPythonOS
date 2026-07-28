@@ -700,6 +700,9 @@ class MockDownloaderUpdateManager:
     async def start_download(self, *args, **kwargs):
         return self._start_download_result
 
+    def get_update_info(self):
+        return {"comparison": "newer", "version": "0.0.0", "download_url": "http://example.com/update.bin", "changelog": ""}
+
 
 class TestOSUpdateRunDownload(unittest.TestCase):
     """Test _run_download error handling after a successful download stream."""
