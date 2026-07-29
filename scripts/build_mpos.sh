@@ -564,6 +564,10 @@ elif [ "$target" == "web" ]; then
 	# /data is recreated empty by IDBFS at boot; drop the preloaded copy so it
 	# does not collide with the persistent mount.
 	rm -rf "$staged_fs"/data
+	staged_bundled_data="$codebasedir"/web/.preload_bundled_data
+	rm -rf "$staged_bundled_data"
+	mkdir -p "$staged_bundled_data"
+	cp -a "$codebasedir"/internal_filesystem_data/. "$staged_bundled_data"/
 
 	# The browser build disables native threading (MICROPY_PY_THREAD=0), so the
 	# C builtin `_thread` module is absent. MicroPythonOS imports `_thread`
@@ -661,7 +665,7 @@ elif [ "$target" == "web" ]; then
 	# The bundled demo apps are packaged separately at /.bundled_apps because
 	# /apps is a persistent IDBFS mount (see web/shell.html); they are seeded
 	# into /apps on first boot.
-	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --shell-file $shell_file"
+	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --preload-file $staged_bundled_data@/.bundled_data --shell-file $shell_file"
 
 	pushd "$codebasedir"/lvgl_micropython/
 	set -x
