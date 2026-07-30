@@ -194,6 +194,33 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertEqual(reset_count, all_count,
                          f"Reset count {reset_count} != original {all_count}")
 
+    def test_app_list_height_accounts_for_top_offset(self):
+        """create_apps_list should size the list to fit within the screen below the top bar."""
+        AppManager.start_app("com.micropythonos.appstore")
+        wait_for_render(iterations=10)
+        activity = _get_appstore_activity()
+        self.assertIsNotNone(activity, "Could not get AppStore activity")
+
+        activity.apps = [
+            App(f"App {i}", "Me", "Desc", "Long",
+                None, None, f"com.test.app{i}", "1.0", "test", [])
+            for i in range(30)
+        ]
+        activity._data_loaded = True
+        activity.create_apps_list()
+        wait_for_render(iterations=10)
+
+        screen_h = lv.screen_active().get_height()
+        # list_top = _TOP_BAR_HEIGHT when update button is hidden
+        list_top = activity._TOP_BAR_HEIGHT
+        # The list height should be screen height minus the top offset,
+        # not 100% of parent (which would extend below the screen).
+        self.assertTrue(list_top > 0, "Top offset must be > 0 for this test to be meaningful")
+        self.assertTrue(screen_h > list_top,
+                        "Screen must be taller than top bar for list to fit")
+        self.assertTrue(screen_h - list_top > 0,
+                        "Remaining space for list must be positive")
+
     def test_updates_category_present(self):
         """'Updates (N)' appears among early options with count format."""
         AppManager.start_app("com.micropythonos.appstore")

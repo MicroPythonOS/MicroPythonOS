@@ -181,12 +181,16 @@ class AppStore(Activity):
             self.update_all_button.remove_flag(lv.obj.FLAG.HIDDEN)
             # Push the list below the button
             if hasattr(self, "apps_list") and self.apps_list:
-                self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, self._TOP_BAR_HEIGHT + self._UPDATE_BUTTON_HEIGHT + 8)
+                list_top = self._TOP_BAR_HEIGHT + self._UPDATE_BUTTON_HEIGHT + 8
+                self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, list_top)
+                self.apps_list.set_height(lv.screen_active().get_height() - list_top)
         else:
             self.update_all_button.add_flag(lv.obj.FLAG.HIDDEN)
             # Move the list back up
             if hasattr(self, "apps_list") and self.apps_list:
-                self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, self._TOP_BAR_HEIGHT)
+                list_top = self._TOP_BAR_HEIGHT
+                self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, list_top)
+                self.apps_list.set_height(lv.screen_active().get_height() - list_top)
 
         # Show/hide per-app "Update available" labels
         updatable_set = {a.get("fullname") for a in (updatable_apps or [])}
@@ -471,6 +475,7 @@ class AppStore(Activity):
         # Determine top offset (update button may be visible)
         button_visible = not self.update_all_button.has_flag(lv.obj.FLAG.HIDDEN)
         list_top = self._TOP_BAR_HEIGHT + (self._UPDATE_BUTTON_HEIGHT + 8 if button_visible else 0)
+        list_h = lv.screen_active().get_height() - list_top
 
         if hasattr(self, "apps_list") and self.apps_list:
             for app in self.apps:
@@ -478,7 +483,7 @@ class AppStore(Activity):
             self.apps_list.delete()
         self.apps_list = lv.list(self.main_screen)
         self._apply_default_styles(self.apps_list)
-        self.apps_list.set_size(lv.pct(100), lv.pct(100))
+        self.apps_list.set_size(lv.pct(100), list_h)
         self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, list_top)
         self._icon_widgets = {}
         self._update_labels = {}
