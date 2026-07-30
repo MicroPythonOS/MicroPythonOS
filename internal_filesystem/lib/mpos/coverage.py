@@ -20,10 +20,11 @@ def _trace_callback(frame, event, arg):
     if _tracker._skip(fn):
         return _trace_callback
     lineno = frame.f_lineno
-    try:
-        _tracker._hits[fn][lineno] = 1
-    except KeyError:
+    d = _tracker._hits.get(fn)
+    if d is None:
         _tracker._hits[fn] = {lineno: 1}
+    else:
+        d[lineno] = d.get(lineno, 0) + 1
     return _trace_callback
 
 
@@ -45,23 +46,13 @@ class Tracker:
     def stop(self):
         sys.settrace(None)
 
-    def report_json(self, source_paths=None):
-        """Return JSON string with coverage data.
-
-        source_paths: optional list of (root_dir) paths to scan for source lines.
-        If omitted, only reports line counts from traced files.
-        """
+    def report_json(self):
         import ujson
 
         files = {}
         for fn, lines in sorted(self._hits.items()):
-            covered = sorted(lines.keys())
-            total = max(covered) if covered else 0
-            files[fn] = {
-                "covered": covered,
-                "total_lines": total,
-            }
-        return ujson.dumps(files)
+            files[fn] = {"lines": {str(k): v for k, v in lines.items()}}
+        return ujson.dumps({"files": files})
 
 
 def start():

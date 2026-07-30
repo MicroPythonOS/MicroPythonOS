@@ -2,7 +2,7 @@
 """Run MicroPythonOS unit tests on desktop or physical/QEMU device.
 
 Usage:
-    python3 scripts/test_runner.py [test_file] [--ondevice] [--port PORT] [--coverage]
+    python3 scripts/test_runner.py [test_file ...] [--ondevice] [--port PORT] [--coverage]
 
 Examples:
     # Desktop — run all tests
@@ -11,16 +11,25 @@ Examples:
     # Desktop — single test
     python3 scripts/test_runner.py tests/test_adpcm_ima.py
 
-    # Desktop — run all tests with coverage (requires mpcov build variant)
-    python3 scripts/test_runner.py --coverage
+    # Desktop — multiple tests
+    python3 scripts/test_runner.py tests/test_a.py tests/test_b.py
 
-    # Desktop — single test with coverage
-    python3 scripts/test_runner.py tests/test_adpcm_ima.py --coverage
+    # Desktop — with coverage (requires mpcov build variant)
+    python3 scripts/test_runner.py --coverage tests/test_adpcm_ima.py tests/test_number_format.py
+
+    # Desktop — save coverage data for later merging or HTML report
+    python3 scripts/test_runner.py --coverage --coverage-save cov.json tests/test_*.py
+
+    # Desktop — merge into existing coverage data
+    python3 scripts/test_runner.py --coverage --coverage-load cov.json --coverage-save cov.json tests/test_extra.py
+
+    # Generate HTML report from saved coverage data
+    python3 scripts/coverage_report.py cov.json -o coverage_report.html
 
     # Physical device — single test
     python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice
 
-    Physical device — custom port
+    # Physical device — custom port
     python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --port /dev/pts/5
 
     MPOS_TEST_PORT env var sets the default serial port (default: /dev/ttyACM0).
@@ -42,10 +51,14 @@ from mpos_controller import ProcessBackend, SerialBackend
 
 REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 TESTS_DIR = os.path.join(REPO_ROOT, "tests")
-FS_DIR = os.path.join(REPO_ROOT, "internal_filesystem")
+FS_ROOT = os.path.join(REPO_ROOT, "internal_filesystem")
 BUILD_DIR = os.path.join(REPO_ROOT, "lvgl_micropython", "build")
 
 MAX_RETRIES = 3
+
+COVERAGE_RE = re.compile(
+    r"=== COVERAGE_DATA ===\n(.*?)\n=== END_COVERAGE_DATA ===", re.DOTALL
+)
 
 
 def _resolve_binary():
@@ -63,16 +76,11 @@ def _resolve_binary():
 
 
 def _cleanup_config():
-    config = os.path.join(FS_DIR, "prefs", "com.micropythonos.settings", "config.json")
+    config = os.path.join(FS_ROOT, "prefs", "com.micropythonos.settings", "config.json")
     try:
         os.remove(config)
     except OSError:
         pass
-
-
-COVERAGE_RE = re.compile(
-    r"=== COVERAGE_DATA ===\n(.*?)\n=== END_COVERAGE_DATA ===", re.DOTALL
-)
 
 
 def _extract_coverage(out_bytes):
@@ -86,43 +94,89 @@ def _extract_coverage(out_bytes):
         return {}
 
 
+def _count_file_lines(relpath):
+    """Read source file from FS_ROOT and return line count."""
+    path = os.path.join(FS_ROOT, relpath)
+    try:
+        with open(path) as f:
+            return sum(1 for _ in f)
+    except (OSError, IOError):
+        return 0
+
+
+def _load_coverage(path):
+    if not path or not os.path.isfile(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def _save_coverage(path, data):
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, sort_keys=True)
+
+
 def _merge_coverage(merged, new_data):
-    for fn, info in new_data.items():
-        if fn not in merged:
-            merged[fn] = {"covered": set(info.get("covered", [])), "total_lines": info.get("total_lines", 0)}
-        else:
-            merged[fn]["covered"].update(info.get("covered", []))
-            merged[fn]["total_lines"] = max(merged[fn]["total_lines"], info.get("total_lines", 0))
+    """Merge new_data into merged. Both have format: {"files": {fn: {"lines": {str(line): count}}}}."""
+    if not new_data:
+        return merged
+    for fn, info in new_data.get("files", {}).items():
+        if fn not in merged.get("files", {}):
+            merged.setdefault("files", {})[fn] = {"lines": {}}
+        merged_lines = merged["files"][fn]["lines"]
+        for lineno, count in info.get("lines", {}).items():
+            merged_lines[lineno] = merged_lines.get(lineno, 0) + count
     return merged
 
 
-def _report_coverage(merged, out_file=None):
-    lines = []
-    total_covered = 0
+def _compute_stats(data):
+    """Compute total_lines, covered_lines per file and globally. Adds total_lines to each file."""
+    total_files = 0
     total_lines = 0
-    for fn in sorted(merged.keys()):
-        info = merged[fn]
-        covered = len(info["covered"])
-        total = info["total_lines"]
-        pct = (covered / total * 100) if total > 0 else 100
+    total_covered = 0
+    files = data.get("files", {})
+    for fn, info in files.items():
+        real_lines = _count_file_lines(fn)
+        if real_lines == 0:
+            continue
+        info["total_lines"] = real_lines
+        covered = len(info.get("lines", {}))
+        total_files += 1
+        total_lines += real_lines
         total_covered += covered
-        total_lines += total
-        uncovered = sorted(set(range(1, total + 1)) - set(info["covered"]))
-        lines.append("")
-        lines.append("{}  {}/{} ({:.1f}%)".format(fn, covered, total, pct))
+    data["summary"] = {
+        "files": total_files,
+        "total_lines": total_lines,
+        "covered_lines": total_covered,
+        "pct": round(total_covered / total_lines * 100, 1) if total_lines else 0.0,
+    }
+    return data
+
+
+def _print_inline_report(data):
+    summary = data.get("summary", {})
+    print(
+        "\n{} files  {} / {} lines  ({:.1f}%)".format(
+            summary.get("files", 0),
+            summary.get("covered_lines", 0),
+            summary.get("total_lines", 0),
+            summary.get("pct", 0.0),
+        )
+    )
+    for fn in sorted(data.get("files", {}).keys()):
+        info = data["files"][fn]
+        total = info.get("total_lines", 0)
+        covered = len(info.get("lines", {}))
+        pct = (covered / total * 100) if total > 0 else 100
+        uncovered = sorted(set(range(1, total + 1)) - {int(k) for k in info.get("lines", {}).keys()})
+        print("  {:3d}/{:3d} ({:5.1f}%)  {}".format(covered, total, pct, fn))
         if uncovered:
-            lines.append("  uncovered: {}".format(_fmt_ranges(uncovered)))
-    overall_pct = (total_covered / total_lines * 100) if total_lines > 0 else 0
-    summary = "Total: {}/{} ({:.1f}%)".format(total_covered, total_lines, overall_pct)
-    output = summary + "\n" + "\n".join(lines)
-    if out_file:
-        with open(out_file, "w") as f:
-            f.write(output + "\n")
-    print(output)
-    return output
+            print("    uncovered: {}".format(_fmt_ranges(uncovered)))
 
 
 def _fmt_ranges(lines):
+    if not lines:
+        return ""
     ranges = []
     start = prev = lines[0]
     for n in lines[1:]:
@@ -136,7 +190,6 @@ def _fmt_ranges(lines):
 
 
 def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False):
-    """Run a single test file. Returns (passed, output)."""
     backend_kwargs = {}
     if backend == "serial":
         port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
@@ -182,16 +235,10 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
     return False, out
 
 
-def _batch_run(backend, tests_dir, timeout, reset=False, coverage=False):
-    all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
-    files = [f for f in all_files if not os.path.basename(f).startswith("notondevice_")]
-    if not files:
-        print("No test files found in {}".format(TESTS_DIR))
-        return True, {}
-
+def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False):
     failed = []
     merged = {}
-    for f in files:
+    for f in test_files:
         print("=== {} ===".format(os.path.basename(f)))
         log_path = os.path.join(
             tempfile.gettempdir(),
@@ -205,11 +252,11 @@ def _batch_run(backend, tests_dir, timeout, reset=False, coverage=False):
             cov = _extract_coverage(out)
             merged = _merge_coverage(merged, cov)
     if failed:
-        print("FAILED: {}/{} tests".format(len(failed), len(files)))
+        print("FAILED: {}/{} tests".format(len(failed), len(test_files)))
         for f in failed:
             print("  {}".format(f))
         return False, merged
-    print("GOOD: all {} tests passed".format(len(files)))
+    print("GOOD: all {} tests passed".format(len(test_files)))
     return True, merged
 
 
@@ -218,8 +265,8 @@ def main():
         description="Run MicroPythonOS unit tests on desktop or device",
     )
     parser.add_argument(
-        "test_file", nargs="?", default=None,
-        help="Path to a single test file (omit to run all)",
+        "test_files", nargs="*", default=None,
+        help="Test file(s) to run (omit to run all)",
     )
     parser.add_argument(
         "--ondevice", action="store_true",
@@ -246,8 +293,12 @@ def main():
         help="Collect line coverage (desktop only, requires mpcov build variant)",
     )
     parser.add_argument(
-        "--coverage-file", default=None,
-        help="Write coverage report to file",
+        "--coverage-save", default=None,
+        help="Save merged coverage JSON to FILE (use with --coverage-load to merge runs)",
+    )
+    parser.add_argument(
+        "--coverage-load", default=None,
+        help="Load existing coverage JSON from FILE and merge with this run's results",
     )
     args = parser.parse_args()
 
@@ -268,30 +319,38 @@ def main():
 
     _cleanup_config()
 
-    coverage = args.coverage
-    merged = {}
-
-    if args.test_file:
-        test_path = os.path.abspath(args.test_file)
-        if not os.path.isfile(test_path):
-            print("ERROR: {} is not a file".format(test_path))
-            sys.exit(1)
-        log_path = os.path.join(
-            tempfile.gettempdir(),
-            test_path.replace("/", "_").lstrip("_") + ".log",
-        )
-        ok, out = _run_with_retry(test_path, backend, tests_dir, args.timeout, log_path, do_reset, coverage)
-        if coverage and out:
-            merged = _extract_coverage(out)
+    if args.test_files:
+        test_files = [os.path.abspath(f) for f in args.test_files]
+        for f in test_files:
+            if not os.path.isfile(f):
+                print("ERROR: {} is not a file".format(f))
+                sys.exit(1)
     else:
-        if not args.ondevice:
-            print("Running all tests on desktop...")
-        else:
-            print("Running all tests on device...")
-        ok, merged = _batch_run(backend, tests_dir, args.timeout, do_reset, coverage)
+        all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+        test_files = [f for f in all_files if not os.path.basename(f).startswith("notondevice_")]
+        if not test_files:
+            print("No test files found in {}".format(TESTS_DIR))
+            sys.exit(1)
 
-    if coverage:
-        _report_coverage(merged, out_file=args.coverage_file)
+    ok, coverage_data = _run_tests(
+        test_files, backend, tests_dir, args.timeout, do_reset, args.coverage,
+    )
+
+    if args.coverage:
+        if args.coverage_load:
+            existing = _load_coverage(args.coverage_load)
+            coverage_data = _merge_coverage(existing, coverage_data)
+
+        _compute_stats(coverage_data)
+
+        if args.coverage_save:
+            _save_coverage(args.coverage_save, coverage_data)
+            s = coverage_data.get("summary", {})
+            print("Coverage saved to {}  ({} files, {:.1f}%)".format(
+                args.coverage_save, s.get("files", 0), s.get("pct", 0.0),
+            ))
+        else:
+            _print_inline_report(coverage_data)
 
     sys.exit(0 if ok else 1)
 

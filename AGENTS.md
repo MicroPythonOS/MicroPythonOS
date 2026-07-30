@@ -20,6 +20,23 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py` (not run by test_runner.py).  
 **Details:** `tests/README.md`
 
+### Code coverage (desktop only)
+
+**Build with coverage:** `./scripts/build_mpos.sh unix coverage` or `make build-mpos-unix-coverage`  
+Enables `sys.settrace` in the mpcov variant. Standard build overwritten — re-run `./scripts/build_mpos.sh unix` to restore.
+
+**Run tests with coverage:**
+```
+python3 scripts/test_runner.py --coverage tests/test_a.py tests/test_b.py   # terminal report
+python3 scripts/test_runner.py --coverage --coverage-save cov.json tests/test_*.py  # save JSON
+python3 scripts/test_runner.py --coverage --coverage-load cov.json --coverage-save cov.json tests/test_extra.py  # merge
+```
+
+**Generate HTML report:** `python3 scripts/coverage_report.py cov.json -o coverage/index.html`  
+Self-contained HTML — overview stats, per-file coverage %, expand inline source with line coloring (red=untested, green=tested, shade intensity by hit count).
+
+**When running multiple tests for coverage:** prefer `test_runner.py` with multiple positional args (e.g. `tests/test_a.py tests/test_b.py`) over one-by-one invocations — the merged coverage report will aggregate all runs.
+
 - Graphical tests (filename contains `graphical`): LVGL boot injected. Non-graphical: no boot, no LVGL init — import `lvgl` lazily.
 - Test CWD = `internal_filesystem/`. `sys.path.insert(0, ".")` assumes that root.
 - `--reset` (device only): hard-resets via `machine.reset()`, waits for `"Starting asyncio REPL..."` (NOT just `>>>`). Boot: 2–40s.
