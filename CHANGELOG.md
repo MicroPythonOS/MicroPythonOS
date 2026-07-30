@@ -12,6 +12,8 @@ Development:
 - Add Python-level line coverage via sys.settrace (mpcov build variant)
 - Add `--coverage` flag to test_runner.py for collecting per-file line coverage
 - Add `make build-mpos-unix-coverage` target
+- Add HTML coverage report with expandable inline source (scripts/coverage_report.py)
+- Add scripts/coverage.sh for automated coverage runs with clustered/partial test support
 
 0.16.0
 ======
