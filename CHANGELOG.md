@@ -2,6 +2,7 @@ Future release (next version)
 =====
 
 Builtin Apps:
+- AppStore: add special 'Updates' category
 - OSUpdate: improve update progress UI
 
 OS:

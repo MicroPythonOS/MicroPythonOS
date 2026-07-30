@@ -37,7 +37,7 @@ class AppStore(Activity):
     _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
     _DEFAULT_ICON_PIPELINE = 'blurhash'
     _DEFAULT_HIDE_WIP = True
-    _SPECIAL_CATEGORIES = {"Work In Progress"}
+    _SPECIAL_CATEGORIES = {"Work In Progress", "Updates"}
 
     # Hardcoded list for now:
     backends = [
@@ -195,6 +195,8 @@ class AppStore(Activity):
                 label.remove_flag(lv.obj.FLAG.HIDDEN)
             else:
                 label.add_flag(lv.obj.FLAG.HIDDEN)
+        if self._data_loaded:
+            self._update_category_dropdown()
 
     def _update_all_click(self, event):
         try:
@@ -307,6 +309,8 @@ class AppStore(Activity):
         self.refresh_list()
 
     def _category_changed(self, event):
+        if getattr(self, "_rebuilding_dropdown", False):
+            return
         idx = self.category_dropdown.get_selected()
         self._selected_category = self._category_options[idx] if idx > 0 else None
         self.create_apps_list()
@@ -325,20 +329,31 @@ class AppStore(Activity):
         top_cats = []
         if self._wip_apps:
             top_cats.append("Work In Progress")
+        top_cats.append("Updates")
         self._category_options = ["All Categories"] + top_cats + sorted_cats
         if "Adult" in cat_counts:
             self._category_options.append("Adult")
         display = ["All Categories (%d)" % total]
         for cat_name in top_cats:
-            display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
+            if cat_name == "Work In Progress":
+                display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
+            elif cat_name == "Updates":
+                try:
+                    from appstore_core import AppUpdateManager
+                    n_updates = len(AppUpdateManager.get_instance().updatable_apps or [])
+                except Exception:
+                    n_updates = 0
+                display.append("%s (%d)" % (cat_name, n_updates))
         for cat_name in sorted_cats:
             display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
         if "Adult" in cat_counts:
             display.append("Adult (%d)" % cat_counts["Adult"])
         selected = self.category_dropdown.get_selected()
+        self._rebuilding_dropdown = True
         self.category_dropdown.set_options("\n".join(display))
         if selected < len(self._category_options):
             self.category_dropdown.set_selected(selected)
+        self._rebuilding_dropdown = False
 
     def _icon_pipeline_changed(self, new_value):
         self._icon_pipeline = new_value
@@ -469,10 +484,19 @@ class AppStore(Activity):
         self._update_labels = {}
         if __debug__: logger.debug("create_apps_list iterating")
         apps_to_show = self._wip_apps if self._selected_category == "Work In Progress" else self.apps
+        if self._selected_category == "Updates":
+            try:
+                from appstore_core import AppUpdateManager
+                updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
+            except Exception:
+                updatable_set = set()
         for app in apps_to_show:
             if self._selected_category:
                 if self._selected_category == "Work In Progress":
                     pass
+                elif self._selected_category == "Updates":
+                    if app.fullname not in updatable_set:
+                        continue
                 elif not app.category or AppStore._normalize_category(app.category) != self._selected_category:
                     continue
             if __debug__: logger.debug(app)

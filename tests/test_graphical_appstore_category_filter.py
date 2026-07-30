@@ -12,7 +12,7 @@ import unittest
 
 import lvgl as lv
 
-from mpos import AppManager
+from mpos import App, AppManager
 from mpos.ui.testing import (
     find_dropdown_widget,
     get_dropdown_options,
@@ -42,12 +42,25 @@ def _count_list_items():
     return 0
 
 
+def _get_appstore_activity():
+    import mpos.ui
+    if not mpos.ui.screen_stack:
+        return None
+    activity, _, _, _ = mpos.ui.screen_stack[-1]
+    return activity
+
+
 class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
 
     def setUp(self):
         AppManager.refresh_apps()
 
     def tearDown(self):
+        try:
+            from appstore_core import AppUpdateManager
+            AppUpdateManager.get_instance().updatable_apps = []
+        except Exception:
+            pass
         try:
             from mpos.ui import back_screen
             back_screen()
@@ -180,3 +193,104 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         reset_count = _count_list_items()
         self.assertEqual(reset_count, all_count,
                          f"Reset count {reset_count} != original {all_count}")
+
+    def test_updates_category_present(self):
+        """'Updates (N)' appears among early options with count format."""
+        AppManager.start_app("com.micropythonos.appstore")
+        wait_for_render(iterations=10)
+        activity = _get_appstore_activity()
+        self.assertIsNotNone(activity, "Could not get AppStore activity")
+
+        activity.apps = [
+            App("Test", "Me", "Desc", "Long", None, None, "com.test.x", "1.0", "test", []),
+        ]
+        activity._data_loaded = True
+        activity.create_apps_list()
+        activity._update_category_dropdown()
+
+        dropdown = find_dropdown_widget(lv.screen_active())
+        self.assertIsNotNone(dropdown, "Category dropdown should exist")
+        options = get_dropdown_options(dropdown)
+
+        update_options = [o for o in options if o.startswith("Updates")]
+        self.assertEqual(len(update_options), 1,
+                         "Should have exactly one 'Updates' option")
+        self.assertTrue(
+            update_options[0].startswith("Updates (") and update_options[0].endswith(")"),
+            "Should include count e.g. 'Updates (0)'")
+
+        update_idx = options.index(update_options[0])
+        self.assertTrue(update_idx < 5,
+                        "'Updates' should appear among special categories near the top")
+
+    def test_updates_category_filters_correctly(self):
+        """Selecting 'Updates' sets _selected_category; count matches updatable_apps."""
+        AppManager.start_app("com.micropythonos.appstore")
+        wait_for_render(iterations=10)
+        activity = _get_appstore_activity()
+        self.assertIsNotNone(activity, "Could not get AppStore activity")
+
+        activity.apps = [
+            App("Updatable", "Me", "Has update", "Long",
+                None, None, "com.test.updatable", "1.0", "test", []),
+            App("Current", "Me", "No update", "Long",
+                None, None, "com.test.current", "1.0", "test", []),
+        ]
+        activity._data_loaded = True
+
+        try:
+            from appstore_core import AppUpdateManager
+            um = AppUpdateManager.get_instance()
+            um.updatable_apps = [{"fullname": "com.test.updatable"}]
+        except Exception:
+            pass
+
+        activity.create_apps_list()
+        activity._update_category_dropdown()
+
+        dropdown = find_dropdown_widget(lv.screen_active())
+        self.assertIsNotNone(dropdown, "Should have dropdown")
+
+        # Verify count matches updatable_apps
+        options = get_dropdown_options(dropdown)
+        update_opt = [o for o in options if o.startswith("Updates")][0]
+        self.assertEqual(update_opt, "Updates (1)",
+                         "Count should match updatable_apps length")
+
+        # Select "Updates" category
+        result = select_dropdown_option_by_text(dropdown, "Updates")
+        self.assertTrue(result, "Should select 'Updates'")
+        wait_for_render(iterations=10)
+
+        # Trigger _category_changed manually if event was deferred
+        if activity._selected_category is None:
+            activity._category_changed(None)
+        wait_for_render(iterations=10)
+
+        self.assertEqual(activity._selected_category, "Updates",
+                         "Should set _selected_category to 'Updates'")
+
+        # Clear updatable_apps and verify count drops to 0
+        try:
+            from appstore_core import AppUpdateManager
+            AppUpdateManager.get_instance().updatable_apps = []
+        except Exception:
+            pass
+        activity._update_category_dropdown()
+        options = get_dropdown_options(dropdown)
+        update_opt = [o for o in options if o.startswith("Updates")][0]
+        self.assertEqual(update_opt, "Updates (0)",
+                         "Count should drop to 0 after clearing updates")
+
+        # Reset to "All Categories"
+        result = select_dropdown_option_by_text(dropdown, "All Categories")
+        self.assertTrue(result, "Should reset to 'All Categories'")
+        wait_for_render(iterations=10)
+
+        # Trigger _category_changed manually if event was deferred
+        if activity._selected_category is not None:
+            activity._category_changed(None)
+        wait_for_render(iterations=10)
+
+        self.assertIsNone(activity._selected_category,
+                          "Should reset _selected_category to None")
