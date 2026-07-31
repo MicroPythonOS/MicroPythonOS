@@ -9,6 +9,7 @@ import argparse
 import html
 import json
 import os
+import re
 import sys
 
 
@@ -46,6 +47,7 @@ details[open] > summary::before { content: '- '; }
 .source-table tr:hover td { background: inherit; }
 .ln { color: #555; text-align: right; padding-right: 10px; user-select: none; min-width: 40px; width: 40px; }
 .ln .hc { font-size: 10px; color: #444; }
+.nocode { color: #444; }
 .uncovered { background: rgba(244, 67, 54, 0.18); }
 .covered-1 { background: rgba(76, 175, 80, 0.12); }
 .covered-2 { background: rgba(76, 175, 80, 0.24); }
@@ -53,6 +55,25 @@ details[open] > summary::before { content: '- '; }
 .covered-4 { background: rgba(76, 175, 80, 0.60); }
 
 """  # noqa: E501
+
+
+_DOCSTRING_RE = re.compile(r'"""|\'\'\'')
+
+
+def _classify_line(line, hits):
+    stripped = line.lstrip()
+    if not stripped or stripped.startswith("#"):
+        return "nocode"
+    m = _DOCSTRING_RE.search(line)
+    if m:
+        delim = m.group()
+        rest = line[m.end():]
+        if delim not in rest:
+            return "nocode"
+        before = line[:m.start()].strip()
+        if not before or before.startswith("#"):
+            return "nocode"
+    return _class_for_hits(hits)
 
 
 def _class_for_hits(hits):
@@ -162,9 +183,20 @@ def generate(data, out_file=None):
         source_lines = _read_source(fn)
         if source_lines:
             parts.append('<table class="source-table">')
+            in_docstring = None
             for i, line in enumerate(source_lines, 1):
                 hits = lines_hit.get(str(i), 0)
-                cls = _class_for_hits(hits)
+                if in_docstring:
+                    if in_docstring in line:
+                        in_docstring = None
+                    cls = "nocode"
+                else:
+                    cls = _classify_line(line, hits)
+                    if cls == "nocode":
+                        for delim in ('"""', "'''"):
+                            if delim in line and delim not in line.split(delim, 1)[1]:
+                                in_docstring = delim
+                                break
                 hc_str = " <span class='hc'>{}</span>".format(hits) if hits > 0 else ""
                 parts.append(
                     '<tr class="{}"><td class="ln">{}{}</td><td>{}</td></tr>'.format(
