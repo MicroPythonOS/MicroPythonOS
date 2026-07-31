@@ -199,7 +199,7 @@ class AppStore(Activity):
                 label.remove_flag(lv.obj.FLAG.HIDDEN)
             else:
                 label.add_flag(lv.obj.FLAG.HIDDEN)
-        if self._data_loaded:
+        if getattr(self, '_data_loaded', False):
             self._update_category_dropdown()
 
     def _update_all_click(self, event):
