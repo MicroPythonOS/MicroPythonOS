@@ -6,6 +6,7 @@ Builtin Apps:
 - OSUpdate: improve update progress UI
 
 OS:
+- App: support multiple categories in MANIFEST.JSON (`"categories"` array), normalize to title-case `self.categories` list with `category` property for backward compat
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
 
 Development:

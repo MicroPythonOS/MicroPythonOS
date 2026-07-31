@@ -30,7 +30,7 @@ class App:
         self.download_url = download_url
         self.fullname = fullname
         self.version = version
-        self.category = category
+        self.categories = App._normalize_categories(category)
         self.activities = activities or []
         self.services = services or []
         self.installed_path = installed_path
@@ -41,8 +41,12 @@ class App:
         if self.fullname != "Unknown" and self.installed_path:
             self._load_icon_data()
 
+    @property
+    def category(self):
+        return self.categories[0] if self.categories else ""
+
     def __str__(self):
-        return f"App({self.name}, version {self.version}, {self.category})"
+        return f"App({self.name}, version {self.version}, {self.categories})"
 
     def _load_icon_data(self):
         icon_name = "icon_64x64.png"
@@ -84,7 +88,7 @@ class App:
         return None
 
     def is_valid_launcher(self):
-        return self.category == "launcher" and self.main_launcher_activity
+        return "Launcher" in self.categories and self.main_launcher_activity
 
     @classmethod
     def from_manifest(cls, appdir):
@@ -107,6 +111,13 @@ class App:
                 deprecated_path,
             )
 
+        if "categories" in data:
+            raw_category = data["categories"]
+        elif "category" in data:
+            raw_category = data["category"]
+        else:
+            raw_category = default.category
+
         return cls(
             name=data.get("name", default.name),
             publisher=data.get("publisher", default.publisher),
@@ -116,11 +127,23 @@ class App:
             download_url=data.get("download_url", default.download_url),
             fullname=data.get("fullname", default.fullname),
             version=data.get("version", default.version),
-            category=data.get("category", default.category),
+            category=raw_category,
             activities=data.get("activities", default.activities),
             services=data.get("services", default.services),
             installed_path=appdir,
         )
+
+    @classmethod
+    def _normalize_categories(cls, category):
+        if isinstance(category, list):
+            return [cls._normalize_category(c) for c in category]
+        if category:
+            return [cls._normalize_category(category)]
+        return []
+
+    @staticmethod
+    def _normalize_category(category):
+        return category[0].upper() + category[1:].lower()
 
     @classmethod
     def _try_load_icon_data(self, icon_path):

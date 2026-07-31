@@ -41,7 +41,7 @@ class Launcher(Activity):
 
         current_apps = []
         for app in AppManager.get_app_list():
-            if app.category == "launcher":
+            if "Launcher" in app.categories:
                 continue
             current_apps.append((app.name, app.installed_path))
 
@@ -76,7 +76,7 @@ class Launcher(Activity):
         iconcont_height = icon_size + label_height
 
         for app in AppManager.get_app_list():
-            if app.category == "launcher" or (app.fullname != "com.micropythonos.settings.wifi" and app.fullname.startswith("com.micropythonos.settings.")):
+            if "Launcher" in app.categories or (app.fullname != "com.micropythonos.settings.wifi" and app.fullname.startswith("com.micropythonos.settings.")):
                 # Ignore launchers and MPOS settings (except wifi)
                 continue
 

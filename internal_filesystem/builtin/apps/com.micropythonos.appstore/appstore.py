@@ -325,8 +325,7 @@ class AppStore(Activity):
         cat_counts = {}
         total = 0
         for app in self.apps:
-            if app.category:
-                cat = AppStore._normalize_category(app.category)
+            for cat in app.categories:
                 cat_counts[cat] = cat_counts.get(cat, 0) + 1
             total += 1
         sorted_cats = [c for c in sorted(cat_counts.keys()) if c != "Adult" and c not in AppStore._SPECIAL_CATEGORIES]
@@ -505,7 +504,7 @@ class AppStore(Activity):
                 elif self._selected_category == "Updates":
                     if app.fullname not in updatable_set:
                         continue
-                elif not app.category or AppStore._normalize_category(app.category) != self._selected_category:
+                elif not app.categories or self._selected_category not in app.categories:
                     continue
             if __debug__: logger.debug(app)
             item = self.apps_list.add_button(None, "")
@@ -780,11 +779,7 @@ class AppStore(Activity):
         except Exception:
             if __debug__: logger.debug("could not find icon_map 64x64 url")
         blur_hash = bhapp.get("blur_hash")
-        category = None
-        try:
-            category = bhapp.get("categories", [None])[0]
-        except Exception:
-            if __debug__: logger.debug("could not parse category")
+        category = bhapp.get("categories")
         return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash)
 
     @staticmethod
@@ -803,10 +798,6 @@ class AppStore(Activity):
     @staticmethod
     def backend_pref_string_to_backend(string):
         return string.split(",")
-
-    @staticmethod
-    def _normalize_category(category):
-        return category[0].upper() + category[1:].lower()
 
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):
