@@ -94,14 +94,41 @@ def _extract_coverage(out_bytes):
         return {}
 
 
-def _count_file_lines(relpath):
-    """Read source file from FS_ROOT and return line count."""
+def _count_code_lines(relpath):
     path = os.path.join(FS_ROOT, relpath)
     try:
         with open(path) as f:
-            return sum(1 for _ in f)
+            lines = f.readlines()
     except (OSError, IOError):
         return 0
+    count = 0
+    in_docstring = None
+    for line in lines:
+        stripped = line.lstrip()
+        if in_docstring:
+            if in_docstring in line:
+                in_docstring = None
+            continue
+        if not stripped or stripped.startswith("#"):
+            continue
+        for delim in ('"""', "'''"):
+            idx = line.find(delim)
+            if idx == -1:
+                continue
+            rest = line[idx + 3:]
+            if delim in rest:
+                before = line[:idx].strip()
+                if before and not before.startswith("#"):
+                    count += 1
+                break
+            in_docstring = delim
+            before = line[:idx].strip()
+            if before and not before.startswith("#"):
+                count += 1
+            break
+        else:
+            count += 1
+    return count
 
 
 def _load_coverage(path):
@@ -136,7 +163,7 @@ def _compute_stats(data):
     total_covered = 0
     files = data.get("files", {})
     for fn, info in files.items():
-        real_lines = _count_file_lines(fn)
+        real_lines = _count_code_lines(fn)
         if real_lines == 0:
             continue
         info["total_lines"] = real_lines

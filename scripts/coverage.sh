@@ -7,7 +7,7 @@
 #   ./scripts/coverage.sh audio        # audio cluster only
 #   ./scripts/coverage.sh apps         # app management cluster only
 #   ./scripts/coverage.sh util         # utility cluster only
-set -euo pipefail
+set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TEST_RUNNER="$REPO_ROOT/scripts/test_runner.py"
