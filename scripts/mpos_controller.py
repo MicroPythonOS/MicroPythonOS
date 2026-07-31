@@ -102,6 +102,7 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
     if coverage:
         code += "import mpos.coverage\n"
         code += "mpos.coverage.start()\n"
+        code += "_cov_stop = mpos.coverage.stop\n"
     code += ("sys.modules.pop('_runner_test', None)\n"
              "import _runner_test as _test_mod\n")
     code += "import unittest\n"
@@ -109,11 +110,9 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
     code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     if coverage:
-        code += "import mpos.coverage\n"
-        code += "mpos.coverage.stop()\n"
-        code += "import ujson as _cov_json\n"
         code += ("_cov_rpt = {}\n"
                  "try:\n"
+                 "    _cov_stop()\n"
                  "    _cov_rpt = mpos.coverage._tracker.report_json()\n"
                  "except Exception:\n"
                  "    pass\n")
