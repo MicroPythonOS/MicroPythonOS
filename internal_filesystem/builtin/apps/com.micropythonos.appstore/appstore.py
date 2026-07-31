@@ -101,7 +101,7 @@ class AppStore(Activity):
         self.category_dropdown.set_options("All Categories")
         self.category_dropdown.add_event_cb(self._category_changed, lv.EVENT.VALUE_CHANGED, None)
         self._category_options = ["All Categories"]
-        self._selected_category = None
+        self._selected_category = self.getIntent().extras.get("category")
 
         # ---- "Update N App(s)" button (hidden until updates are found) ----
         self.update_all_button = lv.button(self.main_screen)
@@ -352,11 +352,14 @@ class AppStore(Activity):
             display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
         if "Adult" in cat_counts:
             display.append("Adult (%d)" % cat_counts["Adult"])
-        selected = self.category_dropdown.get_selected()
         self._rebuilding_dropdown = True
         self.category_dropdown.set_options("\n".join(display))
-        if selected < len(self._category_options):
-            self.category_dropdown.set_selected(selected)
+        if self._selected_category and self._selected_category in self._category_options:
+            self.category_dropdown.set_selected(self._category_options.index(self._selected_category))
+        else:
+            selected = self.category_dropdown.get_selected()
+            if selected < len(self._category_options):
+                self.category_dropdown.set_selected(selected)
         self._rebuilding_dropdown = False
 
     def _icon_pipeline_changed(self, new_value):

@@ -405,7 +405,7 @@ class AppUpdateManager:
                 title="App updates available",
                 text=text,
                 priority=Notification.PRIORITY_DEFAULT,
-                intent=Intent(app_fullname="com.micropythonos.appstore"),
+                intent=Intent(app_fullname="com.micropythonos.appstore").putExtra("category", "Updates"),
                 auto_cancel=True,
                 app_fullname="com.micropythonos.appstore",
             )
