@@ -1,59 +1,41 @@
 import unittest
-import sys
-
-
-class MockLVGL:
-    class obj:
-        FLAG_HIDDEN = 1
-
-    class label:
-        pass
-
-    class textarea:
-        pass
-
-    @staticmethod
-    def group_get_default():
-        return None
-
-
-def _mock_lvgl():
-    lv_mock = type("module", (), {
-        "obj": MockLVGL.obj,
-        "label": MockLVGL.label,
-        "textarea": MockLVGL.textarea,
-        "group_get_default": MockLVGL.group_get_default,
-    })()
-    sys.modules["lvgl"] = lv_mock
+from mpos import clipboard
 
 
 class TestClipboard(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        _mock_lvgl()
-
     def setUp(self):
-        import mpos.clipboard
-        mpos.clipboard.copied = None
+        clipboard.copied = None
 
-    def test_get_returns_none_initially(self):
-        from mpos.clipboard import get
-        self.assertIsNone(get())
+    def test_initial_none(self):
+        clipboard.copied = None
+        self.assertIsNone(clipboard.get())
 
-    def test_add_then_get_returns_value(self):
-        from mpos.clipboard import add, get
-        add("hello world")
-        self.assertEqual(get(), "hello world")
+    def test_add_and_get_string(self):
+        clipboard.add("hello world")
+        self.assertEqual(clipboard.get(), "hello world")
+
+    def test_add_and_get_int(self):
+        clipboard.add(42)
+        self.assertEqual(clipboard.get(), 42)
+
+    def test_add_and_get_list(self):
+        data = [1, 2, 3]
+        clipboard.add(data)
+        self.assertEqual(clipboard.get(), data)
 
     def test_add_overwrites_previous(self):
-        from mpos.clipboard import add, get
-        add("first")
-        add("second")
-        self.assertEqual(get(), "second")
+        clipboard.add("first")
+        self.assertEqual(clipboard.get(), "first")
+        clipboard.add("second")
+        self.assertEqual(clipboard.get(), "second")
 
-    def test_add_empty_string(self):
-        from mpos.clipboard import add, get
-        add("")
-        self.assertEqual(get(), "")
+    def test_add_none(self):
+        clipboard.add("something")
+        self.assertEqual(clipboard.get(), "something")
+        clipboard.add(None)
+        self.assertIsNone(clipboard.get())
 
+    def test_get_returns_copied_value(self):
+        clipboard.copied = "direct"
+        self.assertEqual(clipboard.get(), "direct")

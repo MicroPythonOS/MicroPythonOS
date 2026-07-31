@@ -7,30 +7,32 @@ class TestDeviceManager(unittest.TestCase):
     def setUp(self):
         DeviceManager._i2c_buses = []
 
-    def test_get_bus_empty_returns_none(self):
-        self.assertIsNone(DeviceManager.getBus("i2c"))
+    def test_register_bus_adds_to_list(self):
+        bus = object()
+        DeviceManager.registerBus("i2c", i2c_bus=bus)
+        self.assertEqual(len(DeviceManager._i2c_buses), 1)
+        self.assertIs(DeviceManager._i2c_buses[0], bus)
 
-    def test_register_and_get_bus(self):
-        bus = {"sda": 21, "scl": 22}
-        DeviceManager.registerBus("i2c", bus)
-        self.assertIs(DeviceManager.getBus("i2c"), bus)
+    def test_register_bus_ignores_non_i2c(self):
+        bus = object()
+        DeviceManager.registerBus("spi", i2c_bus=bus)
+        self.assertEqual(len(DeviceManager._i2c_buses), 0)
 
-    def test_get_bus_returns_first_registered(self):
-        bus1 = {"sda": 21}
-        bus2 = {"sda": 22}
-        DeviceManager.registerBus("i2c", bus1)
-        DeviceManager.registerBus("i2c", bus2)
-        self.assertIs(DeviceManager.getBus("i2c"), bus1)
+    def test_register_bus_ignores_none_bus(self):
+        DeviceManager.registerBus("i2c", i2c_bus=None)
+        self.assertEqual(len(DeviceManager._i2c_buses), 0)
 
-    def test_register_non_i2c_ignored(self):
-        DeviceManager.registerBus("spi", "spi_bus")
-        self.assertIsNone(DeviceManager.getBus("i2c"))
+    def test_get_bus_returns_first(self):
+        bus1 = object()
+        bus2 = object()
+        DeviceManager.registerBus("i2c", i2c_bus=bus1)
+        DeviceManager.registerBus("i2c", i2c_bus=bus2)
+        self.assertIs(DeviceManager.getBus(), bus1)
 
-    def test_register_none_bus_ignored(self):
-        DeviceManager.registerBus("i2c", None)
-        self.assertIsNone(DeviceManager.getBus("i2c"))
+    def test_get_bus_returns_none_when_empty(self):
+        self.assertIsNone(DeviceManager.getBus())
 
-    def test_get_unknown_bus_type_returns_none(self):
-        DeviceManager.registerBus("i2c", {"bus": 1})
+    def test_get_bus_returns_none_for_non_i2c(self):
+        bus = object()
+        DeviceManager.registerBus("i2c", i2c_bus=bus)
         self.assertIsNone(DeviceManager.getBus("spi"))
-
