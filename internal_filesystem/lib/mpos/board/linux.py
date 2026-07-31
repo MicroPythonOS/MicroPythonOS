@@ -125,6 +125,7 @@ input_i2s_pins = {
 }
 
 AudioManager.add(AudioManager.Output("speaker", "i2s", i2s_pins=output_i2s_pins))
+AudioManager.add(AudioManager.Output("buzzer", "buzzer", buzzer_pin=-1))
 AudioManager.add(AudioManager.Input("mic", "i2s", i2s_pins=input_i2s_pins))
 
 # === LED HARDWARE ===

@@ -19,6 +19,21 @@ disable_native_viper() {
 	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
 }
 
+restore_native_viper() {
+	# Reverse of disable_native_viper: uncomment the decorators it commented
+	# out, so a desktop/web build doesn't leave every native/viper-using file
+	# in the working tree modified. Invoked via an EXIT trap so the restore
+	# also runs when the build fails or is interrupted.
+	echo "Restoring @micropython.native/@micropython.viper decorators..."
+	find -L "$1" -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+		if [ -L "$f" ]; then
+			continue
+		fi
+		sed -i.bak -E 's/^([[:space:]]*)#(@micropython\.(native|viper)[[:space:]]*)$/\1\2/' "$f"
+	done
+	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
+}
+
 apply_patch() {
 	# $1 = dir to patch in, $2 = patch file. Fails the build when a required
 	# patch neither applies forward nor is already applied, instead of
@@ -210,6 +225,11 @@ if [ "$target" == "unix" -o "$target" == "macOS" -o "$target" == "web" ]; then
 	# Native/viper decorators are unsupported by the WASM/native emitter used for
 	# the web port, so disable them before freezing.
 	disable_native_viper "$codebasedir/internal_filesystem"
+	# The decorators are baked out of the frozen bytecode above; once the
+	# build ends the source tree should go back to normal. EXIT trap covers
+	# success, build failure, and CTRL-C — without this, every desktop/web
+	# build left the native/viper-using files modified in git.
+	trap 'restore_native_viper "$codebasedir/internal_filesystem"' EXIT
 fi
 
 if [ ! -f "$codebasedir"/lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross ]; then
@@ -315,8 +335,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
+	ccache_arg=""
+	[ "${MPOS_CCACHE:-0}" = "1" ] && ccache_arg="--ccache"
 	set -x
-	python3 make.py $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
 		CONFIG_ADC_MIC_TASK_CORE=1 \
@@ -542,6 +564,10 @@ elif [ "$target" == "web" ]; then
 	# /data is recreated empty by IDBFS at boot; drop the preloaded copy so it
 	# does not collide with the persistent mount.
 	rm -rf "$staged_fs"/data
+	staged_bundled_data="$codebasedir"/web/.preload_bundled_data
+	rm -rf "$staged_bundled_data"
+	mkdir -p "$staged_bundled_data"
+	cp -a "$codebasedir"/internal_filesystem_data/. "$staged_bundled_data"/
 
 	# The browser build disables native threading (MICROPY_PY_THREAD=0), so the
 	# C builtin `_thread` module is absent. MicroPythonOS imports `_thread`
@@ -639,7 +665,7 @@ elif [ "$target" == "web" ]; then
 	# The bundled demo apps are packaged separately at /.bundled_apps because
 	# /apps is a persistent IDBFS mount (see web/shell.html); they are seeded
 	# into /apps on first boot.
-	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --shell-file $shell_file"
+	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --preload-file $staged_bundled_data@/.bundled_data --shell-file $shell_file"
 
 	pushd "$codebasedir"/lvgl_micropython/
 	set -x

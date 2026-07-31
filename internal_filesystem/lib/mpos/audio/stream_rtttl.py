@@ -2,8 +2,10 @@
 # Ring Tone Text Transfer Language parser and player
 # Uses synchronous playback in a separate thread for non-blocking operation
 
+import asyncio
 import logging
 import math
+import os
 import time
 
 logger = logging.getLogger(__name__)
@@ -265,3 +267,162 @@ class RTTTLStream:
         if count < 0:
             count = 0
         self._repeat_count = count
+
+
+class WebRTTTLStream(RTTTLStream):
+    runs_async = True
+
+    @staticmethod
+    def _duty_for_volume(volume):
+        if volume <= 0:
+            return 0
+        volume = min(100, volume)
+        divider = 10
+        return int(
+            ((math.exp(volume / divider) - math.exp(0.1)) /
+             (math.exp(10) - math.exp(0.1)) * (32768 - 4)) + 4
+        )
+
+    async def _play_async(self):
+        try:
+            iteration = 0
+            while self._keep_running and iteration < self._repeat_count:
+                iteration += 1
+                self.tune_idx = 0
+                for frequency, duration_ms in self._notes():
+                    if not self._keep_running:
+                        break
+                    duty = self._duty_for_volume(self.volume)
+                    if frequency > 0:
+                        self.buzzer.freq(int(frequency))
+                        self.buzzer.duty_u16(duty)
+                    await asyncio.sleep_ms(int(duration_ms * 0.9))
+                    self.buzzer.duty_u16(0)
+                    await asyncio.sleep_ms(int(duration_ms * 0.1))
+            if self.on_complete:
+                self.on_complete("Finished: %s" % self.name)
+        except Exception as e:
+            logger.error("Error: %s", e)
+            if self.on_complete:
+                self.on_complete("Error: %s" % e)
+        finally:
+            try:
+                self.buzzer.duty_u16(0)
+            except RuntimeError:
+                pass
+            self._is_playing = False
+
+    def play(self):
+        self._is_playing = True
+        asyncio.get_event_loop().create_task(self._play_async())
+
+
+class DesktopRTTTLStream(RTTTLStream):
+    def __init__(self, rtttl_string, stream_type, volume, on_complete):
+        super().__init__(rtttl_string, stream_type, volume, None, on_complete)
+        self._wav_stream = None
+        self._temp_path = "/tmp/mpos_rtttl_%d.wav" % id(self)
+
+    @staticmethod
+    def _write_samples(file, frequency, sample_count, sample_rate):
+        chunk_samples = 1024
+        phase = 0.0
+        remaining = sample_count
+        while remaining > 0:
+            count = min(chunk_samples, remaining)
+            data = bytearray(count * 2)
+            for index in range(count):
+                value = 12000 if phase < sample_rate / 2 else -12000
+                value &= 0xFFFF
+                data[index * 2] = value & 0xFF
+                data[index * 2 + 1] = value >> 8
+                phase += frequency
+                if phase >= sample_rate:
+                    phase -= sample_rate
+            file.write(data)
+            remaining -= count
+
+    @staticmethod
+    def _write_silence(file, sample_count):
+        chunk = bytes(2048)
+        remaining = sample_count * 2
+        while remaining > 0:
+            count = min(len(chunk), remaining)
+            file.write(chunk[:count])
+            remaining -= count
+
+    def _render(self):
+        sample_rate = 22050
+        data_size = 0
+        with open(self._temp_path, "wb") as file:
+            file.write(b"RIFF\x00\x00\x00\x00WAVEfmt ")
+            file.write((16).to_bytes(4, "little"))
+            file.write((1).to_bytes(2, "little"))
+            file.write((1).to_bytes(2, "little"))
+            file.write(sample_rate.to_bytes(4, "little"))
+            file.write((sample_rate * 2).to_bytes(4, "little"))
+            file.write((2).to_bytes(2, "little"))
+            file.write((16).to_bytes(2, "little"))
+            file.write(b"data\x00\x00\x00\x00")
+
+            iteration = 0
+            while self._keep_running and iteration < self._repeat_count:
+                iteration += 1
+                self.tune_idx = 0
+                for frequency, duration_ms in self._notes():
+                    if not self._keep_running:
+                        break
+                    tone_samples = int(sample_rate * duration_ms * 0.9 / 1000)
+                    silence_samples = int(sample_rate * duration_ms * 0.1 / 1000)
+                    if frequency > 0:
+                        self._write_samples(file, frequency, tone_samples, sample_rate)
+                    else:
+                        self._write_silence(file, tone_samples)
+                    self._write_silence(file, silence_samples)
+                    data_size += (tone_samples + silence_samples) * 2
+
+            file.seek(4)
+            file.write((data_size + 36).to_bytes(4, "little"))
+            file.seek(40)
+            file.write(data_size.to_bytes(4, "little"))
+
+    def play(self):
+        from mpos.audio.stream_wav import WAVStream
+
+        self._is_playing = True
+        try:
+            self._render()
+            if not self._keep_running:
+                if self.on_complete:
+                    self.on_complete("Finished: %s" % self.name)
+                return
+            self._wav_stream = WAVStream(
+                file_path=self._temp_path,
+                stream_type=self.stream_type,
+                volume=self.volume,
+                i2s_pins={"ws": 0, "sd": 0},
+                on_complete=None,
+            )
+            self._wav_stream.play()
+            if self.on_complete:
+                self.on_complete("Finished: %s" % self.name)
+        except Exception as e:
+            logger.error("Error: %s", e)
+            if self.on_complete:
+                self.on_complete("Error: %s" % e)
+        finally:
+            self._is_playing = False
+            try:
+                os.remove(self._temp_path)
+            except OSError:
+                pass
+
+    def stop(self):
+        self._keep_running = False
+        if self._wav_stream:
+            self._wav_stream.stop()
+
+    def set_volume(self, vol):
+        self.volume = vol
+        if self._wav_stream:
+            self._wav_stream.set_volume(vol)

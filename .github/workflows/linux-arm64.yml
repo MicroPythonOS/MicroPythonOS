@@ -9,56 +9,54 @@ on:
       - main
   workflow_dispatch: # allow manual workflow starts
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_NOHASHDIR: true
 
     steps:
       - name: Checkout repository with submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
-      - name: Install lvgl_micropython dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            libffi-dev \
-            pkg-config \
-            cmake \
-            ninja-build \
-            gnome-desktop-testing \
-            libasound2-dev \
-            libpulse-dev \
-            libaudio-dev \
-            libjack-dev \
-            libsndio-dev \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxcursor-dev \
-            libxfixes-dev \
-            libxi-dev \
-            libxss-dev \
-            libxkbcommon-dev \
-            libdrm-dev \
-            libgbm-dev \
-            libgl1-mesa-dev \
-            libgles2-mesa-dev \
-            libegl1-mesa-dev \
-            libdbus-1-dev \
-            libibus-1.0-dev \
-            libudev-dev \
-            fcitx-libs-dev \
-            libpipewire-0.3-dev \
-            libwayland-dev \
-            libdecor-0-dev
+      - name: Install and cache APT dependencies
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: >-
+            build-essential libffi-dev pkg-config cmake ninja-build ccache
+            gnome-desktop-testing libasound2-dev libpulse-dev libaudio-dev
+            libjack-dev libsndio-dev libx11-dev libxext-dev libxrandr-dev
+            libxcursor-dev libxfixes-dev libxi-dev libxss-dev
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev
+            libgles2-mesa-dev libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev
+            libudev-dev fcitx-libs-dev libpipewire-0.3-dev libwayland-dev
+            libdecor-0-dev libv4l-dev
+          version: apt-v2-ubuntu-24.04-${{ runner.arch }}
+          execute_install_scripts: true
 
-      - name: Install additional MicroPythonOS dependencies
+      - name: Restore compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-arm64-${{ github.sha }}
+          restore-keys: |
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-arm64-
+
+      - name: Configure compiler cache
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libv4l-dev
+          echo "/usr/lib/ccache" >> "$GITHUB_PATH"
+          ccache --max-size 1G
+          ccache --zero-stats
 
       - name: Extract OS version
         id: version
@@ -73,7 +71,7 @@ jobs:
           cp lvgl_micropython/build/lvgl_micropy_unix lvgl_micropython/build/MicroPythonOS_arm64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
 
       - name: Upload built binary as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: MicroPythonOS_arm64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
           path: lvgl_micropython/build/MicroPythonOS_arm64_linux_${{ steps.version.outputs.OS_VERSION }}.elf
@@ -86,6 +84,10 @@ jobs:
       - name: Run unit tests on unix
         run: |
           ./scripts/test_runner.py
+
+      - name: Show compiler cache statistics
+        if: always()
+        run: ccache --show-stats
 
 
 

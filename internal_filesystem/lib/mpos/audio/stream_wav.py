@@ -2,6 +2,7 @@
 # Supports 8/16/24/32-bit PCM, mono+stereo, auto-upsampling.
 # Uses synchronous playback in a separate thread for non-blocking operation.
 
+import asyncio
 import logging
 import machine
 import micropython
@@ -127,6 +128,8 @@ class WAVStream:
         self._is_playing = False
         self._i2s = None
         self._mck_pwm = None
+        self._web_audio = False
+        self.runs_async = False
         self._progress_samples = 0
         self._total_samples = 0
         self._duration_ms = None
@@ -143,6 +146,13 @@ class WAVStream:
     def stop(self):
         """Stop playback."""
         self._keep_running = False
+        if self._web_audio:
+            try:
+                import _webio
+
+                _webio.audio_stop()
+            except ImportError:
+                pass
 
     def get_progress_percent(self):
         if self._total_samples <= 0:
@@ -390,6 +400,35 @@ class WAVStream:
             return 0
         return WAVStream._VOLUME_TO_SHIFT[volume]
 
+    async def _monitor_web_audio(self, webio):
+        start_ticks = time.ticks_ms()
+        try:
+            while self._keep_running:
+                await asyncio.sleep_ms(100)
+                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                if self._playback_rate:
+                    self._progress_samples = min(
+                        int(elapsed_ms / 1000.0 * self._playback_rate),
+                        self._total_samples
+                    )
+                if elapsed_ms >= (self._duration_ms or 0):
+                    break
+            if not self._keep_running:
+                webio.audio_stop()
+            if self.on_complete:
+                self.on_complete("Finished: %s" % self.file_path)
+        except Exception as e:
+            logger.error("Error: %s", e)
+            if self.on_complete:
+                self.on_complete("Error: %s" % e)
+        finally:
+            self._is_playing = False
+            if self.on_close:
+                try:
+                    self.on_close()
+                except Exception as e:
+                    logger.error("on_close failed: %s", e)
+
     # ----------------------------------------------------------------------
     #  Main playback routine
     # ----------------------------------------------------------------------
@@ -440,65 +479,78 @@ class WAVStream:
 
                 # Desktop (non-ESP32) audio playback branch
                 if sys.platform != "esp32":
-                    player = _detect_desktop_player()
-                    quoted = _shell_quote(self.file_path)
+                    webio = None
+                    try:
+                        import _webio
 
-                    if player is None:
-                        logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
-                        elapsed_ms = 0
-                        while self._keep_running:
-                            if self._duration_ms is None:
-                                break
-                            time.sleep_ms(100)
-                            elapsed_ms += 100
-                            if self._playback_rate:
-                                self._progress_samples = min(
-                                    int(elapsed_ms / 1000.0 * self._playback_rate),
-                                    self._total_samples
-                                )
-                            if elapsed_ms >= self._duration_ms:
-                                break
+                        webio = _webio
+                    except ImportError:
+                        pass
+
+                    if webio:
+                        self._web_audio = bool(webio.audio_play(self.file_path, self.volume))
+                        self.runs_async = True
+                        asyncio.get_event_loop().create_task(self._monitor_web_audio(webio))
                     else:
-                        # Record the backgrounded player's PID (shell $!) so we can
-                        # stop it precisely by PID instead of `pkill -f <path>`.
-                        pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
-                        qpid = _shell_quote(pid_file)
-                        if player == "afplay":
-                            cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
-                                max(0.0, min(1.0, self.volume / 100.0)),
-                                quoted,
-                                qpid
-                            )
-                        elif player == "ffplay":
-                            cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
-                                self.volume,
-                                quoted,
-                                qpid
-                            )
-                        elif player == "aplay":
-                            cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+                        player = _detect_desktop_player()
+                        quoted = _shell_quote(self.file_path)
+
+                        if player is None:
+                            logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
+                            elapsed_ms = 0
+                            while self._keep_running:
+                                if self._duration_ms is None:
+                                    break
+                                time.sleep_ms(100)
+                                elapsed_ms += 100
+                                if self._playback_rate:
+                                    self._progress_samples = min(
+                                        int(elapsed_ms / 1000.0 * self._playback_rate),
+                                        self._total_samples
+                                    )
+                                if elapsed_ms >= self._duration_ms:
+                                    break
                         else:
-                            cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
-
-                        os.system(cmd)
-
-                        start_ticks = time.ticks_ms()
-                        while self._keep_running:
-                            time.sleep_ms(100)
-                            elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                            if self._playback_rate:
-                                self._progress_samples = min(
-                                    int(elapsed_ms / 1000.0 * self._playback_rate),
-                                    self._total_samples
+                            # Record the backgrounded player's PID (shell $!) so we can
+                            # stop it precisely by PID instead of `pkill -f <path>`.
+                            pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
+                            qpid = _shell_quote(pid_file)
+                            if player == "afplay":
+                                cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
+                                    max(0.0, min(1.0, self.volume / 100.0)),
+                                    quoted,
+                                    qpid
                                 )
-                            if elapsed_ms >= (self._duration_ms or 0):
-                                break
+                            elif player == "ffplay":
+                                cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
+                                    self.volume,
+                                    quoted,
+                                    qpid
+                                )
+                            elif player == "aplay":
+                                cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+                            else:
+                                cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
 
-                        # Kill the player by its real PID on explicit stop; on natural
-                        # completion it has already exited, so just clean up the pid file.
-                        _stop_desktop_player(pid_file, not self._keep_running)
+                            os.system(cmd)
 
-                    if self.on_complete:
+                            start_ticks = time.ticks_ms()
+                            while self._keep_running:
+                                time.sleep_ms(100)
+                                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                                if self._playback_rate:
+                                    self._progress_samples = min(
+                                        int(elapsed_ms / 1000.0 * self._playback_rate),
+                                        self._total_samples
+                                    )
+                                if elapsed_ms >= (self._duration_ms or 0):
+                                    break
+
+                            # Kill the player by its real PID on explicit stop; on natural
+                            # completion it has already exited, so just clean up the pid file.
+                            _stop_desktop_player(pid_file, not self._keep_running)
+
+                    if not webio and self.on_complete:
                         self.on_complete("Finished: %s" % self.file_path)
                     return
 
@@ -680,22 +732,23 @@ class WAVStream:
                 self.on_complete(f"Error: {e}")
 
         finally:
-            self._is_playing = False
-            if self.on_close:
-                try:
-                    self.on_close()
-                except Exception as e:
-                    logger.error("on_close failed: %s", e)
-            if self._i2s:
-                if __debug__: logger.debug("Done playing, doing i2s deinit")
-                self._i2s.deinit() # disabling this does not fix the "play just once" issue
-                self._i2s = None
-            if self._mck_pwm:
-                try:
-                    if __debug__: logger.debug("Done playing, stopping MCLK PWM")
-                    self._mck_pwm.deinit()
-                finally:
-                    self._mck_pwm = None
+            if not self.runs_async:
+                self._is_playing = False
+                if self.on_close:
+                    try:
+                        self.on_close()
+                    except Exception as e:
+                        logger.error("on_close failed: %s", e)
+                if self._i2s:
+                    if __debug__: logger.debug("Done playing, doing i2s deinit")
+                    self._i2s.deinit() # disabling this does not fix the "play just once" issue
+                    self._i2s = None
+                if self._mck_pwm:
+                    try:
+                        if __debug__: logger.debug("Done playing, stopping MCLK PWM")
+                        self._mck_pwm.deinit()
+                    finally:
+                        self._mck_pwm = None
 
     def set_repeat(self, count):
         """Set total number of times to play the file."""
@@ -709,3 +762,10 @@ class WAVStream:
 
     def set_volume(self, vol):
         self.volume = vol
+        if self._web_audio:
+            try:
+                import _webio
+
+                _webio.audio_volume(vol)
+            except ImportError:
+                pass

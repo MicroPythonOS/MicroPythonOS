@@ -218,7 +218,7 @@
     // user-installed apps survive page reloads. The functions below run inside
     // the Emscripten runtime once `FS` exists (preRun / onRuntimeInitialized).
 
-    function copyRecursive(src, dst) {
+    function copyRecursive(src, dst, onlyMissing) {
       var entries = FS.readdir(src);
       for (var i = 0; i < entries.length; i++) {
         var name = entries[i];
@@ -233,10 +233,13 @@
         }
         if (FS.isDir(mode)) {
           try { FS.mkdir(d); } catch (e) {}
-          copyRecursive(s, d);
+          copyRecursive(s, d, onlyMissing);
         } else {
           // Regular files (and any symlink resolved by readFile).
           try {
+            if (onlyMissing) {
+              try { FS.stat(d); continue; } catch (e) {}
+            }
             FS.writeFile(d, FS.readFile(s));
           } catch (e) {
             console.error("seed copy failed for " + s + ":", e);
@@ -254,6 +257,12 @@
       try { FS.stat("/.bundled_apps"); } catch (e) { return; }
       copyRecursive("/.bundled_apps", "/apps");
       try { FS.writeFile(marker, "1"); } catch (e) {}
+      flushPersist();
+    }
+
+    function seedBundledData() {
+      try { FS.stat("/.bundled_data"); } catch (e) { return; }
+      copyRecursive("/.bundled_data", "/data", true);
       flushPersist();
     }
 
@@ -475,6 +484,7 @@
         // Seed bundled apps into /apps on first run (after preload + syncfs),
         // then start flushing writes back to IndexedDB periodically.
         try { seedBundledApps(); } catch (e) { console.error("seedBundledApps failed:", e); }
+        try { seedBundledData(); } catch (e) { console.error("seedBundledData failed:", e); }
         startPersistFlush();
       }
     };
