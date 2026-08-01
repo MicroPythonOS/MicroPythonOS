@@ -62,7 +62,7 @@ def _next_backoff(current, connected_ok, min_s, max_s=_RECONNECT_MAX_S):
     """Reset to min after a live connection closed, else grow toward max."""
     if connected_ok:
         return min_s
-    return min(current * 2, max_s)
+    return min(current * 3, max_s)
 
 # Queue for callback dispatching
 _callback_queue = ucollections.deque((), 100)  # Empty tuple, maxlen=100
@@ -282,13 +282,13 @@ class WebSocketApp:
         # Normalise the reconnect interval. ``True``/``None`` use a default;
         # a numeric value uses that many seconds; ``False``/0 disables it.
         if reconnect is True or reconnect is None:
-            reconnect_interval = 3
+            reconnect_interval = 4
         elif reconnect is False:
             reconnect_interval = 0
         elif isinstance(reconnect, (int, float)):
             reconnect_interval = reconnect
         else:
-            reconnect_interval = 3
+            reconnect_interval = 4
         _log_debug(f"Reconnect interval set to {reconnect_interval}s")
 
         # Start callback processing task
@@ -304,7 +304,7 @@ class WebSocketApp:
         # where a relay that accepts then drops the socket returns without
         # raising; connected_ok resets the delay after a live session so an
         # unreachable relay backs off instead of hammering the pool (#191).
-        backoff = reconnect_interval or 3
+        backoff = reconnect_interval or 4
         while self.running:
             _log_debug("Main loop iteration: self.running=True")
             if not _network_available():
@@ -313,7 +313,7 @@ class WebSocketApp:
                         "Skipping connection attempt for %s: no network",
                         self.url,
                     )
-                await asyncio.sleep(reconnect_interval or 3)
+                await asyncio.sleep(reconnect_interval or 4)
                 continue
             connected_ok = False
             try:

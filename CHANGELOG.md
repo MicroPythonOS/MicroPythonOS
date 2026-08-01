@@ -2,12 +2,13 @@ Future release (next version)
 =====
 
 Builtin Apps:
-- AppStore: add special 'Updates' category
+- AppStore: add special 'Updates' category, opened by default when update notification is pressed
 - OSUpdate: improve update progress UI
 
 OS:
-- App: support multiple categories in MANIFEST.JSON (`"categories"` array), normalize to title-case `self.categories` list with `category` property for backward compat
+- App: support multiple categories in MANIFEST.JSON (`"categories"` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
+- aiowebsocket: reduce reconnect frequency to reduce performance impact
 
 Development:
 - build_mpos.sh: restore @micropython.native/@micropython.viper decorators after desktop/web builds (via EXIT trap) so local builds no longer leave the working tree modified
