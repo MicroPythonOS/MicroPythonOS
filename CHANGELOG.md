@@ -17,6 +17,8 @@ Development:
 - Add `make build-mpos-unix-coverage` target
 - Add HTML coverage report with expandable inline source (scripts/coverage_report.py)
 - Add scripts/coverage.sh for automated coverage runs with clustered/partial test support
+- Add scripts/cyclonatic_complexity.sh for per-function cyclomatic complexity reports
+- WAVStream: refactor play() to reduce cyclomatic complexity (69→42) by extracting _read_decode_chunk() and _play_desktop()
 
 0.16.0
 ======
