@@ -2035,14 +2035,22 @@ class SX126X:
         timeout=5000
     ):
     
-        self.cs.value(0)
-
+        # Wait for BUSY to clear *before* selecting the chip. On boards where
+        # this SPI bus is shared with other devices (e.g. a display), holding
+        # CS low for the whole busy-wait (which can take up to `timeout`,
+        # normally 5s, and runs twice per command -- see below) needlessly
+        # widens the window in which another device's traffic on the shared
+        # bus can be shifted into this chip while it's selected, corrupting
+        # the transaction or leaving the chip waiting on a partial command.
+        # Checking BUSY first means CS is only held low for the actual
+        # (short) transfer.
         start = time.ticks_ms()
         while self.gpio.value():
             yield_()
             if time.ticks_diff(time.ticks_ms(), start) >= timeout:
-                self.cs.value(1)
                 return _ERR_SPI_CMD_TIMEOUT
+
+        self.cs.value(0)
 
         for i in range(cmdLen):
             self.spi.write(bytes([cmd[i]]))
