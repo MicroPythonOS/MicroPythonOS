@@ -344,7 +344,7 @@ def custom_exception_handler(e):
 
 # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate but still okay)
 # 1ms gives highest framerate on esp32-s3's but might has side effects: RMT (used for IR RX) timing is off
-def change_task_handler(period_ms=1):
+def change_task_handler(period_ms=2):
     import mpos.ui
     if hasattr(mpos.ui, "task_handler"):
         mpos.ui.task_handler.disable() # this fixes the decode of the real remote!
