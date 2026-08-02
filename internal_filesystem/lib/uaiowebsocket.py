@@ -320,7 +320,11 @@ class WebSocketApp:
                 await self._connect_and_run() # keep waiting for it, until finished
                 connected_ok = True
             except Exception as e:
-                _log_error(f"_async_main's await self._connect_and_run() for {self.url} got exception: {e}")
+                # ponytail: INFO not ERROR — background reconnect failures pollute the
+                # REPL with ERROR output, which breaks file transfers and other
+                # REPL-driven tooling. The reconnection loop handles these transient
+                # failures silently at the protocol level.
+                logger.info("_async_main's await self._connect_and_run() for %s got exception: %s", self.url, e)
                 self.has_errored = True
                 _run_callback(self.on_error, self, e)
             if not self.running:

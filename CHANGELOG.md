@@ -9,6 +9,7 @@ OS:
 - App: support multiple categories in MANIFEST.JSON (`"categories"` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
 - aiowebsocket: reduce reconnect frequency to reduce performance impact
+- nostr: log background relay connection failures at INFO instead of ERROR to avoid REPL pollution breaking file transfers
 - boot: if DeviceInfo.hardware_id is already set, skip board detection and use it directly; warn and continue if board file is missing (enables boot hijack for custom/new devices)
 
 Development:
