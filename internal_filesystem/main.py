@@ -16,17 +16,17 @@ print(f"{sys.implementation=}")
 import os
 sys.modules["uos"] = os
 
-#print("Free space on root filesystem:")
-#stat = os.statvfs("/")
-#total_space = stat[0] * stat[2]
-#free_space = stat[0] * stat[3]
-#used_space = total_space - free_space
-#print(f"{total_space=} / {used_space=} / {free_space=} bytes")
+# These info prints don't seem to slow down the boot measurably so let's leave them in, for now:
+print("Free space on internal filesystem:")
+stat = os.statvfs("/")
+total_space = stat[0] * stat[2]
+free_space = stat[0] * stat[3]
+used_space = total_space - free_space
+print(f"{total_space=} / {used_space=} / {free_space=} bytes")
 
-
-#import gc
-#gc.collect()
-#print(f"RAM: {gc.mem_free()} free, {gc.mem_alloc()} allocated, {gc.mem_alloc() + gc.mem_free()} total")
+import gc
+gc.collect()
+print(f"RAM: {gc.mem_free()} free, {gc.mem_alloc()} allocated, {gc.mem_alloc() + gc.mem_free()} total")
 
 print("Passing execution over to mpos.main")
 try:
