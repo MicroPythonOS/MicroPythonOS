@@ -6,21 +6,21 @@ Builtin Apps:
 - OSUpdate: improve update progress UI
 
 OS:
-- App: support multiple categories in MANIFEST.JSON (`"categories"` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
-- sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
+- Add simple way to force DeviceInfo.hardware_id, skip board detection, and customize hardware board initialization #215
+- App class: support multiple categories in MANIFEST.JSON (`"categories"` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
+- sdl_keyboard: fix CTRL-C and CTRL-V on textarea
 - aiowebsocket: reduce reconnect frequency to reduce performance impact
-- nostr: log background relay connection failures at INFO instead of ERROR to avoid REPL pollution breaking file transfers
-- boot: if DeviceInfo.hardware_id is already set, skip board detection and use it directly; warn and continue if board file is missing (enables boot hijack for custom/new devices)
+- micropython-nostr: log background relay connection failures at INFO instead of ERROR to avoid REPL pollution breaking file transfers
 
 Development:
-- build_mpos.sh: restore @micropython.native/@micropython.viper decorators after desktop/web builds (via EXIT trap) so local builds no longer leave the working tree modified
 - Add Python-level line coverage via sys.settrace (mpcov build variant)
 - Add `--coverage` flag to test_runner.py for collecting per-file line coverage
 - Add `make build-mpos-unix-coverage` target
 - Add HTML coverage report with expandable inline source (scripts/coverage_report.py)
 - Add scripts/coverage.sh for automated coverage runs with clustered/partial test support
 - Add scripts/cyclonatic_complexity.sh for per-function cyclomatic complexity reports
-- WAVStream: refactor play() to reduce cyclomatic complexity (69→42) by extracting _read_decode_chunk() and _play_desktop()
+- build_mpos.sh: restore @micropython.native/@micropython.viper decorators after desktop/web builds (via EXIT trap) so local builds no longer leave the working tree modified
+- WAVStream: refactor play() to reduce cyclomatic complexity (69→42) by extracting read_decode_chunk() and play_desktop()
 
 0.16.0
 ======
