@@ -442,7 +442,7 @@ class WAVStream:
                 )
         else:
             bytes_per_second = self._original_rate * self._bytes_per_sample
-            chunk_size = int(bytes_per_second / 10.7)
+            chunk_size = int(bytes_per_second / 10.7) # chunk_size of 8192 worked great with 22050hz stereo 16 bit so 88200 bytes per sample so fator 10.7
             to_read = min(chunk_size, self._data_size - total_orig)
             to_read -= to_read % self._bytes_per_sample
             if to_read <= 0:
