@@ -10,7 +10,7 @@ Builtin Apps:
 
 OS:
 - Add simple way to force DeviceInfo.hardware_id, skip board detection, and customize hardware board initialization #215
-- App class: support multiple categories in MANIFEST.JSON (`"categories"` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
+- App class: support multiple categories in MANIFEST.JSON (`'categories'` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea
 - aiowebsocket: reduce reconnect frequency to reduce performance impact
 - Tweak TaskHandler's period from 1ms to 2ms to improve asyncio performance at the cost of slightly increased callback latency
