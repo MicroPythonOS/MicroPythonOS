@@ -7,16 +7,16 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch: # allow manual workflow starts
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-esp32:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 45
     env:
       MPOS_CCACHE: 1
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -55,9 +55,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
-          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-${{ github.sha }}
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-esp32-${{ github.sha }}
           restore-keys: |
-            ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-esp32-
 
       - name: Configure compiler cache
         run: |
@@ -68,9 +68,9 @@ jobs:
       - name: Extract OS version
         id: version
         run: |
-            OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
-            echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
-            echo "Extracted version: $OS_VERSION"
+          OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
+          echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $OS_VERSION"
 
       - name: Build LVGL MicroPython esp32
         run: |
@@ -78,19 +78,82 @@ jobs:
           mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC-SPIRAM-16.bin lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
 
-      - name: Upload built binary as artifact
+      - name: Upload esp32 .bin artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
-      - name: Upload built binary as artifact
+      - name: Upload esp32 .ota artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/MicroPythonOS_esp32_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
+
+      - name: Show compiler cache statistics
+        if: always()
+        run: ccache --show-stats
+
+
+  build-esp32s3:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      MPOS_CCACHE: 1
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_NOHASHDIR: true
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Install and cache APT dependencies
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: >-
+            build-essential libffi-dev pkg-config cmake ninja-build ccache
+            gnome-desktop-testing libasound2-dev libpulse-dev libaudio-dev
+            libjack-dev libsndio-dev libx11-dev libxext-dev libxrandr-dev
+            libxcursor-dev libxfixes-dev libxi-dev libxss-dev
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev
+            libgles2-mesa-dev libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev
+            libudev-dev fcitx-libs-dev libpipewire-0.3-dev libwayland-dev
+            libdecor-0-dev libv4l-dev
+          version: apt-v2-ubuntu-24.04-${{ runner.arch }}
+          execute_install_scripts: true
+
+      - name: Restore ESP-IDF tools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.espressif
+          key: esp-idf-tools-v1-5.5.1-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Restore compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-esp32s3-${{ github.sha }}
+          restore-keys: |
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-esp32s3-
+
+      - name: Configure compiler cache
+        run: |
+          echo "/usr/lib/ccache" >> "$GITHUB_PATH"
+          ccache --max-size 1G
+          ccache --zero-stats
+
+      - name: Extract OS version
+        id: version
+        run: |
+          OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
+          echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $OS_VERSION"
 
       - name: Build LVGL MicroPython esp32s3
         run: |
@@ -98,19 +161,75 @@ jobs:
           mv lvgl_micropython/build/lvgl_micropy_ESP32_GENERIC_S3-SPIRAM_OCT-16.bin lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
           mv lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/micropython.bin lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
 
-      - name: Upload built binary as artifact
+      - name: Upload esp32s3 .bin artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
           path: lvgl_micropython/build/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.bin
           retention-days: 7
 
-      - name: Upload built binary as artifact
+      - name: Upload esp32s3 .ota artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           path: lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/MicroPythonOS_esp32s3_${{ steps.version.outputs.OS_VERSION }}.ota
           retention-days: 7
+
+      - name: Show compiler cache statistics
+        if: always()
+        run: ccache --show-stats
+
+
+  build-unix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+      CCACHE_NOHASHDIR: true
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Install and cache APT dependencies
+        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
+        with:
+          packages: >-
+            build-essential libffi-dev pkg-config cmake ninja-build ccache
+            gnome-desktop-testing libasound2-dev libpulse-dev libaudio-dev
+            libjack-dev libsndio-dev libx11-dev libxext-dev libxrandr-dev
+            libxcursor-dev libxfixes-dev libxi-dev libxss-dev
+            libxkbcommon-dev libdrm-dev libgbm-dev libgl1-mesa-dev
+            libgles2-mesa-dev libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev
+            libudev-dev fcitx-libs-dev libpipewire-0.3-dev libwayland-dev
+            libdecor-0-dev libv4l-dev
+          version: apt-v2-ubuntu-24.04-${{ runner.arch }}
+          execute_install_scripts: true
+
+      - name: Restore compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-unix-${{ github.sha }}
+          restore-keys: |
+            ccache-v1-${{ runner.os }}-${{ runner.arch }}-linux-unix-
+
+      - name: Configure compiler cache
+        run: |
+          echo "/usr/lib/ccache" >> "$GITHUB_PATH"
+          ccache --max-size 1G
+          ccache --zero-stats
+
+      - name: Extract OS version
+        id: version
+        run: |
+          OS_VERSION=$(grep "release = " internal_filesystem/lib/mpos/build_info.py | cut -d "=" -f 2 | cut -d "#" -f 1 | tr -d " " | tr -d '"')
+          echo "OS_VERSION=$OS_VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $OS_VERSION"
 
       - name: Build LVGL MicroPython for unix
         run: |
@@ -127,15 +246,11 @@ jobs:
       - name: Run syntax tests on unix
         run: |
           ./tests/syntax.sh
-        #continue-on-error: true
 
       - name: Run unit tests on unix
         run: |
           ./scripts/test_runner.py
-        #continue-on-error: true
 
       - name: Show compiler cache statistics
         if: always()
         run: ccache --show-stats
-
-
