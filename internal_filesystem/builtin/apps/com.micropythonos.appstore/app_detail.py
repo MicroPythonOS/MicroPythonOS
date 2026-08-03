@@ -67,10 +67,12 @@ class AppDetail(Activity):
         WidgetAnimator.smooth_show(self._submit_rating_btn, duration=200)
 
     def _on_submit_rating(self, e):
-        self._submit_rating_btn.add_state(lv.STATE.DISABLED)
         self._rated = True
-        submit_label = self._submit_rating_btn.get_child(0)
-        submit_label.set_text("Rated. Thanks!")
+        WidgetAnimator.smooth_hide(self._submit_rating_btn, duration=200)
+        thanks = lv.label(self.rate_cont)
+        thanks.set_text("Rating submitted. Thanks!")
+        thanks.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        thanks.set_size(lv.pct(100), lv.SIZE_CONTENT)
         revision = getattr(self.app, "revision", None)
         if revision is not None:
             from appstore_core import report_badgehub_rating
