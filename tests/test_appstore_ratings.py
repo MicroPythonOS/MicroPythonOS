@@ -357,3 +357,43 @@ class TestBadgehubPatchesRatingOnInstalled(unittest.TestCase):
         finally:
             dm.DownloadManager.download_url = orig_dl
             AppManager._app_list = orig_list
+
+    def test_phase2_rebuilds_list_after_patching_installed(self):
+        from appstore import AppStore
+        from mpos import App, AppManager
+        import asyncio
+        import mpos.net.download_manager as dm
+        import json
+
+        installed = App("SortApp", "Pub", "desc", "", "", "", "com.micropythonos.sorter", "1.0")
+        orig_list = AppManager._app_list
+        AppManager._app_list = [installed]
+
+        json_data = json.dumps([
+            {
+                "slug": "com.micropythonos.sorter",
+                "name": "SortApp",
+                "description": "desc",
+                "categories": ["Utility"],
+                "ratings": {"average": 4.2, "count": 3},
+            },
+        ])
+
+        async def _fake_download(url):
+            return json_data
+
+        create_list_calls = []
+        orig_dl = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_fake_download)
+        try:
+            store = self._make_store()
+            store.create_apps_list = lambda: create_list_calls.append("called")
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0")
+            )
+            self.assertEqual(len(create_list_calls), 2,
+                "create_apps_list should be called twice: Phase 1 snapshot + Phase 2 rebuild (got %d)" % len(create_list_calls))
+        finally:
+            dm.DownloadManager.download_url = orig_dl
+            AppManager._app_list = orig_list

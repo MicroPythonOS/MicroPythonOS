@@ -467,6 +467,9 @@ class AppStore(Activity):
             self.apps.insert(idx, app)
             self._insert_app_list_item(app, idx)
 
+        # ponytail: rebuild whole list so installed apps get their rating labels
+        # (ratings were patched after Phase 1 already painted the list)
+        self.create_apps_list()
         self._update_category_dropdown()
 
     def create_apps_list(self):
