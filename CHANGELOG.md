@@ -6,6 +6,8 @@ Board Support:
 
 Builtin Apps:
 - AppStore: add special 'Updates' category, opened by default when update notification is pressed
+- AppStore: add app ratings support
+- AppStore: make app version and description focusable so they can be scrolled using arrow keys
 - OSUpdate: improve update progress UI
 
 OS:
