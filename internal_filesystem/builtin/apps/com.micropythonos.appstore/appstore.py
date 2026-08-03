@@ -427,8 +427,12 @@ class AppStore(Activity):
             try:
                 if backend_type == self._BACKEND_API_BADGEHUB:
                     if app_data.get("slug") in installed_by_fullname:
+                        existing = installed_by_fullname[app_data.get("slug")]
+                        ratings = app_data.get("ratings") or {}
+                        existing.rating_average = ratings.get("average")
+                        existing.rating_count = ratings.get("count", 0)
                         if app_data.get("development_status") == "work_in_progress":
-                            self._wip_apps.append(installed_by_fullname[app_data.get("slug")])
+                            self._wip_apps.append(existing)
                         continue
                     if app_data.get("slug") in self._builtin_fullnames:
                         continue

@@ -240,3 +240,120 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
             self.assertTrue(detail.rate_cont._hidden)
         finally:
             mpos.AppManager.is_installed_by_name = orig_installed
+
+
+class TestBadgehubPatchesRatingOnInstalled(unittest.TestCase):
+
+    def setUp(self):
+        import asyncio
+        asyncio.new_event_loop()
+
+    def tearDown(self):
+        import asyncio
+        asyncio.new_event_loop()
+
+    def _make_store(self, hide_wip=False):
+        from appstore import AppStore
+
+        store = AppStore()
+        store.prefs = type("Prefs", (), {
+            "get_string": lambda self, k, d: "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0,https://badgehub.eu/api/v3/projects"
+        })()
+        store._DEFAULT_BACKEND = "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0,https://badgehub.eu/api/v3/projects"
+        store._hide_wip = hide_wip
+        store.please_wait_label = type("Lbl", (), {"add_flag": lambda s, f: None, "remove_flag": lambda s, f: None})()
+        store._refresh_in_progress = False
+        store._data_loaded = False
+        store.update_all_button = type("Btn", (), {"add_flag": lambda s, f: None, "has_flag": lambda s, f: False, "remove_flag": lambda s, f: None})()
+        store.main_screen = type("Scr", (), {})()
+        store.create_apps_list = lambda: None
+        store._update_category_dropdown = lambda: None
+        store._builtin_fullnames = set()
+        store._wip_apps = []
+        return store
+
+    def test_phase2_patches_rating_on_installed_app(self):
+        from mpos import App, AppManager
+        import asyncio
+        import mpos.net.download_manager as dm
+        import json
+
+        installed = App("SortApp", "Pub", "desc", "", "", "", "com.micropythonos.sorter", "1.0")
+        orig_list = AppManager._app_list
+        AppManager._app_list = [installed]
+
+        json_data = json.dumps([
+            {
+                "slug": "com.micropythonos.sorter",
+                "name": "SortApp",
+                "description": "desc",
+                "categories": ["Utility"],
+                "ratings": {"average": 4.2, "count": 3},
+            },
+            {
+                "slug": "com.test.other",
+                "name": "OtherApp",
+                "description": "other",
+                "categories": ["Utility"],
+                "ratings": {"average": 3.5, "count": 1},
+            },
+        ])
+
+        async def _fake_download(url):
+            return json_data
+
+        orig_dl = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_fake_download)
+        try:
+            store = self._make_store()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0")
+            )
+            sorter = [a for a in store.apps if a.fullname == "com.micropythonos.sorter"]
+            self.assertEqual(len(sorter), 1)
+            self.assertEqual(sorter[0].rating_average, 4.2)
+            self.assertEqual(sorter[0].rating_count, 3)
+            other = [a for a in store.apps if a.fullname == "com.test.other"]
+            self.assertEqual(len(other), 1)
+            self.assertEqual(other[0].rating_average, 3.5)
+        finally:
+            dm.DownloadManager.download_url = orig_dl
+            AppManager._app_list = orig_list
+
+    def test_phase2_installed_without_rating_stays_none(self):
+        from mpos import App, AppManager
+        import asyncio
+        import mpos.net.download_manager as dm
+        import json
+
+        installed = App("NoRateApp", "Pub", "desc", "", "", "", "com.test.norate", "1.0")
+        orig_list = AppManager._app_list
+        AppManager._app_list = [installed]
+
+        json_data = json.dumps([
+            {
+                "slug": "com.test.norate",
+                "name": "NoRateApp",
+                "description": "desc",
+                "categories": ["Utility"],
+            },
+        ])
+
+        async def _fake_download(url):
+            return json_data
+
+        orig_dl = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_fake_download)
+        try:
+            store = self._make_store()
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                store.download_app_index("https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0")
+            )
+            app = [a for a in store.apps if a.fullname == "com.test.norate"]
+            self.assertEqual(len(app), 1)
+            self.assertIsNone(app[0].rating_average)
+        finally:
+            dm.DownloadManager.download_url = orig_dl
+            AppManager._app_list = orig_list
