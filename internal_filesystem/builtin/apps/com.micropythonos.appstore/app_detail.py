@@ -2,7 +2,8 @@ import logging
 
 import lvgl as lv
 
-from mpos import Activity, DownloadManager, AppManager, TaskManager
+from mpos import Activity, DownloadManager, AppManager, TaskManager, WidgetAnimator
+from mpos.ui import STAR_SYMBOL
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,11 @@ class AppDetail(Activity):
     publisher_label = None
     _open_button = None
     icon_image = None
+    rate_cont = None
+    _stars = None
+    _selected_rating = 0
+    _rated = False
+    _submit_rating_btn = None
     _icon_download_started = False
 
     # Received from the Intent extras:
@@ -39,6 +45,38 @@ class AppDetail(Activity):
             self._open_button.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             self._open_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _sync_rate_cont(self):
+        if self.rate_cont is None:
+            return
+        backend_type = self.appstore.get_backend_type_from_settings()
+        badgehub = (backend_type == self.appstore._BACKEND_API_BADGEHUB)
+        if badgehub and AppManager.is_installed_by_name(self.app.fullname) and not self._rated:
+            self.rate_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self.rate_cont.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _on_star_click(self, idx):
+        if self._rated:
+            return
+        self._selected_rating = idx + 1
+        yellow = lv.palette_main(lv.PALETTE.YELLOW)
+        gray = lv.color_hex(0x888888)
+        for i, star in enumerate(self._stars):
+            star.set_style_text_color(yellow if i <= idx else gray, lv.PART.MAIN)
+        WidgetAnimator.smooth_show(self._submit_rating_btn, duration=200)
+
+    def _on_submit_rating(self, e):
+        self._submit_rating_btn.add_state(lv.STATE.DISABLED)
+        self._rated = True
+        submit_label = self._submit_rating_btn.get_child(0)
+        submit_label.set_text("Rated. Thanks!")
+        revision = getattr(self.app, "revision", None)
+        if revision is not None:
+            from appstore_core import report_badgehub_rating
+            TaskManager.create_task(report_badgehub_rating(
+                self.app.fullname, revision, self._selected_rating
+            ))
 
     def _set_icon_widget(self):
         if self.app.icon_data:
@@ -122,7 +160,7 @@ class AppDetail(Activity):
         detail_cont = lv.obj(headercont)
         self._apply_default_styles(detail_cont)
         detail_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        detail_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
+        detail_cont.set_flex_grow(1)
         detail_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         name_label = lv.label(detail_cont)
         name_label.set_text(self.app.name)
@@ -130,6 +168,11 @@ class AppDetail(Activity):
         self.publisher_label = lv.label(detail_cont)
         self.publisher_label.set_text(self.app.publisher or "Loading details...")
         self.publisher_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        if getattr(self.app, "rating_average", None) is not None:
+            rating_label = lv.label(headercont)
+            rating_label.set_text("%s %.1f" % (STAR_SYMBOL, self.app.rating_average))
+            rating_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+            rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
 
         self.progress_bar = lv.bar(app_detail_screen)
         self.progress_bar.set_width(lv.pct(100))
@@ -142,6 +185,35 @@ class AppDetail(Activity):
         self.buttoncont.set_size(lv.pct(100), lv.SIZE_CONTENT)
         self.buttoncont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         self.add_action_buttons(self.buttoncont, self.app)
+        self.rate_cont = lv.obj(app_detail_screen)
+        self._apply_default_styles(self.rate_cont)
+        self.rate_cont.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        self.rate_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
+        self.rate_cont.add_flag(lv.obj.FLAG.HIDDEN)
+        rate_title = lv.label(self.rate_cont)
+        rate_title.set_text("Rate this app")
+        rate_title.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        stars_row = lv.obj(self.rate_cont)
+        self._apply_default_styles(stars_row)
+        stars_row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        stars_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        stars_row.set_style_pad_ver(4, lv.PART.MAIN)
+        self._stars = []
+        for i in range(5):
+            star = lv.label(stars_row)
+            star.set_text(STAR_SYMBOL)
+            star.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+            star.set_style_text_color(lv.color_hex(0x888888), lv.PART.MAIN)
+            star.add_event_cb(lambda e, idx=i: self._on_star_click(idx), lv.EVENT.CLICKED, None)
+            self._stars.append(star)
+        self._submit_rating_btn = lv.button(self.rate_cont)
+        self._submit_rating_btn.set_size(lv.SIZE_CONTENT, 40)
+        self._submit_rating_btn.set_style_pad_hor(12, lv.PART.MAIN)
+        self._submit_rating_btn.add_flag(lv.obj.FLAG.HIDDEN)
+        self._submit_rating_btn.add_event_cb(self._on_submit_rating, lv.EVENT.CLICKED, None)
+        submit_label = lv.label(self._submit_rating_btn)
+        submit_label.set_text("Submit Rating")
+        submit_label.center()
         # version label:
         self.version_label = lv.label(app_detail_screen)
         self.version_label.set_width(lv.pct(100))
@@ -159,6 +231,7 @@ class AppDetail(Activity):
 
     def onResume(self, screen):
         self._sync_open_button()
+        self._sync_rate_cont()
         backend_type = self.appstore.get_backend_type_from_settings()
         if backend_type == self.appstore._BACKEND_API_BADGEHUB:
             TaskManager.create_task(self.fetch_and_set_app_details())
@@ -203,6 +276,7 @@ class AppDetail(Activity):
         open_label.set_text(" Open ")
         open_label.center()
         self._sync_open_button()
+        self._sync_rate_cont()
 
     async def fetch_and_set_app_details(self):
         await self.fetch_badgehub_app_details(self.app)

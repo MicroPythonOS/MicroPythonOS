@@ -4,6 +4,7 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingsActivity, SharedPreferences, TaskManager
+from mpos.ui import STAR_SYMBOL
 
 from app_detail import AppDetail
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
@@ -532,7 +533,7 @@ class AppStore(Activity):
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
             label_cont.set_style_pad_ver(10, lv.PART.MAIN)
-            label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
+            label_cont.set_flex_grow(1)
             self._add_click_handler(label_cont, self.show_app_detail, app)
             name_label = lv.label(label_cont)
             name_label.set_text(app.name)
@@ -548,6 +549,11 @@ class AppStore(Activity):
             update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
             update_label.add_flag(lv.obj.FLAG.HIDDEN)
             self._update_labels[app.fullname] = update_label
+            if getattr(app, "rating_average", None) is not None:
+                rating_label = lv.label(cont)
+                rating_label.set_text("%s %.1f" % (STAR_SYMBOL, app.rating_average))
+                rating_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+                rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
         if self._icon_queue:
             self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
         try:
@@ -601,7 +607,7 @@ class AppStore(Activity):
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         label_cont.set_style_pad_ver(10, lv.PART.MAIN)
-        label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
+        label_cont.set_flex_grow(1)
         self._add_click_handler(label_cont, self.show_app_detail, app)
         name_label = lv.label(label_cont)
         name_label.set_text(app.name)
@@ -617,6 +623,11 @@ class AppStore(Activity):
         update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
         update_label.add_flag(lv.obj.FLAG.HIDDEN)
         self._update_labels[app.fullname] = update_label
+        if getattr(app, "rating_average", None) is not None:
+            rating_label = lv.label(cont)
+            rating_label.set_text("%s %.1f" % (STAR_SYMBOL, app.rating_average))
+            rating_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
         item.move_to_index(index)
 
     def _stop_all_timers(self):
@@ -780,7 +791,10 @@ class AppStore(Activity):
             if __debug__: logger.debug("could not find icon_map 64x64 url")
         blur_hash = bhapp.get("blur_hash")
         category = bhapp.get("categories")
-        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash)
+        ratings = bhapp.get("ratings") or {}
+        rating_average = ratings.get("average")
+        rating_count = ratings.get("count", 0)
+        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
 
     @staticmethod
     def get_backend_pref_string(index):

@@ -177,6 +177,25 @@ async def report_badgehub_install(fullname, revision):
         if __debug__: logger.debug("report install failed for %s: %s", fullname, e)
 
 
+async def report_badgehub_rating(fullname, revision, rating):
+    mac, sha1_id = _get_device_mac_and_id()
+    if not mac or not sha1_id:
+        if __debug__: logger.debug("cannot report rating: no device id available")
+        return
+    url = "https://badgehub.eu/api/v3/projects/%s/rev%s/report/rating?mac=%s&id=%s" % (
+        fullname, revision, mac, sha1_id,
+    )
+    try:
+        await DownloadManager.post_url(
+            url,
+            data=ujson.dumps({"rating": rating}).encode(),
+            headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
+            redact_url=True,
+        )
+    except Exception as e:
+        if __debug__: logger.debug("report rating failed for %s: %s", fullname, e)
+
+
 class AppUpdateState:
     IDLE = "idle"
     WAITING_WIFI = "waiting_wifi"
