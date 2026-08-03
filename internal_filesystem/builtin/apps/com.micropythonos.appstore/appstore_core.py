@@ -188,7 +188,7 @@ async def report_badgehub_rating(fullname, revision, rating):
     try:
         await DownloadManager.post_url(
             url,
-            data=ujson.dumps({"rating": rating}).encode(),
+            data=ujson.dumps({"rating": rating}),
             headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
             redact_url=True,
         )

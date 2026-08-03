@@ -3,7 +3,7 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, DownloadManager, AppManager, TaskManager, WidgetAnimator
-from mpos.ui import STAR_SYMBOL
+from mpos.ui import STAR_SYMBOL, add_focus_highlight
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
 
 logger = logging.getLogger(__name__)
@@ -160,7 +160,7 @@ class AppDetail(Activity):
         detail_cont = lv.obj(headercont)
         self._apply_default_styles(detail_cont)
         detail_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
-        detail_cont.set_flex_grow(1)
+        detail_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
         detail_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
         name_label = lv.label(detail_cont)
         name_label.set_text(self.app.name)
@@ -168,11 +168,13 @@ class AppDetail(Activity):
         self.publisher_label = lv.label(detail_cont)
         self.publisher_label.set_text(self.app.publisher or "Loading details...")
         self.publisher_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-        if getattr(self.app, "rating_average", None) is not None:
+        rating_avg = getattr(self.app, "rating_average", None)
+        if rating_avg is not None and rating_avg > 0:
             rating_label = lv.label(headercont)
-            rating_label.set_text("%s %.1f" % (STAR_SYMBOL, self.app.rating_average))
+            rating_label.set_text("%s %.1f" % (STAR_SYMBOL, rating_avg))
             rating_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
-            rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
+            rating_label.add_flag(lv.obj.FLAG.FLOATING)
+            rating_label.align(lv.ALIGN.RIGHT_MID, -4, 0)
 
         self.progress_bar = lv.bar(app_detail_screen)
         self.progress_bar.set_width(lv.pct(100))
@@ -204,7 +206,9 @@ class AppDetail(Activity):
             star.set_text(STAR_SYMBOL)
             star.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
             star.set_style_text_color(lv.color_hex(0x888888), lv.PART.MAIN)
+            star.add_flag(lv.obj.FLAG.CLICKABLE)
             star.add_event_cb(lambda e, idx=i: self._on_star_click(idx), lv.EVENT.CLICKED, None)
+            add_focus_highlight(star)
             self._stars.append(star)
         self._submit_rating_btn = lv.button(self.rate_cont)
         self._submit_rating_btn.set_size(lv.SIZE_CONTENT, 40)

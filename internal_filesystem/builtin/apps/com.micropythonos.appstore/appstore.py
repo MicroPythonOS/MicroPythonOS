@@ -533,7 +533,7 @@ class AppStore(Activity):
             self._apply_default_styles(label_cont)
             label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
             label_cont.set_style_pad_ver(10, lv.PART.MAIN)
-            label_cont.set_flex_grow(1)
+            label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
             self._add_click_handler(label_cont, self.show_app_detail, app)
             name_label = lv.label(label_cont)
             name_label.set_text(app.name)
@@ -549,11 +549,13 @@ class AppStore(Activity):
             update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
             update_label.add_flag(lv.obj.FLAG.HIDDEN)
             self._update_labels[app.fullname] = update_label
-            if getattr(app, "rating_average", None) is not None:
+            rating_avg = getattr(app, "rating_average", None)
+            if rating_avg is not None and rating_avg > 0:
                 rating_label = lv.label(cont)
-                rating_label.set_text("%s %.1f" % (STAR_SYMBOL, app.rating_average))
+                rating_label.set_text("%s %.1f" % (STAR_SYMBOL, rating_avg))
                 rating_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
-                rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
+                rating_label.add_flag(lv.obj.FLAG.FLOATING)
+                rating_label.align(lv.ALIGN.RIGHT_MID, -4, 0)
         if self._icon_queue:
             self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
         try:
@@ -607,7 +609,7 @@ class AppStore(Activity):
         self._apply_default_styles(label_cont)
         label_cont.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         label_cont.set_style_pad_ver(10, lv.PART.MAIN)
-        label_cont.set_flex_grow(1)
+        label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
         self._add_click_handler(label_cont, self.show_app_detail, app)
         name_label = lv.label(label_cont)
         name_label.set_text(app.name)
@@ -623,11 +625,13 @@ class AppStore(Activity):
         update_label.set_style_text_color(lv.palette_main(lv.PALETTE.GREEN), lv.PART.MAIN)
         update_label.add_flag(lv.obj.FLAG.HIDDEN)
         self._update_labels[app.fullname] = update_label
-        if getattr(app, "rating_average", None) is not None:
+        rating_avg = getattr(app, "rating_average", None)
+        if rating_avg is not None and rating_avg > 0:
             rating_label = lv.label(cont)
-            rating_label.set_text("%s %.1f" % (STAR_SYMBOL, app.rating_average))
+            rating_label.set_text("%s %.1f" % (STAR_SYMBOL, rating_avg))
             rating_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
-            rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
+            rating_label.add_flag(lv.obj.FLAG.FLOATING)
+            rating_label.align(lv.ALIGN.RIGHT_MID, -4, 0)
         item.move_to_index(index)
 
     def _stop_all_timers(self):
