@@ -74,6 +74,14 @@ class IRRemote(Activity):
             "vol_down": [0xAB],
             "freq": 36000,
         },
+        "LG/Aconatic": {
+            "protocol": "nec",
+            "addr": 4,
+            "power": [8],
+            "vol_up": [2],
+            "vol_down": [3],
+            "samsung": False,
+        },
     }
 
     def onCreate(self):
