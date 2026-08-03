@@ -898,6 +898,46 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         finally:
             AppUpdateManager._instance = None
 
+    def test_on_update_state_change_rebuilds_list_for_updates_category(self):
+        from appstore_core import AppUpdateManager, AppUpdateState
+        store = self._make_store()
+        store._has_foreground = True
+        store._selected_category = "Updates"
+        store._data_loaded = True
+        AppUpdateManager._instance = None
+        aum = AppUpdateManager.get_instance()
+        aum.updatable_apps = [{"fullname": "com.test.a", "name": "A"}]
+        aum.current_state = AppUpdateState.UPDATES_AVAILABLE
+        rebuild_calls = []
+        store.create_apps_list = lambda: rebuild_calls.append(True)
+        try:
+            store._on_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
+            self.assertEqual(store.update_all_label._text, "Update 1 App")
+            self.assertEqual(len(rebuild_calls), 1,
+                             "list should be rebuilt when updates arrive while viewing Updates category")
+        finally:
+            AppUpdateManager._instance = None
+
+    def test_on_update_state_change_does_not_rebuild_for_other_categories(self):
+        from appstore_core import AppUpdateManager, AppUpdateState
+        store = self._make_store()
+        store._has_foreground = True
+        store._selected_category = "Games"
+        store._data_loaded = True
+        AppUpdateManager._instance = None
+        aum = AppUpdateManager.get_instance()
+        aum.updatable_apps = [{"fullname": "com.test.a", "name": "A"}]
+        aum.current_state = AppUpdateState.UPDATES_AVAILABLE
+        rebuild_calls = []
+        store.create_apps_list = lambda: rebuild_calls.append(True)
+        try:
+            store._on_update_state_change(AppUpdateState.UPDATES_AVAILABLE)
+            self.assertEqual(store.update_all_label._text, "Update 1 App")
+            self.assertEqual(len(rebuild_calls), 0,
+                             "list should NOT be rebuilt when viewing non-Updates category")
+        finally:
+            AppUpdateManager._instance = None
+
 
 if __name__ == "__main__":
     unittest.main()

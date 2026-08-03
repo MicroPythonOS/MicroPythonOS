@@ -171,6 +171,8 @@ class AppStore(Activity):
             from appstore_core import AppUpdateManager
             um = AppUpdateManager.get_instance()
             self._sync_update_banner(state, um.updatable_apps)
+            if self._selected_category == "Updates" and getattr(self, '_data_loaded', False):
+                self.create_apps_list()
         except Exception as e:
             logger.warning("state change error: %s", e)
 
