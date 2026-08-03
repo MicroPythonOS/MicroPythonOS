@@ -320,7 +320,7 @@ jobs:
 
   build-linux-arm64:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
@@ -446,7 +446,7 @@ jobs:
 
   build-macos-arm:
     runs-on: macos-14
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_ANALYTICS: 1
@@ -504,7 +504,7 @@ jobs:
 
   build-macos-intel:
     runs-on: macos-15-intel
-    timeout-minutes: 45
+    timeout-minutes: 90
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_ANALYTICS: 1
