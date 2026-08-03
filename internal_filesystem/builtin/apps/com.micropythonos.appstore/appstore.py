@@ -4,6 +4,7 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingsActivity, SharedPreferences, TaskManager
+from mpos.ui import STAR_SYMBOL
 
 from app_detail import AppDetail
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
@@ -426,8 +427,12 @@ class AppStore(Activity):
             try:
                 if backend_type == self._BACKEND_API_BADGEHUB:
                     if app_data.get("slug") in installed_by_fullname:
+                        existing = installed_by_fullname[app_data.get("slug")]
+                        ratings = app_data.get("ratings") or {}
+                        existing.rating_average = ratings.get("average")
+                        existing.rating_count = ratings.get("count", 0)
                         if app_data.get("development_status") == "work_in_progress":
-                            self._wip_apps.append(installed_by_fullname[app_data.get("slug")])
+                            self._wip_apps.append(existing)
                         continue
                     if app_data.get("slug") in self._builtin_fullnames:
                         continue
@@ -462,6 +467,9 @@ class AppStore(Activity):
             self.apps.insert(idx, app)
             self._insert_app_list_item(app, idx)
 
+        # ponytail: rebuild whole list so installed apps get their rating labels
+        # (ratings were patched after Phase 1 already painted the list)
+        self.create_apps_list()
         self._update_category_dropdown()
 
     def create_apps_list(self):
@@ -534,10 +542,22 @@ class AppStore(Activity):
             label_cont.set_style_pad_ver(10, lv.PART.MAIN)
             label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
             self._add_click_handler(label_cont, self.show_app_detail, app)
-            name_label = lv.label(label_cont)
+            name_row = lv.obj(label_cont)
+            self._apply_default_styles(name_row)
+            name_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+            name_row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+            self._add_click_handler(name_row, self.show_app_detail, app)
+            name_label = lv.label(name_row)
             name_label.set_text(app.name)
             name_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+            name_label.set_flex_grow(1)
             self._add_click_handler(name_label, self.show_app_detail, app)
+            rating_avg = getattr(app, "rating_average", None)
+            if rating_avg is not None and rating_avg > 0:
+                rating_label = lv.label(name_row)
+                rating_label.set_text("%s %.1f" % (STAR_SYMBOL, rating_avg))
+                rating_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+                rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
             desc_label = lv.label(label_cont)
             desc_label.set_text(app.short_description)
             desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
@@ -603,10 +623,22 @@ class AppStore(Activity):
         label_cont.set_style_pad_ver(10, lv.PART.MAIN)
         label_cont.set_size(lv.pct(75), lv.SIZE_CONTENT)
         self._add_click_handler(label_cont, self.show_app_detail, app)
-        name_label = lv.label(label_cont)
+        name_row = lv.obj(label_cont)
+        self._apply_default_styles(name_row)
+        name_row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        name_row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        self._add_click_handler(name_row, self.show_app_detail, app)
+        name_label = lv.label(name_row)
         name_label.set_text(app.name)
         name_label.set_style_text_font(lv.font_montserrat_16, lv.PART.MAIN)
+        name_label.set_flex_grow(1)
         self._add_click_handler(name_label, self.show_app_detail, app)
+        rating_avg = getattr(app, "rating_average", None)
+        if rating_avg is not None and rating_avg > 0:
+            rating_label = lv.label(name_row)
+            rating_label.set_text("%s %.1f" % (STAR_SYMBOL, rating_avg))
+            rating_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+            rating_label.set_size(lv.SIZE_CONTENT, lv.SIZE_CONTENT)
         desc_label = lv.label(label_cont)
         desc_label.set_text(app.short_description)
         desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
@@ -780,7 +812,10 @@ class AppStore(Activity):
             if __debug__: logger.debug("could not find icon_map 64x64 url")
         blur_hash = bhapp.get("blur_hash")
         category = bhapp.get("categories")
-        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash)
+        ratings = bhapp.get("ratings") or {}
+        rating_average = ratings.get("average")
+        rating_count = ratings.get("count", 0)
+        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
 
     @staticmethod
     def get_backend_pref_string(index):

@@ -21,6 +21,8 @@ class App:
         icon_path="builtin/default_icon_64x64.png",
         icon_data=None,
         blur_hash=None,
+        rating_average=None,
+        rating_count=0,
     ):
         self.name = name
         self.publisher = publisher
@@ -37,6 +39,8 @@ class App:
         self.blur_hash = blur_hash
         self.icon_data = icon_data
         self.icon_path = icon_path
+        self.rating_average = rating_average
+        self.rating_count = rating_count
         self.main_launcher_activity = self._find_main_launcher_activity()
         if self.fullname != "Unknown" and self.installed_path:
             self._load_icon_data()
