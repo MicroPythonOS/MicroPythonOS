@@ -76,9 +76,10 @@ def _resolve_binary():
 
 
 def _cleanup_config():
-    config = os.path.join(FS_ROOT, "prefs", "com.micropythonos.settings", "config.json")
+    import shutil
+    prefs = os.path.join(FS_ROOT, "prefs")
     try:
-        os.remove(config)
+        shutil.rmtree(prefs)
     except OSError:
         pass
 
