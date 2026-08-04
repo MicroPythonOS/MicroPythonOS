@@ -111,6 +111,12 @@ class SensorManager:
         self._initialized = self._imu_manager.init_iio()
         return self._initialized
 
+    def init_mock(self, motion=True):
+        """Simulated IMU for platforms without sensor hardware (web/desktop)."""
+        self._ensure_imu_manager()
+        self._initialized = self._imu_manager.init_mock(motion=motion)
+        return self._initialized
+
     def _ensure_imu_manager(self):
         if self._imu_manager is None:
             self._imu_manager = ImuManager()
@@ -270,7 +276,7 @@ class SensorManager:
 
 _original_methods = {}
 _methods_to_delegate = [
-    'init', 'init_iio', 'is_available', 'get_sensor_list', 'get_default_sensor',
+    'init', 'init_iio', 'init_mock', 'is_available', 'get_sensor_list', 'get_default_sensor',
     'read_sensor', 'read_sensor_once', 'calibrate_sensor', 'check_calibration_quality',
     'check_stationarity'
 ]
