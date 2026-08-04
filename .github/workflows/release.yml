@@ -17,16 +17,24 @@ jobs:
       contents: write
       actions: read
 
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMMIT_SHA: ${{ github.sha }}
+
     steps:
+      - name: Skip if manual release already exists
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "Release already exists for $GITHUB_REF_NAME — manual release detected, skipping auto-draft."
+            exit 0
+          fi
+          echo "No existing release for $GITHUB_REF_NAME, proceeding."
+
       - name: Download artifacts from CI runs on this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          COMMIT_SHA: ${{ github.sha }}
         run: |
           RESPONSE=$(curl -sS -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=100")
-          echo "API status: $(echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print('workflow_runs' in d, 'total_count:', d.get('total_count', 'N/A'))" 2>&1 || echo 'not JSON')"
 
           RUN_IDS=$(echo "$RESPONSE" | python3 -c "
           import json, sys, os
@@ -36,7 +44,7 @@ jobs:
           ids = [str(r['id']) for r in runs if r.get('head_sha') == sha and r.get('conclusion') == 'success']
           if not ids:
               sys.stderr.write(f'No successful CI runs found for commit {sha}.\n')
-              sys.stderr.write(f'API returned {len(runs)} total runs.\n')
+              sys.stderr.write(f'API returned {len(runs)} total runs on main.\n')
               sys.stderr.write('Push to main first, let CI pass, then tag.\n')
               sys.exit(1)
           sys.stderr.write(f'Found {len(ids)} successful CI run(s)\n')
@@ -65,3 +73,35 @@ jobs:
           fail_on_unmatched_files: true
           generate_release_notes: true
           make_latest: false
+
+      - name: Warn if any expected artifacts are missing
+        run: |
+          EXPECTED=(
+            "MicroPythonOS_esp32_*.bin"
+            "MicroPythonOS_esp32_*.ota"
+            "MicroPythonOS_esp32s3_*.bin"
+            "MicroPythonOS_esp32s3_*.ota"
+            "MicroPythonOS_esp32-small_*.bin"
+            "MicroPythonOS_esp32-small_*.ota"
+            "MicroPythonOS_esp32s3-unphone_*.bin"
+            "MicroPythonOS_esp32s3-unphone_*.ota"
+            "MicroPythonOS_x64_linux_*.elf"
+            "MicroPythonOS_arm64_linux_*.elf"
+            "MicroPythonOS_arm64_macOS_*.bin"
+            "MicroPythonOS_intel_macOS_*.bin"
+            "MicroPythonOS_web_*.zip"
+          )
+          MISSING=""
+          for pattern in "${EXPECTED[@]}"; do
+            if ! ls release-artifacts/$pattern > /dev/null 2>&1; then
+              MISSING="$MISSING $pattern"
+            fi
+          done
+
+          if [ -n "$MISSING" ]; then
+            WARNING="⚠️  WARNING: Missing artifacts: $MISSING. Add them manually."
+            echo "$WARNING"
+            EXISTING=$(gh release view "$GITHUB_REF_NAME" --json body -q '.body')
+            printf "%s\n\n%s" "$WARNING" "$EXISTING" | gh release edit "$GITHUB_REF_NAME" -F -
+            echo "Warning prepended to release body."
+          fi
