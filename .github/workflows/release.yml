@@ -17,25 +17,29 @@ jobs:
       contents: write
       actions: read
 
-    env:
-      COMMIT_SHA: ${{ github.sha }}
-
     steps:
       - name: Download artifacts from CI runs on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          RUN_IDS=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=100" | python3 -c "
+          RESPONSE=$(curl -sS -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=100")
+          echo "API status: $(echo "$RESPONSE" | python3 -c "import json,sys; d=json.load(sys.stdin); print('workflow_runs' in d, 'total_count:', d.get('total_count', 'N/A'))" 2>&1 || echo 'not JSON')"
+
+          RUN_IDS=$(echo "$RESPONSE" | python3 -c "
           import json, sys, os
           data = json.load(sys.stdin)
-          sha = os.environ['COMMIT_SHA']
-          ids = [str(r['id']) for r in data['workflow_runs'] if r.get('head_sha') == sha and r.get('conclusion') == 'success']
+          sha = os.environ.get('COMMIT_SHA', '')
+          runs = data.get('workflow_runs', [])
+          ids = [str(r['id']) for r in runs if r.get('head_sha') == sha and r.get('conclusion') == 'success']
           if not ids:
               sys.stderr.write(f'No successful CI runs found for commit {sha}.\n')
+              sys.stderr.write(f'API returned {len(runs)} total runs.\n')
               sys.stderr.write('Push to main first, let CI pass, then tag.\n')
               sys.exit(1)
           sys.stderr.write(f'Found {len(ids)} successful CI run(s)\n')
-          for r in data['workflow_runs']:
-              if r.get('head_sha') == sha and r.get('conclusion') == 'success':
-                  sys.stderr.write(f'  {r[\"id\"]}  {r[\"name\"]}\n')
           print(' '.join(ids))
           ")
 
