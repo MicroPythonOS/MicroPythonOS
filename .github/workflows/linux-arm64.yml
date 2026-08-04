@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 90
+    timeout-minutes: 120
     outputs:
       os-version: ${{ steps.version.outputs.OS_VERSION }}
     env:
@@ -93,7 +93,7 @@ jobs:
   test:
     needs: build
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 75
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository

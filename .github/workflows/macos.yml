@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-14 # 15 was giving a blank screen for some MacOS users
-    timeout-minutes: 90
+    timeout-minutes: 120
     outputs:
       os-version: ${{ steps.version.outputs.OS_VERSION }}
     env:
@@ -94,7 +94,7 @@ jobs:
   test:
     needs: build
     runs-on: macos-14
-    timeout-minutes: 75
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository

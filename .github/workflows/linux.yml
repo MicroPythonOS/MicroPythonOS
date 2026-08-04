@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build-esp32:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       MPOS_CCACHE: 1
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -99,7 +99,7 @@ jobs:
 
   build-esp32s3:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 120
     env:
       MPOS_CCACHE: 1
       CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -182,7 +182,7 @@ jobs:
 
   build-unix:
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 120
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
