@@ -112,7 +112,7 @@ jobs:
           if [ -n "$MISSING" ]; then
             WARNING="⚠️  WARNING: Missing artifacts: $MISSING. Add them manually."
             echo "$WARNING"
-            EXISTING=$(gh release view "$GITHUB_REF_NAME" --json body -q '.body')
-            printf "%s\n\n%s" "$WARNING" "$EXISTING" | gh release edit "$GITHUB_REF_NAME" -F -
+            EXISTING=$(gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json body -q '.body')
+            printf "%s\n\n%s" "$WARNING" "$EXISTING" | gh release edit "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -F -
             echo "Warning prepended to release body."
           fi
