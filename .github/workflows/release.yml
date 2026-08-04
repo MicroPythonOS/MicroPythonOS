@@ -26,18 +26,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          RUN_IDS=$(gh run list -R "$GH_REPO" --commit "$COMMIT_SHA" --json databaseId,workflowName,conclusion --limit 50 | python3 -c "
+          RUN_IDS=$(gh run list -R "$GH_REPO" -b main --json databaseId,headSha,workflowName,conclusion --limit 100 | python3 -c "
           import json, sys, os
           runs = json.load(sys.stdin)
-          success_ids = [str(r['databaseId']) for r in runs if r['conclusion'] == 'success']
-          sha = os.environ.get('COMMIT_SHA', 'unknown')
+          sha = os.environ.get('COMMIT_SHA', '')
+          success_ids = [str(r['databaseId']) for r in runs if r['headSha'] == sha and r['conclusion'] == 'success']
           if not success_ids:
               sys.stderr.write(f'No successful CI runs found for commit {sha}.\n')
               sys.stderr.write('Push to main first, let CI pass, then tag.\n')
               sys.exit(1)
           sys.stderr.write(f'Found {len(success_ids)} successful CI run(s)\n')
           for r in runs:
-              if r['conclusion'] == 'success':
+              if r['headSha'] == sha and r['conclusion'] == 'success':
                   sys.stderr.write(f'  {r[\"databaseId\"]}  {r[\"workflowName\"]}\n')
           print(' '.join(success_ids))
           ")
