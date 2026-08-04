@@ -14,11 +14,10 @@ from mpos.imu.constants import (
     IMU_CALIBRATION_FILENAME,
 )
 from mpos.imu.sensor import Sensor
-from mpos.imu.drivers.iio import IIODriver
-from mpos.imu.drivers.qmi8658 import QMI8658Driver
-from mpos.imu.drivers.wsen_isds import WsenISDSDriver
-from mpos.imu.drivers.mpu6886 import MPU6886Driver
-from mpos.imu.drivers.bma423 import BMA423Driver
+
+# NOTE: concrete drivers (IIO, QMI8658, WSEN_ISDS, MPU6886, BMA423, Mock) are
+# imported lazily inside init_iio()/init_mock()/_ensure_imu_initialized() so a
+# board only pays the RAM cost of the one driver it actually uses.
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +52,8 @@ class ImuManager:
         return True
 
     def init_iio(self):
+        from mpos.imu.drivers.iio import IIODriver
+
         self._imu_driver = IIODriver()
         if not getattr(self._imu_driver, "available", True):
             self._imu_driver = None
@@ -104,6 +105,61 @@ class ImuManager:
         self._initialized = True
         return True
 
+    def init_mock(self, motion=True):
+        """Simulated IMU for platforms without sensor hardware (web/desktop).
+
+        motion=True: slow rocking so readings visibly change.
+        motion=False: static level device (screenshots, deterministic tests).
+        Toggle later via the driver's set_motion().
+        """
+        from mpos.imu.drivers.mock import MockDriver
+
+        self._imu_driver = MockDriver(motion=motion)
+        self._sensor_list = [
+            Sensor(
+                name="Mock Accelerometer",
+                sensor_type=TYPE_ACCELEROMETER,
+                vendor="MicroPythonOS",
+                version=1,
+                max_range="±8G (78.4 m/s²)",
+                resolution="0.0024 m/s²",
+                power_ma=0,
+            ),
+            Sensor(
+                name="Mock Gyroscope",
+                sensor_type=TYPE_GYROSCOPE,
+                vendor="MicroPythonOS",
+                version=1,
+                max_range="±256 deg/s",
+                resolution="0.002 deg/s",
+                power_ma=0,
+            ),
+            Sensor(
+                name="Mock Magnetometer",
+                sensor_type=TYPE_MAGNETIC_FIELD,
+                vendor="MicroPythonOS",
+                version=1,
+                max_range="±100 uT",
+                resolution="0.1 uT",
+                power_ma=0,
+            ),
+            Sensor(
+                name="Mock Temperature",
+                sensor_type=TYPE_IMU_TEMPERATURE,
+                vendor="MicroPythonOS",
+                version=1,
+                max_range="-40°C to +85°C",
+                resolution="0.1°C",
+                power_ma=0,
+            ),
+        ]
+
+        # No _load_calibration(): simulated values are already "true", and
+        # offsets saved from other hardware would only skew them.
+
+        self._initialized = True
+        return True
+
     def _ensure_imu_initialized(self):
         if not self._initialized or self._imu_driver is not None:
             return self._imu_driver is not None
@@ -114,6 +170,8 @@ class ImuManager:
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]
                 if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x05:
+                    from mpos.imu.drivers.qmi8658 import QMI8658Driver
+
                     self._imu_driver = QMI8658Driver(self._i2c_bus, self._i2c_address)
                     self._register_qmi8658_sensors()
                     self._load_calibration()
@@ -127,6 +185,8 @@ class ImuManager:
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x0F, 1)[0]
                 if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x6A or chip_id == 0x6C:
+                    from mpos.imu.drivers.wsen_isds import WsenISDSDriver
+
                     self._imu_driver = WsenISDSDriver(self._i2c_bus, self._i2c_address)
                     self._register_wsen_isds_sensors()
                     self._load_calibration()
@@ -140,6 +200,8 @@ class ImuManager:
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x00, 1)[0]
                 if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x13:
+                    from mpos.imu.drivers.bma423 import BMA423Driver
+
                     self._imu_driver = BMA423Driver(self._i2c_bus, self._i2c_address)
                     self._register_bma423_sensors()
                     self._load_calibration()
@@ -153,6 +215,8 @@ class ImuManager:
                 chip_id = self._i2c_bus.readfrom_mem(self._i2c_address, 0x75, 1)[0]
                 if __debug__: logger.debug("chip_id=%#04x", chip_id)
                 if chip_id == 0x19:
+                    from mpos.imu.drivers.mpu6886 import MPU6886Driver
+
                     self._imu_driver = MPU6886Driver(self._i2c_bus, self._i2c_address)
                     self._register_mpu6886_sensors()
                     self._load_calibration()

@@ -195,7 +195,13 @@ if _webio:
 # === SENSOR HARDWARE ===
 from mpos import SensorManager
 
-SensorManager.init_iio()
+# Prefer real sensors via Linux IIO sysfs (e.g. laptops/phones with an
+# accelerometer). Anything without them — the web (Emscripten) build, macOS,
+# most desktops — falls back to the mock IMU with simulated
+# accelerometer/gyroscope values (slow rocking motion), matching the other
+# simulated hardware on this board (battery ADC, microphone).
+if _webio or not SensorManager.init_iio():
+    SensorManager.init_mock()
 
 # === CAMERA HARDWARE ===
 
