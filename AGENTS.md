@@ -15,7 +15,7 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 
 ## Testing
 
-**Run:** `./scripts/test_runner.py tests/<test_file> [--ondevice] [--port <port>] [--reset]`  
+**Run:** `./scripts/test_runner.py tests/<test_file> tests/<other_test_file> [--ondevice] [--port <port>] [--reset]` 
 **All tests:** `make tests` (20–35 min). CI runs them on push. **Syntax:** `make syntax-tests`  
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py` (not run by test_runner.py).  
 **Details:** `tests/README.md`

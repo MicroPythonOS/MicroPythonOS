@@ -145,6 +145,7 @@ class TestAppDetailButtonVisibility(unittest.TestCase):
         self.detail.update_button = None
         self.detail._open_button = None
         self.detail._sync_open_button = lambda: AppDetail._sync_open_button(self.detail)
+        self.detail._sync_rate_cont = lambda: None
         self.detail.set_install_label = self._mock_set_install_label
         self.detail.app = _MockApp()
         self.detail.app.fullname = "com.test.app"
