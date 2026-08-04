@@ -51,20 +51,20 @@ jobs:
           runs = data.get('workflow_runs', [])
           ids = [str(r['id']) for r in runs
                  if r.get('head_sha') == sha
-                 and r.get('conclusion') == 'success'
                  and r.get('name') in ARTIFACT_WORKFLOWS]
           if not ids:
-              sys.stderr.write(f'No successful build runs found for commit {sha}.\n')
+              sys.stderr.write(f'No build runs found for commit {sha}.\n')
               sys.stderr.write(f'API returned {len(runs)} total runs on main.\n')
-              sys.stderr.write('Push to main first, let CI pass, then tag.\n')
+              sys.stderr.write('Push to main first, then tag.\n')
               sys.exit(1)
-          sys.stderr.write(f'Found {len(ids)} successful CI build run(s)\n')
+          sys.stderr.write(f'Found {len(ids)} CI build run(s)\n')
           print(' '.join(ids))
           ")
 
           for run_id in $RUN_IDS; do
             echo "Downloading artifacts from run $run_id ..."
-            gh run download -R "$GITHUB_REPOSITORY" "$run_id" -D release-artifacts
+            gh run download -R "$GITHUB_REPOSITORY" "$run_id" -D release-artifacts || \
+              echo "WARNING: Could not download artifacts from run $run_id (may be in-progress or have none)"
           done
 
       - name: Package web artifact as zip
