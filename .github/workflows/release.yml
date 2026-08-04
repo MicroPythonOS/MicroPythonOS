@@ -72,7 +72,7 @@ jobs:
           for dir in release-artifacts/MicroPythonOS_web_*/; do
             [ -d "$dir" ] || continue
             name=$(basename "$dir")
-            (cd "$dir" && zip -r "../$name" .)
+            (cd "$dir" && zip -qr "/tmp/$name" . && mv "/tmp/$name" "../$name")
             rm -rf "$dir"
           done
 
