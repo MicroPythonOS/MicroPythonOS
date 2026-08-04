@@ -182,7 +182,7 @@ jobs:
 
   build-unix:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 75
     env:
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}

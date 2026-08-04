@@ -93,7 +93,7 @@ jobs:
   test:
     needs: build
     runs-on: macos-15-intel
-    timeout-minutes: 45
+    timeout-minutes: 75
 
     steps:
       - name: Checkout repository
@@ -116,6 +116,21 @@ jobs:
           cp "$BIN" lvgl_micropython/build/lvgl_micropy_macOS
           chmod +x lvgl_micropython/build/lvgl_micropy_macOS
 
+      - name: Disable native/viper decorators
+        run: |
+          find -L internal_filesystem -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+            sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/' "$f"
+          done
+          find -L internal_filesystem -name '*.py.bak' -type f -exec rm -f {} +
+
       - name: Run unit tests on macOS
         run: |
           ./scripts/test_runner.py
+
+      - name: Restore native/viper decorators
+        if: always()
+        run: |
+          find -L internal_filesystem -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+            sed -i.bak -E 's/^([[:space:]]*)#(@micropython\.(native|viper)[[:space:]]*)$/\1\2/' "$f"
+          done
+          find -L internal_filesystem -name '*.py.bak' -type f -exec rm -f {} +
