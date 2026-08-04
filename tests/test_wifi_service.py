@@ -101,7 +101,7 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
 
         def mock_isconnected():
             call_count[0] += 1
-            if call_count[0] >= 1:
+            if call_count[0] >= 2:
                 return True
             return False
 
@@ -202,6 +202,33 @@ class TestWifiServiceAttemptConnecting(unittest.TestCase):
         )
 
         self.assertFalse(result)
+
+    def test_switching_network_disconnects_first(self):
+        """Test disconnect is called before connect when already connected (#220)."""
+        mock_network = MockNetwork(connected=True)
+        mock_time = MockTime()
+
+        mock_wlan = mock_network.WLAN(mock_network.STA_IF)
+        call_order = []
+
+        def mock_connect(ssid, password):
+            call_order.append("connect")
+
+        def mock_disconnect():
+            call_order.append("disconnect")
+
+        mock_wlan.connect = mock_connect
+        mock_wlan.disconnect = mock_disconnect
+
+        WifiService.attempt_connecting(
+            "NewSSID",
+            "password",
+            network_module=mock_network,
+            time_module=mock_time
+        )
+
+        self.assertEqual(call_order, ["disconnect", "connect"],
+                         "Must disconnect from current network before connecting to new one")
 
 
 class TestWifiServiceAutoConnect(unittest.TestCase):
