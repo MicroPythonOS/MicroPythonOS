@@ -69,12 +69,16 @@ jobs:
 
       - name: Package web artifact as zip
         run: |
-          for dir in release-artifacts/MicroPythonOS_web_*/; do
-            [ -d "$dir" ] || continue
-            name=$(basename "$dir")
-            (cd "$dir" && zip -qr "/tmp/$name" . && mv "/tmp/$name" "../$name")
-            rm -rf "$dir"
-          done
+          WEB_DIR=$(find release-artifacts -name 'micropython.wasm' -print -quit | xargs dirname 2>/dev/null)
+          if [ -n "$WEB_DIR" ]; then
+            echo "Packaging web build from $WEB_DIR"
+            ZIP_NAME="MicroPythonOS_web_${GITHUB_REF_NAME}.zip"
+            (cd "$WEB_DIR" && zip -qr "/tmp/$ZIP_NAME" .)
+            mv "/tmp/$ZIP_NAME" "release-artifacts/$ZIP_NAME"
+            rm -rf "$WEB_DIR"
+          else
+            echo "No web build found (micropython.wasm not present in any downloaded artifact)"
+          fi
 
       - name: Flatten artifact directories
         run: |
