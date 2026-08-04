@@ -14,9 +14,9 @@ Builtin Apps:
 - OSUpdate: improve update progress UI
 
 OS:
-- Fix WiFi network switch not actually changing network — disconnect from current network before connecting to new one #220
 - Add simple way to force DeviceInfo.hardware_id, skip board detection, and customize hardware board initialization #215
 - App class: support multiple categories in MANIFEST.JSON (`'categories'` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
+- Fix WiFi network switch not actually changing network — disconnect from current network before connecting to new one #220
 - Focus restoration fix: navigating back now correctly restores the previously focused widget
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea
 - aiowebsocket: reduce reconnect frequency to reduce performance impact
