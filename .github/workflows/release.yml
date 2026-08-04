@@ -18,33 +18,30 @@ jobs:
       actions: read
 
     env:
-      GH_REPO: ${{ github.repository }}
       COMMIT_SHA: ${{ github.sha }}
 
     steps:
       - name: Download artifacts from CI runs on this commit
         run: |
-          set -euo pipefail
-
-          RUN_IDS=$(gh run list -R "$GH_REPO" -b main --json databaseId,headSha,workflowName,conclusion --limit 100 | python3 -c "
+          RUN_IDS=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=100" | python3 -c "
           import json, sys, os
-          runs = json.load(sys.stdin)
-          sha = os.environ.get('COMMIT_SHA', '')
-          success_ids = [str(r['databaseId']) for r in runs if r['headSha'] == sha and r['conclusion'] == 'success']
-          if not success_ids:
+          data = json.load(sys.stdin)
+          sha = os.environ['COMMIT_SHA']
+          ids = [str(r['id']) for r in data['workflow_runs'] if r.get('head_sha') == sha and r.get('conclusion') == 'success']
+          if not ids:
               sys.stderr.write(f'No successful CI runs found for commit {sha}.\n')
               sys.stderr.write('Push to main first, let CI pass, then tag.\n')
               sys.exit(1)
-          sys.stderr.write(f'Found {len(success_ids)} successful CI run(s)\n')
-          for r in runs:
-              if r['headSha'] == sha and r['conclusion'] == 'success':
-                  sys.stderr.write(f'  {r[\"databaseId\"]}  {r[\"workflowName\"]}\n')
-          print(' '.join(success_ids))
+          sys.stderr.write(f'Found {len(ids)} successful CI run(s)\n')
+          for r in data['workflow_runs']:
+              if r.get('head_sha') == sha and r.get('conclusion') == 'success':
+                  sys.stderr.write(f'  {r[\"id\"]}  {r[\"name\"]}\n')
+          print(' '.join(ids))
           ")
 
           for run_id in $RUN_IDS; do
             echo "Downloading artifacts from run $run_id ..."
-            gh run download -R "$GH_REPO" "$run_id" -D release-artifacts
+            gh run download -R "$GITHUB_REPOSITORY" "$run_id" -D release-artifacts
           done
 
       - name: Flatten artifact directories
