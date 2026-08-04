@@ -1,8 +1,11 @@
 Future release (next version)
 =====
 
+0.16.1
+======
+
 Board Support:
-- Fri3d 2026: increase LoRa freq from 500 kHz to max (16 Mhz) to speed up transfers and reduce bus conflicts
+- Fri3d 2026: increase LoRa SPI frequency from 500 kHz to 16 Mhz to speed up transfers and reduce bus collisions
 
 Builtin Apps:
 - AppStore: add special 'Updates' category, opened by default when update notification is pressed
