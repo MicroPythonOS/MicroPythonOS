@@ -111,7 +111,9 @@ jobs:
 
       - name: Install binary to expected path
         run: |
-          cp lvgl_micropython/build/MicroPythonOS_intel_macOS_${{ needs.build.outputs.os-version }}.bin lvgl_micropython/build/lvgl_micropy_macOS
+          mkdir -p lvgl_micropython/build
+          BIN=$(find . -name "MicroPythonOS_intel_macOS_*.bin" | head -1)
+          cp "$BIN" lvgl_micropython/build/lvgl_micropy_macOS
           chmod +x lvgl_micropython/build/lvgl_micropy_macOS
 
       - name: Run unit tests on macOS

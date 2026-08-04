@@ -121,7 +121,9 @@ jobs:
 
       - name: Install binary to expected path
         run: |
-          cp lvgl_micropython/build/MicroPythonOS_arm64_linux_${{ needs.build.outputs.os-version }}.elf lvgl_micropython/build/lvgl_micropy_unix
+          mkdir -p lvgl_micropython/build
+          BIN=$(find . -name "MicroPythonOS_arm64_linux_*.elf" | head -1)
+          cp "$BIN" lvgl_micropython/build/lvgl_micropy_unix
           chmod +x lvgl_micropython/build/lvgl_micropy_unix
 
       - name: Run unit tests
