@@ -55,6 +55,37 @@ def _resolve_cwd():
     return os.path.normpath(os.path.join(d, "..", "internal_filesystem"))
 
 
+def _mpremote_cmd(port=None, *rest):
+    """
+    Build an mpremote command, with the port when the port is known.
+
+    If the command has no `connect`, mpremote uses `connect auto`. That
+    selects sorted(comports())[0], which is the first USB serial device by
+    name. If the host has two devices, that device can be the incorrect one.
+    Because of this, each caller that knows the port must give the port here.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    mpremote = os.path.normpath(os.path.join(
+        script_dir, "..",
+        "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py"))
+    cmd = ["python3", mpremote]
+    if port:
+        cmd += ["connect", port]
+    return cmd + list(rest)
+
+
+def _count_usb_serial_devices():
+    """Count the attached USB serial devices, or give 0 if the count is unknown."""
+    try:
+        import serial.tools.list_ports
+    except ImportError:
+        return 0
+    return sum(
+        1 for p in serial.tools.list_ports.comports()
+        if p.vid is not None and p.pid is not None
+    )
+
+
 def _build_test_code(test_path, tests_dir=None):
     with open(test_path) as f:
         test_content = f.read()
@@ -1076,11 +1107,8 @@ class SerialBackend:
         import subprocess, tempfile, os as _os
         with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
             tmppath = tmp.name
-        script_dir = _os.path.dirname(_os.path.abspath(__file__))
-        mpremote = _os.path.join(script_dir, "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
         subprocess.run(
-            ["python3", mpremote, "cp", ":{}".format(path), tmppath],
+            _mpremote_cmd(self.port, "cp", ":{}".format(path), tmppath),
             capture_output=True, timeout=60
         )
         with open(tmppath, "rb") as f:
@@ -1094,11 +1122,8 @@ class SerialBackend:
             tmppath = tmp.name
         with open(tmppath, "wb") as f:
             f.write(data)
-        script_dir = _os.path.dirname(_os.path.abspath(__file__))
-        mpremote = _os.path.join(script_dir, "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
         subprocess.run(
-            ["python3", mpremote, "cp", tmppath, ":{}".format(path)],
+            _mpremote_cmd(self.port, "cp", tmppath, ":{}".format(path)),
             capture_output=True, timeout=60
         )
         _os.unlink(tmppath)
@@ -1222,11 +1247,8 @@ print("OK")
             import subprocess, json as _json, tempfile, os as _os
             with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
                 tmppath = tmp.name
-            script_dir = _os.path.dirname(_os.path.abspath(__file__))
-            mpremote = _os.path.join(script_dir, "..",
-                "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
             subprocess.run(
-                ["python3", mpremote, "cp", ":/_mpos_tree.json", tmppath],
+                _mpremote_cmd(self.port, "cp", ":/_mpos_tree.json", tmppath),
                 capture_output=True, timeout=15
             )
             with open(tmppath) as f:
@@ -1558,12 +1580,22 @@ def main():
             return 1
         apppath = args.args[0]
         import subprocess, os
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        mpremote = os.path.join(script_dir, "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
-        subprocess.run(["python3", mpremote, "mkdir", ":/apps"], capture_output=True)
+        if not args.serial_port and _count_usb_serial_devices() > 1:
+            print(
+                "error: the host has more than one USB serial device and you "
+                "gave no --serial-port.\n"
+                "       mpremote would select the first device, which can be "
+                "the incorrect one.\n"
+                "       Run 'mpremote connect list' and give --serial-port.",
+                file=sys.stderr,
+            )
+            return 1
+        print("Installing to {}".format(args.serial_port or "the first device"))
+        subprocess.run(
+            _mpremote_cmd(args.serial_port, "mkdir", ":/apps"), capture_output=True
+        )
         result = subprocess.run(
-            ["python3", mpremote, "fs", "cp", "-r", apppath, ":/apps/"],
+            _mpremote_cmd(args.serial_port, "fs", "cp", "-r", apppath, ":/apps/"),
             capture_output=True, timeout=60
         )
         if result.returncode != 0:
