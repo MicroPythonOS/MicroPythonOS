@@ -112,7 +112,8 @@ def finish_current_activity():
     if default_group:
         from .focus import move_focusgroup_objects
         move_focusgroup_objects(prev_focusgroup, default_group)
-        lv.group_focus_obj(prev_focused)
+        if prev_focused is not None:
+            lv.group_focus_obj(prev_focused)
 
     if prev_activity:
         prev_activity.onResume(prev_screen)

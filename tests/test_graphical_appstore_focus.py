@@ -183,3 +183,51 @@ class TestAppStoreFocus(unittest.TestCase):
             ),
             "Update All button was not reachable by pressing DOWN from settings_button.",
         )
+
+    # ------------------------------------------------------------------
+
+    def test_focus_restored_after_back_from_app_detail(self):
+        """Focused widget must be restored after returning from AppDetail via back."""
+        activity = _get_appstore_activity()
+        settings_btn = activity.settings_button
+
+        lv.group_focus_obj(settings_btn)
+        self.assertIsNotNone(
+            wait_for_focus(settings_btn, timeout=0.5),
+            "settings_button should be focused before navigation",
+        )
+
+        activity.show_app_detail(activity.apps[0])
+        _wait_ms(1000)
+
+        mpos.ui.back_screen()
+        _wait_ms(500)
+
+        self.assertIsNotNone(
+            wait_for_focus(settings_btn, timeout=1.0),
+            "Focus was not restored to settings_button after back from AppDetail",
+        )
+
+    def test_focus_restored_after_back_from_app_detail_bottom_item(self):
+        """Focus on a bottom list item must be restored after returning from AppDetail."""
+        activity = _get_appstore_activity()
+
+        last_item = activity.apps_list.get_child(
+            activity.apps_list.get_child_count() - 1
+        )
+        lv.group_focus_obj(last_item)
+        self.assertIsNotNone(
+            wait_for_focus(last_item, timeout=0.5),
+            "Last list item should be focused before navigation",
+        )
+
+        activity.show_app_detail(activity.apps[0])
+        _wait_ms(1000)
+
+        mpos.ui.back_screen()
+        _wait_ms(500)
+
+        self.assertIsNotNone(
+            wait_for_focus(last_item, timeout=1.0),
+            "Focus was not restored to last list item after back from AppDetail",
+        )

@@ -106,5 +106,6 @@ def save_and_clear_current_focusgroup():
     d = lv.group_get_default()
     if d and s:
         a, scr, fg, fo = s.pop()
+        focused = d.get_focused()
         move_focusgroup_objects(d, fg)
-        s.append((a, scr, fg, d.get_focused()))
+        s.append((a, scr, fg, focused))
