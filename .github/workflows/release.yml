@@ -38,16 +38,27 @@ jobs:
 
           RUN_IDS=$(echo "$RESPONSE" | python3 -c "
           import json, sys, os
+          ARTIFACT_WORKFLOWS = {
+              'Build LVGL MicroPython for Linux x64, esp32 and esp32s3',
+              'Build LVGL MicroPython on Linux for arm64',
+              'Build LVGL MicroPython on Linux for special boards like esp32-small, unphone,...',
+              'Build LVGL MicroPython for macOS arm64 (M1)',
+              'Build LVGL MicroPython for macOS Intel',
+              'Build web target and deploy to GitHub Pages',
+          }
           data = json.load(sys.stdin)
           sha = os.environ.get('COMMIT_SHA', '')
           runs = data.get('workflow_runs', [])
-          ids = [str(r['id']) for r in runs if r.get('head_sha') == sha and r.get('conclusion') == 'success']
+          ids = [str(r['id']) for r in runs
+                 if r.get('head_sha') == sha
+                 and r.get('conclusion') == 'success'
+                 and r.get('name') in ARTIFACT_WORKFLOWS]
           if not ids:
-              sys.stderr.write(f'No successful CI runs found for commit {sha}.\n')
+              sys.stderr.write(f'No successful build runs found for commit {sha}.\n')
               sys.stderr.write(f'API returned {len(runs)} total runs on main.\n')
               sys.stderr.write('Push to main first, let CI pass, then tag.\n')
               sys.exit(1)
-          sys.stderr.write(f'Found {len(ids)} successful CI run(s)\n')
+          sys.stderr.write(f'Found {len(ids)} successful CI build run(s)\n')
           print(' '.join(ids))
           ")
 
