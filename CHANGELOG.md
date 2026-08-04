@@ -5,6 +5,7 @@ Future release (next version)
 ======
 
 Board Support:
+- Linux and WebAssembly: initialize mock IMU sensor if no real IMU sensor is present
 - Fri3d 2026: increase LoRa SPI frequency from 500 kHz to 16 Mhz to speed up transfers and reduce bus collisions
 
 Builtin Apps:
