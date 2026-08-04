@@ -67,11 +67,21 @@ jobs:
             gh run download -R "$GITHUB_REPOSITORY" "$run_id" -D release-artifacts
           done
 
+      - name: Package web artifact as zip
+        run: |
+          for dir in release-artifacts/MicroPythonOS_web_*/; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            (cd "$dir" && zip -r "../$name.zip" .)
+            rm -rf "$dir"
+          done
+
       - name: Flatten artifact directories
         run: |
           mkdir -p flat
           find release-artifacts -type f -exec mv {} flat/ \;
-          rm -rf release-artifacts
+          find release-artifacts -type d -empty -delete
+          rmdir release-artifacts 2>/dev/null || true
           mv flat release-artifacts
           ls -la release-artifacts/
 
