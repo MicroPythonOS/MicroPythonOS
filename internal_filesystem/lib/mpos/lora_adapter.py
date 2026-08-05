@@ -62,7 +62,7 @@ class MPOSLoRa:
             dio1=dio1,
             dio2_rf_sw=False,
             dio3_tcxo_millivolts=3000,
-            dio3_tcxo_start_time_us=1000,
+            dio3_tcxo_start_time_us=5000,  # ponytail: 5ms matches old driver default
             reset=None,
         )
 
@@ -119,6 +119,7 @@ class MPOSLoRa:
             cfg["invert_iq_tx"] = txIq
             cfg["invert_iq_rx"] = rxIq
 
+        self._radio._clear_errors()  # ponytail: TCXO may leave stale XOSC_START_ERR (DS 13.3.6)
         self._radio.configure(cfg)
         self._radio.calibrate_image()
 
