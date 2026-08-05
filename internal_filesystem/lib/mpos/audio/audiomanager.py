@@ -763,10 +763,9 @@ class Player:
             self._stream.play()
             return
 
-        from machine import Pin, PWM
+        from machine import PWM
 
-        self._buzzer = PWM(Pin(self.output.buzzer_pin, Pin.OUT))
-        self._buzzer.duty_u16(0)
+        self._buzzer = PWM(self.output.buzzer_pin, duty_u16=0)
 
         on_complete = self.on_complete
         stream_class = RTTTLStream
