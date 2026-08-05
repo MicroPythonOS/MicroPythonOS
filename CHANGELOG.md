@@ -2,7 +2,7 @@ Future release (next version)
 =====
 
 OS:
-- Fix OTA update corruption after WiFi reconnects: DownloadManager now checks for HTTP 206 on the first connection when the caller provides a Range header, not just on internal reconnects. Without this check, a server ignoring Range would send the full file from byte 0, but the UpdateDownloader would write it at the resume block offset, shifting all subsequent data and causing ESP_ERR_OTA_VALIDATE_FAILED.
+- Fix DownloadManager resumption offset after connection loss which could cancel over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update
 
 0.16.1
 ======
