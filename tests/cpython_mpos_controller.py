@@ -24,7 +24,11 @@ import argparse
 import subprocess
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from scripts.mpos_controller import MPOSController, _mpremote_cmd
+from scripts.mpos_controller import (
+    MPOSController,
+    _count_usb_serial_devices,
+    _mpremote_cmd,
+)
 
 
 PASS = 0
@@ -111,6 +115,28 @@ def test_mpremote_port(mpos, is_serial=False, cli_binary=None, serial_port=None)
         cmd[-4:] == ["fs", "cp", "app.py", ":/"],
         "with no port: the command keeps the other arguments",
     )
+
+    # A missing pyserial must give None, and not 0. The installapp guard reads
+    # 0 as "the host has one device or no device", and then does not warn.
+    # mpremote runs with `python3`, which can be a different interpreter that
+    # does have pyserial, so 0 would hide a real multi-device condition.
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_serial(name, *a, **k):
+        if name.split(".")[0] == "serial":
+            raise ImportError("blocked by the test")
+        return real_import(name, *a, **k)
+
+    builtins.__import__ = no_serial
+    try:
+        check(
+            _count_usb_serial_devices() is None,
+            "no pyserial: the device count is unknown, and not 0",
+        )
+    finally:
+        builtins.__import__ = real_import
 
 
 def test_basic(mpos, is_serial=False, cli_binary=None, serial_port=None):

@@ -75,11 +75,19 @@ def _mpremote_cmd(port=None, *rest):
 
 
 def _count_usb_serial_devices():
-    """Count the attached USB serial devices, or give 0 if the count is unknown."""
+    """
+    Count the attached USB serial devices, or give None if the count is unknown.
+
+    The count is unknown when pyserial is missing from *this* interpreter.
+    That does not mean the host has no devices: _mpremote_cmd() starts
+    mpremote with `python3`, which can be a different interpreter that does
+    have pyserial. A missing pyserial therefore gives None, and not 0, so
+    that the caller does not read it as "the host has no devices".
+    """
     try:
         import serial.tools.list_ports
     except ImportError:
-        return 0
+        return None
     return sum(
         1 for p in serial.tools.list_ports.comports()
         if p.vid is not None and p.pid is not None
@@ -1291,28 +1299,23 @@ for s in t:
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
         import subprocess, re
         code = _build_test_code(test_path, tests_dir)
-        mpremote = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
-        )
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
         mpk_names = set(re.findall(r"\.\./tests/(com\.micropythonos\.ziptest_[^\"]+\.mpk)", code))
         if mpk_names:
             subprocess.run(
-                ["python3", mpremote, "connect", self.port, "exec",
-                 "import os; os.mkdir('tests')"],
+                _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),
                 capture_output=True, timeout=15,
             )
             for name in sorted(mpk_names):
                 host_mpk = os.path.join(host_test_dir, name)
                 subprocess.run(
-                    ["python3", mpremote, "connect", self.port, "cp",
-                     host_mpk, ":tests/{}".format(name)],
+                    _mpremote_cmd(self.port, "cp",
+                                  host_mpk, ":tests/{}".format(name)),
                     capture_output=True, timeout=60,
                 )
             code = code.replace("../tests/", "tests/")
         result = subprocess.run(
-            ["python3", mpremote, "connect", self.port, "exec", code],
+            _mpremote_cmd(self.port, "exec", code),
             capture_output=True, timeout=timeout + 60,
         )
         out = result.stdout
@@ -1580,16 +1583,26 @@ def main():
             return 1
         apppath = args.args[0]
         import subprocess, os
-        if not args.serial_port and _count_usb_serial_devices() > 1:
-            print(
-                "error: the host has more than one USB serial device and you "
-                "gave no --serial-port.\n"
-                "       mpremote would select the first device, which can be "
-                "the incorrect one.\n"
-                "       Run 'mpremote connect list' and give --serial-port.",
-                file=sys.stderr,
-            )
-            return 1
+        if not args.serial_port:
+            device_count = _count_usb_serial_devices()
+            if device_count is None:
+                print(
+                    "warning: pyserial is not available here, so the number of "
+                    "USB serial devices is unknown.\n"
+                    "         mpremote selects the first device. Give "
+                    "--serial-port to select a device.",
+                    file=sys.stderr,
+                )
+            elif device_count > 1:
+                print(
+                    "error: the host has more than one USB serial device and "
+                    "you gave no --serial-port.\n"
+                    "       mpremote would select the first device, which can "
+                    "be the incorrect one.\n"
+                    "       Run 'mpremote connect list' and give --serial-port.",
+                    file=sys.stderr,
+                )
+                return 1
         print("Installing to {}".format(args.serial_port or "the first device"))
         subprocess.run(
             _mpremote_cmd(args.serial_port, "mkdir", ":/apps"), capture_output=True
