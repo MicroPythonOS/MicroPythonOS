@@ -130,8 +130,21 @@ class BLEManager:
         ble = cls.get_ble()
         ble.irq(cls._internal_irq)
 
+    _irq_depth = 0
+
     @classmethod
     def _internal_irq(cls, event, data):
+        cls._irq_depth += 1
+        if cls._irq_depth > 8:
+            cls._irq_depth -= 1
+            return
+        try:
+            cls._dispatch_event(event, data)
+        finally:
+            cls._irq_depth -= 1
+
+    @classmethod
+    def _dispatch_event(cls, event, data):
         if event == cls.IRQ_SCAN_RESULT:
             addr_type, addr, adv_type, rssi, adv_data = data
             addr = bytes(addr)
@@ -509,6 +522,13 @@ class GattClient:
         self._value_handle = None
         self._busy = False
         self._deadline = 0
+        self.target_service_uuid = None
+        self.target_char_uuid = None
+        self.on_service_done = None
+        self.on_char_done = None
+        self.on_write_done = None
+        self.addr = None
+        self.addr_type = None
         _irq_handlers.append(self._irq)
 
     def __del__(self):
@@ -522,11 +542,26 @@ class GattClient:
             self._reset()
         elif event == BLEManager.IRQ_GATTC_SERVICE_RESULT:
             conn_handle, start, end, uuid = data
-            self._svc_start = start
-            self._svc_end = end
+            if self.target_service_uuid is None or uuid == self.target_service_uuid:
+                self._svc_start = start
+                self._svc_end = end
         elif event == BLEManager.IRQ_GATTC_CHARACTERISTIC_RESULT:
             conn_handle, def_handle, value_handle, props, uuid = data
-            self._value_handle = value_handle
+            if self.target_char_uuid is None or uuid == self.target_char_uuid:
+                self._value_handle = value_handle
+        elif event == BLEManager.IRQ_GATTC_SERVICE_DONE:
+            self._state = self._DISCOVERING
+            if self.on_service_done and self._svc_start:
+                self.on_service_done(self)
+            elif self._svc_start:
+                self.discover_characteristics(self._svc_start, self._svc_end)
+        elif event == BLEManager.IRQ_GATTC_CHARACTERISTIC_DONE:
+            if self.on_char_done and self._value_handle:
+                self.on_char_done(self)
+        elif event == BLEManager.IRQ_GATTC_WRITE_DONE:
+            self._state = self._IDLE
+            if self.on_write_done:
+                self.on_write_done(self)
 
     def connect(self, addr_type, addr):
         self._state = self._CONNECTING

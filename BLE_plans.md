@@ -128,10 +128,9 @@ BLEManager.register_owner(tag) / unregister_owner(tag)
 **Goal:** All existing BLE apps use the framework.
 
 **Deliverables:**
-- Port `fri3d-friends` (proximity, exchange, setup, beacon) to BLEManager
-- Port `BLEep` (if not fully ported in Phase 2)
-- Remove obsolete `MockBLE` helpers from `mpos.testing.mocks`
-- `BluetoothService` base class for background beacon services
+- [x] Port `BLEep` (794 → ~400 lines, -200+ lines of raw BLE code)
+- [ ] Port `fri3d-friends` (proximity, exchange, setup, beacon) to BLEManager
+- [ ] `BluetoothService` base class for background beacon services
 
 ---
 
