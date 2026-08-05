@@ -21,6 +21,11 @@ class TestSDCardManager(unittest.TestCase):
         result = SDCardManager.mount(format=True)
         self.assertIsInstance(result, bool)
 
+    def test_format_returns_bool(self):
+        result = SDCardManager.format()
+        self.assertIsInstance(result, bool)
+        self.assertFalse(result)
+
     def test_no_instance_returns_false(self):
         self.assertFalse(SDCardManager.is_mounted())
         self.assertIsNone(SDCardManager.get_mode())

@@ -47,6 +47,13 @@ class SDCardManager:
         return cls._instance._mode
 
     @classmethod
+    def format(cls):
+        if not cls._instance:
+            logger.error("SDCardManager not initialized")
+            return False
+        return cls._instance._format(_MOUNT_POINT)
+
+    @classmethod
     def get_raw(cls):
         return cls._instance
 
