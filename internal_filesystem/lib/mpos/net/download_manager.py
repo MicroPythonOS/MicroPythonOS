@@ -195,7 +195,8 @@ class DownloadManager:
         fd = None
         try:
             headers = cls._merge_headers(headers)
-            
+            caller_range = headers.get('Range', None)
+
             # State that must survive a reconnect. On a mid-stream connection
             # drop we re-issue the request with a Range header from partial_size
             # and keep writing to the same fd, so a flaky link resumes the
@@ -235,6 +236,13 @@ class DownloadManager:
                             raise OSError(-110, "Server does not support resume (HTTP %s)" % response.status)
                     else:
                         # ---- one-time setup, runs only on the first connection ----
+                        # If the caller provided a Range header (e.g. resuming an OTA
+                        # update), the server must answer 206. A 200 means it ignored
+                        # the Range and would send the full file from byte 0 —
+                        # writing that to the resume offset corrupts the data.
+                        if caller_range is not None and response.status != 206:
+                            raise OSError(-110, "Server does not support resume (HTTP %s)" % response.status)
+
                         # When redacting, suppress the headers dump entirely - response
                         # headers can include set-cookie / cf-ray tokens that correlate
                         # to a secret-bearing URL.

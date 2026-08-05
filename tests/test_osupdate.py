@@ -522,6 +522,256 @@ class TestUpdateDownloader(unittest.TestCase):
         self.assertEqual(self.downloader.bytes_written_so_far, 245760, "Must preserve internal state")
 
 
+def _make_block_data(block_idx):
+    """Create a 4096-byte block with block_idx embedded for integrity checking."""
+    header = bytes([block_idx & 0xFF, (block_idx >> 8) & 0xFF])
+    fill = bytes([(block_idx + j) & 0xFF for j in range(4096 - 2)])
+    return header + fill
+
+
+def _make_test_data(num_blocks):
+    return b"".join(_make_block_data(i) for i in range(num_blocks))
+
+
+def _verify_all_blocks(partition, num_blocks):
+    for i in range(num_blocks):
+        expected = _make_block_data(i)
+        actual = partition.blocks.get(i, b"")
+        if actual != expected:
+            return False, "block %d mismatch: expected %s, got %s" % (
+                i, expected[:4], actual[:4] if actual else b"empty"
+            )
+    return True, ""
+
+
+class RangeAwareMockDownloadManager:
+    def __init__(self):
+        self._data = b""
+        self._fail_positions = []
+        self._fail_index = 0
+        self._chunk_size = 4096
+        self._respect_range = True
+        self.headers_received = None
+        self.url_received = None
+        self.call_history = []
+
+    def set_download_data(self, data):
+        self._data = data
+
+    def set_fail_positions(self, positions):
+        self._fail_positions = list(positions)
+        self._fail_index = 0
+
+    def set_should_fail(self, should_fail):
+        if should_fail:
+            self.set_fail_positions([0])
+
+    def set_fail_after_bytes(self, bytes_count):
+        self.set_fail_positions([bytes_count])
+
+    async def download_url(self, url, outfile=None, total_size=None,
+                          progress_callback=None, chunk_callback=None, headers=None,
+                          speed_callback=None, redact_url=False):
+        from mpos.net.download_manager import DownloadManager
+
+        headers = DownloadManager._merge_headers(headers)
+        self.url_received = url
+        self.headers_received = headers
+        self.call_history.append({
+            "url": url,
+            "headers": headers,
+        })
+
+        start_pos = 0
+        if headers and self._respect_range:
+            range_val = headers.get("Range", "")
+            if range_val and "bytes=" in range_val:
+                try:
+                    range_part = range_val.split("bytes=")[1]
+                    if range_part.endswith("-"):
+                        start_pos = int(range_part[:-1])
+                    else:
+                        parts = range_part.split("-")
+                        start_pos = int(parts[0])
+                except (ValueError, IndexError):
+                    pass
+
+        if outfile or chunk_callback:
+            data_to_send = self._data[start_pos:]
+            bytes_sent = 0
+
+            for offset in range(0, len(data_to_send), self._chunk_size):
+                chunk = data_to_send[offset:offset + self._chunk_size]
+                if not chunk:
+                    break
+
+                abs_pos = start_pos + bytes_sent
+                if self._fail_index < len(self._fail_positions):
+                    fail_at = self._fail_positions[self._fail_index]
+                    if abs_pos >= fail_at:
+                        self._fail_index += 1
+                        raise OSError(-113, "ECONNABORTED")
+
+                if chunk_callback:
+                    await chunk_callback(chunk)
+
+                bytes_sent += len(chunk)
+
+            return True
+        else:
+            return self._data
+
+
+class TestUpdateDownloaderResumeIntegrity(unittest.TestCase):
+    def setUp(self):
+        self.mock_download_manager = RangeAwareMockDownloadManager()
+        self.downloader = UpdateDownloader(
+            partition_module=MockPartition,
+            download_manager=self.mock_download_manager
+        )
+
+    def test_resume_data_integrity_single_pause(self):
+        """Pause once then resume: verify every block has correct content."""
+        NUM_BLOCKS = 8
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.set_fail_positions([4096 * 3])
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertFalse(result["success"])
+        self.assertTrue(result["paused"])
+        self.assertEqual(result["bytes_written"], 4096 * 3)
+        part = self.downloader._current_partition
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+    def test_resume_data_integrity_multi_pause(self):
+        """Multiple pause/resume cycles: verify blocks after each and at end."""
+        NUM_BLOCKS = 12
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.set_fail_positions(
+            [4096 * 2, 4096 * 5, 4096 * 8]
+        )
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["paused"])
+        self.assertEqual(r["bytes_written"], 4096 * 2)
+        part = self.downloader._current_partition
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["paused"])
+        self.assertEqual(r["bytes_written"], 4096 * 5)
+        ok, msg = _verify_all_blocks(part, 5)
+        self.assertTrue(ok, "after pause 2: " + msg)
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["paused"])
+        self.assertEqual(r["bytes_written"], 4096 * 8)
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["success"])
+        self.assertEqual(r["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+    def test_resume_after_buffer_discard(self):
+        """Pause mid-block (partial buffer): resume must restore missing bytes."""
+        NUM_BLOCKS = 6
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        # fail AFTER the first full block but before buffer reaches next block boundary
+        # 4096 * 1 + 2048 = 6144: after block 0 + 2048 bytes of block 1 in buffer
+        self.mock_download_manager.set_fail_positions([4096 + 2048])
+        self.mock_download_manager._chunk_size = 2048
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertFalse(result["success"])
+        self.assertTrue(result["paused"])
+        # Only block 0 fully written; 2048 bytes of block 1 were in buffer and discarded
+        self.assertEqual(result["bytes_written"], 4096)
+        part = self.downloader._current_partition
+
+        # Resume: Range header must start from byte 4096, re-sending the lost 2048 bytes
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+    def test_resume_many_brief_drops(self):
+        """Many brief pauses (simulating flaky WiFi): verify final integrity."""
+        NUM_BLOCKS = 20
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        drops = [4096 * i for i in range(1, 11)]
+        self.mock_download_manager.set_fail_positions(drops)
+
+        for expected_pause in range(10):
+            r = run_async(self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            ))
+            self.assertTrue(r["paused"], "pause %d" % expected_pause)
+        part = self.downloader._current_partition
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["success"])
+        self.assertEqual(r["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, "after 10 drops: " + msg)
+
+    def test_resume_data_integrity_after_wifi_returns(self):
+        """Full download with a pause: after WiFi returns and resume completes,
+        every block must contain its own data (no shift or corruption)."""
+        NUM_BLOCKS = 8
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.set_fail_positions([4096 * 3])
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["paused"])
+        self.assertEqual(result["bytes_written"], 4096 * 3)
+        part = self.downloader._current_partition
+
+        # Resume after WiFi returns — server correctly supports Range (206)
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+
 class MockLVGLButton:
      """Mock LVGL button for testing button state and text."""
      
