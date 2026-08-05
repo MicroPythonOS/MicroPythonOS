@@ -78,7 +78,7 @@ class MPOSLoRa:
         self._last_events = flags
         if flags & _IRQ_TX_DONE:
             try:
-                self._radio.start_recv(continuous=True)
+                self._radio.poll_send()
             except Exception:
                 pass
         if self._user_callback:
