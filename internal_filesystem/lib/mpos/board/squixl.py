@@ -518,7 +518,7 @@ def card_present():
 
 def _sd_mount():
     try:
-        os.mount(SDCardManager.get_raw()._sdcard, "/sdcard")  # plain mount, never auto-format
+        SDCardManager.mount()  # plain mount, never auto-format
     except Exception as e:
         if __debug__: logger.debug("squixl: sd mount:", e)
 

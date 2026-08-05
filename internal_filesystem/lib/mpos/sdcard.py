@@ -22,11 +22,13 @@ class SDCardManager:
         )
 
     @classmethod
-    def mount(cls):
+    def mount(cls, format=False):
         if not cls._instance:
             logger.error("SDCardManager not initialized")
             return False
-        return cls._instance._mount(_MOUNT_POINT)
+        if format:
+            return cls._instance._mount(_MOUNT_POINT)
+        return cls._instance._try_mount(_MOUNT_POINT)
 
     @classmethod
     def is_mounted(cls):
