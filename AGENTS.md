@@ -13,6 +13,12 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 - `mpy-cross`: `./lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross`. Needs `-march=x64` for native/viper on desktop.
 - Unix/macOS: `build_mpos.sh` creates symlinks in `lvgl_micropython/ext_mod/` for `c_mpos` and `secp256k1-embedded-ecdh`.
 
+### lvgl_micropython submodule branching
+
+- **Patch files** (`.patch` applied by `build_mpos.sh`): commit directly on `integration`. No topic branch needed — the patch file is the topic.
+- **Direct C/C++ source edits**: must go on a `topic/<name>` branch, then merge into `integration`.
+- Branch naming: `topic/<kebab-case>` (e.g. `topic/wifi-country-japan`).
+
 ## Testing
 
 **Run:** `./scripts/test_runner.py tests/<test_file> tests/<other_test_file> [--ondevice] [--port <port>] [--reset]` 
