@@ -2,7 +2,7 @@ Future release (next version)
 =====
 
 OS:
-- Fix DownloadManager resumption offset after connection loss which could cancel over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update
+- Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
 - WiFi: set country code default to Japan instead of World
 
 0.16.1
