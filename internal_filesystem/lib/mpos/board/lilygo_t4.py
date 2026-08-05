@@ -20,8 +20,7 @@ import machine
 import mpos.ui
 from machine import Pin
 from micropython import const
-from mpos import InputManager, BatteryManager, AudioManager
-import mpos.sdcard
+from mpos import InputManager, BatteryManager, AudioManager, SDCardManager
 
 # Display settings (SPI)
 LCD_SPI_BUS = const(1)
@@ -110,7 +109,7 @@ BatteryManager.init_adc(ADC_IN, adc_to_voltage)
 if __debug__: logger.debug("lilygo_t4.py init SPI sdcard")
 try:
     sdcard_spi_bus = machine.SPI.Bus(host=SD_SPI_BUS, sck=SD_SCLK, mosi=SD_MOSI, miso=SD_MISO)
-    mpos.sdcard.init(spi_bus=sdcard_spi_bus, cs_pin=SD_CS)
+    SDCardManager.init(spi_bus=sdcard_spi_bus, cs_pin=SD_CS)
 except Exception as e:
     logger.error("Error initializing sdcard SPI bus: %s" % (e))
 

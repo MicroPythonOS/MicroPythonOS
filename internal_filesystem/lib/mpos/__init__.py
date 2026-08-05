@@ -6,6 +6,7 @@ from .content.intent import Intent
 from .activity_navigator import ActivityNavigator, get_foreground_app
 
 from .content.app_manager import AppManager
+from .sdcard import SDCardManager
 from .shared_preferences import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net.wifi_service import WifiService
@@ -72,7 +73,6 @@ from . import content
 from . import time
 from . import sensor_manager
 from . import camera_manager
-from . import sdcard
 from . import audio
 
 __all__ = (
@@ -80,7 +80,7 @@ __all__ = (
     "App",
     "Activity",
     "Service",
-    "SharedPreferences",
+    "SDCardManager", "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
     "NotificationManager", "Notification",
@@ -119,7 +119,7 @@ __all__ = (
     "retry_action_until", "wait_for_focus",
     # Submodules
     "ui", "shared_preferences", "net", "content", "time", "sensor_manager",
-    "camera_manager", "sdcard", "audio",
+    "camera_manager", "audio",
     # Timezone utilities
     "TimeZone"
 )

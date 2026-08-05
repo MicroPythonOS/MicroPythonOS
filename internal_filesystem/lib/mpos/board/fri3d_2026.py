@@ -237,8 +237,8 @@ try:
 except Exception as e:
     logger.error("expander init got exception: %s" % (e))
 
-import mpos.sdcard
-mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
+from mpos import SDCardManager
+SDCardManager.init(spi_bus=spi_bus, cs_pin=14)
 
 IRManager.txPin = Pin(21, Pin.OUT) # mini blaster / noisycricket has an IR LED
 IRManager.rxPin = Pin(11, Pin.IN)

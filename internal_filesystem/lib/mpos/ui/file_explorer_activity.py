@@ -6,7 +6,7 @@ import os
 import shutil
 import lvgl as lv
 
-from .. import sdcard
+from ..sdcard import SDCardManager
 from ..content.app_manager import AppManager
 from ..content.intent import Intent
 from ..app.activity import Activity
@@ -46,7 +46,7 @@ class FileExplorerActivity(Activity):
     _highlighted_text = None
 
     def onCreate(self):
-        sdcard.mount_with_optional_format("/sdcard")
+        SDCardManager.mount()
         explicit_mode = self.getIntent().extras.get("mode")
         if explicit_mode is None and self.getIntent().action == "pick_file":
             self._mode = self.MODE_PICK
@@ -105,7 +105,7 @@ class FileExplorerActivity(Activity):
         self.setContentView(screen)
 
     def onResume(self, screen):
-        sdcard.mount_with_optional_format("/sdcard")
+        SDCardManager.mount()
 
     def _resolve_start_dir(self, start_dir):
         path = start_dir.rstrip("/")
