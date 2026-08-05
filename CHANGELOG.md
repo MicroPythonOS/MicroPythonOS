@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Frameworks:
+- SDCardManager integrates the old 'sdcard' functionality, which has been removed
+
 OS:
 - Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
 - WiFi: set country code default to Japan instead of World
