@@ -5,7 +5,7 @@ except Exception as e:
     print(f"Activating simulation mode because could not import Pin, SPI from machine: {e}")
     simulation_mode = True
 
-from drivers.lora.sx1262 import SX1262
+from mpos.lora_adapter import MPOSLoRa as SX1262
 import lvgl as lv
 
 from mpos import Activity, MposKeyboard, TaskManager, LoRaManager
@@ -67,15 +67,21 @@ class LoRaChat(Activity):
     def onResume(self, screen):
         super().onResume(screen)
         print("LoRa Chat foregrounded, starting receive_thread")
+        if not simulation_mode:
+            if not LoRaManager.acquire("lora_chat"):
+                print("LoRa in use by", LoRaManager.holder)
+                return
+            LoRaManager.start_watchdog()
         import _thread
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
 
     def onPause(self, screen):
         super().onPause(screen)
-        print("LoRa Chat backgrounded, putting LoRa to sleep")
+        print("LoRa Chat backgrounded, releasing LoRa lock")
         if not simulation_mode:
-            LoRaManager.radioChip.sleep(retainConfig=False)
+            LoRaManager.stop_watchdog()
+            LoRaManager.release("lora_chat")
 
     def send_callback(self, event):
         message = self.input_textarea.get_text()
