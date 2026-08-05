@@ -288,6 +288,25 @@ class BLEManager:
         return bytes(int(part, 16) for part in s.split(":"))
 
     @staticmethod
+    def uuid(val):
+        if _simulation_mode:
+            return val
+        try:
+            import bluetooth
+            return bluetooth.UUID(val)
+        except (ImportError, AttributeError):
+            return val
+
+    @staticmethod
+    def uuid_eq(a, b):
+        if _simulation_mode:
+            return a == b
+        try:
+            return a == b
+        except Exception:
+            return False
+
+    @staticmethod
     def mac_compare(a, b):
         return a == b
 
@@ -442,7 +461,9 @@ class GattServer:
     def add_service(self, uuid, characteristics, owner_tag=None):
         if self._registered:
             raise RuntimeError("GattServer: services already registered")
-        svc = (uuid, tuple(characteristics))
+        uuid = BLEManager.uuid(uuid)
+        chars = tuple((BLEManager.uuid(c[0]),) + c[1:] for c in characteristics)
+        svc = (uuid, chars)
         cb = owner_tag
         self._service_defs.append((svc, cb))
 
@@ -542,12 +563,14 @@ class GattClient:
             self._reset()
         elif event == BLEManager.IRQ_GATTC_SERVICE_RESULT:
             conn_handle, start, end, uuid = data
-            if self.target_service_uuid is None or uuid == self.target_service_uuid:
+            ok = self.target_service_uuid is None or BLEManager.uuid_eq(uuid, self.target_service_uuid)
+            if ok:
                 self._svc_start = start
                 self._svc_end = end
         elif event == BLEManager.IRQ_GATTC_CHARACTERISTIC_RESULT:
             conn_handle, def_handle, value_handle, props, uuid = data
-            if self.target_char_uuid is None or uuid == self.target_char_uuid:
+            ok = self.target_char_uuid is None or BLEManager.uuid_eq(uuid, self.target_char_uuid)
+            if ok:
                 self._value_handle = value_handle
         elif event == BLEManager.IRQ_GATTC_SERVICE_DONE:
             self._state = self._DISCOVERING

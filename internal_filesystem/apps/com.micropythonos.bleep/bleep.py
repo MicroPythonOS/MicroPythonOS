@@ -51,17 +51,6 @@ def _random_nickname():
     return "Happy%d" % (time.ticks_ms() % 900 + 100)
 
 
-def _uuid(val):
-    if BLEManager.is_simulation():
-        return val
-    from mpos import BLEManager as _bm
-    ble = _bm.get_ble()
-    try:
-        return ble.UUID(val)
-    except AttributeError:
-        return val
-
-
 def _load_friends():
     global _friends, _prefs
     if _prefs is None:
@@ -238,8 +227,8 @@ def _process_gatt_queue():
         if addr_str not in _devices:
             continue
         client = BLEManager.create_gatt_client()
-        client.target_service_uuid = _uuid(_BLEEP_GATT_SVC_VAL)
-        client.target_char_uuid = _uuid(_BLEEP_GATT_CHAR_VAL)
+        client.target_service_uuid = _BLEEP_GATT_SVC_VAL
+        client.target_char_uuid = _BLEEP_GATT_CHAR_VAL
         client.on_write_done = _on_gatt_client_write_done
         client.gatt_target_addr_str = addr_str
         client.addr_type = _devices[addr_str]["addr_type"]
@@ -291,7 +280,7 @@ def _ble_init():
     BLEManager.add_scan_filter(service_uuid=bytes([_BLEEP_ADV_UUID & 0xFF, (_BLEEP_ADV_UUID >> 8) & 0xFF]))
 
     gatt_server = BLEManager.create_gatt_server()
-    gatt_server.add_service(_uuid(_BLEEP_GATT_SVC_VAL), [(_uuid(_BLEEP_GATT_CHAR_VAL), 0x0008)])
+    gatt_server.add_service(_BLEEP_GATT_SVC_VAL, [(_BLEEP_GATT_CHAR_VAL, 0x0008)])
     gatt_server.on_write(_on_gatts_write)
     gatt_server.register()
 
