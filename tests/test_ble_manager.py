@@ -156,3 +156,108 @@ class TestScan(unittest.TestCase):
         results = BLEManager.get_scan_results()
         self.assertEqual(len(results), 0)
         self._clean()
+
+
+class TestGattServer(unittest.TestCase):
+
+    def _clean(self):
+        BLEManager.deactivate()
+        BLEManager.clear_scan_results()
+        BLEManager.clear_scan_filters()
+
+    def test_create_gatt_server(self):
+        self._clean()
+        BLEManager.activate()
+        server = BLEManager.create_gatt_server()
+        self.assertIsNotNone(server)
+        self.assertIs(BLEManager.get_gatt_server(), server)
+        self._clean()
+
+    def test_add_service_registers(self):
+        self._clean()
+        BLEManager.activate()
+        server = BLEManager.create_gatt_server()
+        server.add_service(0xB2E4, ((0xB2E5, 0x0008),))
+        server.register()
+        self._clean()
+
+    def test_on_write_callback(self):
+        self._clean()
+        BLEManager.activate()
+        BLEManager.register_irq(lambda e, d: None)
+        BLEManager.create_gatt_server()
+        received = []
+
+        def on_write(conn_handle, value_handle, value):
+            received.append(value)
+
+        BLEManager.get_gatt_server().on_write(on_write)
+        ble = BLEManager.get_ble()
+        ble._simulate_incoming_message(b"hello")
+        self.assertTrue(len(received) > 0)
+        self.assertEqual(received[0], b"hello")
+        self._clean()
+
+
+class TestGattClient(unittest.TestCase):
+
+    def _clean(self):
+        BLEManager.deactivate()
+        BLEManager.clear_scan_results()
+        BLEManager.clear_scan_filters()
+
+    def test_create_gatt_client(self):
+        self._clean()
+        BLEManager.activate()
+        client = BLEManager.create_gatt_client()
+        self.assertIsNotNone(client)
+        self.assertFalse(client.is_connected)
+        self._clean()
+
+    def test_connect_and_disconnect(self):
+        self._clean()
+        BLEManager.activate()
+        BLEManager.register_irq(lambda e, d: None)
+        client = BLEManager.create_gatt_client()
+        client.connect(0, b"\xaa\xbb\xcc\xdd\xee\xff")
+        self.assertTrue(client.is_connected)
+        client.disconnect()
+        self.assertFalse(client.is_connected)
+        self._clean()
+
+    def test_is_busy_watchdog(self):
+        self._clean()
+        BLEManager.activate()
+        BLEManager.register_irq(lambda e, d: None)
+        client = BLEManager.create_gatt_client()
+        self.assertFalse(client.is_busy)
+        client.connect(0, b"\xaa\xbb\xcc\xdd\xee\xff")
+        self.assertFalse(client.is_busy)
+        self._clean()
+
+    def test_simulated_write_notify(self):
+        self._clean()
+        BLEManager.activate()
+        BLEManager.register_irq(lambda e, d: None)
+        client = BLEManager.create_gatt_client()
+        client.connect(0, b"\xaa\xbb\xcc\xdd\xee\xff")
+        client.write(0xB2E5, b"ping", response=False)
+        self._clean()
+
+
+class TestReAdvertise(unittest.TestCase):
+
+    def _clean(self):
+        BLEManager.deactivate()
+        BLEManager.clear_scan_results()
+        BLEManager.clear_scan_filters()
+
+    def test_start_stop_advertising(self):
+        self._clean()
+        BLEManager.activate()
+        self.assertFalse(BLEManager.is_advertising())
+        BLEManager.start_advertising(name="Test", connectable=True)
+        self.assertTrue(BLEManager.is_advertising())
+        BLEManager.stop_advertising()
+        self.assertFalse(BLEManager.is_advertising())
+        self._clean()

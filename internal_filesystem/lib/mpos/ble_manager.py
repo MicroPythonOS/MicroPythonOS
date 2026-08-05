@@ -16,6 +16,15 @@ _irq = None
 _scan_results = []
 _scan_filters = []
 _advertising = False
+_advertising_was_connectable = False
+
+_gatt_server = None
+_gatt_clients = {}
+
+_irq_handlers = []
+
+_owner_tag = None
+_owner_state = None
 
 
 class ScanResult:
@@ -44,6 +53,7 @@ class BLEManager:
     IRQ_GATTC_READ_RESULT = 15
     IRQ_GATTC_WRITE_DONE = 17
     IRQ_MTU_EXCHANGED = 21
+    IRQ_GATTC_NOTIFY = 18
 
     AD_TYPE_SERVICE_UUID_16_COMPLETE = 3
     AD_TYPE_SHORT_NAME = 8
@@ -95,9 +105,11 @@ class BLEManager:
 
     @classmethod
     def deactivate(cls):
-        global _advertising
+        global _advertising, _gatt_server
         ble = cls.get_ble()
         if cls.is_active():
+            if _gatt_server:
+                _gatt_server._on_radio_off()
             ble.active(False)
             _advertising = False
             if __debug__:
@@ -132,9 +144,28 @@ class BLEManager:
                 )
                 if _irq:
                     _irq(event, data)
-        else:
+        elif event == cls.IRQ_CENTRAL_DISCONNECT and _advertising:
+            cls.start_advertising(connectable=_advertising_was_connectable)
+            cls._dispatch_handlers(event, data)
             if _irq:
                 _irq(event, data)
+        elif event in (cls.IRQ_GATTS_WRITE, cls.IRQ_GATTC_NOTIFY):
+            if _gatt_server and event == cls.IRQ_GATTS_WRITE:
+                conn_handle, value_handle = data
+                value = _ble.gatts_read(value_handle)
+                _gatt_server._handle_write(conn_handle, value_handle, value)
+            cls._dispatch_handlers(event, data)
+            if _irq:
+                _irq(event, data)
+        else:
+            cls._dispatch_handlers(event, data)
+            if _irq:
+                _irq(event, data)
+
+    @classmethod
+    def _dispatch_handlers(cls, event, data):
+        for h in _irq_handlers:
+            h(event, data)
 
     @classmethod
     def _apply_scan_filters(cls, addr, parsed_ad):
@@ -305,6 +336,8 @@ class BLEManager:
                 adv_data = cls.ad_build(fields)
         ble.gap_advertise(interval_us, adv_data=adv_data, resp_data=resp_data, connectable=connectable)
         _advertising = True
+        global _advertising_was_connectable
+        _advertising_was_connectable = connectable
         if __debug__:
             logger.debug("BLEManager: advertising started (connectable=%s)", connectable)
 
@@ -329,5 +362,244 @@ class BLEManager:
             7: "PERIPHERAL_CONNECT", 8: "PERIPHERAL_DISCONNECT",
             9: "GATTC_SERVICE_RESULT", 10: "GATTC_SERVICE_DONE",
             11: "GATTC_CHARACTERISTIC_RESULT", 12: "GATTC_CHARACTERISTIC_DONE",
-            15: "GATTC_READ_RESULT", 17: "GATTC_WRITE_DONE", 21: "MTU_EXCHANGED",
+            15: "GATTC_READ_RESULT", 17: "GATTC_WRITE_DONE", 18: "GATTC_NOTIFY",
+            21: "MTU_EXCHANGED",
         }.get(event, "UNKNOWN(%d)" % event)
+
+    @classmethod
+    def create_gatt_server(cls):
+        global _gatt_server
+        if _gatt_server is not None:
+            return _gatt_server
+        _gatt_server = GattServer()
+        return _gatt_server
+
+    @classmethod
+    def get_gatt_server(cls):
+        return _gatt_server
+
+    @classmethod
+    def create_gatt_client(cls):
+        client = GattClient()
+        _gatt_clients[id(client)] = client
+        return client
+
+    @classmethod
+    def suspend(cls, owner_tag):
+        global _owner_tag, _owner_state
+        _owner_tag = owner_tag
+        _owner_state = {
+            "advertising": _advertising,
+            "scan_results": list(_scan_results),
+            "scan_filters": list(_scan_filters),
+        }
+        if __debug__:
+            logger.debug("BLEManager: suspended by %s", owner_tag)
+
+    @classmethod
+    def resume(cls, owner_tag):
+        global _owner_tag, _owner_state
+        if _owner_tag != owner_tag:
+            if __debug__:
+                logger.debug("BLEManager: resume tag mismatch %s != %s", owner_tag, _owner_tag)
+            return
+        if _owner_state and _owner_state["advertising"]:
+            cls.start_advertising()
+        _owner_tag = None
+        _owner_state = None
+        if __debug__:
+            logger.debug("BLEManager: resumed by %s", owner_tag)
+
+
+_FLAG_READ = 0x0002
+_FLAG_WRITE = 0x0008
+_FLAG_NOTIFY = 0x0010
+
+
+class GattServer:
+    def __init__(self):
+        self._ble = BLEManager.get_ble()
+        self._handles = {}
+        self._service_defs = []
+        self._registered = False
+        self._mtu_set = False
+        self._write_cb = None
+        self._read_cb = None
+
+    def add_service(self, uuid, characteristics, owner_tag=None):
+        if self._registered:
+            raise RuntimeError("GattServer: services already registered")
+        svc = (uuid, tuple(characteristics))
+        cb = owner_tag
+        self._service_defs.append((svc, cb))
+
+    def register(self):
+        if self._registered:
+            return
+        if not self._service_defs:
+            return
+        self._probe_and_heal()
+        if self._registered:
+            return
+        svcs = tuple(s[0] for s in self._service_defs)
+        handles = self._ble.gatts_register_services(svcs)
+        if isinstance(handles[0], int):
+            handles = (handles,)
+        for i, (_, cb) in enumerate(self._service_defs):
+            if callable(cb):
+                cb(handles[i])
+        self._registered = True
+        if __debug__:
+            logger.debug("GattServer: registered %d services", len(self._service_defs))
+
+    def _probe_and_heal(self):
+        if not self._registered:
+            return
+        heal = False
+        try:
+            self._ble.gatts_write(self._handles.get("_probe", 0xFFFF), b"\x00")
+        except Exception:
+            heal = True
+        if heal:
+            if __debug__:
+                logger.debug("GattServer: stale handles, re-registering")
+            self._on_radio_off()
+            self._registered = False
+
+    def _on_radio_off(self):
+        self._handles = {}
+        self._registered = False
+        self._mtu_set = False
+
+    def set_probe_handle(self, handle):
+        self._handles["_probe"] = handle
+
+    def on_write(self, callback):
+        self._write_cb = callback
+
+    def on_read(self, callback):
+        self._read_cb = callback
+
+    def _handle_write(self, conn_handle, value_handle, value):
+        if self._write_cb:
+            self._write_cb(conn_handle, value_handle, value)
+
+    def read(self, value_handle):
+        return self._ble.gatts_read(value_handle)
+
+    def write(self, value_handle, data, response=False):
+        self._ble.gatts_write(value_handle, data)
+
+    def notify(self, conn_handle, value_handle, data):
+        self._ble.gatts_notify(conn_handle, value_handle, data)
+
+
+class GattClient:
+    _IDLE = 0
+    _CONNECTING = 1
+    _DISCOVERING = 2
+    _WRITING = 4
+
+    def __init__(self):
+        self._ble = BLEManager.get_ble()
+        self._state = self._IDLE
+        self._conn_handle = None
+        self._svc_start = None
+        self._svc_end = None
+        self._value_handle = None
+        self._busy = False
+        self._deadline = 0
+        _irq_handlers.append(self._irq)
+
+    def __del__(self):
+        if self._irq in _irq_handlers:
+            _irq_handlers.remove(self._irq)
+
+    def _irq(self, event, data):
+        if event == BLEManager.IRQ_PERIPHERAL_CONNECT:
+            self._conn_handle, _, _ = data
+        elif event == BLEManager.IRQ_PERIPHERAL_DISCONNECT:
+            self._reset()
+        elif event == BLEManager.IRQ_GATTC_SERVICE_RESULT:
+            conn_handle, start, end, uuid = data
+            self._svc_start = start
+            self._svc_end = end
+        elif event == BLEManager.IRQ_GATTC_CHARACTERISTIC_RESULT:
+            conn_handle, def_handle, value_handle, props, uuid = data
+            self._value_handle = value_handle
+
+    def connect(self, addr_type, addr):
+        self._state = self._CONNECTING
+        self._busy = True
+        self._deadline = _ticks_add(_ticks_ms(), 10000)
+        self._ble.gap_connect(addr_type, addr)
+
+    def disconnect(self):
+        if self._conn_handle is not None:
+            self._ble.gap_disconnect(self._conn_handle)
+        self._reset()
+
+    def discover_services(self):
+        if self._conn_handle is None:
+            self._reset()
+            return
+        self._state = self._DISCOVERING
+        self._ble.gattc_discover_services(self._conn_handle)
+
+    def discover_characteristics(self, start_handle, end_handle):
+        if self._conn_handle is None:
+            self._reset()
+            return
+        self._ble.gattc_discover_characteristics(self._conn_handle, start_handle, end_handle)
+
+    def read(self, value_handle):
+        return self._ble.gattc_read(self._conn_handle, value_handle)
+
+    def write(self, value_handle, data, response=True):
+        mode = 1 if response else 0
+        self._state = self._WRITING
+        self._ble.gattc_write(self._conn_handle, value_handle, data, mode)
+
+    @property
+    def is_connected(self):
+        return self._conn_handle is not None
+
+    @property
+    def is_busy(self):
+        if self._busy and self._deadline and _ticks_diff(_ticks_ms(), self._deadline) < 0:
+            self._reset()
+        return self._busy
+
+    def _reset(self):
+        self._state = self._IDLE
+        self._conn_handle = None
+        self._svc_start = None
+        self._svc_end = None
+        self._value_handle = None
+        self._busy = False
+        self._deadline = 0
+
+
+def _ticks_ms():
+    try:
+        import time
+        return time.ticks_ms()
+    except Exception:
+        import time as _t
+        return _t.time() * 1000
+
+
+def _ticks_add(a, b):
+    try:
+        import time
+        return time.ticks_add(a, b)
+    except Exception:
+        return a + b
+
+
+def _ticks_diff(a, b):
+    try:
+        import time
+        return time.ticks_diff(a, b)
+    except Exception:
+        return a - b
