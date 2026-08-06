@@ -328,7 +328,10 @@ class _SX126x(BaseModem):
         res = self._cmd("B", _CMD_GET_ERROR, n_read=3)
         status = self._decode_status(res[0], False)
         op_error = (res[1] << 8) + res[2]
-        if op_error != 0:
+        if op_error != 0 and op_error != 0x20:
+            # ponytail: XOSC_START_ERR (0x20) is expected after any STDBY_XOSC
+            # transition (DS 13.3.6). The upstream constructor clears it once at
+            # TCXO init — it reappears on hardware with slower-starting oscillators.
             raise RuntimeError("Internal radio Status {} OpError {:#x}".format(status, op_error))
         self._decode_status(res[0])  # raise an exception here if status shows an error
         return status
