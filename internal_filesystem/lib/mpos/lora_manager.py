@@ -53,31 +53,60 @@ class LoRaManager:
 
     @staticmethod
     def reset_chip():
-        # ponytail: the 0x03→0x13 toggle is unreliable on CH32 fw v2.0.1
-        # (I2C config writes silently fail, issue #224). Use direct 0x13
-        # write + retry+readback, same pattern as board init.
+        # Toggle the CH32 expander config to hardware-reset the LoRa chip.
+        # Uses task_handler.disable() to prevent LVGL I2C reads from
+        # corrupting config writes (issue #224). Returns True on success.
+        task_handler = None
         try:
             import mpos
             exp = getattr(mpos, "io_expander", None)
             if exp is None:
-                return
+                return False
+            task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
             import time
-            for _ in range(3):
-                exp.config = 0x13
-                time.sleep_ms(20)
+            if task_handler:
+                task_handler.disable()
+
+            # Assert reset: 0x03 = aux on + LCD on + LoRa OFF
+            for _ in range(5):
+                exp.config = 0x03
+                time.sleep_ms(10)
                 try:
                     cfg = exp.config  # (lora_reset, remap, reboot, lcd_reset, aux_power)
+                except Exception:
+                    continue
+                if cfg[0] is False:
+                    break
+            else:
+                if __debug__:
+                    logger.debug("CH32 LoRa reset: couldn't assert reset")
+                return False
+
+            time.sleep_ms(100)
+
+            # Release reset: 0x13 = aux on + LCD on + LoRa ON
+            for _ in range(10):
+                exp.config = 0x13
+                time.sleep_ms(10)
+                try:
+                    cfg = exp.config
                 except Exception:
                     continue
                 if cfg[0]:
                     if __debug__:
                         logger.debug("LoRa chip reset via CH32 expander")
-                    return
+                    return True
+
             if __debug__:
-                logger.debug("CH32 LoRa reset: config write failed after 3 retries")
+                logger.debug("CH32 LoRa reset: couldn't release reset")
+            return False
         except Exception as e:
             if __debug__:
                 logger.debug("CH32 LoRa reset failed: %s", e)
+            return False
+        finally:
+            if task_handler:
+                task_handler.enable()
 
     @staticmethod
     def is_healthy():
@@ -164,7 +193,10 @@ class LoRaManager:
             LoRaManager._last_reinit_ms = now
             LoRaManager._bad_count = 0
 
-            LoRaManager.reset_chip()
+            if not LoRaManager.reset_chip():
+                if __debug__:
+                    logger.debug("Watchdog: reset failed, skipping re-init (status 0x%02x)", st)
+                return
 
             try:
                 kwargs = chip._begin_kwargs
