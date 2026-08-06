@@ -107,8 +107,8 @@ io0_pin.irq(trigger=machine.Pin.IRQ_FALLING, handler=io0_interrupt_handler)
 lv.init()
 
 # Initialize SD card in SDIO mode
-from mpos import sdcard
-sdcard.init(cmd_pin=2,clk_pin=42,d0_pin=41)
+from mpos import SDCardManager
+SDCardManager.init(cmd_pin=2, clk_pin=42, d0_pin=41)
 
 # === LED HARDWARE ===
 # Note: MaTouch ESP32-S3 has no NeoPixel LEDs

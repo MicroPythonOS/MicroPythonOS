@@ -114,6 +114,7 @@ class Settings(SettingsActivity):
             # Expert settings, alphabetically
             {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
+            {"title": "Format sdcard FAT32", "key": "format_sdcard_fat32", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, format sdcard as FAT32", "yes")], "changed_callback": self.format_sdcard_fat32},
             # This is currently only in the drawer but would make sense to have it here for completeness:
             #{"title": "Display Brightness", "key": "display_brightness", "placeholder": "A value from 0 to 100."},
             # Maybe also add font size (but ideally then all fonts should scale up/down)
@@ -155,6 +156,13 @@ class Settings(SettingsActivity):
             logger.warning("could not import/run freezefs_mount_builtin: %s", e)
         if __debug__: logger.debug("done mounting, refreshing apps")
         AppManager.refresh_apps()
+
+    def format_sdcard_fat32(self, new_value):
+        if new_value != "yes":
+            return
+        from mpos import SDCardManager
+        SDCardManager.format()
+        SDCardManager.mount()
 
     def theme_changed(self, new_value):
         from mpos import AppearanceManager
