@@ -53,32 +53,31 @@ class LoRaManager:
 
     @staticmethod
     def reset_chip():
-        # ponytail: exp.config writes can silently fail on CH32 fw v2.0.1
-        # due to I2C bus contention with LVGL's periodic expander reads
-        # (buttons, joystick). Pausing the LVGL task handler lets the write
-        # land cleanly. See issue #224.
-        task_handler = None
+        # ponytail: the 0x03→0x13 toggle is unreliable on CH32 fw v2.0.1
+        # (I2C config writes silently fail, issue #224). Use direct 0x13
+        # write + retry+readback, same pattern as board init.
         try:
             import mpos
             exp = getattr(mpos, "io_expander", None)
             if exp is None:
                 return
-            task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
             import time
-            if task_handler:
-                task_handler.disable()
-            exp.config = 0x03
-            time.sleep_ms(100)
-            exp.config = 0x13
-            time.sleep_ms(100)
+            for _ in range(3):
+                exp.config = 0x13
+                time.sleep_ms(20)
+                try:
+                    cfg = exp.config  # (lora_reset, remap, reboot, lcd_reset, aux_power)
+                except Exception:
+                    continue
+                if cfg[0]:
+                    if __debug__:
+                        logger.debug("LoRa chip reset via CH32 expander")
+                    return
             if __debug__:
-                logger.debug("LoRa chip reset via CH32 expander")
+                logger.debug("CH32 LoRa reset: config write failed after 3 retries")
         except Exception as e:
             if __debug__:
                 logger.debug("CH32 LoRa reset failed: %s", e)
-        finally:
-            if task_handler:
-                task_handler.enable()
 
     @staticmethod
     def is_healthy():
@@ -135,7 +134,10 @@ class LoRaManager:
         LoRaManager._last_status = st
         mode = st & 0x70
 
-        if mode == 0x50:
+        # FS (0x30) = PLL locking, normal transient between TX and RX.
+        # RX (0x50) = actively receiving.
+        # TX (0x60) = transmitting.
+        if mode in (0x30, 0x50, 0x60):
             LoRaManager._bad_count = 0
             LoRaManager._unresponsive_ms = 0
             return
@@ -162,8 +164,16 @@ class LoRaManager:
             LoRaManager._last_reinit_ms = now
             LoRaManager._bad_count = 0
 
-            # ponytail: skip re-init to verify this is/isn't the culprit.
-            # begin() uses _begin_kwargs[blocking=True] and
-            # setBlockingCallback(True, cb) clears _user_callback — state corruption.
-            print("Watchdog would have reset+reinit (status 0x%02x, bad=%d) — SKIPPED" % (st, LoRaManager._bad_count))
-            LoRaManager._bad_count = 0
+            LoRaManager.reset_chip()
+
+            try:
+                kwargs = chip._begin_kwargs
+                chip.begin(**kwargs)
+                blocking = chip._blocking  # ponytail: use live state, not _begin_kwargs[blocking=True]
+                cb = chip._user_callback
+                chip.setBlockingCallback(blocking, cb)
+                if __debug__:
+                    logger.debug("Watchdog: re-init complete (was status 0x%02x)", st)
+            except Exception as e:
+                if __debug__:
+                    logger.debug("Watchdog: re-init failed: %s", e)
