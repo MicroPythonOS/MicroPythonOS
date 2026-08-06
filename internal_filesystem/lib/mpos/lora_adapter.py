@@ -8,6 +8,7 @@
 
 import logging
 
+import time
 from micropython import const
 
 try:
@@ -175,7 +176,23 @@ class MPOSLoRa:
                 self._radio._clear_errors()  # _standby() sets XOSC_START_ERR; SX1262 HW needs it cleared to transmit
                 self._radio.prepare_send(data)
                 self._radio.start_send()
-                return len(data), 0
+                # Poll for TX completion instead of relying on the DIO1 ISR
+                # (MicroPython soft IRQs are unreliable; the 1-of-2 toggle
+                # pattern shows SET_TX silently failing when radio state is
+                # "clean RX" vs "stuck TX").
+                t0 = time.ticks_ms()
+                deadline = time.ticks_add(t0, 3000)
+                while time.ticks_diff(time.ticks_ms(), deadline) < 0:
+                    flags = self._radio._get_irq()
+                    if flags & _IRQ_TX_DONE:
+                        if __debug__:
+                            logger.debug("TX poll: TX_DONE after %d ms", time.ticks_diff(time.ticks_ms(), t0))
+                        self._radio.poll_send()
+                        return len(data), 0
+                    time.sleep_ms(20)
+                if __debug__:
+                    logger.debug("TX poll: timeout after 3000 ms")
+                return 0, -5  # ERR_TX_TIMEOUT
             except Exception as e:
                 import sys
                 sys.print_exception(e)
