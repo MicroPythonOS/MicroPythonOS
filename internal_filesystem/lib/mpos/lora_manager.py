@@ -53,12 +53,20 @@ class LoRaManager:
 
     @staticmethod
     def reset_chip():
+        # ponytail: exp.config writes can silently fail on CH32 fw v2.0.1
+        # due to I2C bus contention with LVGL's periodic expander reads
+        # (buttons, joystick). Pausing the LVGL task handler lets the write
+        # land cleanly. See issue #224.
+        task_handler = None
         try:
             import mpos
             exp = getattr(mpos, "io_expander", None)
             if exp is None:
                 return
+            task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
             import time
+            if task_handler:
+                task_handler.disable()
             exp.config = 0x03
             time.sleep_ms(100)
             exp.config = 0x13
@@ -68,6 +76,9 @@ class LoRaManager:
         except Exception as e:
             if __debug__:
                 logger.debug("CH32 LoRa reset failed: %s", e)
+        finally:
+            if task_handler:
+                task_handler.enable()
 
     @staticmethod
     def is_healthy():

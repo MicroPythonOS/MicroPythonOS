@@ -79,8 +79,9 @@ class MPOSLoRa:
         if flags & _IRQ_TX_DONE:
             try:
                 self._radio.poll_send()
-            except Exception:
-                pass
+            except Exception as e:
+                import sys
+                sys.print_exception(e)
         if self._user_callback:
             self._user_callback(flags)
 
@@ -161,14 +162,18 @@ class MPOSLoRa:
             try:
                 self._radio.send(data)
                 return len(data), 0
-            except Exception:
+            except Exception as e:
+                import sys
+                sys.print_exception(e)
                 return 0, -1
         else:
             try:
                 self._radio.prepare_send(data)
                 self._radio.start_send()
                 return len(data), 0
-            except Exception:
+            except Exception as e:
+                import sys
+                sys.print_exception(e)
                 return 0, -1
 
     def recv(self, len_=0, timeout_en=False, timeout_ms=0):
