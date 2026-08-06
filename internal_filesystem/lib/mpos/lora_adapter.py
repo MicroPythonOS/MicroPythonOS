@@ -160,6 +160,7 @@ class MPOSLoRa:
             return 0, -804
         if self._blocking:
             try:
+                self._radio._clear_errors()  # ponytail: _standby() → STDBY_XOSC may set XOSC_START_ERR
                 self._radio.send(data)
                 return len(data), 0
             except Exception as e:
@@ -168,6 +169,7 @@ class MPOSLoRa:
                 return 0, -1
         else:
             try:
+                self._radio._clear_errors()  # ponytail: _standby() → STDBY_XOSC may set XOSC_START_ERR
                 self._radio.prepare_send(data)
                 self._radio.start_send()
                 return len(data), 0
