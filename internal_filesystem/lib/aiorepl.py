@@ -114,9 +114,11 @@ async def task(g=None, prompt="--> "):
             curs = 0  # cursor offset from end of cmd buffer
             while True:
                 b = await s.read(1)
-                # MPOS: return on EOF to avoid infinite prompt spam with /dev/null (differs from upstream).
+                # MPOS: on EOF (host disconnected or /dev/null), keep the task alive and
+                # poll for reconnection without re-printing the prompt (differs from upstream).
                 if not b:  # Handle EOF/empty read
-                    return
+                    await asyncio.sleep_ms(500)
+                    continue
                 pc = c  # save previous character
                 c = ord(b)
                 pt = t  # save previous time

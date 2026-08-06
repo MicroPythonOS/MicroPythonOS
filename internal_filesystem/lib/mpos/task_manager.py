@@ -26,7 +26,15 @@ class TaskManager:
             logger.warning("Not starting TaskManager because it's been disabled.")
             return
         cls.keep_running = True
-        asyncio.run(TaskManager._asyncio_thread(10)) # 100ms is too high, causes lag. 10ms is fine. not sure if 1ms would be better...
+        while cls.keep_running is True:
+            try:
+                asyncio.run(TaskManager._asyncio_thread(10)) # 100ms is too high, causes lag. 10ms is fine. not sure if 1ms would be better...
+            except KeyboardInterrupt:
+                # A KeyboardInterrupt raised inside any task escapes MicroPython's
+                # run_until_complete (it only catches CancelledError and Exception),
+                # which would tear down every task. The task queue survives the
+                # unwind, so re-entering asyncio.run resumes the remaining tasks.
+                logger.warning("asyncio loop got KeyboardInterrupt, resuming remaining tasks")
 
     @classmethod
     def stop(cls):
@@ -45,6 +53,22 @@ class TaskManager:
         task = asyncio.create_task(coroutine)
         cls.task_list.append(task)
         return task
+
+    @classmethod
+    def create_supervised_task(cls, coroutine_factory, restart_delay_ms=200):
+        async def _supervisor():
+            while True:
+                try:
+                    await coroutine_factory()
+                    return
+                except asyncio.CancelledError:
+                    raise
+                except KeyboardInterrupt as e:
+                    logger.warning("supervised task got KeyboardInterrupt, restarting it: %s", e)
+                except Exception as e:
+                    logger.warning("supervised task died, restarting it: %s", e)
+                await asyncio.sleep_ms(restart_delay_ms)
+        return cls.create_task(_supervisor())
 
     @classmethod
     def list_tasks(cls):

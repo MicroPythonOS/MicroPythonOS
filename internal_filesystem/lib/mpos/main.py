@@ -1,6 +1,15 @@
 # Uncomment this line if you want to be dropped to a REPL shell without loading any MicroPythonOS code:
 # raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
 
+import micropython
+
+# Hosts connecting over serial mid-boot (e.g. mpremote entering raw REPL) send Ctrl-C,
+# which would abort the boot scripts and leave the OS half-started at the REPL shell.
+# Disable the interrupt character until the REPL is up; aiorepl manages it afterwards,
+# and the ends of this file restore it on the fall-back-to-REPL paths.
+if hasattr(micropython, "kbd_intr"):
+    micropython.kbd_intr(-1)
+
 import lvgl as lv
 import os
 import logging
@@ -395,3 +404,7 @@ except KeyboardInterrupt as k:
     if __debug__: logger.debug("TaskManager.start() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
 except Exception as e:
     logger.error("TaskManager.start() got exception: %s", e)
+
+# Falling through to the REPL shell: restore the Ctrl-C interrupt character for it.
+if hasattr(micropython, "kbd_intr"):
+    micropython.kbd_intr(3)

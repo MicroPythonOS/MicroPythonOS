@@ -40,3 +40,7 @@ except Exception as e:
     time.sleep(5) # sleep so the user has time to connect to serial console
     sys.print_exception(e) # print it after the sleep so user can see it on serial console
     print("MicroPythonOS exiting.")
+    # mpos.main disables the Ctrl-C interrupt character during boot; restore it for the REPL shell.
+    import micropython
+    if hasattr(micropython, "kbd_intr"):
+        micropython.kbd_intr(3)

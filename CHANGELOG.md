@@ -6,6 +6,10 @@ Builtin Apps:
 
 OS:
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea if set_text_selection(True)
+- aiorepl: survive stdin EOF (host disconnect) by polling for reconnection instead of exiting, so the serial console no longer dies permanently after mpremote/raw-REPL connection attempts
+- TaskManager: restart the asyncio loop when a stray KeyboardInterrupt escapes a task (previously a single Ctrl-C could tear down all asyncio tasks while the UI kept running)
+- TaskManager: add create_supervised_task() and use it for the aiorepl console so it is restarted if it dies from a KeyboardInterrupt or exception
+- boot: disable the Ctrl-C interrupt character while mpos.main boots (restored on the REPL fallback paths), so hosts connecting over serial mid-boot (e.g. mpremote entering raw REPL) can no longer silently abort the boot scripts and leave the OS half-started at the REPL
 
 Development:
 - Add Python-level line coverage via sys.settrace (mpcov build variant)
