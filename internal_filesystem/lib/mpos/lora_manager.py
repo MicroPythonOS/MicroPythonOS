@@ -160,18 +160,22 @@ class LoRaManager:
             return
 
         now = time.ticks_ms()
-        if LoRaManager._last_reinit_ms and time.ticks_diff(now, LoRaManager._last_reinit_ms) < 5000:
+        # Rate-limit recovery to once per 30s to avoid reset storms
+        # (a single 0x00 may be transient SPI bus contention, PR #222).
+        if LoRaManager._last_reinit_ms and time.ticks_diff(now, LoRaManager._last_reinit_ms) < 30000:
             return
 
-        if __debug__:
-            logger.debug("Watchdog: re-init (status 0x%02x, bad=%d)", st, LoRaManager._bad_count)
-        LoRaManager._last_reinit_ms = now
-        LoRaManager._bad_count = 0
+        # Only act on truly unresponsive chips: 3+ consecutive 0x00 reads.
+        # Non-zero bad modes (0xac, 0xaa, 0xc8) mean the chip is responsive
+        # but in a bad mode — software re-init corrupts adapter state,
+        # so we ignore these and let the app handle it.
+        if st == 0x00 and LoRaManager._bad_count >= 3:
+            LoRaManager._last_reinit_ms = now
+            LoRaManager._bad_count = 0
 
-        if st == 0x00:
-            # Chip completely unresponsive — hardware reset + full reconstruction.
-            # The upstream SX1262 constructor does TCXO init and DIO IRQ config
-            # that begin() doesn't re-do. Must create a fresh object after reset.
+            if __debug__:
+                logger.debug("Watchdog: hardware reset (status 0x00, bad=%d)", LoRaManager._bad_count)
+
             if LoRaManager._lora_spi_device is not None and LoRaManager.reset_chip():
                 try:
                     from mpos.lora_adapter import MPOSLoRa
@@ -188,14 +192,3 @@ class LoRaManager:
                 except Exception as e:
                     if __debug__:
                         logger.debug("Watchdog: reconstruction failed: %s", e)
-        else:
-            # Chip is responsive but in wrong mode — software re-init.
-            # No hardware reset; TCXO and DIO are still configured.
-            try:
-                chip.begin(**chip._begin_kwargs)
-                chip.setBlockingCallback(chip._blocking, chip._user_callback)
-                if __debug__:
-                    logger.debug("Watchdog: software re-init OK")
-            except Exception as e:
-                if __debug__:
-                    logger.debug("Watchdog: software re-init failed: %s", e)
