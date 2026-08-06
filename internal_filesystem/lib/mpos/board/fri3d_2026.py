@@ -162,6 +162,9 @@ if lora_spi_device is not None:
     sx = SX1262(lora_spi_device, 40, 11, 41, 45)  # reset pin driven by CH32 Expander
     from mpos import LoRaManager
     LoRaManager.radioChip = sx
+    # Store params needed to reconstruct after a watchdog hardware reset.
+    LoRaManager._lora_spi_device = lora_spi_device
+    LoRaManager._lora_pins = (40, 11, 41, 45)  # irq, rst, gpio, cs_pin
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(

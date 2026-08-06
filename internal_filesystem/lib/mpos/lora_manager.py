@@ -53,60 +53,36 @@ class LoRaManager:
 
     @staticmethod
     def reset_chip():
-        # Toggle the CH32 expander config to hardware-reset the LoRa chip.
-        # Uses task_handler.disable() to prevent LVGL I2C reads from
-        # corrupting config writes (issue #224). Returns True on success.
-        task_handler = None
+        # Toggle CH32 expander config to hardware-reset the LoRa chip.
+        # 0x03 = aux on + LCD on + LoRa OFF (assert reset)
+        # 0x13 = aux on + LCD on + LoRa ON  (release reset)
+        # Meshcore uses this same sequence without task_handler.disable();
+        # the I2C writes work reliably on the unfragmented bus during recovery.
         try:
             import mpos
             exp = getattr(mpos, "io_expander", None)
             if exp is None:
                 return False
-            task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
             import time
-            if task_handler:
-                task_handler.disable()
-
-            # Assert reset: 0x03 = aux on + LCD on + LoRa OFF
-            for _ in range(5):
-                exp.config = 0x03
-                time.sleep_ms(10)
-                try:
-                    cfg = exp.config  # (lora_reset, remap, reboot, lcd_reset, aux_power)
-                except Exception:
-                    continue
-                if cfg[0] is False:
-                    break
-            else:
-                if __debug__:
-                    logger.debug("CH32 LoRa reset: couldn't assert reset")
-                return False
-
+            exp.config = 0x03
             time.sleep_ms(100)
-
-            # Release reset: 0x13 = aux on + LCD on + LoRa ON
-            for _ in range(10):
-                exp.config = 0x13
-                time.sleep_ms(10)
-                try:
-                    cfg = exp.config
-                except Exception:
-                    continue
+            exp.config = 0x13
+            time.sleep_ms(100)
+            try:
+                cfg = exp.config  # (lora_reset, remap, reboot, lcd_reset, aux_power)
                 if cfg[0]:
                     if __debug__:
                         logger.debug("LoRa chip reset via CH32 expander")
                     return True
-
+            except Exception:
+                pass
             if __debug__:
-                logger.debug("CH32 LoRa reset: couldn't release reset")
+                logger.debug("CH32 LoRa reset: readback check failed")
             return False
         except Exception as e:
             if __debug__:
                 logger.debug("CH32 LoRa reset failed: %s", e)
             return False
-        finally:
-            if task_handler:
-                task_handler.enable()
 
     @staticmethod
     def is_healthy():
@@ -187,25 +163,39 @@ class LoRaManager:
         if LoRaManager._last_reinit_ms and time.ticks_diff(now, LoRaManager._last_reinit_ms) < 5000:
             return
 
-        if st == 0x00 or LoRaManager._bad_count >= 3:
-            if __debug__:
-                logger.debug("Watchdog: re-init (status 0x%02x, bad=%d)", st, LoRaManager._bad_count)
-            LoRaManager._last_reinit_ms = now
-            LoRaManager._bad_count = 0
+        if __debug__:
+            logger.debug("Watchdog: re-init (status 0x%02x, bad=%d)", st, LoRaManager._bad_count)
+        LoRaManager._last_reinit_ms = now
+        LoRaManager._bad_count = 0
 
-            if not LoRaManager.reset_chip():
-                if __debug__:
-                    logger.debug("Watchdog: reset failed, skipping re-init (status 0x%02x)", st)
-                return
-
+        if st == 0x00:
+            # Chip completely unresponsive — hardware reset + full reconstruction.
+            # The upstream SX1262 constructor does TCXO init and DIO IRQ config
+            # that begin() doesn't re-do. Must create a fresh object after reset.
+            if LoRaManager._lora_spi_device is not None and LoRaManager.reset_chip():
+                try:
+                    from mpos.lora_adapter import MPOSLoRa
+                    new_chip = MPOSLoRa(
+                        LoRaManager._lora_spi_device,
+                        *LoRaManager._lora_pins,
+                    )
+                    kwargs = chip._begin_kwargs
+                    new_chip.begin(**kwargs)
+                    new_chip.setBlockingCallback(chip._blocking, chip._user_callback)
+                    LoRaManager.radioChip = new_chip
+                    if __debug__:
+                        logger.debug("Watchdog: hardware reset + full reconstruction OK")
+                except Exception as e:
+                    if __debug__:
+                        logger.debug("Watchdog: reconstruction failed: %s", e)
+        else:
+            # Chip is responsive but in wrong mode — software re-init.
+            # No hardware reset; TCXO and DIO are still configured.
             try:
-                kwargs = chip._begin_kwargs
-                chip.begin(**kwargs)
-                blocking = chip._blocking  # ponytail: use live state, not _begin_kwargs[blocking=True]
-                cb = chip._user_callback
-                chip.setBlockingCallback(blocking, cb)
+                chip.begin(**chip._begin_kwargs)
+                chip.setBlockingCallback(chip._blocking, chip._user_callback)
                 if __debug__:
-                    logger.debug("Watchdog: re-init complete (was status 0x%02x)", st)
+                    logger.debug("Watchdog: software re-init OK")
             except Exception as e:
                 if __debug__:
-                    logger.debug("Watchdog: re-init failed: %s", e)
+                    logger.debug("Watchdog: software re-init failed: %s", e)
