@@ -56,14 +56,19 @@ class LoRaManager:
         # Toggle CH32 expander config to hardware-reset the LoRa chip.
         # 0x03 = aux on + LCD on + LoRa OFF (assert reset)
         # 0x13 = aux on + LCD on + LoRa ON  (release reset)
-        # Meshcore uses this same sequence without task_handler.disable();
-        # the I2C writes work reliably on the unfragmented bus during recovery.
+        # task_handler.disable() prevents LVGL I2C reads from corrupting
+        # the config writes (tested: 0/150 failures with, 6/150 without).
+        task_handler = None
         try:
             import mpos
             exp = getattr(mpos, "io_expander", None)
             if exp is None:
                 return False
+            task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
             import time
+            if task_handler:
+                task_handler.disable()
+
             exp.config = 0x03
             time.sleep_ms(100)
             exp.config = 0x13
@@ -83,6 +88,9 @@ class LoRaManager:
             if __debug__:
                 logger.debug("CH32 LoRa reset failed: %s", e)
             return False
+        finally:
+            if task_handler:
+                task_handler.enable()
 
     @staticmethod
     def is_healthy():
