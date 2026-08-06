@@ -6,6 +6,8 @@
 # Board-specific quirks (SPI adapter, CH32 reset, dio2_rf_sw=False,
 # TCXO voltage) live here only.
 
+import logging
+
 from micropython import const
 
 try:
@@ -15,6 +17,8 @@ except ImportError:
 
 from lora import SX1262 as _UpstreamSX1262
 from mpos.lora_spi_adapter import SPIAdapter
+
+logger = logging.getLogger(__name__)
 
 _IRQ_TX_DONE = const(1 << 0)
 _IRQ_RX_DONE = const(1 << 1)
@@ -182,13 +186,17 @@ class MPOSLoRa:
         # The SX1262 holds DIO1 high until IRQ flags are cleared; an
         # edge-triggered ISR that's dropped never fires again. This SPI
         # poll catches the flags on the next recv() iteration (~5ms).
+        caught_missed = False
         if not self._blocking:
             try:
                 flags = self._radio._get_irq()
                 if flags:
                     self._last_events = flags
                     if flags & _IRQ_TX_DONE:
-                        self._radio.poll_send()
+                        self._radio.poll_send()  # restarts RX
+                        caught_missed = True
+                        if __debug__:
+                            logger.debug("recv poll caught TX_DONE")
             except Exception:
                 pass
 
@@ -204,6 +212,8 @@ class MPOSLoRa:
             status = -7 if pkt.crc_error else 0
             return bytes(pkt), status
         else:
+            if caught_missed:
+                return b"", 0  # skip _read_data: poll_send() already restarted RX
             return self._read_data(len_)
 
     def _read_data(self, len_):
