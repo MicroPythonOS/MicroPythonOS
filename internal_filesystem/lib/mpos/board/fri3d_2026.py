@@ -66,14 +66,13 @@ try:
 except Exception as e:
     import sys
     sys.print_exception(e)
-else:
-    from mpos.lora_adapter import MPOSLoRa as SX1262
-    rf_sw = Pin(46, Pin.OUT)
-    rf_sw.value(1)
-    if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable receiver mode
-    sx = SX1262(lora_spi_device, 40, 11, 41, 45) # reset pin driven by CH32 Expander (passed as rst but unused — adapter passes reset=None to upstream)
-    from mpos import LoRaManager
-    LoRaManager.radioChip = sx
+    lora_spi_device = None
+rf_sw = Pin(46, Pin.OUT)
+rf_sw.value(1)
+if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable receiver mode
+# SX1262 constructor moved to after CH32 releases LoRa reset —
+# if it ran while the chip was held in reset, TCXO init and DIO
+# IRQ config would be silently lost.
 
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
@@ -145,9 +144,24 @@ BatteryManager.has_battery = lambda *args: True
 BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (mpos.io_expander.analog[1] * 0.00192308 - 0.28076923)
 
 # LCD and Lora reset using the CH32 microcontroller
-expander.config = 0x01 # 3v3 aux on + LCD off + Lora Off
-time.sleep_ms(100)
-expander.config = 0x13 # 3v3 aux + LCD on + Lora on
+# ponytail: the 0x01→0x13 toggle is unreliable on some boards (I2C write
+# of 0x13 silently fails). The factory default state leaves the chip out
+# of reset. Try releasing directly; retry if I2C flaked out.
+for _ in range(3):
+    expander.config = 0x13  # 3v3 aux + LCD on + Lora on
+    time.sleep_ms(20)
+    cfg = expander.config  # returns (lora_reset, remap, reboot, lcd_reset, aux_power)
+    if cfg[0]:
+        break
+    print("CH32 config write 0x13 failed, retrying (readback=%s)" % (cfg,))
+else:
+    print("WARNING: LoRa NOT released from reset after 3 retries! config=%s" % (cfg,))
+
+if lora_spi_device is not None:
+    from mpos.lora_adapter import MPOSLoRa as SX1262
+    sx = SX1262(lora_spi_device, 40, 11, 41, 45)  # reset pin driven by CH32 Expander
+    from mpos import LoRaManager
+    LoRaManager.radioChip = sx
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(

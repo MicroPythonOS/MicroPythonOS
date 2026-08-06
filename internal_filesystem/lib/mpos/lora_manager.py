@@ -162,16 +162,8 @@ class LoRaManager:
             LoRaManager._last_reinit_ms = now
             LoRaManager._bad_count = 0
 
-            LoRaManager.reset_chip()
-
-            try:
-                kwargs = chip._begin_kwargs
-                chip.begin(**kwargs)
-                blocking = kwargs.get("blocking", True)
-                cb = chip._user_callback
-                chip.setBlockingCallback(blocking, cb)
-                if __debug__:
-                    logger.debug("Watchdog: re-init complete")
-            except Exception as e:
-                if __debug__:
-                    logger.debug("Watchdog: re-init failed: %s", e)
+            # ponytail: skip re-init to verify this is/isn't the culprit.
+            # begin() uses _begin_kwargs[blocking=True] and
+            # setBlockingCallback(True, cb) clears _user_callback — state corruption.
+            print("Watchdog would have reset+reinit (status 0x%02x, bad=%d) — SKIPPED" % (st, LoRaManager._bad_count))
+            LoRaManager._bad_count = 0
