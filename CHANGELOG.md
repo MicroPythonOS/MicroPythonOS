@@ -29,6 +29,7 @@ OS:
 - micropython-nostr: log background relay connection failures at INFO instead of ERROR to avoid REPL pollution breaking file transfers
 
 Development:
+- mpos_controller: give --serial-port to mpremote, so file transfers, screenshots and widget trees use the selected device instead of the first device that mpremote finds
 - Add Python-level line coverage via sys.settrace (mpcov build variant)
 - Add `--coverage` flag to test_runner.py for collecting per-file line coverage
 - Add `make build-mpos-unix-coverage` target
