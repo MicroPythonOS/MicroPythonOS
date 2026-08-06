@@ -62,7 +62,7 @@ class MPOSLoRa:
             dio1=dio1,
             dio2_rf_sw=False,
             dio3_tcxo_millivolts=3000,
-            dio3_tcxo_start_time_us=5000,  # ponytail: 5ms matches old driver default
+            dio3_tcxo_start_time_us=1000,  # ponytail: upstream default, test if still works post-reset-fix
             reset=None,
         )
 
@@ -120,7 +120,6 @@ class MPOSLoRa:
             cfg["invert_iq_tx"] = txIq
             cfg["invert_iq_rx"] = rxIq
 
-        self._radio._clear_errors()  # ponytail: TCXO may leave stale XOSC_START_ERR (DS 13.3.6)
         self._radio.configure(cfg)
         self._radio.calibrate_image()
 
@@ -160,7 +159,7 @@ class MPOSLoRa:
             return 0, -804
         if self._blocking:
             try:
-                self._radio._clear_errors()  # ponytail: _standby() → STDBY_XOSC may set XOSC_START_ERR
+                self._radio._clear_errors()  # _standby() sets XOSC_START_ERR; SX1262 HW needs it cleared to transmit
                 self._radio.send(data)
                 return len(data), 0
             except Exception as e:
@@ -169,7 +168,7 @@ class MPOSLoRa:
                 return 0, -1
         else:
             try:
-                self._radio._clear_errors()  # ponytail: _standby() → STDBY_XOSC may set XOSC_START_ERR
+                self._radio._clear_errors()  # _standby() sets XOSC_START_ERR; SX1262 HW needs it cleared to transmit
                 self._radio.prepare_send(data)
                 self._radio.start_send()
                 return len(data), 0
