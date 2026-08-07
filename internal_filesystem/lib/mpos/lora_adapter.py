@@ -199,6 +199,19 @@ class MPOSLoRa:
                 return 0, -1
 
     def recv(self, len_=0, timeout_en=False, timeout_ms=0):
+        # Acknowledge pending IRQ events via SPI. The SX1262 gates the RX
+        # buffer behind the IRQ flag: GET_RX_BUFFER_STATUS returns rx_len=0
+        # until GET_IRQ_STATUS has been read and shows RX_DONE. Since the
+        # DIO1 ISR is unreliable on ESP32, this SPI poll ensures the buffer
+        # is unlocked before _read_data() accesses it.
+        if not self._blocking:
+            try:
+                flags = self._radio._get_irq()
+                if flags:
+                    self._last_events = flags
+            except Exception:
+                pass
+
         if self._blocking:
             timeout = timeout_ms if timeout_en else None
             rx_len = len_ if len_ else 0xFF
