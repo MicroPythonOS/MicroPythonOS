@@ -71,7 +71,6 @@ class LoRaChat(Activity):
             if not LoRaManager.acquire("lora_chat"):
                 print("LoRa in use by", LoRaManager.holder)
                 return
-            LoRaManager.start_watchdog()
         import _thread
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
@@ -80,7 +79,6 @@ class LoRaChat(Activity):
         super().onPause(screen)
         print("LoRa Chat backgrounded, releasing LoRa lock")
         if not simulation_mode:
-            LoRaManager.stop_watchdog()
             LoRaManager.release("lora_chat")
 
     def send_callback(self, event):

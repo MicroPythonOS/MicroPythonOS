@@ -24,6 +24,8 @@ class LoRaManager:
     def acquire(app_name):
         if LoRaManager._holder is None:
             LoRaManager._holder = app_name
+            LoRaManager.start_watchdog()
+            # release() stops this watchdog when the lock is released.
             if __debug__:
                 logger.debug("LoRa lock acquired by %s", app_name)
             return True
