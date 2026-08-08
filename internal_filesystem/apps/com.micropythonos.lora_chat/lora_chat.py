@@ -163,6 +163,12 @@ class LoRaChat(Activity):
 
         self.lora_device = LoRaManager.radioChip
 
+        # SPI bus race workaround: stop the watchdog and suspend the
+        # DIO1 ISR during configure/calibrate to prevent SPI bus
+        # collisions from concurrent thread access.
+        LoRaManager.stop_watchdog()
+        self.lora_device.suspend()
+
         # Custom LoRa Chat settings to avoid overlap with Meshtastic and MeshCore:
         # syncWord 0x12 is for peer-to-peer
         # sf=10 for longer range but also longer transmission time
@@ -176,6 +182,9 @@ class LoRaChat(Activity):
         # MeshCore settings:
         # self.lora_device.radio.configure({"freq_khz": 869618, "bw": 62.5, "sf": 8, "coding_rate": 8, "syncword": 0x12, "preamble_len": 8, "output_power": 22})
         self.lora_device.set_callback(self.receive_callback)
+
+        self.lora_device.resume()
+        LoRaManager.start_watchdog()
 
         if DeviceInfo.hardware_id == "fri3d_2026":
             rf_sw.value(1) ; print("RF_SW set to HIGH")

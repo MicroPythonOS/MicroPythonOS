@@ -6,7 +6,10 @@
 # untouched for everything else (configure, standby, sleep, etc.).
 #
 # Callers access the underlying radio via the .radio property.
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 
 from lora import SX1262 as _UpstreamSX1262  # noqa: F401 — re-exported for type info
 # IRQ flags are defined here rather than imported from lora.sx126x
@@ -46,21 +49,38 @@ class PolledSX126x:
         self._last_events = 0
         self._user_callback = None
         self._cfg = None
+        self._suspended = False  # SPI bus race workaround
         radio.set_irq_callback(self._irq_handler)
 
     @property
     def radio(self):
         return self._radio
 
+    # SPI bus race workaround: call suspend() before any multi-step
+    # SPI operation that runs in a separate thread (configure,
+    # calibrate_image). The watchdog thread and the main-thread DIO1
+    # ISR both access SPI concurrently without hardware-level locking.
+    def suspend(self):
+        self._suspended = True
+
+    def resume(self):
+        self._suspended = False
+
     def _irq_handler(self):
+        # SPI bus race workaround: the DIO1 ISR fires in the main
+        # MicroPython thread.  We MUST NOT call poll_send() here
+        # because send() already handles TX completion in its own
+        # poll loop — calling poll_send() from both paths races
+        # (ISR sets _tx=False before send()'s poll_send() runs,
+        # making it believe send is still in progress).
+        #
+        # The ISR's only job is to forward flags to the app callback.
+        if self._suspended:
+            if __debug__:
+                logger.warning("DIO1 IRQ fired while suspended (SPI bus race workaround)")
+            return
         flags = self._radio._get_irq()
         self._last_events = flags
-        if flags & _TX_DONE:
-            try:
-                self._radio.poll_send()
-            except Exception as e:
-                import sys
-                sys.print_exception(e)
         if self._user_callback:
             self._user_callback(flags)
 
