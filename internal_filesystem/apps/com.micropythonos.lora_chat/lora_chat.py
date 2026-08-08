@@ -68,7 +68,7 @@ class LoRaChat(Activity):
         super().onResume(screen)
         print("LoRa Chat foregrounded, starting receive_thread")
         if not simulation_mode:
-            if not LoRaManager.acquire("lora_chat"):
+            if not LoRaManager.acquire(self.appFullName):
                 print("LoRa in use by", LoRaManager.holder)
                 return
         import _thread
@@ -79,7 +79,7 @@ class LoRaChat(Activity):
         super().onPause(screen)
         print("LoRa Chat backgrounded, releasing LoRa lock")
         if not simulation_mode:
-            LoRaManager.release("lora_chat")
+            LoRaManager.release(self.appFullName)
 
     def send_callback(self, event):
         message = self.input_textarea.get_text()
@@ -167,17 +167,10 @@ class LoRaChat(Activity):
         # syncWord 0x12 is for peer-to-peer
         # sf=10 for longer range but also longer transmission time
         # cr=8 is 4/8: maximal error correction, but slower
-        self.lora_device.radio.configure({
-            "freq_khz": 869450,
-            "bw": 62.5,
-            "sf": 10,
-            "coding_rate": 8,
-            "syncword": 0x12,
-            "preamble_len": 8,
-            "output_power": 22,
-        })
+        self.lora_device.radio.configure({ "freq_khz": 869450, "bw": 62.5, "sf": 10, "coding_rate": 8, "syncword": 0x12, "preamble_len": 8, "output_power": 22 })
         self.lora_device.radio.calibrate_image()
         # Meshtastic settings for Europe (868Mhz) at default LongFast profile (untested)
+        # https://meshtastic.org/docs/configuration/radio/lora/
         # self.lora_device.radio.configure({"freq_khz": 869525, "bw": 250, "sf": 12, "coding_rate": 8, "syncword": 0x2B, "preamble_len": 16, "output_power": 22})
 
         # MeshCore settings:
