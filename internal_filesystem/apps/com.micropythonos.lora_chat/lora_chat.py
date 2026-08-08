@@ -5,7 +5,7 @@ except Exception as e:
     print(f"Activating simulation mode because could not import Pin, SPI from machine: {e}")
     simulation_mode = True
 
-from mpos.lora_adapter import MPOSLoRa
+from mpos.reliable_lora import ReliableLoRa
 import lvgl as lv
 
 from mpos import Activity, MposKeyboard, TaskManager, LoRaManager
@@ -102,34 +102,22 @@ class LoRaChat(Activity):
             return
 
         _, result = self.lora_device.send(to_send)
-        print(f"send result {result}: {MPOSLoRa.STATUS[result]}")
-
-        if result == 0:
-            # The callback for TX_DONE is never called and the device gets stuck in TX mode unless
-            # startReceive is set here. Maybe it should even be unconditional, or at least retried?
-            try:
-                import time
-                time.sleep_ms(200)
-                if self.lora_device.getIrqStatus() & MPOSLoRa.TX_DONE:
-                    self.lora_device.clearIrqStatus()
-                    self.lora_device.startReceive()
-            except Exception:
-                pass
+        print(f"send result {result}: {ReliableLoRa.STATUS[result]}")
 
     def receive_callback(self, events):
         print(f"receive_callback for events: {events}")
-        print(f"getRSSI: {self.lora_device.getRSSI()}")
-        print(f"getSNR: {self.lora_device.getSNR()}")
-        print(f"getStatus: {self.lora_device.getStatus()}")
-        print(f"getPacketStatus: {self.lora_device.getPacketStatus()}")
-        if events & MPOSLoRa.TX_DONE:
+        print(f"getRSSI: {self.lora_device.rssi}")
+        print(f"getSNR: {self.lora_device.snr}")
+        print(f"getStatus: {self.lora_device.get_status()}")
+        print(f"getPacketStatus: {self.lora_device.get_packet_status()}")
+        if events & ReliableLoRa.TX_DONE:
             print('TX done.')
-        elif events & MPOSLoRa.RX_DONE:
+        elif events & ReliableLoRa.RX_DONE:
             print('RX done.')
             try:
                 print("self.lora_device.recv")
                 msg, err = self.lora_device.recv()
-                status = MPOSLoRa.STATUS[err]
+                status = ReliableLoRa.STATUS[err]
                 print(f"after self.lora_device.recv, status: {status}")
                 if len(msg) > 0:
                     print(msg)
@@ -179,17 +167,24 @@ class LoRaChat(Activity):
         # syncWord 0x12 is for peer-to-peer
         # sf=10 for longer range but also longer transmission time
         # cr=8 is 4/8: maximal error correction, but slower
-        self.lora_device.begin(freq=869.450, bw=62.5, sf=10, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True, currentLimit=140.0, power=22)
+        self.lora_device.radio.configure({
+            "freq_khz": 869450,
+            "bw": 62.5,
+            "sf": 10,
+            "coding_rate": 8,
+            "syncword": 0x12,
+            "preamble_len": 8,
+            "output_power": 22,
+        })
+        self.lora_device.radio.calibrate_image()
         # Meshtastic settings for Europe (868Mhz) at default LongFast profile (untested)
-        # https://meshtastic.org/docs/configuration/radio/lora/
-        #self.lora_device.begin(freq=869.525, bw=250, sf=12, cr=8, syncWord=0x2B, preambleLength=16, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True, currentLimit=140.0, power=22)
+        # self.lora_device.radio.configure({"freq_khz": 869525, "bw": 250, "sf": 12, "coding_rate": 8, "syncword": 0x2B, "preamble_len": 16, "output_power": 22})
 
         # MeshCore settings:
-        #self.lora_device.begin(freq=869.618, bw=62.5, sf=8, cr=8, syncWord=0x12, preambleLength=8, implicit=False, crcOn=True, tcxoVoltage=3.0, useRegulatorLDO=False, blocking=True, currentLimit=140.0, power=22)
-        self.lora_device.setBlockingCallback(False, self.receive_callback)
+        # self.lora_device.radio.configure({"freq_khz": 869618, "bw": 62.5, "sf": 8, "coding_rate": 8, "syncword": 0x12, "preamble_len": 8, "output_power": 22})
+        self.lora_device.set_callback(self.receive_callback)
 
         if DeviceInfo.hardware_id == "fri3d_2026":
-            self.lora_device.setDio2AsRfSwitch(False)
             rf_sw.value(1) ; print("RF_SW set to HIGH")
 
         print("lora started")

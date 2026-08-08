@@ -59,9 +59,8 @@ spi_bus = SPI.Bus(
 # Would be better to do this only when the LoRa app starts:
 try:
     # cs=-1 disables hardware CS on the SPI.Device — the upstream lora driver
-    # manages CS via its own GPIO (cs_pin passed to MPOSLoRa below). Each SPI
-    # command is a single write_readinto() call, so CS is only held across one
-    # atomic transaction.
+    # manages CS via its own GPIO. Each SPI command is a single
+    # write_readinto() call, so CS is only held across one atomic transaction.
     lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=16000000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
 except Exception as e:
     import sys
@@ -158,10 +157,22 @@ else:
     print("WARNING: LoRa NOT released from reset after 3 retries! config=%s" % (cfg,))
 
 if lora_spi_device is not None:
-    from mpos.lora_adapter import MPOSLoRa
-    sx = MPOSLoRa(lora_spi_device, 40, 11, 41, 45)  # reset pin driven by CH32 Expander
+    from lora import SX1262
+    from mpos.lora_spi_adapter import SPIAdapter
+    from mpos.reliable_lora import ReliableLoRa
+    radio = SX1262(
+        spi=SPIAdapter(lora_spi_device),
+        cs=Pin(45, Pin.OUT, value=1),
+        busy=Pin(41, Pin.IN),
+        dio1=Pin(40, Pin.IN),
+        dio2_rf_sw=False,
+        dio3_tcxo_millivolts=3000,
+        dio3_tcxo_start_time_us=1000,
+        reset=None,  # CH32 expander drives reset
+    )
+    reliable = ReliableLoRa(radio)
     from mpos import LoRaManager
-    LoRaManager.radioChip = sx
+    LoRaManager.radioChip = reliable
     # Store params needed to reconstruct after a watchdog hardware reset.
     LoRaManager._lora_spi_device = lora_spi_device
     LoRaManager._lora_pins = (40, 11, 41, 45)  # irq, rst, gpio, cs_pin

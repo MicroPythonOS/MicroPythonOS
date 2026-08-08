@@ -188,14 +188,28 @@ class LoRaManager:
 
             if LoRaManager._lora_spi_device is not None and LoRaManager.reset_chip():
                 try:
-                    from mpos.lora_adapter import MPOSLoRa
-                    new_chip = MPOSLoRa(
-                        LoRaManager._lora_spi_device,
-                        *LoRaManager._lora_pins,
+                    from machine import Pin
+                    from lora import SX1262
+                    from mpos.lora_spi_adapter import SPIAdapter
+                    from mpos.reliable_lora import ReliableLoRa
+                    irq, rst, gpio, cs = LoRaManager._lora_pins
+                    radio = SX1262(
+                        spi=SPIAdapter(LoRaManager._lora_spi_device),
+                        cs=Pin(cs, Pin.OUT, value=1),
+                        busy=Pin(gpio, Pin.IN),
+                        dio1=Pin(irq, Pin.IN),
+                        dio2_rf_sw=False,
+                        dio3_tcxo_millivolts=3000,
+                        dio3_tcxo_start_time_us=1000,
+                        reset=None,  # CH32 expander drives reset
                     )
-                    kwargs = chip._begin_kwargs
-                    new_chip.begin(**kwargs)
-                    new_chip.setBlockingCallback(chip._blocking, chip._user_callback)
+                    new_chip = ReliableLoRa(radio)
+                    cfg = chip._cfg
+                    if cfg:
+                        radio.configure(cfg)
+                        radio.calibrate_image()
+                    if chip._user_callback:
+                        new_chip.set_callback(chip._user_callback)
                     LoRaManager.radioChip = new_chip
                     if __debug__:
                         logger.debug("Watchdog: hardware reset + full reconstruction OK")
