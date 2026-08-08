@@ -17,6 +17,7 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 
 - **Patch files** (`.patch` applied by `build_mpos.sh`): commit directly on `integration`. No topic branch needed — the patch file is the topic.
 - **Direct C/C++ source edits**: must go on a `topic/<name>` branch, then merge into `integration`.
+- **Pick ONE** mechanism per change — never mix both. If the change can be a `.patch` and there's no existing `micropy_updates/` copy to maintain, use a `.patch`. If `micropy_updates/` files need updating, use a topic branch.
 - Branch naming: `topic/<kebab-case>` (e.g. `topic/wifi-country-japan`).
 
 ## Testing
