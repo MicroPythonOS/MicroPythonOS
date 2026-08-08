@@ -9,6 +9,11 @@
 import time
 
 from lora import SX1262 as _UpstreamSX1262  # noqa: F401 — re-exported for type info
+# These are re-exported here rather than imported directly by apps
+# because they are private upstream names (_IRQ_*). PolledSX126x is
+# the designated bridge to upstream internals — concentrating all
+# private-API access in one module so that micropython-lib renames
+# only break one file.
 from lora.sx126x import _IRQ_TX_DONE as TX_DONE
 from lora.sx126x import _IRQ_RX_DONE as RX_DONE
 from lora.sx126x import _IRQ_CRC_ERR as CRC_ERR
