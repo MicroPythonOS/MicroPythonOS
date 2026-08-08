@@ -9,14 +9,16 @@
 import time
 
 from lora import SX1262 as _UpstreamSX1262  # noqa: F401 — re-exported for type info
-# These are re-exported here rather than imported directly by apps
-# because they are private upstream names (_IRQ_*). PolledSX126x is
-# the designated bridge to upstream internals — concentrating all
-# private-API access in one module so that micropython-lib renames
-# only break one file.
-from lora.sx126x import _IRQ_TX_DONE as TX_DONE
-from lora.sx126x import _IRQ_RX_DONE as RX_DONE
-from lora.sx126x import _IRQ_CRC_ERR as CRC_ERR
+# IRQ flags are defined here rather than imported from lora.sx126x
+# because MicroPython const() values in compiled .mpy modules are
+# compile-time inlined and not importable across modules. These are
+# hardware register masks from the SX126x datasheet — the upstream
+# driver defines identical private copies.
+from micropython import const
+
+_TX_DONE = const(1 << 0)
+_RX_DONE = const(1 << 1)
+_CRC_ERR = const(1 << 6)
 
 _STATUS = {
     0: "ERR_NONE",
@@ -34,9 +36,9 @@ _STATUS = {
 
 
 class PolledSX126x:
-    TX_DONE = TX_DONE
-    RX_DONE = RX_DONE
-    CRC_ERR = CRC_ERR
+    TX_DONE = _TX_DONE
+    RX_DONE = _RX_DONE
+    CRC_ERR = _CRC_ERR
     STATUS = _STATUS
 
     def __init__(self, radio):
@@ -53,7 +55,7 @@ class PolledSX126x:
     def _irq_handler(self):
         flags = self._radio._get_irq()
         self._last_events = flags
-        if flags & TX_DONE:
+        if flags & _TX_DONE:
             try:
                 self._radio.poll_send()
             except Exception as e:
@@ -80,7 +82,7 @@ class PolledSX126x:
         deadline = time.ticks_add(t0, 3000)
         while time.ticks_diff(time.ticks_ms(), deadline) < 0:
             flags = self._radio._get_irq()
-            if flags & TX_DONE:
+            if flags & _TX_DONE:
                 self._radio.poll_send()
                 return len(data), 0
             time.sleep_ms(20)
@@ -126,7 +128,7 @@ class PolledSX126x:
         rssi, snr = struct.unpack("xBbx", pkt_status)
 
         flags = self._last_events
-        crc_error = (flags & CRC_ERR) != 0
+        crc_error = (flags & _CRC_ERR) != 0
 
         self._radio._clear_irq()
         try:
