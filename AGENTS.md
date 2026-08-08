@@ -139,6 +139,19 @@ with MPOSController(backend='process') as mpos:
 - No `bytearray * int` → `bytearray(); [out.extend(buf) for _ in range(n)]`.
 - Some builds lack `random.Random`/`shuffle` → Fisher-Yates with `randint`. Prefer tiny LCG for deterministic jitter.
 - `logging.Logger.log()` formats via `msg % args` — always include `%s` when passing variables.
+- **`Pin.IRQ_RISING` (soft IRQs) are unreliable under LVGL load.** The ESP32
+  scheduler may drop edge-triggered ISRs when busy with I2C expander reads
+  (~60 Hz from Fri3d2026Expander), display SPI updates, or other operations.
+  Do NOT rely on them for critical state transitions. (Verified: TX_DONE ISR
+  fired ~0% of the time in lora_chat testing.)
+- **Prefer SPI polling over pin ISRs.** For the SX1262 LoRa driver, use
+  `_get_irq()` to read IRQ flags via SPI (~50µs). A 20ms polling loop
+  (see `lora_adapter.py:send()` non-blocking path) adds negligible CPU
+  and eliminates missed IRQs entirely.
+- **Guard `_clear_irq()` carefully.** It clears ALL pending SX1262 IRQ flags.
+  Calling it between event-occurred and handler-run (e.g. `_standby()` inside
+  `prepare_send()` clears pending TX_DONE from a previous send) makes
+  polling miss events. Minimize it in paths that run between those points.
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 
