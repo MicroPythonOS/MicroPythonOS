@@ -158,8 +158,8 @@ else:
     print("WARNING: LoRa NOT released from reset after 3 retries! config=%s" % (cfg,))
 
 if lora_spi_device is not None:
-    from mpos.lora_adapter import MPOSLoRa as SX1262
-    sx = SX1262(lora_spi_device, 40, 11, 41, 45)  # reset pin driven by CH32 Expander
+    from mpos.lora_adapter import MPOSLoRa
+    sx = MPOSLoRa(lora_spi_device, 40, 11, 41, 45)  # reset pin driven by CH32 Expander
     from mpos import LoRaManager
     LoRaManager.radioChip = sx
     # Store params needed to reconstruct after a watchdog hardware reset.

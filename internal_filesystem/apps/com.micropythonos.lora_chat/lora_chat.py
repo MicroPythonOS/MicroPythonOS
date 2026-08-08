@@ -5,7 +5,7 @@ except Exception as e:
     print(f"Activating simulation mode because could not import Pin, SPI from machine: {e}")
     simulation_mode = True
 
-from mpos.lora_adapter import MPOSLoRa as SX1262
+from mpos.lora_adapter import MPOSLoRa
 import lvgl as lv
 
 from mpos import Activity, MposKeyboard, TaskManager, LoRaManager
@@ -102,7 +102,7 @@ class LoRaChat(Activity):
             return
 
         _, result = self.lora_device.send(to_send)
-        print(f"send result {result}: {SX1262.STATUS[result]}")
+        print(f"send result {result}: {MPOSLoRa.STATUS[result]}")
 
         if result == 0:
             # The callback for TX_DONE is never called and the device gets stuck in TX mode unless
@@ -110,7 +110,7 @@ class LoRaChat(Activity):
             try:
                 import time
                 time.sleep_ms(200)
-                if self.lora_device.getIrqStatus() & SX1262.TX_DONE:
+                if self.lora_device.getIrqStatus() & MPOSLoRa.TX_DONE:
                     self.lora_device.clearIrqStatus()
                     self.lora_device.startReceive()
             except Exception:
@@ -122,14 +122,14 @@ class LoRaChat(Activity):
         print(f"getSNR: {self.lora_device.getSNR()}")
         print(f"getStatus: {self.lora_device.getStatus()}")
         print(f"getPacketStatus: {self.lora_device.getPacketStatus()}")
-        if events & SX1262.TX_DONE:
+        if events & MPOSLoRa.TX_DONE:
             print('TX done.')
-        elif events & SX1262.RX_DONE:
+        elif events & MPOSLoRa.RX_DONE:
             print('RX done.')
             try:
                 print("self.lora_device.recv")
                 msg, err = self.lora_device.recv()
-                status = SX1262.STATUS[err]
+                status = MPOSLoRa.STATUS[err]
                 print(f"after self.lora_device.recv, status: {status}")
                 if len(msg) > 0:
                     print(msg)
