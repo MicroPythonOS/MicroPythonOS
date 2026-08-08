@@ -1,0 +1,181 @@
+# SPI-polling wrapper for upstream lora.SX126x (SX1261, SX1262).
+#
+# The upstream driver's non-blocking send/recv depends on the DIO1 ISR,
+# which is unreliable on ESP32 under LVGL load. This wrapper replaces
+# ISR-dependent I/O with SPI polling, leaving the upstream driver
+# untouched for everything else (configure, standby, sleep, etc.).
+#
+# Callers access the underlying radio via the .radio property.
+from micropython import const
+
+import time
+
+from lora import SX1262 as _UpstreamSX1262  # noqa: F401 — re-exported for type info
+
+_IRQ_TX_DONE = const(1 << 0)
+_IRQ_RX_DONE = const(1 << 1)
+_IRQ_CRC_ERR = const(1 << 6)
+
+_ERROR_NAMES = {
+    0: "ERR_NONE",
+    -1: "ERR_UNKNOWN",
+    -2: "ERR_CHIP_NOT_FOUND",
+    -5: "ERR_TX_TIMEOUT",
+    -6: "ERR_RX_TIMEOUT",
+    -7: "ERR_CRC_MISMATCH",
+    -12: "ERR_INVALID_FREQUENCY",
+    -13: "ERR_INVALID_OUTPUT_POWER",
+    -705: "ERR_SPI_CMD_TIMEOUT",
+    -706: "ERR_SPI_CMD_INVALID",
+    -707: "ERR_SPI_CMD_FAILED",
+}
+
+
+class PolledSX126x:
+    TX_DONE = _IRQ_TX_DONE
+    RX_DONE = _IRQ_RX_DONE
+    STATUS = _ERROR_NAMES
+
+    def __init__(self, radio):
+        self._radio = radio
+        self._last_events = 0
+        self._user_callback = None
+        self._cfg = None
+        radio.set_irq_callback(self._irq_handler)
+
+    @property
+    def radio(self):
+        return self._radio
+
+    def _irq_handler(self):
+        flags = self._radio._get_irq()
+        self._last_events = flags
+        if flags & _IRQ_TX_DONE:
+            try:
+                self._radio.poll_send()
+            except Exception as e:
+                import sys
+                sys.print_exception(e)
+        if self._user_callback:
+            self._user_callback(flags)
+
+    def configure(self, cfg):
+        self._radio.configure(cfg)
+        self._cfg = cfg
+
+    def set_callback(self, callback):
+        self._user_callback = callback
+        self._radio.start_recv(continuous=True)
+
+    def send(self, data):
+        if not isinstance(data, (bytes, bytearray)):
+            return 0, -804
+        self._radio._clear_errors()
+        self._radio.prepare_send(data)
+        self._radio.start_send()
+        t0 = time.ticks_ms()
+        deadline = time.ticks_add(t0, 3000)
+        while time.ticks_diff(time.ticks_ms(), deadline) < 0:
+            flags = self._radio._get_irq()
+            if flags & _IRQ_TX_DONE:
+                self._radio.poll_send()
+                return len(data), 0
+            time.sleep_ms(20)
+        return 0, -5
+
+    def recv(self, len_=0):
+        # Acknowledge pending IRQ events via SPI. The SX1262 gates the RX
+        # buffer behind the IRQ flag: GET_RX_BUFFER_STATUS returns rx_len=0
+        # until GET_IRQ_STATUS has been read and shows RX_DONE. Since the
+        # DIO1 ISR is unreliable on ESP32, this SPI poll ensures the buffer
+        # is unlocked before _read_data() accesses it.
+        try:
+            flags = self._radio._get_irq()
+            if flags:
+                self._last_events = flags
+        except Exception:
+            pass
+        return self._read_data(len_)
+
+    def _read_data(self, len_):
+        try:
+            res = self._radio._cmd("B", 0x13, n_read=3)
+        except Exception:
+            return b"", -1
+
+        rx_len = res[1]
+        rx_ptr = res[2]
+
+        if len_ > 0 and len_ < rx_len:
+            rx_len = len_
+
+        if rx_len == 0:
+            return b"", -6
+
+        data = bytearray(rx_len)
+        try:
+            self._radio._cmd("BB", 0x1E, rx_ptr, n_read=1, read_buf=data)
+        except Exception:
+            return b"", -1
+
+        pkt_status = self._radio._cmd("B", 0x14, n_read=4)
+        import struct
+        rssi, snr = struct.unpack("xBbx", pkt_status)
+
+        flags = self._last_events
+        crc_error = (flags & _IRQ_CRC_ERR) != 0
+
+        self._radio._clear_irq()
+        try:
+            self._radio.start_recv(continuous=True)
+        except Exception:
+            pass
+
+        status = -7 if crc_error else 0
+        return bytes(data), status
+
+    def get_irq_status(self):
+        flags = self._last_events
+        if not flags:
+            try:
+                flags = self._radio._get_irq()
+            except Exception:
+                pass
+        return flags
+
+    def clear_irq_status(self):
+        self._last_events = 0
+        try:
+            self._radio._clear_irq()
+        except Exception:
+            pass
+
+    def start_recv(self):
+        try:
+            self._radio._standby()
+            self._radio._clear_irq()
+            self._radio.start_recv(continuous=True)
+        except Exception:
+            pass
+
+    def get_status(self):
+        try:
+            res = self._radio._cmd("B", 0x12, n_read=3)
+            return res[0]
+        except Exception:
+            return 0x00
+
+    def get_packet_status(self):
+        try:
+            res = self._radio._cmd("B", 0x14, n_read=4)
+            return (res[1] << 16) | (res[2] << 8) | res[3]
+        except Exception:
+            return 0
+
+    @property
+    def rssi(self):
+        return getattr(self._radio, "_last_rssi", 0.0)
+
+    @property
+    def snr(self):
+        return getattr(self._radio, "_last_snr", 0.0)

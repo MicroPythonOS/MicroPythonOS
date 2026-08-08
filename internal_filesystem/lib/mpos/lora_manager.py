@@ -191,7 +191,7 @@ class LoRaManager:
                     from machine import Pin
                     from lora import SX1262
                     from mpos.lora_spi_adapter import SPIAdapter
-                    from mpos.reliable_lora import ReliableLoRa
+                    from mpos.polled_sx126x import PolledSX126x
                     irq, rst, gpio, cs = LoRaManager._lora_pins
                     radio = SX1262(
                         spi=SPIAdapter(LoRaManager._lora_spi_device),
@@ -203,7 +203,7 @@ class LoRaManager:
                         dio3_tcxo_start_time_us=1000,
                         reset=None,  # CH32 expander drives reset
                     )
-                    new_chip = ReliableLoRa(radio)
+                    new_chip = PolledSX126x(radio)
                     cfg = chip._cfg
                     if cfg:
                         radio.configure(cfg)

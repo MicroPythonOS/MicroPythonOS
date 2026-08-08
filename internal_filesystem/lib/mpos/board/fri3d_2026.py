@@ -159,7 +159,7 @@ else:
 if lora_spi_device is not None:
     from lora import SX1262
     from mpos.lora_spi_adapter import SPIAdapter
-    from mpos.reliable_lora import ReliableLoRa
+    from mpos.polled_sx126x import PolledSX126x
     radio = SX1262(
         spi=SPIAdapter(lora_spi_device),
         cs=Pin(45, Pin.OUT, value=1),
@@ -170,7 +170,7 @@ if lora_spi_device is not None:
         dio3_tcxo_start_time_us=1000,
         reset=None,  # CH32 expander drives reset
     )
-    reliable = ReliableLoRa(radio)
+    reliable = PolledSX126x(radio)
     from mpos import LoRaManager
     LoRaManager.radioChip = reliable
     # Store params needed to reconstruct after a watchdog hardware reset.

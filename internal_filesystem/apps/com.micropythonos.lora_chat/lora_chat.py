@@ -5,7 +5,7 @@ except Exception as e:
     print(f"Activating simulation mode because could not import Pin, SPI from machine: {e}")
     simulation_mode = True
 
-from mpos.reliable_lora import ReliableLoRa
+from mpos.polled_sx126x import PolledSX126x
 import lvgl as lv
 
 from mpos import Activity, MposKeyboard, TaskManager, LoRaManager
@@ -102,7 +102,7 @@ class LoRaChat(Activity):
             return
 
         _, result = self.lora_device.send(to_send)
-        print(f"send result {result}: {ReliableLoRa.STATUS[result]}")
+        print(f"send result {result}: {PolledSX126x.STATUS[result]}")
 
     def receive_callback(self, events):
         print(f"receive_callback for events: {events}")
@@ -110,14 +110,14 @@ class LoRaChat(Activity):
         print(f"getSNR: {self.lora_device.snr}")
         print(f"getStatus: {self.lora_device.get_status()}")
         print(f"getPacketStatus: {self.lora_device.get_packet_status()}")
-        if events & ReliableLoRa.TX_DONE:
+        if events & PolledSX126x.TX_DONE:
             print('TX done.')
-        elif events & ReliableLoRa.RX_DONE:
+        elif events & PolledSX126x.RX_DONE:
             print('RX done.')
             try:
                 print("self.lora_device.recv")
                 msg, err = self.lora_device.recv()
-                status = ReliableLoRa.STATUS[err]
+                status = PolledSX126x.STATUS[err]
                 print(f"after self.lora_device.recv, status: {status}")
                 if len(msg) > 0:
                     print(msg)
