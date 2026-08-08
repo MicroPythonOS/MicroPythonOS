@@ -6,17 +6,14 @@
 # untouched for everything else (configure, standby, sleep, etc.).
 #
 # Callers access the underlying radio via the .radio property.
-from micropython import const
-
 import time
 
 from lora import SX1262 as _UpstreamSX1262  # noqa: F401 — re-exported for type info
+from lora.sx126x import _IRQ_TX_DONE as TX_DONE
+from lora.sx126x import _IRQ_RX_DONE as RX_DONE
+from lora.sx126x import _IRQ_CRC_ERR as CRC_ERR
 
-_IRQ_TX_DONE = const(1 << 0)
-_IRQ_RX_DONE = const(1 << 1)
-_IRQ_CRC_ERR = const(1 << 6)
-
-_ERROR_NAMES = {
+_STATUS = {
     0: "ERR_NONE",
     -1: "ERR_UNKNOWN",
     -2: "ERR_CHIP_NOT_FOUND",
@@ -32,9 +29,10 @@ _ERROR_NAMES = {
 
 
 class PolledSX126x:
-    TX_DONE = _IRQ_TX_DONE
-    RX_DONE = _IRQ_RX_DONE
-    STATUS = _ERROR_NAMES
+    TX_DONE = TX_DONE
+    RX_DONE = RX_DONE
+    CRC_ERR = CRC_ERR
+    STATUS = _STATUS
 
     def __init__(self, radio):
         self._radio = radio
@@ -50,7 +48,7 @@ class PolledSX126x:
     def _irq_handler(self):
         flags = self._radio._get_irq()
         self._last_events = flags
-        if flags & _IRQ_TX_DONE:
+        if flags & TX_DONE:
             try:
                 self._radio.poll_send()
             except Exception as e:
@@ -77,7 +75,7 @@ class PolledSX126x:
         deadline = time.ticks_add(t0, 3000)
         while time.ticks_diff(time.ticks_ms(), deadline) < 0:
             flags = self._radio._get_irq()
-            if flags & _IRQ_TX_DONE:
+            if flags & TX_DONE:
                 self._radio.poll_send()
                 return len(data), 0
             time.sleep_ms(20)
@@ -123,7 +121,7 @@ class PolledSX126x:
         rssi, snr = struct.unpack("xBbx", pkt_status)
 
         flags = self._last_events
-        crc_error = (flags & _IRQ_CRC_ERR) != 0
+        crc_error = (flags & CRC_ERR) != 0
 
         self._radio._clear_irq()
         try:
