@@ -75,11 +75,20 @@ class LoRaChatV2(Activity):
     def _auto_send_callback(self, timer):
         print("_auto_send_callback")
         if simulation_mode or self.lora_device is None:
+            print("not doing anything")
             return
-        length = random.randint(0, 128)
-        data = os.urandom(length)
-        print("not sending because it hangs")
-        #self.lora_device.send(data)
+        #length = random.randint(0, 128)
+        #data = os.urandom(length)
+        #print("not auto sending data:")
+        #print(data)
+        import time
+        #message = f"data: {time.time()}"
+        message = "1234" # works
+        #message = "12345" # hangs
+        print(f"sending message: {message}")
+        self.real_send(message)
+        #lv.async_call(lambda _: self.lora_device.send(message), None) # trying this
+        #lv.async_call(lambda _: self.real_send(message), None) # trying this
 
     def onResume(self, screen):
         super().onResume(screen)
@@ -92,7 +101,7 @@ class LoRaChatV2(Activity):
         import _thread
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
-        self._auto_send_timer = lv.timer_create(self._auto_send_callback, 15000, None)
+        self._auto_send_timer = lv.timer_create(self._auto_send_callback, 30000, None)
 
     def onPause(self, screen):
         super().onPause(screen)
@@ -109,6 +118,11 @@ class LoRaChatV2(Activity):
             return
 
         self.input_textarea.set_text("")
+
+        self.real_send(message)
+
+    def real_send(self, message):
+        print(f"real send: {message}")
         self.alltext += "Sent: " + message + "\n"
         lv.async_call(lambda _: self.messages.set_text(self.alltext), None)
 
