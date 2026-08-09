@@ -208,10 +208,10 @@ class LoRaManager:
             return
 
         LoRaManager._bad_count += 1
-        if st == 0x00:
+        if st in (0x00, 0xff):
             LoRaManager._unresponsive_ms += 2000
             if __debug__ and LoRaManager._bad_count == 1:
-                logger.debug("Watchdog: status 0x00 (count=1), monitoring")
+                logger.debug("Watchdog: status 0x%02x (count=1), monitoring", st)
         else:
             LoRaManager._unresponsive_ms = 0
             if __debug__:
@@ -233,8 +233,8 @@ class LoRaManager:
 
         # Two-tier recovery:
         #   Light: non-0x00 -> clear IRQ + restart continuous RX
-        #   Hard:  3+ consecutive 0x00 -> HW reset via CH32, reap objects
-        if st == 0x00:
+        #   Hard:  3+ consecutive 0x00/0xff -> HW reset via CH32, reap objects
+        if st in (0x00, 0xff):
             if LoRaManager._bad_count < 3:
                 return
             bad = LoRaManager._bad_count
