@@ -105,6 +105,10 @@ class LoRaManager:
                     except Exception as e:
                         print("reset_chip: TCXO error check FAILED: %s" % e)
                 r._cmd("BB", 0x8A, 1)  # SET_PACKET_TYPE → LoRa
+                r._cmd(">BHHHH", 0x08,
+                    579,    # IrqMask: TX(1)|RX(2)|CRC_ERR(64)|TIMEOUT(512)
+                    515,    # DIO1Mask: TX(1)|RX(2)|TIMEOUT(512)
+                    0, 0)   # DIO2Mask, DIO3Mask
                 r._clear_irq()
                 st = r._cmd("B", 0xC0, n_read=1)[0]
                 print("reset_chip: status=0x%02x (mode=%d) [retry %d]" %
