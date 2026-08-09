@@ -73,11 +73,13 @@ class LoRaChatV2(Activity):
         self.setContentView(main_content)
 
     def _auto_send_callback(self, timer):
+        print("_auto_send_callback")
         if simulation_mode or self.lora_device is None:
             return
         length = random.randint(0, 128)
         data = os.urandom(length)
-        self.lora_device.send(data)
+        print("not sending because it hangs")
+        #self.lora_device.send(data)
 
     def onResume(self, screen):
         super().onResume(screen)
@@ -90,11 +92,12 @@ class LoRaChatV2(Activity):
         import _thread
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
-        #self._auto_send_timer = lv.timer_create(self._auto_send_callback, 15000, None)
+        self._auto_send_timer = lv.timer_create(self._auto_send_callback, 15000, None)
 
     def onPause(self, screen):
         super().onPause(screen)
-        #self._auto_send_timer.delete()
+        if self._auto_send_timer:
+            self._auto_send_timer.delete()
         print("LoRa Chat backgrounded, releasing LoRa lock")
         if not simulation_mode:
             LoRaManager.release(self.appFullName)
