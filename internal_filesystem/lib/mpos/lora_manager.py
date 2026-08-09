@@ -66,9 +66,9 @@ class LoRaManager:
                 return False
             import time
             chip = LoRaManager.radioChip
-            if chip:
+            if chip and __debug__:
                 st_pre = chip.radio._cmd("B", 0xC0, n_read=1)[0]
-                print("reset_chip: pre-reset status=0x%02x" % st_pre)
+                logger.debug("reset_chip: pre-reset status=0x%02x", st_pre)
             exp.config = 0x03
             time.sleep_ms(200)
             exp.config = 0x13
@@ -83,7 +83,8 @@ class LoRaManager:
                     logger.debug("LoRa chip reset via CH32 expander")
                 return True
             r = chip.radio
-            print("reset_chip: expander confirms lora_reset=%s" % exp.config[0])
+            if __debug__:
+                logger.debug("reset_chip: expander confirms lora_reset=%s", exp.config[0])
             for retry in range(3):
                 r._sleep = True
                 r._configured = False
@@ -103,7 +104,7 @@ class LoRaManager:
                     try:
                         r._check_error()
                     except Exception as e:
-                        print("reset_chip: TCXO error check FAILED: %s" % e)
+                        logger.warning("reset_chip: TCXO error check FAILED: %s", e)
                 r._cmd("BB", 0x8A, 1)  # SET_PACKET_TYPE → LoRa
                 r._cmd(">BHHHH", 0x08,
                     579,    # IrqMask: TX(1)|RX(2)|CRC_ERR(64)|TIMEOUT(512)
@@ -111,17 +112,18 @@ class LoRaManager:
                     0, 0)   # DIO2Mask, DIO3Mask
                 r._clear_irq()
                 st = r._cmd("B", 0xC0, n_read=1)[0]
-                print("reset_chip: status=0x%02x (mode=%d) [retry %d]" %
-                  (st, (st >> 4) & 7, retry))
+                if __debug__:
+                    logger.debug("reset_chip: status=0x%02x (mode=%d) [retry %d]",
+                        st, (st >> 4) & 7, retry)
                 if st != 0x00:
                     break
-                print("reset_chip: chip unresponsive, re-resetting")
+                logger.warning("reset_chip: chip unresponsive, re-resetting")
                 exp.config = 0x03
                 time.sleep_ms(200)
                 exp.config = 0x13
                 time.sleep_ms(200)
             else:
-                print("reset_chip: FAILED after 3 tries")
+                logger.warning("reset_chip: FAILED after 3 tries")
                 return False
             if __debug__:
                 logger.debug("LoRa chip reset via CH32 expander")
