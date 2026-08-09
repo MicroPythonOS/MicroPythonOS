@@ -282,41 +282,29 @@ class LoRaManager:
                     logger.debug("Watchdog: light recovery failed: %s", e)
 
     @staticmethod
-    def force_watchdog_recovery():
-        """Public test hook: exercise the hard-recovery path.
-
-        Disables DIO1 ISR, hardware-resets the chip via CH32 expander,
-        reconfigures with the saved config, and restores the user callback.
-        Same logic the watchdog runs on a hard trigger.  Returns True on
-        success so callers can log/verify."""
-        chip = LoRaManager.radioChip
-        if chip is None:
-            return False
-        if LoRaManager._lora_spi_device is None:
-            return False
-
-        chip.disable_irq()
-        if not LoRaManager.reset_chip():
-            if __debug__:
-                logger.debug("force_watchdog_recovery: reset_chip failed")
-            return False
-
+    def blunt_reset():
+        """Public test hook: hardware-reset the LoRa chip via CH32
+        expander ONLY.  No SPI re-initialization — the chip comes back
+        in a raw post-reset state.  The watchdog will detect the dead
+        chip on its next cycle and run the real recovery path."""
         try:
-            r = chip._radio
-            cfg = chip._cfg
-            if cfg:
-                chip.suspend()
-                try:
-                    r.configure(cfg)
-                    r.calibrate_image()
-                finally:
-                    chip.resume()
-            if chip._user_callback:
-                chip.set_callback(chip._user_callback)
+            import mpos
+            exp = getattr(mpos, "io_expander", None)
+            if exp is None:
+                return False
+            import time
+            exp.config = 0x03
+            time.sleep_ms(200)
+            exp.config = 0x13
+            time.sleep_ms(200)
+            if not exp.config[0]:
+                if __debug__:
+                    logger.debug("blunt_reset: readback check failed")
+                return False
             if __debug__:
-                logger.debug("force_watchdog_recovery: OK")
+                logger.debug("blunt_reset: OK (watchdog will recover in ~6s)")
             return True
         except Exception as e:
             if __debug__:
-                logger.debug("force_watchdog_recovery: reconfigure failed: %s", e)
+                logger.debug("blunt_reset: failed: %s", e)
             return False
