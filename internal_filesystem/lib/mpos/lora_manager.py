@@ -208,7 +208,10 @@ class LoRaManager:
         # listening. Transient modes (FS 0x40, TX 0x60, STANDBY 0x20/0x30)
         # are brief during tx/rx transitions; a stuck non-RX mode means the
         # chip fell out of receive and needs recovery.
-        if mode == 0x50:
+        # ponytail: TX (0x60) and FS (0x40) are transient modes during
+        # valid sends; recovering mid-transmission kills the send and
+        # corrupts chip state.  Only recover from stuck standby/corrupt.
+        if mode in (0x50, 0x60, 0x40):
             if LoRaManager._bad_count:
                 if __debug__:
                     logger.debug("Watchdog: RX recovered after %d bad reads",
@@ -218,7 +221,7 @@ class LoRaManager:
             return
 
         LoRaManager._bad_count += 1
-        if st in (0x00, 0xff):
+        if st in (0x00, 0xff) or (st & 0x70) not in (0x20, 0x30, 0x40, 0x50, 0x60):
             LoRaManager._unresponsive_ms += 2000
             if __debug__ and LoRaManager._bad_count == 1:
                 logger.debug("Watchdog: status 0x%02x (count=1), monitoring", st)
@@ -243,8 +246,8 @@ class LoRaManager:
 
         # Two-tier recovery:
         #   Light: non-0x00 -> clear IRQ + restart continuous RX
-        #   Hard:  3+ consecutive 0x00/0xff -> HW reset via CH32, reap objects
-        if st in (0x00, 0xff):
+        #   Hard:  3+ consecutive 0x00/0xff or corrupt mode -> HW reset via CH32
+        if st in (0x00, 0xff) or (st & 0x70) not in (0x20, 0x30, 0x40, 0x50, 0x60):
             if LoRaManager._bad_count < 3:
                 return
             bad = LoRaManager._bad_count
