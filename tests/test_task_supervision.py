@@ -113,6 +113,30 @@ class TestCreateSupervisedTask(unittest.TestCase):
 
         self._run(main())
 
+    def test_console_is_restarted_after_a_clean_return(self):
+        """restart_on_return brings the console back however it exited."""
+        calls = {"n": 0}
+
+        def factory():
+            async def repl():
+                calls["n"] += 1
+            return repl()
+
+        async def main():
+            task = self.TaskManager.create_supervised_task(
+                factory, restart_delay_ms=10, restart_on_return=True)
+            await asyncio.sleep_ms(150)
+            # MPOS's minimal unittest has no assertGreater.
+            self.assertTrue(calls["n"] > 1, "console was not restarted")
+            self.assertFalse(task.done())
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        self._run(main())
+
     def test_cancel_stops_supervision(self):
         calls = {"n": 0}
 
@@ -181,6 +205,55 @@ class TestAioreplEofResilience(unittest.TestCase):
 
     def tearDown(self):
         asyncio.StreamReader = self._orig_stream_reader
+
+    def test_ctrl_d_does_not_kill_the_asyncio_loop(self):
+        """Ctrl-D outside the raw-REPL protocol must not tear down asyncio.
+
+        Upstream aiorepl answers Ctrl-D with asyncio.new_event_loop(), which
+        on MPOS discards every running task -- the app, TaskManager's main
+        task and the console itself -- and then returns. That is the whole
+        "console dead until replug" bug: mpremote sessions that desync leave
+        stray Ctrl-Ds in the stream outside raw mode.
+        """
+        import aiorepl
+
+        killed = {"n": 0}
+        real_new_event_loop = asyncio.new_event_loop
+
+        def counting_new_event_loop(*args, **kwargs):
+            killed["n"] += 1
+            return real_new_event_loop(*args, **kwargs)
+
+        class FakeCtrlDStdin:
+            """Sends one Ctrl-D, then blocks like an idle console."""
+
+            def __init__(self, *args, **kwargs):
+                self.sent = False
+
+            async def read(self, n):
+                if not self.sent:
+                    self.sent = True
+                    return chr(0x04)
+                await asyncio.sleep_ms(50)
+                return ""
+
+        asyncio.StreamReader = FakeCtrlDStdin
+        asyncio.new_event_loop = counting_new_event_loop
+        try:
+            async def main():
+                task = asyncio.create_task(aiorepl.task(g={}))
+                await asyncio.sleep_ms(300)
+                self.assertEqual(killed["n"], 0, "Ctrl-D tore down the event loop")
+                self.assertFalse(task.done(), "console exited on Ctrl-D")
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            asyncio.run(main())
+        finally:
+            asyncio.new_event_loop = real_new_event_loop
 
     def test_task_survives_stdin_eof(self):
         import aiorepl

@@ -55,12 +55,22 @@ class TaskManager:
         return task
 
     @classmethod
-    def create_supervised_task(cls, coroutine_factory, restart_delay_ms=200):
+    def create_supervised_task(cls, coroutine_factory, restart_delay_ms=200,
+                               restart_on_return=False):
+        """Keep a task alive across crashes.
+
+        restart_on_return also restarts it when the coroutine finishes
+        normally. Use it for tasks that are only ever meant to stop when
+        the device does -- the serial console above all, where any quiet
+        exit path leaves no way back in short of a power cycle.
+        """
         async def _supervisor():
             while True:
                 try:
                     await coroutine_factory()
-                    return
+                    if not restart_on_return:
+                        return
+                    logger.warning("supervised task returned, restarting it")
                 except asyncio.CancelledError:
                     raise
                 except KeyboardInterrupt as e:
