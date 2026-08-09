@@ -35,6 +35,7 @@ class LoRaChat(Activity):
         return text[:head] + "..." + text[-tail:]
 
     def onCreate(self):
+        #import logging ; logging.getLogger().setLevel(logging.DEBUG) # or logging.INFO
         main_content = lv.obj()
         main_content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         main_content.set_style_pad_gap(10, 0)
@@ -184,6 +185,7 @@ class LoRaChat(Activity):
         self.lora_device.set_callback(self.receive_callback)
 
         self.lora_device.resume()
+        print("chat_app starting lora watchdog - this might hang stuff")
         LoRaManager.start_watchdog()
 
         if DeviceInfo.hardware_id == "fri3d_2026":

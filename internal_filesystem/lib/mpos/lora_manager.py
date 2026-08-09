@@ -24,7 +24,7 @@ class LoRaManager:
     def acquire(app_name):
         if LoRaManager._holder is None:
             LoRaManager._holder = app_name
-            LoRaManager.start_watchdog()
+            #LoRaManager.start_watchdog() # disabled for now since it always detects 0x00 and then triggers needlessly
             # release() stops this watchdog when the lock is released.
             if __debug__:
                 logger.debug("LoRa lock acquired by %s", app_name)
@@ -41,10 +41,12 @@ class LoRaManager:
             return
         LoRaManager.stop_watchdog()
         if LoRaManager.radioChip:
+            LoRaManager.radioChip.clear_callback()
             try:
-                LoRaManager.radioChip._radio.sleep(retainConfig=False)
-            except Exception:
-                pass
+                LoRaManager.radioChip._radio.standby()
+            except Exception as e:
+                if __debug__:
+                    logger.warning("standby on release failed: %s", e)
         LoRaManager._holder = None
         if __debug__:
             logger.debug("LoRa lock released by %s", app_name)
@@ -70,11 +72,11 @@ class LoRaManager:
             import time
             if task_handler:
                 task_handler.disable()
-
-            exp.config = 0x03
-            time.sleep_ms(100)
-            exp.config = 0x13
-            time.sleep_ms(100)
+            time.sleep_ms(200)
+            exp.config = 0x03 # AUX and LCD reset high, lora reset low
+            time.sleep_ms(200)
+            exp.config = 0x13 # AUX and LCD reset high, lora reset high
+            time.sleep_ms(200)
             try:
                 cfg = exp.config  # (lora_reset, remap, reboot, lcd_reset, aux_power)
                 if cfg[0]:
@@ -142,9 +144,12 @@ class LoRaManager:
             return
 
         try:
-            st = chip.getStatus()
+            st = chip.try_get_status()
         except Exception:
             st = 0x00
+
+        if st is None:
+            return  # bus busy (other thread mid-SPI), skip this iteration
 
         LoRaManager._last_status = st
         mode = st & 0x70
@@ -174,23 +179,20 @@ class LoRaManager:
             return
 
         now = time.ticks_ms()
-        # Rate-limit recovery to once per 30s to avoid reset storms
+        # Rate-limit recovery to once per 5s to avoid reset storms
         # (a single 0x00 may be transient SPI bus contention, PR #222).
-        if LoRaManager._last_reinit_ms and time.ticks_diff(now, LoRaManager._last_reinit_ms) < 30000:
+        if LoRaManager._last_reinit_ms and time.ticks_diff(now, LoRaManager._last_reinit_ms) < 5000:
             if __debug__:
                 logger.debug("Watchdog: rate-limited, skipping recovery (last=%dms ago)",
                     time.ticks_diff(now, LoRaManager._last_reinit_ms))
             return
 
-        # Only act on truly unresponsive SPI reads (3+ consecutive 0x00).
-        # Non-zero bad modes (e.g. 0xac, 0xaa, 0xc8) mean the chip is
-        # responsive but in a bad mode — logged above, let the app handle it.
-        if st != 0x00:
-            if __debug__:
-                logger.debug("Watchdog: bad mode 0x%02x (count=%d), letting app handle", st, LoRaManager._bad_count)
-            return
-
-        if LoRaManager._bad_count >= 3:
+        # Two-tier recovery:
+        #   Soft: non-0x00 but wrong mode -> start_recv() to re-enter RX
+        #   Hard: 3+ consecutive 0x00 -> HW reset + full reconstruction
+        if st == 0x00:
+            if LoRaManager._bad_count < 3:
+                return
             bad = LoRaManager._bad_count
             LoRaManager._last_reinit_ms = now
             LoRaManager._bad_count = 0
@@ -229,3 +231,15 @@ class LoRaManager:
                 except Exception as e:
                     if __debug__:
                         logger.debug("Watchdog: reconstruction failed: %s", e)
+        else:
+            # Non-zero status but wrong mode: try soft recovery (re-enter RX).
+            if __debug__:
+                logger.debug("Watchdog: soft recovery (status 0x%02x, mode=0x%02x)", st, mode)
+            LoRaManager._last_reinit_ms = now
+            LoRaManager._bad_count = 0
+            try:
+                chip._radio._clear_irq()
+                chip._radio.start_recv(continuous=True)
+            except Exception as e:
+                if __debug__:
+                    logger.debug("Watchdog: soft recovery failed: %s", e)

@@ -92,14 +92,35 @@ class PolledSX126x:
         self._user_callback = callback
         self._radio.start_recv(continuous=True)
 
+    def clear_callback(self):
+        self._user_callback = None
+
+    def try_get_status(self):
+        spi = getattr(self._radio, "_spi", None)
+        if spi is not None:
+            try:
+                import _thread
+                owner = getattr(spi, "_lock_owner", None)
+                if owner is not None and owner != _thread.get_ident():
+                    return None
+            except (ImportError, AttributeError):
+                pass
+        return self.get_status()
+
     def send(self, data):
         if not isinstance(data, (bytes, bytearray)):
             return 0, -804
         self._radio._clear_errors()
         self._radio.prepare_send(data)
         self._radio.start_send()
+        ms = max(100, (self._radio.get_time_on_air_us(len(data)) // 1000) + 120)
+        time.sleep_ms(ms)
+        flags = self._radio._get_irq()
+        if flags & _TX_DONE:
+            self._radio.poll_send()
+            return len(data), 0
         t0 = time.ticks_ms()
-        deadline = time.ticks_add(t0, 3000)
+        deadline = time.ticks_add(t0, 2000)
         while time.ticks_diff(time.ticks_ms(), deadline) < 0:
             flags = self._radio._get_irq()
             if flags & _TX_DONE:
@@ -186,8 +207,14 @@ class PolledSX126x:
     def get_status(self):
         try:
             res = self._radio._cmd("B", 0x12, n_read=3)
-            return res[0]
-        except Exception:
+            status = res[0]
+            if __debug__ and status == 0x00:
+                logger.warning("get_status raw=%s status=0x00 (rx_mode=%s irq=%02x%02x)",
+                    bytes(res), (status & 0x70) >> 4, res[1], res[2])
+            return status
+        except Exception as e:
+            if __debug__:
+                logger.warning("get_status exception: %s", e)
             return 0x00
 
     def get_packet_status(self):
