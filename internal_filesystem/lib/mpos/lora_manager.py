@@ -65,6 +65,10 @@ class LoRaManager:
             if exp is None:
                 return False
             import time
+            chip = LoRaManager.radioChip
+            if chip:
+                st_pre = chip.radio._cmd("B", 0xC0, n_read=1)[0]
+                print("reset_chip: pre-reset status=0x%02x" % st_pre)
             exp.config = 0x03
             time.sleep_ms(200)
             exp.config = 0x13
