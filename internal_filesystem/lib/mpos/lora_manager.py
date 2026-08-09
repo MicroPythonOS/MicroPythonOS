@@ -56,63 +56,53 @@ class LoRaManager:
     @staticmethod
     def reset_chip():
         # Toggle CH32 expander config to hardware-reset the LoRa chip.
-        # 0x03 = aux on + LCD on + LoRa OFF (assert reset)
-        # 0x13 = aux on + LCD on + LoRa ON  (release reset)
-        # task_handler.disable() prevents LVGL I2C reads from corrupting
-        # the config writes (tested: 0/150 failures with, 6/150 without).
-        task_handler = None
+        # 0x03 = aux + LCD + LoRa OFF (assert reset)
+        # 0x13 = aux + LCD + LoRa ON  (release reset)
+        # expander config setter handles readback + retry + LVGL safe.
         try:
             import mpos
             exp = getattr(mpos, "io_expander", None)
             if exp is None:
                 return False
-            task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
             import time
-            if task_handler:
-                logger.info("disabling task handler briefly")
-                task_handler.disable()
+            exp.config = 0x03
             time.sleep_ms(200)
-            exp.config = 0x03 # AUX and LCD reset high, lora reset low
+            exp.config = 0x13
             time.sleep_ms(200)
-            exp.config = 0x13 # AUX and LCD reset high, lora reset high
-            time.sleep_ms(200)
-            try:
-                cfg = exp.config  # (lora_reset, remap, reboot, lcd_reset, aux_power)
-                if cfg[0]:
-                    chip = LoRaManager.radioChip
-                    if chip:
-                        r = chip.radio
-                        r._sleep = True
-                        r._configured = False
-                        r._rx = False
-                        tcxo_mv = getattr(LoRaManager, "_tcxo_mv", None)
-                        if tcxo_mv:
-                            tcxo_start_us = LoRaManager._tcxo_start_us
-                            timeout = (tcxo_start_us * 1000 + 15624) // 15625
-                            dv = tcxo_mv // 100
-                            tcxo_trim_lookup = (16, 17, 18, 22, 24, 27, 30, 33)
-                            while dv not in tcxo_trim_lookup:
-                                dv -= 1
-                            reg_trim = tcxo_trim_lookup.index(dv)
-                            r._cmd(">BI", 0x97, (reg_trim << 24) + timeout)
-                            time.sleep_ms(15)
-                            r._clear_errors()
-                    if __debug__:
-                        logger.debug("LoRa chip reset via CH32 expander")
-                    return True
-            except Exception:
-                pass
+            if not exp.config[0]:
+                if __debug__:
+                    logger.debug("CH32 LoRa reset: readback check failed")
+                return False
+            chip = LoRaManager.radioChip
+            if chip:
+                r = chip.radio
+                r._sleep = True
+                r._configured = False
+                r._rx = False
+                tcxo_mv = getattr(LoRaManager, "_tcxo_mv", None)
+                if tcxo_mv:
+                    tcxo_start_us = LoRaManager._tcxo_start_us
+                    timeout = (tcxo_start_us * 1000 + 15624) // 15625
+                    dv = tcxo_mv // 100
+                    tcxo_trim_lookup = (16, 17, 18, 22, 24, 27, 30, 33)
+                    while dv not in tcxo_trim_lookup:
+                        dv -= 1
+                    reg_trim = tcxo_trim_lookup.index(dv)
+                    r._cmd(">BI", 0x97, (reg_trim << 24) + timeout)
+                    time.sleep_ms(15)
+                    r._clear_errors()
+                r._cmd("BB", 0x8A, 1)  # SET_PACKET_TYPE → LoRa (lost on reset)
+                r._clear_irq()
+                st = r._cmd("B", 0xC0, n_read=1)[0]  # GET_STATUS
+                print("reset_chip: post-reset status=0x%02x (mode=%d, cmd=%d)" %
+                  (st, (st >> 4) & 7, (st >> 1) & 3))
             if __debug__:
-                logger.debug("CH32 LoRa reset: readback check failed")
-            return False
+                logger.debug("LoRa chip reset via CH32 expander")
+            return True
         except Exception as e:
             if __debug__:
                 logger.debug("CH32 LoRa reset failed: %s", e)
             return False
-        finally:
-            if task_handler:
-                logger.info("enabling task handler again")
-                task_handler.enable()
 
     @staticmethod
     def is_healthy():

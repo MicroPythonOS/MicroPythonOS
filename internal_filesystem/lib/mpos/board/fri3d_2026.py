@@ -142,19 +142,11 @@ BatteryManager.read_raw_adc = lambda *args: mpos.io_expander.analog[1]
 BatteryManager.has_battery = lambda *args: True
 BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (mpos.io_expander.analog[1] * 0.00192308 - 0.28076923)
 
-# LCD and Lora reset using the CH32 microcontroller
-# ponytail: the 0x01→0x13 toggle is unreliable on some boards (I2C write
-# of 0x13 silently fails). The factory default state leaves the chip out
-# of reset. Try releasing directly; retry if I2C flaked out.
-for _ in range(3):
-    expander.config = 0x13  # 3v3 aux + LCD on + Lora on
-    time.sleep_ms(20)
-    cfg = expander.config  # returns (lora_reset, remap, reboot, lcd_reset, aux_power)
-    if cfg[0]:
-        break
-    print("CH32 config write 0x13 failed, retrying (readback=%s)" % (cfg,))
-else:
-    print("WARNING: LoRa NOT released from reset after 3 retries! config=%s" % (cfg,))
+# LCD and Lora reset using the CH32 microcontroller.
+# expander config setter handles readback + 3 retries internally.
+expander.config = 0x13  # 3v3 aux + LCD on + Lora on
+if not expander.config[0]:
+    print("WARNING: LoRa NOT released from reset! config=%s" % (expander.config,))
 
 if lora_spi_device is not None:
     from lora import SX1262

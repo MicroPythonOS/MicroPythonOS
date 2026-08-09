@@ -87,8 +87,24 @@ class Expander(Device):
     @config.setter
     def config(self, value: int):
         """set the configuration byte"""
-        if value >= 0 and value <= 0x1F:
-            self._write(_EXPANDER_REG_CONFIG, struct.pack("B", value))
+        if not (0 <= value <= 0x1F):
+            return
+        import mpos
+        th = getattr(getattr(mpos, "ui", None), "task_handler", None)
+        if th:
+            th.disable()
+        try:
+            packet = struct.pack("B", value)
+            for _ in range(3):
+                self._read("B", _EXPANDER_REG_INPUTS, 1)  # clears I2C state
+                self._write(_EXPANDER_REG_CONFIG, packet)
+                time.sleep_ms(10)
+                readback = self._read("B", _EXPANDER_REG_CONFIG, 1)[0]
+                if (readback & 0x1F) == value:
+                    return
+        finally:
+            if th:
+                th.enable()
 
     def install_firmware(self, filename: str, progress_cb):
         print("Installing latest CH32 firmware")
