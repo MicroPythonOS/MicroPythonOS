@@ -130,6 +130,14 @@ class PolledSX126x:
     def send(self, data):
         if not isinstance(data, (bytes, bytearray)):
             return 0, -804
+        # ponytail: drain any pending RX before clear_errors/clear_irq.
+        # prepare_send() → _standby() → _clear_irq() clears ALL IRQ flags
+        # including RX_DONE. If a packet arrived but the DIO1 ISR hasn't
+        # fired yet (MicroPython IRQs can lag under LVGL load), this loses
+        # the packet. Reading _get_irq() first unlatches RX_DONE from
+        # hardware; _read_data drains the buffer so the chip can re-arm.
+        if self._radio._get_irq() & _RX_DONE:
+            self._read_data(0)
         self._radio._clear_errors()
         self._radio.prepare_send(data)
         self._radio.start_send()

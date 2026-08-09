@@ -85,16 +85,17 @@ class LoRaChatV2(Activity):
             print("not doing anything")
             return
         import random
-        import os
         import time as _time
         ts = _time.time()
         tm = _time.localtime(ts)
         ts_human = "%04d-%02d-%02dT%02d:%02d:%02d" % tm[:6]
         ts_head = "ts=%.3f|%s|" % (ts, ts_human)
         ts_bytes = ts_head.encode()
-        #random_len = random.randint(0, 255 - len(ts_bytes))
-        random_len = random.randint(0, 32 - len(ts_bytes))
-        message = ts_bytes + os.urandom(random_len)
+        max_pad = max(0, 255 - len(ts_bytes))
+        random_len = random.randint(0, min(max_pad, 32))
+        _ALPHA = b"abcdefghijklmnopqrstuvwxyz0123456789"
+        pad = bytes(_ALPHA[random.randint(0, len(_ALPHA) - 1)] for _ in range(random_len))
+        message = ts_bytes + pad
         print("auto sending: %s + %d bytes pad, total=%d" % (ts_head, random_len, len(message)))
         self.real_send(message)
 
