@@ -69,6 +69,7 @@ class LoRaManager:
             task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
             import time
             if task_handler:
+                logger.info("disabling task handler briefly")
                 task_handler.disable()
             time.sleep_ms(200)
             exp.config = 0x03 # AUX and LCD reset high, lora reset low
@@ -78,6 +79,24 @@ class LoRaManager:
             try:
                 cfg = exp.config  # (lora_reset, remap, reboot, lcd_reset, aux_power)
                 if cfg[0]:
+                    chip = LoRaManager.radioChip
+                    if chip:
+                        r = chip.radio
+                        r._sleep = True
+                        r._configured = False
+                        r._rx = False
+                        tcxo_mv = getattr(LoRaManager, "_tcxo_mv", None)
+                        if tcxo_mv:
+                            tcxo_start_us = LoRaManager._tcxo_start_us
+                            timeout = (tcxo_start_us * 1000 + 15624) // 15625
+                            dv = tcxo_mv // 100
+                            tcxo_trim_lookup = (16, 17, 18, 22, 24, 27, 30, 33)
+                            while dv not in tcxo_trim_lookup:
+                                dv -= 1
+                            reg_trim = tcxo_trim_lookup.index(dv)
+                            r._cmd(">BI", 0x97, (reg_trim << 24) + timeout)
+                            time.sleep_ms(15)
+                            r._clear_errors()
                     if __debug__:
                         logger.debug("LoRa chip reset via CH32 expander")
                     return True
@@ -92,6 +111,7 @@ class LoRaManager:
             return False
         finally:
             if task_handler:
+                logger.info("enabling task handler again")
                 task_handler.enable()
 
     @staticmethod
