@@ -76,14 +76,15 @@ class LoRaChatV2(Activity):
             return
         import random
         import os
-        length = random.randint(0, 128)
-        message = os.urandom(length)
-        #print("not auto sending data:")
-        #print(data)
-        #message = "1"
-        #message = "1234"
-        #        message = "12345"
-        print(f"sending message: {message}")
+        import time as _time
+        ts = _time.time()
+        tm = _time.localtime(ts)
+        ts_human = "%04d-%02d-%02dT%02d:%02d:%02d" % tm[:6]
+        ts_head = "ts=%.3f|%s|" % (ts, ts_human)
+        ts_bytes = ts_head.encode()
+        random_len = random.randint(0, 255 - len(ts_bytes))
+        message = ts_bytes + os.urandom(random_len)
+        print("auto sending: %s + %d bytes pad, total=%d" % (ts_head, random_len, len(message)))
         self.real_send(message)
 
     def onResume(self, screen):
@@ -166,7 +167,7 @@ class LoRaChatV2(Activity):
                         except UnicodeError as e:
                             #print("decode failed, using hex:", repr(e))
                             decoded_msg = self._format_bytes_python_hex(msg)
-                            decoded_msg = self._ellipsize_center(decoded_msg, head=10, tail=20)
+                            #decoded_msg = self._ellipsize_center(decoded_msg, head=10, tail=20)
                     else:
                         decoded_msg = str(msg)
                     print("decoded_msg repr:", repr(decoded_msg))
