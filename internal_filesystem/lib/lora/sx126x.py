@@ -719,12 +719,14 @@ class _SX126x(BaseModem):
             if write_buf:
                 print(">>> {}".format(write_buf.hex()))
         self._cs(0)
-        self._spi.write_readinto(buf, buf)
-        if write_buf:
-            self._spi.write(write_buf)  # Used by _CMD_WRITE_BUFFER only
-        if read_buf:
-            self._spi.readinto(read_buf, 0xFF)  # Used by _CMD_READ_BUFFER only
-        self._cs(1)
+        try:
+            self._spi.write_readinto(buf, buf)
+            if write_buf:
+                self._spi.write(write_buf)  # Used by _CMD_WRITE_BUFFER only
+            if read_buf:
+                self._spi.readinto(read_buf, 0xFF)  # Used by _CMD_READ_BUFFER only
+        finally:
+            self._cs(1)
 
         if n_read > 0:
             res = self._buf_view[wrlen : (wrlen + n_read)]  # noqa: E203

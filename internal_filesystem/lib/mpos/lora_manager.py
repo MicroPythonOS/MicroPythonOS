@@ -42,7 +42,7 @@ class LoRaManager:
         LoRaManager.stop_watchdog()
         if LoRaManager.radioChip:
             try:
-                LoRaManager.radioChip.sleep(retainConfig=False)
+                LoRaManager.radioChip._radio.sleep(retainConfig=False)
             except Exception:
                 pass
         LoRaManager._holder = None
@@ -160,8 +160,12 @@ class LoRaManager:
         LoRaManager._bad_count += 1
         if st == 0x00:
             LoRaManager._unresponsive_ms += 2000
+            if __debug__ and LoRaManager._bad_count == 1:
+                logger.debug("Watchdog: status 0x00 (count=1), monitoring")
         else:
             LoRaManager._unresponsive_ms = 0
+            if __debug__:
+                logger.warning("Watchdog: unexpected status 0x%02x mode=0x%02x (count=%d)", st, mode, LoRaManager._bad_count)
 
         if LoRaManager._unresponsive_ms > 30000:
             if __debug__:
@@ -173,24 +177,32 @@ class LoRaManager:
         # Rate-limit recovery to once per 30s to avoid reset storms
         # (a single 0x00 may be transient SPI bus contention, PR #222).
         if LoRaManager._last_reinit_ms and time.ticks_diff(now, LoRaManager._last_reinit_ms) < 30000:
+            if __debug__:
+                logger.debug("Watchdog: rate-limited, skipping recovery (last=%dms ago)",
+                    time.ticks_diff(now, LoRaManager._last_reinit_ms))
             return
 
-        # Only act on truly unresponsive chips: 3+ consecutive 0x00 reads.
-        # Non-zero bad modes (0xac, 0xaa, 0xc8) mean the chip is responsive
-        # but in a bad mode — software re-init corrupts adapter state,
-        # so we ignore these and let the app handle it.
-        if st == 0x00 and LoRaManager._bad_count >= 3:
+        # Only act on truly unresponsive SPI reads (3+ consecutive 0x00).
+        # Non-zero bad modes (e.g. 0xac, 0xaa, 0xc8) mean the chip is
+        # responsive but in a bad mode — logged above, let the app handle it.
+        if st != 0x00:
+            if __debug__:
+                logger.debug("Watchdog: bad mode 0x%02x (count=%d), letting app handle", st, LoRaManager._bad_count)
+            return
+
+        if LoRaManager._bad_count >= 3:
+            bad = LoRaManager._bad_count
             LoRaManager._last_reinit_ms = now
             LoRaManager._bad_count = 0
 
             if __debug__:
-                logger.debug("Watchdog: hardware reset (status 0x00, bad=%d)", LoRaManager._bad_count)
+                logger.debug("Watchdog: hardware reset (status 0x00, bad=%d)", bad)
 
             if LoRaManager._lora_spi_device is not None and LoRaManager.reset_chip():
                 try:
                     from machine import Pin
                     from lora import SX1262
-                    from mpos.lora_spi_adapter import SPIAdapter
+                    from mpos.lora_spi_adapter import SPIAdapter, wrap_sx126x_cmd
                     from mpos.polled_sx126x import PolledSX126x
                     irq, rst, gpio, cs = LoRaManager._lora_pins
                     radio = SX1262(
@@ -203,6 +215,7 @@ class LoRaManager:
                         dio3_tcxo_start_time_us=1000,
                         reset=None,  # CH32 expander drives reset
                     )
+                    wrap_sx126x_cmd(radio)
                     new_chip = PolledSX126x(radio)
                     cfg = chip._cfg
                     if cfg:
