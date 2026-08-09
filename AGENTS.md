@@ -153,6 +153,12 @@ with MPOSController(backend='process') as mpos:
   Calling it between event-occurred and handler-run (e.g. `_standby()` inside
   `prepare_send()` clears pending TX_DONE from a previous send) makes
   polling miss events. Minimize it in paths that run between those points.
+- **Never hold `SPI.Device.lock()` (C-level `spi_device_acquire_bus`) from
+  Python.** The C lock blocks with the MicroPython GIL held. The display
+  driver's SPI flush runs in a separate FreeRTOS task (LVGL) that also needs
+  the bus — deadlock. (See `lora_spi_adapter.py` — the `SPIAdapter` uses a
+  Python-level reentrant lock instead; each `transfer()` call handles bus
+  arbitration atomically.)
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 

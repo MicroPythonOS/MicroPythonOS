@@ -185,8 +185,6 @@ class LoRaChat(Activity):
         self.lora_device.set_callback(self.receive_callback)
 
         self.lora_device.resume()
-        print("chat_app starting lora watchdog - this might hang stuff")
-        LoRaManager.start_watchdog()
 
         if DeviceInfo.hardware_id == "fri3d_2026":
             rf_sw.value(1) ; print("RF_SW set to HIGH")

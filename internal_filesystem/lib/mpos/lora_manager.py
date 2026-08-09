@@ -13,7 +13,6 @@ class LoRaManager:
     radioChip = None
     _holder = None
     _watchdog_active = False
-    _watchdog_thread = None
     _last_status = None
     _bad_count = 0
     _last_reinit_ms = 0
@@ -24,8 +23,7 @@ class LoRaManager:
     def acquire(app_name):
         if LoRaManager._holder is None:
             LoRaManager._holder = app_name
-            #LoRaManager.start_watchdog() # disabled for now since it always detects 0x00 and then triggers needlessly
-            # release() stops this watchdog when the lock is released.
+            LoRaManager.start_watchdog()
             if __debug__:
                 logger.debug("LoRa lock acquired by %s", app_name)
             return True
@@ -113,28 +111,31 @@ class LoRaManager:
         LoRaManager._unresponsive_ms = 0
         LoRaManager._last_check_ms = 0
         try:
-            import _thread
-            _thread.start_new_thread(LoRaManager._watchdog_loop, (interval_ms,))
+            from mpos import TaskManager
+            TaskManager.create_task(LoRaManager._watchdog_loop(interval_ms))
         except Exception as e:
             LoRaManager._watchdog_active = False
             if __debug__:
-                logger.debug("Watchdog thread start failed: %s", e)
+                logger.debug("Watchdog task creation failed: %s", e)
 
     @staticmethod
     def stop_watchdog():
         LoRaManager._watchdog_active = False
 
     @staticmethod
-    def _watchdog_loop(interval_ms):
-        import time
-        while LoRaManager._watchdog_active:
-            time.sleep_ms(interval_ms)
-            if not LoRaManager._watchdog_active:
-                break
-            if LoRaManager._holder is None:
-                LoRaManager._watchdog_active = False
-                break
-            LoRaManager._check_once()
+    async def _watchdog_loop(interval_ms):
+        from mpos import TaskManager
+        try:
+            while LoRaManager._watchdog_active:
+                await TaskManager.sleep_ms(interval_ms)
+                if not LoRaManager._watchdog_active:
+                    break
+                if LoRaManager._holder is None:
+                    LoRaManager._watchdog_active = False
+                    break
+                LoRaManager._check_once()
+        finally:
+            LoRaManager._watchdog_active = False
 
     @staticmethod
     def _check_once():
