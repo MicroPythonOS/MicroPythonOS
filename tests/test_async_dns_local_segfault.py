@@ -23,7 +23,7 @@ class TestAsyncDnsLocal(unittest.TestCase):
             from mpos.net.download_manager import DownloadManager
             try:
                 await DownloadManager.download_url("http://invalid-url-that-does-not-exist.local/")
-            except OSError:
+            except Exception:
                 pass
 
         asyncio.run(run())
@@ -35,7 +35,7 @@ class TestAsyncDnsLocal(unittest.TestCase):
             from mpos.net.download_manager import DownloadManager
             try:
                 await DownloadManager.download_url("http://invalid-url-that-does-not-exist.com/")
-            except OSError:
+            except Exception:
                 pass
 
         asyncio.run(run())

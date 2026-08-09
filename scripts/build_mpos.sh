@@ -187,6 +187,9 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 echo "Applying lvgl_micropython esp32 uart repl enable/disable at runtime patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_uart_repl_runtime.patch
 
+echo "Applying lvgl_micropython mpremote disable auto-soft-reset patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/mpremote_no_auto_soft_reset.patch
+
 echo "Applying lvgl_micropython/lib/lvgl bmp scaling fix patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropython/lib_lvgl_lv_bmp.c.patch
 
