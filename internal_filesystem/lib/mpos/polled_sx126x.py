@@ -110,24 +110,46 @@ class PolledSX126x:
     def send(self, data):
         if not isinstance(data, (bytes, bytearray)):
             return 0, -804
-        self._radio._clear_errors()
-        self._radio.prepare_send(data)
-        self._radio.start_send()
-        ms = max(100, (self._radio.get_time_on_air_us(len(data)) // 1000) + 120)
-        time.sleep_ms(ms)
-        flags = self._radio._get_irq()
-        if flags & _TX_DONE:
-            self._radio.poll_send()
-            return len(data), 0
-        t0 = time.ticks_ms()
-        deadline = time.ticks_add(t0, 2000)
-        while time.ticks_diff(time.ticks_ms(), deadline) < 0:
+        self.suspend()
+        th = None
+        try:
+            import mpos
+            th = mpos.ui.task_handler
+        except Exception:
+            pass
+        if th:
+            th.disable()
+        try:
+            print("send:clear_errors")
+            self._radio._clear_errors()
+            print("send:prepare_send")
+            self._radio.prepare_send(data)
+            print("send:start_send")
+            self._radio.start_send()
+            self._radio._clear_errors()
+            self._radio.prepare_send(data)
+            self._radio.start_send()
+            ms = max(100, (self._radio.get_time_on_air_us(len(data)) // 1000) + 120)
+            print("send:sleep_ms", ms)
+            time.sleep_ms(ms)
+            print("send:get_irq")
             flags = self._radio._get_irq()
             if flags & _TX_DONE:
                 self._radio.poll_send()
                 return len(data), 0
-            time.sleep_ms(20)
-        return 0, -5
+            t0 = time.ticks_ms()
+            deadline = time.ticks_add(t0, 2000)
+            while time.ticks_diff(time.ticks_ms(), deadline) < 0:
+                flags = self._radio._get_irq()
+                if flags & _TX_DONE:
+                    self._radio.poll_send()
+                    return len(data), 0
+                time.sleep_ms(20)
+            return 0, -5
+        finally:
+            if th:
+                th.enable()
+            self.resume()
 
     def recv(self, len_=0):
         # Acknowledge pending IRQ events via SPI. The SX1262 gates the RX

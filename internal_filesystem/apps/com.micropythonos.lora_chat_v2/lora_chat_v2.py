@@ -80,11 +80,9 @@ class LoRaChatV2(Activity):
         #print(data)
         message = "1"
         #message = "1234"
-        #message = "12345"
+        #        message = "12345"
         print(f"sending message: {message}")
-        to_send = message.encode("utf8") if isinstance(message, str) else message
-        import _thread
-        _thread.start_new_thread(self._do_send, (to_send,))
+        self.real_send(message)
 
     def onResume(self, screen):
         super().onResume(screen)
@@ -132,16 +130,8 @@ class LoRaChatV2(Activity):
             print("Not actually sending because simulation mode")
             return
 
-        import _thread
-        _thread.start_new_thread(self._do_send, (to_send,))
-
-    def _do_send(self, data):
-        # ponytail: runs send() in a background thread so it doesn't block
-        # lv.task_handler().  The send blocks on time.sleep_ms() which yields
-        # to the main thread, keeping the UI responsive.
-        self.alltext += "Sent: " + str(data) + "\n"
-        _, result = self.lora_device.send(data)
-        print(f"auto-send result {result}: {PolledSX126x.STATUS[result]}")
+        _, result = self.lora_device.send(to_send)
+        print(f"send result {result}: {PolledSX126x.STATUS[result]}")
 
     def receive_callback(self, events):
         print(f"receive_callback for events: {events}")
