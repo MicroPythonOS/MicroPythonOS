@@ -90,11 +90,11 @@ class LoRaChatV2(Activity):
         import _thread
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
-        self._auto_send_timer = lv.timer_create(self._auto_send_callback, 15000, None)
+        #self._auto_send_timer = lv.timer_create(self._auto_send_callback, 15000, None)
 
     def onPause(self, screen):
         super().onPause(screen)
-        self._auto_send_timer.delete()
+        #self._auto_send_timer.delete()
         print("LoRa Chat backgrounded, releasing LoRa lock")
         if not simulation_mode:
             LoRaManager.release(self.appFullName)
@@ -184,7 +184,7 @@ class LoRaChatV2(Activity):
         # SPI bus race workaround: stop the watchdog and suspend the
         # DIO1 ISR during configure/calibrate to prevent SPI bus
         # collisions from concurrent thread access.
-        LoRaManager.stop_watchdog()
+        #LoRaManager.stop_watchdog()
         self.lora_device.suspend()
 
         # Custom LoRa Chat settings to avoid overlap with Meshtastic and MeshCore:

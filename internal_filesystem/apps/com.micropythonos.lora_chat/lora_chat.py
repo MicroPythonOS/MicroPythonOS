@@ -166,7 +166,7 @@ class LoRaChat(Activity):
         # SPI bus race workaround: stop the watchdog and suspend the
         # DIO1 ISR during configure/calibrate to prevent SPI bus
         # collisions from concurrent thread access.
-        LoRaManager.stop_watchdog()
+        #LoRaManager.stop_watchdog()
         self.lora_device.suspend()
 
         # Custom LoRa Chat settings to avoid overlap with Meshtastic and MeshCore:
