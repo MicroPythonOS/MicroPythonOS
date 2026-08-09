@@ -67,8 +67,11 @@ class LoRaManager:
             import time
             chip = LoRaManager.radioChip
             if chip and __debug__:
-                st_pre = chip.radio._cmd("B", 0xC0, n_read=1)[0]
-                logger.debug("reset_chip: pre-reset status=0x%02x", st_pre)
+                try:
+                    st_pre = chip.radio._cmd("B", 0xC0, n_read=1)[0]
+                    logger.debug("reset_chip: pre-reset status=0x%02x", st_pre)
+                except Exception:
+                    logger.debug("reset_chip: pre-reset status read failed (chip non-responsive)")
             exp.config = 0x03
             time.sleep_ms(200)
             exp.config = 0x13

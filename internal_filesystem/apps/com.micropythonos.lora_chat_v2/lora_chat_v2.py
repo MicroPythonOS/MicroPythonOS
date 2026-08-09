@@ -92,7 +92,8 @@ class LoRaChatV2(Activity):
         ts_human = "%04d-%02d-%02dT%02d:%02d:%02d" % tm[:6]
         ts_head = "ts=%.3f|%s|" % (ts, ts_human)
         ts_bytes = ts_head.encode()
-        random_len = random.randint(0, 255 - len(ts_bytes))
+        #random_len = random.randint(0, 255 - len(ts_bytes))
+        random_len = random.randint(0, 32 - len(ts_bytes))
         message = ts_bytes + os.urandom(random_len)
         print("auto sending: %s + %d bytes pad, total=%d" % (ts_head, random_len, len(message)))
         self.real_send(message)
