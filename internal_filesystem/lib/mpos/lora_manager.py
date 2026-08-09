@@ -23,7 +23,7 @@ class LoRaManager:
     def acquire(app_name):
         if LoRaManager._holder is None:
             LoRaManager._holder = app_name
-            #LoRaManager.start_watchdog()
+            LoRaManager.start_watchdog()
             if __debug__:
                 logger.debug("LoRa lock acquired by %s", app_name)
             return True
@@ -240,6 +240,7 @@ class LoRaManager:
             if __debug__:
                 logger.debug("Watchdog: hardware reset (status 0x00, bad=%d)", bad)
 
+            chip.disable_irq()
             if LoRaManager._lora_spi_device is not None and LoRaManager.reset_chip():
                 try:
                     from machine import Pin
@@ -247,22 +248,28 @@ class LoRaManager:
                     from mpos.lora_spi_adapter import SPIAdapter, wrap_sx126x_cmd
                     from mpos.polled_sx126x import PolledSX126x
                     irq, rst, gpio, cs = LoRaManager._lora_pins
+                    tcxo_mv = getattr(LoRaManager, "_tcxo_mv", 3000)
+                    tcxo_start_us = getattr(LoRaManager, "_tcxo_start_us", 1000)
                     radio = SX1262(
                         spi=SPIAdapter(LoRaManager._lora_spi_device),
                         cs=Pin(cs, Pin.OUT, value=1),
                         busy=Pin(gpio, Pin.IN),
                         dio1=Pin(irq, Pin.IN),
                         dio2_rf_sw=False,
-                        dio3_tcxo_millivolts=3000,
-                        dio3_tcxo_start_time_us=1000,
+                        dio3_tcxo_millivolts=tcxo_mv,
+                        dio3_tcxo_start_time_us=tcxo_start_us,
                         reset=None,  # CH32 expander drives reset
                     )
                     wrap_sx126x_cmd(radio)
                     new_chip = PolledSX126x(radio)
                     cfg = chip._cfg
                     if cfg:
-                        radio.configure(cfg)
-                        radio.calibrate_image()
+                        new_chip.suspend()
+                        try:
+                            radio.configure(cfg)
+                            radio.calibrate_image()
+                        finally:
+                            new_chip.resume()
                     if chip._user_callback:
                         new_chip.set_callback(chip._user_callback)
                     LoRaManager.radioChip = new_chip

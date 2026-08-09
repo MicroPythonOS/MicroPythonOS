@@ -50,6 +50,15 @@ class PolledSX126x:
         self._user_callback = None
         self._cfg = None
         self._suspended = False  # SPI bus race workaround
+        # ponytail: intercept radio.configure so _cfg is always tracked,
+        # even when apps call self.lora_device.radio.configure() directly.
+        _orig_configure = radio.configure
+
+        def _wrapped_configure(cfg):
+            self._cfg = cfg
+            _orig_configure(cfg)
+
+        radio.configure = _wrapped_configure
         radio.set_irq_callback(self._irq_handler)
 
     @property
@@ -65,6 +74,17 @@ class PolledSX126x:
 
     def resume(self):
         self._suspended = False
+
+    def disable_irq(self):
+        # ponytail: teardown DIO1 ISR so the watchdog can safely
+        # hardware-reset and reconstruct the chip without spurious
+        # ISR calls into freed/outdated state.
+        dio1 = getattr(self._radio, "_dio1", None)
+        if dio1:
+            try:
+                dio1.irq(None)
+            except Exception:
+                pass
 
     def _irq_handler(self):
         # SPI bus race workaround: the DIO1 ISR fires in the main
