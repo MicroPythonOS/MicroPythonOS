@@ -78,9 +78,13 @@ class LoRaManager:
                     logger.debug("CH32 LoRa reset: readback check failed")
                 return False
             chip = LoRaManager.radioChip
-            if chip:
-                r = chip.radio
-                print("reset_chip: expander confirms lora_reset=%s" % exp.config[0])
+            if not chip:
+                if __debug__:
+                    logger.debug("LoRa chip reset via CH32 expander")
+                return True
+            r = chip.radio
+            print("reset_chip: expander confirms lora_reset=%s" % exp.config[0])
+            for retry in range(3):
                 r._sleep = True
                 r._configured = False
                 r._rx = False
@@ -94,32 +98,27 @@ class LoRaManager:
                         dv -= 1
                     reg_trim = tcxo_trim_lookup.index(dv)
                     r._cmd(">BI", 0x97, (reg_trim << 24) + timeout)
-                    print("reset_chip: SET_DIO3_AS_TCXO_CTRL sent, waiting 15ms")
                     time.sleep_ms(15)
                     r._clear_errors()
                     try:
                         r._check_error()
-                        print("reset_chip: TCXO error check passed")
                     except Exception as e:
                         print("reset_chip: TCXO error check FAILED: %s" % e)
-                else:
-                    print("reset_chip: no TCXO configured")
                 r._cmd("BB", 0x8A, 1)  # SET_PACKET_TYPE → LoRa
-                print("reset_chip: SET_PACKET_TYPE -> LoRa")
                 r._clear_irq()
                 st = r._cmd("B", 0xC0, n_read=1)[0]
-                print("reset_chip: after init status=0x%02x (mode=%d, cmd=%d)" %
-                  (st, (st >> 4) & 7, (st >> 1) & 3))
-                # Force STDBY_XOSC to verify TCXO oscillator starts
-                r._cmd("BB", 0x80, 1)
-                st_xosc = r._cmd("B", 0xC0, n_read=1)[0]
-                print("reset_chip: after STDBY_XOSC status=0x%02x (mode=%d, cmd=%d)" %
-                  (st_xosc, (st_xosc >> 4) & 7, (st_xosc >> 1) & 3))
-                if ((st_xosc >> 4) & 7) != 3:
-                    print("reset_chip: WARNING - STDBY_XOSC failed! mode=%d (expected 3)" % ((st_xosc >> 4) & 7))
-                # Test register readback
-                reg = r._reg_read(0x0740)
-                print("reset_chip: REG_LSYNCR=0x%04x" % reg)
+                print("reset_chip: status=0x%02x (mode=%d) [retry %d]" %
+                  (st, (st >> 4) & 7, retry))
+                if st != 0x00:
+                    break
+                print("reset_chip: chip unresponsive, re-resetting")
+                exp.config = 0x03
+                time.sleep_ms(200)
+                exp.config = 0x13
+                time.sleep_ms(200)
+            else:
+                print("reset_chip: FAILED after 3 tries")
+                return False
             if __debug__:
                 logger.debug("LoRa chip reset via CH32 expander")
             return True
