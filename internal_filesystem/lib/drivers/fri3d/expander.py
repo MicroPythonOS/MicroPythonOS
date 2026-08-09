@@ -1,3 +1,4 @@
+import logging
 import struct
 
 import time
@@ -6,6 +7,8 @@ from micropython import const
 from machine import I2C, Pin
 
 from .device import Device
+
+logger = logging.getLogger(__name__)
 
 # registers
 _EXPANDER_REG_INPUTS = const(0x04)
@@ -81,8 +84,11 @@ class Expander(Device):
     @property
     def config(self) -> tuple[bool, bool, bool, bool, bool]:
         """Read the configuration bits: lora reset, remap, reboot, lcd_reset, aux_power"""
-        config = self._read("B", _EXPANDER_REG_CONFIG, 1)[0]
-        return tuple([bool(int(digit)) for digit in "{:08b}".format(config)[3:]])
+        raw = self._read("B", _EXPANDER_REG_CONFIG, 1)[0]
+        config = tuple([bool(int(digit)) for digit in "{:08b}".format(raw)[3:]])
+        if __debug__:
+            logger.debug("expander config read raw=0x%02x bits=%s", raw, config)
+        return config
 
     @config.setter
     def config(self, value: int):
@@ -95,13 +101,17 @@ class Expander(Device):
             th.disable()
         try:
             packet = struct.pack("B", value)
-            for _ in range(3):
+            readback = None
+            for attempt in range(3):
                 self._read("B", _EXPANDER_REG_INPUTS, 1)  # clears I2C state
                 self._write(_EXPANDER_REG_CONFIG, packet)
                 time.sleep_ms(10)
                 readback = self._read("B", _EXPANDER_REG_CONFIG, 1)[0]
                 if (readback & 0x1F) == value:
+                    if __debug__:
+                        logger.debug("expander config write 0x%02x OK (attempt %d)", value, attempt + 1)
                     return
+            logger.warning("expander config write 0x%02x FAILED after 3 attempts, readback=0x%02x", value, readback)
         finally:
             if th:
                 th.enable()
