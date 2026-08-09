@@ -33,7 +33,14 @@ class SPIAdapter:
             self._get_tid = lambda: 0
 
     def write(self, buf):
-        self._dev.write(buf)
+        # ponytail: byte-at-a-time _dev.read(1, byte) instead of
+        # _dev.write(buf).  The batch transfer path hangs the ESP32
+        # SPI host driver for len(buf) >= 5.
+        for i in range(len(buf)):
+            try:
+                self._dev.read(1, buf[i])
+            except Exception:
+                self._dev.read(1, write=buf[i])
 
     def write_readinto(self, wr_buf, rd_buf):
         self.lock()
