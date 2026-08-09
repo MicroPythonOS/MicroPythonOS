@@ -194,10 +194,15 @@ class LoRaManager:
         LoRaManager._last_status = st
         mode = st & 0x70
 
-        # FS (0x30) = PLL locking, normal transient between TX and RX.
-        # RX (0x50) = actively receiving.
-        # TX (0x60) = transmitting.
-        if mode in (0x30, 0x50, 0x60):
+        # Only continuous RX (0x50) is healthy — the chip should always be
+        # listening. Transient modes (FS 0x40, TX 0x60, STANDBY 0x20/0x30)
+        # are brief during tx/rx transitions; a stuck non-RX mode means the
+        # chip fell out of receive and needs recovery.
+        if mode == 0x50:
+            if LoRaManager._bad_count:
+                if __debug__:
+                    logger.debug("Watchdog: RX recovered after %d bad reads",
+                                 LoRaManager._bad_count)
             LoRaManager._bad_count = 0
             LoRaManager._unresponsive_ms = 0
             return
@@ -210,7 +215,7 @@ class LoRaManager:
         else:
             LoRaManager._unresponsive_ms = 0
             if __debug__:
-                logger.warning("Watchdog: unexpected status 0x%02x mode=0x%02x (count=%d)", st, mode, LoRaManager._bad_count)
+                logger.warning("Watchdog: not in RX, status 0x%02x mode=0x%02x (count=%d)", st, mode, LoRaManager._bad_count)
 
         if LoRaManager._unresponsive_ms > 30000:
             if __debug__:
@@ -219,8 +224,7 @@ class LoRaManager:
             return
 
         now = time.ticks_ms()
-        # Rate-limit recovery to once per 5s to avoid reset storms
-        # (a single 0x00 may be transient SPI bus contention, PR #222).
+        # Rate-limit recovery to once per 5s to avoid reset storms.
         if LoRaManager._last_reinit_ms and time.ticks_diff(now, LoRaManager._last_reinit_ms) < 5000:
             if __debug__:
                 logger.debug("Watchdog: rate-limited, skipping recovery (last=%dms ago)",
@@ -228,8 +232,8 @@ class LoRaManager:
             return
 
         # Two-tier recovery:
-        #   Soft: non-0x00 but wrong mode -> start_recv() to re-enter RX
-        #   Hard: 3+ consecutive 0x00 -> HW reset + full reconstruction
+        #   Light: non-0x00 -> clear IRQ + restart continuous RX
+        #   Hard:  3+ consecutive 0x00 -> HW reset via CH32, reap objects
         if st == 0x00:
             if LoRaManager._bad_count < 3:
                 return
@@ -242,46 +246,32 @@ class LoRaManager:
 
             chip.disable_irq()
             if LoRaManager._lora_spi_device is not None and LoRaManager.reset_chip():
+                # ponytail: reset_chip() already reset state flags
+                # (_sleep=True, _configured=False, _rx=False) and did
+                # TCXO init + SET_PACKET_TYPE + DIO_IRQ + _clear_irq
+                # on the existing radio object. Reuse it — creating a
+                # new SX1262 glitches the CS pin and fails.
                 try:
-                    from machine import Pin
-                    from lora import SX1262
-                    from mpos.lora_spi_adapter import SPIAdapter, wrap_sx126x_cmd
-                    from mpos.polled_sx126x import PolledSX126x
-                    irq, rst, gpio, cs = LoRaManager._lora_pins
-                    tcxo_mv = getattr(LoRaManager, "_tcxo_mv", 3000)
-                    tcxo_start_us = getattr(LoRaManager, "_tcxo_start_us", 1000)
-                    radio = SX1262(
-                        spi=SPIAdapter(LoRaManager._lora_spi_device),
-                        cs=Pin(cs, Pin.OUT, value=1),
-                        busy=Pin(gpio, Pin.IN),
-                        dio1=Pin(irq, Pin.IN),
-                        dio2_rf_sw=False,
-                        dio3_tcxo_millivolts=tcxo_mv,
-                        dio3_tcxo_start_time_us=tcxo_start_us,
-                        reset=None,  # CH32 expander drives reset
-                    )
-                    wrap_sx126x_cmd(radio)
-                    new_chip = PolledSX126x(radio)
+                    r = chip._radio
                     cfg = chip._cfg
                     if cfg:
-                        new_chip.suspend()
+                        chip.suspend()
                         try:
-                            radio.configure(cfg)
-                            radio.calibrate_image()
+                            r.configure(cfg)
+                            r.calibrate_image()
                         finally:
-                            new_chip.resume()
+                            chip.resume()
                     if chip._user_callback:
-                        new_chip.set_callback(chip._user_callback)
-                    LoRaManager.radioChip = new_chip
+                        chip.set_callback(chip._user_callback)
                     if __debug__:
-                        logger.debug("Watchdog: hardware reset + full reconstruction OK")
+                        logger.debug("Watchdog: hardware reset + reconfigure OK")
                 except Exception as e:
                     if __debug__:
-                        logger.debug("Watchdog: reconstruction failed: %s", e)
+                        logger.debug("Watchdog: reconfigure failed: %s", e)
         else:
-            # Non-zero status but wrong mode: try soft recovery (re-enter RX).
+            # Non-zero status but wrong mode: try light recovery.
             if __debug__:
-                logger.debug("Watchdog: soft recovery (status 0x%02x, mode=0x%02x)", st, mode)
+                logger.debug("Watchdog: light recovery (status 0x%02x, mode=0x%02x)", st, mode)
             LoRaManager._last_reinit_ms = now
             LoRaManager._bad_count = 0
             try:
@@ -289,4 +279,4 @@ class LoRaManager:
                 chip._radio.start_recv(continuous=True)
             except Exception as e:
                 if __debug__:
-                    logger.debug("Watchdog: soft recovery failed: %s", e)
+                    logger.debug("Watchdog: light recovery failed: %s", e)
