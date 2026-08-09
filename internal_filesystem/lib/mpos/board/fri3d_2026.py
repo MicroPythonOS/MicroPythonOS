@@ -58,26 +58,20 @@ spi_bus = SPI.Bus(
 
 # Would be better to do this only when the LoRa app starts:
 try:
-    # cs=-1 disables hardware CS on the SPI.Device — the SX1262 driver manages
-    # CS manually via GPIO 45 (passed to SX1262() below as cs_pin). This is
-    # necessary because SPItransfer() must hold CS low across multiple
-    # spi.write()/read() calls for a single command frame. If SPI.Device handled
-    # CS automatically, it would toggle between each call, fragmenting the
-    # command. The BUSY wait was moved outside the CS-low span by PR #222.
-    # A full fix would batch all bytes into one spi.write_readinto() call,
-    # allowing hardware CS — but that requires a driver rewrite.
+    # cs=-1 disables hardware CS on the SPI.Device — the upstream lora driver
+    # manages CS via its own GPIO. Each SPI command is a single
+    # write_readinto() call, so CS is only held across one atomic transaction.
     lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=16000000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
 except Exception as e:
     import sys
     sys.print_exception(e)
-else:
-    from drivers.lora.sx1262 import SX1262
-    rf_sw = Pin(46, Pin.OUT)
-    rf_sw.value(1)
-    if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable receiver mode
-    sx = SX1262(lora_spi_device, 40, 11, 41, 45) # reset pin is actually driven by CH32 Expander but expects a value so set to 11 (IR receiver) here for now
-    from mpos import LoRaManager
-    LoRaManager.radioChip = sx
+    lora_spi_device = None
+rf_sw = Pin(46, Pin.OUT)
+rf_sw.value(1)
+if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable receiver mode
+# SX1262 constructor moved to after CH32 releases LoRa reset —
+# if it ran while the chip was held in reset, TCXO init and DIO
+# IRQ config would be silently lost.
 
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
@@ -149,9 +143,40 @@ BatteryManager.has_battery = lambda *args: True
 BatteryManager.read_battery_voltage = lambda force_refresh=False, raw_adc_value=None: (mpos.io_expander.analog[1] * 0.00192308 - 0.28076923)
 
 # LCD and Lora reset using the CH32 microcontroller
-expander.config = 0x01 # 3v3 aux on + LCD off + Lora Off
-time.sleep_ms(100)
-expander.config = 0x13 # 3v3 aux + LCD on + Lora on
+# ponytail: the 0x01→0x13 toggle is unreliable on some boards (I2C write
+# of 0x13 silently fails). The factory default state leaves the chip out
+# of reset. Try releasing directly; retry if I2C flaked out.
+for _ in range(3):
+    expander.config = 0x13  # 3v3 aux + LCD on + Lora on
+    time.sleep_ms(20)
+    cfg = expander.config  # returns (lora_reset, remap, reboot, lcd_reset, aux_power)
+    if cfg[0]:
+        break
+    print("CH32 config write 0x13 failed, retrying (readback=%s)" % (cfg,))
+else:
+    print("WARNING: LoRa NOT released from reset after 3 retries! config=%s" % (cfg,))
+
+if lora_spi_device is not None:
+    from lora import SX1262
+    from mpos.lora_spi_adapter import SPIAdapter, wrap_sx126x_cmd
+    from mpos.polled_sx126x import PolledSX126x
+    radio = SX1262(
+        spi=SPIAdapter(lora_spi_device),
+        cs=Pin(45, Pin.OUT, value=1),
+        busy=Pin(41, Pin.IN),
+        dio1=Pin(40, Pin.IN),
+        dio2_rf_sw=False,
+        dio3_tcxo_millivolts=3000,
+        dio3_tcxo_start_time_us=1000,
+        reset=None,  # CH32 expander drives reset
+    )
+    wrap_sx126x_cmd(radio)
+    reliable = PolledSX126x(radio)
+    from mpos import LoRaManager
+    LoRaManager.radioChip = reliable
+    # Store params needed to reconstruct after a watchdog hardware reset.
+    LoRaManager._lora_spi_device = lora_spi_device
+    LoRaManager._lora_pins = (40, 11, 41, 45)  # irq, rst, gpio, cs_pin
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(

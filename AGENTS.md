@@ -17,6 +17,7 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 
 - **Patch files** (`.patch` applied by `build_mpos.sh`): commit directly on `integration`. No topic branch needed — the patch file is the topic.
 - **Direct C/C++ source edits**: must go on a `topic/<name>` branch, then merge into `integration`.
+- **Pick ONE** mechanism per change — never mix both. If the change can be a `.patch` and there's no existing `micropy_updates/` copy to maintain, use a `.patch`. If `micropy_updates/` files need updating, use a topic branch.
 - Branch naming: `topic/<kebab-case>` (e.g. `topic/wifi-country-japan`).
 
 ## Testing
@@ -139,6 +140,25 @@ with MPOSController(backend='process') as mpos:
 - No `bytearray * int` → `bytearray(); [out.extend(buf) for _ in range(n)]`.
 - Some builds lack `random.Random`/`shuffle` → Fisher-Yates with `randint`. Prefer tiny LCG for deterministic jitter.
 - `logging.Logger.log()` formats via `msg % args` — always include `%s` when passing variables.
+- **`Pin.IRQ_RISING` (soft IRQs) are unreliable under LVGL load.** The ESP32
+  scheduler may drop edge-triggered ISRs when busy with I2C expander reads
+  (~60 Hz from Fri3d2026Expander), display SPI updates, or other operations.
+  Do NOT rely on them for critical state transitions. (Verified: TX_DONE ISR
+  fired ~0% of the time in lora_chat testing.)
+- **Prefer SPI polling over pin ISRs.** For the SX1262 LoRa driver, use
+  `_get_irq()` to read IRQ flags via SPI (~50µs). A 20ms polling loop
+  (see `lora_adapter.py:send()` non-blocking path) adds negligible CPU
+  and eliminates missed IRQs entirely.
+- **Guard `_clear_irq()` carefully.** It clears ALL pending SX1262 IRQ flags.
+  Calling it between event-occurred and handler-run (e.g. `_standby()` inside
+  `prepare_send()` clears pending TX_DONE from a previous send) makes
+  polling miss events. Minimize it in paths that run between those points.
+- **Never hold `SPI.Device.lock()` (C-level `spi_device_acquire_bus`) from
+  Python.** The C lock blocks with the MicroPython GIL held. The display
+  driver's SPI flush runs in a separate FreeRTOS task (LVGL) that also needs
+  the bus — deadlock. (See `lora_spi_adapter.py` — the `SPIAdapter` uses a
+  Python-level reentrant lock instead; each `transfer()` call handles bus
+  arbitration atomically.)
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 

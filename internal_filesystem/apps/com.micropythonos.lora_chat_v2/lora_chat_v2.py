@@ -10,7 +10,7 @@ import lvgl as lv
 
 from mpos import Activity, MposKeyboard, TaskManager, LoRaManager
 
-class LoRaChat(Activity):
+class LoRaChatV2(Activity):
 
     alltext = ""
     lora_device = None
@@ -57,6 +57,10 @@ class LoRaChat(Activity):
         self.send_button.add_event_cb(self.send_callback, lv.EVENT.CLICKED, None)
         send_label = lv.label(self.send_button)
         send_label.set_text("Send It!")
+
+        spinner = lv.spinner(main_content)
+        spinner.align(lv.ALIGN.TOP_RIGHT, 0, 0)
+        spinner.set_size(lv.pct(25), lv.pct(25))
 
         self.messages = lv.label(main_content)
         self.messages.set_text('Waiting for messages...')
