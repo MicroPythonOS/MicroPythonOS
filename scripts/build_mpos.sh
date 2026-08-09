@@ -367,6 +367,19 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	echo "Applying unix auto-import main patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
 
+	# Desktop builds on architectures without a native emitter (e.g. macOS on
+	# aarch64) can't compile @micropython.native/@micropython.viper decorators
+	# in RUNTIME-loaded .py files (apps/, on-disk lib/): the compiler raises
+	# "invalid micropython decorator". disable_native_viper only covers frozen
+	# code. This patch makes the compiler fall back to bytecode instead.
+	# Existence-guarded so MPOS still builds against older pinned
+	# lvgl_micropython SHAs that don't ship the patch yet.
+	native_fallback_patch="$codebasedir"/lvgl_micropython/unix_native_decorator_fallback.patch
+	if [ -f "$native_fallback_patch" ]; then
+		echo "Applying unix native-decorator bytecode fallback patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$native_fallback_patch"
+	fi
+
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
 
@@ -484,6 +497,15 @@ elif [ "$target" == "web" ]; then
 
 	echo "Applying unix auto-import main patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
+
+	# Same native/viper-decorator bytecode fallback as the unix/macOS build:
+	# the wasm build has no native emitter either, so runtime-loaded apps
+	# using those decorators would fail to import in the browser.
+	native_fallback_patch="$codebasedir"/lvgl_micropython/unix_native_decorator_fallback.patch
+	if [ -f "$native_fallback_patch" ]; then
+		echo "Applying unix native-decorator bytecode fallback patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$native_fallback_patch"
+	fi
 
 	# Apply the web-port modifications to the lvgl_micropython submodule. These
 	# live in THIS (MicroPythonOS) repo under scripts/web_port/ so the entire web

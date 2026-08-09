@@ -5,6 +5,7 @@ Frameworks:
 - SDCardManager integrates the old 'sdcard' functionality, which has been removed
 
 OS:
+- Desktop/web builds: fix runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError "invalid micropython decorator" on architectures without a native emitter (e.g. macOS on Apple Silicon): the compiler now falls back to bytecode (Draw app, AppStore blurhash and the Nostr service were affected)
 - Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
 - WiFi: set country code default to Japan instead of World
 
