@@ -61,9 +61,9 @@ class LoRaChatV2(Activity):
         send_label = lv.label(self.send_button)
         send_label.set_text("Send It!")
 
-        spinner = lv.spinner(main_content)
-        spinner.align(lv.ALIGN.TOP_RIGHT, 0, 0)
-        spinner.set_size(lv.pct(25), lv.pct(25))
+        self.spinner = lv.spinner(main_content)
+        self.spinner.align(lv.ALIGN.TOP_RIGHT, 0, 0)
+        self.spinner.set_size(lv.pct(25), lv.pct(25))
 
         self.messages = lv.label(main_content)
         self.messages.set_text('Waiting for messages...')
@@ -81,6 +81,7 @@ class LoRaChatV2(Activity):
 
     def onResume(self, screen):
         super().onResume(screen)
+        self.spinner.add_flag(lv.obj.FLAG.HIDDEN)
         print("LoRa Chat foregrounded, starting receive_thread")
         if not simulation_mode:
             if not LoRaManager.acquire(self.appFullName):
@@ -206,3 +207,4 @@ class LoRaChatV2(Activity):
             rf_sw.value(1) ; print("RF_SW set to HIGH")
 
         print("lora started")
+        lv.async_call(lambda _: self.spinner.remove_flag(lv.obj.FLAG.HIDDEN), None)
