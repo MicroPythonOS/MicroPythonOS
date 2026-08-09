@@ -1,6 +1,10 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: fix double update check (network established + some time after boot)
+- OSUpdate: fix double update check (network established + some time after boot)
+
 OS:
 - Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
 - WiFi: set country code default to Japan instead of World
