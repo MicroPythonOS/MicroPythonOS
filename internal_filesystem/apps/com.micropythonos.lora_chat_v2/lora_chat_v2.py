@@ -58,6 +58,11 @@ class LoRaChatV2(Activity):
         send_label = lv.label(self.send_button)
         send_label.set_text("Send It!")
 
+        self.watchdog_button = lv.button(main_content)
+        self.watchdog_button.add_event_cb(self._watchdog_test_callback, lv.EVENT.CLICKED, None)
+        wd_label = lv.label(self.watchdog_button)
+        wd_label.set_text("Trigger Watchdog")
+
         self.spinner = lv.spinner(main_content)
         self.spinner.align(lv.ALIGN.TOP_RIGHT, 0, 0)
         self.spinner.set_size(lv.pct(25), lv.pct(25))
@@ -87,6 +92,26 @@ class LoRaChatV2(Activity):
         print("auto sending: %s + %d bytes pad, total=%d" % (ts_head, random_len, len(message)))
         self.real_send(message)
 
+    def _watchdog_test_callback(self, event):
+        print("_watchdog_test_callback (manual trigger)")
+        if simulation_mode or self.lora_device is None:
+            print("skipping (sim or no chip)")
+            return
+        ok = LoRaManager.force_watchdog_recovery()
+        print("force_watchdog_recovery -> %s" % ok)
+        self.alltext += "Watchdog trigger: %s\n" % ("OK" if ok else "FAIL")
+        lv.async_call(lambda _: self.messages.set_text(self.alltext), None)
+
+    def _auto_watchdog_callback(self, timer):
+        print("_auto_watchdog_callback (timer)")
+        if simulation_mode or self.lora_device is None:
+            print("skipping (sim or no chip)")
+            return
+        ok = LoRaManager.force_watchdog_recovery()
+        print("auto watchdog trigger -> %s" % ok)
+        self.alltext += "Auto-WD: %s\n" % ("OK" if ok else "FAIL")
+        lv.async_call(lambda _: self.messages.set_text(self.alltext), None)
+
     def onResume(self, screen):
         super().onResume(screen)
         self.spinner.add_flag(lv.obj.FLAG.HIDDEN)
@@ -99,11 +124,14 @@ class LoRaChatV2(Activity):
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
         self._auto_send_timer = lv.timer_create(self._auto_send_callback, 30000, None)
+        self._auto_watchdog_timer = lv.timer_create(self._auto_watchdog_callback, 60000, None)
 
     def onPause(self, screen):
         super().onPause(screen)
         if self._auto_send_timer:
             self._auto_send_timer.delete()
+        if self._auto_watchdog_timer:
+            self._auto_watchdog_timer.delete()
         print("LoRa Chat backgrounded, releasing LoRa lock")
         if not simulation_mode:
             LoRaManager.release(self.appFullName)
