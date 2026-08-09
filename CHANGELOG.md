@@ -7,6 +7,7 @@ Frameworks:
 OS:
 - Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
 - WiFi: set country code default to Japan instead of World
+- main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
 
 0.16.1
 ======
