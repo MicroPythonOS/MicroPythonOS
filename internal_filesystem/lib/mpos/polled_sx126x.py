@@ -99,10 +99,18 @@ class PolledSX126x:
             if __debug__:
                 logger.warning("DIO1 IRQ fired while suspended (SPI bus race workaround)")
             return
-        flags = self._radio._get_irq()
-        self._last_events = flags
-        if self._user_callback:
-            self._user_callback(flags)
+        # ponytail: if the chip is stuck BUSY (e.g. shared SPI bus
+        # contention), _get_irq() times out.  Catch it so the ISR
+        # doesn't crash — the data path already polls _get_irq() in
+        # recv() so a missed ISR cycle is harmless.
+        try:
+            flags = self._radio._get_irq()
+            self._last_events = flags
+            if self._user_callback:
+                self._user_callback(flags)
+        except Exception:
+            if __debug__:
+                logger.warning("DIO1 ISR: SPI read failed (chip busy)")
 
     def configure(self, cfg):
         self._radio.configure(cfg)

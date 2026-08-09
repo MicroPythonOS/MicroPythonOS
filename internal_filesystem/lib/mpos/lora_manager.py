@@ -89,42 +89,49 @@ class LoRaManager:
             if __debug__:
                 logger.debug("reset_chip: expander confirms lora_reset=%s", exp.config[0])
             for retry in range(3):
-                r._sleep = True
-                r._configured = False
-                r._rx = False
-                tcxo_mv = getattr(LoRaManager, "_tcxo_mv", None)
-                if tcxo_mv:
-                    tcxo_start_us = LoRaManager._tcxo_start_us
-                    timeout = (tcxo_start_us * 1000 + 15624) // 15625
-                    dv = tcxo_mv // 100
-                    tcxo_trim_lookup = (16, 17, 18, 22, 24, 27, 30, 33)
-                    while dv not in tcxo_trim_lookup:
-                        dv -= 1
-                    reg_trim = tcxo_trim_lookup.index(dv)
-                    r._cmd(">BI", 0x97, (reg_trim << 24) + timeout)
-                    time.sleep_ms(15)
-                    r._clear_errors()
-                    try:
-                        r._check_error()
-                    except Exception as e:
-                        logger.warning("reset_chip: TCXO error check FAILED: %s", e)
-                r._cmd("BB", 0x8A, 1)  # SET_PACKET_TYPE → LoRa
-                r._cmd(">BHHHH", 0x08,
-                    579,    # IrqMask: TX(1)|RX(2)|CRC_ERR(64)|TIMEOUT(512)
-                    515,    # DIO1Mask: TX(1)|RX(2)|TIMEOUT(512)
-                    0, 0)   # DIO2Mask, DIO3Mask
-                r._clear_irq()
-                st = r._cmd("B", 0xC0, n_read=1)[0]
+                try:
+                    r._sleep = True
+                    r._configured = False
+                    r._rx = False
+                    tcxo_mv = getattr(LoRaManager, "_tcxo_mv", None)
+                    if tcxo_mv:
+                        tcxo_start_us = LoRaManager._tcxo_start_us
+                        timeout = (tcxo_start_us * 1000 + 15624) // 15625
+                        dv = tcxo_mv // 100
+                        tcxo_trim_lookup = (16, 17, 18, 22, 24, 27, 30, 33)
+                        while dv not in tcxo_trim_lookup:
+                            dv -= 1
+                        reg_trim = tcxo_trim_lookup.index(dv)
+                        r._cmd(">BI", 0x97, (reg_trim << 24) + timeout)
+                        time.sleep_ms(15)
+                        r._clear_errors()
+                        try:
+                            r._check_error()
+                        except Exception as e:
+                            logger.warning("reset_chip: TCXO error check FAILED: %s", e)
+                    r._cmd("BB", 0x8A, 1)  # SET_PACKET_TYPE → LoRa
+                    r._cmd(">BHHHH", 0x08,
+                        579,    # IrqMask: TX(1)|RX(2)|CRC_ERR(64)|TIMEOUT(512)
+                        515,    # DIO1Mask: TX(1)|RX(2)|TIMEOUT(512)
+                        0, 0)   # DIO2Mask, DIO3Mask
+                    r._clear_irq()
+                    st = r._cmd("B", 0xC0, n_read=1)[0]
+                except Exception as e:
+                    if __debug__:
+                        logger.debug("reset_chip: SPI failed (retry %d): %s",
+                                     retry, e)
+                    st = 0x00
                 if __debug__:
                     logger.debug("reset_chip: status=0x%02x (mode=%d) [retry %d]",
                         st, (st >> 4) & 7, retry)
                 if st != 0x00:
                     break
-                logger.warning("reset_chip: chip unresponsive, re-resetting")
-                exp.config = 0x03
-                time.sleep_ms(200)
-                exp.config = 0x13
-                time.sleep_ms(200)
+                if retry < 2:
+                    logger.warning("reset_chip: chip unresponsive, re-resetting")
+                    exp.config = 0x03
+                    time.sleep_ms(200)
+                    exp.config = 0x13
+                    time.sleep_ms(200)
             else:
                 logger.warning("reset_chip: FAILED after 3 tries")
                 return False

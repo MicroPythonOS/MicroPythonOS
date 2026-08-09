@@ -113,6 +113,9 @@ class LoRaChat(Activity):
         if events & PolledSX126x.TX_DONE:
             print('TX done.')
         elif events & PolledSX126x.RX_DONE:
+            if events & PolledSX126x.CRC_ERR:
+                print("RX CRC error, ignoring")
+                return
             print('RX done.')
             try:
                 print("self.lora_device.recv")
