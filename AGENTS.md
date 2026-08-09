@@ -159,6 +159,10 @@ with MPOSController(backend='process') as mpos:
   the bus — deadlock. (See `lora_spi_adapter.py` — the `SPIAdapter` uses a
   Python-level reentrant lock instead; each `transfer()` call handles bus
   arbitration atomically.)
+- **`SPI.Device.write(buf)` hangs ESP32 for `len(buf) >= 5` bytes.** The batch
+  transfer path in the ESP32 SPI host driver deadlocks. Use byte-at-a-time
+  `_dev.read(1, byte)` / `_dev.read(1, write=byte)` instead — the
+  `SPIAdapter.write()` in `lora_spi_adapter.py` already does this.
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 
