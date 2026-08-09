@@ -74,11 +74,13 @@ class LoRaChatV2(Activity):
         if simulation_mode or self.lora_device is None:
             print("not doing anything")
             return
-        #length = random.randint(0, 128)
-        #data = os.urandom(length)
+        import random
+        import os
+        length = random.randint(0, 128)
+        message = os.urandom(length)
         #print("not auto sending data:")
         #print(data)
-        message = "1"
+        #message = "1"
         #message = "1234"
         #        message = "12345"
         print(f"sending message: {message}")
@@ -117,7 +119,7 @@ class LoRaChatV2(Activity):
 
     def real_send(self, message):
         print(f"real send: {message}")
-        self.alltext += "Sent: " + message + "\n"
+        self.alltext += "Sent: " + str(message) + "\n"
         lv.async_call(lambda _: self.messages.set_text(self.alltext), None)
 
         if isinstance(message, (bytes, bytearray)):
