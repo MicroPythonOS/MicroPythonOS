@@ -35,7 +35,6 @@ class LoRaChat(Activity):
         return text[:head] + "..." + text[-tail:]
 
     def onCreate(self):
-        #import logging ; logging.getLogger().setLevel(logging.DEBUG) # or logging.INFO
         main_content = lv.obj()
         main_content.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         main_content.set_style_pad_gap(10, 0)

@@ -5,6 +5,9 @@ except Exception as e:
     print(f"Activating simulation mode because could not import Pin, SPI from machine: {e}")
     simulation_mode = True
 
+import os
+import random
+
 from mpos.polled_sx126x import PolledSX126x
 import lvgl as lv
 
@@ -69,6 +72,13 @@ class LoRaChatV2(Activity):
 
         self.setContentView(main_content)
 
+    def _auto_send_callback(self, timer):
+        if simulation_mode or self.lora_device is None:
+            return
+        length = random.randint(0, 128)
+        data = os.urandom(length)
+        self.lora_device.send(data)
+
     def onResume(self, screen):
         super().onResume(screen)
         print("LoRa Chat foregrounded, starting receive_thread")
@@ -79,9 +89,11 @@ class LoRaChatV2(Activity):
         import _thread
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
+        self._auto_send_timer = lv.timer_create(self._auto_send_callback, 15000, None)
 
     def onPause(self, screen):
         super().onPause(screen)
+        self._auto_send_timer.delete()
         print("LoRa Chat backgrounded, releasing LoRa lock")
         if not simulation_mode:
             LoRaManager.release(self.appFullName)
