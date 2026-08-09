@@ -50,6 +50,7 @@ class PolledSX126x:
         self._user_callback = None
         self._cfg = None
         self._suspended = False  # SPI bus race workaround
+        self._in_op = False  # ponytail: guard watchdog during send/recv
         # ponytail: intercept radio.configure so _cfg is always tracked,
         # even when apps call self.lora_device.radio.configure() directly.
         _orig_configure = radio.configure
@@ -138,6 +139,13 @@ class PolledSX126x:
     def send(self, data):
         if not isinstance(data, (bytes, bytearray)):
             return 0, -804
+        self._in_op = True
+        try:
+            return self._send_impl(data)
+        finally:
+            self._in_op = False
+
+    def _send_impl(self, data):
         # ponytail: drain any pending RX before clear_errors/clear_irq.
         # prepare_send() → _standby() → _clear_irq() clears ALL IRQ flags
         # including RX_DONE. If a packet arrived but the DIO1 ISR hasn't
@@ -166,6 +174,13 @@ class PolledSX126x:
         return 0, -5
 
     def recv(self, len_=0):
+        self._in_op = True
+        try:
+            return self._recv_impl(len_)
+        finally:
+            self._in_op = False
+
+    def _recv_impl(self, len_):
         # Acknowledge pending IRQ events via SPI. The SX1262 gates the RX
         # buffer behind the IRQ flag: GET_RX_BUFFER_STATUS returns rx_len=0
         # until GET_IRQ_STATUS has been read and shows RX_DONE. Since the

@@ -151,7 +151,7 @@ class LoRaManager:
         return (st & 0x70) not in (0x00, 0x10)
 
     @staticmethod
-    def start_watchdog(interval_ms=2000):
+    def start_watchdog(interval_ms=5000):
         if LoRaManager._watchdog_active:
             return
         LoRaManager._watchdog_active = True
@@ -193,6 +193,10 @@ class LoRaManager:
         if chip is None:
             return
 
+        # ponytail: don't interfere with an active send/recv.
+        if chip._in_op:
+            return
+
         try:
             st = chip.try_get_status()
         except Exception:
@@ -208,10 +212,7 @@ class LoRaManager:
         # listening. Transient modes (FS 0x40, TX 0x60, STANDBY 0x20/0x30)
         # are brief during tx/rx transitions; a stuck non-RX mode means the
         # chip fell out of receive and needs recovery.
-        # ponytail: TX (0x60) and FS (0x40) are transient modes during
-        # valid sends; recovering mid-transmission kills the send and
-        # corrupts chip state.  Only recover from stuck standby/corrupt.
-        if mode in (0x50, 0x60, 0x40):
+        if mode == 0x50:
             if LoRaManager._bad_count:
                 if __debug__:
                     logger.debug("Watchdog: RX recovered after %d bad reads",
