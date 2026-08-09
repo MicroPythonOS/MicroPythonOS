@@ -143,7 +143,7 @@ class LoRaChatV2(Activity):
         _thread.stack_size(TaskManager.good_stack_size())
         _thread.start_new_thread(self.receive_thread, ())
         self._auto_send_timer = lv.timer_create(self._auto_send_callback, 30000, None)
-        #self._auto_watchdog_timer = lv.timer_create(self._auto_watchdog_callback, 60000, None)
+        self._auto_watchdog_timer = lv.timer_create(self._auto_watchdog_callback, 6000000, None)
 
     def onPause(self, screen):
         super().onPause(screen)
