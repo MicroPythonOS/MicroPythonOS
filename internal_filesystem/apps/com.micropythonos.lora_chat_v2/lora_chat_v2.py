@@ -5,9 +5,6 @@ except Exception as e:
     print(f"Activating simulation mode because could not import Pin, SPI from machine: {e}")
     simulation_mode = True
 
-import os
-import random
-
 from mpos.polled_sx126x import PolledSX126x
 import lvgl as lv
 
@@ -81,14 +78,13 @@ class LoRaChatV2(Activity):
         #data = os.urandom(length)
         #print("not auto sending data:")
         #print(data)
-        import time
-        #message = f"data: {time.time()}"
-        message = "1234" # works
-        #message = "12345" # hangs
+        message = "1"
+        #message = "1234"
+        #message = "12345"
         print(f"sending message: {message}")
-        self.real_send(message)
-        #lv.async_call(lambda _: self.lora_device.send(message), None) # trying this
-        #lv.async_call(lambda _: self.real_send(message), None) # trying this
+        to_send = message.encode("utf8") if isinstance(message, str) else message
+        import _thread
+        _thread.start_new_thread(self._do_send, (to_send,))
 
     def onResume(self, screen):
         super().onResume(screen)
@@ -136,8 +132,16 @@ class LoRaChatV2(Activity):
             print("Not actually sending because simulation mode")
             return
 
-        _, result = self.lora_device.send(to_send)
-        print(f"send result {result}: {PolledSX126x.STATUS[result]}")
+        import _thread
+        _thread.start_new_thread(self._do_send, (to_send,))
+
+    def _do_send(self, data):
+        # ponytail: runs send() in a background thread so it doesn't block
+        # lv.task_handler().  The send blocks on time.sleep_ms() which yields
+        # to the main thread, keeping the UI responsive.
+        self.alltext += "Sent: " + str(data) + "\n"
+        _, result = self.lora_device.send(data)
+        print(f"auto-send result {result}: {PolledSX126x.STATUS[result]}")
 
     def receive_callback(self, events):
         print(f"receive_callback for events: {events}")
