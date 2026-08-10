@@ -124,8 +124,25 @@ def finish_current_activity():
     return True
 
 
+_back_screen_disabled = False
+
+
+def set_back_screen_disabled(disabled):
+    global _back_screen_disabled
+    _back_screen_disabled = disabled
+
+
+def is_back_screen_disabled():
+    return _back_screen_disabled
+
+
 def back_screen():
-    global screen_stack
+    global _back_screen_disabled, screen_stack
+    if _back_screen_disabled:
+        group = lv.group_get_default()
+        if group:
+            lv.group_send_data(group, lv.KEY.ESC)
+        return False
 
     from . import topmenu
     if topmenu.drawer_open:
