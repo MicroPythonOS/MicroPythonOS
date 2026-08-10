@@ -171,6 +171,15 @@ class PolledSX126x:
                 self._radio.poll_send()
                 return len(data), 0
             time.sleep_ms(20)
+        ''' is this the cause for the busy error?!
+        # ponytail: after TX timeout, try to restore RX so the chip
+        # doesn't sit wedged in STDBY_RC.  If BUSY is stuck, let the
+        # watchdog hard-reset.
+        try:
+            self._radio.start_recv(continuous=True)
+        except Exception:
+            pass
+        '''
         return 0, -5
 
     def recv(self, len_=0):
