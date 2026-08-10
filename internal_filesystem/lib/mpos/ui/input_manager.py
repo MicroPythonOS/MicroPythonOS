@@ -23,6 +23,26 @@ class InputManager:
     _registered_indevs = []  # List of registered input devices
 
     _has_haptic_feedback = False
+
+    _back_screen_disabled = False
+    _drawer_open_disabled = False
+
+    @classmethod
+    def set_back_screen_disabled(cls, disabled):
+        cls._back_screen_disabled = disabled
+
+    @classmethod
+    def is_back_screen_disabled(cls):
+        return cls._back_screen_disabled
+
+    @classmethod
+    def set_drawer_open_disabled(cls, disabled):
+        cls._drawer_open_disabled = disabled
+
+    @classmethod
+    def is_drawer_open_disabled(cls):
+        return cls._drawer_open_disabled
+
     
     @classmethod
     def register_indev(cls, indev):

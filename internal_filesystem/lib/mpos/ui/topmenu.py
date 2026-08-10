@@ -33,17 +33,6 @@ _drawer_panel = None
 # State variables (kept in sync with panel.is_open for external code)
 drawer_open = False
 bar_open = False
-_drawer_open_disabled = False
-
-
-def set_drawer_open_disabled(disabled):
-    global _drawer_open_disabled
-    _drawer_open_disabled = disabled
-
-
-def is_drawer_open_disabled():
-    return _drawer_open_disabled
-
 # Widgets:
 notification_bar = None
 notification_icon_label = None   # bell indicator in the top bar (label only – no image in the bar)
@@ -248,7 +237,7 @@ def _register_notifications_listener():
 def toggle_drawer():
     if drawer_open:
         close_drawer()
-    elif not _drawer_open_disabled:
+    elif not InputManager.is_drawer_open_disabled():
         open_drawer()
     else:
         group = lv.group_get_default()
@@ -257,7 +246,7 @@ def toggle_drawer():
 
 def open_drawer():
     global drawer_open, _pre_drawer_focused
-    if _drawer_open_disabled:
+    if InputManager.is_drawer_open_disabled():
         group = lv.group_get_default()
         if group:
             lv.group_send_data(group, lv.KEY.HOME)

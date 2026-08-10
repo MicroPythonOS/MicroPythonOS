@@ -2,6 +2,7 @@ import logging
 import lvgl as lv
 import sys
 
+from .input_manager import InputManager
 from .topmenu import open_bar, close_drawer
 
 logger = logging.getLogger(__name__)
@@ -124,21 +125,9 @@ def finish_current_activity():
     return True
 
 
-_back_screen_disabled = False
-
-
-def set_back_screen_disabled(disabled):
-    global _back_screen_disabled
-    _back_screen_disabled = disabled
-
-
-def is_back_screen_disabled():
-    return _back_screen_disabled
-
-
 def back_screen():
-    global _back_screen_disabled, screen_stack
-    if _back_screen_disabled:
+    global screen_stack
+    if InputManager.is_back_screen_disabled():
         group = lv.group_get_default()
         if group:
             lv.group_send_data(group, lv.KEY.ESC)

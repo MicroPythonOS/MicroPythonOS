@@ -5,11 +5,11 @@ Future release (next version)
 ======
 
 Board Support:
-- Fri3d 2026: update CH32 firmware to 2.0.2 to fix issue with 2 consecutive i2c register writes which impacted LoRa reset etc.
+- Fri3d 2026: update CH32 firmware to 2.0.3 to fix issue with 2 consecutive i2c register writes which could impact LoRa reset and others
 
 Frameworks:
 - SDCardManager: integrate 'sdcard' module functionality and remove the module
-- Navigation: add set_back_screen_disabled()/is_back_screen_disabled() and set_drawer_open_disabled()/is_drawer_open_disabled() to globally disable back-screen navigation and top-menu-drawer opening
+- Navigation: add InputManager.set_back_screen_disabled()/is_back_screen_disabled() and set_drawer_open_disabled()/is_drawer_open_disabled() to globally disable back-screen navigation and top-menu-drawer opening; disabled keys forwarded to app as lv.KEY.ESC / lv.KEY.HOME
 
 OS:
 - Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
