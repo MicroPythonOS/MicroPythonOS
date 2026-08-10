@@ -23,7 +23,7 @@ class LoRaManager:
     def acquire(app_name):
         if LoRaManager._holder is None:
             LoRaManager._holder = app_name
-            #LoRaManager.start_watchdog()
+            # LoRaManager.start_watchdog() # this causes a complete hang/deadlock fairly quickly
             if __debug__:
                 logger.debug("LoRa lock acquired by %s", app_name)
             return True
@@ -151,8 +151,9 @@ class LoRaManager:
         return (st & 0x70) not in (0x00, 0x10)
 
     @staticmethod
-    def start_watchdog(interval_ms=5000):
+    def start_watchdog(interval_ms=4321):
         if LoRaManager._watchdog_active:
+            logger.info("not enabling watchdog because already enabled")
             return
         LoRaManager._watchdog_active = True
         LoRaManager._bad_count = 0
@@ -176,6 +177,7 @@ class LoRaManager:
         from mpos import TaskManager
         try:
             while LoRaManager._watchdog_active:
+                logger.info("watchdog loop")
                 await TaskManager.sleep_ms(interval_ms)
                 if not LoRaManager._watchdog_active:
                     break
@@ -191,14 +193,17 @@ class LoRaManager:
         import time
         chip = LoRaManager.radioChip
         if chip is None:
+            logger.info("watchdog _check_once exits because no radioChip")
             return
 
         # ponytail: don't interfere with an active send/recv.
         if chip._in_op:
+            logger.info("watchdog _check_once exits because _in_op (active operation)")
             return
 
         try:
             st = chip.try_get_status()
+            logger.info(f"watchdog got status {st}")
         except Exception:
             st = 0x00
 

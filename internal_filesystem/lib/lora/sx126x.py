@@ -15,7 +15,7 @@ from .modem import BaseModem, ConfigError, RxPacket, _clamp, _flag
 
 # Set _DEBUG to const(True) to print all SPI commands sent to the device, and all responses,
 # plus a few additional pieces of information.
-_DEBUG = const(False)  # force-on for SPI debug
+_DEBUG = const(False)
 
 _REG_RXGAINCR = const(0x8AC)  # Reset value 0x94
 _REG_LSYNCRH = const(0x740)
