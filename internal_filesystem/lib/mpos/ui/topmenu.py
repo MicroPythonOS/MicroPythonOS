@@ -378,18 +378,16 @@ def create_notification_bar():
 
     # Update time
     def update_time(timer):
-        hours = mpos.time.localtime()[3]
-        minutes = mpos.time.localtime()[4]
-        seconds = mpos.time.localtime()[5]
-        time_label.set_text(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
-    
+        now = mpos.time.localtime()
+        time_label.set_text(f"{now[3]:02d}:{now[4]:02d}:{now[5]:02d}")
+
     def update_wifi_icon(timer):
         from mpos import WifiService
         if WifiService.is_connected():
             wifi_icon.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
-    
+
     # Get temperature sensor via SensorManager
     from mpos import SensorManager
     temp_sensor = None
@@ -408,7 +406,7 @@ def create_notification_bar():
                 temp_label.set_text("--°C")
         else:
             temp_label.set_text("42°C")
-    
+
     lv.timer_create(update_time, CLOCK_UPDATE_INTERVAL, None)
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
     #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
@@ -416,7 +414,7 @@ def create_notification_bar():
 
     _register_notifications_listener()
     _refresh_notification_widgets()
-    
+
 
 
 def create_drawer():

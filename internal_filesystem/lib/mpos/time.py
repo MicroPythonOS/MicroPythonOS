@@ -35,14 +35,26 @@ def sync_time():
     except Exception as e:
         logger.error("Failed to sync time: %s", e)
 
+# Cached because localtime() is called once a second to update the status bar
+# clock, and the full POSIX-TZ computation allocates ~3 KB per call. The cache
+# holds (ptz, offset, isdst, valid_from, valid_until) and is reused while the
+# timezone matches and valid_from <= now < valid_until. tzoffset() reports the
+# exact interval its offset is valid for (DST transitions, new year), so the
+# cache can never return a stale offset.
+_tz_cache = (None, 0, 0, 0, 0)  # (ptz, offset_seconds, isdst, valid_from, valid_until)
+
 def localtime():
+    global _tz_cache
     if not TimeZone.timezone_preference: # if it's the first time, then it needs refreshing
         TimeZone.refresh_timezone_preference()
     ptz = TimeZone.timezone_to_posix_time_zone(TimeZone.timezone_preference)
     t = time.time()
-    try:
-        localtime = localPTZtime.tztime(t, ptz)
-    except Exception:
-        return time.localtime()
-    return localtime
-
+    cptz, offset, isdst, valid_from, valid_until = _tz_cache
+    if cptz != ptz or not (valid_from <= t < valid_until):
+        try:
+            offset, isdst, valid_from, valid_until = localPTZtime.tzoffset(t, ptz)
+        except Exception:
+            return time.localtime()
+        _tz_cache = (ptz, offset, isdst, valid_from, valid_until)
+    lt = time.gmtime(int(t) + offset)
+    return (lt[0], lt[1], lt[2], lt[3], lt[4], lt[5], lt[6], lt[7], isdst)

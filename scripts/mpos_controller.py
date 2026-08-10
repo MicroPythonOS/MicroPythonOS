@@ -294,10 +294,19 @@ class AIOREPLClient:
         return data
 
     def read_until(self, ending, timeout=30):
+        # A device REPL emits CRLF line endings; the desktop PTY (OPOST
+        # cleared) emits bare LF. Accept both, or an *ending* that expects
+        # "\n" never matches over serial and every exec waits out its full
+        # timeout — then still returns the right bytes, because the caller
+        # recovers the sentinels with rfind. Correct output, 30s late, on
+        # every call: that is what made serial sessions mysteriously slow.
+        endings = (ending,)
+        if ending.endswith(b"\n") and not ending.endswith(b"\r\n"):
+            endings = (ending, ending[:-1] + b"\r\n")
         data = b""
         t0 = time.monotonic()
         while True:
-            if data.endswith(ending):
+            if data.endswith(endings):
                 break
             if not self._data_waiting(0.01):
                 if timeout is not None and time.monotonic() - t0 > timeout:
