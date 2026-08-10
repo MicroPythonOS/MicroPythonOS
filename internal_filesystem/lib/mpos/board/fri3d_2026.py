@@ -150,9 +150,11 @@ if not expander.config[0]:
 
 if lora_spi_device is not None:
     from lora import SX1262
+    from mpos.lora_spi_adapter import SPIAdapter, wrap_sx126x_cmd
     from mpos.polled_sx126x import PolledSX126x
+    print("before radio")
     radio = SX1262(
-        spi=lora_spi_device,
+        spi=SPIAdapter(lora_spi_device),
         cs=Pin(45, Pin.OUT, value=1),
         busy=Pin(41, Pin.IN),
         dio1=Pin(40, Pin.IN),
@@ -161,6 +163,8 @@ if lora_spi_device is not None:
         dio3_tcxo_start_time_us=1000,
         reset=None,  # CH32 expander drives reset
     )
+    print("after radio")
+    wrap_sx126x_cmd(radio)
     reliable = PolledSX126x(radio)
     from mpos import LoRaManager
     LoRaManager.radioChip = reliable
