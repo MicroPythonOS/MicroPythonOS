@@ -240,16 +240,16 @@ def toggle_drawer():
     elif not InputManager.is_drawer_open_disabled():
         open_drawer()
     else:
-        group = lv.group_get_default()
-        if group:
-            lv.group_send_data(group, lv.KEY.HOME)
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
 
 def open_drawer():
     global drawer_open, _pre_drawer_focused
     if InputManager.is_drawer_open_disabled():
-        group = lv.group_get_default()
-        if group:
-            lv.group_send_data(group, lv.KEY.HOME)
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
         return
     if _drawer_panel is None or drawer_open:
         return

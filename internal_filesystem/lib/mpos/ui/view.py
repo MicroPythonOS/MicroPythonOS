@@ -128,9 +128,9 @@ def finish_current_activity():
 def back_screen():
     global screen_stack
     if InputManager.is_back_screen_disabled():
-        group = lv.group_get_default()
-        if group:
-            lv.group_send_data(group, lv.KEY.ESC)
+        cb = InputManager._back_screen_cb
+        if cb:
+            cb()
         return False
 
     from . import topmenu

@@ -26,18 +26,22 @@ class InputManager:
 
     _back_screen_disabled = False
     _drawer_open_disabled = False
+    _back_screen_cb = None
+    _drawer_open_cb = None
 
     @classmethod
-    def set_back_screen_disabled(cls, disabled):
+    def set_back_screen_disabled(cls, disabled, cb=None):
         cls._back_screen_disabled = disabled
+        cls._back_screen_cb = cb
 
     @classmethod
     def is_back_screen_disabled(cls):
         return cls._back_screen_disabled
 
     @classmethod
-    def set_drawer_open_disabled(cls, disabled):
+    def set_drawer_open_disabled(cls, disabled, cb=None):
         cls._drawer_open_disabled = disabled
+        cls._drawer_open_cb = cb
 
     @classmethod
     def is_drawer_open_disabled(cls):
