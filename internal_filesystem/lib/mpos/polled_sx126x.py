@@ -102,7 +102,12 @@ class PolledSX126x:
             return
         owner = getattr(self._radio, "_lock_owner", None)
         if owner is not None:
-            return  # another thread is using the radio
+            for _ in range(10):
+                time.sleep_ms(5)
+                if getattr(self._radio, "_lock_owner", None) is None:
+                    break
+            else:
+                return  # gave up after 50ms
         # ponytail: if the chip is stuck BUSY (e.g. shared SPI bus
         # contention), _get_irq() times out.  Catch it so the ISR
         # doesn't crash — the data path already polls _get_irq() in
