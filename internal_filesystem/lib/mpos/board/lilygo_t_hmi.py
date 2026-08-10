@@ -112,8 +112,8 @@ lv.init()
 if __debug__: logger.debug("lilygo_t_hmi.py SDCard initialization...")
 
 # Initialize SD card in SDIO mode
-from mpos import sdcard
-sdcard.init(cmd_pin=11,clk_pin=12,d0_pin=13)
+from mpos import SDCardManager
+SDCardManager.init(cmd_pin=11, clk_pin=12, d0_pin=13)
 
 if __debug__: logger.debug("lilygo_t_hmi.py Battery initialization...")
 

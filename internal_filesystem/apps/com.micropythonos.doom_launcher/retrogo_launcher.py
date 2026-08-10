@@ -1,7 +1,7 @@
 import logging
 import lvgl as lv
 import os
-from mpos import Activity, Intent, SettingsActivity, SharedPreferences, TaskManager, sdcard
+from mpos import Activity, Intent, SettingsActivity, SharedPreferences, SDCardManager, TaskManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -61,7 +61,6 @@ class StartingActivity(Activity):
 
 class RetroGoLauncher(Activity):
 
-    mountpoint_sdcard = "/sdcard"
     esp32_partition_type_ota_0 = 16
 
     def onCreate(self):
@@ -117,12 +116,10 @@ class RetroGoLauncher(Activity):
 
     def onResume(self, screen):
         self.bootfile_prefix = ""
-        mounted_sdcard = sdcard.mount_with_optional_format(self.mountpoint_sdcard)
-        if mounted_sdcard:
-            logger.info("sdcard is mounted, configuring it...")
-            self.bootfile_prefix = self.mountpoint_sdcard
-        if self.bootfile_prefix:
-            self.bootfile_prefix = self.bootfile_prefix + "/"
+        SDCardManager.mount()
+        prefix = SDCardManager.get_mount_point()
+        if prefix:
+            self.bootfile_prefix = prefix + "/"
         self.bootfile_to_write = self.bootfile_prefix + self.bootfile
         self.romartbase = self.bootfile_prefix + self.romartdir
         if __debug__: logger.debug("config will later be written to %s", self.bootfile_to_write)

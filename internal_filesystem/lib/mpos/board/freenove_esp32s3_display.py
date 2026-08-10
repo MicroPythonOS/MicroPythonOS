@@ -206,8 +206,8 @@ BatteryManager.init_adc(9, adc_to_voltage)
 # Step 5: SD Card (SDMMC 4-bit)
 # ==============================
 if __debug__: logger.debug("freenove_esp32s3_display.py: init SD card (SDMMC 4-bit)")
-import mpos.sdcard
-mpos.sdcard.init(cmd_pin=40, clk_pin=38, d0_pin=39, d1_pin=41, d2_pin=48, d3_pin=47)
+from mpos import SDCardManager
+SDCardManager.init(cmd_pin=40, clk_pin=38, d0_pin=39, d1_pin=41, d2_pin=48, d3_pin=47)
 
 # ==============================
 # Step 6: NeoPixel (WS2812B, 1 LED, GPIO 42)

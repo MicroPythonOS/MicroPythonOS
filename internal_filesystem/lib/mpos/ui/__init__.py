@@ -5,7 +5,13 @@ from .view import (
 )
 from .gesture_navigation import handle_back_swipe, handle_top_swipe
 from .appearance_manager import AppearanceManager
+from .input_manager import InputManager
 from .topmenu import open_bar, close_bar, open_drawer, drawer_open
+
+set_back_screen_disabled = InputManager.set_back_screen_disabled
+is_back_screen_disabled = InputManager.is_back_screen_disabled
+set_drawer_open_disabled = InputManager.set_drawer_open_disabled
+is_drawer_open_disabled = InputManager.is_drawer_open_disabled
 from .focus import save_and_clear_current_focusgroup, add_focus_highlight, add_focus_border
 from .display_metrics import DisplayMetrics
 from .event import get_event_name, print_event
@@ -50,13 +56,16 @@ def get_foreground_app():
 __all__ = [
     "setContentView", "back_screen", "remove_and_stop_current_activity", "remove_and_stop_all_activities",
     "screen_stack",
+    "set_back_screen_disabled", "is_back_screen_disabled",
     "handle_back_swipe", "handle_top_swipe",
     "AppearanceManager",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
+    "set_drawer_open_disabled", "is_drawer_open_disabled",
     "save_and_clear_current_focusgroup", "add_focus_highlight", "add_focus_border",
     "DisplayMetrics",
     "get_event_name", "print_event",
     "get_foreground_app",
+    "InputManager",
     "InputActivity",
     "SettingActivity",
     "SettingsActivity",

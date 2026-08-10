@@ -55,6 +55,45 @@ def _resolve_cwd():
     return os.path.normpath(os.path.join(d, "..", "internal_filesystem"))
 
 
+def _mpremote_cmd(port=None, *rest):
+    """
+    Build an mpremote command, with the port when the port is known.
+
+    If the command has no `connect`, mpremote uses `connect auto`. That
+    selects sorted(comports())[0], which is the first USB serial device by
+    name. If the host has two devices, that device can be the incorrect one.
+    Because of this, each caller that knows the port must give the port here.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    mpremote = os.path.normpath(os.path.join(
+        script_dir, "..",
+        "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py"))
+    cmd = ["python3", mpremote]
+    if port:
+        cmd += ["connect", port]
+    return cmd + list(rest)
+
+
+def _count_usb_serial_devices():
+    """
+    Count the attached USB serial devices, or give None if the count is unknown.
+
+    The count is unknown when pyserial is missing from *this* interpreter.
+    That does not mean the host has no devices: _mpremote_cmd() starts
+    mpremote with `python3`, which can be a different interpreter that does
+    have pyserial. A missing pyserial therefore gives None, and not 0, so
+    that the caller does not read it as "the host has no devices".
+    """
+    try:
+        import serial.tools.list_ports
+    except ImportError:
+        return None
+    return sum(
+        1 for p in serial.tools.list_ports.comports()
+        if p.vid is not None and p.pid is not None
+    )
+
+
 def _build_test_code(test_path, tests_dir=None):
     with open(test_path) as f:
         test_content = f.read()
@@ -255,10 +294,19 @@ class AIOREPLClient:
         return data
 
     def read_until(self, ending, timeout=30):
+        # A device REPL emits CRLF line endings; the desktop PTY (OPOST
+        # cleared) emits bare LF. Accept both, or an *ending* that expects
+        # "\n" never matches over serial and every exec waits out its full
+        # timeout — then still returns the right bytes, because the caller
+        # recovers the sentinels with rfind. Correct output, 30s late, on
+        # every call: that is what made serial sessions mysteriously slow.
+        endings = (ending,)
+        if ending.endswith(b"\n") and not ending.endswith(b"\r\n"):
+            endings = (ending, ending[:-1] + b"\r\n")
         data = b""
         t0 = time.monotonic()
         while True:
-            if data.endswith(ending):
+            if data.endswith(endings):
                 break
             if not self._data_waiting(0.01):
                 if timeout is not None and time.monotonic() - t0 > timeout:
@@ -1076,11 +1124,8 @@ class SerialBackend:
         import subprocess, tempfile, os as _os
         with tempfile.NamedTemporaryFile(suffix=".raw", delete=False) as tmp:
             tmppath = tmp.name
-        script_dir = _os.path.dirname(_os.path.abspath(__file__))
-        mpremote = _os.path.join(script_dir, "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
         subprocess.run(
-            ["python3", mpremote, "cp", ":{}".format(path), tmppath],
+            _mpremote_cmd(self.port, "cp", ":{}".format(path), tmppath),
             capture_output=True, timeout=60
         )
         with open(tmppath, "rb") as f:
@@ -1094,11 +1139,8 @@ class SerialBackend:
             tmppath = tmp.name
         with open(tmppath, "wb") as f:
             f.write(data)
-        script_dir = _os.path.dirname(_os.path.abspath(__file__))
-        mpremote = _os.path.join(script_dir, "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
         subprocess.run(
-            ["python3", mpremote, "cp", tmppath, ":{}".format(path)],
+            _mpremote_cmd(self.port, "cp", tmppath, ":{}".format(path)),
             capture_output=True, timeout=60
         )
         _os.unlink(tmppath)
@@ -1222,11 +1264,8 @@ print("OK")
             import subprocess, json as _json, tempfile, os as _os
             with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
                 tmppath = tmp.name
-            script_dir = _os.path.dirname(_os.path.abspath(__file__))
-            mpremote = _os.path.join(script_dir, "..",
-                "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
             subprocess.run(
-                ["python3", mpremote, "cp", ":/_mpos_tree.json", tmppath],
+                _mpremote_cmd(self.port, "cp", ":/_mpos_tree.json", tmppath),
                 capture_output=True, timeout=15
             )
             with open(tmppath) as f:
@@ -1269,28 +1308,23 @@ for s in t:
     def run_test_file(self, test_path, tests_dir=None, timeout=300):
         import subprocess, re
         code = _build_test_code(test_path, tests_dir)
-        mpremote = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py",
-        )
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
         mpk_names = set(re.findall(r"\.\./tests/(com\.micropythonos\.ziptest_[^\"]+\.mpk)", code))
         if mpk_names:
             subprocess.run(
-                ["python3", mpremote, "connect", self.port, "exec",
-                 "import os; os.mkdir('tests')"],
+                _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),
                 capture_output=True, timeout=15,
             )
             for name in sorted(mpk_names):
                 host_mpk = os.path.join(host_test_dir, name)
                 subprocess.run(
-                    ["python3", mpremote, "connect", self.port, "cp",
-                     host_mpk, ":tests/{}".format(name)],
+                    _mpremote_cmd(self.port, "cp",
+                                  host_mpk, ":tests/{}".format(name)),
                     capture_output=True, timeout=60,
                 )
             code = code.replace("../tests/", "tests/")
         result = subprocess.run(
-            ["python3", mpremote, "connect", self.port, "exec", code],
+            _mpremote_cmd(self.port, "exec", code),
             capture_output=True, timeout=timeout + 60,
         )
         out = result.stdout
@@ -1558,12 +1592,32 @@ def main():
             return 1
         apppath = args.args[0]
         import subprocess, os
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        mpremote = os.path.join(script_dir, "..",
-            "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
-        subprocess.run(["python3", mpremote, "mkdir", ":/apps"], capture_output=True)
+        if not args.serial_port:
+            device_count = _count_usb_serial_devices()
+            if device_count is None:
+                print(
+                    "warning: pyserial is not available here, so the number of "
+                    "USB serial devices is unknown.\n"
+                    "         mpremote selects the first device. Give "
+                    "--serial-port to select a device.",
+                    file=sys.stderr,
+                )
+            elif device_count > 1:
+                print(
+                    "error: the host has more than one USB serial device and "
+                    "you gave no --serial-port.\n"
+                    "       mpremote would select the first device, which can "
+                    "be the incorrect one.\n"
+                    "       Run 'mpremote connect list' and give --serial-port.",
+                    file=sys.stderr,
+                )
+                return 1
+        print("Installing to {}".format(args.serial_port or "the first device"))
+        subprocess.run(
+            _mpremote_cmd(args.serial_port, "mkdir", ":/apps"), capture_output=True
+        )
         result = subprocess.run(
-            ["python3", mpremote, "fs", "cp", "-r", apppath, ":/apps/"],
+            _mpremote_cmd(args.serial_port, "fs", "cp", "-r", apppath, ":/apps/"),
             capture_output=True, timeout=60
         )
         if result.returncode != 0:
