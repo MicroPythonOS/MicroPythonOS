@@ -666,7 +666,10 @@ class Player:
             self._stream.stop()
         if self._buzzer:
             try:
+                from machine import Pin
                 self._buzzer.deinit()
+                Pin(self.output.buzzer_pin, Pin.IN)  # reconfigure buzzer_pin as INPUT to disassociate it from PWM
+                self._buzzer = None
             except Exception:
                 pass
         self._manager._session_finished(self)
@@ -730,7 +733,10 @@ class Player:
             if not (self._stream and getattr(self._stream, "runs_async", False)):
                 if self._buzzer:
                     try:
+                        from machine import Pin
                         self._buzzer.deinit()
+                        Pin(self.output.buzzer_pin, Pin.IN)  # reconfigure buzzer_pin as INPUT to disassociate it from PWM
+                        self._buzzer = None
                     except Exception:
                         pass
                 self._manager._session_finished(self)
@@ -757,10 +763,9 @@ class Player:
             self._stream.play()
             return
 
-        from machine import Pin, PWM
+        from machine import PWM
 
-        self._buzzer = PWM(Pin(self.output.buzzer_pin, Pin.OUT))
-        self._buzzer.duty_u16(0)
+        self._buzzer = PWM(self.output.buzzer_pin, duty_u16=0)
 
         on_complete = self.on_complete
         stream_class = RTTTLStream
@@ -775,6 +780,7 @@ class Player:
                     if self._buzzer:
                         try:
                             self._buzzer.deinit()
+                            self._buzzer = None
                         except Exception:
                             pass
                     self._manager._session_finished(self)

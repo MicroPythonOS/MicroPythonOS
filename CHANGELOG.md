@@ -1,10 +1,23 @@
 Future release (next version)
 =====
 
+Board Support:
+- Fri3d 2026: update CH32 firmware to 2.0.2 to fix issue with 2 consecutive i2c register writes which impacted LoRa reset etc.
+
+Frameworks:
+- SDCardManager: integrate 'sdcard' module functionality and remove the module
+
+OS:
+- Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
+- SPI: expose Device.lock()/unlock() for shared-bus arbitration between multiple drivers
+- SPI: fix MicroPython's ESP32 SPI driver DMA failures due to incorrect txdata/rxdata flags
+- WiFi: set country code default to Japan instead of World
+
 0.16.1
 ======
 
 Board Support:
+- Linux and WebAssembly: initialize mock IMU sensor if no real IMU sensor is present
 - Fri3d 2026: increase LoRa SPI frequency from 500 kHz to 16 Mhz to speed up transfers and reduce bus collisions
 
 Builtin Apps:
@@ -14,9 +27,9 @@ Builtin Apps:
 - OSUpdate: improve update progress UI
 
 OS:
-- Fix WiFi network switch not actually changing network — disconnect from current network before connecting to new one #220
 - Add simple way to force DeviceInfo.hardware_id, skip board detection, and customize hardware board initialization #215
 - App class: support multiple categories in MANIFEST.JSON (`'categories'` array), normalize to title-case `self.categories` list with `category` property for backward compatibility
+- Fix WiFi network switch not actually changing network — disconnect from current network before connecting to new one #220
 - Focus restoration fix: navigating back now correctly restores the previously focused widget
 - sdl_keyboard: fix CTRL-C and CTRL-V on textarea
 - aiowebsocket: reduce reconnect frequency to reduce performance impact
@@ -24,6 +37,7 @@ OS:
 - micropython-nostr: log background relay connection failures at INFO instead of ERROR to avoid REPL pollution breaking file transfers
 
 Development:
+- mpos_controller: give --serial-port to mpremote, so file transfers, screenshots and widget trees use the selected device instead of the first device that mpremote finds
 - Add Python-level line coverage via sys.settrace (mpcov build variant)
 - Add `--coverage` flag to test_runner.py for collecting per-file line coverage
 - Add `make build-mpos-unix-coverage` target
