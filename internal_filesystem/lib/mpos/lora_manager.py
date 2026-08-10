@@ -250,26 +250,19 @@ class LoRaManager:
                     time.ticks_diff(now, LoRaManager._last_reinit_ms))
             return
 
-        # Two-tier recovery:
-        #   Light: non-0x00 -> clear IRQ + restart continuous RX
-        #   Hard:  3+ consecutive 0x00/0xff or corrupt mode -> HW reset via CH32
-        if st in (0x00, 0xff) or (st & 0x70) not in (0x20, 0x30, 0x40, 0x50, 0x60):
-            if LoRaManager._bad_count < 3:
-                return
+        # Two-tier recovery: light then hard.
+        # Light: clear IRQ + restart continuous RX (handles transient wrong-mode)
+        # Hard:  3+ consecutive non-RX readings -> HW reset via CH32
+        if LoRaManager._bad_count >= 3:
             bad = LoRaManager._bad_count
             LoRaManager._last_reinit_ms = now
             LoRaManager._bad_count = 0
 
             if __debug__:
-                logger.debug("Watchdog: hardware reset (status 0x00, bad=%d)", bad)
+                logger.debug("Watchdog: hardware reset (bad=%d, status 0x%02x mode=0x%02x)", bad, st, mode)
 
             chip.disable_irq()
             if LoRaManager._lora_spi_device is not None and LoRaManager.reset_chip():
-                # ponytail: reset_chip() already reset state flags
-                # (_sleep=True, _configured=False, _rx=False) and did
-                # TCXO init + SET_PACKET_TYPE + DIO_IRQ + _clear_irq
-                # on the existing radio object. Reuse it — creating a
-                # new SX1262 glitches the CS pin and fails.
                 try:
                     r = chip._radio
                     cfg = chip._cfg
@@ -287,12 +280,12 @@ class LoRaManager:
                 except Exception as e:
                     if __debug__:
                         logger.debug("Watchdog: reconfigure failed: %s", e)
-        else:
-            # Non-zero status but wrong mode: try light recovery.
+        elif st not in (0x00, 0xff) and (st & 0x70) in (0x20, 0x30, 0x40, 0x50, 0x60):
+            # Valid mode but not RX: try light recovery (clear IRQ + restart RX).
+            # Don't reset _bad_count — if this keeps failing, hard reset kicks in.
             if __debug__:
-                logger.debug("Watchdog: light recovery (status 0x%02x, mode=0x%02x)", st, mode)
+                logger.debug("Watchdog: light recovery (status 0x%02x, mode=0x%02x, bad=%d)", st, mode, LoRaManager._bad_count)
             LoRaManager._last_reinit_ms = now
-            LoRaManager._bad_count = 0
             try:
                 chip._radio._clear_irq()
                 chip._radio.start_recv(continuous=True)
