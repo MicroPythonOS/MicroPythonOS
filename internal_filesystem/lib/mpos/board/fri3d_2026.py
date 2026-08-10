@@ -73,25 +73,6 @@ if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable 
 # if it ran while the chip was held in reset, TCXO init and DIO
 # IRQ config would be silently lost.
 
-display_bus = lcd_bus.SPIBus(
-    spi_bus=spi_bus,
-    freq=40000000, # 40 Mhz
-    dc=4,
-    cs=5
-)
-
-# lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
-# The default was /10 so 15360 bytes.
-# /2 = 76800 shows something on display and then hangs the board
-# /2 = 38400 works and pretty high framerate but camera gets ESP_FAIL
-# /2 = 19200 works, including camera at 9FPS
-# 28800 is between the two and still works with camera!
-# 30720 is /5 and is already too much
-#_BUFFER_SIZE = const(28800)
-buffersize = const(28800)
-fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-
 # Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
     twentieth = int(pct / 20)
@@ -173,6 +154,17 @@ if lora_spi_device is not None:
     LoRaManager._lora_pins = (40, 11, 41, 45)  # irq, rst, gpio, cs_pin
     LoRaManager._tcxo_mv = 3000
     LoRaManager._tcxo_start_us = 1000
+
+# Display init AFTER LoRa init (EXPERIMENT: test batch SPI without display bus registered)
+display_bus = lcd_bus.SPIBus(
+    spi_bus=spi_bus,
+    freq=40000000,
+    dc=4,
+    cs=5
+)
+buffersize = const(28800)
+fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
 # see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
 mpos.ui.main_display = st7789.ST7789(
