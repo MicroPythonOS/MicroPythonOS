@@ -155,17 +155,18 @@ with MPOSController(backend='process') as mpos:
   polling miss events. Minimize it in paths that run between those points.
 - **SPI bus sharing IS safe.** Both LCD and LoRa run on the MicroPython main
   thread. The ESP-IDF `spi_bus_lock` properly arbitrates between devices.
-  `SPI.Device.lock()`/`unlock()` is safe for CS-low spans. See `sx126x.py:_cmd()`.
+  Each byte-at-a-time SPI transfer independently acquires/releases the bus.
+  `SPI.Device.lock()`/`unlock()` is available but NOT held long-term — it
+  blocks the main thread (DIO1 ISR) from other `_thread` tasks.
 - **`SPI.Device.write(buf)` works for any `len`** (fixed in `micropy_updates`
   commit `e8f638d` — `SPI_TRANS_USE_TXDATA`/`RXDATA` flags were incorrectly
   set on the DMA path). Use normal batch transfers.
 - **SX1262 SPI split-phase**: The SX1262 needs ~50µs between receiving the
   opcode byte and the read-phase bytes (e.g., GET_ERROR response). Continuous
   batch SPI starves this processing time, causing corrupted MISO reads.
-  `_cmd()` in `sx126x.py` handles this: holds `_spi.lock()`/`unlock()` across
-  the CS-low span and uses byte-at-a-time `read(1, byte)` transfers.  The lock
-  prevents display SPI interleaving; the per-byte gaps give the chip time to
-  process commands.
+  `_cmd()` in `sx126x.py` uses byte-at-a-time `read(1, byte)` transfers
+  (per-byte bus arbitration, inter-byte gaps for chip processing).
+  `_lock_owner` flag signals busy to the DIO1 ISR and watchdog.
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 
