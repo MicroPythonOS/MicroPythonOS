@@ -724,7 +724,7 @@ class _SX126x(BaseModem):
             try:
                 self._spi.write_readinto(buf[:wrlen], buf[:wrlen])
                 if n_read > 0:
-                    time.sleep_us(50)
+                    self._wait_not_busy(self._busy_timeout)
                     self._spi.write_readinto(
                         buf[wrlen:wrlen + n_read],
                         buf[wrlen:wrlen + n_read],
