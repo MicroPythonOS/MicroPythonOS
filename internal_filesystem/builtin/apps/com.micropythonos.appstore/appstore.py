@@ -103,6 +103,7 @@ class AppStore(Activity):
         self.category_dropdown.add_event_cb(self._category_changed, lv.EVENT.VALUE_CHANGED, None)
         self._category_options = ["All Categories"]
         self._selected_category = self.getIntent().extras.get("category")
+        self._default_to_installed = self._selected_category is None
 
         # ---- "Update N App(s)" button (hidden until updates are found) ----
         self.update_all_button = lv.button(self.main_screen)
@@ -410,6 +411,11 @@ class AppStore(Activity):
                 self._builtin_fullnames.add(installed_app.fullname)
                 continue
             self.apps.append(installed_app)
+        if self._default_to_installed:
+            self._default_to_installed = False
+            n_installed = sum(1 for app in self.apps if app.installed_path is not None)
+            if n_installed > 0:
+                self._selected_category = "Installed"
         self._data_loaded = True
         self.create_apps_list()
         self._update_category_dropdown()

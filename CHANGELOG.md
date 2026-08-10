@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: add new 'Installed' category and show it by default (or 'All' if there are no apps installed) 
+
 0.17.0
 ======
 
