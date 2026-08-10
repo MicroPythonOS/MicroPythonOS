@@ -75,32 +75,22 @@ if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable 
 
 display_bus = lcd_bus.SPIBus(
     spi_bus=spi_bus,
-    freq=40000000,
+    freq=40000000, # 40 Mhz
     dc=4,
     cs=5
 )
+
+# lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
+# The default was /10 so 15360 bytes.
+# /2 = 76800 shows something on display and then hangs the board
+# /2 = 38400 works and pretty high framerate but camera gets ESP_FAIL
+# /2 = 19200 works, including camera at 9FPS
+# 28800 is between the two and still works with camera!
+# 30720 is /5 and is already too much
+#_BUFFER_SIZE = const(28800)
 buffersize = const(28800)
 fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-
-# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
-mpos.ui.main_display = st7789.ST7789(
-    data_bus=display_bus,
-    frame_buffer1=fb1,
-    frame_buffer2=fb2,
-    display_width=240,
-    display_height=320,
-    color_space=lv.COLOR_FORMAT.RGB565,
-    color_byte_order=st7789.BYTE_ORDER_BGR,
-    rgb565_byte_swap=True,
-    # reset_pin is driven by the CH32 microcontroller
-) # calls lv.init() if necessary
-
-mpos.ui.main_display.init()
-mpos.ui.main_display.set_power(True)
-mpos.ui.main_display.set_backlight(100)
-mpos.ui.main_display.set_color_inversion(True)
-mpos.ui.main_display.set_backlight = lambda percent: setattr(expander, "lcd_brightness", percent)
 
 # Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
@@ -181,6 +171,25 @@ if lora_spi_device is not None:
     LoRaManager._lora_pins = (40, 11, 41, 45)  # irq, rst, gpio, cs_pin
     LoRaManager._tcxo_mv = 3000
     LoRaManager._tcxo_start_us = 1000
+
+# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
+mpos.ui.main_display = st7789.ST7789(
+    data_bus=display_bus,
+    frame_buffer1=fb1,
+    frame_buffer2=fb2,
+    display_width=240,
+    display_height=320,
+    color_space=lv.COLOR_FORMAT.RGB565,
+    color_byte_order=st7789.BYTE_ORDER_BGR,
+    rgb565_byte_swap=True,
+    # reset_pin is driven by the CH32 microcontroller
+) # calls lv.init() if necessary
+
+mpos.ui.main_display.init()
+mpos.ui.main_display.set_power(True)
+mpos.ui.main_display.set_backlight(100)
+mpos.ui.main_display.set_color_inversion(True)
+mpos.ui.main_display.set_backlight = lambda percent: setattr(expander, "lcd_brightness", percent)
 
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13
