@@ -153,15 +153,17 @@ with MPOSController(backend='process') as mpos:
   Calling it between event-occurred and handler-run (e.g. `_standby()` inside
   `prepare_send()` clears pending TX_DONE from a previous send) makes
   polling miss events. Minimize it in paths that run between those points.
-- **SPI bus sharing is safe.** Both the LCD flush and LoRa SPI operations run
-  on the MicroPython main thread (same thread, same event loop). The ESP-IDF's
-  `spi_bus_lock` (via `spi_device_acquire_bus`/`release_bus`) properly
-  arbitrates between devices. `SPI.Device.lock()`/`unlock()` is safe to use for
-  CS-low spans in the SX1262 driver — see `lora_spi_adapter.py`.
+- **SPI bus sharing IS safe.** Both LCD and LoRa run on the MicroPython main
+  thread. The ESP-IDF `spi_bus_lock` properly arbitrates between devices.
+  `SPI.Device.lock()`/`unlock()` is safe for CS-low spans. See `sx126x.py:_cmd()`.
 - **`SPI.Device.write(buf)` works for any `len`** (fixed in `micropy_updates`
   commit `e8f638d` — `SPI_TRANS_USE_TXDATA`/`RXDATA` flags were incorrectly
-  set on the DMA path). Use normal batch transfers; no byte-at-a-time workaround
-  needed.
+  set on the DMA path). Use normal batch transfers.
+- **SX1262 SPI split-phase**: The SX1262 needs ~50µs between receiving the
+  opcode byte and the read-phase bytes (e.g., GET_ERROR response). Continuous
+  batch SPI starves this processing time, causing corrupted MISO reads.
+  `_cmd()` in `sx126x.py` handles this: sends opcode+params in one batch,
+  pauses 50µs, then reads response bytes. All within `_spi.lock()`/`unlock()`.
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 

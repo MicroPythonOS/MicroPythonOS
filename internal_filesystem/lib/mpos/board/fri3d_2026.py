@@ -73,6 +73,35 @@ if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable 
 # if it ran while the chip was held in reset, TCXO init and DIO
 # IRQ config would be silently lost.
 
+display_bus = lcd_bus.SPIBus(
+    spi_bus=spi_bus,
+    freq=40000000,
+    dc=4,
+    cs=5
+)
+buffersize = const(28800)
+fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+
+# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
+mpos.ui.main_display = st7789.ST7789(
+    data_bus=display_bus,
+    frame_buffer1=fb1,
+    frame_buffer2=fb2,
+    display_width=240,
+    display_height=320,
+    color_space=lv.COLOR_FORMAT.RGB565,
+    color_byte_order=st7789.BYTE_ORDER_BGR,
+    rgb565_byte_swap=True,
+    # reset_pin is driven by the CH32 microcontroller
+) # calls lv.init() if necessary
+
+mpos.ui.main_display.init()
+mpos.ui.main_display.set_power(True)
+mpos.ui.main_display.set_backlight(100)
+mpos.ui.main_display.set_color_inversion(True)
+mpos.ui.main_display.set_backlight = lambda percent: setattr(expander, "lcd_brightness", percent)
+
 # Avoid excessive prints here because it slows down if the serial connects during printing?!
 def progress(msg, pct):
     twentieth = int(pct / 20)
@@ -131,11 +160,9 @@ if not expander.config[0]:
 
 if lora_spi_device is not None:
     from lora import SX1262
-    from mpos.lora_spi_adapter import SPIAdapter, wrap_sx126x_cmd
     from mpos.polled_sx126x import PolledSX126x
-    print("before radio")
     radio = SX1262(
-        spi=SPIAdapter(lora_spi_device),
+        spi=lora_spi_device,
         cs=Pin(45, Pin.OUT, value=1),
         busy=Pin(41, Pin.IN),
         dio1=Pin(40, Pin.IN),
@@ -144,8 +171,6 @@ if lora_spi_device is not None:
         dio3_tcxo_start_time_us=1000,
         reset=None,  # CH32 expander drives reset
     )
-    print("after radio")
-    wrap_sx126x_cmd(radio)
     reliable = PolledSX126x(radio)
     from mpos import LoRaManager
     LoRaManager.radioChip = reliable
@@ -154,36 +179,6 @@ if lora_spi_device is not None:
     LoRaManager._lora_pins = (40, 11, 41, 45)  # irq, rst, gpio, cs_pin
     LoRaManager._tcxo_mv = 3000
     LoRaManager._tcxo_start_us = 1000
-
-# Display init AFTER LoRa init (EXPERIMENT: test batch SPI without display bus registered)
-display_bus = lcd_bus.SPIBus(
-    spi_bus=spi_bus,
-    freq=40000000,
-    dc=4,
-    cs=5
-)
-buffersize = const(28800)
-fb1 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-fb2 = display_bus.allocate_framebuffer(buffersize, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-
-# see ./lvgl_micropython/api_drivers/py_api_drivers/frozen/display/display_driver_framework.py
-mpos.ui.main_display = st7789.ST7789(
-    data_bus=display_bus,
-    frame_buffer1=fb1,
-    frame_buffer2=fb2,
-    display_width=240,
-    display_height=320,
-    color_space=lv.COLOR_FORMAT.RGB565,
-    color_byte_order=st7789.BYTE_ORDER_BGR,
-    rgb565_byte_swap=True,
-    # reset_pin is driven by the CH32 microcontroller
-) # calls lv.init() if necessary
-
-mpos.ui.main_display.init()
-mpos.ui.main_display.set_power(True)
-mpos.ui.main_display.set_backlight(100)
-mpos.ui.main_display.set_color_inversion(True)
-mpos.ui.main_display.set_backlight = lambda percent: setattr(expander, "lcd_brightness", percent)
 
 # Touch handling:
 # touch pad interrupt TP Int is on ESP.IO13

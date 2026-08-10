@@ -326,7 +326,6 @@ class _SX126x(BaseModem):
         #
         # Return the decoded status, otherwise.
         res = self._cmd("B", _CMD_GET_ERROR, n_read=3)
-        print("_check_error raw res:", res[0], res[1], res[2])  # DEBUG
         status = self._decode_status(res[0], False)
         op_error = (res[1] << 8) + res[2]
         if op_error != 0 and op_error != 0x20:
@@ -719,17 +718,25 @@ class _SX126x(BaseModem):
             print(">>> {}".format(buf[:wrlen].hex()))
             if write_buf:
                 print(">>> {}".format(write_buf.hex()))
-        print("_cmd pre-wr:", buf[:wrlen+n_read].hex())
         self._cs(0)
         try:
-            self._spi.write_readinto(buf, buf)
-            if write_buf:
-                self._spi.write(write_buf)  # Used by _CMD_WRITE_BUFFER only
-            if read_buf:
-                self._spi.readinto(read_buf, 0xFF)  # Used by _CMD_READ_BUFFER only
+            self._spi.lock()
+            try:
+                self._spi.write_readinto(buf[:wrlen], buf[:wrlen])
+                if n_read > 0:
+                    time.sleep_us(50)
+                    self._spi.write_readinto(
+                        buf[wrlen:wrlen + n_read],
+                        buf[wrlen:wrlen + n_read],
+                    )
+                if write_buf:
+                    self._spi.write(write_buf)
+                if read_buf:
+                    self._spi.readinto(read_buf, 0xFF)
+            finally:
+                self._spi.unlock()
         finally:
             self._cs(1)
-        print("_cmd post-rd:", buf[:wrlen+n_read].hex())
 
         if n_read > 0:
             res = self._buf_view[wrlen : (wrlen + n_read)]  # noqa: E203
