@@ -6,13 +6,20 @@ Future release (next version)
 
 Board Support:
 - Fri3d 2026: update CH32 firmware to 2.0.3 which fixes issue with 2 consecutive i2c register writes (fixes #224)
+- Adapt freenove_esp32s3_display, fri3d_2024, fri3d_2026, lilygo_t4, lilygo_t_hmi, matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and squixl to SDCardManager API changes
+
+Builtin Apps:
+- AppStore: fix double update check (when network established + some time after boot)
+- OSUpdate: fix double update check (when network established + some time after boot)
 
 Frameworks:
+- AudioManager: fix buzzer buzzing along when PWM instance is created and fix clicking sound on PWM init (#233) by @cheops
 - DownloadManager: resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
 - InputManager: add back screen and drawer menu disable/enable APIs so apps receive those keys as regular lv.KEY.ESC / lv.KEY.HOME press
 - SDCardManager: integrate 'sdcard' module functionality and cleanup legacy module
 
 OS:
+- Optimize status bar clock to reduce allocations from ~4.5 KB/s to ~224 B/s (#244) by @fdb
 - SPI: expose Device.lock()/unlock() for shared-bus arbitration between multiple drivers
 - SPI: fix MicroPython's ESP32 SPI driver DMA failures due to incorrect txdata/rxdata flags
 - WiFi: set country code default to Japan instead of World
