@@ -6,6 +6,7 @@
 # In comments, abbreviation "DS" = Semtech SX1261/62 Datasheet Rev 2.1 (December 2021)
 import struct
 import time
+import _thread
 from micropython import const
 try:
     from machine import Pin
@@ -143,6 +144,7 @@ class _SX126x(BaseModem):
         self._busy = busy
         self._sleep = True  # assume the radio is in sleep mode to start, will wake on _cmd
         self._dio1 = dio1
+        self._lock_owner = None
 
         if hasattr(busy, "init"):
             busy.init(Pin.IN)
@@ -720,6 +722,7 @@ class _SX126x(BaseModem):
                 print(">>> {}".format(write_buf.hex()))
         self._cs(0)
         try:
+            self._lock_owner = _thread.get_ident()
             self._spi.lock()
             try:
                 n = wrlen + n_read
@@ -744,6 +747,7 @@ class _SX126x(BaseModem):
                         read_buf[i] = b[0]
             finally:
                 self._spi.unlock()
+                self._lock_owner = None
         finally:
             self._cs(1)
 

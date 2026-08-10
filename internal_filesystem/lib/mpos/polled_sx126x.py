@@ -125,15 +125,13 @@ class PolledSX126x:
         self._user_callback = None
 
     def try_get_status(self):
-        spi = getattr(self._radio, "_spi", None)
-        if spi is not None:
-            try:
-                import _thread
-                owner = getattr(spi, "_lock_owner", None)
-                if owner is not None and owner != _thread.get_ident():
-                    return None
-            except (ImportError, AttributeError):
-                pass
+        try:
+            import _thread
+            owner = getattr(self._radio, "_lock_owner", None)
+            if owner is not None and owner != _thread.get_ident():
+                return None
+        except (ImportError, AttributeError):
+            pass
         return self.get_status()
 
     def send(self, data):
