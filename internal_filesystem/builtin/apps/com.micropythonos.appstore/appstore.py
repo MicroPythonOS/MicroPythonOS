@@ -38,7 +38,7 @@ class AppStore(Activity):
     _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
     _DEFAULT_ICON_PIPELINE = 'blurhash'
     _DEFAULT_HIDE_WIP = True
-    _SPECIAL_CATEGORIES = {"Work In Progress", "Updates"}
+    _SPECIAL_CATEGORIES = {"Work In Progress", "Installed", "Updates"}
 
     # Hardcoded list for now:
     backends = [
@@ -335,6 +335,7 @@ class AppStore(Activity):
         top_cats = []
         if self._wip_apps:
             top_cats.append("Work In Progress")
+        top_cats.append("Installed")
         top_cats.append("Updates")
         self._category_options = ["All Categories"] + top_cats + sorted_cats
         if "Adult" in cat_counts:
@@ -343,6 +344,9 @@ class AppStore(Activity):
         for cat_name in top_cats:
             if cat_name == "Work In Progress":
                 display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
+            elif cat_name == "Installed":
+                n_installed = sum(1 for app in self.apps if app.installed_path is not None)
+                display.append("%s (%d)" % (cat_name, n_installed))
             elif cat_name == "Updates":
                 try:
                     from appstore_core import AppUpdateManager
@@ -501,6 +505,9 @@ class AppStore(Activity):
         self._update_labels = {}
         if __debug__: logger.debug("create_apps_list iterating")
         apps_to_show = self._wip_apps if self._selected_category == "Work In Progress" else self.apps
+        installed_set = set()
+        if self._selected_category == "Installed":
+            installed_set = {app.fullname for app in self.apps if app.installed_path is not None}
         if self._selected_category == "Updates":
             try:
                 from appstore_core import AppUpdateManager
@@ -511,6 +518,9 @@ class AppStore(Activity):
             if self._selected_category:
                 if self._selected_category == "Work In Progress":
                     pass
+                elif self._selected_category == "Installed":
+                    if app.fullname not in installed_set:
+                        continue
                 elif self._selected_category == "Updates":
                     if app.fullname not in updatable_set:
                         continue
