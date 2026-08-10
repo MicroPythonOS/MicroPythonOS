@@ -1,5 +1,6 @@
 import logging
 
+import time
 import ujson
 
 from mpos import (
@@ -436,6 +437,12 @@ class UpdateManager:
     async def check_for_update(self):
         if self._check_in_progress:
             return
+        # deduplicate against _network_changed callback triggering first check
+        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks
+        now = time.ticks_ms()
+        if now - getattr(self, '_last_check_ts', 0) < 60000:
+            return
+        self._last_check_ts = now
         self._check_in_progress = True
         try:
             self.set_state(UpdateState.CHECKING_UPDATE)
