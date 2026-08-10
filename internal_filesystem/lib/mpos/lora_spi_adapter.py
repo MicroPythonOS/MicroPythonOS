@@ -38,20 +38,22 @@ class SPIAdapter:
     def write_readinto(self, wr_buf, rd_buf):
         self.lock()
         try:
-            self._dev.write_readinto(wr_buf, rd_buf)
+            tmp_wr = bytearray(len(wr_buf))
+            tmp_wr[:] = wr_buf
+            tmp_rd = bytearray(len(rd_buf))
+            self._dev.write_readinto(tmp_wr, tmp_rd)
+            mv = memoryview(rd_buf)
+            mv[:] = tmp_rd
         finally:
             self.unlock()
 
     def readinto(self, buf, fill=0x00):
         self.lock()
         try:
-            mv = memoryview(buf)
+            tmp_wr = bytearray(len(buf))
             for i in range(len(buf)):
-                try:
-                    b = self._dev.read(1, fill)
-                except Exception:
-                    b = self._dev.read(1, write=fill)
-                mv[i] = b[0]
+                tmp_wr[i] = fill
+            self._dev.write_readinto(tmp_wr, buf)
         finally:
             self.unlock()
 
