@@ -33,12 +33,22 @@ class SPIAdapter:
             self._get_tid = lambda: 0
 
     def write(self, buf):
-        self._dev.write(buf)
+        for i in range(len(buf)):
+            try:
+                self._dev.read(1, buf[i])
+            except Exception:
+                self._dev.read(1, write=buf[i])
 
     def write_readinto(self, wr_buf, rd_buf):
         self.lock()
         try:
-            self._dev.write_readinto(wr_buf, rd_buf)
+            mv = memoryview(rd_buf)
+            for i in range(len(wr_buf)):
+                try:
+                    b = self._dev.read(1, wr_buf[i])
+                except Exception:
+                    b = self._dev.read(1, write=wr_buf[i])
+                mv[i] = b[0]
         finally:
             self.unlock()
 

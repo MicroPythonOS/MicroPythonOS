@@ -15,7 +15,7 @@ from .modem import BaseModem, ConfigError, RxPacket, _clamp, _flag
 
 # Set _DEBUG to const(True) to print all SPI commands sent to the device, and all responses,
 # plus a few additional pieces of information.
-_DEBUG = const(True)
+_DEBUG = False  # force-on for SPI debug
 
 _REG_RXGAINCR = const(0x8AC)  # Reset value 0x94
 _REG_LSYNCRH = const(0x740)
@@ -719,8 +719,7 @@ class _SX126x(BaseModem):
             print(">>> {}".format(buf[:wrlen].hex()))
             if write_buf:
                 print(">>> {}".format(write_buf.hex()))
-        if _DEBUG:
-            print("_cmd pre-wr:", buf[:wrlen+n_read].hex())
+        print("_cmd pre-wr:", buf[:wrlen+n_read].hex())
         self._cs(0)
         try:
             self._spi.write_readinto(buf, buf)
@@ -730,8 +729,7 @@ class _SX126x(BaseModem):
                 self._spi.readinto(read_buf, 0xFF)  # Used by _CMD_READ_BUFFER only
         finally:
             self._cs(1)
-        if _DEBUG:
-            print("_cmd post-rd:", buf[:wrlen+n_read].hex())
+        print("_cmd post-rd:", buf[:wrlen+n_read].hex())
 
         if n_read > 0:
             res = self._buf_view[wrlen : (wrlen + n_read)]  # noqa: E203
