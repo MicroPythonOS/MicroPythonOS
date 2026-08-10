@@ -162,8 +162,10 @@ with MPOSController(backend='process') as mpos:
 - **SX1262 SPI split-phase**: The SX1262 needs ~50µs between receiving the
   opcode byte and the read-phase bytes (e.g., GET_ERROR response). Continuous
   batch SPI starves this processing time, causing corrupted MISO reads.
-  `_cmd()` in `sx126x.py` handles this: sends opcode+params in one batch,
-  pauses 50µs, then reads response bytes. All within `_spi.lock()`/`unlock()`.
+  `_cmd()` in `sx126x.py` handles this: holds `_spi.lock()`/`unlock()` across
+  the CS-low span and uses byte-at-a-time `read(1, byte)` transfers.  The lock
+  prevents display SPI interleaving; the per-byte gaps give the chip time to
+  process commands.
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 

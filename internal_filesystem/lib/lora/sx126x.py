@@ -15,7 +15,7 @@ from .modem import BaseModem, ConfigError, RxPacket, _clamp, _flag
 
 # Set _DEBUG to const(True) to print all SPI commands sent to the device, and all responses,
 # plus a few additional pieces of information.
-_DEBUG = const(False)
+_DEBUG = False  # force-on for SPI debug
 
 _REG_RXGAINCR = const(0x8AC)  # Reset value 0x94
 _REG_LSYNCRH = const(0x740)
@@ -720,11 +720,30 @@ class _SX126x(BaseModem):
                 print(">>> {}".format(write_buf.hex()))
         self._cs(0)
         try:
-            self._spi.write_readinto(buf, buf)
-            if write_buf:
-                self._spi.write(write_buf)  # Used by _CMD_WRITE_BUFFER only
-            if read_buf:
-                self._spi.readinto(read_buf, 0xFF)  # Used by _CMD_READ_BUFFER only
+            self._spi.lock()
+            try:
+                n = wrlen + n_read
+                for i in range(n):
+                    try:
+                        b = self._spi.read(1, buf[i])
+                    except Exception:
+                        b = self._spi.read(1, write=buf[i])
+                    buf[i] = b[0]
+                if write_buf:
+                    for i in range(len(write_buf)):
+                        try:
+                            self._spi.read(1, write_buf[i])
+                        except Exception:
+                            self._spi.read(1, write=write_buf[i])
+                if read_buf:
+                    for i in range(len(read_buf)):
+                        try:
+                            b = self._spi.read(1, 0xFF)
+                        except Exception:
+                            b = self._spi.read(1, write=0xFF)
+                        read_buf[i] = b[0]
+            finally:
+                self._spi.unlock()
         finally:
             self._cs(1)
 
