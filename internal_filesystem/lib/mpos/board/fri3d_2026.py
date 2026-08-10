@@ -128,7 +128,7 @@ expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 expander = Expander(i2c_bus=expander_i2c)
 expander.wait_for_normal_mode(min_uptime_ms=1000)
 if expander.install_firmware_if_needed(
-        "/builtin/firmware/fri3d_2026/coprocessor_2.0.1.fw", (2, 0, 1), progress_cb=progress,
+        "/builtin/firmware/fri3d_2026/coprocessor_2.0.2.fw", (2, 0, 2), progress_cb=progress,
         success_cb=lambda: (LightsManager.set_all(21, 96, 67), LightsManager.write()),
         warning_cb=warning, failure_cb=failure):
     if __debug__: logger.debug("Re-initializing expander_i2c")
