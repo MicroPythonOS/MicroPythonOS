@@ -38,12 +38,7 @@ class SPIAdapter:
     def write_readinto(self, wr_buf, rd_buf):
         self.lock()
         try:
-            tmp_wr = bytearray(len(wr_buf))
-            tmp_wr[:] = wr_buf
-            tmp_rd = bytearray(len(rd_buf))
-            self._dev.write_readinto(tmp_wr, tmp_rd)
-            mv = memoryview(rd_buf)
-            mv[:] = tmp_rd
+            self._dev.write_readinto(wr_buf, rd_buf)
         finally:
             self.unlock()
 
