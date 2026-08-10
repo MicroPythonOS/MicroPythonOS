@@ -3,6 +3,8 @@ Future release (next version)
 
 Frameworks:
 - SDCardManager integrates the old 'sdcard' functionality, which has been removed
+- Fix ESP32 SPI driver incorrectly using txdata/rxdata flags in DMA path, causing SPI bus failures with DMA-enabled peripherals
+- SPI: expose Device.lock()/unlock() for shared-bus arbitration between multiple drivers
 
 OS:
 - Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
