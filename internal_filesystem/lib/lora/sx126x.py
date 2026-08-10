@@ -704,15 +704,16 @@ class _SX126x(BaseModem):
         if self._sleep:
             self._wakeup()
 
-        # Ensure "busy" from previously issued command has de-asserted. Usually this will
-        # have happened well before _cmd() is called again.
-        self._wait_not_busy(self._busy_timeout)
-
         # Pack write_args into slice of _buf_view memoryview of correct length
         wrlen = struct.calcsize(fmt)
         assert n_read + wrlen <= len(self._buf_view)  # if this fails, make _buf bigger!
         struct.pack_into(fmt, self._buf_view, 0, *write_args)
         buf = self._buf_view[: (wrlen + n_read)]
+
+        # Ensure "busy" from previously issued command has de-asserted. Usually this will
+        # have happened well before _cmd() is called again.
+        print("_cmd op %02x busy=%d" % (buf[0], self._busy()))
+        self._wait_not_busy(self._busy_timeout)
 
         if _DEBUG:
             print(">>> {}".format(buf[:wrlen].hex()))
