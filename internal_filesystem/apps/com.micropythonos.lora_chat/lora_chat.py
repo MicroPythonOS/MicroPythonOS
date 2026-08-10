@@ -58,7 +58,7 @@ class LoRaChat(Activity):
         send_label.set_text("Send It!")
 
         self.messages = lv.label(main_content)
-        self.messages.set_text('Waiting for messages...')
+        self.messages.set_text('Waiting for messages...\n\nNote: this is a quick and dirty LoRa\ndemo app. Don\'t expect too much!\n\nIf you have an issue with your computer,\nhave you tried turning it off and on again?')
         self.messages.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.messages.set_style_text_font(lv.font_montserrat_14, 0)
 
