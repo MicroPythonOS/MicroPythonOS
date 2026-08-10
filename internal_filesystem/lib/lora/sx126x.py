@@ -6,7 +6,6 @@
 # In comments, abbreviation "DS" = Semtech SX1261/62 Datasheet Rev 2.1 (December 2021)
 import struct
 import time
-import _thread
 from micropython import const
 try:
     from machine import Pin
@@ -144,9 +143,6 @@ class _SX126x(BaseModem):
         self._busy = busy
         self._sleep = True  # assume the radio is in sleep mode to start, will wake on _cmd
         self._dio1 = dio1
-        self._cmd_mutex = _thread.allocate_lock()
-        self._cmd_lock_depth = 0
-        self._cmd_lock_tid = None
 
         if hasattr(busy, "init"):
             busy.init(Pin.IN)
@@ -705,43 +701,32 @@ class _SX126x(BaseModem):
         #
         # Returns None if n_read==0, otherwise a memoryview of length n_read which points into a
         # shared buffer (buffer will be clobbered on next call to _cmd!)
-        tid = _thread.get_ident()
-        if self._cmd_lock_tid != tid:
-            self._cmd_mutex.acquire()
-            self._cmd_lock_tid = tid
-        self._cmd_lock_depth += 1
+        if self._sleep:
+            self._wakeup()
+
+        # Ensure "busy" from previously issued command has de-asserted. Usually this will
+        # have happened well before _cmd() is called again.
+        self._wait_not_busy(self._busy_timeout)
+
+        # Pack write_args into slice of _buf_view memoryview of correct length
+        wrlen = struct.calcsize(fmt)
+        assert n_read + wrlen <= len(self._buf_view)  # if this fails, make _buf bigger!
+        struct.pack_into(fmt, self._buf_view, 0, *write_args)
+        buf = self._buf_view[: (wrlen + n_read)]
+
+        if _DEBUG:
+            print(">>> {}".format(buf[:wrlen].hex()))
+            if write_buf:
+                print(">>> {}".format(write_buf.hex()))
+        self._cs(0)
         try:
-            if self._sleep:
-                self._wakeup()
-
-            # Pack write_args into slice of _buf_view memoryview of correct length
-            wrlen = struct.calcsize(fmt)
-            assert n_read + wrlen <= len(self._buf_view)  # if this fails, make _buf bigger!
-            struct.pack_into(fmt, self._buf_view, 0, *write_args)
-            buf = self._buf_view[: (wrlen + n_read)]
-
-            # Ensure "busy" from previously issued command has de-asserted. Usually this will
-            # have happened well before _cmd() is called again.
-            self._wait_not_busy(self._busy_timeout)
-
-            if _DEBUG:
-                print(">>> {}".format(buf[:wrlen].hex()))
-                if write_buf:
-                    print(">>> {}".format(write_buf.hex()))
-            self._cs(0)
-            try:
-                self._spi.write_readinto(buf, buf)
-                if write_buf:
-                    self._spi.write(write_buf)
-                if read_buf:
-                    self._spi.readinto(read_buf, 0xFF)
-            finally:
-                self._cs(1)
+            self._spi.write_readinto(buf, buf)
+            if write_buf:
+                self._spi.write(write_buf)  # Used by _CMD_WRITE_BUFFER only
+            if read_buf:
+                self._spi.readinto(read_buf, 0xFF)  # Used by _CMD_READ_BUFFER only
         finally:
-            self._cmd_lock_depth -= 1
-            if self._cmd_lock_depth == 0:
-                self._cmd_lock_tid = None
-                self._cmd_mutex.release()
+            self._cs(1)
 
         if n_read > 0:
             res = self._buf_view[wrlen : (wrlen + n_read)]  # noqa: E203

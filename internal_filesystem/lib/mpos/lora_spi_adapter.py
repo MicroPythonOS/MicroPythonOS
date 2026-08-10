@@ -1,9 +1,31 @@
 print("lora_spi_adapter: loaded (filesystem copy)")
 
+# ponytail: wraps SPI.Device so the upstream lora driver (which expects
+# standard machine.SPI: write_readinto/write/readinto) can talk through
+# lvgl_micropython's split SPI.Bus/SPI.Device API.
+#
+# SPIAdapter uses a reentrant Python-level lock (count + owner tid).
+# Each individual byte transfer via the C-level transfer() function
+# handles bus arbitration atomically (spi_device_acquire_bus/release
+# per transaction).
+#
+# wrap_sx126x_cmd() monkey-patches lora.SX1262._cmd() to hold the
+# Python-level lock across the CS-low span.
+# _wait_not_busy() runs BEFORE lock acquisition so the display can
+# flush while the LoRa chip is processing the previous command.
+
+
 class SPIAdapter:
 
     def __init__(self, spi_device):
         self._dev = spi_device
+        self._lock_count = 0
+        self._lock_owner = None
+        try:
+            import _thread
+            self._get_tid = _thread.get_ident
+        except (ImportError, AttributeError):
+            self._get_tid = lambda: 0
 
     def write(self, buf):
         for i in range(len(buf)):
@@ -13,19 +35,65 @@ class SPIAdapter:
                 self._dev.read(1, write=buf[i])
 
     def write_readinto(self, wr_buf, rd_buf):
-        mv = memoryview(rd_buf)
-        for i in range(len(wr_buf)):
-            try:
-                b = self._dev.read(1, wr_buf[i])
-            except Exception:
-                b = self._dev.read(1, write=wr_buf[i])
-            mv[i] = b[0]
+        self.lock()
+        try:
+            mv = memoryview(rd_buf)
+            for i in range(len(wr_buf)):
+                try:
+                    b = self._dev.read(1, wr_buf[i])
+                except Exception:
+                    b = self._dev.read(1, write=wr_buf[i])
+                mv[i] = b[0]
+        finally:
+            self.unlock()
 
     def readinto(self, buf, fill=0x00):
-        mv = memoryview(buf)
-        for i in range(len(buf)):
-            try:
-                b = self._dev.read(1, fill)
-            except Exception:
-                b = self._dev.read(1, write=fill)
-            mv[i] = b[0]
+        self.lock()
+        try:
+            mv = memoryview(buf)
+            for i in range(len(buf)):
+                try:
+                    b = self._dev.read(1, fill)
+                except Exception:
+                    b = self._dev.read(1, write=fill)
+                mv[i] = b[0]
+        finally:
+            self.unlock()
+
+    def lock(self):
+        tid = self._get_tid()
+        if self._lock_count == 0 or self._lock_owner != tid:
+            self._lock_owner = tid
+        self._lock_count += 1
+        return self._lock_count
+
+    def unlock(self):
+        self._lock_count -= 1
+        if self._lock_count == 0:
+            self._lock_owner = None
+        return self._lock_count
+
+
+def wrap_sx126x_cmd(radio):
+    """Hold SPI bus lock for the CS-low span of lora.SX1262._cmd().
+
+    The upstream _cmd() toggles CS, calls write_readinto, then optionally
+    write (FIFO write) or readinto (FIFO read).  This wrapper holds the
+    bus lock across those calls so the shared bus cannot be preempted
+    while CS is held low.
+
+    _wait_not_busy() runs BEFORE acquiring the lock — it only polls the
+    BUSY GPIO pin and holding the bus during that poll blocks the display
+    driver's SPI flush (separate FreeRTOS task, shared bus).
+    """
+    _cmd = radio._cmd
+
+    def locked_cmd(*args, **kwargs):
+        radio._wait_not_busy(radio._busy_timeout)
+        radio._spi.lock()
+        try:
+            return _cmd(*args, **kwargs)
+        finally:
+            radio._spi.unlock()
+
+    radio._cmd = locked_cmd
