@@ -160,9 +160,10 @@ if not expander.config[0]:
 
 if lora_spi_device is not None:
     from lora import SX1262
+    from mpos.lora_spi_adapter import SPIAdapter
     from mpos.polled_sx126x import PolledSX126x
     radio = SX1262(
-        spi=lora_spi_device,
+        spi=SPIAdapter(lora_spi_device),
         cs=Pin(45, Pin.OUT, value=1),
         busy=Pin(41, Pin.IN),
         dio1=Pin(40, Pin.IN),

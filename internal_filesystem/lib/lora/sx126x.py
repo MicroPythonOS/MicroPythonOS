@@ -722,7 +722,6 @@ class _SX126x(BaseModem):
 
             # Ensure "busy" from previously issued command has de-asserted. Usually this will
             # have happened well before _cmd() is called again.
-            print("_cmd op %02x busy=%d" % (buf[0], self._busy()))
             self._wait_not_busy(self._busy_timeout)
 
             if _DEBUG:
@@ -731,26 +730,11 @@ class _SX126x(BaseModem):
                     print(">>> {}".format(write_buf.hex()))
             self._cs(0)
             try:
-                n = wrlen + n_read
-                for i in range(n):
-                    try:
-                        b = self._spi.read(1, buf[i])
-                    except Exception:
-                        b = self._spi.read(1, write=buf[i])
-                    buf[i] = b[0]
+                self._spi.write_readinto(buf, buf)
                 if write_buf:
-                    for i in range(len(write_buf)):
-                        try:
-                            self._spi.read(1, write_buf[i])
-                        except Exception:
-                            self._spi.read(1, write=write_buf[i])
+                    self._spi.write(write_buf)
                 if read_buf:
-                    for i in range(len(read_buf)):
-                        try:
-                            b = self._spi.read(1, 0xFF)
-                        except Exception:
-                            b = self._spi.read(1, write=0xFF)
-                        read_buf[i] = b[0]
+                    self._spi.readinto(read_buf, 0xFF)
             finally:
                 self._cs(1)
         finally:
