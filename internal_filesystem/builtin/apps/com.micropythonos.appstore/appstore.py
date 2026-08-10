@@ -38,7 +38,7 @@ class AppStore(Activity):
     _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
     _DEFAULT_ICON_PIPELINE = 'blurhash'
     _DEFAULT_HIDE_WIP = True
-    _SPECIAL_CATEGORIES = {"Work In Progress", "Installed", "Updates"}
+    _SPECIAL_CATEGORIES = {"All", "Work In Progress", "Installed", "Updates"}
 
     # Hardcoded list for now:
     backends = [
@@ -99,9 +99,9 @@ class AppStore(Activity):
         self.category_dropdown = lv.dropdown(self.top_bar)
         self.category_dropdown.set_size(lv.pct(75), self._TOP_BAR_HEIGHT - 6)
         self.category_dropdown.align_to(self.settings_button, lv.ALIGN.OUT_RIGHT_MID, 8, 0)
-        self.category_dropdown.set_options("All Categories")
+        self.category_dropdown.set_options("All")
         self.category_dropdown.add_event_cb(self._category_changed, lv.EVENT.VALUE_CHANGED, None)
-        self._category_options = ["All Categories"]
+        self._category_options = ["All"]
         self._selected_category = self.getIntent().extras.get("category")
         self._default_to_installed = self._selected_category is None
 
@@ -320,7 +320,8 @@ class AppStore(Activity):
         if getattr(self, "_rebuilding_dropdown", False):
             return
         idx = self.category_dropdown.get_selected()
-        self._selected_category = self._category_options[idx] if idx > 0 else None
+        cat = self._category_options[idx]
+        self._selected_category = None if cat == "All" else cat
         self.create_apps_list()
 
     def _update_category_dropdown(self):
@@ -333,19 +334,16 @@ class AppStore(Activity):
                 cat_counts[cat] = cat_counts.get(cat, 0) + 1
             total += 1
         sorted_cats = [c for c in sorted(cat_counts.keys()) if c != "Adult" and c not in AppStore._SPECIAL_CATEGORIES]
-        top_cats = []
+        top_cats = ["Installed", "Updates"]
         if self._wip_apps:
             top_cats.append("Work In Progress")
-        top_cats.append("Installed")
-        top_cats.append("Updates")
-        self._category_options = ["All Categories"] + top_cats + sorted_cats
+        top_cats.append("All")
+        self._category_options = top_cats + sorted_cats
         if "Adult" in cat_counts:
             self._category_options.append("Adult")
-        display = ["All Categories (%d)" % total]
+        display = []
         for cat_name in top_cats:
-            if cat_name == "Work In Progress":
-                display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
-            elif cat_name == "Installed":
+            if cat_name == "Installed":
                 n_installed = sum(1 for app in self.apps if app.installed_path is not None)
                 display.append("%s (%d)" % (cat_name, n_installed))
             elif cat_name == "Updates":
@@ -355,6 +353,10 @@ class AppStore(Activity):
                 except Exception:
                     n_updates = 0
                 display.append("%s (%d)" % (cat_name, n_updates))
+            elif cat_name == "Work In Progress":
+                display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
+            elif cat_name == "All":
+                display.append("%s (%d)" % (cat_name, total))
         for cat_name in sorted_cats:
             display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
         if "Adult" in cat_counts:
@@ -363,6 +365,8 @@ class AppStore(Activity):
         self.category_dropdown.set_options("\n".join(display))
         if self._selected_category and self._selected_category in self._category_options:
             self.category_dropdown.set_selected(self._category_options.index(self._selected_category))
+        elif self._selected_category is None and "All" in self._category_options:
+            self.category_dropdown.set_selected(self._category_options.index("All"))
         else:
             selected = self.category_dropdown.get_selected()
             if selected < len(self._category_options):
