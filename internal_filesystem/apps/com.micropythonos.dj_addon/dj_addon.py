@@ -107,7 +107,7 @@ class DJAddonActivity(Activity):
             import usb.device
             from usb.device.midi import MIDIInterface
             self.m = MIDIInterface()
-            usb.device.get().init(self.m, builtin_driver=True)
+            usb.device.get().init(self.m, builtin_driver=True, manufacturer_str="Fri3d Camp", product_str="Fri3d Badge DJ Addon")
 
             # start reading MIDI messages from UART
             from machine import UART, Pin
