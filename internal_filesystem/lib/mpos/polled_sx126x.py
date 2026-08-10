@@ -100,6 +100,9 @@ class PolledSX126x:
             if __debug__:
                 logger.warning("DIO1 IRQ fired while suspended (SPI bus race workaround)")
             return
+        owner = getattr(self._radio, "_lock_owner", None)
+        if owner is not None:
+            return  # another thread is using the radio
         # ponytail: if the chip is stuck BUSY (e.g. shared SPI bus
         # contention), _get_irq() times out.  Catch it so the ISR
         # doesn't crash — the data path already polls _get_irq() in

@@ -723,32 +723,28 @@ class _SX126x(BaseModem):
         self._cs(0)
         try:
             self._lock_owner = _thread.get_ident()
-            self._spi.lock()
-            try:
-                n = wrlen + n_read
-                for i in range(n):
+            n = wrlen + n_read
+            for i in range(n):
+                try:
+                    b = self._spi.read(1, buf[i])
+                except Exception:
+                    b = self._spi.read(1, write=buf[i])
+                buf[i] = b[0]
+            if write_buf:
+                for i in range(len(write_buf)):
                     try:
-                        b = self._spi.read(1, buf[i])
+                        self._spi.read(1, write_buf[i])
                     except Exception:
-                        b = self._spi.read(1, write=buf[i])
-                    buf[i] = b[0]
-                if write_buf:
-                    for i in range(len(write_buf)):
-                        try:
-                            self._spi.read(1, write_buf[i])
-                        except Exception:
-                            self._spi.read(1, write=write_buf[i])
-                if read_buf:
-                    for i in range(len(read_buf)):
-                        try:
-                            b = self._spi.read(1, 0xFF)
-                        except Exception:
-                            b = self._spi.read(1, write=0xFF)
-                        read_buf[i] = b[0]
-            finally:
-                self._spi.unlock()
-                self._lock_owner = None
+                        self._spi.read(1, write=write_buf[i])
+            if read_buf:
+                for i in range(len(read_buf)):
+                    try:
+                        b = self._spi.read(1, 0xFF)
+                    except Exception:
+                        b = self._spi.read(1, write=0xFF)
+                    read_buf[i] = b[0]
         finally:
+            self._lock_owner = None
             self._cs(1)
 
         if n_read > 0:
