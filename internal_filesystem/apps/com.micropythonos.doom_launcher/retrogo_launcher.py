@@ -341,11 +341,13 @@ class RetroGoLauncher(Activity):
             romart = self._romart_for_dir(d)
             items.append((d + "/", romart, "dir", d))
 
+        # Skip romart lookup when there are many files — CRC32 per file is slow
+        has_romart = len(all_files) <= 12
         for f in all_files:
             gamedir = self.romdir + "/" + self.roms_subdir
             fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
             diskpath = self.bootfile_prefix + fullpath
-            romart = self._find_romart(diskpath, f) if not self.skip_crc32 else None
+            romart = self._find_romart(diskpath, f) if (has_romart and not self.skip_crc32) else None
             items.append((f, romart, "file", fullpath))
 
         self.wadlist.set_data(items, self._render_list_item)
