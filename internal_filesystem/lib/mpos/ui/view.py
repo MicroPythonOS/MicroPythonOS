@@ -3,6 +3,7 @@ import lvgl as lv
 import sys
 
 from .font_manager import FontManager
+from .input_manager import InputManager
 from .topmenu import open_bar, close_drawer
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,11 @@ def finish_current_activity():
 
 def back_screen():
     global screen_stack
+    if InputManager.is_back_screen_disabled():
+        cb = InputManager._back_screen_cb
+        if cb:
+            cb()
+        return False
 
     from . import topmenu
     if topmenu.drawer_open:

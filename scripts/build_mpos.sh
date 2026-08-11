@@ -276,6 +276,8 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_readsize_progsize.patch
 	echo "Applying lvgl_micropython esp32 network wlan country Japan patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_country_japan.patch
+	echo "Applying lvgl_micropython esp32 network wlan config country patch..."
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_config_country.patch
 
 	partition_size=3670016 # 3.5MiB is enough and is the maximum for the Fri3d 2024/2026 devices due to the partition table
 	flash_size="16"

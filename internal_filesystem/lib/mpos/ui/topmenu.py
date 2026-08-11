@@ -33,7 +33,6 @@ _drawer_panel = None
 # State variables (kept in sync with panel.is_open for external code)
 drawer_open = False
 bar_open = False
-
 # Widgets:
 notification_bar = None
 notification_icon_label = None   # bell indicator in the top bar (label only – no image in the bar)
@@ -238,11 +237,20 @@ def _register_notifications_listener():
 def toggle_drawer():
     if drawer_open:
         close_drawer()
-    else:
+    elif not InputManager.is_drawer_open_disabled():
         open_drawer()
+    else:
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
 
 def open_drawer():
     global drawer_open, _pre_drawer_focused
+    if InputManager.is_drawer_open_disabled():
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
+        return
     if _drawer_panel is None or drawer_open:
         return
     # Save the currently focused widget so we can restore it on close.
