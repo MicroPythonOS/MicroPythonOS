@@ -2,6 +2,7 @@ import logging
 import lvgl as lv
 import os
 from mpos import Activity, Intent, SettingsActivity, SharedPreferences, SDCardManager, TaskManager
+from mpos.ui.infinite_list import InfiniteList
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -91,7 +92,7 @@ class RetroGoLauncher(Activity):
         title_label.set_text(self.title)
         title_label.align(lv.ALIGN.TOP_LEFT, 0, 0)
 
-        self.wadlist = lv.list(screen)
+        self.wadlist = InfiniteList(screen)
         self.wadlist.set_size(lv.pct(100), lv.pct(70))
         self.wadlist.center()
 
@@ -125,6 +126,38 @@ class RetroGoLauncher(Activity):
         if __debug__: logger.debug("config will later be written to %s", self.bootfile_to_write)
 
         self.refresh_file_list()
+
+    def _render_list_item(self, container, idx, item_data):
+        text = item_data[0]
+        icon = item_data[1] if len(item_data) > 1 else None
+        action_type = item_data[2] if len(item_data) > 2 else None
+        action_data = item_data[3] if len(item_data) > 3 else None
+
+        btn = lv.button(container)
+        btn.set_size(lv.pct(100), 40)
+
+        if icon:
+            img = lv.image(btn)
+            img.set_src(icon)
+            img.align(lv.ALIGN.LEFT_MID, 5, 0)
+
+        label = lv.label(btn)
+        label.set_text(text)
+        if icon:
+            label.align(lv.ALIGN.LEFT_MID, 45, 0)
+        else:
+            label.align(lv.ALIGN.LEFT_MID, 10, 0)
+
+        if action_type == "back":
+            btn.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
+        elif action_type == "dir":
+            btn.add_event_cb(lambda e, d=action_data: self.navigate_into(d), lv.EVENT.CLICKED, None)
+        elif action_type == "root_dir":
+            btn.add_event_cb(lambda e, d=action_data: self.select_rom_subdir(d), lv.EVENT.CLICKED, None)
+        elif action_type == "file":
+            btn.add_event_cb(lambda e, p=action_data: self._launch_game(p), lv.EVENT.CLICKED, None)
+
+        return btn
 
     def scan_entries(self, directory):
         subdirs = []
@@ -253,10 +286,11 @@ class RetroGoLauncher(Activity):
                 self.status_label.set_text("No ROM directories found")
                 return
 
+            items = []
             for d in subdirs:
                 romart = self._romart_for_console(d)
-                button = self.wadlist.add_button(romart, lv.SYMBOL.DIRECTORY + "  " + d)
-                button.add_event_cb(lambda e, dirname=d: self.select_rom_subdir(dirname), lv.EVENT.CLICKED, None)
+                items.append((lv.SYMBOL.DIRECTORY + "  " + d, romart, "root_dir", d))
+            self.wadlist.set_data(items, self._render_list_item)
             return
 
         current_full_dir = self.bootfile_prefix + self.romdir + "/" + self.roms_subdir
@@ -276,25 +310,21 @@ class RetroGoLauncher(Activity):
 
         if __debug__: logger.debug("refresh_file_list: %d dirs, %d files", len(subdirs), len(all_files))
 
-        button = self.wadlist.add_button(None, lv.SYMBOL.LEFT + "  Back")
-        button.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
+        items = []
+        items.append((lv.SYMBOL.LEFT + "  Back", None, "back", None))
 
         for d in subdirs:
             romart = self._romart_for_dir(d)
-            button = self.wadlist.add_button(romart, d + "/")
-            button.add_event_cb(lambda e, dirname=d: self.navigate_into(dirname), lv.EVENT.CLICKED, None)
+            items.append((d + "/", romart, "dir", d))
 
-        has_romart = len(all_files) <= 12
         for f in all_files:
             gamedir = self.romdir + "/" + self.roms_subdir
             fullpath = gamedir + "/" + self.current_subdir + "/" + f if self.current_subdir else gamedir + "/" + f
             diskpath = self.bootfile_prefix + fullpath
-            romart = self._find_romart(diskpath, f) if (has_romart and not self.skip_crc32) else None
-            button = self.wadlist.add_button(romart, f)
-            button.add_event_cb(
-                lambda e, p=fullpath: self._launch_game(p),
-                lv.EVENT.CLICKED, None
-            )
+            romart = self._find_romart(diskpath, f) if not self.skip_crc32 else None
+            items.append((f, romart, "file", fullpath))
+
+        self.wadlist.set_data(items, self._render_list_item)
 
     def navigate_into(self, subdir):
         if self.current_subdir:
