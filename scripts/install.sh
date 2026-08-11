@@ -57,21 +57,26 @@ fi
 #$mpremote fs cp -r apps :/
 
 $mpremote fs cp -r lib :/
-
+echo $?
 
 #echo "Unmounting builtin/ so that it can be customized..." # not sure this is necessary
 #$mpremote exec "import os ; os.umount('/builtin')"
 $mpremote fs cp -r builtin :/
+echo $?
 
 #$mpremote fs cp -r data :/
 #$mpremote fs cp -r data/images :/data/
 
 $mpremote fs mkdir :/prefs
+echo $?
 $mpremote fs mkdir :/prefs/com.micropythonos.system.wifiservice
+echo $?
 #$mpremote fs cp ../internal_filesystem_excluded/prefs/com.micropythonos.system.wifiservice/config.json :/prefs/com.micropythonos.system.wifiservice/
 $mpremote fs cp ../internal_filesystem/data/prefs/com.micropythonos.system.wifiservice/config.json :/prefs/com.micropythonos.system.wifiservice/
+echo $?
 
 $mpremote fs mkdir :/apps
+echo $?
 
 # Use this to install just a few apps:
 #$mpremote fs cp -r apps/com.micropythonos.musicplayer :/apps/
@@ -87,6 +92,7 @@ fi
 echo "Not installing all apps by default because it takes a long time, uses lots of storage and makes the boot slower..." ; popd ; exit 0
 
 $mpremote fs cp -r apps/com.micropythonos.* :/apps/
+echo $?
 find apps/ -maxdepth 1 -type l | while read symlink; do
     if echo $symlink | grep quasiboats; then
         echo "Skipping $symlink because it's needlessly big..."
@@ -94,8 +100,9 @@ find apps/ -maxdepth 1 -type l | while read symlink; do
     fi
     echo "Handling symlink $symlink"
     $mpremote fs mkdir :/"$symlink"
+    echo $?
     $mpremote fs cp -r "$symlink"/* :/"$symlink"/
-
+    echo $?
 done
 
 popd

@@ -317,7 +317,7 @@ def round_up_to_multiple(n, multiple):
 class UpdateManager:
     _instance = None
 
-    BOOT_INITIAL_DELAY = 180 # how long to wait after startup to check for updates
+    BOOT_INITIAL_DELAY = 90 # how long to wait after startup to check for updates
     BOOT_CHECK_INTERVAL = 60 * 60 * 24 # how often to check for updates
     WIFI_WAIT_TIMEOUT = 300
     WIFI_CHECK_INTERVAL = 5
@@ -340,7 +340,6 @@ class UpdateManager:
         self._running = False
         self._check_in_progress = False
         self._suppress_notifications = False
-        self._check_needed = False
 
     def set_state_callback(self, callback):
         self._state_callback = callback
@@ -378,11 +377,11 @@ class UpdateManager:
         else:
             if self.current_state == UpdateState.IDLE or self.current_state == UpdateState.WAITING_WIFI:
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                self._check_needed = True
+                TaskManager.create_task(self.check_for_update())
             elif self.current_state == UpdateState.ERROR:
                 if __debug__: logger.debug("retrying update check after network came back")
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                self._check_needed = True
+                TaskManager.create_task(self.check_for_update())
 
     def _notify_update_available(self):
         if self._suppress_notifications:
@@ -417,24 +416,14 @@ class UpdateManager:
         TaskManager.create_task(self._run_loop())
 
     async def _run_loop(self):
-        for _ in range(self.BOOT_INITIAL_DELAY):
-            if self._check_needed:
-                break
-            if not self._running:
-                return
-            await TaskManager.sleep(1)
+        await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
 
         while self._running:
             if self._check_in_progress:
                 await TaskManager.sleep(1)
                 continue
 
-            if self._check_needed:
-                self._check_needed = False
-                await self.check_for_update()
-                if self.current_state == UpdateState.UPDATE_AVAILABLE:
-                    self._notify_update_available()
-            elif self.connectivity_manager.is_online():
+            if self.connectivity_manager.is_online():
                 await self.check_for_update()
                 if self.current_state == UpdateState.UPDATE_AVAILABLE:
                     self._notify_update_available()
@@ -444,8 +433,6 @@ class UpdateManager:
             for _ in range(self.BOOT_CHECK_INTERVAL):
                 if not self._running:
                     return
-                if self._check_needed:
-                    break
                 await TaskManager.sleep(1)
 
     def stop(self):
@@ -455,10 +442,10 @@ class UpdateManager:
             self.connectivity_manager.unregister_callback(self._network_changed)
 
     def check_for_update_now(self):
-        """Kick off an update check now."""
+        """Kick off an update check now. Resets any stale check still in flight."""
         self._check_in_progress = False
         self._last_check_ts = 0
-        self._check_needed = True
+        TaskManager.create_task(self.check_for_update())
 
     async def check_for_update(self):
         if self._check_in_progress:
