@@ -23,7 +23,7 @@ OS:
 - Optimize status bar clock to reduce allocations from ~4.5 KB/s to ~224 B/s (#244) by @fdb
 - SPI: expose Device.lock()/unlock() for shared-bus arbitration between multiple drivers
 - SPI: fix MicroPython's ESP32 SPI driver DMA failures due to incorrect txdata/rxdata flags
-- WiFi: set default country code to Japan instead of World to support channel 12, 13 and 14 (including active scan, so hidden SSID)
+- WiFi: set default country code to Japan instead of World to support channel 12, 13 and 14 (including active scan, meaning hidden SSIDs)
 
 0.16.1
 ======
