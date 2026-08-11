@@ -82,6 +82,28 @@ class InfiniteList:
     def move_to_index(self, index):
         pass
 
+    def ensure_loaded(self, idx):
+        n = len(self._items)
+        if n == 0:
+            return
+        idx = min(idx, n - 1)
+        if idx < 0:
+            return
+
+        while self._last < idx:
+            self._last += 1
+            self._render_cb(self._container, self._last, self._items[self._last])
+            self._container.update_layout()
+
+        while self._first > idx:
+            self._first -= 1
+            bottom_before = self._container.get_scroll_bottom()
+            item = self._render_cb(self._container, self._first, self._items[self._first])
+            item.move_to_index(0)
+            self._container.update_layout()
+            bottom_after = self._container.get_scroll_bottom()
+            self._container.scroll_by(0, bottom_before - bottom_after, False)
+
     def set_data(self, items, render_cb):
         self.clean()
         self._items = list(items)

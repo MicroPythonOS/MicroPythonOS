@@ -20,11 +20,22 @@ class _Base:
         lst.set_size(lv.pct(100), lv.pct(70))
         lst.center()
 
+        focus_group = lv.group_get_default()
+        if focus_group is None:
+            focus_group = lv.group_create()
+            lv.group_set_default(focus_group)
+
         def render(container, idx, item):
             row = lv.obj(container)
             row.set_flex_flow(lv.FLEX_FLOW.ROW)
             row.set_size(lv.pct(100), lv.SIZE_CONTENT)
             row.add_flag(lv.obj.FLAG.CLICKABLE)
+            row.add_flag(lv.obj.FLAG.SCROLL_ON_FOCUS)
+            focus_group.add_obj(row)
+            row.add_event_cb(
+                lambda e, l=lst, i=idx: l.ensure_loaded(i + 10),
+                lv.EVENT.FOCUSED, None,
+            )
             label = lv.label(row)
             label.set_text(item[0])
             label.center()
@@ -135,6 +146,22 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         self.assertTextPresent("rom_0000.wad")
         self.assertTextNotPresent("rom_0999.wad")
 
+    def test_focusing_last_item_loads_more(self):
+        lst = self._make_list(200)
+        initial = lst.rendered_count
+        g = lv.group_get_default()
+
+        focus_on = lst.obj.get_child(initial - 1)
+        lv.group_focus_obj(focus_on)
+
+        for _ in range(30):
+            self.wait_for_render()
+
+        self.assertTrue(
+            lst.rendered_count > initial,
+            f"Expected >{initial} rendered after focusing last item, got {lst.rendered_count}"
+        )
+
 
 class TestInfiniteListPerformance(GraphicalTestCase, _Base):
 
@@ -149,6 +176,7 @@ class TestInfiniteListPerformance(GraphicalTestCase, _Base):
             row.set_flex_flow(lv.FLEX_FLOW.ROW)
             row.set_size(lv.pct(100), lv.SIZE_CONTENT)
             row.add_flag(lv.obj.FLAG.CLICKABLE)
+            row.add_flag(lv.obj.FLAG.SCROLL_ON_FOCUS)
             label = lv.label(row)
             label.set_text(item[0])
             label.center()

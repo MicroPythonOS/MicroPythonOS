@@ -139,6 +139,7 @@ class RetroGoLauncher(Activity):
         row.set_flex_flow(lv.FLEX_FLOW.ROW)
         row.set_size(lv.pct(100), lv.SIZE_CONTENT)
         row.add_flag(lv.obj.FLAG.CLICKABLE)
+        row.add_flag(lv.obj.FLAG.SCROLL_ON_FOCUS)
         row.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
 
         row.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
@@ -166,6 +167,10 @@ class RetroGoLauncher(Activity):
         label.center()
 
         add_focus_highlight(row, mode="bg")
+        row.add_event_cb(
+            lambda e, l=self.wadlist, i=idx: l.ensure_loaded(i + 10),
+            lv.EVENT.FOCUSED, None,
+        )
 
         if action_type == "back":
             row.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)

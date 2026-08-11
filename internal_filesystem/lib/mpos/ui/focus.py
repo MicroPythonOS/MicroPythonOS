@@ -44,6 +44,7 @@ def _focus_bg_handler(event, color):
     target = event.get_target_obj()
     target.set_style_bg_color(color, lv.PART.MAIN)
     target.set_style_bg_opa(lv.OPA._30, lv.PART.MAIN)
+    target.scroll_to_view(True)
 
 
 def _defocus_bg_handler(event):
