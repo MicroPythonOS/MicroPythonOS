@@ -172,7 +172,7 @@ class AppStore(Activity):
             from appstore_core import AppUpdateManager
             um = AppUpdateManager.get_instance()
             self._sync_update_banner(state, um.updatable_apps)
-            if self._selected_category == "Updates" and getattr(self, '_data_loaded', False):
+            if getattr(self, '_selected_category', None) == "Updates" and getattr(self, '_data_loaded', False):
                 self.create_apps_list()
         except Exception as e:
             logger.warning("state change error: %s", e)
@@ -363,9 +363,10 @@ class AppStore(Activity):
             display.append("Adult (%d)" % cat_counts["Adult"])
         self._rebuilding_dropdown = True
         self.category_dropdown.set_options("\n".join(display))
-        if self._selected_category and self._selected_category in self._category_options:
-            self.category_dropdown.set_selected(self._category_options.index(self._selected_category))
-        elif self._selected_category is None and "All" in self._category_options:
+        selected_cat = getattr(self, "_selected_category", None)
+        if selected_cat and selected_cat in self._category_options:
+            self.category_dropdown.set_selected(self._category_options.index(selected_cat))
+        elif selected_cat is None and "All" in self._category_options:
             self.category_dropdown.set_selected(self._category_options.index("All"))
         else:
             selected = self.category_dropdown.get_selected()
@@ -415,7 +416,7 @@ class AppStore(Activity):
                 self._builtin_fullnames.add(installed_app.fullname)
                 continue
             self.apps.append(installed_app)
-        if self._default_to_installed:
+        if getattr(self, "_default_to_installed", False):
             self._default_to_installed = False
             n_installed = sum(1 for app in self.apps if app.installed_path is not None)
             if n_installed > 0:
@@ -514,27 +515,28 @@ class AppStore(Activity):
         self._icon_widgets = {}
         self._update_labels = {}
         if __debug__: logger.debug("create_apps_list iterating")
-        apps_to_show = self._wip_apps if self._selected_category == "Work In Progress" else self.apps
+        sel_cat = getattr(self, "_selected_category", None)
+        apps_to_show = self._wip_apps if sel_cat == "Work In Progress" else self.apps
         installed_set = set()
-        if self._selected_category == "Installed":
+        if sel_cat == "Installed":
             installed_set = {app.fullname for app in self.apps if app.installed_path is not None}
-        if self._selected_category == "Updates":
+        if sel_cat == "Updates":
             try:
                 from appstore_core import AppUpdateManager
                 updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
             except Exception:
                 updatable_set = set()
         for app in apps_to_show:
-            if self._selected_category:
-                if self._selected_category == "Work In Progress":
+            if sel_cat:
+                if sel_cat == "Work In Progress":
                     pass
-                elif self._selected_category == "Installed":
+                elif sel_cat == "Installed":
                     if app.fullname not in installed_set:
                         continue
-                elif self._selected_category == "Updates":
+                elif sel_cat == "Updates":
                     if app.fullname not in updatable_set:
                         continue
-                elif not app.categories or self._selected_category not in app.categories:
+                elif not app.categories or sel_cat not in app.categories:
                     continue
             if __debug__: logger.debug(app)
             item = self.apps_list.add_button(None, "")
