@@ -355,7 +355,7 @@ class Sorter(Activity):
             border.set_style_radius(4, 0)
             border.add_flag(lv.obj.FLAG.CLICKABLE)
             border.add_event_cb(lambda e, i=idx: self.on_tube(e, i), lv.EVENT.CLICKED, None)
-            mpos.ui.add_focus_border(border, mode="bg")
+            mpos.ui.add_focus_highlight(border, mode="bg")
             self.tube_borders.append(border)
 
             emoji_x = tube_x + (tube_width - emoji_sz) // 2

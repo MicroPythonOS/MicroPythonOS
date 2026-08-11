@@ -17,7 +17,10 @@ Frameworks:
 - AudioManager: fix buzzer buzzing along when PWM instance is created and fix clicking sound on PWM init (#233) by @cheops
 - DownloadManager: resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
 - InputManager: add back screen and drawer menu disable/enable APIs so apps receive those keys as regular lv.KEY.ESC / lv.KEY.HOME press
+- InfiniteList: new `mpos.ui.InfiniteList` virtual-scrolling list widget that only renders visible items, keeping memory and render cost bounded even with thousands of entries
 - SDCardManager: integrate 'sdcard' module functionality and cleanup legacy module
+- Focus: `add_focus_highlight(mode="bg")` now defaults to 100% background opacity (was 30%) so highlighted items are fully opaque, matching the theme's native `lv_list` button focus appearance
+- Focus: bg-mode focus handler now scrolls the focused widget into view (matching the border-mode handler)
 
 OS:
 - Optimize status bar clock to reduce allocations from ~4.5 KB/s to ~224 B/s (#244) by @fdb
