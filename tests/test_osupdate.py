@@ -987,6 +987,7 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
     def test_sync_ui_checking_update(self):
         self.app._sync_ui(UpdateState.CHECKING_UPDATE)
         self.assertEqual(self.app.status_label.get_text(), "Checking for OS updates...")
+        self.assertFalse(self.app.check_again_button.is_hidden())
 
 
 class TestFormatSetBootError(unittest.TestCase):
@@ -1061,3 +1062,138 @@ class TestOSUpdateRunDownload(unittest.TestCase):
         self.assertIn("ESP_ERR_OTA_VALIDATE_FAILED", status_text)
         self.assertIn("corrupted", status_text.lower())
         self.assertFalse(self.app.install_button.is_disabled())
+
+
+class MockConnectivityManager:
+    def __init__(self, online=True):
+        self._online = online
+
+    def is_online(self):
+        return self._online
+
+    def is_wifi_connected(self):
+        return self._online
+
+    def register_callback(self, cb):
+        pass
+
+    def unregister_callback(self, cb):
+        pass
+
+
+class TestOSUpdateCheckForUpdateErrorHandling(unittest.TestCase):
+
+    def setUp(self):
+        from osupdate_core import UpdateManager
+        UpdateManager._instance = None
+        self.um = UpdateManager.get_instance()
+        self.um.connectivity_manager = MockConnectivityManager(online=True)
+        self.um._notify_update_available = lambda: None
+        self.um._clear_update_available_notification = lambda: None
+        self.um._check_in_progress = False
+        self.um._last_check_ts = 0
+
+        async def mock_fetch(hwid):
+            raise OSError(-202, "MBEDTLS_ERR_NET_UNKNOWN_HOST")
+        self.um.update_checker.fetch_update_info = mock_fetch
+
+    def tearDown(self):
+        from osupdate_core import UpdateManager
+        UpdateManager._instance = None
+
+    def test_network_error_wifi_online_goes_to_error(self):
+        self.um.connectivity_manager._online = True
+        run_async(self.um.check_for_update())
+        self.assertEqual(self.um.current_state, "error")
+
+    def test_network_error_wifi_offline_goes_to_waiting_wifi(self):
+        self.um.connectivity_manager._online = False
+        run_async(self.um.check_for_update())
+        self.assertEqual(self.um.current_state, "waiting_wifi")
+
+    def test_network_error_no_connectivity_manager_falls_back_to_waiting_wifi(self):
+        self.um.connectivity_manager = None
+        run_async(self.um.check_for_update())
+        self.assertEqual(self.um.current_state, "waiting_wifi")
+
+
+class TestOSUpdateOnResumeConnectivity(unittest.TestCase):
+
+    class MockUMWithConnectivity:
+        def __init__(self, online=True):
+            self._state = "idle"
+            self.connectivity_manager = MockConnectivityManager(online=online)
+            self._state_callback = None
+            self.suppress_notifications = False
+            self.check_for_update_now_called = False
+
+        def get_state(self):
+            return self._state
+
+        def set_state(self, state):
+            self._state = state
+            if self._state_callback:
+                self._state_callback(state)
+
+        def set_state_callback(self, cb):
+            self._state_callback = cb
+
+        def clear_state_callback(self):
+            self._state_callback = None
+
+        def check_for_update_now(self):
+            self.check_for_update_now_called = True
+
+        def get_update_info(self):
+            return None
+
+    def setUp(self):
+        from osupdate import OSUpdate
+        self.app = OSUpdate()
+        self.app.status_label = MockLVGLLabel()
+        self.app.install_button = MockLVGLButton(initial_disabled=True)
+        self.app.check_again_button = MockLVGLButton(initial_disabled=False)
+        self.app.check_again_button.children = [MockLVGLLabel()]
+        self.app.changelog_container = MockLVGLButton(initial_disabled=False)
+        self.app._populate_changelog = lambda *a: None
+        self.app.has_foreground = lambda: True
+        self.mock_um = self.MockUMWithConnectivity(online=True)
+        self.app._um = self.mock_um
+
+    def test_on_resume_idle_wifi_offline_sets_waiting_wifi(self):
+        self.mock_um._state = "idle"
+        self.mock_um.connectivity_manager._online = False
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertEqual(self.mock_um._state, "waiting_wifi")
+        self.assertFalse(self.mock_um.check_for_update_now_called)
+        self.assertEqual(self.app.status_label.get_text(), "Waiting for WiFi connection...")
+
+    def test_on_resume_idle_wifi_online_calls_check(self):
+        self.mock_um._state = "idle"
+        self.mock_um.connectivity_manager._online = True
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertTrue(self.mock_um.check_for_update_now_called)
+        self.assertNotEqual(self.mock_um._state, "waiting_wifi")
+
+    def test_on_resume_idle_no_connectivity_manager_still_calls_check(self):
+        self.mock_um._state = "idle"
+        self.mock_um.connectivity_manager = None
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertTrue(self.mock_um.check_for_update_now_called)
+
+    def test_on_resume_non_idle_skips_check(self):
+        self.mock_um._state = "checking_update"
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertFalse(self.mock_um.check_for_update_now_called)

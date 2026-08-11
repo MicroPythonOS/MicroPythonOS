@@ -121,7 +121,7 @@ class OSUpdate(Activity):
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         elif state == UpdateState.CHECKING_UPDATE:
             self.status_label.set_text("Checking for OS updates...")
-            self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+            self.check_again_button.remove_flag(lv.obj.FLAG.HIDDEN)
         elif state == UpdateState.UPDATE_AVAILABLE:
             info = self._um.get_update_info()
             self._update_install_button(info["comparison"] if info else "newer")

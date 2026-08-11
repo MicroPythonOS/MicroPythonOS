@@ -340,6 +340,7 @@ class UpdateManager:
         self._running = False
         self._check_in_progress = False
         self._suppress_notifications = False
+        self._woke_by_network = False
 
     def set_state_callback(self, callback):
         self._state_callback = callback
@@ -377,11 +378,11 @@ class UpdateManager:
         else:
             if self.current_state == UpdateState.IDLE or self.current_state == UpdateState.WAITING_WIFI:
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                TaskManager.create_task(self.check_for_update())
+                self._woke_by_network = True
             elif self.current_state == UpdateState.ERROR:
                 if __debug__: logger.debug("retrying update check after network came back")
                 self.set_state(UpdateState.CHECKING_UPDATE)
-                TaskManager.create_task(self.check_for_update())
+                self._woke_by_network = True
 
     def _notify_update_available(self):
         if self._suppress_notifications:
@@ -416,7 +417,13 @@ class UpdateManager:
         TaskManager.create_task(self._run_loop())
 
     async def _run_loop(self):
-        await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
+        for _ in range(self.BOOT_INITIAL_DELAY):
+            if self._woke_by_network:
+                self._woke_by_network = False
+                break
+            if not self._running:
+                return
+            await TaskManager.sleep(1)
 
         while self._running:
             if self._check_in_progress:
@@ -442,9 +449,9 @@ class UpdateManager:
             self.connectivity_manager.unregister_callback(self._network_changed)
 
     def check_for_update_now(self):
-        """Kick off a one-off update check if none is already in progress."""
-        if self._check_in_progress:
-            return
+        """Kick off an update check now. Resets any stale check still in flight."""
+        self._check_in_progress = False
+        self._last_check_ts = 0
         TaskManager.create_task(self.check_for_update())
 
     async def check_for_update(self):
@@ -460,6 +467,7 @@ class UpdateManager:
         try:
             self.set_state(UpdateState.CHECKING_UPDATE)
             hwid = DeviceInfo.hardware_id
+            if __debug__: logger.debug("checking for updates (hwid=%s)", hwid)
             update_info = await self.update_checker.fetch_update_info(hwid)
             comparison = _get_version_comparison(
                 update_info["version"],
