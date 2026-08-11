@@ -173,6 +173,8 @@ Critical gotchas:
 - `sys.platform` always `'esp32'` (S3, C3, etc.).
 - `Pin.init(Pin.OUT)` silently overrides peripheral GPIO routing → no output, no error. Fix: deinit + re-create peripheral.
 - Shared RMT pin: re-create RMT driver (not just `pin.init`).
+- `asyncio.create_task()` from outside the event loop (timer callbacks, thread, boot services) does NOT wake the event loop — tasks queue up and execute with unpredictable delay (~6s typical on ESP32-S3). Architectures that rely on a `create_task()`-spawned loop polling a flag will fail. Instead, call `create_task()` directly from each callback (see `appstore_core._network_changed` for the proven pattern).
+- Services that call `start()` → `register_callback()` → `create_task(_run_loop())` at boot: the callback path works (fired via timer ISR on main thread), but the run-loop task may face scheduling delays. Don't rely on the run-loop for time-sensitive work — treat it as best-effort periodic background check.
 
 ### BLE
 - 31-byte advertising cap (NimBLE). No extended advertising. Scan response = separate 31 bytes.
