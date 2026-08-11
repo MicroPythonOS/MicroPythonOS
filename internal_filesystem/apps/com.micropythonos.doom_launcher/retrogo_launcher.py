@@ -2,6 +2,7 @@ import logging
 import lvgl as lv
 import os
 from mpos import Activity, Intent, SettingsActivity, SharedPreferences, SDCardManager, TaskManager
+from mpos.ui import add_focus_highlight
 from mpos.ui.infinite_list import InfiniteList
 
 logger = logging.getLogger(__name__)
@@ -163,6 +164,8 @@ class RetroGoLauncher(Activity):
         label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
         label.set_flex_grow(1)
         label.center()
+
+        add_focus_highlight(row)
 
         if action_type == "back":
             row.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
