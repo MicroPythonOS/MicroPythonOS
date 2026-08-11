@@ -165,7 +165,7 @@ class RetroGoLauncher(Activity):
         label.set_flex_grow(1)
         label.center()
 
-        add_focus_highlight(row)
+        add_focus_highlight(row, mode="bg")
 
         if action_type == "back":
             row.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
