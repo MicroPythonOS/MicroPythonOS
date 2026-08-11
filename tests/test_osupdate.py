@@ -56,6 +56,16 @@ def run_async(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
+class MockRNG:
+    """Mock RNG that returns a fixed value from getrandbits for deterministic tests."""
+
+    def __init__(self, fixed_bits=0):
+        self._bits = fixed_bits
+
+    def getrandbits(self, n):
+        return self._bits
+
+
 class TestUpdateChecker(unittest.TestCase):
     """Test UpdateChecker class."""
 
@@ -71,13 +81,19 @@ class TestUpdateChecker(unittest.TestCase):
         """Test URL generation for waveshare hardware."""
         url = self.checker.get_update_url("waveshare_esp32_s3_touch_lcd_2")
 
-        self.assertEqual(url, "https://updates.micropythonos.com/osupdate_waveshare_esp32_s3_touch_lcd_2.json")
+        self.assertIn(url, (
+            "https://updates.micropythonos.com/osupdate_waveshare_esp32_s3_touch_lcd_2.json",
+            "https://updates.micropythonos.org/osupdate_waveshare_esp32_s3_touch_lcd_2.json",
+        ))
 
     def test_get_update_url_other_hardware(self):
         """Test URL generation for other hardware."""
         url = self.checker.get_update_url("fri3d_2024")
 
-        self.assertEqual(url, "https://updates.micropythonos.com/osupdate_fri3d_2024.json")
+        self.assertIn(url, (
+            "https://updates.micropythonos.com/osupdate_fri3d_2024.json",
+            "https://updates.micropythonos.org/osupdate_fri3d_2024.json",
+        ))
 
     def test_fetch_update_info_success(self):
         """Test successful update info fetch."""
@@ -246,12 +262,46 @@ class TestUpdateChecker(unittest.TestCase):
 
     def test_get_update_url_custom_hardware(self):
         """Test URL generation for custom hardware IDs."""
-        # Test with different hardware IDs
         url1 = self.checker.get_update_url("custom-device-v1")
-        self.assertEqual(url1, "https://updates.micropythonos.com/osupdate_custom-device-v1.json")
+        self.assertIn(url1, (
+            "https://updates.micropythonos.com/osupdate_custom-device-v1.json",
+            "https://updates.micropythonos.org/osupdate_custom-device-v1.json",
+        ))
 
         url2 = self.checker.get_update_url("test-123")
-        self.assertEqual(url2, "https://updates.micropythonos.com/osupdate_test-123.json")
+        self.assertIn(url2, (
+            "https://updates.micropythonos.com/osupdate_test-123.json",
+            "https://updates.micropythonos.org/osupdate_test-123.json",
+        ))
+
+    def test_get_update_url_uses_both_mirrors(self):
+        """Test that both mirrors can be selected with a mock RNG."""
+        seen = set()
+        for bit in (0, 1):
+            mock_rng = MockRNG(fixed_bits=bit)
+            checker = UpdateChecker(
+                download_manager=self.mock_download_manager,
+                json_module=self.mock_json,
+                rng=mock_rng,
+            )
+            url = checker.get_update_url("waveshare_esp32_s3_touch_lcd_2")
+            domain = url.split("/osupdate_")[0]
+            seen.add(domain)
+        self.assertEqual(seen, {
+            "https://updates.micropythonos.com",
+            "https://updates.micropythonos.org",
+        })
+
+    def test_get_update_url_stores_chosen_mirror(self):
+        """Test that chosen_mirror is set after get_update_url call."""
+        mock_rng = MockRNG(fixed_bits=0)
+        checker = UpdateChecker(
+            download_manager=self.mock_download_manager,
+            json_module=self.mock_json,
+            rng=mock_rng,
+        )
+        checker.get_update_url("test-device")
+        self.assertEqual(checker._chosen_mirror, "https://updates.micropythonos.com")
 
 
 class TestUpdateDownloader(unittest.TestCase):

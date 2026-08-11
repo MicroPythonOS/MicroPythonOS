@@ -1,5 +1,6 @@
 import logging
 
+import random
 import time
 import ujson
 
@@ -247,14 +248,26 @@ class UpdateDownloader:
             raise
 
 
+_UPDATE_MIRRORS = (
+    "https://updates.micropythonos.com",
+    "https://updates.micropythonos.org",
+)
+
+
 class UpdateChecker:
 
-    def __init__(self, download_manager=None, json_module=None):
+    def __init__(self, download_manager=None, json_module=None, rng=None):
         self.download_manager = download_manager if download_manager else DownloadManager
         self.json = json_module if json_module else ujson
+        self.rng = rng if rng else random
+        # Track which mirror was used for the current check so that the
+        # download_url returned by that mirror is used for the download too.
+        self._chosen_mirror = None
 
     def get_update_url(self, hardware_id):
-        return f"https://updates.micropythonos.com/osupdate_{hardware_id}.json"
+        idx = self.rng.getrandbits(1) % len(_UPDATE_MIRRORS)
+        self._chosen_mirror = _UPDATE_MIRRORS[idx]
+        return f"{self._chosen_mirror}/osupdate_{hardware_id}.json"
 
     async def fetch_update_info(self, hardware_id):
         url = self.get_update_url(hardware_id)

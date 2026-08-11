@@ -12,6 +12,7 @@ Builtin Apps:
 - AppStore: add new 'Installed' category and show it by default (or 'All' if there are no apps installed)
 - AppStore: fix double update check (when network established + some time after boot)
 - OSUpdate: fix double update check (when network established + some time after boot)
+- OSUpdate: randomly select between update mirrors (updates.micropythonos.com and updates.micropythonos.org) for redundancy
 
 Frameworks:
 - AudioManager: fix buzzer buzzing along when PWM instance is created and fix clicking sound on PWM init (#233) by @cheops
