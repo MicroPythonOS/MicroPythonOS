@@ -1,9 +1,6 @@
 Future release (next version)
 =====
 
-Builtin Apps:
-- AppStore: add new 'Installed' category and show it by default (or 'All' if there are no apps installed) 
-
 0.17.0
 ======
 
@@ -12,6 +9,7 @@ Board Support:
 - Adapt freenove_esp32s3_display, fri3d_2024, fri3d_2026, lilygo_t4, lilygo_t_hmi, matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and squixl to SDCardManager API changes
 
 Builtin Apps:
+- AppStore: add new 'Installed' category and show it by default (or 'All' if there are no apps installed)
 - AppStore: fix double update check (when network established + some time after boot)
 - OSUpdate: fix double update check (when network established + some time after boot)
 
