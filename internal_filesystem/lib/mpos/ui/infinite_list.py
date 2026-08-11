@@ -64,6 +64,18 @@ class InfiniteList:
     def set_style_pad_all(self, value, selector=lv.PART.MAIN):
         self._container.set_style_pad_all(value, selector)
 
+    def set_list_style(self):
+        self._container.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
+        self._container.set_style_bg_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
+        self._container.set_style_radius(8, lv.PART.MAIN)
+        self._container.set_style_border_width(2, lv.PART.MAIN)
+        self._container.set_style_border_color(lv.color_hex(0xCCCCCC), lv.PART.MAIN)
+        self._container.set_style_border_post(True, lv.PART.MAIN)
+        self._container.set_style_pad_hor(16, lv.PART.MAIN)
+        self._container.set_style_pad_ver(0, lv.PART.MAIN)
+        self._container.set_style_pad_gap(0, lv.PART.MAIN)
+        self._container.set_style_clip_corner(True, lv.PART.MAIN)
+
     def set_dimension(self, size):
         pass
 
@@ -93,10 +105,7 @@ class InfiniteList:
         self._last = -1
 
     def _visible_count(self):
-        h = self._container.get_height()
-        if h <= 0:
-            return 3
-        return max(h // 40, 3)
+        return 15
 
     def _on_scroll(self, event):
         if self._scroll_running:

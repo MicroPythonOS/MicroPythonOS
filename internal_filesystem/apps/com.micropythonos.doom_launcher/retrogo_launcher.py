@@ -95,6 +95,7 @@ class RetroGoLauncher(Activity):
         self.wadlist = InfiniteList(screen)
         self.wadlist.set_size(lv.pct(100), lv.pct(70))
         self.wadlist.center()
+        self.wadlist.set_list_style()
 
         self.settings_button = lv.button(screen)
         settings_size = 35
@@ -133,31 +134,46 @@ class RetroGoLauncher(Activity):
         action_type = item_data[2] if len(item_data) > 2 else None
         action_data = item_data[3] if len(item_data) > 3 else None
 
-        btn = lv.button(container)
-        btn.set_size(lv.pct(100), 40)
+        row = lv.obj(container)
+        row.set_flex_flow(lv.FLEX_FLOW.ROW)
+        row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+        row.add_flag(lv.obj.FLAG.CLICKABLE)
+        row.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+
+        row.set_style_bg_opa(lv.OPA.COVER, lv.PART.MAIN)
+        row.set_style_bg_color(lv.color_hex(0xFFFFFF), lv.PART.MAIN)
+        row.set_style_text_color(lv.color_hex(0x212121), lv.PART.MAIN)
+        row.set_style_border_width(1, lv.PART.MAIN)
+        row.set_style_border_color(lv.color_hex(0xCCCCCC), lv.PART.MAIN)
+        row.set_style_border_side(lv.BORDER_SIDE.BOTTOM, lv.PART.MAIN)
+        row.set_style_pad_all(10, lv.PART.MAIN)
+        row.set_style_pad_column(10, lv.PART.MAIN)
+        row.set_style_radius(0, lv.PART.MAIN)
+
+        pressed_sel = lv.PART.MAIN | lv.STATE.PRESSED
+        row.set_style_recolor(lv.color_hex(0x000000), pressed_sel)
+        row.set_style_recolor_opa(35, pressed_sel)
 
         if icon:
-            img = lv.image(btn)
+            img = lv.image(row)
             img.set_src(icon)
-            img.align(lv.ALIGN.LEFT_MID, 5, 0)
 
-        label = lv.label(btn)
+        label = lv.label(row)
         label.set_text(text)
-        if icon:
-            label.align(lv.ALIGN.LEFT_MID, 45, 0)
-        else:
-            label.align(lv.ALIGN.LEFT_MID, 10, 0)
+        label.set_long_mode(lv.label.LONG_MODE.SCROLL_CIRCULAR)
+        label.set_flex_grow(1)
+        label.center()
 
         if action_type == "back":
-            btn.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
+            row.add_event_cb(lambda e: self.navigate_up(), lv.EVENT.CLICKED, None)
         elif action_type == "dir":
-            btn.add_event_cb(lambda e, d=action_data: self.navigate_into(d), lv.EVENT.CLICKED, None)
+            row.add_event_cb(lambda e, d=action_data: self.navigate_into(d), lv.EVENT.CLICKED, None)
         elif action_type == "root_dir":
-            btn.add_event_cb(lambda e, d=action_data: self.select_rom_subdir(d), lv.EVENT.CLICKED, None)
+            row.add_event_cb(lambda e, d=action_data: self.select_rom_subdir(d), lv.EVENT.CLICKED, None)
         elif action_type == "file":
-            btn.add_event_cb(lambda e, p=action_data: self._launch_game(p), lv.EVENT.CLICKED, None)
+            row.add_event_cb(lambda e, p=action_data: self._launch_game(p), lv.EVENT.CLICKED, None)
 
-        return btn
+        return row
 
     def scan_entries(self, directory):
         subdirs = []

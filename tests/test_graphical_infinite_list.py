@@ -8,11 +8,9 @@ from mpos.ui.testing import GraphicalTestCase, wait_for_render, simulate_drag
 from mpos.ui.infinite_list import InfiniteList
 
 TOTAL_ITEMS = 5000
-ITEM_HEIGHT = 40
 
 
 class _Base:
-    ITEM_HEIGHT = 40
 
     def _make_items(self, count=TOTAL_ITEMS):
         return [(f"rom_{i:04d}.wad", None, None, None) for i in range(count)]
@@ -23,12 +21,14 @@ class _Base:
         lst.center()
 
         def render(container, idx, item):
-            btn = lv.button(container)
-            btn.set_size(lv.pct(100), self.ITEM_HEIGHT)
-            label = lv.label(btn)
+            row = lv.obj(container)
+            row.set_flex_flow(lv.FLEX_FLOW.ROW)
+            row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+            row.add_flag(lv.obj.FLAG.CLICKABLE)
+            label = lv.label(row)
             label.set_text(item[0])
-            label.align(lv.ALIGN.LEFT_MID, 10, 0)
-            return btn
+            label.center()
+            return row
 
         items = self._make_items(item_count)
         lst.set_data(items, render)
@@ -145,12 +145,14 @@ class TestInfiniteListPerformance(GraphicalTestCase, _Base):
         lst.center()
 
         def render(container, idx, item):
-            btn = lv.button(container)
-            btn.set_size(lv.pct(100), self.ITEM_HEIGHT)
-            label = lv.label(btn)
+            row = lv.obj(container)
+            row.set_flex_flow(lv.FLEX_FLOW.ROW)
+            row.set_size(lv.pct(100), lv.SIZE_CONTENT)
+            row.add_flag(lv.obj.FLAG.CLICKABLE)
+            label = lv.label(row)
             label.set_text(item[0])
-            label.align(lv.ALIGN.LEFT_MID, 10, 0)
-            return btn
+            label.center()
+            return row
 
         t0 = time.ticks_ms()
         lst.set_data(items, render)
