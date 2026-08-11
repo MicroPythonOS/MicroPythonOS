@@ -486,8 +486,12 @@ class UpdateManager:
         except Exception as e:
             logger.error("check_for_update got exception: %s", e)
             if DownloadManager.is_network_error(e):
-                logger.warning("network error while checking for updates, waiting for WiFi")
-                self.set_state(UpdateState.WAITING_WIFI)
+                if self.connectivity_manager and self.connectivity_manager.is_online():
+                    logger.warning("server unreachable while checking for updates (network is online)")
+                    self.set_state(UpdateState.ERROR)
+                else:
+                    logger.warning("network error while checking for updates, waiting for WiFi")
+                    self.set_state(UpdateState.WAITING_WIFI)
             else:
                 self.set_state(UpdateState.ERROR)
             self._clear_update_available_notification()

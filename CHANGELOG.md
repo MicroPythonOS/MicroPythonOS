@@ -13,6 +13,7 @@ Builtin Apps:
 - AppStore: fix double update check (when network established + some time after boot)
 - OSUpdate: fix double update check (when network established + some time after boot)
 - OSUpdate: randomly select between update mirrors (updates.micropythonos.com and updates.micropythonos.org) for redundancy
+- OSUpdate: if wifi is connected but update check fails (due to server error, for example) don't go into 'Waiting for WiFi' state
 
 Frameworks:
 - AudioManager: fix buzzer buzzing along when PWM instance is created and fix clicking sound on PWM init (#233) by @cheops
