@@ -1190,10 +1190,22 @@ class TestOSUpdateOnResumeConnectivity(unittest.TestCase):
         self.app.onResume(mock_screen)
         self.assertTrue(self.mock_um.check_for_update_now_called)
 
-    def test_on_resume_non_idle_skips_check(self):
+    def test_on_resume_checking_update_wifi_online_calls_check(self):
         self.mock_um._state = "checking_update"
+        self.mock_um.connectivity_manager._online = True
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertTrue(self.mock_um.check_for_update_now_called)
+        self.assertEqual(self.mock_um._state, "idle")
+
+    def test_on_resume_checking_update_wifi_offline_sets_waiting_wifi(self):
+        self.mock_um._state = "checking_update"
+        self.mock_um.connectivity_manager._online = False
 
         import lvgl as lv
         mock_screen = MockLVGLButton()
         self.app.onResume(mock_screen)
         self.assertFalse(self.mock_um.check_for_update_now_called)
+        self.assertEqual(self.mock_um._state, "waiting_wifi")
