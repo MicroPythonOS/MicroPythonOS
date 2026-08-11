@@ -91,9 +91,12 @@ class OSUpdate(Activity):
         self._um.set_state_callback(self._on_um_state_change)
         self._um.suppress_notifications = True
         current_state = self._um.get_state()
-        self._sync_ui(current_state)
         if current_state == UpdateState.IDLE:
-            self._um.check_for_update_now()
+            if self._um.connectivity_manager and not self._um.connectivity_manager.is_online():
+                self._um.set_state(UpdateState.WAITING_WIFI)
+            else:
+                self._um.check_for_update_now()
+        self._sync_ui(self._um.get_state())
 
     def onPause(self, screen):
         self._um.clear_state_callback()
