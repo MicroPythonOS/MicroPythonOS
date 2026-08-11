@@ -2,6 +2,7 @@ import logging
 import lvgl as lv
 import sys
 
+from .font_manager import FontManager
 from .topmenu import open_bar, close_drawer
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,8 @@ def remove_and_stop_all_activities():
     global screen_stack
     while len(screen_stack):
         remove_and_stop_current_activity()
+    # Every app is gone, so release the TTF fonts they loaded.
+    FontManager.clear_cache()
 
 def remove_and_stop_current_activity():
     current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()
@@ -120,6 +123,9 @@ def finish_current_activity():
 
     if len(screen_stack) == 1:
         open_bar()
+
+    # The finished activity may have been the last user of an app's TTF font.
+    FontManager.clear_cache()
 
     return True
 
