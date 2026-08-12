@@ -108,12 +108,14 @@ class TestAppDetailInstallButton(unittest.TestCase):
         self.detail._action_in_progress = True
         self.detail.app = self.app
         self.detail.version_label = lv.label(self.screen)
+        self.detail.installed_version_label = lv.label(self.screen)
         self.detail.long_desc_label = lv.label(self.screen)
         self.detail.publisher_label = lv.label(self.screen)
         self.detail.buttoncont = lv.obj(self.screen)
         self.detail.fetch_badgehub_app_details = lambda s: None
         self.detail._sync_open_button = lambda: None
         self.detail._start_icon_download = lambda: None
+        self.detail._update_version_labels = lambda: None
 
         self._add_action_called = False
         def _mock_add_action(cont, app):
@@ -148,6 +150,7 @@ class TestAppDetailButtonVisibility(unittest.TestCase):
         self.detail._open_button = None
         self.detail._sync_open_button = lambda: AppDetail._sync_open_button(self.detail)
         self.detail._sync_rate_cont = lambda: None
+        self.detail._update_version_labels = lambda: None
         self.detail.set_install_label = self._mock_set_install_label
         self.detail.app = _MockApp()
         self.detail.app.fullname = "com.test.app"
@@ -344,6 +347,10 @@ class TestAppDetailRealUpdateDetection(unittest.TestCase):
         self.detail._open_button = None
         self.detail._sync_open_button = lambda: AppDetail._sync_open_button(self.detail)
         self.detail._sync_rate_cont = lambda: None
+        self.detail._update_version_labels = lambda: AppDetail._update_version_labels(self.detail)
+        self.detail._read_installed_version = AppDetail._read_installed_version
+        self.detail.installed_version_label = lv.label(self.screen)
+        self.detail.version_label = lv.label(self.screen)
         self.detail.set_install_label = self._mock_set_install_label
         self.detail.app = _MockApp()
         self.detail.app.fullname = self.TEST_FULLNAME
@@ -460,3 +467,99 @@ class TestAppDetailRealUpdateDetection(unittest.TestCase):
             "Update button must be created when store index has version and is_update works",
         )
         self.assertTrue(self._button_visible(self.detail.update_button))
+
+    def test_remote_version_takes_precedence_over_app_version(self):
+        """_remote_version from BadgeHub summary takes precedence over app.version
+        when the App object is a reused installed-app reference."""
+        self._register_installed(self.TEST_FULLNAME, "0.4.0")
+
+        AppManager.is_installed_by_name = lambda fn: True
+
+        self.detail.app = _MockApp()
+        self.detail.app.fullname = self.TEST_FULLNAME
+        self.detail.app.version = "0.4.0"        # installed version (reused object)
+        self.detail.app._remote_version = "0.4.1"  # from BadgeHub summary
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+
+        self.assertIsNotNone(
+            self.detail.update_button,
+            "Update button must be created when _remote_version > installed version",
+        )
+        self.assertTrue(self._button_visible(self.detail.update_button))
+
+    def test_no_update_button_when_app_version_equals_installed(self):
+        """Regression: without _remote_version, when app.version == installed version
+        (the reused-object bug), no Update button appears."""
+        self._register_installed(self.TEST_FULLNAME, "0.4.0")
+
+        AppManager.is_installed_by_name = lambda fn: True
+
+        self.detail.app = _MockApp()
+        self.detail.app.fullname = self.TEST_FULLNAME
+        self.detail.app.version = "0.4.0"  # same as installed — no _remote_version
+
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+
+        self.assertIsNone(
+            self.detail.update_button,
+            "No Update button when app.version equals installed version (no _remote_version)",
+        )
+        self.assertTrue(self._button_visible(self.detail._open_button))
+
+    def test_update_button_persists_after_detail_fetch_simulation(self):
+        """add_action_buttons called a second time (as fetch_and_set_app_details does
+        after the async detail fetch) still shows the Update button.
+        The detail fetch no longer overwrites app.version (prevents cache corruption)."""
+        self._register_installed(self.TEST_FULLNAME, "0.4.0")
+
+        AppManager.is_installed_by_name = lambda fn: True
+
+        self.detail.app = _MockApp()
+        self.detail.app.fullname = self.TEST_FULLNAME
+        self.detail.app.version = "0.4.0"
+        self.detail.app._remote_version = "0.4.1"
+
+        # First call — simulates onCreate
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+        self.assertIsNotNone(self.detail.update_button)
+        self.assertTrue(self._button_visible(self.detail.update_button))
+
+        # Second call — simulates fetch_and_set_app_details re-calling add_action_buttons
+        # (detail fetch no longer overwrites app.version, so nothing changes)
+        AppDetail.add_action_buttons(self.detail, self.buttoncont, self.detail.app)
+        self.assertIsNotNone(
+            self.detail.update_button,
+            "Update button must persist after detail-fetch rebuild",
+        )
+        self.assertTrue(self._button_visible(self.detail.update_button))
+
+    def test_installed_version_read_from_filesystem_not_cache(self):
+        """_read_installed_version reads from MANIFEST.JSON filesystem,
+        bypassing the shared-object cache that can be corrupted."""
+        from mpos.app.app import App
+        installed = App(
+            name="Test", fullname=self.TEST_FULLNAME, version="0.3.5",
+            installed_path="apps/%s" % self.TEST_FULLNAME,
+        )
+        AppManager._by_fullname[self.TEST_FULLNAME] = installed
+        if not AppManager._app_list:
+            AppManager._app_list = [installed]
+
+        import ujson
+        import os as _os
+        test_dir = "apps/com.test.showfonts"
+        try:
+            _os.stat(test_dir)
+        except OSError:
+            _os.mkdir(test_dir)
+        try:
+            with open("%s/MANIFEST.JSON" % test_dir, "w") as f:
+                f.write(ujson.dumps({"name": "Test", "fullname": "com.test.showfonts", "version": "0.4.0"}))
+
+            ver = AppDetail._read_installed_version("com.test.showfonts")
+            self.assertEqual(ver, "0.4.0",
+                "Must read 0.4.0 from filesystem, not cache (which has 0.3.5)")
+        finally:
+            _os.remove("%s/MANIFEST.JSON" % test_dir)
+            _os.rmdir(test_dir)

@@ -445,6 +445,9 @@ class AppStore(Activity):
                 if backend_type == self._BACKEND_API_BADGEHUB:
                     if app_data.get("slug") in installed_by_fullname:
                         existing = installed_by_fullname[app_data.get("slug")]
+                        store_version = app_data.get("version")
+                        if store_version:
+                            existing._remote_version = store_version
                         ratings = app_data.get("ratings") or {}
                         existing.rating_average = ratings.get("average")
                         existing.rating_count = ratings.get("count", 0)
@@ -467,6 +470,7 @@ class AppStore(Activity):
                         existing = installed_by_fullname[fullname]
                         existing.icon_url = app_data["icon_url"]
                         existing.download_url = app_data["download_url"]
+                        existing._remote_version = app_data["version"]
                     else:
                         new_apps.append(App(
                             app_data["name"], app_data["publisher"],

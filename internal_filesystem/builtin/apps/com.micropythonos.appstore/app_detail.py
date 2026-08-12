@@ -20,6 +20,7 @@ class AppDetail(Activity):
     install_label = None
     long_desc_label = None
     version_label = None
+    installed_version_label = None
     buttoncont = None
     publisher_label = None
     _open_button = None
@@ -228,18 +229,26 @@ class AppDetail(Activity):
         # version label:
         self.version_label = lv.label(app_detail_screen)
         self.version_label.set_width(lv.pct(100))
-        self.version_label.set_text(self.app.version and f"Latest version: {self.app.version}" or "Loading details...")
-        self.version_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.version_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.version_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.version_label.align_to(self.install_button, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
+        self.version_label.set_text("Loading details...")
         add_focus_highlight(self.version_label)
+        self.installed_version_label = lv.label(app_detail_screen)
+        self.installed_version_label.set_width(lv.pct(100))
+        self.installed_version_label.set_long_mode(lv.label.LONG_MODE.WRAP)
+        self.installed_version_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
+        self.installed_version_label.align_to(self.version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(3))
+        self.installed_version_label.add_flag(lv.obj.FLAG.HIDDEN)
+        add_focus_highlight(self.installed_version_label)
         self.long_desc_label = lv.label(app_detail_screen)
-        self.long_desc_label.align_to(self.version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
+        self.long_desc_label.align_to(self.installed_version_label, lv.ALIGN.OUT_BOTTOM_MID, 0, lv.pct(5))
         self.long_desc_label.set_text(self.app.long_description or self.app.short_description or "Loading details...")
         self.long_desc_label.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
         self.long_desc_label.set_width(lv.pct(100))
         self.long_desc_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         add_focus_highlight(self.long_desc_label)
+        self._update_version_labels()
 
         if __debug__: logger.debug("loading app detail screen")
         self.setContentView(app_detail_screen)
@@ -259,6 +268,34 @@ class AppDetail(Activity):
             self._icon_download_started = True
             lv.timer_create(lambda t: (t.delete(), TaskManager.create_task(self._download_icon())), 500, None)
 
+    @staticmethod
+    def _read_installed_version(app_fullname):
+        for base in ("apps", "builtin/apps"):
+            manifest = "%s/%s/MANIFEST.JSON" % (base, app_fullname)
+            try:
+                import ujson
+                with open(manifest, "r") as f:
+                    data = ujson.load(f)
+                return data.get("version")
+            except Exception:
+                continue
+        return None
+
+    def _update_version_labels(self):
+        if self.version_label is not None:
+            remote = getattr(self.app, "_remote_version", None) or self.app.version
+            if remote:
+                self.version_label.set_text("Available: %s" % remote)
+            else:
+                self.version_label.set_text("Loading details...")
+        if self.installed_version_label is not None:
+            installed_version = self._read_installed_version(self.app.fullname)
+            if installed_version:
+                self.installed_version_label.set_text("Installed: %s" % installed_version)
+                self.installed_version_label.remove_flag(lv.obj.FLAG.HIDDEN)
+            else:
+                self.installed_version_label.add_flag(lv.obj.FLAG.HIDDEN)
+
     def add_action_buttons(self, buttoncont, app):
         buttoncont.clean()
         buttoncont.set_style_pad_all(4, lv.PART.MAIN)
@@ -273,7 +310,10 @@ class AppDetail(Activity):
         self.install_label.center()
         self.set_install_label(self.app.fullname)
         self.update_button = None
-        if app.version and AppManager.is_update_available(self.app.fullname, app.version):
+        store_version = getattr(app, "_remote_version", None) or app.version
+        if __debug__: logger.debug("update check: _remote_version=%s app.version=%s store_version=%s",
+            getattr(app, "_remote_version", None), app.version, store_version)
+        if store_version and AppManager.is_update_available(self.app.fullname, store_version):
             if __debug__: logger.debug("update available, adding update button")
             self.update_button = lv.button(buttoncont)
             self.update_button.set_style_pad_hor(3, lv.PART.MAIN)
@@ -292,11 +332,12 @@ class AppDetail(Activity):
         open_label.center()
         self._sync_open_button()
         self._sync_rate_cont()
+        self._update_version_labels()
 
     async def fetch_and_set_app_details(self):
         await self.fetch_badgehub_app_details(self.app)
         if __debug__: logger.debug("app has version: %s", self.app.version)
-        self.version_label.set_text(self.app.version)
+        self._update_version_labels()
         self.long_desc_label.set_text(self.app.long_description)
         self.publisher_label.set_text(self.app.publisher)
         if not self._action_in_progress:
@@ -422,8 +463,9 @@ class AppDetail(Activity):
         result = await fetch_badgehub_project_details(details_url)
         if not result:
             return
-        if result.get("version"):
-            app_obj.version = result["version"]
+        remote_version = result.get("version")
+        if remote_version and not getattr(app_obj, "_remote_version", None):
+            app_obj._remote_version = remote_version
         if result.get("download_url"):
             app_obj.download_url = result["download_url"]
             app_obj.download_url_size = result.get("download_url_size")
