@@ -1,6 +1,12 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: fix update button not appearing
+
+Frameworks:
+- View: fix crash when navigating back from an app launched via notification drawer
+
 0.17.0
 ======
 

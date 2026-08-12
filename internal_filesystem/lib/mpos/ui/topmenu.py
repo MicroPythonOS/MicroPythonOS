@@ -102,8 +102,8 @@ def _set_notification_icon(notification):
 
 
 def _notification_pressed(event, notification_id):
-    NotificationManager.trigger(notification_id)
     close_drawer()
+    NotificationManager.trigger(notification_id)
 
 
 def _build_drawer_notification_item(parent, notification):
