@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+0.17.1
+======
+
 Builtin Apps:
 - AppStore: fix update button not appearing
 
