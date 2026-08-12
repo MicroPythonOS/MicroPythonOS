@@ -5,8 +5,8 @@ Future release (next version)
 ======
 
 Builtin Apps:
-- AppStore: fix "Update" button in app detail activity
-- AppStore: improve "Update all apps" button behavior
+- AppStore: fix 'Update' button in app detail activity
+- AppStore: improve 'Update N Apps' button behavior
 
 Frameworks:
 - View: fix crash when navigating back from an app launched via notification drawer
