@@ -839,7 +839,7 @@ class AppStore(Activity):
         ratings = bhapp.get("ratings") or {}
         rating_average = ratings.get("average")
         rating_count = ratings.get("count", 0)
-        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
+        return App(name, None, short_description, None, icon_url, None, fullname, bhapp.get("version"), category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
 
     @staticmethod
     def get_backend_pref_string(index):

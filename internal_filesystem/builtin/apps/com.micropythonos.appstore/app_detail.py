@@ -337,6 +337,9 @@ class AppDetail(Activity):
         download_url = app_obj.download_url
         fullname = app_obj.fullname
         if __debug__: logger.debug("update button clicked for %s and fullname %s", download_url, fullname)
+        if not download_url:
+            if __debug__: logger.debug("no download_url yet, ignoring")
+            return
         self._action_in_progress = True
         self.update_button.add_flag(lv.obj.FLAG.HIDDEN)
         self.install_button.add_state(lv.STATE.DISABLED)
