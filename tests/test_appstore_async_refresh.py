@@ -789,7 +789,7 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
         finally:
             dm.DownloadManager.download_url = orig_dl
 
-        self.assertEqual(app_obj.version, "0.6.0")
+        self.assertEqual(app_obj._remote_version, "0.6.0")
         self.assertIsNotNone(app_obj.download_url)
         self.assertTrue(
             app_obj.download_url.endswith("com.lightningpiggy.displaywallet_0.6.0.mpk"),
