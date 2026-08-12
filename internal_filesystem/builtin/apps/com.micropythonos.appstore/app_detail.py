@@ -395,6 +395,7 @@ class AppDetail(Activity):
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self._action_in_progress = False
+        AppManager.refresh_apps()
         self.add_action_buttons(self.buttoncont, self.app)
         self._trigger_update_recheck()
 
@@ -441,6 +442,7 @@ class AppDetail(Activity):
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self._action_in_progress = False
+        AppManager.refresh_apps()
         self.add_action_buttons(self.buttoncont, self.app)
         self._trigger_update_recheck()
 
