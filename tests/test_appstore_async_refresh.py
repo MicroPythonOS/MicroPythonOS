@@ -81,6 +81,10 @@ class MockAppUpdateManager:
 
     def check_for_updates_now(self, index_url=None):
         self.check_calls.append("check_for_updates_now")
+        import mpos
+        async def _noop():
+            pass
+        mpos.TaskManager.create_task(_noop())
 
     @classmethod
     def get_instance(cls):

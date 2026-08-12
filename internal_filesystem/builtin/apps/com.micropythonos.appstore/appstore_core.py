@@ -311,7 +311,7 @@ class AppUpdateManager:
         """Kick off a one-off update check if none is already in progress."""
         if self._check_in_progress:
             return
-        TaskManager.create_task(self.check_for_updates(index_url))
+        TaskManager.create_task(self.check_for_updates(index_url, force=True))
 
     def _network_changed(self, online):
         if __debug__: logger.debug("network %s", "ONLINE" if online else "OFFLINE")
@@ -338,7 +338,7 @@ class AppUpdateManager:
         list_url = parts[1]
         return list_url, backend_type
 
-    async def check_for_updates(self, index_url=None):
+    async def check_for_updates(self, index_url=None, force=False):
         """Download the app index and compare versions against installed apps.
 
         ``index_url`` defaults to the production index.  The AppStore UI
@@ -349,7 +349,7 @@ class AppUpdateManager:
         # deduplicate against _network_changed callback triggering first check
         # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks
         now = time.ticks_ms()
-        if now - getattr(self, '_last_check_ts', 0) < 60000:
+        if not force and now - getattr(self, '_last_check_ts', 0) < 60000:
             return
         self._last_check_ts = now
         self._check_in_progress = True

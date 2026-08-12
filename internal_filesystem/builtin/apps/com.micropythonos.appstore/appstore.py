@@ -599,9 +599,24 @@ class AppStore(Activity):
         if self._icon_queue:
             self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
         try:
-            from appstore_core import AppUpdateManager
-            um = AppUpdateManager.get_instance()
-            self._sync_update_banner(um.current_state, um.updatable_apps)
+            from appstore_core import AppUpdateState
+            updatable = []
+            for app in self.apps:
+                installed_path = getattr(app, "installed_path", None)
+                if not installed_path:
+                    continue
+                remote = getattr(app, "_remote_version", None)
+                if not remote:
+                    continue
+                if AppManager.is_update_available(app.fullname, remote):
+                    updatable.append({
+                        "fullname": app.fullname,
+                        "version": remote,
+                        "name": app.name,
+                        "download_url": app.download_url,
+                    })
+            state = AppUpdateState.UPDATES_AVAILABLE if updatable else AppUpdateState.NO_UPDATES
+            self._sync_update_banner(state, updatable)
         except Exception:
             pass
         if __debug__: logger.debug("create_apps_list done")

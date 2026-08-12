@@ -453,7 +453,7 @@ class AppDetail(Activity):
         try:
             AppManager.refresh_apps()
             from appstore_core import AppUpdateManager
-            TaskManager.create_task(AppUpdateManager.get_instance().check_for_updates())
+            AppUpdateManager.get_instance().check_for_updates_now()
         except Exception as e:
             logger.warning("could not schedule update recheck: %s", e)
 
