@@ -64,6 +64,16 @@ Self-contained HTML — overview stats, per-file coverage %, expand inline sourc
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
 - **Batch edits:** constrain to exact patterns. Broad edits can silently delete unrelated code. If damage occurs, restore from git and re-apply a precise script.
 - **Implement missing functionality** rather than working around it.
+- **Observe before fixing, not after.** When a bug involves UI state or runtime data, use `mpos-controller` (`exec`, `get_widget_tree`, `eval`) to inspect the actual running system before coding a fix. Do NOT spend more than 2 rounds of static code analysis without validating assumptions against the live process.
+
+### Debugging shared-object / identity bugs
+
+The AppStore and AppManager share App objects by reference — `self.apps`, `_by_fullname`, and `_app_list` may all point to the same instance. Mutating any attribute on one path silently changes it everywhere. When tracing a bug where a value is "wrong" despite looking correct in isolation:
+
+1. **Check object identity first:** `a is b` on the suspected candidates. Use `mpos-controller exec` to test.
+2. **Mock objects hide identity bugs.** A test mock that creates a fresh object won't catch mutations propagated through shared references. Write at least one test that uses the real objects from the cache (`AppManager._by_fullname`) — not mock copies.
+3. **Prefer filesystem reads over cache reads for installed state.** The cache can go stale or be corrupted by shared-object writes. For installed-app data (version, installed status), reading MANIFEST.JSON directly from `apps/` or `builtin/apps/` is more reliable than `_by_fullname`.
+4. **Don't overwrite fields on shared objects.** If an App object lives in both the AppManager cache and the store list, use a separate attribute (e.g., `_remote_version`) for store-specific data instead of mutating shared fields like `version`.
 
 ### Logging
 
