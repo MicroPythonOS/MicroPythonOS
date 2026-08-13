@@ -1,13 +1,17 @@
 Future release (next version)
 =====
 
+0.17.2
+======
+
+- AppStore: fix "Update N Apps" button and "Updates (0)" dropdown reading from stale data source when opened before the background update check has run
+
 0.17.1
 ======
 
 Builtin Apps:
 - AppStore: fix 'Update' button in app detail activity
 - AppStore: improve 'Update N Apps' button behavior
-- AppStore: fix "Update N Apps" button and "Updates (0)" dropdown reading from stale data source when opened before the background update check has run
 
 Frameworks:
 - View: fix crash when navigating back from an app launched via notification drawer
