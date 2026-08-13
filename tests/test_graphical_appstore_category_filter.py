@@ -267,11 +267,16 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         try:
             from appstore_core import AppUpdateManager
             um = AppUpdateManager.get_instance()
-            um.updatable_apps = [{"fullname": "com.test.updatable"}]
         except Exception:
             pass
 
         activity.create_apps_list()
+
+        try:
+            um.updatable_apps = [{"fullname": "com.test.updatable"}]
+        except Exception:
+            pass
+
         activity._update_category_dropdown()
 
         dropdown = find_dropdown_widget(lv.screen_active())
