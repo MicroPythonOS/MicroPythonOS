@@ -4,7 +4,7 @@ Future release (next version)
 0.17.2
 ======
 
-- AppStore: fix "Update N Apps" button and "Updates (0)" dropdown reading from stale data source when opened before the background update check has run
+- AppStore: fix 'Update N Apps' button and 'Updates (0)' dropdown behavior when opened before the background update check has run
 
 0.17.1
 ======
