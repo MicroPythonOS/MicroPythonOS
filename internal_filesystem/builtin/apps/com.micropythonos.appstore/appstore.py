@@ -4,7 +4,8 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingsActivity, SharedPreferences, TaskManager
-from mpos.ui import STAR_SYMBOL
+from mpos.ui import QR_SYMBOL, STAR_SYMBOL
+from mpos.content import deeplink
 
 from app_detail import AppDetail
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
@@ -96,14 +97,24 @@ class AppStore(Activity):
         settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
 
+        self.scanqr_button = lv.button(self.top_bar)
+        self.scanqr_button.set_size(self._TOP_BAR_BUTTON_SIZE, self._TOP_BAR_BUTTON_SIZE)
+        self.scanqr_button.align(lv.ALIGN.RIGHT_MID, -5, 0)
+        self.scanqr_button.add_event_cb(self.scanqr_button_tap, lv.EVENT.CLICKED, None)
+        scanqr_label = lv.label(self.scanqr_button)
+        scanqr_label.set_text(QR_SYMBOL)
+        scanqr_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        scanqr_label.center()
+
         self.category_dropdown = lv.dropdown(self.top_bar)
-        self.category_dropdown.set_size(lv.pct(75), self._TOP_BAR_HEIGHT - 6)
+        self.category_dropdown.set_size(lv.pct(55), self._TOP_BAR_HEIGHT - 6)
         self.category_dropdown.align_to(self.settings_button, lv.ALIGN.OUT_RIGHT_MID, 8, 0)
         self.category_dropdown.set_options("All")
         self.category_dropdown.add_event_cb(self._category_changed, lv.EVENT.VALUE_CHANGED, None)
         self._category_options = ["All"]
         self._selected_category = self.getIntent().extras.get("category")
-        self._default_to_installed = self._selected_category is None
+        self._pending_deeplink = self.getIntent().extras.get("deeplink_fullname")
+        self._default_to_installed = self._selected_category is None and self._pending_deeplink is None
 
         # ---- "Update N App(s)" button (hidden until updates are found) ----
         self.update_all_button = lv.button(self.main_screen)
@@ -430,11 +441,13 @@ class AppStore(Activity):
             response = await DownloadManager.download_url(json_url)
         except Exception as e:
             if __debug__: logger.debug("store index unavailable (%s), showing installed apps only", e)
+            self._resolve_pending_deeplink(index_available=False)
             return
         try:
             parsed = json.loads(response)
         except Exception as e:
             logger.warning("could not parse store index: %s", e)
+            self._resolve_pending_deeplink(index_available=False)
             return
 
         backend_type = self.get_backend_type_from_settings()
@@ -492,6 +505,7 @@ class AppStore(Activity):
         # (ratings were patched after Phase 1 already painted the list)
         self.create_apps_list()
         self._update_category_dropdown()
+        self._resolve_pending_deeplink()
 
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
@@ -827,6 +841,79 @@ class AppStore(Activity):
         intent.putExtra("app", app)
         intent.putExtra("appstore", self)
         self.startActivity(intent)
+
+    # ------------------------------------------------------------------
+    # QR scanning and deep links
+    # ------------------------------------------------------------------
+
+    def scanqr_button_tap(self, event):
+        from mpos.ui.camera_activity import CameraActivity
+        self.startActivityForResult(
+            Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True),
+            self.scanqr_result_callback,
+        )
+
+    def scanqr_result_callback(self, result):
+        if not isinstance(result, dict) or not result.get("result_code"):
+            return
+        data = result.get("data")
+        link = deeplink.parse_store_link(data)
+        if link:
+            self.open_app_by_fullname(link["fullname"])
+            return
+        # Not a store link: offer it to third-party URL handlers.
+        if isinstance(data, str) and deeplink.open_url(data):
+            return
+        preview = data if isinstance(data, str) else repr(data)
+        if len(preview) > 128:
+            preview = preview[:128] + "..."
+        self._show_scan_message("Not an app link", "This QR code is not a MicroPythonOS app link:\n\n%s" % preview)
+
+    def open_app_by_fullname(self, fullname):
+        """Open the detail screen for a store app, refreshing the index if needed."""
+        app = self._find_store_app(fullname)
+        if app:
+            self.show_app_detail(app)
+            return
+        self._pending_deeplink = fullname
+        if self._data_loaded and not self._refresh_in_progress:
+            self.refresh_list()
+        # Otherwise the index download is already underway and
+        # _resolve_pending_deeplink() will run when it finishes.
+
+    def _find_store_app(self, fullname):
+        for app in self.apps:
+            if app.fullname == fullname:
+                return app
+        for app in self._wip_apps:
+            if app.fullname == fullname:
+                return app
+        return None
+
+    def _resolve_pending_deeplink(self, index_available=True):
+        fullname = getattr(self, "_pending_deeplink", None)
+        if not fullname:
+            return
+        self._pending_deeplink = None
+        app = self._find_store_app(fullname)
+        if app:
+            self.show_app_detail(app)
+        elif not index_available:
+            self._show_scan_message("No connection",
+                                    "Could not download the app index to look up '%s'.\nCheck your network connection and try again." % fullname)
+        else:
+            self._show_scan_message("App not found",
+                                    "App '%s' is not in the App Store.\nIt may have been removed, or your device may need a system update." % fullname)
+
+    def _show_scan_message(self, title, text):
+        mbox = lv.msgbox(lv.layer_top())
+        mbox.add_title(title)
+        mbox.add_text(text)
+        ok = mbox.add_footer_button("OK")
+        ok.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
+        close = mbox.add_close_button()
+        close.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
+        mbox.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CANCEL, None)
 
     def _get_backend_config(self):
         """Get backend configuration tuple (type, list_url, details_url)"""

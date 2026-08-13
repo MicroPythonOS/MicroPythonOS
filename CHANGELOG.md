@@ -1,6 +1,13 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID or micropythonos://app/APP_ID)
+
+Frameworks:
+- DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
+- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host or micropythonos:// scheme are reserved and rejected; multiple matching handlers open the chooser
+
 0.17.1
 ======
 
