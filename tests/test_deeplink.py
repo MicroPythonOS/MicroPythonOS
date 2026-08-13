@@ -189,6 +189,37 @@ class TestUrlHandlerRegistry(unittest.TestCase):
         self.assertEqual(AppManager.resolve_url_handlers("not a url"), [])
 
 
+class TestOpenActionLabel(unittest.TestCase):
+    """Chip label decision used by QR scanners (Camera app)."""
+
+    def setUp(self):
+        self._saved_specs = AppManager._url_handler_specs
+        self._saved_cache = AppManager._handler_class_cache
+        AppManager._url_handler_specs = []
+        AppManager._handler_class_cache = {}
+
+    def tearDown(self):
+        AppManager._url_handler_specs = self._saved_specs
+        AppManager._handler_class_cache = self._saved_cache
+
+    def test_store_link(self):
+        self.assertEqual(
+            deeplink.open_action_label("https://apps.micropythonos.com/app/com.example.paint"),
+            "Open in App Store")
+
+    def test_registered_handler(self):
+        AppManager._register_url_handler_spec(
+            "com.acme.store", "main.py", "_FakeHandlerA", "https://store.acme.example/app/*")
+        AppManager._handler_class_cache[("com.acme.store", "main.py", "_FakeHandlerA")] = _FakeHandlerA
+        self.assertEqual(
+            deeplink.open_action_label("https://store.acme.example/app/foo"), "Open link")
+
+    def test_unhandled(self):
+        self.assertIsNone(deeplink.open_action_label("https://unrelated.example/x"))
+        self.assertIsNone(deeplink.open_action_label("WIFI:T:WPA;S:x;P:y;;"))
+        self.assertIsNone(deeplink.open_action_label(None))
+
+
 class TestOpenUrl(unittest.TestCase):
     """open_url dispatch: store links go to the AppStore, others to handlers."""
 

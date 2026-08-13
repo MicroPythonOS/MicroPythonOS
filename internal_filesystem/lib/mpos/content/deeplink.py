@@ -218,6 +218,24 @@ def url_matches_pattern(pattern, url):
     return scheme == pscheme and host == phost and path == ppath
 
 
+def open_action_label(text):
+    """Return a short action label if text is an app link the OS can open.
+
+    Used by QR scanners (e.g. the Camera app) to decide whether to offer an
+    "open" chip for a decoded code. Returns None for anything that no
+    handler would accept, "Open in App Store" for official store links, and
+    "Open link" when an installed app's urlPattern matches.
+    """
+    if parse_store_link(text):
+        return "Open in App Store"
+    if not isinstance(text, str):
+        return None
+    from .app_manager import AppManager
+    if AppManager.resolve_url_handlers(text):
+        return "Open link"
+    return None
+
+
 def open_url(text):
     """Dispatch a URL (e.g. decoded from a QR code) to its handler.
 
