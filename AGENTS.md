@@ -57,6 +57,24 @@ Self-contained HTML — overview stats, per-file coverage %, expand inline sourc
 
 **Most common test segfault cause:** passing a non-LVGL Python object (mock, plain instance) as parent to any LVGL widget constructor. Mock the calling method instead, or use real `lv.obj()` (graphical test).
 
+**Never cache `asyncio.get_event_loop()` in `setUp`.** The test runner may create a fresh event loop between `setUp` and the test method, making a cached reference stale. Get the loop fresh at call time — inside the test method or inside the task-capture callback:
+
+```python
+# WRONG — loop may be stale
+def setUp(self):
+    self._loop = asyncio.get_event_loop()
+
+def _capture_task(coro):
+    self._loop.run_until_complete(coro)  # boom
+
+# RIGHT — fresh lookup
+def _capture_task(coro):
+    import asyncio as _asyncio
+    _asyncio.get_event_loop().run_until_complete(coro)
+```
+
+**Task capture triggers cascading side effects.** When `TaskManager.create_task` is mocked to `run_until_complete` synchronously, any task that internally spawns more tasks also runs synchronously in the same call. E.g. mocking `_update_all_click` reaches `_run_update_all` → `refresh_list` → `download_app_index` → `create_apps_list` → `_stop_all_timers`. Every link in the chain needs a mock (`_raw_timer`, `refresh_list`, etc.) even if your test goal is narrow. The crash surfaces far from the mocked entry point — watch the stack trace for the full cascade.
+
 ## Development rules
 
 - **TDD:** write failing test → fix → test passes.
