@@ -1282,83 +1282,66 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
         store._wip_apps = []
         store._builtin_fullnames = set()
         store.category_dropdown = None
+        store._raw_timer = None
+        store._icon_queue = []
+        store._download_in_progress = False
+        store._icon_pipeline = "none"
         return store
 
-    def _run_local_update_check(self, store):
-        """Mimic the local update check at the end of create_apps_list().
-        Returns the updatable list after writing to the singleton."""
-        import mpos
-        from appstore_core import AppUpdateManager, AppUpdateState
-        updatable = []
-        for a in store.apps:
-            if not getattr(a, "installed_path", None):
-                continue
-            remote = getattr(a, "_remote_version", None)
-            if not remote:
-                continue
-            if mpos.AppManager.is_update_available(a.fullname, remote):
-                updatable.append({
-                    "fullname": a.fullname,
-                    "version": remote,
-                    "name": a.name,
-                    "download_url": a.download_url,
-                })
-        AppUpdateManager.get_instance().updatable_apps = updatable
-        if updatable:
-            AppUpdateManager.get_instance().current_state = AppUpdateState.UPDATES_AVAILABLE
-        return updatable
-
     def test_update_all_button_click_triggers_installs(self):
-        """Bug 1: clicking the visible button must trigger installs.
-        The fix ensures create_apps_list() writes its local results to the
-        singleton, so _update_all_click can find the apps."""
+        """Bug 1: _update_all_click reads AppUpdateManager.updatable_apps
+        which is empty before auto-check. The fix makes create_apps_list()
+        write its local results to the singleton."""
         store = self._make_store()
-        store._raw_timer = None
+        self.assertFalse(_MockAUM.get_instance().updatable_apps,
+                         "pre-condition: singleton must be empty before create_apps_list")
+
         store.refresh_list = lambda: None
         from mpos import App
         app = App("TestApp", "Pub", "desc", "", "", "http://x/a.mpk", "com.test.a", "1.0")
         app.installed_path = "apps/com.test.a"
         app._remote_version = "2.0"
+        app.short_description = "desc"
+        app.categories = ["Tools"]
         store.apps = [app]
 
-        updatable = self._run_local_update_check(store)
-        self.assertEqual(len(updatable), 1,
-                         "local check should find one updatable app")
+        store.create_apps_list()
+
         self.assertEqual(len(_MockAUM.get_instance().updatable_apps), 1,
-                         "singleton should be populated by create_apps_list()")
-
-        from appstore_core import AppUpdateState
-        store._sync_update_banner(AppUpdateState.UPDATES_AVAILABLE, updatable)
-
+                         "create_apps_list() must write to AppUpdateManager.updatable_apps")
         self.assertFalse(store.update_all_button.has_flag(HIDDEN_FLAG),
                          "button should be visible after local check")
+
         store._update_all_click(None)
+
         self.assertTrue(self._install_calls,
                         "button click should trigger installs, not silently return")
 
     def test_updates_dropdown_shows_correct_count(self):
-        """Bug 2: dropdown must show the correct count of updatable apps.
-        The fix ensures create_apps_list() writes to the singleton, so
-        _update_category_dropdown reads consistent data."""
+        """Bug 2: _update_category_dropdown reads AppUpdateManager.updatable_apps
+        which is empty before auto-check. The fix makes create_apps_list()
+        write its local results to the singleton before the dropdown is built."""
         store = self._make_store()
+        self.assertFalse(_MockAUM.get_instance().updatable_apps,
+                         "pre-condition: singleton must be empty before create_apps_list")
+
         from mpos import App
         app = App("TestApp", "Pub", "desc", "", "", "", "com.test.a", "1.0")
         app.installed_path = "apps/com.test.a"
         app._remote_version = "2.0"
+        app.short_description = "desc"
         app.categories = ["Tools"]
         store.apps = [app]
 
         mock_dd = MockDropdown()
         store.category_dropdown = mock_dd
 
-        updatable = self._run_local_update_check(store)
-        self.assertEqual(len(updatable), 1,
-                         "local check should find one updatable app")
+        store.create_apps_list()
 
-        store._update_category_dropdown()
-
+        self.assertEqual(len(_MockAUM.get_instance().updatable_apps), 1,
+                         "create_apps_list() must write to AppUpdateManager.updatable_apps")
         self.assertIn("Updates (1)", mock_dd._options,
-                      "dropdown should show 'Updates (1)' when an updatable app was found locally")
+                      "dropdown should show 'Updates (1)' after create_apps_list() populates the singleton")
 
     def test_on_resume_syncs_with_auto_check(self):
         """Scenario 6 regression guard: when the user returns to AppStore
