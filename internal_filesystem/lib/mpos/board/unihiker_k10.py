@@ -21,6 +21,7 @@ import mpos.ui
 from machine import I2C, Pin
 from micropython import const
 from mpos import InputManager
+from mpos.board.unihiker_k10_input import K10ButtonInput
 
 # ── Display SPI pins ────────────────────────────────────────────────────────
 # K10 uses FSPI (SPI2, host=1) with CLK on GPIO12 (IO_MUX fast path)
@@ -124,6 +125,7 @@ mpos.ui.main_display.set_power(True)
 # BTN_B: NEXT  — cycles through focusable items; repeats while held
 # BTN_A: ENTER — selects / confirms the focused item
 _last_key = None
+_button_input = K10ButtonInput(ticks_diff=time.ticks_diff)
 
 
 def _keypad_read_cb(indev, data):
@@ -135,24 +137,44 @@ def _keypad_read_cb(indev, data):
         btn_a = not bool(p1 & BTNA_BIT)  # P1.4, active-low
         btn_b = not bool(p0 & BTNB_BIT)  # P0.2, active-low
     except Exception:
-        btn_a = False
-        btn_b = False
+        current_key = _button_input.cancel()
+        data.key = {
+            "next": lv.KEY.NEXT,
+            "right": lv.KEY.RIGHT,
+        }.get(current_key, lv.KEY.ENTER)
+        data.state = lv.INDEV_STATE.RELEASED
+        _last_key = None
+        return
 
-    if btn_a:
-        current_key = lv.KEY.ENTER
-    elif btn_b:
-        current_key = lv.KEY.NEXT
-    else:
-        current_key = None
+    focusgroup = lv.group_get_default()
+    focused = focusgroup.get_focused() if focusgroup else None
+    keyboard_focused = isinstance(focused, lv.keyboard) or isinstance(focused, lv.buttonmatrix)
+    if keyboard_focused:
+        focused.add_state(lv.STATE.FOCUS_KEY)
+    action, pressed, back = _button_input.update(
+        btn_a,
+        btn_b,
+        time.ticks_ms(),
+        keyboard_focused,
+    )
 
+    if back:
+        mpos.ui.back_screen()
+
+    current_key = {
+        "enter": lv.KEY.ENTER,
+        "next": lv.KEY.NEXT,
+        "right": lv.KEY.RIGHT,
+    }.get(action)
     if current_key is None:
         data.key = _last_key if _last_key else lv.KEY.ENTER
         data.state = lv.INDEV_STATE.RELEASED
         _last_key = None
-    else:
-        data.key = current_key
-        data.state = lv.INDEV_STATE.PRESSED
-        _last_key = current_key
+        return
+
+    data.key = current_key
+    data.state = lv.INDEV_STATE.PRESSED if pressed else lv.INDEV_STATE.RELEASED
+    _last_key = current_key if pressed else None
 
 
 indev = lv.indev_create()
