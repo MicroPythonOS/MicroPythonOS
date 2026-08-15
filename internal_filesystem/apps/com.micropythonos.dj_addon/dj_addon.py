@@ -90,8 +90,6 @@ class DJAddonActivity(Activity):
             self.dj = DJAddon(i2c_bus=i2c_bus)
             version = self.dj.version
             print("DJ Addon FW version:", ".".join(str(i) for i in version))
-            if version != (1, 0, 2):
-                raise ValueError("unexpected firmware version")
         except Exception as e:
             print("DJ Addon not available, using mock:", e)
             self.dj = _MockDJAddon()
