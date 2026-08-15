@@ -21,7 +21,7 @@ import mpos.ui
 from machine import I2C, Pin
 from micropython import const
 from mpos import InputManager
-from mpos.board.unihiker_k10_input import K10ButtonInput
+from mpos.board.unihiker_k10_input import K10ButtonInput, create_expander_i2c
 
 # ── Display SPI pins ────────────────────────────────────────────────────────
 # K10 uses FSPI (SPI2, host=1) with CLK on GPIO12 (IO_MUX fast path)
@@ -60,25 +60,7 @@ BTNA_BIT    = const(0x10)  # P1.4: BTN_A input       (active-low)
 if __debug__: logger.debug("unihiker_k10.py: initializing XL9535 I2C expander")
 _i2c = None  # guarded: _keypad_read_cb catches AttributeError if init fails
 try:
-    _i2c = I2C(0, sda=Pin(I2C_SDA), scl=Pin(I2C_SCL), freq=400_000)
-
-    # Port 0: P0.0 = output (backlight), P0.1 = output (Camera_RST), P0.2 = input (BTN_B)
-    _cfg0 = _i2c.readfrom_mem(XL9535_ADDR, XL9535_CFG0, 1)[0]
-    _cfg0 &= ~BL_BIT       # P0.0 backlight: output
-    _cfg0 &= ~CAM_RST_BIT  # P0.1 Camera_RST: output
-    _cfg0 |=  BTNB_BIT     # P0.2 BTN_B: input
-    _i2c.writeto_mem(XL9535_ADDR, XL9535_CFG0, bytes([_cfg0]))
-
-    # Port 1: P1.4 = input (BTN_A)
-    _cfg1 = _i2c.readfrom_mem(XL9535_ADDR, XL9535_CFG1, 1)[0]
-    _cfg1 |= BTNA_BIT
-    _i2c.writeto_mem(XL9535_ADDR, XL9535_CFG1, bytes([_cfg1]))
-
-    # Turn backlight on (P0.0 high); release Camera_RST (P0.1 high = not in reset)
-    _out0 = _i2c.readfrom_mem(XL9535_ADDR, XL9535_OUT0, 1)[0]
-    _out0 |= BL_BIT | CAM_RST_BIT
-    _i2c.writeto_mem(XL9535_ADDR, XL9535_OUT0, bytes([_out0]))
-
+    _i2c = create_expander_i2c(I2C, Pin, I2C_SDA, I2C_SCL)
     if __debug__: logger.debug("unihiker_k10.py: XL9535 OK, backlight ON")
 except Exception as e:
     logger.error("unihiker_k10.py: XL9535 init failed: %s", e)
@@ -118,6 +100,7 @@ mpos.ui.main_display = ili9341.ILI9341(
 )
 # Type 2 = standard ILI9341 alternative init sequence (used by most SPI panels)
 mpos.ui.main_display.init(2)
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
 mpos.ui.main_display.set_power(True)
 # Note: backlight is controlled via XL9535, not a GPIO pin — already turned on above
 
@@ -236,11 +219,21 @@ def _camera_reset():
         logger.error("unihiker_k10: camera_reset failed: %s", e)
 
 
+def _restore_expander_i2c():
+    global _i2c
+    try:
+        _i2c = create_expander_i2c(I2C, Pin, I2C_SDA, I2C_SCL)
+    except Exception as e:
+        _i2c = None
+        logger.error("unihiker_k10: XL9535 restore failed: %s", e)
+
+
 from mpos import CameraManager
 
 
 def init_cam(width, height, colormode):
     from camera import Camera, GrabMode, PixelFormat
+    _restore_expander_i2c()
     _camera_reset()
     frame_size = CameraManager.resolution_to_framesize(width, height)
     for attempt in range(3):
@@ -278,6 +271,7 @@ def deinit_cam(cam):
         logger.error("unihiker_k10: deinit_cam: %s", e)
     # SCCB leaves GPIO47/48 in an indeterminate state; brief pause lets I2C settle
     time.sleep_ms(20)
+    _restore_expander_i2c()
     _camera_reset()
 
 
@@ -288,9 +282,11 @@ def capture_cam(cam, colormode):
 def apply_cam_settings(cam, prefs):
     # GC2145 settings support; use generic OV helper as fallback
     try:
-        return CameraManager.ov_apply_camera_settings(cam, prefs)
+        result = CameraManager.ov_apply_camera_settings(cam, prefs)
     except Exception:
-        return None
+        result = None
+    _restore_expander_i2c()
+    return result
 
 
 CameraManager.add_camera(CameraManager.Camera(
@@ -301,6 +297,8 @@ CameraManager.add_camera(CameraManager.Camera(
     deinit=deinit_cam,
     capture=capture_cam,
     apply_settings=apply_cam_settings,
+    rgb565_byte_swap=True,
+    default_vflip=True,
 ))
 
 # ── On-board sensors (SC7A20H · LTR303ALS · AHT20) + RGB LEDs ────────────────

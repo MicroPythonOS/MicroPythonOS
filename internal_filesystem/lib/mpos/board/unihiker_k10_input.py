@@ -1,3 +1,15 @@
+def create_expander_i2c(i2c_class, pin_class, sda, scl):
+    i2c = i2c_class(0, sda=pin_class(sda), scl=pin_class(scl), freq=400_000)
+    cfg0 = i2c.readfrom_mem(0x20, 0x06, 1)[0]
+    cfg0 = (cfg0 & ~0x03) | 0x04
+    i2c.writeto_mem(0x20, 0x06, bytes([cfg0]))
+    cfg1 = i2c.readfrom_mem(0x20, 0x07, 1)[0] | 0x10
+    i2c.writeto_mem(0x20, 0x07, bytes([cfg1]))
+    out0 = i2c.readfrom_mem(0x20, 0x02, 1)[0] | 0x03
+    i2c.writeto_mem(0x20, 0x02, bytes([out0]))
+    return i2c
+
+
 class K10ButtonInput:
     def __init__(self, long_press_ms=700, ticks_diff=None):
         self._long_press_ms = long_press_ms

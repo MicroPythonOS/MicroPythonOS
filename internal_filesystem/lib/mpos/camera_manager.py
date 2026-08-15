@@ -40,7 +40,7 @@ class Camera:
     Represents a camera device with its characteristics.
     """
 
-    def __init__(self, lens_facing, name=None, vendor=None, version=None, init=None, deinit=None, capture=None, apply_settings=None, rotation_degrees=0):
+    def __init__(self, lens_facing, name=None, vendor=None, version=None, init=None, deinit=None, capture=None, apply_settings=None, rotation_degrees=0, rgb565_byte_swap=False, default_vflip=True):
         """Initialize camera metadata.
 
         Args:
@@ -59,6 +59,8 @@ class Camera:
         self.capture_function = capture
         self.apply_settings_function = apply_settings
         self.rotation_degrees = rotation_degrees
+        self.rgb565_byte_swap = rgb565_byte_swap
+        self.default_vflip = default_vflip
 
     def __repr__(self):
         facing_names = {
@@ -87,6 +89,12 @@ class Camera:
 
     def get_rotation_degrees(self):
         return self.rotation_degrees
+
+    def get_rgb565_byte_swap(self):
+        return self.rgb565_byte_swap
+
+    def get_default_vflip(self):
+        return self.default_vflip
 
 
 class CameraManager:
