@@ -198,7 +198,6 @@ Critical gotchas:
 - Viper: `ba[i]` returns `object` → `int()` cast. int16 sign extension: `v = int(ba[i]) | (int(ba[i+1]) << 8); if v & 0x8000: v -= 65536`.
 
 ### ESP32
-- Remember that MicroPythonOS often runs on resource constrained hardware
 - `sys.platform` always `'esp32'` (S3, C3, etc.).
 - `Pin.init(Pin.OUT)` silently overrides peripheral GPIO routing → no output, no error. Fix: deinit + re-create peripheral.
 - Shared RMT pin: re-create RMT driver (not just `pin.init`).
