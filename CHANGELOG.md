@@ -11,7 +11,6 @@ Builtin Apps:
 - AppStore: apply dropdown filter when adding to list so apps don't show up unnecessarily (less glitchy)
 
 Frameworks:
-- FontManager: free TTF and emoji fonts instead of leaking them per app by @fdb
 - View: fix two LVGL memory leaks in activity navigation by @fdb
 
 
