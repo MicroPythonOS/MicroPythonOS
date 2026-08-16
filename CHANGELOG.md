@@ -1,6 +1,10 @@
 Future release (next version)
 =====
 
+0.17.3
+======
+- AppStore: apply dropdown filter when adding to list so apps don't show up unnecessarily (less glitchy)
+
 0.17.2
 ======
 

@@ -640,6 +640,21 @@ class AppStore(Activity):
         """Create LVGL widgets for an app and insert at the given index in the list."""
         if not hasattr(self, "apps_list") or not self.apps_list:
             return
+        sel_cat = getattr(self, "_selected_category", None)
+        if sel_cat == "Installed":
+            if app.installed_path is None:
+                return
+        elif sel_cat == "Updates":
+            try:
+                from appstore_core import AppUpdateManager
+                updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
+            except Exception:
+                updatable_set = set()
+            if app.fullname not in updatable_set:
+                return
+        elif sel_cat and sel_cat not in AppStore._SPECIAL_CATEGORIES:
+            if not app.categories or sel_cat not in app.categories:
+                return
         item = self.apps_list.add_button(None, "")
         item.set_style_pad_all(0, lv.PART.MAIN)
         item.set_size(lv.pct(100), lv.SIZE_CONTENT)
