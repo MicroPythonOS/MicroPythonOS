@@ -3,11 +3,22 @@ Future release (next version)
 
 0.17.3
 ======
+
+Board Support:
+- WebAssembly: expose WebExpander (= simulated Fri3d expander) through mpos.io_expander like on fri3d_2026 board by @DrSkunk
+
+Builtin Apps:
 - AppStore: apply dropdown filter when adding to list so apps don't show up unnecessarily (less glitchy)
+
+Frameworks:
+- FontManager: free TTF and emoji fonts instead of leaking them per app by @fdb
+- View: fix two LVGL memory leaks in activity navigation by @fdb
+
 
 0.17.2
 ======
 
+Builtin Apps:
 - AppStore: fix 'Update N Apps' button and 'Updates (0)' dropdown behavior when opened before the background update check has run
 
 0.17.1
