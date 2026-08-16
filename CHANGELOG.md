@@ -1,11 +1,14 @@
 Future release (next version)
 =====
 
+0.17.3
+======
+- AppStore: apply dropdown filter when adding to list so apps don't show up unnecessarily (less glitchy)
+
 0.17.2
 ======
 
 - AppStore: fix 'Update N Apps' button and 'Updates (0)' dropdown behavior when opened before the background update check has run
-- AppStore: apply filter when adding to list so it don't show apps unnecessarily
 
 0.17.1
 ======
