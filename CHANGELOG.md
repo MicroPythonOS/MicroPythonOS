@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Frameworks:
+- FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
+
 0.17.3
 ======
 
