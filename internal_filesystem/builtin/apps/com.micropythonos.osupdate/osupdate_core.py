@@ -339,6 +339,7 @@ class UpdateManager:
         self._state_callback = None
         self._running = False
         self._check_in_progress = False
+        self._last_check_ts = None
         self._suppress_notifications = False
 
     def set_state_callback(self, callback):
@@ -444,16 +445,18 @@ class UpdateManager:
     def check_for_update_now(self):
         """Kick off an update check now. Resets any stale check still in flight."""
         self._check_in_progress = False
-        self._last_check_ts = 0
+        self._last_check_ts = None
         TaskManager.create_task(self.check_for_update())
 
     async def check_for_update(self):
         if self._check_in_progress:
             return
         # deduplicate against _network_changed callback triggering first check
-        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks
+        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks.
+        # _last_check_ts starts as None: on ESP32 ticks_ms() counts from boot, so
+        # treating "never checked" as 0 would block the first check for 60s of uptime.
         now = time.ticks_ms()
-        if now - getattr(self, '_last_check_ts', 0) < 60000:
+        if self._last_check_ts is not None and now - self._last_check_ts < 60000:
             return
         self._last_check_ts = now
         self._check_in_progress = True

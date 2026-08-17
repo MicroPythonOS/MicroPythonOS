@@ -1323,10 +1323,15 @@ for s in t:
                     capture_output=True, timeout=60,
                 )
             code = code.replace("../tests/", "tests/")
-        result = subprocess.run(
-            _mpremote_cmd(self.port, "exec", code),
-            capture_output=True, timeout=timeout + 60,
-        )
+        try:
+            result = subprocess.run(
+                _mpremote_cmd(self.port, "exec", code),
+                capture_output=True, timeout=timeout + 60,
+            )
+        except subprocess.TimeoutExpired:
+            # device hung mid-test (e.g. froze while exec-ing the test); report the
+            # failure here so the runner can retry (with --reset it power-cycles).
+            return False, "<test timed out after {}s>\n".format(timeout).encode()
         out = result.stdout
         out_str = out.decode("utf-8", errors="replace")
         passed = "TEST WAS A SUCCESS" in out_str

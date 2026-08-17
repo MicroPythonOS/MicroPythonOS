@@ -1091,7 +1091,7 @@ class TestOSUpdateCheckForUpdateErrorHandling(unittest.TestCase):
         self.um._notify_update_available = lambda: None
         self.um._clear_update_available_notification = lambda: None
         self.um._check_in_progress = False
-        self.um._last_check_ts = 0
+        self.um._last_check_ts = None
 
         async def mock_fetch(hwid):
             raise OSError(-202, "MBEDTLS_ERR_NET_UNKNOWN_HOST")

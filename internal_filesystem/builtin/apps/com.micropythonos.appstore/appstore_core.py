@@ -239,6 +239,7 @@ class AppUpdateManager:
         self.current_state = AppUpdateState.IDLE
         self._running = False
         self._check_in_progress = False
+        self._last_check_ts = None
         self._connectivity_manager = None
         self._state_callback = None
         self._suppress_notifications = False
@@ -347,9 +348,11 @@ class AppUpdateManager:
         if self._check_in_progress:
             return
         # deduplicate against _network_changed callback triggering first check
-        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks
+        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks.
+        # _last_check_ts starts as None: on ESP32 ticks_ms() counts from boot, so
+        # treating "never checked" as 0 would block the first check for 60s of uptime.
         now = time.ticks_ms()
-        if not force and now - getattr(self, '_last_check_ts', 0) < 60000:
+        if not force and self._last_check_ts is not None and now - self._last_check_ts < 60000:
             return
         self._last_check_ts = now
         self._check_in_progress = True

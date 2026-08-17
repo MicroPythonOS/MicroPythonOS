@@ -1,6 +1,15 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
+- OSUPDater: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
+
+Testing:
+- test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
+- test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
+- test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration
+
 0.17.3
 ======
 
