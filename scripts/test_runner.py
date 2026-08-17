@@ -408,6 +408,17 @@ def main():
     )
     args = parser.parse_args()
 
+    _warned = False
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(line_buffering=True)
+        elif not _warned:
+            _warned = True
+            sys.stderr.write(
+                "WARNING: stream lacks reconfigure(); piped output may be "
+                "buffered until the process exits\n"
+            )
+
     if args.coverage and args.ondevice:
         print("ERROR: --coverage only works with desktop backend")
         sys.exit(1)
