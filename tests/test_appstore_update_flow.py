@@ -99,6 +99,62 @@ class MockConnectivityManager:
             delattr(cls, "_inst")
 
 
+class MockDropdown:
+    """Captures LVGL dropdown set_options calls."""
+
+    def __init__(self):
+        self._options = ""
+        self._selected = 0
+
+    def set_options(self, text):
+        self._options = text
+
+    def get_selected(self):
+        return self._selected
+
+    def set_selected(self, idx):
+        self._selected = idx
+
+
+class _MockAUM:
+    """Mock AppUpdateManager with controllable updatable_apps."""
+
+    _instance = None
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def reset_instance(cls):
+        cls._instance = None
+
+    def __init__(self):
+        self.updatable_apps = []
+        self.current_state = "idle"
+        self._state_callback = None
+        self._suppress_notifications = False
+
+    def set_state_callback(self, cb):
+        self._state_callback = cb
+
+    def clear_state_callback(self):
+        self._state_callback = None
+
+    def check_for_updates_now(self, index_url=None):
+        pass
+
+    @property
+    def suppress_notifications(self):
+        return self._suppress_notifications
+
+    @suppress_notifications.setter
+    def suppress_notifications(self, value):
+        self._suppress_notifications = bool(value)
+
+
 # ---------------------------------------------------------------------------
 # Gap #1: Boot service wiring
 # ---------------------------------------------------------------------------
@@ -1151,6 +1207,163 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         finally:
             AppUpdateManager._instance = None
 
+
+# ---------------------------------------------------------------------------
+# Bug reproduction: AppStore reads from wrong data source before auto-check
+# ---------------------------------------------------------------------------
+
+class TestAppStorePreAutoCheck(unittest.TestCase):
+    """When the AppStore is opened before the auto-update background check:
+    - create_apps_list() correctly identifies updatable apps via local check
+      and writes the results to AppUpdateManager.updatable_apps
+    - All consumers (_update_all_click, _update_category_dropdown) then see
+      consistent data
+    """
+
+    def setUp(self):
+        import asyncio
+        import mpos
+        import appstore_core
+
+        asyncio.new_event_loop()
+
+        self._orig_aum = appstore_core.AppUpdateManager
+        appstore_core.AppUpdateManager = _MockAUM
+        _MockAUM.reset_instance()
+
+        self._install_calls = []
+        self._orig_dl_install = mpos.AppManager.download_and_install_package
+
+        async def _fake_install(url, fullname, **kwargs):
+            self._install_calls.append((url, fullname))
+
+        mpos.AppManager.download_and_install_package = _fake_install
+
+        self._tasks_created = []
+        self._orig_create_task = mpos.TaskManager.create_task
+
+        def _capture_task(coro):
+            self._tasks_created.append(coro)
+            import asyncio as _asyncio
+            _asyncio.get_event_loop().run_until_complete(coro)
+
+        mpos.TaskManager.create_task = _capture_task
+
+        self._orig_refresh = mpos.AppManager.refresh_apps
+        self._refresh_calls = []
+        mpos.AppManager.refresh_apps = lambda: self._refresh_calls.append(True)
+
+        self._orig_iav = mpos.AppManager.is_update_available
+        mpos.AppManager.is_update_available = staticmethod(lambda fn, v: True)
+
+    def tearDown(self):
+        import mpos
+        import appstore_core
+        appstore_core.AppUpdateManager = self._orig_aum
+        _MockAUM.reset_instance()
+        mpos.AppManager.download_and_install_package = self._orig_dl_install
+        mpos.TaskManager.create_task = self._orig_create_task
+        mpos.AppManager.refresh_apps = self._orig_refresh
+        mpos.AppManager.is_update_available = self._orig_iav
+
+    def _make_store(self):
+        from appstore import AppStore
+        store = AppStore()
+        store.prefs = MockPrefs(None)
+        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
+        store.please_wait_label = MockLabel()
+        store._refresh_in_progress = False
+        store._data_loaded = True
+        store.update_all_button = MockLabel()
+        store.update_all_label = MockLabel()
+        store.main_screen = MockLabel()
+        store.apps = []
+        store._update_labels = {}
+        store._wip_apps = []
+        store._builtin_fullnames = set()
+        store.category_dropdown = None
+        store._raw_timer = None
+        store._icon_queue = []
+        store._download_in_progress = False
+        store._icon_pipeline = "none"
+        return store
+
+    def test_update_all_button_click_triggers_installs(self):
+        """Bug 1: _update_all_click reads AppUpdateManager.updatable_apps
+        which is empty before auto-check. The fix makes create_apps_list()
+        write its local results to the singleton."""
+        store = self._make_store()
+        self.assertFalse(_MockAUM.get_instance().updatable_apps,
+                         "pre-condition: singleton must be empty before create_apps_list")
+
+        store.refresh_list = lambda: None
+        from mpos import App
+        app = App("TestApp", "Pub", "desc", "", "", "http://x/a.mpk", "com.test.a", "1.0")
+        app.installed_path = "apps/com.test.a"
+        app._remote_version = "2.0"
+        app.short_description = "desc"
+        app.categories = ["Tools"]
+        store.apps = [app]
+
+        store.create_apps_list()
+
+        self.assertEqual(len(_MockAUM.get_instance().updatable_apps), 1,
+                         "create_apps_list() must write to AppUpdateManager.updatable_apps")
+        self.assertFalse(store.update_all_button.has_flag(HIDDEN_FLAG),
+                         "button should be visible after local check")
+
+        store._update_all_click(None)
+
+        self.assertTrue(self._install_calls,
+                        "button click should trigger installs, not silently return")
+
+    def test_updates_dropdown_shows_correct_count(self):
+        """Bug 2: _update_category_dropdown reads AppUpdateManager.updatable_apps
+        which is empty before auto-check. The fix makes create_apps_list()
+        write its local results to the singleton before the dropdown is built."""
+        store = self._make_store()
+        self.assertFalse(_MockAUM.get_instance().updatable_apps,
+                         "pre-condition: singleton must be empty before create_apps_list")
+
+        from mpos import App
+        app = App("TestApp", "Pub", "desc", "", "", "", "com.test.a", "1.0")
+        app.installed_path = "apps/com.test.a"
+        app._remote_version = "2.0"
+        app.short_description = "desc"
+        app.categories = ["Tools"]
+        store.apps = [app]
+
+        mock_dd = MockDropdown()
+        store.category_dropdown = mock_dd
+
+        store.create_apps_list()
+
+        self.assertEqual(len(_MockAUM.get_instance().updatable_apps), 1,
+                         "create_apps_list() must write to AppUpdateManager.updatable_apps")
+        self.assertIn("Updates (1)", mock_dd._options,
+                      "dropdown should show 'Updates (1)' after create_apps_list() populates the singleton")
+
+    def test_on_resume_syncs_with_auto_check(self):
+        """Scenario 6 regression guard: when the user returns to AppStore
+        after the auto-check ran in the background, onResume must sync the
+        banner with the check's current state."""
+        store = self._make_store()
+
+        from appstore_core import AppUpdateState
+        aum = _MockAUM.get_instance()
+        aum.updatable_apps = [
+            {"fullname": "com.test.a", "name": "AppA"},
+            {"fullname": "com.test.b", "name": "AppB"},
+        ]
+        aum.current_state = AppUpdateState.UPDATES_AVAILABLE
+
+        store.onResume(MockLabel())
+
+        self.assertEqual(store.update_all_label._text, "Update 2 Apps")
+        self.assertFalse(store.update_all_button.has_flag(HIDDEN_FLAG))
+
+
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     unittest.main()

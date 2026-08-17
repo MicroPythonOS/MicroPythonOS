@@ -613,7 +613,7 @@ class AppStore(Activity):
         if self._icon_queue:
             self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
         try:
-            from appstore_core import AppUpdateState
+            from appstore_core import AppUpdateManager, AppUpdateState
             updatable = []
             for app in self.apps:
                 installed_path = getattr(app, "installed_path", None)
@@ -629,6 +629,9 @@ class AppStore(Activity):
                         "name": app.name,
                         "download_url": app.download_url,
                     })
+            AppUpdateManager.get_instance().updatable_apps = updatable
+            if updatable:
+                AppUpdateManager.get_instance().current_state = AppUpdateState.UPDATES_AVAILABLE
             state = AppUpdateState.UPDATES_AVAILABLE if updatable else AppUpdateState.NO_UPDATES
             self._sync_update_banner(state, updatable)
         except Exception:
@@ -651,6 +654,21 @@ class AppStore(Activity):
         """Create LVGL widgets for an app and insert at the given index in the list."""
         if not hasattr(self, "apps_list") or not self.apps_list:
             return
+        sel_cat = getattr(self, "_selected_category", None)
+        if sel_cat == "Installed":
+            if app.installed_path is None:
+                return
+        elif sel_cat == "Updates":
+            try:
+                from appstore_core import AppUpdateManager
+                updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
+            except Exception:
+                updatable_set = set()
+            if app.fullname not in updatable_set:
+                return
+        elif sel_cat and sel_cat not in AppStore._SPECIAL_CATEGORIES:
+            if not app.categories or sel_cat not in app.categories:
+                return
         item = self.apps_list.add_button(None, "")
         item.set_style_pad_all(0, lv.PART.MAIN)
         item.set_size(lv.pct(100), lv.SIZE_CONTENT)

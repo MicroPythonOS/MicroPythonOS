@@ -9,12 +9,30 @@ Frameworks:
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
 - AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host or micropythonos:// scheme are reserved and rejected; multiple matching handlers open the chooser
 
+0.17.3
+======
+
+Board Support:
+- WebAssembly: expose WebExpander (= simulated Fri3d expander) through mpos.io_expander like on fri3d_2026 board by @DrSkunk
+
+Builtin Apps:
+- AppStore: apply dropdown filter when adding to list so apps don't show up unnecessarily (less glitchy)
+
+Frameworks:
+- View: fix two LVGL memory leaks in activity navigation by @fdb
+
+0.17.2
+======
+
+Builtin Apps:
+- AppStore: fix 'Update N Apps' button and 'Updates (0)' dropdown behavior when opened before the background update check has run
+
 0.17.1
 ======
 
 Builtin Apps:
-- AppStore: fix "Update" button in app detail activity
-- AppStore: improve "Update all apps" button behavior
+- AppStore: fix 'Update' button in app detail activity
+- AppStore: improve 'Update N Apps' button behavior
 
 Frameworks:
 - View: fix crash when navigating back from an app launched via notification drawer
