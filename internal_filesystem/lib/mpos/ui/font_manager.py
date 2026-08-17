@@ -108,15 +108,19 @@ lips,🫦
         (e.g. "Montserrat"), ttf loads a custom font from a .ttf file, and
         emoji=True adds emoji support on top of the chosen font.
 
-        Note: only use custom (ttf=) fonts in your activities. When your app
-        closes, the OS deletes its custom fonts, so the device does not
-        slowly run out of memory. Code that keeps running after your app
-        closes — a service, a thread, a timer, an LVGL callback — must not
-        hold on to a font: the font it remembers is gone, and drawing with
-        it crashes the device. For the same reason, do not put a custom font
-        on a system widget like lv.layer_top(), because it stays on screen
-        after your app closes. Fonts are cached, so calling getFont() again
-        is cheap. Builtin fonts are always safe.
+        When your app closes, the OS deletes custom (ttf=) fonts to keep
+        memory free.
+
+        - Use a custom font in your activities only.
+        - Do not keep a custom font in a service, a thread, a timer, or an
+          LVGL callback.
+        - Do not put a custom font on a system widget such as lv.layer_top().
+
+        This code can run after your app closes. A deleted font crashes the
+        device.
+
+        Fonts are cached, so it is cheap to call getFont() again. Builtin
+        fonts are always safe.
         """
         target_size = cls._normalize_size(size)
 
