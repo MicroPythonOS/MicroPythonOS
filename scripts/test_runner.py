@@ -63,6 +63,10 @@ BUILD_DIR = os.path.join(REPO_ROOT, "lvgl_micropython", "build")
 
 MAX_RETRIES = 3
 
+ONDEVICE_SKIP = {
+    "test_apps_manifest.py",
+}
+
 COVERAGE_RE = re.compile(
     r"=== COVERAGE_DATA ===\n(.*?)\n=== END_COVERAGE_DATA ===", re.DOTALL
 )
@@ -499,6 +503,8 @@ def main():
     else:
         all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
         test_files = [f for f in all_files if not os.path.basename(f).startswith("notondevice_")]
+        if args.ondevice:
+            test_files = [f for f in test_files if os.path.basename(f) not in ONDEVICE_SKIP]
         if not test_files:
             print("No test files found in {}".format(TESTS_DIR))
             sys.exit(1)
