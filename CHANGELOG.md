@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Frameworks:
+- FontManager: free TTF and emoji fonts once the last app activity closes, instead of leaking them per app, by @fdb
+
 0.17.3
 ======
 

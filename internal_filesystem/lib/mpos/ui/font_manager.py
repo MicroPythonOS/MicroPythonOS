@@ -102,6 +102,16 @@ lips,🫦
 
     @classmethod
     def getFont(cls, size=None, ttf=None, family=None, emoji=False):
+        """Return a font, loading and caching it on first use.
+
+        Lifetime: a font loaded with ttf= (and any emoji font composed on it)
+        is valid until the last activity of the running app closes. The OS
+        destroys it then, so the C heap it lives on is not leaked. Within an
+        app run you can keep and reuse the returned font freely, but do not
+        cache it in a service or thread that outlives your activities, and do
+        not apply it to OS-owned widgets such as lv.layer_top(). Builtin and
+        emoji-composed builtin fonts are never destroyed.
+        """
         target_size = cls._normalize_size(size)
 
         if ttf is None:
@@ -113,6 +123,47 @@ lips,🫦
             return base_font
 
         return cls._get_composed_font(base_font)
+
+    @classmethod
+    def _clear_cache(cls):
+        """Destroy every cached TTF font and the emoji imgfonts composed on
+        them. Both come from lv_malloc(), which the MicroPython GC does not
+        manage, so dropping the Python reference alone leaks them and fragments
+        the C heap.
+
+        Destroying a font that something still uses is a use-after-free, and
+        apps may keep a font from getFont() in a variable and apply it later.
+        So only call this when no app code can run again with an old font: the
+        OS calls it once the last app activity is gone, because a relaunch
+        re-imports the app module with fresh globals. TTF fonts are for apps;
+        the launcher and system UI must use builtin fonts.
+
+        Composed fonts over builtin fonts stay cached: the builtin font list
+        bounds how many can ever exist, so they are not a per-app leak.
+        """
+        if not cls._ttf_font_cache:
+            return
+
+        ttf_ids = set()
+        for font in cls._ttf_font_cache.values():
+            ttf_ids.add(cls._font_identity(font))
+
+        # Destroy composed fonts before the TTFs they hold as fallback.
+        for cache_key in list(cls._composed_font_cache.keys()):
+            if cache_key[0] not in ttf_ids:
+                continue
+            composed_font = cls._composed_font_cache.pop(cache_key)
+            try:
+                lv.imgfont_destroy(composed_font)
+            except Exception as err:
+                cls._debug("imgfont_destroy failed: " + repr(err))
+
+        for cache_key in list(cls._ttf_font_cache.keys()):
+            font = cls._ttf_font_cache.pop(cache_key)
+            try:
+                lv.tiny_ttf_destroy(font)
+            except Exception as err:
+                cls._debug("tiny_ttf_destroy failed: " + repr(err))
 
     @classmethod
     def normalizeEmojiText(cls, text):

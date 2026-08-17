@@ -159,6 +159,150 @@ class TestFontManagerGetFont(GraphicalTestCase):
         self.assertEqual(ptr.value, -int(base.base_line))
 
 
+class TestFontManagerClearCache(GraphicalTestCase):
+    """Tests for FontManager._clear_cache()."""
+
+    def setUp(self):
+        super().setUp()
+        _reset_font_manager()
+
+    def test_clear_cache_empties_ttf_cache(self):
+        """_clear_cache() releases every cached TTF font."""
+        FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        self.assertTrue(len(FontManager._ttf_font_cache) > 0)
+
+        FontManager._clear_cache()
+
+        self.assertEqual(len(FontManager._ttf_font_cache), 0)
+
+    def test_clear_cache_drops_composed_ttf_fonts(self):
+        """Composed fonts wrapping a TTF are released along with the TTF."""
+        base = FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=True)
+        base_id = FontManager._font_identity(base)
+        composed_keys = [k for k in FontManager._composed_font_cache if k[0] == base_id]
+        self.assertTrue(len(composed_keys) > 0)
+
+        FontManager._clear_cache()
+
+        remaining = [k for k in FontManager._composed_font_cache if k[0] == base_id]
+        self.assertEqual(len(remaining), 0)
+
+    def test_clear_cache_keeps_builtin_composed_fonts(self):
+        """Composed fonts over builtin fonts survive: system UI holds live references."""
+        composed = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+
+        FontManager._clear_cache()
+
+        self.assertIs(
+            FontManager.getFont(size=16, family="Montserrat", emoji=True), composed
+        )
+
+    def test_clear_cache_allows_reload(self):
+        """A TTF font requested after _clear_cache() is usable again."""
+        FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        FontManager._clear_cache()
+
+        font = FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        self.assertIsNotNone(font)
+        self.assertTrue(font.get_line_height() > 0)
+
+    def test_clear_cache_on_empty_caches(self):
+        """_clear_cache() is safe when nothing was ever cached."""
+        FontManager._clear_cache()
+        self.assertEqual(len(FontManager._ttf_font_cache), 0)
+
+
+class TestFontManagerAppHeldFont(GraphicalTestCase):
+    """Regression test for the MeshCore crash.
+
+    MeshCore keeps its TTF font in a module global and applies it each time a
+    chat channel screen is built. Freeing the font when the channel activity
+    finishes leaves that global dangling, so re-entering the channel renders
+    with freed memory and crashes. The OS must keep app fonts alive for as
+    long as any activity of the app is on the stack.
+    """
+
+    def setUp(self):
+        super().setUp()
+        _reset_font_manager()
+        import mpos.ui
+        for _ in range(10):
+            if len(mpos.ui.screen_stack) <= 1:
+                break
+            mpos.ui.back_screen()
+            self.wait_for_render()
+        # Fonts are freed when only the launcher remains (stack length 1). If
+        # this test environment has no launcher, push a stand-in so the stack
+        # floor is 1, like on a running system.
+        self._pushed_launcher_standin = False
+        if not mpos.ui.screen_stack:
+            self._push_activity()
+            self._pushed_launcher_standin = True
+
+    def tearDown(self):
+        import mpos.ui
+        from mpos.ui.view import finish_current_activity
+        for _ in range(10):
+            if len(mpos.ui.screen_stack) <= 1:
+                break
+            finish_current_activity()
+            self.wait_for_render()
+        if self._pushed_launcher_standin and mpos.ui.screen_stack:
+            mpos.ui.remove_and_stop_current_activity()
+            self.wait_for_render()
+        super().tearDown()
+
+    def _push_activity(self, build_screen=None):
+        from mpos import Activity
+        import mpos.ui
+        activity = Activity()
+        screen = lv.obj(None)
+        if build_screen:
+            build_screen(screen)
+        mpos.ui.setContentView(activity, screen)
+        self.wait_for_render()
+        return activity
+
+    def test_held_font_survives_sub_activity_finish(self):
+        """A font the app holds in a variable stays valid across a sub-activity
+        finish, and is freed once the app's last activity is gone."""
+        import mpos.ui
+        from mpos.ui.view import finish_current_activity
+
+        # App home activity (like the MeshCore home tabs).
+        self._push_activity()
+
+        # The app loads the TTF once and keeps the reference, then applies it
+        # inside a sub-activity (like a chat channel screen).
+        held_font = FontManager.getFont(size=14, ttf=_TEST_TTF_PATH)
+
+        def build_channel(screen):
+            label = lv.label(screen)
+            label.set_style_text_font(held_font, lv.PART.MAIN)
+            label.set_text("chat channel")
+
+        self._push_activity(build_channel)
+
+        # Back out of the sub-activity. The app still runs, so the held font
+        # must survive even though no widget draws with it right now.
+        finish_current_activity()
+        self.wait_for_render()
+        self.assertEqual(len(FontManager._ttf_font_cache), 1)
+
+        # Re-enter the sub-activity and apply the held font again. With the
+        # font freed this render dereferences freed memory (the crash).
+        self._push_activity(build_channel)
+        self.wait_for_render(10)
+
+        # Quit the app: with only the launcher left, the font is released.
+        finish_current_activity()
+        self.wait_for_render()
+        finish_current_activity()
+        self.wait_for_render()
+        self.assertEqual(len(FontManager._ttf_font_cache), 0)
+
+
 class TestFontManagerListFonts(GraphicalTestCase):
     """Tests for FontManager.listFonts()."""
 
