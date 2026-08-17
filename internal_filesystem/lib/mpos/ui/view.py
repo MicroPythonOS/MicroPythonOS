@@ -2,6 +2,7 @@ import logging
 import lvgl as lv
 import sys
 
+from .font_manager import FontManager
 from .input_manager import InputManager
 from .topmenu import open_bar, close_drawer
 
@@ -76,6 +77,8 @@ def remove_and_stop_all_activities():
     global screen_stack
     while len(screen_stack):
         remove_and_stop_current_activity()
+    # Every app is gone. Drop the cached TTF fonts.
+    FontManager._clear_cache()
 
 def remove_and_stop_current_activity():
     global _orphan_screen
@@ -156,6 +159,10 @@ def finish_current_activity():
 
     if len(screen_stack) == 1:
         open_bar()
+        # Only the launcher is left. Drop the app fonts from the cache, so
+        # the GC can reclaim them. A font that app code still holds stays
+        # alive until that code is gone too.
+        FontManager._clear_cache()
 
     return True
 

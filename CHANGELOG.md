@@ -5,6 +5,9 @@ Builtin Apps:
 - AppStore: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 - OSUPDater: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 
+Frameworks:
+- FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
+
 Testing:
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
 - test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
@@ -21,7 +24,6 @@ Builtin Apps:
 
 Frameworks:
 - View: fix two LVGL memory leaks in activity navigation by @fdb
-
 
 0.17.2
 ======
