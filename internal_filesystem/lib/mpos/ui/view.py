@@ -77,7 +77,7 @@ def remove_and_stop_all_activities():
     global screen_stack
     while len(screen_stack):
         remove_and_stop_current_activity()
-    # Every app is gone, so release the TTF fonts they loaded.
+    # Every app is gone. Destroy the TTF fonts that apps loaded.
     FontManager._clear_cache()
 
 def remove_and_stop_current_activity():
@@ -159,10 +159,10 @@ def finish_current_activity():
 
     if len(screen_stack) == 1:
         open_bar()
-        # Only the launcher is left, so no app code can reuse a font it cached
-        # earlier: a relaunch re-imports the app module with fresh globals.
-        # Freeing any sooner is unsafe — an app that keeps a font in a Python
-        # variable across its own sub-activities would get a dangling font.
+        # Only the launcher is left. No app code can use an old font now:
+        # a relaunch re-imports the app module with fresh globals.
+        # Do not destroy fonts sooner. An app can keep a font in a variable
+        # and apply it again in its next activity.
         FontManager._clear_cache()
 
     return True

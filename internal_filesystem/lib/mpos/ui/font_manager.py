@@ -136,20 +136,21 @@ lips,🫦
 
     @classmethod
     def _clear_cache(cls):
-        """Destroy every cached TTF font and the emoji imgfonts composed on
-        them. Both come from lv_malloc(), which the MicroPython GC does not
-        manage, so dropping the Python reference alone leaks them and fragments
-        the C heap.
+        """Destroy all cached TTF fonts and the emoji fonts composed on them.
 
-        Destroying a font that something still uses is a use-after-free, and
-        apps may keep a font from getFont() in a variable and apply it later.
-        So only call this when no app code can run again with an old font: the
-        OS calls it once the last app activity is gone, because a relaunch
-        re-imports the app module with fresh globals. TTF fonts are for apps;
-        the launcher and system UI must use builtin fonts.
+        These fonts come from lv_malloc(). The MicroPython GC does not
+        manage that memory. If we only drop the Python reference, the
+        memory leaks and the C heap fragments.
 
-        Composed fonts over builtin fonts stay cached: the builtin font list
-        bounds how many can ever exist, so they are not a per-app leak.
+        Apps can keep a font from getFont() in a variable and apply it
+        later. If we destroy a font that an app still holds, the app
+        crashes on the next draw. So call this only when no app code can
+        run again. The OS calls it when the last app activity is gone.
+        A relaunch re-imports the app module, so old references cannot
+        come back. The launcher and system UI must use builtin fonts.
+
+        Emoji fonts composed on builtin fonts stay cached. The builtin
+        font list bounds their count, so they are not a per-app leak.
         """
         if not cls._ttf_font_cache:
             return
@@ -158,7 +159,7 @@ lips,🫦
         for font in cls._ttf_font_cache.values():
             ttf_ids.add(cls._font_identity(font))
 
-        # Destroy composed fonts before the TTFs they hold as fallback.
+        # Destroy composed fonts first. They hold a TTF as fallback.
         for cache_key in list(cls._composed_font_cache.keys()):
             if cache_key[0] not in ttf_ids:
                 continue
