@@ -307,7 +307,8 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
                 print("Hard-resetting device...")
                 be.hard_reset()
         passed, out = be.run_test_file(
-            test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage,
+            test_path, tests_dir=tests_dir, timeout=timeout,
+            **({"coverage": coverage} if backend == "process" else {})
         )
     finally:
         be.stop()
