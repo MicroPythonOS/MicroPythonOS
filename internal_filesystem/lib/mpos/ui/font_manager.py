@@ -108,19 +108,10 @@ lips,🫦
         (e.g. "Montserrat"), ttf loads a custom font from a .ttf file, and
         emoji=True adds emoji support on top of the chosen font.
 
-        When your app closes, the OS deletes custom (ttf=) fonts to keep
-        memory free.
-
-        - Use a custom font in your activities only.
-        - Do not keep a custom font in a service, a thread, a timer, or an
-          LVGL callback.
-        - Do not put a custom font on a system widget such as lv.layer_top().
-
-        This code can run after your app closes. A deleted font crashes the
-        device.
-
-        Fonts are cached, so it is cheap to call getFont() again. Builtin
-        fonts are always safe.
+        Fonts are cached, so it is cheap to call getFont() again. When
+        your app closes, the OS drops custom (ttf=) fonts from the cache.
+        The garbage collector then reclaims each font once nothing uses
+        it. A font that you still hold stays valid.
         """
         target_size = cls._normalize_size(size)
 
@@ -136,18 +127,14 @@ lips,🫦
 
     @classmethod
     def _clear_cache(cls):
-        """Destroy all cached TTF fonts and the emoji fonts composed on them.
+        """Drop the cached TTF fonts and the emoji fonts composed on them.
 
-        These fonts come from lv_malloc(). The MicroPython GC does not
-        manage that memory. If we only drop the Python reference, the
-        memory leaks and the C heap fragments.
-
-        Apps can keep a font from getFont() in a variable and apply it
-        later. If we destroy a font that an app still holds, the app
-        crashes on the next draw. So call this only when no app code can
-        run again. The OS calls it when the last app activity is gone.
-        A relaunch re-imports the app module, so old references cannot
-        come back. The launcher and system UI must use builtin fonts.
+        LVGL allocates from the MicroPython GC heap in this build
+        (lv_conf.h sets LV_USE_STDLIB_MALLOC to LV_STDLIB_MPY). So it is
+        enough to drop the cache references: the GC reclaims a font once
+        nothing uses it, and keeps a font that an app, a widget, or a
+        style still holds. Never destroy fonts here: destroy frees memory
+        that an app can still draw with, and that crashes the device.
 
         Emoji fonts composed on builtin fonts stay cached. The builtin
         font list bounds their count, so they are not a per-app leak.
@@ -159,22 +146,10 @@ lips,🫦
         for font in cls._ttf_font_cache.values():
             ttf_ids.add(cls._font_identity(font))
 
-        # Destroy composed fonts first. They hold a TTF as fallback.
         for cache_key in list(cls._composed_font_cache.keys()):
-            if cache_key[0] not in ttf_ids:
-                continue
-            composed_font = cls._composed_font_cache.pop(cache_key)
-            try:
-                lv.imgfont_destroy(composed_font)
-            except Exception as err:
-                cls._debug("imgfont_destroy failed: " + repr(err))
-
-        for cache_key in list(cls._ttf_font_cache.keys()):
-            font = cls._ttf_font_cache.pop(cache_key)
-            try:
-                lv.tiny_ttf_destroy(font)
-            except Exception as err:
-                cls._debug("tiny_ttf_destroy failed: " + repr(err))
+            if cache_key[0] in ttf_ids:
+                del cls._composed_font_cache[cache_key]
+        cls._ttf_font_cache.clear()
 
     @classmethod
     def normalizeEmojiText(cls, text):
@@ -320,18 +295,22 @@ lips,🫦
         if key in cls._ttf_font_cache:
             return cls._ttf_font_cache[key]
 
-        cls._assert_ttf_exists(ttf_path)
-        font = lv.tiny_ttf_create_file(ttf_path, size)
+        # tiny_ttf_create_file keeps a file open that only a destroy call
+        # closes. We never destroy (the GC reclaims dropped fonts), so
+        # load the file into memory. The font keeps the data alive.
+        data = cls._read_ttf(ttf_path)
+        font = lv.tiny_ttf_create_data(data, len(data), size)
         cls._ttf_font_cache[key] = font
         return font
 
     @classmethod
-    def _assert_ttf_exists(cls, ttf_path):
+    def _read_ttf(cls, ttf_path):
         path = ttf_path
         if isinstance(path, str) and path.startswith("M:"):
             path = path[2:]
         try:
-            os.stat(path)
+            with open(path, "rb") as ttf_file:
+                return ttf_file.read()
         except OSError:
             raise OSError("TTF file not found: {}".format(ttf_path))
 

@@ -167,7 +167,7 @@ class TestFontManagerClearCache(GraphicalTestCase):
         _reset_font_manager()
 
     def test_clear_cache_empties_ttf_cache(self):
-        """_clear_cache() destroys every cached TTF font."""
+        """_clear_cache() drops every cached TTF font."""
         FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
         self.assertTrue(len(FontManager._ttf_font_cache) > 0)
 
@@ -176,7 +176,7 @@ class TestFontManagerClearCache(GraphicalTestCase):
         self.assertEqual(len(FontManager._ttf_font_cache), 0)
 
     def test_clear_cache_drops_composed_ttf_fonts(self):
-        """_clear_cache() destroys composed fonts together with their TTF."""
+        """_clear_cache() drops composed fonts together with their TTF."""
         base = FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
         FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=True)
         base_id = FontManager._font_identity(base)
@@ -217,10 +217,10 @@ class TestFontManagerAppHeldFont(GraphicalTestCase):
     """Regression test for the MeshCore crash.
 
     MeshCore keeps its TTF font in a module global. It applies the font
-    each time it builds a chat channel screen. If the OS destroys the font
-    when the channel activity finishes, the global points to freed memory.
-    The next channel screen then crashes the device. So the OS must keep
-    app fonts until the last activity of the app is gone.
+    each time it builds a chat channel screen. When #248 destroyed the
+    font on the back navigation, the global pointed to freed memory, and
+    the next channel screen crashed the device. A held font must stay
+    valid for as long as the app can apply it.
     """
 
     def setUp(self):
@@ -232,7 +232,7 @@ class TestFontManagerAppHeldFont(GraphicalTestCase):
                 break
             mpos.ui.back_screen()
             self.wait_for_render()
-        # The OS destroys fonts when only the launcher remains (stack
+        # The OS drops cached fonts when only the launcher remains (stack
         # length 1). If this test environment has no launcher, push a
         # stand-in, so the stack floor is 1, like on a running system.
         self._pushed_launcher_standin = False
@@ -266,7 +266,7 @@ class TestFontManagerAppHeldFont(GraphicalTestCase):
 
     def test_held_font_survives_sub_activity_finish(self):
         """A font held in a variable stays valid across a sub-activity
-        finish. The OS destroys it once the app's last activity is gone."""
+        finish. The OS drops it from the cache once the app is gone."""
         import mpos.ui
         from mpos.ui.view import finish_current_activity
 
@@ -290,12 +290,12 @@ class TestFontManagerAppHeldFont(GraphicalTestCase):
         self.wait_for_render()
         self.assertEqual(len(FontManager._ttf_font_cache), 1)
 
-        # Re-enter the sub-activity and apply the held font again. If the
-        # font was destroyed, this render reads freed memory and crashes.
+        # Re-enter the sub-activity and apply the held font again. With
+        # #248 the font was destroyed here, and this render crashed.
         self._push_activity(build_channel)
         self.wait_for_render(10)
 
-        # Quit the app. Only the launcher is left, so the OS destroys the font.
+        # Quit the app. Only the launcher is left, so the cache is dropped.
         finish_current_activity()
         self.wait_for_render()
         finish_current_activity()
