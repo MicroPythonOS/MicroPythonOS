@@ -2,7 +2,7 @@
 """Run MicroPythonOS unit tests on desktop or physical/QEMU device.
 
 Usage:
-    python3 scripts/test_runner.py [test_file ...] [--ondevice] [--port PORT] [--coverage]
+    python3 scripts/test_runner.py [test_file ...] [--ondevice] [--port PORT] [--reset] [--relayport PORT] [--coverage]
 
 Examples:
     # Desktop — run all tests
@@ -32,6 +32,9 @@ Examples:
     # Physical device — custom port
     python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --port /dev/pts/5
 
+    # Physical device — power-cycle reset via USB relay
+    python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --reset --relayport /dev/ttyUSB0
+
     MPOS_TEST_PORT env var sets the default serial port (default: /dev/ttyACM0).
 """
 
@@ -43,6 +46,7 @@ import platform
 import re
 import sys
 import tempfile
+import time
 
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -217,7 +221,71 @@ def _fmt_ranges(lines):
     return ", ".join(ranges)
 
 
-def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False):
+def _relay_write(relay_port, data):
+    try:
+        import serial as _serial
+    except ImportError:
+        raise SystemExit(
+            "pyserial is required for --relayport: pip install pyserial"
+        )
+    #with _serial.Serial(relay_port, 115200, timeout=1) as ser:
+    with _serial.Serial(relay_port, 9600, timeout=1) as ser:
+        ser.write(data)
+
+
+def _relay_reset(relay_port, device_port, boot_timeout=60):
+    """Power-cycle the device via a USB relay.
+
+    The relay controls the device's power supply. Power off, wait for the
+    board to drop, power back on, then poll the device serial port until it
+    reappears and "Starting asyncio REPL..." confirms main.py ran to
+    completion (same sentinel used by SerialBackend.hard_reset).
+    """
+    print("Power-cycling device via relay on {}...".format(relay_port))
+    _relay_write(relay_port, b"\xA0\x01\x00\xA1")
+    time.sleep(2)
+    _relay_write(relay_port, b"\xA0\x01\x01\xA2")
+
+    try:
+        import serial as _serial
+    except ImportError:
+        raise SystemExit(
+            "pyserial is required for --relayport: pip install pyserial"
+        )
+
+    print("waiting for device at {} to boot...".format(device_port))
+    last_err = None
+    for _ in range(20):
+        if not os.path.exists(device_port):
+            time.sleep(3)
+            continue
+        try:
+            ser = _serial.Serial(
+                device_port, 115200, timeout=0.5, write_timeout=2,
+            )
+            try:
+                t0 = time.monotonic()
+                data = b""
+                while time.monotonic() - t0 < min(boot_timeout, 60):
+                    chunk = ser.read(4096)
+                    if chunk:
+                        data += chunk
+                        if b"Starting asyncio REPL..." in data:
+                            return True
+                    time.sleep(0.1)
+            finally:
+                ser.close()
+        except (OSError, _serial.SerialException) as e:
+            last_err = e
+            time.sleep(3)
+    raise RuntimeError(
+        "Device at {} not reachable after relay reset: {}".format(
+            device_port, last_err
+        )
+    )
+
+
+def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None):
     backend_kwargs = {}
     if backend == "serial":
         port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
@@ -233,8 +301,11 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
 
     try:
         if reset and backend == "serial":
-            print("Hard-resetting device...")
-            be.hard_reset()
+            if relay_port:
+                _relay_reset(relay_port, port)
+            else:
+                print("Hard-resetting device...")
+                be.hard_reset()
         passed, out = be.run_test_file(
             test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage,
         )
@@ -248,12 +319,12 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
     return passed, out
 
 
-def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False):
+def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None):
     for attempt in range(1, MAX_RETRIES + 1):
         if attempt > 1:
             print("Retry attempt {} for {}".format(attempt, test_path))
 
-        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage)
+        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage, relay_port)
         out_str = out.decode("utf-8", errors="replace")
         sys.stdout.write(out_str)
 
@@ -263,7 +334,7 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
     return False, out
 
 
-def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False):
+def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False, relay_port=None):
     failed = []
     merged = {}
     for f in test_files:
@@ -272,7 +343,7 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
             tempfile.gettempdir(),
             f.replace("/", "_").lstrip("_") + ".log",
         )
-        ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage)
+        ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage, relay_port)
         if not ok:
             failed.append(f)
             print("WARNING: {} failed!".format(f))
@@ -305,6 +376,12 @@ def main():
         help="Serial port for device (overrides MPOS_TEST_PORT env var)",
     )
     parser.add_argument(
+        "--relayport", default=None,
+        help="Serial port of a USB power relay for the device (e.g. /dev/ttyUSB0). "
+             "When given with --reset, power-cycles the device instead of machine.reset(). "
+             "Requires --ondevice.",
+    )
+    parser.add_argument(
         "--tests-dir", default=None,
         help="Directory to add to sys.path for test helpers",
     )
@@ -335,6 +412,10 @@ def main():
         sys.exit(1)
     if args.reset and not args.ondevice:
         print("WARNING: --reset has no effect without --ondevice, ignoring")
+    if args.relayport and not args.ondevice:
+        print("WARNING: --relayport has no effect without --ondevice, ignoring")
+    if args.relayport and not args.reset:
+        print("WARNING: --relayport has no effect without --reset, ignoring")
 
     if args.port:
         os.environ["MPOS_TEST_PORT"] = args.port
@@ -362,6 +443,7 @@ def main():
 
     ok, coverage_data = _run_tests(
         test_files, backend, tests_dir, args.timeout, do_reset, args.coverage,
+        args.relayport,
     )
 
     if args.coverage:
