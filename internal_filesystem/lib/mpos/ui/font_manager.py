@@ -102,15 +102,21 @@ lips,🫦
 
     @classmethod
     def getFont(cls, size=None, ttf=None, family=None, emoji=False):
-        """Return a font, loading and caching it on first use.
+        """Return a font for use in this app's widgets.
 
-        Lifetime: a font loaded with ttf= (and any emoji font composed on it)
-        is valid until the last activity of the running app closes. The OS
-        destroys it then, so the C heap it lives on is not leaked. Within an
-        app run you can keep and reuse the returned font freely, but do not
-        cache it in a service or thread that outlives your activities, and do
-        not apply it to OS-owned widgets such as lv.layer_top(). Builtin and
-        emoji-composed builtin fonts are never destroyed.
+        size picks the closest builtin size, family picks a builtin family
+        (e.g. "Montserrat"), ttf loads a custom font from a .ttf file, and
+        emoji=True adds emoji support on top of the chosen font.
+
+        Note: only use custom (ttf=) fonts in your activities. When your app
+        closes, the OS deletes its custom fonts, so the device does not
+        slowly run out of memory. Code that keeps running after your app
+        closes — a service, a thread, a timer, an LVGL callback — must not
+        hold on to a font: the font it remembers is gone, and drawing with
+        it crashes the device. For the same reason, do not put a custom font
+        on a system widget like lv.layer_top(), because it stays on screen
+        after your app closes. Fonts are cached, so calling getFont() again
+        is cheap. Builtin fonts are always safe.
         """
         target_size = cls._normalize_size(size)
 
