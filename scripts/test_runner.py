@@ -35,6 +35,9 @@ Examples:
     # Physical device — power-cycle reset via USB relay
     python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --reset --relayport /dev/ttyUSB0
 
+    # Physical device — log serial traffic to a file (watch with: tail -f serial.log)
+    python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --logserial /tmp/serial.log
+
     MPOS_TEST_PORT env var sets the default serial port (default: /dev/ttyACM0).
 """
 
@@ -221,6 +224,29 @@ def _fmt_ranges(lines):
     return ", ".join(ranges)
 
 
+def _serial_log_open(path):
+    try:
+        return open(path, "a", encoding="utf-8", errors="replace")
+    except OSError as e:
+        print("WARNING: cannot open --logserial file {}: {}".format(path, e))
+        return None
+
+
+def _serial_log_write(log_f, direction, data):
+    if log_f is None or not data:
+        return
+    try:
+        log_f.write(
+            "[{:3s}] {:10.3f} {}\n".format(
+                direction, time.monotonic(),
+                data.decode("utf-8", errors="replace"),
+            )
+        )
+        log_f.flush()
+    except OSError:
+        pass
+
+
 def _relay_write(relay_port, data):
     try:
         import serial as _serial
@@ -233,7 +259,7 @@ def _relay_write(relay_port, data):
         ser.write(data)
 
 
-def _relay_reset(relay_port, device_port, boot_timeout=60):
+def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
     """Power-cycle the device via a USB relay.
 
     The relay controls the device's power supply. Power off, wait for the
@@ -242,8 +268,10 @@ def _relay_reset(relay_port, device_port, boot_timeout=60):
     completion (same sentinel used by SerialBackend.hard_reset).
     """
     print("Power-cycling device via relay on {}...".format(relay_port))
+    _serial_log_write(log_f, "REL", b"\xA0\x01\x00\xA1")
     _relay_write(relay_port, b"\xA0\x01\x00\xA1")
     time.sleep(2)
+    _serial_log_write(log_f, "REL", b"\xA0\x01\x01\xA2")
     _relay_write(relay_port, b"\xA0\x01\x01\xA2")
 
     try:
@@ -270,7 +298,12 @@ def _relay_reset(relay_port, device_port, boot_timeout=60):
                     chunk = ser.read(4096)
                     if chunk:
                         data += chunk
+                        _serial_log_write(log_f, "RX", chunk)
                         if b"Starting asyncio REPL..." in data:
+                            _serial_log_write(
+                                log_f, "RX",
+                                b"<detected 'Starting asyncio REPL...'>\n",
+                            )
                             return True
                     time.sleep(0.1)
             finally:
@@ -285,7 +318,7 @@ def _relay_reset(relay_port, device_port, boot_timeout=60):
     )
 
 
-def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None):
+def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None, log_f=None):
     backend_kwargs = {}
     if backend == "serial":
         port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
@@ -302,14 +335,19 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
     try:
         if reset and backend == "serial":
             if relay_port:
-                _relay_reset(relay_port, port)
+                _relay_reset(relay_port, port, log_f=log_f)
             else:
                 print("Hard-resetting device...")
                 be.hard_reset()
+        _serial_log_write(
+            log_f, "TST",
+            b"--- " + os.path.basename(test_path).encode() + b" ---\n",
+        )
         passed, out = be.run_test_file(
             test_path, tests_dir=tests_dir, timeout=timeout,
             **({"coverage": coverage} if backend == "process" else {})
         )
+        _serial_log_write(log_f, "RX", out)
     finally:
         be.stop()
 
@@ -320,12 +358,12 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
     return passed, out
 
 
-def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None):
+def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None, log_f=None):
     for attempt in range(1, MAX_RETRIES + 1):
         if attempt > 1:
             print("Retry attempt {} for {}".format(attempt, test_path))
 
-        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage, relay_port)
+        passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f)
         out_str = out.decode("utf-8", errors="replace")
         sys.stdout.write(out_str)
 
@@ -335,22 +373,27 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
     return False, out
 
 
-def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False, relay_port=None):
+def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False, relay_port=None, logserial=None):
     failed = []
     merged = {}
-    for f in test_files:
-        print("=== {} ===".format(os.path.basename(f)))
-        log_path = os.path.join(
-            tempfile.gettempdir(),
-            f.replace("/", "_").lstrip("_") + ".log",
-        )
-        ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage, relay_port)
-        if not ok:
-            failed.append(f)
-            print("WARNING: {} failed!".format(f))
-        if coverage and out:
-            cov = _extract_coverage(out)
-            merged = _merge_coverage(merged, cov)
+    log_f = _serial_log_open(logserial) if logserial else None
+    try:
+        for f in test_files:
+            print("=== {} ===".format(os.path.basename(f)))
+            log_path = os.path.join(
+                tempfile.gettempdir(),
+                f.replace("/", "_").lstrip("_") + ".log",
+            )
+            ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f)
+            if not ok:
+                failed.append(f)
+                print("WARNING: {} failed!".format(f))
+            if coverage and out:
+                cov = _extract_coverage(out)
+                merged = _merge_coverage(merged, cov)
+    finally:
+        if log_f is not None:
+            log_f.close()
     if failed:
         print("FAILED: {}/{} tests".format(len(failed), len(test_files)))
         for f in failed:
@@ -381,6 +424,11 @@ def main():
         help="Serial port of a USB power relay for the device (e.g. /dev/ttyUSB0). "
              "When given with --reset, power-cycles the device instead of machine.reset(). "
              "Requires --ondevice.",
+    )
+    parser.add_argument(
+        "--logserial", default=None,
+        help="Log serial traffic (device output and relay/boot polling) to FILE. "
+             "Requires --ondevice. Watch in realtime with: tail -f FILE",
     )
     parser.add_argument(
         "--tests-dir", default=None,
@@ -428,6 +476,8 @@ def main():
         print("WARNING: --relayport has no effect without --ondevice, ignoring")
     if args.relayport and not args.reset:
         print("WARNING: --relayport has no effect without --reset, ignoring")
+    if args.logserial and not args.ondevice:
+        print("WARNING: --logserial has no effect without --ondevice, ignoring")
 
     if args.port:
         os.environ["MPOS_TEST_PORT"] = args.port
@@ -455,7 +505,7 @@ def main():
 
     ok, coverage_data = _run_tests(
         test_files, backend, tests_dir, args.timeout, do_reset, args.coverage,
-        args.relayport,
+        args.relayport, args.logserial,
     )
 
     if args.coverage:
