@@ -81,6 +81,10 @@ class MockAppUpdateManager:
 
     def check_for_updates_now(self, index_url=None):
         self.check_calls.append("check_for_updates_now")
+        import mpos
+        async def _noop():
+            pass
+        mpos.TaskManager.create_task(_noop())
 
     @classmethod
     def get_instance(cls):
@@ -640,8 +644,90 @@ class TestAppDetailUpdateRecheck(unittest.TestCase):
         )
 
 
-class TestAppDetailBadgehubFileSelection(unittest.TestCase):
-    """Ensure AppDetail selects the correct .mpk when BadgeHub lists several."""
+class TestAppDetailRefreshBeforeAddButtons(unittest.TestCase):
+    """Ensure AppDetail.refresh_apps is called BEFORE add_action_buttons after install."""
+
+    def setUp(self):
+        import asyncio
+        import mpos
+        import appstore_core
+
+        asyncio.new_event_loop()
+
+        self._orig_refresh = mpos.AppManager.refresh_apps
+        self._orig_dl = mpos.AppManager.download_and_install_package
+        self._orig_create = mpos.TaskManager.create_task
+
+        self._tracked_events = []
+        mpos.AppManager.refresh_apps = lambda: self._tracked_events.append("refresh_apps")
+
+        self._orig_aum = appstore_core.AppUpdateManager
+        appstore_core.AppUpdateManager = MockAppUpdateManager
+        MockAppUpdateManager.clear_instance()
+
+    def tearDown(self):
+        import mpos
+        import appstore_core
+        mpos.AppManager.refresh_apps = self._orig_refresh
+        mpos.AppManager.download_and_install_package = self._orig_dl
+        mpos.TaskManager.create_task = self._orig_create
+        appstore_core.AppUpdateManager = self._orig_aum
+
+    def test_download_and_install_refreshes_before_add_action_buttons(self):
+        """After install, AppManager.refresh_apps must run BEFORE add_action_buttons
+        so is_update_available() reads the fresh installed version."""
+        import asyncio
+        import mpos
+        from app_detail import AppDetail
+
+        async def _fake_dl(url, fullname, **kwargs):
+            pass
+
+        mpos.AppManager.download_and_install_package = _fake_dl
+
+        detail = AppDetail()
+        detail.app = type("App", (), {
+            "fullname": "com.test.a",
+            "download_url": "https://example.com/a.mpk",
+        })()
+        detail.appstore = type("AppStore", (), {
+            "get_backend_type_from_settings": lambda self: "github",
+            "_BACKEND_API_BADGEHUB": "badgehub",
+        })()
+
+        events = self._tracked_events
+
+        orig_aab = detail.add_action_buttons
+        detail.add_action_buttons = lambda *a: events.append("add_action_buttons")
+
+        class MockBar:
+            def add_flag(self, f): pass
+            def remove_flag(self, f): pass
+            def set_value(self, v, w): pass
+
+        detail.install_button = type("Btn", (), {"add_state": lambda s: None, "remove_state": lambda s: None})()
+        detail.install_label = type("Lbl", (), {"set_text": lambda t: None})()
+        detail.buttoncont = type("Obj", (), {})()
+        detail.progress_bar = MockBar()
+
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(detail.download_and_install(
+                detail.app, "apps/com.test.a"
+            ))
+
+            self.assertIn("add_action_buttons", events,
+                          "add_action_buttons must be called after install")
+            self.assertIn("refresh_apps", events,
+                          "AppManager.refresh_apps must be called after install")
+            refresh_idx = events.index("refresh_apps")
+            aab_idx = events.index("add_action_buttons")
+            self.assertTrue(
+                refresh_idx < aab_idx,
+                "refresh_apps (%d) must be called BEFORE add_action_buttons (%d)" % (refresh_idx, aab_idx),
+            )
+        finally:
+            detail.add_action_buttons = orig_aab
 
     def _make_files(self):
         return [
@@ -789,7 +875,7 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
         finally:
             dm.DownloadManager.download_url = orig_dl
 
-        self.assertEqual(app_obj.version, "0.6.0")
+        self.assertEqual(app_obj._remote_version, "0.6.0")
         self.assertIsNotNone(app_obj.download_url)
         self.assertTrue(
             app_obj.download_url.endswith("com.lightningpiggy.displaywallet_0.6.0.mpk"),

@@ -26,6 +26,8 @@ import subprocess
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from scripts.mpos_controller import (
     MPOSController,
+    AIOREPLClient,
+    END_MARKER,
     _count_usb_serial_devices,
     _mpremote_cmd,
 )
@@ -73,6 +75,7 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
         "navigation": test_app_navigation,
         "appmanagement": test_app_management,
         "helpers": test_controller_helpers,
+        "readuntil": test_read_until,
         "mpremoteport": test_mpremote_port,
     }
     if only:
@@ -88,6 +91,62 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
     else:
         for name, fn in sections.items():
             fn(mpos, is_serial=is_serial, cli_binary=cli_binary, serial_port=serial_port)
+
+
+def test_read_until(mpos, is_serial=False, cli_binary=None, serial_port=None):
+    # Unit test: no device and no desktop binary. read_until must match
+    # an LF sentinel against LF output (desktop PTY) and against CRLF
+    # output (device REPL). Before the CRLF fix, the serial case never
+    # matched and every exec waited out its full timeout.
+    section("read_until sentinel matching (LF and CRLF)")
+
+    class PipeStream:
+        def __init__(self, data):
+            self.rfd, self.wfd = os.pipe()
+            os.write(self.wfd, data)
+
+        def fileno(self):
+            return self.rfd
+
+        def read(self, n):
+            return os.read(self.rfd, n)
+
+        def close(self):
+            os.close(self.rfd)
+            os.close(self.wfd)
+
+    def read_from(data, ending, timeout):
+        stream = PipeStream(data)
+        try:
+            t0 = time.monotonic()
+            result = AIOREPLClient(stream).read_until(ending, timeout=timeout)
+            return result, time.monotonic() - t0
+        finally:
+            stream.close()
+
+    sentinel = END_MARKER.encode() + b"\n"
+
+    out, elapsed = read_from(b"hello\n" + sentinel, sentinel, timeout=10)
+    check(out.endswith(sentinel), f"LF output matches LF sentinel: {out!r}")
+    check(elapsed < 5, f"LF match returns before the timeout ({elapsed:.2f}s)")
+
+    crlf_data = b"hello\r\n" + END_MARKER.encode() + b"\r\n"
+    out, elapsed = read_from(crlf_data, sentinel, timeout=10)
+    check(
+        out.endswith(END_MARKER.encode() + b"\r\n"),
+        f"CRLF output matches LF sentinel: {out!r}",
+    )
+    check(elapsed < 5, f"CRLF match returns before the timeout ({elapsed:.2f}s)")
+
+    out, elapsed = read_from(b"MicroPython\r\n>>> ", b">>> ", timeout=10)
+    check(out.endswith(b">>> "), f"prompt sentinel without newline: {out!r}")
+    check(elapsed < 5, f"prompt match returns before the timeout ({elapsed:.2f}s)")
+
+    out, elapsed = read_from(b"no sentinel here\r\n", sentinel, timeout=0.5)
+    check(
+        out == b"no sentinel here\r\n",
+        f"missing sentinel: timeout still returns the data: {out!r}",
+    )
 
 
 def test_mpremote_port(mpos, is_serial=False, cli_binary=None, serial_port=None):
@@ -448,7 +507,7 @@ for a in AppManager.get_app_list():
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers,readuntil,mpremoteport")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 

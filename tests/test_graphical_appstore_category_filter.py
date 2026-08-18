@@ -2,7 +2,7 @@
 Graphical test for AppStore category dropdown filtering.
 
 Verifies that the category dropdown filters the app list and
-that selecting "All Categories" shows all apps again.
+that selecting "All" shows all apps again.
 Also verifies category names are title-cased, deduped,
 "Adult" appears at the bottom, and no orphaned list widgets
 linger after filtering (focus group correctness).
@@ -15,6 +15,7 @@ import lvgl as lv
 from mpos import App, AppManager
 from mpos.ui.testing import (
     find_dropdown_widget,
+    find_label_with_text,
     get_dropdown_options,
     get_screen_widget_tree,
     select_dropdown_option_by_text,
@@ -73,8 +74,6 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         dropdown = find_dropdown_widget(lv.screen_active())
         self.assertIsNotNone(dropdown, "Category dropdown should exist")
         options = get_dropdown_options(dropdown)
-        self.assertEqual(options[0], "All Categories",
-                         "First option should be 'All Categories'")
         return dropdown, options
 
     def test_categories_are_title_cased_and_deduped(self):
@@ -109,7 +108,7 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertEqual(_count_list_widgets(), 1,
                          "Only one list widget should exist after filtering")
 
-        select_dropdown_option_by_text(dropdown, "All Categories", allow_partial=False)
+        select_dropdown_option_by_text(dropdown, "All", allow_partial=False)
         wait_for_render(iterations=10)
         self.assertEqual(_count_list_widgets(), 1,
                          "Only one list widget should exist after reset")
@@ -158,7 +157,7 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         select_dropdown_option_by_text(dropdown, target)
         wait_for_render(iterations=10)
 
-        select_dropdown_option_by_text(dropdown, "All Categories", allow_partial=False)
+        select_dropdown_option_by_text(dropdown, "All", allow_partial=False)
         wait_for_render(iterations=10)
 
         tree = get_screen_widget_tree()
@@ -186,8 +185,8 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertLessEqual(filtered_count, all_count,
                             f"Filtered count {filtered_count} > all {all_count}")
 
-        result = select_dropdown_option_by_text(dropdown, "All Categories", allow_partial=False)
-        self.assertTrue(result, "Should select 'All Categories' to reset")
+        result = select_dropdown_option_by_text(dropdown, "All", allow_partial=False)
+        self.assertTrue(result, "Should select 'All' to reset")
         wait_for_render(iterations=10)
 
         reset_count = _count_list_items()
@@ -268,11 +267,16 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         try:
             from appstore_core import AppUpdateManager
             um = AppUpdateManager.get_instance()
-            um.updatable_apps = [{"fullname": "com.test.updatable"}]
         except Exception:
             pass
 
         activity.create_apps_list()
+
+        try:
+            um.updatable_apps = [{"fullname": "com.test.updatable"}]
+        except Exception:
+            pass
+
         activity._update_category_dropdown()
 
         dropdown = find_dropdown_widget(lv.screen_active())
@@ -309,9 +313,9 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
         self.assertEqual(update_opt, "Updates (0)",
                          "Count should drop to 0 after clearing updates")
 
-        # Reset to "All Categories"
-        result = select_dropdown_option_by_text(dropdown, "All Categories")
-        self.assertTrue(result, "Should reset to 'All Categories'")
+        # Reset to "All"
+        result = select_dropdown_option_by_text(dropdown, "All")
+        self.assertTrue(result, "Should reset to 'All'")
         wait_for_render(iterations=10)
 
         # Trigger _category_changed manually if event was deferred
@@ -321,3 +325,48 @@ class TestGraphicalAppStoreCategoryFilter(unittest.TestCase):
 
         self.assertIsNone(activity._selected_category,
                           "Should reset _selected_category to None")
+
+    def test_installed_filter_does_not_leak_remote_apps_during_phase2(self):
+        """When _selected_category is 'Installed', _insert_app_list_item for an
+        uninstalled app must not make it visible. Phase 2 inserts remote-only
+        apps — they should stay hidden under the 'Installed' filter."""
+        AppManager.start_app("com.micropythonos.appstore")
+        wait_for_render(iterations=40)
+        activity = _get_appstore_activity()
+        self.assertIsNotNone(activity, "Could not get AppStore activity")
+
+        installed_app = App(
+            "InstalledApp", "Me", "Installed desc", "Long desc",
+            None, None, "com.test.installed", "1.0", "test", [],
+            installed_path="apps/com.test.installed/",
+        )
+        remote_app = App(
+            "RemoteApp", "Publisher", "Remote desc", "Long desc",
+            None, None, "com.test.remote", "1.0", "test", [],
+            installed_path=None,
+        )
+
+        activity.apps = [installed_app]
+        activity._wip_apps = []
+        activity._data_loaded = True
+        activity._selected_category = "Installed"
+        activity.create_apps_list()
+        wait_for_render(iterations=10)
+
+        self.assertIsNotNone(
+            find_label_with_text(lv.screen_active(), "InstalledApp"),
+            "Installed app should be visible",
+        )
+        self.assertIsNone(
+            find_label_with_text(lv.screen_active(), "RemoteApp"),
+            "Remote app should not be visible under 'Installed' filter",
+        )
+
+        activity.apps.insert(1, remote_app)
+        activity._insert_app_list_item(remote_app, 1)
+        wait_for_render(iterations=10)
+
+        self.assertIsNone(
+            find_label_with_text(lv.screen_active(), "RemoteApp"),
+            "Remote app leaked into 'Installed' view",
+        )

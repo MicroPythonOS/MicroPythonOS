@@ -1,96 +1,45 @@
 """Test for calibration check bug after calibrating.
 
 Reproduces issue where check_calibration_quality() returns None after calibration.
+
+Uses the real IMU via auto-detection (chip-ID probing in SensorManager), so it
+works on both Waveshare (QMI8658) and fri3d_2026 (LSM6DSO). On desktop there is
+no sensor hardware, so the deterministic mock driver is used instead.
 """
-import unittest
+import os
 import sys
+import unittest
 
-# Mock hardware before importing SensorManager
-class MockI2C:
-    def __init__(self, bus_id, sda=None, scl=None):
-        self.bus_id = bus_id
-        self.sda = sda
-        self.scl = scl
-        self.memory = {}
-
-    def readfrom_mem(self, addr, reg, nbytes):
-        if addr not in self.memory:
-            raise OSError("I2C device not found")
-        if reg not in self.memory[addr]:
-            return bytes([0] * nbytes)
-        return bytes(self.memory[addr][reg])
-
-    def writeto_mem(self, addr, reg, data):
-        if addr not in self.memory:
-            self.memory[addr] = {}
-        self.memory[addr][reg] = list(data)
-
-
-class MockQMI8658:
-    def __init__(self, i2c_bus, address=0x6B, accel_scale=0b10, gyro_scale=0b100):
-        self.i2c = i2c_bus
-        self.address = address
-        self.accel_scale = accel_scale
-        self.gyro_scale = gyro_scale
-
-    @property
-    def temperature(self):
-        return 25.5
-
-    @property
-    def acceleration(self):
-        return (0.0, 0.0, 1.0)  # At rest, Z-axis = 1G
-
-    @property
-    def gyro(self):
-        return (0.0, 0.0, 0.0)  # Stationary
-
-
-# Mock constants
-_QMI8685_PARTID = 0x05
-_REG_PARTID = 0x00
-_ACCELSCALE_RANGE_8G = 0b10
-_GYROSCALE_RANGE_256DPS = 0b100
-
-# Create mock modules
-mock_machine = type('module', (), {
-    'I2C': MockI2C,
-    'Pin': type('Pin', (), {})
-})()
-
-mock_qmi8658 = type('module', (), {
-    'QMI8658': MockQMI8658,
-    '_QMI8685_PARTID': _QMI8685_PARTID,
-    '_REG_PARTID': _REG_PARTID,
-    '_ACCELSCALE_RANGE_8G': _ACCELSCALE_RANGE_8G,
-    '_GYROSCALE_RANGE_256DPS': _GYROSCALE_RANGE_256DPS
-})()
-
-def _mock_mcu_temperature(*args, **kwargs):
-    return 42.0
-
-mock_esp32 = type('module', (), {
-    'mcu_temperature': _mock_mcu_temperature
-})()
-
-# Inject mocks
-sys.modules['machine'] = mock_machine
-sys.modules['mpos.hardware.drivers.qmi8658'] = mock_qmi8658
-sys.modules['esp32'] = mock_esp32
-
-try:
-    import _thread
-except ImportError:
-    mock_thread = type('module', (), {
-        'allocate_lock': lambda: type('lock', (), {
-            'acquire': lambda self: None,
-            'release': lambda self: None
-        })()
-    })()
-    sys.modules['_thread'] = mock_thread
-
-# Now import the module to test
 from mpos import SensorManager
+
+_IS_DEVICE = sys.platform == "esp32"
+
+_CALIBRATION_PATH = "prefs/com.micropythonos.settings/imu_calibration.json"
+
+
+def _save_calibration_backup():
+    """Read the current calibration file so it can be restored after the test."""
+    try:
+        with open(_CALIBRATION_PATH, "r") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def _restore_calibration(backup):
+    """Restore the calibration file that existed before the test (or remove it)."""
+    try:
+        os.remove(_CALIBRATION_PATH)
+    except OSError:
+        pass
+    if backup is not None:
+        dirname = os.path.dirname(_CALIBRATION_PATH)
+        try:
+            os.mkdir(dirname)
+        except OSError:
+            pass
+        with open(_CALIBRATION_PATH, "w") as f:
+            f.write(backup)
 
 
 class TestCalibrationCheckBug(unittest.TestCase):
@@ -98,15 +47,13 @@ class TestCalibrationCheckBug(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test."""
-        # Reset SensorManager state
-        SensorManager._initialized = False
-        SensorManager._imu_driver = None
-        SensorManager._sensor_list = []
-        SensorManager._has_mcu_temperature = False
+        if not _IS_DEVICE:
+            # Deterministic static level device on desktop (no sensor HW).
+            SensorManager.init_mock(motion=False)
+        self._cal_backup = _save_calibration_backup()
 
-        # Create mock I2C bus with QMI8658
-        self.i2c_bus = MockI2C(0, sda=48, scl=47)
-        self.i2c_bus.memory[0x6B] = {_REG_PARTID: [_QMI8685_PARTID]}
+    def tearDown(self):
+        _restore_calibration(self._cal_backup)
 
     def test_check_quality_after_calibration(self):
         """Test that check_calibration_quality() works after calibration.
@@ -114,8 +61,11 @@ class TestCalibrationCheckBug(unittest.TestCase):
         This reproduces the bug where check_calibration_quality() returns
         None or shows "--" after performing calibration.
         """
-        # Initialize
-        SensorManager.init(self.i2c_bus, address=0x6B)
+        accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
+        gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
+
+        self.assertIsNotNone(accel, "Accelerometer should be available")
+        self.assertIsNotNone(gyro, "Gyroscope should be available")
 
         # Step 1: Check calibration quality BEFORE calibration (should work)
         print("\n=== Step 1: Check quality BEFORE calibration ===")
@@ -126,12 +76,6 @@ class TestCalibrationCheckBug(unittest.TestCase):
 
         # Step 2: Calibrate sensors
         print("\n=== Step 2: Calibrate sensors ===")
-        accel = SensorManager.get_default_sensor(SensorManager.TYPE_ACCELEROMETER)
-        gyro = SensorManager.get_default_sensor(SensorManager.TYPE_GYROSCOPE)
-
-        self.assertIsNotNone(accel, "Accelerometer should be available")
-        self.assertIsNotNone(gyro, "Gyroscope should be available")
-
         accel_offsets = SensorManager.calibrate_sensor(accel, samples=10)
         print(f"Accel offsets: {accel_offsets}")
         self.assertIsNotNone(accel_offsets, "Accelerometer calibration should succeed")

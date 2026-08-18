@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 
+import time
 import ujson
 
 from mpos import (
@@ -238,6 +239,7 @@ class AppUpdateManager:
         self.current_state = AppUpdateState.IDLE
         self._running = False
         self._check_in_progress = False
+        self._last_check_ts = None
         self._connectivity_manager = None
         self._state_callback = None
         self._suppress_notifications = False
@@ -310,7 +312,7 @@ class AppUpdateManager:
         """Kick off a one-off update check if none is already in progress."""
         if self._check_in_progress:
             return
-        TaskManager.create_task(self.check_for_updates(index_url))
+        TaskManager.create_task(self.check_for_updates(index_url, force=True))
 
     def _network_changed(self, online):
         if __debug__: logger.debug("network %s", "ONLINE" if online else "OFFLINE")
@@ -337,7 +339,7 @@ class AppUpdateManager:
         list_url = parts[1]
         return list_url, backend_type
 
-    async def check_for_updates(self, index_url=None):
+    async def check_for_updates(self, index_url=None, force=False):
         """Download the app index and compare versions against installed apps.
 
         ``index_url`` defaults to the production index.  The AppStore UI
@@ -345,6 +347,14 @@ class AppUpdateManager:
         """
         if self._check_in_progress:
             return
+        # deduplicate against _network_changed callback triggering first check
+        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks.
+        # _last_check_ts starts as None: on ESP32 ticks_ms() counts from boot, so
+        # treating "never checked" as 0 would block the first check for 60s of uptime.
+        now = time.ticks_ms()
+        if not force and self._last_check_ts is not None and now - self._last_check_ts < 60000:
+            return
+        self._last_check_ts = now
         self._check_in_progress = True
         try:
             self._set_state(AppUpdateState.CHECKING_UPDATES)

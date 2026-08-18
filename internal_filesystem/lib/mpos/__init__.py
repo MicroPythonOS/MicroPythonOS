@@ -58,7 +58,13 @@ from .ui.input_manager import InputManager
 from .ui.appearance_manager import AppearanceManager
 from .ui.event import get_event_name, print_event
 from .ui.view import setContentView, back_screen
+from .ui.input_manager import InputManager
 from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
+
+set_back_screen_disabled = InputManager.set_back_screen_disabled
+is_back_screen_disabled = InputManager.is_back_screen_disabled
+set_drawer_open_disabled = InputManager.set_drawer_open_disabled
+is_drawer_open_disabled = InputManager.is_drawer_open_disabled
 from .ui.focus import save_and_clear_current_focusgroup, add_focus_highlight, add_focus_border
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.widget_animator import WidgetAnimator
@@ -100,7 +106,9 @@ __all__ = (
     "SensorManager",
     "get_event_name", "print_event",
     "setContentView", "back_screen",
+    "set_back_screen_disabled", "is_back_screen_disabled",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
+    "set_drawer_open_disabled", "is_drawer_open_disabled",
     "save_and_clear_current_focusgroup", "add_focus_highlight", "add_focus_border",
     "handle_back_swipe", "handle_top_swipe",
     "get_foreground_app",

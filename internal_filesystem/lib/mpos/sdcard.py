@@ -256,18 +256,21 @@ class SDCardManager:
 
     def _check_mounted(self, mount_point):
         try:
-            mounted = mount_point in os.listdir('/') and not os.mkdir(f'{mount_point}/_tmp_test')
-            if mounted:
-                if __debug__: logger.debug("SD card is mounted at %s", mount_point)
-                try:
-                    os.rmdir(f'{mount_point}/_tmp_test')
-                except:
-                    pass
-            else:
+            if mount_point.lstrip('/') not in os.listdir('/'):
                 if __debug__: logger.debug("SD card is not mounted at %s", mount_point)
                 if __debug__: logger.debug("  - Possible causes: Never mounted, unmounted manually, or card removed")
                 if __debug__: logger.debug("  - Try: Call mount()")
-            return mounted
+                return False
+            try:
+                os.mkdir(f'{mount_point}/_tmp_test')
+            except OSError:
+                pass
+            if __debug__: logger.debug("SD card is mounted at %s", mount_point)
+            try:
+                os.rmdir(f'{mount_point}/_tmp_test')
+            except OSError:
+                pass
+            return True
         except OSError as e:
             logger.warning("Failed to check mount status at %s: %s", mount_point, e)
             if __debug__: logger.debug("  - Possible causes: Card removed, invalid mount point, or filesystem error")

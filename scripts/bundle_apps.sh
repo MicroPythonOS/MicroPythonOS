@@ -1,3 +1,5 @@
+#!/bin/sh
+
 output=../apps/
 outputjson="$output"/app_index.json
 output=$(readlink -f "$output")
@@ -28,7 +30,7 @@ echo "[" | tee -a "$outputjson"
 #for apprepo in internal_filesystem/apps internal_filesystem/builtin/apps; do
 for apprepo in internal_filesystem/apps; do
     echo "Listing apps in $apprepo"
-    ls -1 "$apprepo" | sort | while read appdir; do
+    for appdir in $(ls -1 "$apprepo" | sort); do
         if echo "$blacklist" | grep "$appdir"; then
             echo "Skipping $appdir because it's in blacklist $blacklist"
         else
