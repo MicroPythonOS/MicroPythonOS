@@ -3,6 +3,7 @@ Future release (next version)
 
 Board Support:
 - UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
+- unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError "invalid micropython decorator"
 
 Builtin Apps:
 - AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
