@@ -15,6 +15,7 @@ import lvgl as lv
 import mpos.ui
 from mpos import (
     AppManager,
+    DeviceInfo,
     wait_for_text,
     retry_action_until,
     find_label_with_text,
@@ -226,3 +227,43 @@ class TestHowToAppFocusNavigation(unittest.TestCase):
             f"HowTo should not be the foreground app after closing. "
             f"Got: {foreground}",
         )
+
+
+class TestHowToAppK10FocusNavigation(unittest.TestCase):
+    def setUp(self):
+        self._hardware_id = DeviceInfo.get_hardware_id()
+        _go_back_to_launcher()
+        DeviceInfo.set_hardware_id("unihiker_k10")
+
+        result = AppManager.start_app("com.micropythonos.howto")
+        self.assertTrue(result, "HowTo app failed to launch")
+        self.assertTrue(
+            wait_for_text("B: next. Hold B in a list: previous.", timeout=10),
+            "K10 HowTo instructions did not load within timeout",
+        )
+        _wait_ms(200)
+
+    def tearDown(self):
+        try:
+            checkbox = _find_checkbox(lv.screen_active())
+            if checkbox:
+                checkbox.add_state(lv.STATE.CHECKED)
+            _go_back_to_launcher()
+        finally:
+            DeviceInfo.set_hardware_id(self._hardware_id)
+
+    def test_k10_keeps_static_help_out_of_the_focus_cycle(self):
+        screen = lv.screen_active()
+        checkbox = _find_checkbox(screen)
+        close_button = find_button_with_text(screen, "Close")
+        group = lv.group_get_default()
+
+        self.assertIsNotNone(checkbox, "Could not find checkbox in K10 HowTo")
+        self.assertIsNotNone(close_button, "Could not find Close button in K10 HowTo")
+        self.assertIsNotNone(group, "No default focus group")
+        self.assertIs(
+            _focused_obj(),
+            close_button,
+            "K10 HowTo should focus Close so the two-button user can exit immediately",
+        )
+        self.assertEqual(group.get_obj_count(), 2)

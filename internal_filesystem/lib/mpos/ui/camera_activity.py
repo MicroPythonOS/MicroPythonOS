@@ -167,6 +167,7 @@ class CameraActivity(Activity):
             mpos_ui.add_focus_highlight(button, width=2)
         lv.group_focus_obj(self.close_button)
 
+    # Merge common, mode-specific, and board-specific camera defaults.
     def _get_camera_defaults(self, mode_defaults):
         defaults = {}
         defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)

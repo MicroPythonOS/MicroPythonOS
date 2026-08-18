@@ -18,33 +18,47 @@ class HowTo(Activity):
         screen.set_style_border_width(0, lv.PART.MAIN)
         screen.set_flex_flow(lv.FLEX_FLOW.COLUMN)
         screen.set_style_pad_all(DisplayMetrics.pct_of_width(5), lv.PART.MAIN)
-        # Only actionable controls should go into the focus group.
-        preamble = "Navigate"
-        self._add_label(screen, preamble, is_header=True)
+        self._add_label(
+            screen,
+            "How to Navigate",
+            is_header=True,
+            focusable=DeviceInfo.get_hardware_id() != "unihiker_k10",
+        )
 
         buttonhelp_items = [
-            "Joystick: move. Btns: ENTER/BACK.",
-            "3 buttons: PREV/ENTER/NEXT.",
-            "2 buttons: PREV/NEXT.",
+            (
+                "If you have a joystick and at least 2 buttons, then use the joystick "
+                "to move around. Use one of the buttons to ENTER and another to go BACK."
+            ),
+            (
+                "If you have 3 buttons, then one is PREVIOUS, one is ENTER and one "
+                "is NEXT. To go back, press PREVIOUS and NEXT together."
+            ),
+            (
+                "If you have just 2 buttons, then one is PREVIOUS, the other is NEXT. "
+                "To ENTER, press both at the same time. To go back, long-press the "
+                "PREVIOUS button."
+            ),
         ]
-        buttonhelp_intro = "Use buttons to navigate:"
-        touchhelp = "Left/back. Menu top."
+        buttonhelp_intro = "As you don't have a touch screen, you need to use the buttons to navigate:"
+        touchhelp = (
+            "Swipe from the left edge to go back. Swipe down from the top edge to "
+            "open the menu."
+        )
         from mpos import InputManager
-        try:
-            is_k10 = DeviceInfo.get_hardware_id() == "unihiker_k10"
-        except Exception:
-            is_k10 = False
-        if InputManager.has_pointer():
+        if DeviceInfo.get_hardware_id() == "unihiker_k10":
+            # K10 uses B as its only NEXT key, so static help text stays out of
+            # its focus cycle and must remain compact enough to fit on one screen.
+            self._add_label(screen, "B: next. Hold B in a list: previous.", focusable=False)
+            self._add_label(screen, "A: select. Hold A: cancel or go back.", focusable=False)
+        elif InputManager.has_pointer():
             self._add_label(screen, touchhelp)
-        elif is_k10:
-            self._add_label(screen, "K")
-            self._add_label(screen, "- B: next.")
-            self._add_label(screen, "- A: select.")
         else:
             self._add_label(screen, buttonhelp_intro)
             for item in buttonhelp_items:
                 self._add_label(screen, f"• {item}")
 
+        # Register the only actionable controls for keypad navigation.
         self.dontshow_checkbox = lv.checkbox(screen)
         self.dontshow_checkbox.set_text("Don't show again")
         add_focus_highlight(self.dontshow_checkbox)
@@ -59,7 +73,7 @@ class HowTo(Activity):
 
         self.setContentView(screen)
 
-    def _add_label(self, parent, text, is_header=False):
+    def _add_label(self, parent, text, is_header=False, focusable=True):
         label = lv.label(parent)
         label.set_width(lv.pct(100))
         label.set_text(text)
@@ -70,6 +84,8 @@ class HowTo(Activity):
         else:
             label.set_style_text_font(lv.font_montserrat_14, lv.PART.MAIN)
             label.set_style_margin_bottom(2, lv.PART.MAIN)
+        if focusable:
+            add_focus_highlight(label)
         return label
 
     def _on_long_press(self, event):
@@ -85,11 +101,9 @@ class HowTo(Activity):
         else:
             self.dontshow_checkbox.add_state(lv.STATE.CHECKED)
 
-        if self.closebutton:
-            try:
-                lv.group_focus_obj(self.closebutton)
-            except Exception:
-                pass
+        if DeviceInfo.get_hardware_id() == "unihiker_k10" and self.closebutton:
+            # Make the exit action immediately reachable on the two-button K10.
+            lv.group_focus_obj(self.closebutton)
 
     def onPause(self, screen):
         if __debug__: logger.debug("howto app onPause called")

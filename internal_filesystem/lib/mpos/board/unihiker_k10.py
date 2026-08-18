@@ -21,7 +21,12 @@ import mpos.ui
 from machine import I2C, Pin
 from micropython import const
 from mpos import InputManager
-from mpos.board.unihiker_k10_input import K10ButtonInput, create_expander_i2c
+from mpos.board.unihiker_k10_input import (
+    K10ButtonInput,
+    create_expander_i2c,
+    is_direct_navigation_target,
+)
+from mpos.ui.focus import enable_focus_borders
 
 # ── Display SPI pins ────────────────────────────────────────────────────────
 # K10 uses FSPI (SPI2, host=1) with CLK on GPIO12 (IO_MUX fast path)
@@ -105,8 +110,8 @@ mpos.ui.main_display.set_power(True)
 # Note: backlight is controlled via XL9535, not a GPIO pin — already turned on above
 
 # ── Button input (keypad indev) ───────────────────────────────────────────────
-# BTN_B: NEXT  — cycles through focusable items; repeats while held
-# BTN_A: ENTER — selects / confirms the focused item
+# BTN_B: NEXT — cycles through focusable items; an open dropdown uses tap/hold for next/previous
+# BTN_A: ENTER — selects / confirms the focused item; holding it cancels an open dropdown or goes back
 _last_key = None
 _button_input = K10ButtonInput(ticks_diff=time.ticks_diff)
 
@@ -124,7 +129,9 @@ def _keypad_read_cb(indev, data):
         data.key = {
             "next": lv.KEY.NEXT,
             "right": lv.KEY.RIGHT,
-        }.get(current_key, lv.KEY.ENTER)
+            "left": lv.KEY.LEFT,
+            "esc": lv.KEY.ESC,
+        }.get(current_key, _last_key or lv.KEY.ENTER)
         data.state = lv.INDEV_STATE.RELEASED
         _last_key = None
         return
@@ -132,22 +139,36 @@ def _keypad_read_cb(indev, data):
     focusgroup = lv.group_get_default()
     focused = focusgroup.get_focused() if focusgroup else None
     keyboard_focused = isinstance(focused, lv.keyboard) or isinstance(focused, lv.buttonmatrix)
+    dropdown_open = isinstance(focused, lv.dropdown)
+    if dropdown_open:
+        try:
+            dropdown_open = focused.is_open()
+        except Exception:
+            dropdown_open = False
+    direct_navigation_focused = is_direct_navigation_target(
+        focused, lv.keyboard, lv.buttonmatrix, lv.dropdown
+    )
     if keyboard_focused:
         focused.add_state(lv.STATE.FOCUS_KEY)
     action, pressed, back = _button_input.update(
         btn_a,
         btn_b,
         time.ticks_ms(),
-        keyboard_focused,
+        direct_navigation_focused,
+        dropdown_open,
     )
 
     if back:
         mpos.ui.back_screen()
+    if action in ("next", "right", "left") and pressed:
+        enable_focus_borders()
 
     current_key = {
         "enter": lv.KEY.ENTER,
         "next": lv.KEY.NEXT,
         "right": lv.KEY.RIGHT,
+        "left": lv.KEY.LEFT,
+        "esc": lv.KEY.ESC,
     }.get(action)
     if current_key is None:
         data.key = _last_key if _last_key else lv.KEY.ENTER

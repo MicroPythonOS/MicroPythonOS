@@ -1,6 +1,10 @@
 import unittest
 
-from mpos.board.unihiker_k10_input import K10ButtonInput, create_expander_i2c
+from mpos.board.unihiker_k10_input import (
+    K10ButtonInput,
+    create_expander_i2c,
+    is_direct_navigation_target,
+)
 
 
 class FakePin:
@@ -39,13 +43,102 @@ class TestK10ButtonInput(unittest.TestCase):
         self.assertEqual(self.input.update(True, False, 800, False), (None, False, True))
         self.assertEqual(self.input.update(False, False, 820, False), (None, False, False))
 
+    def test_long_a_emits_escape_for_an_open_dropdown(self):
+        self.assertEqual(
+            self.input.update(True, False, 100, True, dropdown_open=True),
+            (None, False, False),
+        )
+        self.assertEqual(
+            self.input.update(True, False, 800, True, dropdown_open=True),
+            ("esc", True, False),
+        )
+        self.assertEqual(
+            self.input.update(True, False, 820, True, dropdown_open=True),
+            ("esc", False, False),
+        )
+        self.assertEqual(
+            self.input.update(False, False, 840, True, dropdown_open=True),
+            (None, False, False),
+        )
+
     def test_b_moves_to_next_widget(self):
         self.assertEqual(self.input.update(False, True, 100, False), ("next", True, False))
         self.assertEqual(self.input.update(False, False, 120, False), ("next", False, False))
 
+    def test_b_keeps_repeating_for_normal_navigation(self):
+        self.assertEqual(self.input.update(False, True, 100, False), ("next", True, False))
+        self.assertEqual(self.input.update(False, True, 800, False), ("next", True, False))
+        self.assertEqual(self.input.update(False, False, 820, False), ("next", False, False))
+
     def test_b_moves_to_next_keyboard_key(self):
         self.assertEqual(self.input.update(False, True, 100, True), ("right", True, False))
         self.assertEqual(self.input.update(False, False, 120, True), ("right", False, False))
+
+    def test_b_uses_next_for_a_closed_dropdown(self):
+        class Keyboard:
+            pass
+
+        class ButtonMatrix:
+            pass
+
+        class Dropdown:
+            def is_open(self):
+                return False
+
+        direct_navigation = is_direct_navigation_target(
+            Dropdown(), Keyboard, ButtonMatrix, Dropdown
+        )
+        self.assertFalse(direct_navigation)
+        self.assertEqual(
+            self.input.update(False, True, 100, direct_navigation),
+            ("next", True, False),
+        )
+
+    def test_short_b_moves_to_next_open_dropdown_option(self):
+        class Keyboard:
+            pass
+
+        class ButtonMatrix:
+            pass
+
+        class Dropdown:
+            def is_open(self):
+                return True
+
+        direct_navigation = is_direct_navigation_target(
+            Dropdown(), Keyboard, ButtonMatrix, Dropdown
+        )
+        self.assertTrue(direct_navigation)
+        self.assertEqual(
+            self.input.update(False, True, 100, direct_navigation, dropdown_open=True),
+            (None, False, False),
+        )
+        self.assertEqual(
+            self.input.update(False, False, 200, direct_navigation, dropdown_open=True),
+            ("right", True, False),
+        )
+        self.assertEqual(
+            self.input.update(False, False, 220, direct_navigation, dropdown_open=True),
+            ("right", False, False),
+        )
+
+    def test_long_b_moves_to_previous_open_dropdown_option(self):
+        self.assertEqual(
+            self.input.update(False, True, 100, True, dropdown_open=True),
+            (None, False, False),
+        )
+        self.assertEqual(
+            self.input.update(False, True, 800, True, dropdown_open=True),
+            ("left", True, False),
+        )
+        self.assertEqual(
+            self.input.update(False, True, 820, True, dropdown_open=True),
+            ("left", False, False),
+        )
+        self.assertEqual(
+            self.input.update(False, False, 840, True, dropdown_open=True),
+            (None, False, False),
+        )
 
     def test_a_takes_priority_when_b_is_also_pressed(self):
         self.assertEqual(self.input.update(False, True, 100, False), ("next", True, False))

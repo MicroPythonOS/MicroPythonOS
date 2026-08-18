@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Board Support:
+- UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
+
 Builtin Apps:
 - AppStore: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 - OSUPDater: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
@@ -24,7 +27,6 @@ Builtin Apps:
 
 Frameworks:
 - View: fix two LVGL memory leaks in activity navigation by @fdb
-
 0.17.2
 ======
 
