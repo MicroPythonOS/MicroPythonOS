@@ -1,4 +1,6 @@
 def create_expander_i2c(i2c_class, pin_class, sda, scl):
+    # Camera SCCB can reconfigure I2C(0); restore the XL9535 after camera use.
+    # P0.0/P0.1 are outputs, while P0.2/P1.4 return to BTN_B/BTN_A inputs.
     i2c = i2c_class(0, sda=pin_class(sda), scl=pin_class(scl), freq=400_000)
     cfg0 = i2c.readfrom_mem(0x20, 0x06, 1)[0]
     cfg0 = (cfg0 & ~0x03) | 0x04
@@ -11,6 +13,7 @@ def create_expander_i2c(i2c_class, pin_class, sda, scl):
 
 
 def is_direct_navigation_target(focused, keyboard_type, buttonmatrix_type, dropdown_type):
+    # A closed dropdown is one focus target; its open list needs direct navigation.
     if isinstance(focused, dropdown_type):
         try:
             return focused.is_open()

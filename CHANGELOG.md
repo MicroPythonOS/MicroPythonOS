@@ -27,6 +27,7 @@ Builtin Apps:
 
 Frameworks:
 - View: fix two LVGL memory leaks in activity navigation by @fdb
+
 0.17.2
 ======
 

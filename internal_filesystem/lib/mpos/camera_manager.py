@@ -49,6 +49,8 @@ class Camera:
             vendor: Camera vendor/manufacturer (e.g., "OmniVision")
             version: Driver version (default 1)
             rotation_degrees: how many degrees the camera is rotated clockwise
+            rgb565_byte_swap: Whether color frames use byte-swapped RGB565 data.
+            default_vflip: Default vertical flip for newly created camera preferences.
         """
         self.lens_facing = lens_facing
         self.name = name or "Camera"

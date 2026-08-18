@@ -101,10 +101,12 @@ mpos.ui.main_display = ili9341.ILI9341(
     display_height=TFT_HEIGHT,
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=ili9341.BYTE_ORDER_BGR,
+    # The K10 panel expects swapped RGB565 bytes on its SPI bus.
     rgb565_byte_swap=True,
 )
 # Type 2 = standard ILI9341 alternative init sequence (used by most SPI panels)
 mpos.ui.main_display.init(2)
+# The LCD is mounted upside down relative to the K10 enclosure orientation.
 mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._180)
 mpos.ui.main_display.set_power(True)
 # Note: backlight is controlled via XL9535, not a GPIO pin — already turned on above
@@ -241,6 +243,7 @@ def _camera_reset():
 
 
 def _restore_expander_i2c():
+    # Camera SCCB shares GPIO47/48 and leaves the keypad expander bus unusable.
     global _i2c
     try:
         _i2c = create_expander_i2c(I2C, Pin, I2C_SDA, I2C_SCL)
@@ -318,6 +321,7 @@ CameraManager.add_camera(CameraManager.Camera(
     deinit=deinit_cam,
     capture=capture_cam,
     apply_settings=apply_cam_settings,
+    # GC2145 frames are byte-swapped; the physical camera orientation needs vflip.
     rgb565_byte_swap=True,
     default_vflip=True,
 ))

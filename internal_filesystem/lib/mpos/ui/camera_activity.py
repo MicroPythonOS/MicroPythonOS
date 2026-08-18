@@ -8,6 +8,7 @@ import time
 from ..time import epoch_seconds
 from .camera_settings import CameraSettingsActivity
 from ..camera_manager import CameraManager
+from ..device_info import DeviceInfo
 from .. import ui as mpos_ui
 from ..app.activity import Activity
 
@@ -158,6 +159,9 @@ class CameraActivity(Activity):
         self.snap_button.set_style_radius(self.button_width, lv.PART.MAIN)
 
     def _add_focusable_buttons(self):
+        # K10 has only A and B, so give camera controls visible focus and a stable start.
+        if DeviceInfo.get_hardware_id() != "unihiker_k10":
+            return
         for button in (
             self.close_button,
             self.settings_button,

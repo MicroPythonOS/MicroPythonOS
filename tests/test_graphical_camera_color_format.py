@@ -2,7 +2,7 @@ import unittest
 
 import lvgl as lv
 
-from mpos import CameraManager
+from mpos import CameraManager, DeviceInfo
 from mpos.ui.camera_activity import CameraActivity
 from mpos.ui.camera_settings import CameraSettingsActivity
 
@@ -10,9 +10,11 @@ from mpos.ui.camera_settings import CameraSettingsActivity
 class TestCameraColorFormat(unittest.TestCase):
     def setUp(self):
         self.cameras = CameraManager._cameras
+        self.hardware_id = DeviceInfo.get_hardware_id()
 
     def tearDown(self):
         CameraManager._cameras = self.cameras
+        DeviceInfo.set_hardware_id(self.hardware_id)
 
     def make_activity(self, rgb565_byte_swap):
         CameraManager._cameras = [
@@ -51,18 +53,33 @@ class TestCameraColorFormat(unittest.TestCase):
         defaults = activity._get_camera_defaults(CameraSettingsActivity.NORMAL_DEFAULTS)
         self.assertFalse(defaults["vflip"])
 
-    def test_camera_buttons_are_added_to_focus_group(self):
+    def test_k10_camera_buttons_start_with_close_focused(self):
         group = lv.group_get_default()
         group.remove_all_objs()
+        DeviceInfo.set_hardware_id("unihiker_k10")
         activity = CameraActivity()
         activity.main_screen = lv.obj()
         activity.close_button = lv.button(activity.main_screen)
         activity.settings_button = lv.button(activity.main_screen)
         activity.qr_button = lv.button(activity.main_screen)
         activity.snap_button = lv.button(activity.main_screen)
+        lv.group_focus_obj(activity.settings_button)
         activity._add_focusable_buttons()
-        self.assertEqual(group.get_obj_count(), 4)
         self.assertTrue(group.get_focused() is activity.close_button)
+
+    def test_non_k10_camera_buttons_keep_existing_focus(self):
+        group = lv.group_get_default()
+        group.remove_all_objs()
+        DeviceInfo.set_hardware_id("desktop")
+        activity = CameraActivity()
+        activity.main_screen = lv.obj()
+        activity.close_button = lv.button(activity.main_screen)
+        activity.settings_button = lv.button(activity.main_screen)
+        activity.qr_button = lv.button(activity.main_screen)
+        activity.snap_button = lv.button(activity.main_screen)
+        lv.group_focus_obj(activity.settings_button)
+        activity._add_focusable_buttons()
+        self.assertTrue(group.get_focused() is activity.settings_button)
 
 
 if __name__ == "__main__":
