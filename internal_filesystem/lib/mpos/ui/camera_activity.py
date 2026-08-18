@@ -43,6 +43,8 @@ class CameraActivity(Activity):
     snap_button = None
     status_label = None
     status_label_cont = None
+    open_link_button = None
+    open_link_label = None
 
     def onCreate(self):
         self.main_screen = lv.obj()
@@ -99,6 +101,17 @@ class CameraActivity(Activity):
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(100))
         self.status_label.center()
+
+        # Action chip shown when a decoded QR is an app link the OS can open
+        # (official store link or a registered urlPattern handler).
+        self._last_qr_text = None
+        self.open_link_button = lv.button(self.status_label_cont)
+        self.open_link_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.open_link_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.open_link_button.add_event_cb(self._open_link_click, lv.EVENT.CLICKED, None)
+        self.open_link_label = lv.label(self.open_link_button)
+        self.open_link_label.set_text("")
+        self.open_link_label.center()
 
         if mpos_ui.DisplayMetrics.width() < mpos_ui.DisplayMetrics.height():
             # poster
@@ -291,6 +304,7 @@ class CameraActivity(Activity):
             self.finish()
         else:
             self.status_label.set_text(result) # in the future, the status_label text should be copy-paste-able
+            self._maybe_offer_open_link(result)
             self.stop_qr_decoding()
 
     def snap_button_click(self, e):
@@ -330,9 +344,29 @@ class CameraActivity(Activity):
         except OSError as e:
             logger.error("Error writing to file: %s" % (e))
     
+    def _maybe_offer_open_link(self, text):
+        """Show the action chip when a decoded QR is an openable app link."""
+        from mpos.content import deeplink
+        label = deeplink.open_action_label(text)
+        if label:
+            self._last_qr_text = text
+            self.open_link_label.set_text(label)
+            self.open_link_button.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._last_qr_text = None
+            self.open_link_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _open_link_click(self, event):
+        from mpos.content import deeplink
+        if self._last_qr_text:
+            deeplink.open_url(self._last_qr_text)
+
     def start_qr_decoding(self):
         if __debug__: logger.debug("Activating live QR decoding...")
         self.scanqr_mode = True
+        if self.open_link_button:
+            self.open_link_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self._last_qr_text = None
         oldwidth = self.width
         oldheight = self.height
         oldcolormode = self.colormode

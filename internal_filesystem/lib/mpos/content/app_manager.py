@@ -48,6 +48,10 @@ class AppManager:
     # action → [{app_fullname, entrypoint, classname, mime_type, path_pattern}, ...]
     _file_handler_specs = {}
 
+    # URL intent handlers discovered from app manifests ("urlPattern" filters).
+    # [{app_fullname, entrypoint, classname, url_pattern}, ...]
+    _url_handler_specs = []
+
     # Lazily imported handler classes: (app_fullname, entrypoint, classname) → class
     _handler_class_cache = {}
 
@@ -83,6 +87,40 @@ class AppManager:
             "mime_type": mime_type,
             "path_pattern": path_pattern,
         })
+
+    @classmethod
+    def _register_url_handler_spec(cls, app_fullname, entrypoint, classname, url_pattern):
+        """Store a manifest-declared URL handler after validating its pattern.
+
+        Patterns matching the official store host or the micropythonos:// or mpos://
+        scheme are reserved and rejected here, so no installed app can
+        shadow system deep links. Returns True if registered.
+        """
+        from . import deeplink
+        error = deeplink.validate_handler_pattern(url_pattern)
+        if error:
+            logger.warning("app %s declares invalid urlPattern %s: %s",
+                           app_fullname, url_pattern, error)
+            return False
+        cls._url_handler_specs.append({
+            "app_fullname": app_fullname,
+            "entrypoint": entrypoint,
+            "classname": classname,
+            "url_pattern": url_pattern,
+        })
+        return True
+
+    @classmethod
+    def resolve_url_handlers(cls, url):
+        """Return HandlerInfo objects for manifest URL handlers matching url."""
+        from . import deeplink
+        results = []
+        for spec in cls._url_handler_specs:
+            if deeplink.url_matches_pattern(spec["url_pattern"], url):
+                activity_cls = cls._import_handler_class(spec)
+                if activity_cls is not None:
+                    results.append(HandlerInfo(activity_cls, spec["app_fullname"]))
+        return results
 
     @staticmethod
     def _is_valid_identifier(s):
@@ -317,6 +355,7 @@ class AppManager:
         cls._app_list = []
         cls._by_fullname = {}
         cls._file_handler_specs = {}
+        cls._url_handler_specs = []
         cls._handler_class_cache = {}
         cls._handler_app_fullname = {}
 
@@ -390,6 +429,11 @@ class AppManager:
                                 cls._register_file_handler_spec(
                                     action, app.fullname, entrypoint, classname,
                                     mime_type=mime_type, path_pattern=path_pattern,
+                                )
+                            url_pattern = f.get("urlPattern")
+                            if url_pattern:
+                                cls._register_url_handler_spec(
+                                    app.fullname, entrypoint, classname, url_pattern,
                                 )
 
             except Exception as e:
