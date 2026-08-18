@@ -202,7 +202,7 @@ class Launcher(Activity):
     def _focus_first_usable_app(self):
         for fullname, target in self._app_cont_map.items():
             if fullname == "com.micropythonos.howto":
-                # K10 should resume on a launchable app instead of the startup HowTo.
+                # This K10-only fallback skips static HowTo and restores focus to another app.
                 continue
             if target:
                 lv.group_focus_obj(target)
