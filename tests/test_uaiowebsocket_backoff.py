@@ -21,13 +21,13 @@ MIN_S = 3
 
 class TestReconnectBackoff(unittest.TestCase):
 
-    def test_first_failure_doubles_min(self):
-        """A failure from the seed interval doubles it, staying below the cap."""
-        self.assertEqual(_next_backoff(MIN_S, False, MIN_S), 6)
+    def test_first_failure_triples_min(self):
+        """A failure from the seed interval triples it, staying below the cap."""
+        self.assertEqual(_next_backoff(MIN_S, False, MIN_S), 9)
 
     def test_geometric_growth_to_cap(self):
-        """Repeated failures double the delay until clamped at the max."""
-        expected = [6, 12, 24, 48, 96, 192, 300, 300, 300]
+        """Repeated failures triple the delay until clamped at the max."""
+        expected = [9, 27, 81, 243, 300, 300, 300]
         delay = MIN_S
         seen = []
         for _ in range(len(expected)):
@@ -47,7 +47,7 @@ class TestReconnectBackoff(unittest.TestCase):
     def test_seed_min_is_honored(self):
         """A custom (larger) reconnect interval is used as the floor on reset."""
         self.assertEqual(_next_backoff(48, True, 5), 5)
-        self.assertEqual(_next_backoff(5, False, 5), 10)
+        self.assertEqual(_next_backoff(5, False, 5), 15)
 
 
 if __name__ == "__main__":

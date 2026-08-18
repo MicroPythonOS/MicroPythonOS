@@ -185,6 +185,107 @@ class TestAppManifestAndIcon(unittest.TestCase):
         app = App.from_manifest(self.APP_DIR)
         self.assertEqual(app.main_launcher_activity["entrypoint"], "assets/code.py")
 
+    def _write_manifest_data(self, dest_dir, data):
+        manifest = dest_dir + "/MANIFEST.JSON"
+        with open(manifest, "w") as f:
+            ujson.dump(data, f)
+
+    def test_category_string_becomes_normalized_list(self):
+        self._mkdirs(self.APP_DIR)
+        self._write_manifest_data(self.APP_DIR, {
+            "name": "TestApp",
+            "fullname": "com.micropythonos.test_app_flat",
+            "version": "0.0.1",
+            "category": "graphics",
+            "activities": [],
+        })
+        app = App.from_manifest(self.APP_DIR)
+        self.assertEqual(app.categories, ["Graphics"])
+        self.assertEqual(app.category, "Graphics")
+
+    def test_categories_list_is_normalized(self):
+        self._mkdirs(self.APP_DIR)
+        self._write_manifest_data(self.APP_DIR, {
+            "name": "TestApp",
+            "fullname": "com.micropythonos.test_app_flat",
+            "version": "0.0.1",
+            "categories": ["default", "Finance"],
+            "activities": [],
+        })
+        app = App.from_manifest(self.APP_DIR)
+        self.assertEqual(app.categories, ["Default", "Finance"])
+        self.assertEqual(app.category, "Default")
+
+    def test_categories_takes_precedence_over_category(self):
+        self._mkdirs(self.APP_DIR)
+        self._write_manifest_data(self.APP_DIR, {
+            "name": "TestApp",
+            "fullname": "com.micropythonos.test_app_flat",
+            "version": "0.0.1",
+            "category": "ignored",
+            "categories": ["graphics", "utilities"],
+            "activities": [],
+        })
+        app = App.from_manifest(self.APP_DIR)
+        self.assertEqual(app.categories, ["Graphics", "Utilities"])
+
+    def test_no_category_is_empty_list(self):
+        self._mkdirs(self.APP_DIR)
+        self._write_manifest_data(self.APP_DIR, {
+            "name": "TestApp",
+            "fullname": "com.micropythonos.test_app_flat",
+            "version": "0.0.1",
+            "activities": [],
+        })
+        app = App.from_manifest(self.APP_DIR)
+        self.assertEqual(app.categories, [])
+        self.assertEqual(app.category, "")
+
+    def test_normalize_category_title_case(self):
+        self.assertEqual(App._normalize_category("launcher"), "Launcher")
+        self.assertEqual(App._normalize_category("GRAPHICS"), "Graphics")
+        self.assertEqual(App._normalize_category("uTiLiTiEs"), "Utilities")
+
+    def test_is_valid_launcher_with_normalized_category(self):
+        self._mkdirs(self.APP_DIR)
+        self._write_manifest_data(self.APP_DIR, {
+            "name": "TestLauncher",
+            "fullname": "com.micropythonos.test_app_flat",
+            "version": "0.0.1",
+            "category": "launcher",
+            "activities": [{
+                "entrypoint": "code.py",
+                "classname": "Main",
+                "intent_filters": [{"action": "main", "category": "launcher"}],
+            }],
+        })
+        self._write_code(self.APP_DIR, "code.py")
+        app = App.from_manifest(self.APP_DIR)
+        self.assertTrue(app.is_valid_launcher())
+
+    def test_is_valid_launcher_multiple_categories(self):
+        self._mkdirs(self.APP_DIR)
+        self._write_manifest_data(self.APP_DIR, {
+            "name": "TestLauncher",
+            "fullname": "com.micropythonos.test_app_flat",
+            "version": "0.0.1",
+            "categories": ["Default", "Launcher"],
+            "activities": [{
+                "entrypoint": "code.py",
+                "classname": "Main",
+                "intent_filters": [{"action": "main", "category": "launcher"}],
+            }],
+        })
+        self._write_code(self.APP_DIR, "code.py")
+        app = App.from_manifest(self.APP_DIR)
+        self.assertTrue(app.is_valid_launcher())
+
+    def test_direct_construction_normalizes_categories(self):
+        app = App(category="utilities")
+        self.assertEqual(app.categories, ["Utilities"])
+        app = App(category=["default", "Finance"])
+        self.assertEqual(app.categories, ["Default", "Finance"])
+
 
 class TestAppManagerStartApp(unittest.TestCase):
     APP_DIR = "apps/com.micropythonos.test_start_app"

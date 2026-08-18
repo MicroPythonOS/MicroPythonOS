@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMMIT_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Skip if manual release already exists
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            echo "Release already exists for $GITHUB_REF_NAME — manual release detected, skipping auto-draft."
+            exit 0
+          fi
+          echo "No existing release for $GITHUB_REF_NAME, proceeding."
+
+      - name: Download artifacts from CI runs on this commit
+        run: |
+          RESPONSE=$(curl -sS -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs?branch=main&per_page=100")
+
+          RUN_IDS=$(echo "$RESPONSE" | python3 -c "
+          import json, sys, os
+          ARTIFACT_WORKFLOWS = {
+              'Build LVGL MicroPython for Linux x64, esp32 and esp32s3',
+              'Build LVGL MicroPython on Linux for arm64',
+              'Build LVGL MicroPython on Linux for special boards like esp32-small, unphone,...',
+              'Build LVGL MicroPython for macOS arm64 (M1)',
+              'Build LVGL MicroPython for macOS Intel',
+              'Build web target and deploy to GitHub Pages',
+          }
+          data = json.load(sys.stdin)
+          sha = os.environ.get('COMMIT_SHA', '')
+          runs = data.get('workflow_runs', [])
+          ids = [str(r['id']) for r in runs
+                 if r.get('head_sha') == sha
+                 and r.get('name') in ARTIFACT_WORKFLOWS]
+          if not ids:
+              sys.stderr.write(f'No build runs found for commit {sha}.\n')
+              sys.stderr.write(f'API returned {len(runs)} total runs on main.\n')
+              sys.stderr.write('Push to main first, then tag.\n')
+              sys.exit(1)
+          sys.stderr.write(f'Found {len(ids)} CI build run(s)\n')
+          print(' '.join(ids))
+          ")
+
+          for run_id in $RUN_IDS; do
+            echo "Downloading artifacts from run $run_id ..."
+            gh run download -R "$GITHUB_REPOSITORY" "$run_id" -D release-artifacts || \
+              echo "WARNING: Could not download artifacts from run $run_id (may be in-progress or have none)"
+          done
+
+      - name: Package web artifact as zip
+        run: |
+          WEB_DIR=$(find release-artifacts -name 'micropython.wasm' -print -quit | xargs dirname 2>/dev/null)
+          if [ -n "$WEB_DIR" ]; then
+            echo "Packaging web build from $WEB_DIR"
+            ZIP_NAME="MicroPythonOS_web_${GITHUB_REF_NAME}.zip"
+            (cd "$WEB_DIR" && zip -qr "/tmp/$ZIP_NAME" .)
+            mv "/tmp/$ZIP_NAME" "release-artifacts/$ZIP_NAME"
+            rm -rf "$WEB_DIR"
+          else
+            echo "No web build found (micropython.wasm not present in any downloaded artifact)"
+          fi
+
+      - name: Flatten artifact directories
+        run: |
+          mkdir -p flat
+          find release-artifacts -type f -exec mv {} flat/ \;
+          find release-artifacts -type d -empty -delete
+          rmdir release-artifacts 2>/dev/null || true
+          mv flat release-artifacts
+          ls -la release-artifacts/
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          draft: true
+          name: ${{ github.ref_name }}
+          files: release-artifacts/*
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          make_latest: false
+
+      - name: Warn if any expected artifacts are missing
+        run: |
+          EXPECTED=(
+            "MicroPythonOS_esp32_*.bin"
+            "MicroPythonOS_esp32_*.ota"
+            "MicroPythonOS_esp32s3_*.bin"
+            "MicroPythonOS_esp32s3_*.ota"
+            "MicroPythonOS_esp32-small_*.bin"
+            "MicroPythonOS_esp32-small_*.ota"
+            "MicroPythonOS_esp32s3-unphone_*.bin"
+            "MicroPythonOS_esp32s3-unphone_*.ota"
+            "MicroPythonOS_x64_linux_*.elf"
+            "MicroPythonOS_arm64_linux_*.elf"
+            "MicroPythonOS_arm64_macOS_*.bin"
+            "MicroPythonOS_intel_macOS_*.bin"
+            "MicroPythonOS_web_*.zip"
+          )
+          MISSING=""
+          for pattern in "${EXPECTED[@]}"; do
+            if ! ls release-artifacts/$pattern > /dev/null 2>&1; then
+              MISSING="$MISSING $pattern"
+            fi
+          done
+
+          if [ -n "$MISSING" ]; then
+            WARNING="⚠️  WARNING: Missing artifacts: $MISSING. Add them manually."
+            echo "$WARNING"
+            EXISTING=$(gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --json body -q '.body')
+            printf "%s\n\n%s" "$WARNING" "$EXISTING" | gh release edit "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" -F -
+            echo "Warning prepended to release body."
+          fi

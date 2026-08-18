@@ -138,6 +138,12 @@ class WAVStream:
         self._channels = None
         self._bits_per_sample = None
         self._data_size = None
+        self._format_tag = 0
+        self._block_align = 0
+        self._bytes_per_sample = 0
+        self._upsample_factor = 1
+        self._spb = 0
+        self._adpcm_chunk_blocks = 0
 
     def is_playing(self):
         """Check if stream is currently playing."""
@@ -400,6 +406,136 @@ class WAVStream:
             return 0
         return WAVStream._VOLUME_TO_SHIFT[volume]
 
+    # ----------------------------------------------------------------------
+    #  Read/decode one chunk from the WAV file to 16-bit PCM
+    # ----------------------------------------------------------------------
+    def _read_decode_chunk(self, f, total_orig):
+        """Read one chunk from file, decode/convert/upsample to 16-bit PCM.
+
+        Returns:
+            tuple: (bytearray of 16-bit PCM data, original bytes read)
+        """
+        if self._format_tag == WAVStream.WAVE_FORMAT_ADPCM:
+            remaining_compressed = self._data_size - total_orig
+            remaining_compressed -= remaining_compressed % self._block_align
+            if remaining_compressed <= 0:
+                return None, 0
+            max_blocks = min(self._adpcm_chunk_blocks, remaining_compressed // self._block_align)
+            to_read = max_blocks * self._block_align
+            if to_read <= 0:
+                return None, 0
+            raw_compressed = bytearray(f.read(to_read))
+            if not raw_compressed:
+                return None, 0
+            decoded_size = max_blocks * self._spb * 2 * self._channels
+            raw = bytearray(decoded_size)
+            compressed_view = memoryview(raw_compressed)
+            for block_idx in range(max_blocks):
+                src_off = block_idx * self._block_align
+                dst_off = block_idx * self._spb * 2 * self._channels
+                adpcm_ima.decode_block_into(
+                    compressed_view[src_off:src_off + self._block_align],
+                    self._channels,
+                    self._block_align,
+                    raw,
+                    dst_off,
+                )
+        else:
+            bytes_per_second = self._original_rate * self._bytes_per_sample
+            chunk_size = int(bytes_per_second / 10.7) # chunk_size of 8192 worked great with 22050hz stereo 16 bit so 88200 bytes per sample so fator 10.7
+            to_read = min(chunk_size, self._data_size - total_orig)
+            to_read -= to_read % self._bytes_per_sample
+            if to_read <= 0:
+                return None, 0
+            raw = bytearray(f.read(to_read))
+            if not raw:
+                return None, 0
+            if self._bits_per_sample == 8:
+                raw = self._convert_8_to_16(raw)
+            elif self._bits_per_sample == 24:
+                raw = self._convert_24_to_16(raw)
+            elif self._bits_per_sample == 32:
+                raw = self._convert_32_to_16(raw)
+        if self._upsample_factor > 1:
+            raw = self._upsample_buffer(raw, self._upsample_factor)
+        return raw, to_read
+
+    # ----------------------------------------------------------------------
+    #  Desktop playback (non-ESP32)
+    # ----------------------------------------------------------------------
+    def _play_desktop(self):
+        """Play audio on desktop platforms via web audio or shell player."""
+        webio = None
+        try:
+            import _webio
+
+            webio = _webio
+        except ImportError:
+            pass
+
+        if webio:
+            self._web_audio = bool(webio.audio_play(self.file_path, self.volume))
+            self.runs_async = True
+            asyncio.get_event_loop().create_task(self._monitor_web_audio(webio))
+            return
+
+        player = _detect_desktop_player()
+        quoted = _shell_quote(self.file_path)
+
+        if player is None:
+            logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
+            elapsed_ms = 0
+            while self._keep_running:
+                if self._duration_ms is None:
+                    break
+                time.sleep_ms(100)
+                elapsed_ms += 100
+                if self._playback_rate:
+                    self._progress_samples = min(
+                        int(elapsed_ms / 1000.0 * self._playback_rate),
+                        self._total_samples
+                    )
+                if elapsed_ms >= self._duration_ms:
+                    break
+        else:
+            pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
+            qpid = _shell_quote(pid_file)
+            if player == "afplay":
+                cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
+                    max(0.0, min(1.0, self.volume / 100.0)),
+                    quoted,
+                    qpid
+                )
+            elif player == "ffplay":
+                cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
+                    self.volume,
+                    quoted,
+                    qpid
+                )
+            elif player == "aplay":
+                cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+            else:
+                cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+
+            os.system(cmd)
+
+            start_ticks = time.ticks_ms()
+            while self._keep_running:
+                time.sleep_ms(100)
+                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                if self._playback_rate:
+                    self._progress_samples = min(
+                        int(elapsed_ms / 1000.0 * self._playback_rate),
+                        self._total_samples
+                    )
+                if elapsed_ms >= (self._duration_ms or 0):
+                    break
+
+            _stop_desktop_player(pid_file, not self._keep_running)
+
+        if self.on_complete:
+            self.on_complete("Finished: %s" % self.file_path)
+
     async def _monitor_web_audio(self, webio):
         start_ticks = time.ticks_ms()
         try:
@@ -450,6 +586,8 @@ class WAVStream:
                 self._channels = channels
                 self._bits_per_sample = bits_per_sample
                 self._data_size = data_size
+                self._format_tag = format_tag
+                self._block_align = block_align
 
                 playback_rate, upsample_factor = self.compute_playback_rate(
                     original_rate,
@@ -457,6 +595,7 @@ class WAVStream:
                 )
 
                 self._playback_rate = playback_rate
+                self._upsample_factor = upsample_factor
 
                 # This influences how long it takes for the audio to start; low values: more responsive, high values: slow start but smoother
                 # ibuf = playback_rate # doesnt account for stereo vs mono...
@@ -469,89 +608,18 @@ class WAVStream:
 
                 if data_size > file_size - data_start:
                     data_size = file_size - data_start
+                    self._data_size = data_size
 
                 bytes_per_sample = (bits_per_sample // 8) * channels
+                self._bytes_per_sample = bytes_per_sample
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM or bytes_per_sample > 0:
                     self._total_samples = total_samples_frames
                     self._duration_ms = int((self._total_samples / original_rate) * 1000)
 
                 if __debug__: logger.debug("I2S init params: requested_rate=%s, playback_rate=%s, original_rate=%s, channels=%s, bits=16, i2s_pins=%s", self.requested_sample_rate, playback_rate, original_rate, channels, self.i2s_pins)
 
-                # Desktop (non-ESP32) audio playback branch
                 if sys.platform != "esp32":
-                    webio = None
-                    try:
-                        import _webio
-
-                        webio = _webio
-                    except ImportError:
-                        pass
-
-                    if webio:
-                        self._web_audio = bool(webio.audio_play(self.file_path, self.volume))
-                        self.runs_async = True
-                        asyncio.get_event_loop().create_task(self._monitor_web_audio(webio))
-                    else:
-                        player = _detect_desktop_player()
-                        quoted = _shell_quote(self.file_path)
-
-                        if player is None:
-                            logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
-                            elapsed_ms = 0
-                            while self._keep_running:
-                                if self._duration_ms is None:
-                                    break
-                                time.sleep_ms(100)
-                                elapsed_ms += 100
-                                if self._playback_rate:
-                                    self._progress_samples = min(
-                                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                                        self._total_samples
-                                    )
-                                if elapsed_ms >= self._duration_ms:
-                                    break
-                        else:
-                            # Record the backgrounded player's PID (shell $!) so we can
-                            # stop it precisely by PID instead of `pkill -f <path>`.
-                            pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
-                            qpid = _shell_quote(pid_file)
-                            if player == "afplay":
-                                cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
-                                    max(0.0, min(1.0, self.volume / 100.0)),
-                                    quoted,
-                                    qpid
-                                )
-                            elif player == "ffplay":
-                                cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
-                                    self.volume,
-                                    quoted,
-                                    qpid
-                                )
-                            elif player == "aplay":
-                                cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
-                            else:
-                                cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
-
-                            os.system(cmd)
-
-                            start_ticks = time.ticks_ms()
-                            while self._keep_running:
-                                time.sleep_ms(100)
-                                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                                if self._playback_rate:
-                                    self._progress_samples = min(
-                                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                                        self._total_samples
-                                    )
-                                if elapsed_ms >= (self._duration_ms or 0):
-                                    break
-
-                            # Kill the player by its real PID on explicit stop; on natural
-                            # completion it has already exited, so just clean up the pid file.
-                            _stop_desktop_player(pid_file, not self._keep_running)
-
-                    if not webio and self.on_complete:
-                        self.on_complete("Finished: %s" % self.file_path)
+                    self._play_desktop()
                     return
 
                 # Initialize I2S (always 16-bit output)
@@ -614,61 +682,12 @@ class WAVStream:
                 bytes_per_second_out = playback_rate * 2 * channels
                 self._repeat_played = 0
 
-                # Read/decode one source chunk to upsampled 16-bit PCM.
-                # Volume shift is NOT applied here; it is applied just before
-                # I2S write so changes to self.volume take effect per chunk.
-                def _next_16bit_chunk(temp_total):
-                    if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
-                        remaining_compressed = data_size - temp_total
-                        remaining_compressed -= remaining_compressed % block_align
-                        if remaining_compressed <= 0:
-                            return None, 0
-                        max_blocks = min(adpcm_chunk_blocks, remaining_compressed // block_align)
-                        to_read = max_blocks * block_align
-                        if to_read <= 0:
-                            return None, 0
-                        raw_compressed = bytearray(f.read(to_read))
-                        if not raw_compressed:
-                            return None, 0
-                        # Decode all blocks into one pre-allocated buffer to
-                        # avoid per-block allocations and bytearray.extend().
-                        decoded_size = max_blocks * spb * 2 * channels
-                        raw = bytearray(decoded_size)
-                        compressed_view = memoryview(raw_compressed)
-                        for block_idx in range(max_blocks):
-                            src_off = block_idx * block_align
-                            dst_off = block_idx * spb * 2 * channels
-                            adpcm_ima.decode_block_into(
-                                compressed_view[src_off:src_off + block_align],
-                                channels,
-                                block_align,
-                                raw,
-                                dst_off,
-                            )
-                    else:
-                        bytes_per_second = original_rate * bytes_per_sample
-                        chunk_size = int(bytes_per_second / 10.7)
-                        to_read = min(chunk_size, data_size - temp_total)
-                        to_read -= to_read % bytes_per_sample
-                        if to_read <= 0:
-                            return None, 0
-                        raw = bytearray(f.read(to_read))
-                        if not raw:
-                            return None, 0
-                        if bits_per_sample == 8:
-                            raw = self._convert_8_to_16(raw)
-                        elif bits_per_sample == 24:
-                            raw = self._convert_24_to_16(raw)
-                        elif bits_per_sample == 32:
-                            raw = self._convert_32_to_16(raw)
-                    if upsample_factor > 1:
-                        raw = self._upsample_buffer(raw, upsample_factor)
-                    return raw, to_read
+                # Chunk decode moved to _read_decode_chunk method.
 
                 if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
-                    spb = adpcm_ima.samples_per_block(block_align, channels)
-                    decoded_bytes_per_block = spb * 2 * channels
-                    adpcm_chunk_blocks = max(
+                    self._spb = adpcm_ima.samples_per_block(block_align, channels)
+                    decoded_bytes_per_block = self._spb * 2 * channels
+                    self._adpcm_chunk_blocks = max(
                         1,
                         (playback_rate * 2 * channels // 10) // decoded_bytes_per_block,
                     )
@@ -682,7 +701,7 @@ class WAVStream:
                     f.seek(data_start)
 
                     while total_original < data_size and self._keep_running:
-                        chunk, to_read = _next_16bit_chunk(total_original)
+                        chunk, to_read = self._read_decode_chunk(f, total_original)
                         if chunk is None:
                             break
 
@@ -707,7 +726,7 @@ class WAVStream:
 
                         total_original += to_read
                         if format_tag == WAVStream.WAVE_FORMAT_ADPCM:
-                            self._progress_samples = (total_original // block_align) * spb
+                            self._progress_samples = (total_original // block_align) * self._spb
                         else:
                             self._progress_samples = total_original // bytes_per_sample
 

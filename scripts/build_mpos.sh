@@ -19,6 +19,21 @@ disable_native_viper() {
 	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
 }
 
+restore_native_viper() {
+	# Reverse of disable_native_viper: uncomment the decorators it commented
+	# out, so a desktop/web build doesn't leave every native/viper-using file
+	# in the working tree modified. Invoked via an EXIT trap so the restore
+	# also runs when the build fails or is interrupted.
+	echo "Restoring @micropython.native/@micropython.viper decorators..."
+	find -L "$1" -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+		if [ -L "$f" ]; then
+			continue
+		fi
+		sed -i.bak -E 's/^([[:space:]]*)#(@micropython\.(native|viper)[[:space:]]*)$/\1\2/' "$f"
+	done
+	find -L "$1" -name '*.py.bak' -type f -exec rm -f {} +
+}
+
 apply_patch() {
 	# $1 = dir to patch in, $2 = patch file. Fails the build when a required
 	# patch neither applies forward nor is already applied, instead of
@@ -172,6 +187,9 @@ ln -sf ../../c_mpos "$codebasedir"/lvgl_micropython/ext_mod/c_mpos
 echo "Applying lvgl_micropython esp32 uart repl enable/disable at runtime patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_uart_repl_runtime.patch
 
+echo "Applying lvgl_micropython mpremote disable auto-soft-reset patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/mpremote_no_auto_soft_reset.patch
+
 echo "Applying lvgl_micropython/lib/lvgl bmp scaling fix patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropython/lib_lvgl_lv_bmp.c.patch
 
@@ -210,6 +228,11 @@ if [ "$target" == "unix" -o "$target" == "macOS" -o "$target" == "web" ]; then
 	# Native/viper decorators are unsupported by the WASM/native emitter used for
 	# the web port, so disable them before freezing.
 	disable_native_viper "$codebasedir/internal_filesystem"
+	# The decorators are baked out of the frozen bytecode above; once the
+	# build ends the source tree should go back to normal. EXIT trap covers
+	# success, build failure, and CTRL-C — without this, every desktop/web
+	# build left the native/viper-using files modified in git.
+	trap 'restore_native_viper "$codebasedir/internal_filesystem"' EXIT
 fi
 
 if [ ! -f "$codebasedir"/lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross ]; then
@@ -251,6 +274,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_warn_and_format.patch
 	echo "Applying lvgl_micropython esp32 inisetup readsize/progsize patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_readsize_progsize.patch
+	echo "Applying lvgl_micropython esp32 network wlan country Japan patch..."
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_country_japan.patch
+	echo "Applying lvgl_micropython esp32 network wlan config country patch..."
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_config_country.patch
 
 	partition_size=3670016 # 3.5MiB is enough and is the maximum for the Fri3d 2024/2026 devices due to the partition table
 	flash_size="16"
@@ -315,8 +342,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 	# CONFIG_ADC_MIC_TASK_CORE=1 because with the default (-1) it hangs the CPU
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
+	ccache_arg=""
+	[ "${MPOS_CCACHE:-0}" = "1" ] && ccache_arg="--ccache"
 	set -x
-	python3 make.py $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
+	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
 		CONFIG_ADC_MIC_TASK_CORE=1 \
@@ -339,6 +368,19 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 
 	echo "Applying unix auto-import main patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
+
+	# Desktop builds on architectures without a native emitter (e.g. macOS on
+	# aarch64) can't compile @micropython.native/@micropython.viper decorators
+	# in RUNTIME-loaded .py files (apps/, on-disk lib/): the compiler raises
+	# "invalid micropython decorator". disable_native_viper only covers frozen
+	# code. This patch makes the compiler fall back to bytecode instead.
+	# Existence-guarded so MPOS still builds against older pinned
+	# lvgl_micropython SHAs that don't ship the patch yet.
+	native_fallback_patch="$codebasedir"/lvgl_micropython/unix_native_decorator_fallback.patch
+	if [ -f "$native_fallback_patch" ]; then
+		echo "Applying unix native-decorator bytecode fallback patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$native_fallback_patch"
+	fi
 
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
@@ -458,6 +500,15 @@ elif [ "$target" == "web" ]; then
 	echo "Applying unix auto-import main patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
 
+	# Same native/viper-decorator bytecode fallback as the unix/macOS build:
+	# the wasm build has no native emitter either, so runtime-loaded apps
+	# using those decorators would fail to import in the browser.
+	native_fallback_patch="$codebasedir"/lvgl_micropython/unix_native_decorator_fallback.patch
+	if [ -f "$native_fallback_patch" ]; then
+		echo "Applying unix native-decorator bytecode fallback patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$native_fallback_patch"
+	fi
+
 	# Apply the web-port modifications to the lvgl_micropython submodule. These
 	# live in THIS (MicroPythonOS) repo under scripts/web_port/ so the entire web
 	# port is reproducible from a clean submodule checkout without hand-editing
@@ -542,6 +593,10 @@ elif [ "$target" == "web" ]; then
 	# /data is recreated empty by IDBFS at boot; drop the preloaded copy so it
 	# does not collide with the persistent mount.
 	rm -rf "$staged_fs"/data
+	staged_bundled_data="$codebasedir"/web/.preload_bundled_data
+	rm -rf "$staged_bundled_data"
+	mkdir -p "$staged_bundled_data"
+	cp -a "$codebasedir"/internal_filesystem_data/. "$staged_bundled_data"/
 
 	# The browser build disables native threading (MICROPY_PY_THREAD=0), so the
 	# C builtin `_thread` module is absent. MicroPythonOS imports `_thread`
@@ -639,7 +694,7 @@ elif [ "$target" == "web" ]; then
 	# The bundled demo apps are packaged separately at /.bundled_apps because
 	# /apps is a persistent IDBFS mount (see web/shell.html); they are seeded
 	# into /apps on first boot.
-	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --shell-file $shell_file"
+	export MPOS_WEB_LINK_FLAGS="--preload-file $staged_fs@/ --preload-file $staged_bundled_apps@/.bundled_apps --preload-file $staged_bundled_data@/.bundled_data --shell-file $shell_file"
 
 	pushd "$codebasedir"/lvgl_micropython/
 	set -x

@@ -5,36 +5,87 @@ import vfs
 
 logger = logging.getLogger(__name__)
 
+_MOUNT_POINT = "/sdcard"
+
+
 class SDCardManager:
+    _instance = None
+
+    @classmethod
+    def init(cls, mode=None, spi_bus=None, cs_pin=None, cmd_pin=None, clk_pin=None,
+             d0_pin=None, d1_pin=None, d2_pin=None, d3_pin=None, slot=1, width=None, freq=20000000):
+        cls._instance = cls(
+            mode=mode, spi_bus=spi_bus, cs_pin=cs_pin,
+            cmd_pin=cmd_pin, clk_pin=clk_pin, d0_pin=d0_pin,
+            d1_pin=d1_pin, d2_pin=d2_pin, d3_pin=d3_pin,
+            slot=slot, width=width, freq=freq
+        )
+
+    @classmethod
+    def mount(cls, format=False):
+        if not cls._instance:
+            logger.error("SDCardManager not initialized")
+            return False
+        if format:
+            return cls._instance._mount(_MOUNT_POINT)
+        return cls._instance._try_mount(_MOUNT_POINT)
+
+    @classmethod
+    def is_mounted(cls):
+        if not cls._instance:
+            return False
+        return cls._instance._check_mounted(_MOUNT_POINT)
+
+    @classmethod
+    def get_mount_point(cls):
+        return _MOUNT_POINT if cls.is_mounted() else None
+
+    @classmethod
+    def get_mode(cls):
+        if not cls._instance:
+            return None
+        return cls._instance._mode
+
+    @classmethod
+    def format(cls):
+        if not cls._instance:
+            logger.error("SDCardManager not initialized")
+            return False
+        return cls._instance._format(_MOUNT_POINT)
+
+    @classmethod
+    def get_raw(cls):
+        return cls._instance
+
     def __init__(self, mode=None, spi_bus=None, cs_pin=None, cmd_pin=None, clk_pin=None,
                  d0_pin=None, d1_pin=None, d2_pin=None, d3_pin=None, slot=1, width=None, freq=20000000):
         self._sdcard = None
         self._mode = None
-        
+
         # Auto-detect mode: if SDIO pins provided, use SDIO; otherwise use SPI
         if cmd_pin is not None or clk_pin is not None or d0_pin is not None:
             self._mode = 'sdio'
         else:
             self._mode = 'spi'
-        
+
         # Allow explicit mode override only if explicitly provided (not default)
         if mode is not None and mode in ('spi', 'sdio'):
             self._mode = mode
-        
+
         if __debug__: logger.debug("SD card mode: %s", self._mode.upper())
 
         if self._mode == 'spi':
             self._init_spi(spi_bus, cs_pin)
         elif self._mode == 'sdio':
             self._init_sdio(cmd_pin, clk_pin, d0_pin, d1_pin, d2_pin, d3_pin, slot, width, freq)
-    
+
     def _init_spi(self, spi_bus, cs_pin):
         """Initialize SD card in SPI mode."""
         if spi_bus is None or cs_pin is None:
             logger.error("SPI mode requires spi_bus and cs_pin parameters")
             if __debug__: logger.debug("  - Provide: init(spi_bus=machine.SPI(...), cs_pin=pin_number)")
             return
-        
+
         try:
             self._sdcard = machine.SDCard(spi_bus=spi_bus, cs=cs_pin)
             self._sdcard.info()
@@ -44,7 +95,7 @@ class SDCardManager:
             if __debug__: logger.debug("  - Possible causes: Invalid SPI configuration, SD card not inserted, faulty wiring, or firmware issue")
             if __debug__: logger.debug("  - Check: SPI pins for the SPI bus, card insertion, VCC (3.3V/5V), GND")
             if __debug__: logger.debug("  - Try: Hard reset ESP32, test with known-good SD card")
-    
+
     def _init_sdio(self, cmd_pin, clk_pin, d0_pin, d1_pin=None, d2_pin=None, d3_pin=None,
                    slot=1, width=None, freq=20000000):
         """Initialize SD card in SDIO mode."""
@@ -53,7 +104,7 @@ class SDCardManager:
             logger.error("SDIO mode requires cmd_pin, clk_pin, and d0_pin parameters")
             if __debug__: logger.debug("  - Provide: init(mode='sdio', cmd_pin=X, clk_pin=Y, d0_pin=Z, ...)")
             return
-        
+
         # Auto-detect SDIO width based on provided data pins
         # This happens BEFORE explicit width validation to allow user override
         if width is None:
@@ -64,7 +115,7 @@ class SDCardManager:
                 d2_pin is not None,
                 d3_pin is not None
             ])
-            
+
             if data_pins_provided == 1:
                 # Only d0_pin provided: use 1-bit mode
                 width = 1
@@ -80,17 +131,17 @@ class SDCardManager:
                 if __debug__: logger.debug("  - For 4-bit mode: provide all four pins (d0_pin, d1_pin, d2_pin, d3_pin)")
                 if __debug__: logger.debug("  - Or explicitly specify width parameter to override auto-detection")
                 return
-        
+
         # Validate width parameter
         if width not in (1, 4):
             logger.error("SDIO width must be 1 or 4, got %s", width)
             return
-        
+
         # Validate slot parameter
         if slot not in (0, 1):
             logger.error("SDIO slot must be 0 or 1, got %s", slot)
             return
-        
+
         # Validate that provided pins match the requested width
         if width == 4:
             if d1_pin is None or d2_pin is None or d3_pin is None:
@@ -104,7 +155,7 @@ class SDCardManager:
                 if __debug__: logger.debug("  - For 1-bit mode: provide only d0_pin")
                 if __debug__: logger.debug("  - For 4-bit mode: provide all four pins (d0_pin, d1_pin, d2_pin, d3_pin)")
                 return
-        
+
         try:
             # For 4-bit mode, all data pins are required
             if width == 4:
@@ -125,7 +176,7 @@ class SDCardManager:
                     width=width,
                     freq=freq
                 )
-            
+
             self._sdcard.info()
             if __debug__: logger.debug("SD card initialized successfully in SDIO mode (slot=%s, width=%s-bit, freq=%sHz)", slot, width, freq)
         except Exception as e:
@@ -169,7 +220,7 @@ class SDCardManager:
             if __debug__: logger.debug("  - Try: Test with another SD card, reformat on PC, ensure VCC/GND correct")
             return False
 
-    def mount_with_optional_format(self, mount_point):
+    def _mount(self, mount_point):
         if not self._sdcard:
             logger.error("No SD card object initialized for mounting at %s", mount_point)
             if __debug__: logger.debug("  - Possible causes: SD card initialization failed in __init__")
@@ -203,20 +254,23 @@ class SDCardManager:
             if __debug__: logger.debug("  - Try: Unmount and remount, or reformat card")
             return False
 
-    def is_mounted(self, mount_point):
+    def _check_mounted(self, mount_point):
         try:
-            mounted = mount_point in os.listdir('/') and not os.mkdir(f'{mount_point}/_tmp_test')
-            if mounted:
-                if __debug__: logger.debug("SD card is mounted at %s", mount_point)
-                try:
-                    os.rmdir(f'{mount_point}/_tmp_test')
-                except:
-                    pass
-            else:
+            if mount_point.lstrip('/') not in os.listdir('/'):
                 if __debug__: logger.debug("SD card is not mounted at %s", mount_point)
                 if __debug__: logger.debug("  - Possible causes: Never mounted, unmounted manually, or card removed")
-                if __debug__: logger.debug("  - Try: Call mount_with_optional_format('%s')", mount_point)
-            return mounted
+                if __debug__: logger.debug("  - Try: Call mount()")
+                return False
+            try:
+                os.mkdir(f'{mount_point}/_tmp_test')
+            except OSError:
+                pass
+            if __debug__: logger.debug("SD card is mounted at %s", mount_point)
+            try:
+                os.rmdir(f'{mount_point}/_tmp_test')
+            except OSError:
+                pass
+            return True
         except OSError as e:
             logger.warning("Failed to check mount status at %s: %s", mount_point, e)
             if __debug__: logger.debug("  - Possible causes: Card removed, invalid mount point, or filesystem error")
@@ -234,86 +288,5 @@ class SDCardManager:
             logger.warning("Failed to list contents at %s: %s", mount_point, e)
             if __debug__: logger.debug("  - Possible causes: SD card not mounted, removed, or corrupted filesystem")
             if __debug__: logger.debug("  - Check: Run is_mounted('%s'), ensure card is inserted", mount_point)
-            if __debug__: logger.debug("  - Try: Remount with mount_with_optional_format('%s')", mount_point)
+            if __debug__: logger.debug("  - Try: Remount with mount()")
             return []
-
-# --- Singleton pattern ---
-_manager = None
-
-def init(mode=None, spi_bus=None, cs_pin=None, cmd_pin=None, clk_pin=None,
-         d0_pin=None, d1_pin=None, d2_pin=None, d3_pin=None, slot=1, width=None, freq=20000000):
-    """
-    Initialize the global SD card manager.
-    
-    SPI mode (default):
-        init(spi_bus=machine.SPI(...), cs_pin=pin_number)
-    
-    SDIO mode with auto-detection:
-        init(mode='sdio', cmd_pin=X, clk_pin=Y, d0_pin=Z, d1_pin=A, d2_pin=B, d3_pin=C, slot=1, freq=20000000)
-    
-    SDIO width auto-detection:
-        - If only d0_pin is provided: width is auto-set to 1 (1-bit mode)
-        - If all four data pins (d0, d1, d2, d3) are provided: width is auto-set to 4 (4-bit mode)
-        - If width parameter is explicitly provided: that value is used (overrides auto-detection)
-        - If partial data pins are provided (e.g., only d0 and d1): raises an error
-    
-    Auto-detection of mode:
-        If SDIO pins are provided, SDIO mode is used automatically.
-    """
-    global _manager
-    if _manager is None:
-        _manager = SDCardManager(
-            mode=mode,
-            spi_bus=spi_bus,
-            cs_pin=cs_pin,
-            cmd_pin=cmd_pin,
-            clk_pin=clk_pin,
-            d0_pin=d0_pin,
-            d1_pin=d1_pin,
-            d2_pin=d2_pin,
-            d3_pin=d3_pin,
-            slot=slot,
-            width=width,
-            freq=freq
-        )
-    else:
-        logger.warning("SDCardManager already initialized")
-        if __debug__: logger.debug("  - Use existing instance via get()")
-    return _manager
-
-def get():
-    """Get the global SD card manager instance."""
-    if _manager is None:
-        logger.error("SDCardManager not initialized")
-        if __debug__: logger.debug("  - Call init() with appropriate parameters first in lib/mpos/board/*.py")
-        if __debug__: logger.debug("  - SPI mode: init(spi_bus=machine.SPI(...), cs_pin=pin_number)")
-        if __debug__: logger.debug("  - SDIO mode: init(mode='sdio', cmd_pin=X, clk_pin=Y, d0_pin=Z, ...)")
-    return _manager
-
-def get_mode():
-    """Get the current SD card mode ('spi' or 'sdio')."""
-    mgr = get()
-    if mgr is None:
-        logger.error("Cannot get mode - SDCardManager not initialized")
-        return None
-    return mgr._mode
-
-def mount(mount_point):
-    mgr = get()
-    if mgr is None:
-        logger.error("Cannot mount - SDCardManager not initialized")
-        if __debug__: logger.debug("  - Call init() with appropriate parameters first")
-        return False
-    return mgr.mount_with_optional_format(mount_point)
-
-def mount_with_optional_format(mount_point):
-    mgr = get()
-    if mgr is None:
-        logger.error("Cannot mount with format - SDCardManager not initialized")
-        if __debug__: logger.debug("  - Call init() with appropriate parameters first")
-        return False
-    success = mgr.mount_with_optional_format(mount_point)
-    if not success:
-        logger.error("mount_with_format('%s') failed", mount_point)
-        if __debug__: logger.debug("  - See detailed errors above for mount or format issues")
-    return success

@@ -1,4 +1,5 @@
 from mpos import Activity, AppearanceManager, AudioManager, DisplayMetrics, Intent, SettingActivity, SharedPreferences, add_focus_highlight
+from mpos.ui.input_manager import InputManager
 import mpos.ui
 import lvgl as lv
 import os
@@ -354,7 +355,7 @@ class Sorter(Activity):
             border.set_style_radius(4, 0)
             border.add_flag(lv.obj.FLAG.CLICKABLE)
             border.add_event_cb(lambda e, i=idx: self.on_tube(e, i), lv.EVENT.CLICKED, None)
-            mpos.ui.add_focus_border(border, mode="bg")
+            mpos.ui.add_focus_highlight(border, mode="bg")
             self.tube_borders.append(border)
 
             emoji_x = tube_x + (tube_width - emoji_sz) // 2
@@ -585,8 +586,22 @@ class Sorter(Activity):
 
         self.popup_modal = mbox
 
+    def onPause(self, screen):
+        InputManager.set_back_screen_disabled(False)
+        InputManager.set_drawer_open_disabled(False)
+        super().onPause(screen)
+
     def onResume(self, screen):
         self.sound_effects = self._load_sound_effects()
+        InputManager.set_back_screen_disabled(True, cb=self._show_exit_confirm)
+        InputManager.set_drawer_open_disabled(True, cb=lambda: self.on_help(None))
+
+    def _show_exit_confirm(self):
+        self._show_confirm_popup("Exit the game?", self._do_exit, self._close_popup)
+
+    def _do_exit(self, event):
+        self._close_popup()
+        self.finish()
 
     def _on_reset_highscore_yes(self, event):
         self.highscore = 0

@@ -124,7 +124,7 @@ import i2c
 import lcd_bus
 import lvgl as lv
 import machine
-import mpos.sdcard
+from mpos import SDCardManager
 import mpos.ui
 from drivers.display.st7701s import ST7701S
 from drivers.display.st7701s.expander_spi3wire import ExpanderSpi3Wire
@@ -518,14 +518,13 @@ def card_present():
 
 def _sd_mount():
     try:
-        os.mount(mpos.sdcard.get()._sdcard, "/sdcard")  # plain mount, never auto-format
+        SDCardManager.mount()  # plain mount, never auto-format
     except Exception as e:
         if __debug__: logger.debug("squixl: sd mount:", e)
 
 
 def sd_init():
-    # Boot bring-up: mux to SD, create the SPI bus, register the card with mpos.sdcard
-    # (which owns the manager singleton), and mount it.
+    # Boot bring-up: mux to SD, create the SPI bus, register the card, and mount it.
     global _sd_spi
     set_iomux(IOMUX_SD)
     _sd_spi = machine.SPI.Bus(
@@ -534,7 +533,7 @@ def sd_init():
         mosi=SD_MOSI_PIN,
         miso=SD_MISO_PIN,
     )
-    mpos.sdcard.init(spi_bus=_sd_spi, cs_pin=SD_CS_PIN)
+    SDCardManager.init(spi_bus=_sd_spi, cs_pin=SD_CS_PIN)
     _sd_mount()
 
 
@@ -566,7 +565,7 @@ def _audio_acquire():  # AudioManager Output.on_open
     except Exception:
         pass
     try:
-        mgr = mpos.sdcard.get()
+        mgr = SDCardManager.get_raw()
         if mgr and mgr._sdcard:
             mgr._sdcard.deinit()  # frees the SPI bus + releases the shared pins
     except Exception as e:

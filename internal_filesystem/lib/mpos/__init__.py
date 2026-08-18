@@ -6,6 +6,7 @@ from .content.intent import Intent
 from .activity_navigator import ActivityNavigator, get_foreground_app
 
 from .content.app_manager import AppManager
+from .sdcard import SDCardManager
 from .shared_preferences import SharedPreferences
 from .net.connectivity_manager import ConnectivityManager
 from .net.wifi_service import WifiService
@@ -57,7 +58,13 @@ from .ui.input_manager import InputManager
 from .ui.appearance_manager import AppearanceManager
 from .ui.event import get_event_name, print_event
 from .ui.view import setContentView, back_screen
+from .ui.input_manager import InputManager
 from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
+
+set_back_screen_disabled = InputManager.set_back_screen_disabled
+is_back_screen_disabled = InputManager.is_back_screen_disabled
+set_drawer_open_disabled = InputManager.set_drawer_open_disabled
+is_drawer_open_disabled = InputManager.is_drawer_open_disabled
 from .ui.focus import save_and_clear_current_focusgroup, add_focus_highlight, add_focus_border
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.widget_animator import WidgetAnimator
@@ -72,7 +79,6 @@ from . import content
 from . import time
 from . import sensor_manager
 from . import camera_manager
-from . import sdcard
 from . import audio
 
 __all__ = (
@@ -80,7 +86,7 @@ __all__ = (
     "App",
     "Activity",
     "Service",
-    "SharedPreferences",
+    "SDCardManager", "SharedPreferences",
     "ConnectivityManager", "DownloadManager", "WifiService", "AudioManager", "Intent",
     "ActivityNavigator", "AppManager", "TaskManager", "CameraManager", "BatteryManager", "WebServer",
     "NotificationManager", "Notification",
@@ -100,7 +106,9 @@ __all__ = (
     "SensorManager",
     "get_event_name", "print_event",
     "setContentView", "back_screen",
+    "set_back_screen_disabled", "is_back_screen_disabled",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
+    "set_drawer_open_disabled", "is_drawer_open_disabled",
     "save_and_clear_current_focusgroup", "add_focus_highlight", "add_focus_border",
     "handle_back_swipe", "handle_top_swipe",
     "get_foreground_app",
@@ -119,7 +127,7 @@ __all__ = (
     "retry_action_until", "wait_for_focus",
     # Submodules
     "ui", "shared_preferences", "net", "content", "time", "sensor_manager",
-    "camera_manager", "sdcard", "audio",
+    "camera_manager", "audio",
     # Timezone utilities
     "TimeZone"
 )

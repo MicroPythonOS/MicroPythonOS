@@ -6,7 +6,7 @@ import lvgl as lv
 
 logger = logging.getLogger(__name__)
 
-from mpos import Activity, AppManager, DisplayMetrics, Intent, sdcard, AudioManager, add_focus_border
+from mpos import Activity, AppManager, DisplayMetrics, Intent, SDCardManager, AudioManager, add_focus_border
 
 slider_max = 16
 ENDLESS_REPEAT_COUNT = 1_000_000
@@ -30,7 +30,7 @@ class MusicPlayer(Activity):
     def onCreate(self):
         screen = lv.obj()
         # the user might have recently plugged in the sd card so try to mount it
-        sdcard.mount_with_optional_format("/sdcard")
+        SDCardManager.mount()
 
         self._filename = self.getIntent().extras.get("filename") or self.getIntent().data
         self._playback_attempted_for = None

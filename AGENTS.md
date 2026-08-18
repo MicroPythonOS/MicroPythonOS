@@ -13,12 +13,35 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 - `mpy-cross`: `./lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cross`. Needs `-march=x64` for native/viper on desktop.
 - Unix/macOS: `build_mpos.sh` creates symlinks in `lvgl_micropython/ext_mod/` for `c_mpos` and `secp256k1-embedded-ecdh`.
 
+### lvgl_micropython submodule branching
+
+- **Patch files** (`.patch` applied by `build_mpos.sh`): commit directly on `integration`. No topic branch needed — the patch file is the topic.
+- **Direct C/C++ source edits**: must go on a `topic/<name>` branch, then merge into `integration`.
+- Branch naming: `topic/<kebab-case>` (e.g. `topic/wifi-country-japan`).
+
 ## Testing
 
-**Run:** `./scripts/test_runner.py tests/<test_file> [--ondevice] [--port <port>] [--reset]`  
+**Run:** `./scripts/test_runner.py tests/<test_file> tests/<other_test_file> [--ondevice] [--port <port>] [--reset]` 
 **All tests:** `make tests` (20–35 min). CI runs them on push. **Syntax:** `make syntax-tests`  
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py` (not run by test_runner.py).  
 **Details:** `tests/README.md`
+
+### Code coverage (desktop only)
+
+**Build with coverage:** `./scripts/build_mpos.sh unix coverage` or `make build-mpos-unix-coverage`  
+Enables `sys.settrace` in the mpcov variant. Standard build overwritten — re-run `./scripts/build_mpos.sh unix` to restore.
+
+**Run tests with coverage:**
+```
+python3 scripts/test_runner.py --coverage tests/test_a.py tests/test_b.py   # terminal report
+python3 scripts/test_runner.py --coverage --coverage-save cov.json tests/test_*.py  # save JSON
+python3 scripts/test_runner.py --coverage --coverage-load cov.json --coverage-save cov.json tests/test_extra.py  # merge
+```
+
+**Generate HTML report:** `python3 scripts/coverage_report.py cov.json -o coverage/index.html`  
+Self-contained HTML — overview stats, per-file coverage %, expand inline source with line coloring (red=untested, green=tested, shade intensity by hit count).
+
+**When running multiple tests for coverage:** prefer `test_runner.py` with multiple positional args (e.g. `tests/test_a.py tests/test_b.py`) over one-by-one invocations — the merged coverage report will aggregate all runs.
 
 - Graphical tests (filename contains `graphical`): LVGL boot injected. Non-graphical: no boot, no LVGL init — import `lvgl` lazily.
 - Test CWD = `internal_filesystem/`. `sys.path.insert(0, ".")` assumes that root.
@@ -34,6 +57,24 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 
 **Most common test segfault cause:** passing a non-LVGL Python object (mock, plain instance) as parent to any LVGL widget constructor. Mock the calling method instead, or use real `lv.obj()` (graphical test).
 
+**Never cache `asyncio.get_event_loop()` in `setUp`.** The test runner may create a fresh event loop between `setUp` and the test method, making a cached reference stale. Get the loop fresh at call time — inside the test method or inside the task-capture callback:
+
+```python
+# WRONG — loop may be stale
+def setUp(self):
+    self._loop = asyncio.get_event_loop()
+
+def _capture_task(coro):
+    self._loop.run_until_complete(coro)  # boom
+
+# RIGHT — fresh lookup
+def _capture_task(coro):
+    import asyncio as _asyncio
+    _asyncio.get_event_loop().run_until_complete(coro)
+```
+
+**Task capture triggers cascading side effects.** When `TaskManager.create_task` is mocked to `run_until_complete` synchronously, any task that internally spawns more tasks also runs synchronously in the same call. E.g. mocking `_update_all_click` reaches `_run_update_all` → `refresh_list` → `download_app_index` → `create_apps_list` → `_stop_all_timers`. Every link in the chain needs a mock (`_raw_timer`, `refresh_list`, etc.) even if your test goal is narrow. The crash surfaces far from the mocked entry point — watch the stack trace for the full cascade.
+
 ## Development rules
 
 - **TDD:** write failing test → fix → test passes.
@@ -41,6 +82,16 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
 - **Batch edits:** constrain to exact patterns. Broad edits can silently delete unrelated code. If damage occurs, restore from git and re-apply a precise script.
 - **Implement missing functionality** rather than working around it.
+- **Observe before fixing, not after.** When a bug involves UI state or runtime data, use `mpos-controller` (`exec`, `get_widget_tree`, `eval`) to inspect the actual running system before coding a fix. Do NOT spend more than 2 rounds of static code analysis without validating assumptions against the live process.
+
+### Debugging shared-object / identity bugs
+
+The AppStore and AppManager share App objects by reference — `self.apps`, `_by_fullname`, and `_app_list` may all point to the same instance. Mutating any attribute on one path silently changes it everywhere. When tracing a bug where a value is "wrong" despite looking correct in isolation:
+
+1. **Check object identity first:** `a is b` on the suspected candidates. Use `mpos-controller exec` to test.
+2. **Mock objects hide identity bugs.** A test mock that creates a fresh object won't catch mutations propagated through shared references. Write at least one test that uses the real objects from the cache (`AppManager._by_fullname`) — not mock copies.
+3. **Prefer filesystem reads over cache reads for installed state.** The cache can go stale or be corrupted by shared-object writes. For installed-app data (version, installed status), reading MANIFEST.JSON directly from `apps/` or `builtin/apps/` is more reliable than `_by_fullname`.
+4. **Don't overwrite fields on shared objects.** If an App object lives in both the AppManager cache and the store list, use a separate attribute (e.g., `_remote_version`) for store-specific data instead of mutating shared fields like `version`.
 
 ### Logging
 
@@ -147,9 +198,12 @@ Critical gotchas:
 - Viper: `ba[i]` returns `object` → `int()` cast. int16 sign extension: `v = int(ba[i]) | (int(ba[i+1]) << 8); if v & 0x8000: v -= 65536`.
 
 ### ESP32
+- Remember that MicroPythonOS often runs on resource constrained hardware
 - `sys.platform` always `'esp32'` (S3, C3, etc.).
 - `Pin.init(Pin.OUT)` silently overrides peripheral GPIO routing → no output, no error. Fix: deinit + re-create peripheral.
 - Shared RMT pin: re-create RMT driver (not just `pin.init`).
+- `asyncio.create_task()` from outside the event loop (timer callbacks, thread, boot services) does NOT wake the event loop — tasks queue up and execute with unpredictable delay (~6s typical on ESP32-S3). Architectures that rely on a `create_task()`-spawned loop polling a flag will fail. Instead, call `create_task()` directly from each callback (see `appstore_core._network_changed` for the proven pattern).
+- Services that call `start()` → `register_callback()` → `create_task(_run_loop())` at boot: the callback path works (fired via timer ISR on main thread), but the run-loop task may face scheduling delays. Don't rely on the run-loop for time-sensitive work — treat it as best-effort periodic background check.
 
 ### BLE
 - 31-byte advertising cap (NimBLE). No extended advertising. Scan response = separate 31 bytes.

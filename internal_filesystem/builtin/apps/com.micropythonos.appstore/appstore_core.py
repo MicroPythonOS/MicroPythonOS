@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 
+import time
 import ujson
 
 from mpos import (
@@ -177,6 +178,25 @@ async def report_badgehub_install(fullname, revision):
         if __debug__: logger.debug("report install failed for %s: %s", fullname, e)
 
 
+async def report_badgehub_rating(fullname, revision, rating):
+    mac, sha1_id = _get_device_mac_and_id()
+    if not mac or not sha1_id:
+        if __debug__: logger.debug("cannot report rating: no device id available")
+        return
+    url = "https://badgehub.eu/api/v3/projects/%s/rev%s/report/rating?mac=%s&id=%s" % (
+        fullname, revision, mac, sha1_id,
+    )
+    try:
+        await DownloadManager.post_url(
+            url,
+            data=ujson.dumps({"rating": rating}),
+            headers={'Accept': 'application/json', 'Content-Type': 'application/json'},
+            redact_url=True,
+        )
+    except Exception as e:
+        if __debug__: logger.debug("report rating failed for %s: %s", fullname, e)
+
+
 class AppUpdateState:
     IDLE = "idle"
     WAITING_WIFI = "waiting_wifi"
@@ -219,6 +239,7 @@ class AppUpdateManager:
         self.current_state = AppUpdateState.IDLE
         self._running = False
         self._check_in_progress = False
+        self._last_check_ts = None
         self._connectivity_manager = None
         self._state_callback = None
         self._suppress_notifications = False
@@ -291,7 +312,7 @@ class AppUpdateManager:
         """Kick off a one-off update check if none is already in progress."""
         if self._check_in_progress:
             return
-        TaskManager.create_task(self.check_for_updates(index_url))
+        TaskManager.create_task(self.check_for_updates(index_url, force=True))
 
     def _network_changed(self, online):
         if __debug__: logger.debug("network %s", "ONLINE" if online else "OFFLINE")
@@ -318,7 +339,7 @@ class AppUpdateManager:
         list_url = parts[1]
         return list_url, backend_type
 
-    async def check_for_updates(self, index_url=None):
+    async def check_for_updates(self, index_url=None, force=False):
         """Download the app index and compare versions against installed apps.
 
         ``index_url`` defaults to the production index.  The AppStore UI
@@ -326,6 +347,14 @@ class AppUpdateManager:
         """
         if self._check_in_progress:
             return
+        # deduplicate against _network_changed callback triggering first check
+        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks.
+        # _last_check_ts starts as None: on ESP32 ticks_ms() counts from boot, so
+        # treating "never checked" as 0 would block the first check for 60s of uptime.
+        now = time.ticks_ms()
+        if not force and self._last_check_ts is not None and now - self._last_check_ts < 60000:
+            return
+        self._last_check_ts = now
         self._check_in_progress = True
         try:
             self._set_state(AppUpdateState.CHECKING_UPDATES)
@@ -405,7 +434,7 @@ class AppUpdateManager:
                 title="App updates available",
                 text=text,
                 priority=Notification.PRIORITY_DEFAULT,
-                intent=Intent(app_fullname="com.micropythonos.appstore"),
+                intent=Intent(app_fullname="com.micropythonos.appstore").putExtra("category", "Updates"),
                 auto_cancel=True,
                 app_fullname="com.micropythonos.appstore",
             )

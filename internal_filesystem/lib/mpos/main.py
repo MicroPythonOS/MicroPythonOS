@@ -302,14 +302,22 @@ if not focusgroup:
     focusgroup = lv.group_create()
     focusgroup.set_default()
 
-board = detect_board()
-if board:
-    if __debug__: logger.warning("Detected %s system, importing mpos.board.%s", board, board)
-    DeviceInfo.set_hardware_id(board)
-    __import__(f"mpos.board.{board}")
+if DeviceInfo.hardware_id != "missing-hardware-info":
+    logger.warning("DeviceInfo.hardware_id already set to '%s', skipping board detection", DeviceInfo.hardware_id)
+    board = DeviceInfo.hardware_id
+    try:
+        __import__(f"mpos.board.{board}")
+    except ImportError:
+        logger.warning("No board file 'mpos.board.%s' found, continuing without it", board)
 else:
-    # It makes no sense to continue, because we have no display etc...
-    raise RuntimeError("No board detected, exit initialization!")
+    board = detect_board()
+    if board:
+        if __debug__: logger.warning("Detected %s system, importing mpos.board.%s", board, board)
+        DeviceInfo.set_hardware_id(board)
+        __import__(f"mpos.board.{board}")
+    else:
+        # It makes no sense to continue, because we have no display etc...
+        raise RuntimeError("No board detected, exit initialization!")
 
 # Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
 import mpos.fs_driver
@@ -345,7 +353,7 @@ def custom_exception_handler(e):
 
 # 5ms is recommended for MicroPython+LVGL on desktop (less results in lower framerate but still okay)
 # 1ms gives highest framerate on esp32-s3's but might has side effects: RMT (used for IR RX) timing is off
-def change_task_handler(period_ms=1):
+def change_task_handler(period_ms=2):
     import mpos.ui
     if hasattr(mpos.ui, "task_handler"):
         mpos.ui.task_handler.disable() # this fixes the decode of the real remote!

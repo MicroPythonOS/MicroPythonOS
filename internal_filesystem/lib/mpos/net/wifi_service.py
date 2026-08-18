@@ -286,6 +286,11 @@ class WifiService:
 
         try:
             wlan = WifiService._get_sta_wlan(net)
+
+            if wlan.isconnected():
+                wlan.disconnect()
+                time_mod.sleep(0.5)
+
             wlan.connect(ssid, password)
 
             # Wait up to 13 seconds for connection

@@ -30,6 +30,22 @@ class TestCameraClass(unittest.TestCase):
         self.assertEqual(cam.name, "Camera")
         self.assertEqual(cam.vendor, "Unknown")
         self.assertEqual(cam.version, 1)
+        self.assertFalse(cam.get_rgb565_byte_swap())
+        self.assertTrue(cam.get_default_vflip())
+
+    def test_camera_rgb565_byte_swap(self):
+        cam = CameraManager.Camera(
+            lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
+            rgb565_byte_swap=True
+        )
+        self.assertTrue(cam.get_rgb565_byte_swap())
+
+    def test_camera_default_vflip(self):
+        cam = CameraManager.Camera(
+            lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_FRONT,
+            default_vflip=False
+        )
+        self.assertFalse(cam.get_default_vflip())
 
     def test_camera_repr(self):
         """Test Camera __repr__ method."""
@@ -295,4 +311,3 @@ class TestCameraManagerUsagePattern(unittest.TestCase):
             has_camera = False
         
         self.assertFalse(has_camera)
-

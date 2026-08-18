@@ -22,11 +22,14 @@ Usage:
     ip = ai[0][-1][0]
 """
 
+import logging
 import socket
 import _thread
 import sys
 import time
 from mpos.task_manager import TaskManager
+
+logger = logging.getLogger(__name__)
 
 # Module-level reference to the getaddrinfo implementation.  Tests replace this
 # variable to monkeypatch without needing to modify the built-in socket module
@@ -111,6 +114,8 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
 
     global _inflight
 
+    if __debug__: logger.debug("resolving %s:%s", host, port)
+
     # Wait for a free worker slot without blocking the event loop. If cancelled
     # here, we have not reserved a slot yet, so nothing leaks.
     while True:
@@ -153,8 +158,10 @@ async def getaddrinfo_async(host, port, proto=0, socktype=None):
         await TaskManager.sleep_ms(20)
 
     if _result["exc"] is not None:
+        if __debug__: logger.debug("resolve %s:%s failed: %s", host, port, _result["exc"])
         raise _result["exc"]
 
     # Cache only successful results so a later lookup can skip the worker thread.
     _dns_cache[key] = (_result["value"], time.ticks_ms())
+    if __debug__: logger.debug("resolve %s:%s done", host, port)
     return _result["value"]

@@ -145,6 +145,54 @@ class TestAppStoreFocus(unittest.TestCase):
             "to the small corner button.",
         )
 
+    def test_dropdown_confirmation_allows_focus_to_leave(self):
+        activity = _get_appstore_activity()
+        dropdown = activity.category_dropdown
+        group = lv.group_get_default()
+
+        activity._category_options = ["One", "Two", "Three"]
+        dropdown.set_options("One\nTwo\nThree")
+        dropdown.set_selected(0)
+        lv.group_focus_obj(dropdown)
+
+        self.assertFalse(dropdown.is_open())
+        group.send_data(lv.KEY.ENTER)
+        self.assertTrue(dropdown.is_open())
+        group.send_data(lv.KEY.RIGHT)
+        self.assertEqual(dropdown.get_selected(), 1)
+        group.send_data(lv.KEY.ENTER)
+        self.assertFalse(dropdown.is_open())
+        group.focus_next()
+        self.assertIsNot(_focused_obj(), dropdown)
+
+    def test_dropdown_escape_restores_unconfirmed_category(self):
+        activity = _get_appstore_activity()
+        dropdown = activity.category_dropdown
+        group = lv.group_get_default()
+        rebuilds = []
+        original_create_apps_list = activity.create_apps_list
+
+        activity._category_options = ["One", "Two", "Three"]
+        dropdown.set_options("One\nTwo\nThree")
+        dropdown.set_selected(0)
+        activity.create_apps_list = lambda: rebuilds.append(dropdown.get_selected())
+        lv.group_focus_obj(dropdown)
+
+        try:
+            group.send_data(lv.KEY.ENTER)
+            group.send_data(lv.KEY.RIGHT)
+            self.assertEqual(dropdown.get_selected(), 1)
+            group.send_data(lv.KEY.LEFT)
+            self.assertEqual(dropdown.get_selected(), 0)
+            group.send_data(lv.KEY.RIGHT)
+            self.assertEqual(dropdown.get_selected(), 1)
+            group.send_data(lv.KEY.ESC)
+            self.assertFalse(dropdown.is_open())
+            self.assertEqual(dropdown.get_selected(), 0)
+            self.assertEqual(rebuilds, [])
+        finally:
+            activity.create_apps_list = original_create_apps_list
+
     def test_update_all_button_reachable_when_visible(self):
         """When 'Update N App(s)' is visible it must be reachable via DOWN from settings_button."""
         activity = _get_appstore_activity()
@@ -182,4 +230,52 @@ class TestAppStoreFocus(unittest.TestCase):
                 timeout=0.5,
             ),
             "Update All button was not reachable by pressing DOWN from settings_button.",
+        )
+
+    # ------------------------------------------------------------------
+
+    def test_focus_restored_after_back_from_app_detail(self):
+        """Focused widget must be restored after returning from AppDetail via back."""
+        activity = _get_appstore_activity()
+        settings_btn = activity.settings_button
+
+        lv.group_focus_obj(settings_btn)
+        self.assertIsNotNone(
+            wait_for_focus(settings_btn, timeout=0.5),
+            "settings_button should be focused before navigation",
+        )
+
+        activity.show_app_detail(activity.apps[0])
+        _wait_ms(1000)
+
+        mpos.ui.back_screen()
+        _wait_ms(500)
+
+        self.assertIsNotNone(
+            wait_for_focus(settings_btn, timeout=1.0),
+            "Focus was not restored to settings_button after back from AppDetail",
+        )
+
+    def test_focus_restored_after_back_from_app_detail_bottom_item(self):
+        """Focus on a bottom list item must be restored after returning from AppDetail."""
+        activity = _get_appstore_activity()
+
+        last_item = activity.apps_list.get_child(
+            activity.apps_list.get_child_count() - 1
+        )
+        lv.group_focus_obj(last_item)
+        self.assertIsNotNone(
+            wait_for_focus(last_item, timeout=0.5),
+            "Last list item should be focused before navigation",
+        )
+
+        activity.show_app_detail(activity.apps[0])
+        _wait_ms(1000)
+
+        mpos.ui.back_screen()
+        _wait_ms(500)
+
+        self.assertIsNotNone(
+            wait_for_focus(last_item, timeout=1.0),
+            "Focus was not restored to last list item after back from AppDetail",
         )

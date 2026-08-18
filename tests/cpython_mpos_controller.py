@@ -24,7 +24,13 @@ import argparse
 import subprocess
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from scripts.mpos_controller import MPOSController
+from scripts.mpos_controller import (
+    MPOSController,
+    AIOREPLClient,
+    END_MARKER,
+    _count_usb_serial_devices,
+    _mpremote_cmd,
+)
 
 
 PASS = 0
@@ -69,6 +75,8 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
         "navigation": test_app_navigation,
         "appmanagement": test_app_management,
         "helpers": test_controller_helpers,
+        "readuntil": test_read_until,
+        "mpremoteport": test_mpremote_port,
     }
     if only:
         names = [s.strip() for s in only.split(",")]
@@ -83,6 +91,111 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
     else:
         for name, fn in sections.items():
             fn(mpos, is_serial=is_serial, cli_binary=cli_binary, serial_port=serial_port)
+
+
+def test_read_until(mpos, is_serial=False, cli_binary=None, serial_port=None):
+    # Unit test: no device and no desktop binary. read_until must match
+    # an LF sentinel against LF output (desktop PTY) and against CRLF
+    # output (device REPL). Before the CRLF fix, the serial case never
+    # matched and every exec waited out its full timeout.
+    section("read_until sentinel matching (LF and CRLF)")
+
+    class PipeStream:
+        def __init__(self, data):
+            self.rfd, self.wfd = os.pipe()
+            os.write(self.wfd, data)
+
+        def fileno(self):
+            return self.rfd
+
+        def read(self, n):
+            return os.read(self.rfd, n)
+
+        def close(self):
+            os.close(self.rfd)
+            os.close(self.wfd)
+
+    def read_from(data, ending, timeout):
+        stream = PipeStream(data)
+        try:
+            t0 = time.monotonic()
+            result = AIOREPLClient(stream).read_until(ending, timeout=timeout)
+            return result, time.monotonic() - t0
+        finally:
+            stream.close()
+
+    sentinel = END_MARKER.encode() + b"\n"
+
+    out, elapsed = read_from(b"hello\n" + sentinel, sentinel, timeout=10)
+    check(out.endswith(sentinel), f"LF output matches LF sentinel: {out!r}")
+    check(elapsed < 5, f"LF match returns before the timeout ({elapsed:.2f}s)")
+
+    crlf_data = b"hello\r\n" + END_MARKER.encode() + b"\r\n"
+    out, elapsed = read_from(crlf_data, sentinel, timeout=10)
+    check(
+        out.endswith(END_MARKER.encode() + b"\r\n"),
+        f"CRLF output matches LF sentinel: {out!r}",
+    )
+    check(elapsed < 5, f"CRLF match returns before the timeout ({elapsed:.2f}s)")
+
+    out, elapsed = read_from(b"MicroPython\r\n>>> ", b">>> ", timeout=10)
+    check(out.endswith(b">>> "), f"prompt sentinel without newline: {out!r}")
+    check(elapsed < 5, f"prompt match returns before the timeout ({elapsed:.2f}s)")
+
+    out, elapsed = read_from(b"no sentinel here\r\n", sentinel, timeout=0.5)
+    check(
+        out == b"no sentinel here\r\n",
+        f"missing sentinel: timeout still returns the data: {out!r}",
+    )
+
+
+def test_mpremote_port(mpos, is_serial=False, cli_binary=None, serial_port=None):
+    # This test does not use a device, because _mpremote_cmd() only builds a
+    # list of arguments. It runs with the desktop backend and with a device.
+    section("mpremote port selection")
+
+    cmd = _mpremote_cmd("/dev/ttyACM7", "fs", "cp", "app.py", ":/")
+    has_connect = "connect" in cmd
+    check(has_connect, "with a port: the command contains 'connect'")
+    check(
+        has_connect and cmd[cmd.index("connect") + 1] == "/dev/ttyACM7",
+        "with a port: the port comes after 'connect'",
+    )
+    check(
+        cmd[-4:] == ["fs", "cp", "app.py", ":/"],
+        "with a port: the command keeps the other arguments",
+    )
+
+    # With no port, mpremote connects to the first device that it finds. The
+    # command must not contain 'connect', because there is no port to give.
+    cmd = _mpremote_cmd(None, "fs", "cp", "app.py", ":/")
+    check("connect" not in cmd, "with no port: the command contains no 'connect'")
+    check(
+        cmd[-4:] == ["fs", "cp", "app.py", ":/"],
+        "with no port: the command keeps the other arguments",
+    )
+
+    # A missing pyserial must give None, and not 0. The installapp guard reads
+    # 0 as "the host has one device or no device", and then does not warn.
+    # mpremote runs with `python3`, which can be a different interpreter that
+    # does have pyserial, so 0 would hide a real multi-device condition.
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_serial(name, *a, **k):
+        if name.split(".")[0] == "serial":
+            raise ImportError("blocked by the test")
+        return real_import(name, *a, **k)
+
+    builtins.__import__ = no_serial
+    try:
+        check(
+            _count_usb_serial_devices() is None,
+            "no pyserial: the device count is unknown, and not 0",
+        )
+    finally:
+        builtins.__import__ = real_import
 
 
 def test_basic(mpos, is_serial=False, cli_binary=None, serial_port=None):
@@ -358,13 +471,13 @@ def test_app_management(mpos, is_serial=False, cli_binary=None, serial_port=None
                      "internal_filesystem/apps", appname)
     )
 
-    script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    mpremote = os.path.join(script_dir,
-        "lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py")
-
-    subprocess.run(["python3", mpremote, "mkdir", ":/apps"], capture_output=True)
+    # Use the port that the caller gave. If mpremote gets no port, it connects
+    # to the first serial device that it finds, which can be a different device.
+    subprocess.run(
+        _mpremote_cmd(serial_port, "mkdir", ":/apps"), capture_output=True
+    )
     result = subprocess.run(
-        ["python3", mpremote, "fs", "cp", "-r", apppath, ":/apps/"],
+        _mpremote_cmd(serial_port, "fs", "cp", "-r", apppath, ":/apps/"),
         capture_output=True, timeout=60
     )
     check(result.returncode == 0, f"installapp: cp exit code {result.returncode}")
@@ -394,7 +507,7 @@ for a in AppManager.get_app_list():
 def main():
     parser = argparse.ArgumentParser(description="Test MPOSController backends")
     parser.add_argument("--serial", help="Serial port for device backend")
-    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers")
+    parser.add_argument("--only", help="Comma-separated test sections: basic,ui,interaction,drag,cli,sessions,navigation,appmanagement,helpers,readuntil,mpremoteport")
     parser.add_argument("--binary", help="Path to lvgl_micropy_unix binary")
     args = parser.parse_args()
 

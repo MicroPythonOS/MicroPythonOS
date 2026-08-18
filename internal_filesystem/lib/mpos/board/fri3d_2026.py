@@ -58,7 +58,15 @@ spi_bus = SPI.Bus(
 
 # Would be better to do this only when the LoRa app starts:
 try:
-    lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=500000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
+    # cs=-1 disables hardware CS on the SPI.Device — the SX1262 driver manages
+    # CS manually via GPIO 45 (passed to SX1262() below as cs_pin). This is
+    # necessary because SPItransfer() must hold CS low across multiple
+    # spi.write()/read() calls for a single command frame. If SPI.Device handled
+    # CS automatically, it would toggle between each call, fragmenting the
+    # command. The BUSY wait was moved outside the CS-low span by PR #222.
+    # A full fix would batch all bytes into one spi.write_readinto() call,
+    # allowing hardware CS — but that requires a driver rewrite.
+    lora_spi_device = SPI.Device(spi_bus=spi_bus, freq=16000000, cs=-1, polarity=0, phase=0, firstbit=SPI.Device.MSB, bits=8)
 except Exception as e:
     import sys
     sys.print_exception(e)
@@ -67,7 +75,7 @@ else:
     rf_sw = Pin(46, Pin.OUT)
     rf_sw.value(1)
     if __debug__: logger.debug("RF_SW set to HIGH") # Logic high level means enable receiver mode
-    sx = SX1262(lora_spi_device, 40, 11, 41, 45) # reset pin isn't used but driver expects a value so set to 11 (IR receiver) here for now
+    sx = SX1262(lora_spi_device, 40, 11, 41, 45) # reset pin is actually driven by CH32 Expander but expects a value so set to 11 (IR receiver) here for now
     from mpos import LoRaManager
     LoRaManager.radioChip = sx
 
@@ -120,7 +128,7 @@ expander_i2c = I2C(1, sda=Pin(39), scl=Pin(42), freq=400000)
 expander = Expander(i2c_bus=expander_i2c)
 expander.wait_for_normal_mode(min_uptime_ms=1000)
 if expander.install_firmware_if_needed(
-        "/builtin/firmware/fri3d_2026/coprocessor_2.0.1.fw", (2, 0, 1), progress_cb=progress,
+        "/builtin/firmware/fri3d_2026/coprocessor_2.0.3.fw", (2, 0, 3), progress_cb=progress,
         success_cb=lambda: (LightsManager.set_all(21, 96, 67), LightsManager.write()),
         warning_cb=warning, failure_cb=failure):
     if __debug__: logger.debug("Re-initializing expander_i2c")
@@ -229,8 +237,8 @@ try:
 except Exception as e:
     logger.error("expander init got exception: %s" % (e))
 
-import mpos.sdcard
-mpos.sdcard.init(spi_bus=spi_bus, cs_pin=14)
+from mpos import SDCardManager
+SDCardManager.init(spi_bus=spi_bus, cs_pin=14)
 
 IRManager.txPin = Pin(21, Pin.OUT) # mini blaster / noisycricket has an IR LED
 IRManager.rxPin = Pin(11, Pin.IN)

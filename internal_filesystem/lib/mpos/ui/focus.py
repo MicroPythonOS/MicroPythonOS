@@ -38,12 +38,13 @@ def _defocus_border_handler(event):
     target.set_style_border_width(0, lv.PART.MAIN)
 
 
-def _focus_bg_handler(event, color):
+def _focus_bg_handler(event, color, opacity):
     if not _focus_nav_active:
         return
     target = event.get_target_obj()
     target.set_style_bg_color(color, lv.PART.MAIN)
-    target.set_style_bg_opa(lv.OPA._30, lv.PART.MAIN)
+    target.set_style_bg_opa(opacity, lv.PART.MAIN)
+    target.scroll_to_view(True)
 
 
 def _defocus_bg_handler(event):
@@ -53,11 +54,12 @@ def _defocus_bg_handler(event):
     target.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
 
 
-def add_focus_highlight(widget, width=1, color=None, opacity=None, radius=None, mode="border"):
+def add_focus_highlight(widget, width=1, color=None, opacity=None, radius=None, mode="border", bg_opacity=lv.OPA.COVER):
     """Register focus/defocus callbacks that highlight a widget.
 
     mode='border' (default): draws a border around the widget on focus.
     mode='bg': tints the widget's background on focus, leaving borders intact.
+        bg_opacity controls the background opacity (default lv.OPA.COVER, 100%).
 
     The widget is always added to the focus group, but the highlight stays
     invisible until the user navigates by direction (see enable_focus_borders
@@ -69,7 +71,7 @@ def add_focus_highlight(widget, width=1, color=None, opacity=None, radius=None, 
         color = lv.theme_get_color_primary(None)
     if mode == "bg":
         widget.add_event_cb(
-            lambda e, c=color: _focus_bg_handler(e, c),
+            lambda e, c=color, o=bg_opacity: _focus_bg_handler(e, c, o),
             lv.EVENT.FOCUSED,
             None,
         )
@@ -106,5 +108,6 @@ def save_and_clear_current_focusgroup():
     d = lv.group_get_default()
     if d and s:
         a, scr, fg, fo = s.pop()
+        focused = d.get_focused()
         move_focusgroup_objects(d, fg)
-        s.append((a, scr, fg, d.get_focused()))
+        s.append((a, scr, fg, focused))

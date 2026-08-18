@@ -56,6 +56,16 @@ def run_async(coro):
     return asyncio.get_event_loop().run_until_complete(coro)
 
 
+class MockRNG:
+    """Mock RNG that returns a fixed value from getrandbits for deterministic tests."""
+
+    def __init__(self, fixed_bits=0):
+        self._bits = fixed_bits
+
+    def getrandbits(self, n):
+        return self._bits
+
+
 class TestUpdateChecker(unittest.TestCase):
     """Test UpdateChecker class."""
 
@@ -71,13 +81,19 @@ class TestUpdateChecker(unittest.TestCase):
         """Test URL generation for waveshare hardware."""
         url = self.checker.get_update_url("waveshare_esp32_s3_touch_lcd_2")
 
-        self.assertEqual(url, "https://updates.micropythonos.com/osupdate_waveshare_esp32_s3_touch_lcd_2.json")
+        self.assertIn(url, (
+            "https://updates.micropythonos.com/osupdate_waveshare_esp32_s3_touch_lcd_2.json",
+            "https://updates.micropythonos.org/osupdate_waveshare_esp32_s3_touch_lcd_2.json",
+        ))
 
     def test_get_update_url_other_hardware(self):
         """Test URL generation for other hardware."""
         url = self.checker.get_update_url("fri3d_2024")
 
-        self.assertEqual(url, "https://updates.micropythonos.com/osupdate_fri3d_2024.json")
+        self.assertIn(url, (
+            "https://updates.micropythonos.com/osupdate_fri3d_2024.json",
+            "https://updates.micropythonos.org/osupdate_fri3d_2024.json",
+        ))
 
     def test_fetch_update_info_success(self):
         """Test successful update info fetch."""
@@ -246,12 +262,46 @@ class TestUpdateChecker(unittest.TestCase):
 
     def test_get_update_url_custom_hardware(self):
         """Test URL generation for custom hardware IDs."""
-        # Test with different hardware IDs
         url1 = self.checker.get_update_url("custom-device-v1")
-        self.assertEqual(url1, "https://updates.micropythonos.com/osupdate_custom-device-v1.json")
+        self.assertIn(url1, (
+            "https://updates.micropythonos.com/osupdate_custom-device-v1.json",
+            "https://updates.micropythonos.org/osupdate_custom-device-v1.json",
+        ))
 
         url2 = self.checker.get_update_url("test-123")
-        self.assertEqual(url2, "https://updates.micropythonos.com/osupdate_test-123.json")
+        self.assertIn(url2, (
+            "https://updates.micropythonos.com/osupdate_test-123.json",
+            "https://updates.micropythonos.org/osupdate_test-123.json",
+        ))
+
+    def test_get_update_url_uses_both_mirrors(self):
+        """Test that both mirrors can be selected with a mock RNG."""
+        seen = set()
+        for bit in (0, 1):
+            mock_rng = MockRNG(fixed_bits=bit)
+            checker = UpdateChecker(
+                download_manager=self.mock_download_manager,
+                json_module=self.mock_json,
+                rng=mock_rng,
+            )
+            url = checker.get_update_url("waveshare_esp32_s3_touch_lcd_2")
+            domain = url.split("/osupdate_")[0]
+            seen.add(domain)
+        self.assertEqual(seen, {
+            "https://updates.micropythonos.com",
+            "https://updates.micropythonos.org",
+        })
+
+    def test_get_update_url_stores_chosen_mirror(self):
+        """Test that chosen_mirror is set after get_update_url call."""
+        mock_rng = MockRNG(fixed_bits=0)
+        checker = UpdateChecker(
+            download_manager=self.mock_download_manager,
+            json_module=self.mock_json,
+            rng=mock_rng,
+        )
+        checker.get_update_url("test-device")
+        self.assertEqual(checker._chosen_mirror, "https://updates.micropythonos.com")
 
 
 class TestUpdateDownloader(unittest.TestCase):
@@ -522,6 +572,256 @@ class TestUpdateDownloader(unittest.TestCase):
         self.assertEqual(self.downloader.bytes_written_so_far, 245760, "Must preserve internal state")
 
 
+def _make_block_data(block_idx):
+    """Create a 4096-byte block with block_idx embedded for integrity checking."""
+    header = bytes([block_idx & 0xFF, (block_idx >> 8) & 0xFF])
+    fill = bytes([(block_idx + j) & 0xFF for j in range(4096 - 2)])
+    return header + fill
+
+
+def _make_test_data(num_blocks):
+    return b"".join(_make_block_data(i) for i in range(num_blocks))
+
+
+def _verify_all_blocks(partition, num_blocks):
+    for i in range(num_blocks):
+        expected = _make_block_data(i)
+        actual = partition.blocks.get(i, b"")
+        if actual != expected:
+            return False, "block %d mismatch: expected %s, got %s" % (
+                i, expected[:4], actual[:4] if actual else b"empty"
+            )
+    return True, ""
+
+
+class RangeAwareMockDownloadManager:
+    def __init__(self):
+        self._data = b""
+        self._fail_positions = []
+        self._fail_index = 0
+        self._chunk_size = 4096
+        self._respect_range = True
+        self.headers_received = None
+        self.url_received = None
+        self.call_history = []
+
+    def set_download_data(self, data):
+        self._data = data
+
+    def set_fail_positions(self, positions):
+        self._fail_positions = list(positions)
+        self._fail_index = 0
+
+    def set_should_fail(self, should_fail):
+        if should_fail:
+            self.set_fail_positions([0])
+
+    def set_fail_after_bytes(self, bytes_count):
+        self.set_fail_positions([bytes_count])
+
+    async def download_url(self, url, outfile=None, total_size=None,
+                          progress_callback=None, chunk_callback=None, headers=None,
+                          speed_callback=None, redact_url=False):
+        from mpos.net.download_manager import DownloadManager
+
+        headers = DownloadManager._merge_headers(headers)
+        self.url_received = url
+        self.headers_received = headers
+        self.call_history.append({
+            "url": url,
+            "headers": headers,
+        })
+
+        start_pos = 0
+        if headers and self._respect_range:
+            range_val = headers.get("Range", "")
+            if range_val and "bytes=" in range_val:
+                try:
+                    range_part = range_val.split("bytes=")[1]
+                    if range_part.endswith("-"):
+                        start_pos = int(range_part[:-1])
+                    else:
+                        parts = range_part.split("-")
+                        start_pos = int(parts[0])
+                except (ValueError, IndexError):
+                    pass
+
+        if outfile or chunk_callback:
+            data_to_send = self._data[start_pos:]
+            bytes_sent = 0
+
+            for offset in range(0, len(data_to_send), self._chunk_size):
+                chunk = data_to_send[offset:offset + self._chunk_size]
+                if not chunk:
+                    break
+
+                abs_pos = start_pos + bytes_sent
+                if self._fail_index < len(self._fail_positions):
+                    fail_at = self._fail_positions[self._fail_index]
+                    if abs_pos >= fail_at:
+                        self._fail_index += 1
+                        raise OSError(-113, "ECONNABORTED")
+
+                if chunk_callback:
+                    await chunk_callback(chunk)
+
+                bytes_sent += len(chunk)
+
+            return True
+        else:
+            return self._data
+
+
+class TestUpdateDownloaderResumeIntegrity(unittest.TestCase):
+    def setUp(self):
+        self.mock_download_manager = RangeAwareMockDownloadManager()
+        self.downloader = UpdateDownloader(
+            partition_module=MockPartition,
+            download_manager=self.mock_download_manager
+        )
+
+    def test_resume_data_integrity_single_pause(self):
+        """Pause once then resume: verify every block has correct content."""
+        NUM_BLOCKS = 8
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.set_fail_positions([4096 * 3])
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertFalse(result["success"])
+        self.assertTrue(result["paused"])
+        self.assertEqual(result["bytes_written"], 4096 * 3)
+        part = self.downloader._current_partition
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+    def test_resume_data_integrity_multi_pause(self):
+        """Multiple pause/resume cycles: verify blocks after each and at end."""
+        NUM_BLOCKS = 12
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.set_fail_positions(
+            [4096 * 2, 4096 * 5, 4096 * 8]
+        )
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["paused"])
+        self.assertEqual(r["bytes_written"], 4096 * 2)
+        part = self.downloader._current_partition
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["paused"])
+        self.assertEqual(r["bytes_written"], 4096 * 5)
+        ok, msg = _verify_all_blocks(part, 5)
+        self.assertTrue(ok, "after pause 2: " + msg)
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["paused"])
+        self.assertEqual(r["bytes_written"], 4096 * 8)
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["success"])
+        self.assertEqual(r["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+    def test_resume_after_buffer_discard(self):
+        """Pause mid-block (partial buffer): resume must restore missing bytes."""
+        NUM_BLOCKS = 6
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        # fail AFTER the first full block but before buffer reaches next block boundary
+        # 4096 * 1 + 2048 = 6144: after block 0 + 2048 bytes of block 1 in buffer
+        self.mock_download_manager.set_fail_positions([4096 + 2048])
+        self.mock_download_manager._chunk_size = 2048
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertFalse(result["success"])
+        self.assertTrue(result["paused"])
+        # Only block 0 fully written; 2048 bytes of block 1 were in buffer and discarded
+        self.assertEqual(result["bytes_written"], 4096)
+        part = self.downloader._current_partition
+
+        # Resume: Range header must start from byte 4096, re-sending the lost 2048 bytes
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+    def test_resume_many_brief_drops(self):
+        """Many brief pauses (simulating flaky WiFi): verify final integrity."""
+        NUM_BLOCKS = 20
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        drops = [4096 * i for i in range(1, 11)]
+        self.mock_download_manager.set_fail_positions(drops)
+
+        for expected_pause in range(10):
+            r = run_async(self.downloader.download_and_install(
+                "http://example.com/update.bin"
+            ))
+            self.assertTrue(r["paused"], "pause %d" % expected_pause)
+        part = self.downloader._current_partition
+
+        r = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(r["success"])
+        self.assertEqual(r["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, "after 10 drops: " + msg)
+
+    def test_resume_data_integrity_after_wifi_returns(self):
+        """Full download with a pause: after WiFi returns and resume completes,
+        every block must contain its own data (no shift or corruption)."""
+        NUM_BLOCKS = 8
+        test_data = _make_test_data(NUM_BLOCKS)
+        self.mock_download_manager.set_download_data(test_data)
+        self.mock_download_manager.set_fail_positions([4096 * 3])
+
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["paused"])
+        self.assertEqual(result["bytes_written"], 4096 * 3)
+        part = self.downloader._current_partition
+
+        # Resume after WiFi returns — server correctly supports Range (206)
+        result = run_async(self.downloader.download_and_install(
+            "http://example.com/update.bin"
+        ))
+        self.assertTrue(result["success"])
+        self.assertEqual(result["bytes_written"], 4096 * NUM_BLOCKS)
+
+        ok, msg = _verify_all_blocks(part, NUM_BLOCKS)
+        self.assertTrue(ok, msg)
+
+
 class MockLVGLButton:
      """Mock LVGL button for testing button state and text."""
      
@@ -545,6 +845,24 @@ class MockLVGLButton:
      def remove_flag(self, flag):
          """Remove a flag."""
          self.hidden = False
+
+     def has_flag(self, flag):
+         return self.hidden
+
+     def get_y(self):
+         return 0
+
+     def get_height(self):
+         return 10
+
+     def align_to(self, ref, align, x, y):
+         pass
+
+     def set_y(self, y):
+         pass
+
+     def set_height(self, h):
+         pass
      
      def get_child(self, index):
          """Get child widget by index."""
@@ -669,6 +987,7 @@ class TestOSUpdateButtonBehavior(unittest.TestCase):
     def test_sync_ui_checking_update(self):
         self.app._sync_ui(UpdateState.CHECKING_UPDATE)
         self.assertEqual(self.app.status_label.get_text(), "Checking for OS updates...")
+        self.assertFalse(self.app.check_again_button.is_hidden())
 
 
 class TestFormatSetBootError(unittest.TestCase):
@@ -699,6 +1018,9 @@ class MockDownloaderUpdateManager:
 
     async def start_download(self, *args, **kwargs):
         return self._start_download_result
+
+    def get_update_info(self):
+        return {"comparison": "newer", "version": "0.0.0", "download_url": "http://example.com/update.bin", "changelog": ""}
 
 
 class TestOSUpdateRunDownload(unittest.TestCase):
@@ -740,3 +1062,150 @@ class TestOSUpdateRunDownload(unittest.TestCase):
         self.assertIn("ESP_ERR_OTA_VALIDATE_FAILED", status_text)
         self.assertIn("corrupted", status_text.lower())
         self.assertFalse(self.app.install_button.is_disabled())
+
+
+class MockConnectivityManager:
+    def __init__(self, online=True):
+        self._online = online
+
+    def is_online(self):
+        return self._online
+
+    def is_wifi_connected(self):
+        return self._online
+
+    def register_callback(self, cb):
+        pass
+
+    def unregister_callback(self, cb):
+        pass
+
+
+class TestOSUpdateCheckForUpdateErrorHandling(unittest.TestCase):
+
+    def setUp(self):
+        from osupdate_core import UpdateManager
+        UpdateManager._instance = None
+        self.um = UpdateManager.get_instance()
+        self.um.connectivity_manager = MockConnectivityManager(online=True)
+        self.um._notify_update_available = lambda: None
+        self.um._clear_update_available_notification = lambda: None
+        self.um._check_in_progress = False
+        self.um._last_check_ts = None
+
+        async def mock_fetch(hwid):
+            raise OSError(-202, "MBEDTLS_ERR_NET_UNKNOWN_HOST")
+        self.um.update_checker.fetch_update_info = mock_fetch
+
+    def tearDown(self):
+        from osupdate_core import UpdateManager
+        UpdateManager._instance = None
+
+    def test_network_error_wifi_online_goes_to_error(self):
+        self.um.connectivity_manager._online = True
+        run_async(self.um.check_for_update())
+        self.assertEqual(self.um.current_state, "error")
+
+    def test_network_error_wifi_offline_goes_to_waiting_wifi(self):
+        self.um.connectivity_manager._online = False
+        run_async(self.um.check_for_update())
+        self.assertEqual(self.um.current_state, "waiting_wifi")
+
+    def test_network_error_no_connectivity_manager_falls_back_to_waiting_wifi(self):
+        self.um.connectivity_manager = None
+        run_async(self.um.check_for_update())
+        self.assertEqual(self.um.current_state, "waiting_wifi")
+
+
+class TestOSUpdateOnResumeConnectivity(unittest.TestCase):
+
+    class MockUMWithConnectivity:
+        def __init__(self, online=True):
+            self._state = "idle"
+            self.connectivity_manager = MockConnectivityManager(online=online)
+            self._state_callback = None
+            self.suppress_notifications = False
+            self.check_for_update_now_called = False
+
+        def get_state(self):
+            return self._state
+
+        def set_state(self, state):
+            self._state = state
+            if self._state_callback:
+                self._state_callback(state)
+
+        def set_state_callback(self, cb):
+            self._state_callback = cb
+
+        def clear_state_callback(self):
+            self._state_callback = None
+
+        def check_for_update_now(self):
+            self.check_for_update_now_called = True
+
+        def get_update_info(self):
+            return None
+
+    def setUp(self):
+        from osupdate import OSUpdate
+        self.app = OSUpdate()
+        self.app.status_label = MockLVGLLabel()
+        self.app.install_button = MockLVGLButton(initial_disabled=True)
+        self.app.check_again_button = MockLVGLButton(initial_disabled=False)
+        self.app.check_again_button.children = [MockLVGLLabel()]
+        self.app.changelog_container = MockLVGLButton(initial_disabled=False)
+        self.app._populate_changelog = lambda *a: None
+        self.app.has_foreground = lambda: True
+        self.mock_um = self.MockUMWithConnectivity(online=True)
+        self.app._um = self.mock_um
+
+    def test_on_resume_idle_wifi_offline_sets_waiting_wifi(self):
+        self.mock_um._state = "idle"
+        self.mock_um.connectivity_manager._online = False
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertEqual(self.mock_um._state, "waiting_wifi")
+        self.assertFalse(self.mock_um.check_for_update_now_called)
+        self.assertEqual(self.app.status_label.get_text(), "Waiting for WiFi connection...")
+
+    def test_on_resume_idle_wifi_online_calls_check(self):
+        self.mock_um._state = "idle"
+        self.mock_um.connectivity_manager._online = True
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertTrue(self.mock_um.check_for_update_now_called)
+        self.assertNotEqual(self.mock_um._state, "waiting_wifi")
+
+    def test_on_resume_idle_no_connectivity_manager_still_calls_check(self):
+        self.mock_um._state = "idle"
+        self.mock_um.connectivity_manager = None
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertTrue(self.mock_um.check_for_update_now_called)
+
+    def test_on_resume_checking_update_wifi_online_calls_check(self):
+        self.mock_um._state = "checking_update"
+        self.mock_um.connectivity_manager._online = True
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertTrue(self.mock_um.check_for_update_now_called)
+        self.assertEqual(self.mock_um._state, "idle")
+
+    def test_on_resume_checking_update_wifi_offline_sets_waiting_wifi(self):
+        self.mock_um._state = "checking_update"
+        self.mock_um.connectivity_manager._online = False
+
+        import lvgl as lv
+        mock_screen = MockLVGLButton()
+        self.app.onResume(mock_screen)
+        self.assertFalse(self.mock_um.check_for_update_now_called)
+        self.assertEqual(self.mock_um._state, "waiting_wifi")
