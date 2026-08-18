@@ -56,9 +56,9 @@ fi
 # The issue is that this brings all the .git folders with it:
 #$mpremote fs cp -r apps :/
 
-echo "Skipping lib/ install!"
-#$mpremote fs cp -r lib :/
-#echo $?
+#echo "Skipping lib/ install!"
+$mpremote fs cp -r lib :/
+echo $?
 
 #echo "Unmounting builtin/ so that it can be customized..." # not sure this is necessary
 #$mpremote exec "import os ; os.umount('/builtin')"
