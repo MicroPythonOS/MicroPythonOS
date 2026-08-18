@@ -22,6 +22,16 @@ def is_direct_navigation_target(focused, keyboard_type, buttonmatrix_type, dropd
     return isinstance(focused, keyboard_type) or isinstance(focused, buttonmatrix_type)
 
 
+def initialize_camera_with_recovery(init_camera, on_failure, restore_expander_i2c, attempts=3):
+    for attempt in range(attempts):
+        try:
+            return init_camera()
+        except Exception as error:
+            on_failure(attempt, error)
+    restore_expander_i2c()
+    return None
+
+
 class K10ButtonInput:
     def __init__(self, long_press_ms=700, ticks_diff=None):
         self._long_press_ms = long_press_ms

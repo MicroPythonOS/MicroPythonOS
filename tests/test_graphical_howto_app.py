@@ -238,7 +238,7 @@ class TestHowToAppK10FocusNavigation(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.howto")
         self.assertTrue(result, "HowTo app failed to launch")
         self.assertTrue(
-            wait_for_text("B: next. Hold B in a list: previous.", timeout=10),
+            wait_for_text("Open a drop-down: B next. Hold B: previous.", timeout=10),
             "K10 HowTo instructions did not load within timeout",
         )
         _wait_ms(200)

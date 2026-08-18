@@ -49,7 +49,7 @@ class HowTo(Activity):
         if DeviceInfo.get_hardware_id() == "unihiker_k10":
             # K10 uses B as its only NEXT key, so static help text stays out of
             # its focus cycle and must remain compact enough to fit on one screen.
-            self._add_label(screen, "B: next. Hold B in a list: previous.", focusable=False)
+            self._add_label(screen, "Open a drop-down: B next. Hold B: previous.", focusable=False)
             self._add_label(screen, "A: select. Hold A: cancel or go back.", focusable=False)
         elif InputManager.has_pointer():
             self._add_label(screen, touchhelp)

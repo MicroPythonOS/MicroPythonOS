@@ -24,6 +24,7 @@ from mpos import InputManager
 from mpos.board.unihiker_k10_input import (
     K10ButtonInput,
     create_expander_i2c,
+    initialize_camera_with_recovery,
     is_direct_navigation_target,
 )
 from mpos.ui.focus import enable_focus_borders
@@ -260,32 +261,37 @@ def init_cam(width, height, colormode):
     _restore_expander_i2c()
     _camera_reset()
     frame_size = CameraManager.resolution_to_framesize(width, height)
-    for attempt in range(3):
-        try:
-            cam = Camera(
-                data_pins=[CAM_D2, CAM_D3, CAM_D4, CAM_D5,
-                           CAM_D6, CAM_D7, CAM_D8, CAM_D9],
-                vsync_pin=CAM_VSYNC,
-                href_pin=CAM_HREF,
-                sda_pin=I2C_SDA,
-                scl_pin=I2C_SCL,
-                pclk_pin=CAM_PCLK,
-                xclk_pin=CAM_XCLK,
-                xclk_freq=20_000_000,
-                powerdown_pin=-1,
-                reset_pin=-1,
-                pixel_format=PixelFormat.RGB565 if colormode else PixelFormat.GRAYSCALE,
-                frame_size=frame_size,
-                grab_mode=GrabMode.LATEST,
-                fb_count=1,
-            )
-            return cam
-        except Exception as e:
-            if attempt < 2:
-                logger.error("unihiker_k10: init_cam attempt %d failed: %s", attempt, e)
-            else:
-                logger.error("unihiker_k10: init_cam failed after 3 attempts: %s", e)
-    return None
+
+    def create_camera():
+        return Camera(
+            data_pins=[CAM_D2, CAM_D3, CAM_D4, CAM_D5,
+                       CAM_D6, CAM_D7, CAM_D8, CAM_D9],
+            vsync_pin=CAM_VSYNC,
+            href_pin=CAM_HREF,
+            sda_pin=I2C_SDA,
+            scl_pin=I2C_SCL,
+            pclk_pin=CAM_PCLK,
+            xclk_pin=CAM_XCLK,
+            xclk_freq=20_000_000,
+            powerdown_pin=-1,
+            reset_pin=-1,
+            pixel_format=PixelFormat.RGB565 if colormode else PixelFormat.GRAYSCALE,
+            frame_size=frame_size,
+            grab_mode=GrabMode.LATEST,
+            fb_count=1,
+        )
+
+    def log_init_failure(attempt, error):
+        if attempt < 2:
+            logger.error("unihiker_k10: init_cam attempt %d failed: %s", attempt, error)
+        else:
+            logger.error("unihiker_k10: init_cam failed after 3 attempts: %s", error)
+
+    return initialize_camera_with_recovery(
+        create_camera,
+        log_init_failure,
+        _restore_expander_i2c,
+    )
 
 
 def deinit_cam(cam):

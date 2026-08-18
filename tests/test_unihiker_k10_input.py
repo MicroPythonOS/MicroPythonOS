@@ -3,6 +3,7 @@ import unittest
 from mpos.board.unihiker_k10_input import (
     K10ButtonInput,
     create_expander_i2c,
+    initialize_camera_with_recovery,
     is_direct_navigation_target,
 )
 
@@ -145,6 +146,51 @@ class TestK10ButtonInput(unittest.TestCase):
         self.assertEqual(self.input.update(True, True, 120, False), ("next", False, False))
         self.assertEqual(self.input.update(False, False, 200, False), ("enter", True, False))
         self.assertEqual(self.input.update(False, False, 220, False), ("enter", False, False))
+
+
+class TestK10CameraInitialization(unittest.TestCase):
+    def test_all_failed_attempts_restore_expander_i2c(self):
+        attempts = []
+        failures = []
+        recoveries = []
+
+        def init_camera():
+            attempts.append(True)
+            raise OSError("camera unavailable")
+
+        result = initialize_camera_with_recovery(
+            init_camera,
+            lambda attempt, error: failures.append(attempt),
+            lambda: recoveries.append(True),
+        )
+
+        self.assertTrue(result is None)
+        self.assertEqual(len(attempts), 3)
+        self.assertEqual(failures, [0, 1, 2])
+        self.assertEqual(recoveries, [True])
+
+    def test_successful_camera_attempt_does_not_restore_expander_i2c(self):
+        attempts = []
+        failures = []
+        recoveries = []
+        camera = object()
+
+        def init_camera():
+            attempts.append(True)
+            if len(attempts) < 3:
+                raise OSError("camera unavailable")
+            return camera
+
+        result = initialize_camera_with_recovery(
+            init_camera,
+            lambda attempt, error: failures.append(attempt),
+            lambda: recoveries.append(True),
+        )
+
+        self.assertTrue(result is camera)
+        self.assertEqual(len(attempts), 3)
+        self.assertEqual(failures, [0, 1])
+        self.assertEqual(recoveries, [])
 
 
 class TestK10ExpanderI2C(unittest.TestCase):
