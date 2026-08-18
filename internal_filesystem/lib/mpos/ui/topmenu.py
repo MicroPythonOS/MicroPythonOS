@@ -33,7 +33,6 @@ _drawer_panel = None
 # State variables (kept in sync with panel.is_open for external code)
 drawer_open = False
 bar_open = False
-
 # Widgets:
 notification_bar = None
 notification_icon_label = None   # bell indicator in the top bar (label only – no image in the bar)
@@ -103,8 +102,8 @@ def _set_notification_icon(notification):
 
 
 def _notification_pressed(event, notification_id):
-    NotificationManager.trigger(notification_id)
     close_drawer()
+    NotificationManager.trigger(notification_id)
 
 
 def _build_drawer_notification_item(parent, notification):
@@ -238,11 +237,20 @@ def _register_notifications_listener():
 def toggle_drawer():
     if drawer_open:
         close_drawer()
-    else:
+    elif not InputManager.is_drawer_open_disabled():
         open_drawer()
+    else:
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
 
 def open_drawer():
     global drawer_open, _pre_drawer_focused
+    if InputManager.is_drawer_open_disabled():
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
+        return
     if _drawer_panel is None or drawer_open:
         return
     # Save the currently focused widget so we can restore it on close.
@@ -370,18 +378,16 @@ def create_notification_bar():
 
     # Update time
     def update_time(timer):
-        hours = mpos.time.localtime()[3]
-        minutes = mpos.time.localtime()[4]
-        seconds = mpos.time.localtime()[5]
-        time_label.set_text(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
-    
+        now = mpos.time.localtime()
+        time_label.set_text(f"{now[3]:02d}:{now[4]:02d}:{now[5]:02d}")
+
     def update_wifi_icon(timer):
         from mpos import WifiService
         if WifiService.is_connected():
             wifi_icon.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
-    
+
     # Get temperature sensor via SensorManager
     from mpos import SensorManager
     temp_sensor = None
@@ -400,7 +406,7 @@ def create_notification_bar():
                 temp_label.set_text("--°C")
         else:
             temp_label.set_text("42°C")
-    
+
     lv.timer_create(update_time, CLOCK_UPDATE_INTERVAL, None)
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
     #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
@@ -408,7 +414,7 @@ def create_notification_bar():
 
     _register_notifications_listener()
     _refresh_notification_widgets()
-    
+
 
 
 def create_drawer():

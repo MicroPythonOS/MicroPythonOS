@@ -76,6 +76,7 @@ class DJAddonActivity(Activity):
         self._prev_led = -1
         self.pad_buttons = []
         self.pad_button_states = []  # 0=off, 1=R, 2=G, 3=B cycles on each click
+        self.pad_pressed = []  # physical button state, last seen per pad
 
     def onCreate(self):
         screen = lv.obj()
@@ -89,8 +90,11 @@ class DJAddonActivity(Activity):
             self.dj = DJAddon(i2c_bus=i2c_bus)
             version = self.dj.version
             print("DJ Addon FW version:", ".".join(str(i) for i in version))
-            if version != (1, 0, 0):
-                raise ValueError("unexpected firmware version")
+        except Exception as e:
+            print("DJ Addon not available, using mock:", e)
+            self.dj = _MockDJAddon()
+
+        try:
             print("Disabling UART REPL because it receives data from the DJ Add-On. Use esp.uart_repl(True) to re-enable.")
 
             # disable the REPL on the uart
@@ -101,7 +105,7 @@ class DJAddonActivity(Activity):
             import usb.device
             from usb.device.midi import MIDIInterface
             self.m = MIDIInterface()
-            usb.device.get().init(self.m, builtin_driver=True)
+            usb.device.get().init(self.m, builtin_driver=True, manufacturer_str="Fri3d Camp", product_str="Fri3d Badge DJ Addon")
 
             # start reading MIDI messages from UART
             from machine import UART, Pin
@@ -110,10 +114,8 @@ class DJAddonActivity(Activity):
             self._uart_rx_buf = bytearray(4)
             self._uart_rx_mv = memoryview(self._uart_rx_buf)
             self.uart.flush()
-
         except Exception as e:
-            print("DJ Addon not available, using mock:", e)
-            self.dj = _MockDJAddon()
+            print("DJ Addon MIDI bridge not available:", e)
 
         self._build_ui(screen)
         self.setContentView(screen)
@@ -176,6 +178,7 @@ class DJAddonActivity(Activity):
         btn_h = (h - _BTN_GAP) // 2
         self.pad_buttons = []
         self.pad_button_states = []
+        self.pad_pressed = []
         for row in range(2):
             for col in range(4):
                 idx = len(self.pad_buttons)
@@ -190,6 +193,7 @@ class DJAddonActivity(Activity):
                 btn.add_event_cb(lambda _e, i=idx: self._on_pad_click(i), lv.EVENT.CLICKED, None)
                 self.pad_buttons.append(btn)
                 self.pad_button_states.append(0)
+                self.pad_pressed.append(False)
 
     @staticmethod
     def _set_needle(needle, cx, cy, r, value):
@@ -276,8 +280,16 @@ class DJAddonActivity(Activity):
             self._set_needle(needle, cx, cy, r, val)
 
         for dj_idx, pressed in enumerate(buttons):
+            pad_idx = _DJ_TO_PAD[dj_idx]
             color = lv.color_white() if pressed else lv.color_hex(0x444444)
-            self.pad_buttons[_DJ_TO_PAD[dj_idx]].set_style_border_color(color, lv.PART.MAIN)
+            self.pad_buttons[pad_idx].set_style_border_color(color, lv.PART.MAIN)
+            if pressed != self.pad_pressed[pad_idx]:
+                self.pad_pressed[pad_idx] = pressed
+                if pressed:
+                    self.dj.set_led(pad_idx, 255, 255, 255)
+                else:
+                    r, g, b = _PAD_COLORS[self.pad_button_states[pad_idx]]
+                    self.dj.set_led(pad_idx, r, g, b)
 
         self.bar_left.set_value(_ADC_MAX - analog[_CH_SLIDER_LEFT], False)
         self.bar_right.set_value(_ADC_MAX - analog[_CH_SLIDER_RIGHT], False)
@@ -322,6 +334,7 @@ class DJAddonActivity(Activity):
         if self.dj is not None:
             for idx in range(len(self.pad_buttons)):
                 self.dj.set_led(idx, 0, 0, 0)
+            self.pad_pressed = [False] * len(self.pad_pressed)
 
 
     def refresh(self, timer):

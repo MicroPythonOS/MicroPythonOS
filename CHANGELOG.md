@@ -1,13 +1,84 @@
 Future release (next version)
 =====
 
+Board Support:
+- UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
+
+Builtin Apps:
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
+- OSUPDater: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
+
 Frameworks:
-- SDCardManager integrates the old 'sdcard' functionality, which has been removed
+- Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open
+- DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
+- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host or micropythonos:// scheme are reserved and rejected; multiple matching handlers open the chooser
+- FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
 
 OS:
-- Fix DownloadManager resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
-- WiFi: set country code default to Japan instead of World
 - main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
+
+Testing:
+- test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
+- test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
+- test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration
+
+0.17.3
+======
+
+Board Support:
+- WebAssembly: expose WebExpander (= simulated Fri3d expander) through mpos.io_expander like on fri3d_2026 board by @DrSkunk
+
+Builtin Apps:
+- AppStore: apply dropdown filter when adding to list so apps don't show up unnecessarily (less glitchy)
+
+Frameworks:
+- View: fix two LVGL memory leaks in activity navigation by @fdb
+
+0.17.2
+======
+
+Builtin Apps:
+- AppStore: fix 'Update N Apps' button and 'Updates (0)' dropdown behavior when opened before the background update check has run
+
+0.17.1
+======
+
+Builtin Apps:
+- AppStore: fix 'Update' button in app detail activity
+- AppStore: improve 'Update N Apps' button behavior
+
+Frameworks:
+- View: fix crash when navigating back from an app launched via notification drawer
+
+0.17.0
+======
+
+Board Support:
+- Fri3d 2026: update CH32 firmware to 2.0.3 which fixes issue with 2 consecutive i2c register writes (fixes #224)
+- Adapt freenove_esp32s3_display, fri3d_2024, fri3d_2026, lilygo_t4, lilygo_t_hmi, matouch_esp32_s3_spi_ips_2_8_with_camera_ov3660 and squixl to SDCardManager API changes
+
+Builtin Apps:
+- AppStore: add new 'Installed' category and show it by default (or 'All' if there are no apps installed)
+- AppStore: fix double update check (when network established + some time after boot)
+- OSUpdate: fix double update check (when network established + some time after boot)
+- OSUpdate: randomly select between update mirrors (updates.micropythonos.com and updates.micropythonos.org) for redundancy
+- OSUpdate: if wifi is connected but update check fails (due to server error, for example) don't go into 'Waiting for WiFi' state
+
+Frameworks:
+- AudioManager: fix buzzer buzzing along when PWM instance is created and fix clicking sound on PWM init (#233) by @cheops
+- DownloadManager: resumption offset after connection loss that could prevent over-the-air update (ESP_ERR_OTA_VALIDATE_FAILED) if wifi was lost during update download
+- InputManager: add back screen and drawer menu disable/enable APIs so apps receive those keys as regular lv.KEY.ESC / lv.KEY.HOME press
+- InfiniteList: add new `mpos.ui.InfiniteList` virtual-scrolling list widget that only renders visible items, keeping memory and render cost bounded even with thousands of entries
+- SDCardManager: integrate 'sdcard' module functionality and cleanup legacy module
+- Focus: add_focus_highlight with mode='bg' now defaults to 100% background opacity, was 30%
+- Focus: bg-mode focus handler now scrolls the focused widget into view (matching the border-mode handler)
+
+OS:
+- Optimize status bar clock to reduce allocations from ~4.5 KB/s to ~224 B/s (#244) by @fdb
+- SPI: expose Device.lock()/unlock() for shared-bus arbitration between multiple drivers
+- SPI: fix MicroPython's ESP32 SPI driver DMA failures due to incorrect txdata/rxdata flags
+- WiFi: set default country code to Japan instead of World to support channel 12, 13 and 14 (including active scan, meaning hidden SSIDs)
 
 0.16.1
 ======

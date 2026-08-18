@@ -115,27 +115,19 @@ def tziso(timestamp: float, ptz_string: str, zone_designator = True):
 	return stx
 
 
-def _timecalc(timestamp: float, ptz_string: str):
+def tzoffset(timestamp: float, ptz_string: str):
 	"""
-	Converts a time expressed in seconds in 10-tuple according to the time zone provided in Posix Time Zone format
+	Return the UTC offset in effect at 'timestamp' for the time zone provided in Posix Time Zone format, together with the interval of timestamps for which that offset is valid.
+	The offset only changes at a DST transition or when the year changes (transition rules are recomputed per year), so the result can be cached and reused for any timestamp within [valid_from, valid_until).
 
 	Parameters:
 	timestamp (float): Time in second
 	ptz_string (str): Time zone in Posix format
-	zone_designator (bool): Insert zone designator in returned string - default: True
-	
+
 	Returns:
-	tuple: 
-		* ``year``
-		* ``month``
-		* ``mday``
-		* ``hour``
-		* ``minute``
-		* ``second``
-		* ``weekday``
-		* ``yearday``
-		* ``isdst``
-		* ``utcoffset``
+	tuple: (utcoffset, isdst, valid_from, valid_until) where utcoffset is the
+	seconds to add to a UTC timestamp to obtain local time, valid for
+	timestamps in [valid_from, valid_until)
 	"""
 	ptz_string = _normalize(ptz_string)
 
@@ -192,14 +184,44 @@ def _timecalc(timestamp: float, ptz_string: str):
 		#print("dstStart:\t" + str(dst_start) + "\t" + str(time.gmtime(dst_start)))
 		#print("dstEnd:  \t" + str(dst_end) + "\t" + str(time.gmtime(dst_end)))
 
+		# The comparisons above flip only at these two UTC instants, or when
+		# 'year' changes and dst_start/dst_end are recomputed. Narrow the
+		# current year down to the interval around 'timestamp'.
+		valid_from = time.mktime((year, 1, 1, 0, 0, 0, 0, 0, 0))
+		valid_until = time.mktime((year + 1, 1, 1, 0, 0, 0, 0, 0, 0))
+		for boundary in (dst_start - std_offset_seconds, dst_end - std_offset_seconds - dst_offset_seconds):
+			if (boundary <= timestamp):
+				if (boundary > valid_from):
+					valid_from = boundary
+			elif (boundary < valid_until):
+				valid_until = boundary
+
 	else:
 		tot_offset_seconds = std_offset_seconds
+		valid_from = 0
+		valid_until = 1 << 62						# fixed offset: valid forever
+
+	return (tot_offset_seconds, int(is_dst), valid_from, valid_until)
+
+
+def _timecalc(timestamp: float, ptz_string: str):
+	"""
+	Converts a time expressed in seconds in 10-tuple according to the time zone provided in Posix Time Zone format
+
+	Parameters:
+	timestamp (float): Time in second
+	ptz_string (str): Time zone in Posix format
+
+	Returns:
+	tuple: (year, month, mday, hour, minute, second, weekday, yearday, isdst, utcoffset)
+	"""
+	(tot_offset_seconds, is_dst, _, _) = tzoffset(timestamp, ptz_string)
 
 	timemod = timestamp + tot_offset_seconds
 
 	t = time.gmtime(int(timemod))
 
-	tx = (t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7], int(is_dst), tot_offset_seconds)
+	tx = (t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7], is_dst, tot_offset_seconds)
 
 	return tx
 
