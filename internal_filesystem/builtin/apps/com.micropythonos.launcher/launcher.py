@@ -3,7 +3,8 @@ import lvgl as lv
 import math
 import time
 
-from mpos import AppearanceManager, AppManager, Activity, DisplayMetrics, add_focus_highlight
+from mpos import AppearanceManager, AppManager, Activity, DeviceInfo, DisplayMetrics, add_focus_highlight
+from mpos.ui.focus import enable_focus_borders
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,17 @@ class Launcher(Activity):
         self._splash_fullname = None        # fullname of the app being launched (splash shown)
         self._splash_screen = None          # temporary splash screen shown before app launch
         self._screen = None                 # the launcher's own screen object
+        self._k10 = False
 
     def onCreate(self):
         if __debug__: logger.debug("onCreate")
+
+        try:
+            self._k10 = DeviceInfo.get_hardware_id() == "unihiker_k10"
+        except Exception:
+            self._k10 = False
+        if self._k10:
+            enable_focus_borders()
 
         main_screen = lv.obj()
         main_screen.set_style_border_width(0, lv.PART.MAIN)
@@ -90,6 +99,7 @@ class Launcher(Activity):
             app_cont.set_style_pad_all(0, lv.PART.MAIN)
             app_cont.set_style_bg_opa(lv.OPA.TRANSP, lv.PART.MAIN)
             app_cont.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+            app_cont.add_flag(lv.obj.FLAG.CLICKABLE)
 
             # ----- icon ----------------------------------------------------
             image = lv.image(app_cont)
@@ -113,7 +123,10 @@ class Launcher(Activity):
 
             # ----- events --------------------------------------------------
             app_cont.add_event_cb(lambda e, fullname=app.fullname: self._launch_app(fullname), lv.EVENT.CLICKED, None)
-            add_focus_highlight(app_cont)
+            if self._k10:
+                add_focus_highlight(app_cont, width=2)
+            else:
+                add_focus_highlight(app_cont)
 
             self._app_cont_map[app.fullname] = app_cont
 
@@ -127,7 +140,6 @@ class Launcher(Activity):
         self._focus_last_or_first()
 
     def _launch_app(self, fullname):
-        """Record which app was launched, show splash screen, then start it."""
         self._last_started_fullname = fullname
 
         # Uncomment to disable the splash screen display when starting an app:
@@ -187,9 +199,25 @@ class Launcher(Activity):
         self._cleanup_splash_screen()
         screen.set_scrollbar_mode(lv.SCROLLBAR_MODE.AUTO)
 
+    def _focus_first_usable_app(self):
+        for fullname, target in self._app_cont_map.items():
+            if fullname == "com.micropythonos.howto":
+                # This K10-only fallback skips static HowTo and restores focus to another app.
+                continue
+            if target:
+                lv.group_focus_obj(target)
+                return True
+        return False
+
     def _focus_last_or_first(self):
-        """Focus the last launched app tile if any."""
+        if self._k10 and self._last_started_fullname in (None, "com.micropythonos.howto"):
+            if self._focus_first_usable_app():
+                return
+
         target = self._app_cont_map.get(self._last_started_fullname)
         if target:
             lv.group_focus_obj(target)
+            return
 
+        if self._k10:
+            self._focus_first_usable_app()

@@ -1,16 +1,24 @@
 Future release (next version)
 =====
 
+Board Support:
+- UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
+
 Builtin Apps:
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 
 Frameworks:
+- Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open
+- DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
+- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host or micropythonos:// scheme are reserved and rejected; multiple matching handlers open the chooser
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
 
 OS:
 - lvgl_micropython: add general-punctuation glyphs to Montserrat fonts
 - lvgl_micropython: add native-decorator bytecode fallback for builds without a native emitter like the unix port on aarch64 (Apple Silicon macOS) and the wasm/web port
 - lvgl_micropython: compress Montserrat 10-18 fonts to save ~19 KB of flash space
+- main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
 
 Testing:
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing

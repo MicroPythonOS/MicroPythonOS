@@ -145,6 +145,54 @@ class TestAppStoreFocus(unittest.TestCase):
             "to the small corner button.",
         )
 
+    def test_dropdown_confirmation_allows_focus_to_leave(self):
+        activity = _get_appstore_activity()
+        dropdown = activity.category_dropdown
+        group = lv.group_get_default()
+
+        activity._category_options = ["One", "Two", "Three"]
+        dropdown.set_options("One\nTwo\nThree")
+        dropdown.set_selected(0)
+        lv.group_focus_obj(dropdown)
+
+        self.assertFalse(dropdown.is_open())
+        group.send_data(lv.KEY.ENTER)
+        self.assertTrue(dropdown.is_open())
+        group.send_data(lv.KEY.RIGHT)
+        self.assertEqual(dropdown.get_selected(), 1)
+        group.send_data(lv.KEY.ENTER)
+        self.assertFalse(dropdown.is_open())
+        group.focus_next()
+        self.assertIsNot(_focused_obj(), dropdown)
+
+    def test_dropdown_escape_restores_unconfirmed_category(self):
+        activity = _get_appstore_activity()
+        dropdown = activity.category_dropdown
+        group = lv.group_get_default()
+        rebuilds = []
+        original_create_apps_list = activity.create_apps_list
+
+        activity._category_options = ["One", "Two", "Three"]
+        dropdown.set_options("One\nTwo\nThree")
+        dropdown.set_selected(0)
+        activity.create_apps_list = lambda: rebuilds.append(dropdown.get_selected())
+        lv.group_focus_obj(dropdown)
+
+        try:
+            group.send_data(lv.KEY.ENTER)
+            group.send_data(lv.KEY.RIGHT)
+            self.assertEqual(dropdown.get_selected(), 1)
+            group.send_data(lv.KEY.LEFT)
+            self.assertEqual(dropdown.get_selected(), 0)
+            group.send_data(lv.KEY.RIGHT)
+            self.assertEqual(dropdown.get_selected(), 1)
+            group.send_data(lv.KEY.ESC)
+            self.assertFalse(dropdown.is_open())
+            self.assertEqual(dropdown.get_selected(), 0)
+            self.assertEqual(rebuilds, [])
+        finally:
+            activity.create_apps_list = original_create_apps_list
+
     def test_update_all_button_reachable_when_visible(self):
         """When 'Update N App(s)' is visible it must be reachable via DOWN from settings_button."""
         activity = _get_appstore_activity()
