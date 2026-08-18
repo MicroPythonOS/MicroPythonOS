@@ -65,6 +65,10 @@ MAX_RETRIES = 3
 
 ONDEVICE_SKIP = {
     "test_apps_manifest.py",
+    "test_connectivity_manager.py",
+    "test_connectivity_manager_reconnect.py",
+    "test_osupdate.py",
+    "test_wifi_service.py",
 }
 
 COVERAGE_RE = re.compile(

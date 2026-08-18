@@ -27,10 +27,11 @@ class TestDownloadManager(unittest.TestCase):
         """Reset module state before each test."""
         # Create temp directory for file downloads
         self.temp_dir = "/tmp/test_download_manager"
-        try:
-            os.mkdir(self.temp_dir)
-        except OSError:
-            pass  # Directory already exists
+        for _dir in ("/tmp", self.temp_dir):
+            try:
+                os.mkdir(_dir)
+            except OSError:
+                pass  # Directory already exists
 
     def tearDown(self):
         """Clean up after each test."""
@@ -815,10 +816,11 @@ class TestDownloadResumeOnConnectionDrop(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = "/tmp/test_download_manager"
-        try:
-            os.mkdir(self.temp_dir)
-        except OSError:
-            pass
+        for _dir in ("/tmp", self.temp_dir):
+            try:
+                os.mkdir(_dir)
+            except OSError:
+                pass
 
     def _run_with_fake_aiohttp(self, *, payload, drop_after, outfile):
         import asyncio

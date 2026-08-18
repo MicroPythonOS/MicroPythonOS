@@ -1309,20 +1309,30 @@ for s in t:
         import subprocess, re
         code = _build_test_code(test_path, tests_dir)
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
-        mpk_names = set(re.findall(r"\.\./tests/(com\.micropythonos\.ziptest_[^\"]+\.mpk)", code))
-        if mpk_names:
+        fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", code))
+        if fixture_names:
             subprocess.run(
                 _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),
                 capture_output=True, timeout=15,
             )
-            for name in sorted(mpk_names):
-                host_mpk = os.path.join(host_test_dir, name)
+            for name in sorted(fixture_names):
+                host_fixture = os.path.join(host_test_dir, name)
+                if not os.path.exists(host_fixture):
+                    continue
                 subprocess.run(
                     _mpremote_cmd(self.port, "cp",
-                                  host_mpk, ":tests/{}".format(name)),
+                                  host_fixture, ":tests/{}".format(name)),
                     capture_output=True, timeout=60,
                 )
             code = code.replace("../tests/", "tests/")
+        # Base64-encode the code so multibyte UTF-8 (e.g. emoji in string
+        # literals) survives the trip through mpremote's byte-at-a-time
+        # raw REPL transport. The device decodes back to exact bytes before
+        # compiling, so non-ASCII source arrives intact.
+        import base64
+        b64 = base64.b64encode(code.encode("utf-8")).decode("ascii")
+        code = ("import ubinascii\n"
+                "exec(ubinascii.a2b_base64({!r}))".format(b64))
         try:
             result = subprocess.run(
                 _mpremote_cmd(self.port, "exec", code),
