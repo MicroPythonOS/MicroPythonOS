@@ -30,10 +30,13 @@ class AIOReplService(Service):
         import mpos
         from ..task_manager import TaskManager
 
-        async def asyncio_repl():
+        def asyncio_repl():
             logger.warning("Starting very limited asyncio REPL task. To stop all asyncio tasks and go to real REPL, do: mpos.TaskManager.stop()")
-            await aiorepl.task(g={"lv": lv, "mpos": mpos}, prompt=">>> ")
-        TaskManager.create_task(asyncio_repl())
+            return aiorepl.task(g={"lv": lv, "mpos": mpos}, prompt=">>> ")
+        # restart_on_return: a console that exits quietly for any reason
+        # cannot be got back without a power cycle, so treat every exit as
+        # something to recover from.
+        TaskManager.create_supervised_task(asyncio_repl, restart_on_return=True)
 
 
 AppManager.register_service("boot_completed", WifiBootService, fullname="com.micropythonos.system")

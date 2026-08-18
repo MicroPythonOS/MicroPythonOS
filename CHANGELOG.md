@@ -10,12 +10,16 @@ Builtin Apps:
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 
 Frameworks:
+- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
-- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
+- TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
 
 OS:
+- aiorepl: survive stdin EOF (host disconnect) by polling for reconnection instead of exiting, so the serial console no longer dies permanently after mpremote/raw-REPL connection attempts
+- aiorepl: stop Ctrl-D in the non-raw REPL loop from shutting asyncio down; it now ends the line like Ctrl-C
+- boot: disable the Ctrl-C interrupt character while mpos.main boots (restored on the REPL fallback paths), so hosts connecting over serial mid-boot (e.g. mpremote entering raw REPL) can no longer silently abort the boot scripts and leave the OS half-started at the REPL
 - lvgl_micropython: add general-punctuation glyphs to Montserrat fonts
 - lvgl_micropython: add native-decorator bytecode fallback for builds without a native emitter like the unix port on aarch64 (Apple Silicon macOS) and the wasm/web port
 - lvgl_micropython: compress Montserrat 10-18 fonts to save ~19 KB of flash space
