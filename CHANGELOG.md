@@ -15,6 +15,9 @@ Frameworks:
 - AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host or micropythonos:// scheme are reserved and rejected; multiple matching handlers open the chooser
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
 
+OS:
+- main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
+
 Testing:
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
 - test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
