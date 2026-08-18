@@ -2,11 +2,15 @@ Future release (next version)
 =====
 
 Builtin Apps:
-- AppStore: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
-- OSUPDater: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
+- AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 
 Frameworks:
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
+
+OS:
+- lvgl_micropython: add general-punctuation glyphs to Montserrat fonts
+- lvgl_micropython: add native-decorator bytecode fallback for builds without a native emitter like the unix port on aarch64 (Apple Silicon macOS) and the wasm/web port
+- lvgl_micropython: compress Montserrat 10-18 fonts to save ~19 KB of flash space
 
 Testing:
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
