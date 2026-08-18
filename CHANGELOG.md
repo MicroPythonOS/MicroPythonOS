@@ -3,11 +3,19 @@ Future release (next version)
 
 Builtin Apps:
 - AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
+- OSUPDater: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 
 Frameworks:
 - Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
 - AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host or micropythonos:// scheme are reserved and rejected; multiple matching handlers open the chooser
+- FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
+
+Testing:
+- test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
+- test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
+- test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration
 
 0.17.3
 ======

@@ -22,6 +22,12 @@ sys.modules["mpos.net.wifi_service"] = type("module", (), {"WifiService": MockWi
 # Now import BatteryManager
 from mpos.battery_manager import BatteryManager
 
+# Boards without a battery ADC (e.g. fri3d_2026, USB powered) monkey-patch
+# BatteryManager.read_raw_adc / read_battery_voltage / has_battery to read the
+# io_expander instead. Those overrides bypass the mocked `_adc` used here and
+# reject the `force_refresh` kwarg, so the ADC-driven tests don't apply.
+_BATTERY_OVERRIDDEN = BatteryManager.read_raw_adc.__name__ != "read_raw_adc"
+
 
 class TestADC2Detection(unittest.TestCase):
     """Test ADC1 vs ADC2 pin detection."""
@@ -92,6 +98,10 @@ class TestInitADC(unittest.TestCase):
         self.assertEqual(bm._conversion_func, my_conversion)
 
 
+@unittest.skipIf(
+    _BATTERY_OVERRIDDEN,
+    "board overrides BatteryManager to read io_expander (no battery ADC)",
+)
 class TestCaching(unittest.TestCase):
     """Test caching mechanism."""
 
@@ -150,6 +160,10 @@ class TestCaching(unittest.TestCase):
         self.assertEqual(bm._last_read_time, 0)
 
 
+@unittest.skipIf(
+    _BATTERY_OVERRIDDEN,
+    "board overrides BatteryManager to read io_expander (no battery ADC)",
+)
 class TestADC1Reading(unittest.TestCase):
     """Test ADC reading with ADC1 (no WiFi interference)."""
 
@@ -189,6 +203,10 @@ class TestADC1Reading(unittest.TestCase):
             self.fail("ADC1 should not raise error when WiFi is busy")
 
 
+@unittest.skipIf(
+    _BATTERY_OVERRIDDEN,
+    "board overrides BatteryManager to read io_expander (no battery ADC)",
+)
 class TestADC2Reading(unittest.TestCase):
     """Test ADC reading with ADC2 (requires WiFi disable)."""
 
@@ -259,6 +277,10 @@ class TestADC2Reading(unittest.TestCase):
         self.assertFalse(MockWifiService.is_connected())
 
 
+@unittest.skipIf(
+    _BATTERY_OVERRIDDEN,
+    "board overrides BatteryManager to read io_expander (no battery ADC)",
+)
 class TestVoltageCalculations(unittest.TestCase):
     """Test voltage and percentage calculations."""
 
@@ -325,6 +347,10 @@ class TestVoltageCalculations(unittest.TestCase):
         self.assertLessEqual(percentage, 100.0)
 
 
+@unittest.skipIf(
+    _BATTERY_OVERRIDDEN,
+    "board overrides BatteryManager to read io_expander (no battery ADC)",
+)
 class TestAveragingLogic(unittest.TestCase):
     """Test that ADC readings are averaged."""
 
