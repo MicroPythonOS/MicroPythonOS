@@ -11,7 +11,7 @@ Builtin Apps:
 Frameworks:
 - Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
-- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host or micropythonos:// scheme are reserved and rejected; multiple matching handlers open the chooser
+- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
 
 OS:
