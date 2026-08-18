@@ -4,6 +4,10 @@ This module implements the QR-code app discovery link format:
 
     https://apps.micropythonos.com/app/<app_id>[?v=<min_version>&s=<source>]
     micropythonos://app/<app_id>[?...]           (accepted alias, never emitted)
+    mpos://app/<app_id>[?...]                    (short form of the alias)
+
+All parts of a link are case-insensitive (QR alphanumeric mode uppercases
+the whole payload), so MPOS://APP/COM.EXAMPLE.PAINT works too.
 
 The link carries the app's *identity* only, never a download location: the
 AppStore resolves the app_id against the catalog it already trusts, so a
@@ -14,7 +18,7 @@ Third-party apps can declare their own URL handlers in MANIFEST.JSON via a
 
     {"action": "view_url", "urlPattern": "https://store.acme.example/app/*"}
 
-Patterns matching the official store host or the micropythonos:// scheme are
+Patterns matching the official store host or the micropythonos:// / mpos:// schemes are
 reserved for the system and rejected at registration time.
 
 No LVGL or hardware dependencies at module level: everything heavy is
@@ -30,7 +34,7 @@ MAX_APP_ID_LENGTH = 64
 MAX_PARAM_LENGTH = 64
 
 STORE_HOSTS = ("apps.micropythonos.com",)
-STORE_SCHEME = "micropythonos"
+STORE_SCHEMES = ("micropythonos", "mpos")
 APPSTORE_FULLNAME = "com.micropythonos.appstore"
 
 # Action carried by intents dispatched to third-party URL handlers.
@@ -123,7 +127,7 @@ def parse_store_link(text):
 
     Returns {"fullname": ..., "min_version": ... or None, "source": ... or None}
     for a valid link, None for everything else. Accepts both the canonical
-    https form and the micropythonos:// alias. The app id is folded to
+    https form and the micropythonos:// or mpos:// alias. The app id is folded to
     lowercase (store app ids are lowercase by convention; QR alphanumeric
     mode uppercases everything).
     """
@@ -138,7 +142,7 @@ def parse_store_link(text):
         if path[:5].lower() != "/app/":
             return None
         app_id = path[5:]
-    elif scheme == STORE_SCHEME:
+    elif scheme in STORE_SCHEMES:
         # micropythonos://app/<id> parses as host="app", path="/<id>"
         if host != "app":
             return None
@@ -165,7 +169,7 @@ def validate_handler_pattern(pattern):
     Rules: the pattern must parse as scheme://host/... with a literal host,
     a "*" wildcard is only allowed as the final character, and patterns
     that could match official store links (the store hosts or the
-    micropythonos:// scheme) are reserved for the system.
+    micropythonos:// / mpos:// schemes) are reserved for the system.
     """
     if not isinstance(pattern, str) or not pattern or len(pattern) > MAX_URL_LENGTH:
         return "pattern missing or too long"
@@ -179,8 +183,8 @@ def validate_handler_pattern(pattern):
     scheme, host, path, query = parts
     if query:
         return "pattern must not contain a query string"
-    if scheme == STORE_SCHEME:
-        return "the %s:// scheme is reserved for the system" % STORE_SCHEME
+    if scheme in STORE_SCHEMES:
+        return "the %s:// scheme is reserved for the system" % scheme
     if host in STORE_HOSTS:
         return "host %s is reserved for the system" % host
     if pattern.endswith("*") and not path:

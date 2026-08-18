@@ -2,7 +2,7 @@ Future release (next version)
 =====
 
 Builtin Apps:
-- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID or micropythonos://app/APP_ID)
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
 
 Frameworks:
 - Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open

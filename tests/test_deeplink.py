@@ -34,15 +34,27 @@ class TestParseStoreLink(unittest.TestCase):
         self.assertIsNone(link["min_version"])
 
     def test_custom_scheme_alias(self):
-        link = deeplink.parse_store_link("micropythonos://app/com.example.paint")
-        self.assertIsNotNone(link)
-        self.assertEqual(link["fullname"], "com.example.paint")
+        for scheme in ("micropythonos", "mpos"):
+            link = deeplink.parse_store_link(scheme + "://app/com.example.paint")
+            self.assertIsNotNone(link, scheme)
+            self.assertEqual(link["fullname"], "com.example.paint")
 
     def test_uppercase_qr_alphanumeric_mode(self):
         # QR codes in alphanumeric mode encode everything uppercase.
         link = deeplink.parse_store_link("HTTPS://APPS.MICROPYTHONOS.COM/APP/COM.EXAMPLE.PAINT")
         self.assertIsNotNone(link)
         self.assertEqual(link["fullname"], "com.example.paint")
+
+    def test_mixed_case_schemes(self):
+        # Every part of a link is case-insensitive, including hand-typed
+        # scheme spellings like MicroPythonOS:// and MPOS://.
+        for text in ("MicroPythonOS://app/com.example.paint",
+                     "MPOS://APP/COM.EXAMPLE.PAINT",
+                     "Mpos://App/Com.Example.Paint",
+                     "Https://Apps.MicroPythonOS.com/App/com.example.paint"):
+            link = deeplink.parse_store_link(text)
+            self.assertIsNotNone(link, text)
+            self.assertEqual(link["fullname"], "com.example.paint", text)
 
     def test_surrounding_whitespace_stripped(self):
         link = deeplink.parse_store_link("  https://apps.micropythonos.com/app/com.example.paint\n")
@@ -101,6 +113,8 @@ class TestParseStoreLink(unittest.TestCase):
     def test_rejects_custom_scheme_wrong_form(self):
         self.assertIsNone(deeplink.parse_store_link("micropythonos://repo/xyz"))
         self.assertIsNone(deeplink.parse_store_link("micropythonos://app/"))
+        self.assertIsNone(deeplink.parse_store_link("mpos://repo/xyz"))
+        self.assertIsNone(deeplink.parse_store_link("mpos://app/"))
 
 
 class TestHandlerPatternValidation(unittest.TestCase):
@@ -116,6 +130,8 @@ class TestHandlerPatternValidation(unittest.TestCase):
 
     def test_reserved_scheme_rejected(self):
         self.assertIsNotNone(deeplink.validate_handler_pattern("micropythonos://app/*"))
+        self.assertIsNotNone(deeplink.validate_handler_pattern("mpos://app/*"))
+        self.assertIsNotNone(deeplink.validate_handler_pattern("MPOS://app/*"))
 
     def test_wildcard_only_at_end(self):
         self.assertIsNotNone(deeplink.validate_handler_pattern("https://*.example/app/x"))
@@ -175,6 +191,7 @@ class TestUrlHandlerRegistry(unittest.TestCase):
     def test_reserved_pattern_rejected_at_registration(self):
         self.assertFalse(self._register("com.evil.app", "https://apps.micropythonos.com/app/*", _FakeHandlerA))
         self.assertFalse(self._register("com.evil.app", "micropythonos://app/*", _FakeHandlerA))
+        self.assertFalse(self._register("com.evil.app", "mpos://app/*", _FakeHandlerA))
         self.assertEqual(AppManager._url_handler_specs, [])
 
     def test_multiple_matches_resolved(self):

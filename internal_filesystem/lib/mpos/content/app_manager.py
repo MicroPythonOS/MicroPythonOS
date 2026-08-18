@@ -92,7 +92,7 @@ class AppManager:
     def _register_url_handler_spec(cls, app_fullname, entrypoint, classname, url_pattern):
         """Store a manifest-declared URL handler after validating its pattern.
 
-        Patterns matching the official store host or the micropythonos://
+        Patterns matching the official store host or the micropythonos:// or mpos://
         scheme are reserved and rejected here, so no installed app can
         shadow system deep links. Returns True if registered.
         """
