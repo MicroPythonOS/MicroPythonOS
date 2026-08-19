@@ -421,8 +421,9 @@ def _install_test_apps(port=None):
         print("WARNING: install_test_apps.sh not found, skipping app install")
         return
     cmd = ["bash", install_script]
-    if port:
-        cmd.extend(["--serial-port", port])
+    effective_port = port or os.environ.get("MPOS_TEST_PORT")
+    if effective_port:
+        cmd.extend(["--serial-port", effective_port])
     print("Installing test apps (use --no-install-test-apps to skip)...")
     try:
         subprocess.run(cmd, check=True)
