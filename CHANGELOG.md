@@ -26,6 +26,8 @@ OS:
 - main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
 
 Testing:
+- test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, _task_queue, _io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
+- test_download_manager: temporarily set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
 - test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
 - test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration

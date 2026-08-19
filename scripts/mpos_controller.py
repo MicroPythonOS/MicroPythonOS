@@ -137,27 +137,76 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
     code += "sys.path.insert(0, 'lib')\n"
     if tests_dir:
         code += "sys.path.append(%r)\n" % tests_dir
+
+    # Save outer asyncio event loop state before test code corrupts it.
+    # MicroPython asyncio stores the entire event loop in module-level
+    # globals (_task_queue, _io_queue, cur_task).  Tests that call
+    # asyncio.run(), new_event_loop(), or Loop.run_until_complete() from
+    # within the running TaskManager event loop (via the aiorepl paste
+    # mode) corrupt them, causing SIGSEGV in task_queue_push.
+    #
+    # The inner run_until_complete sets cur_task = None on exit, which is
+    # the primary corruption.  Sharing _task_queue and _io_queue is safe
+    # — the outer loop is idle in wait_io_event() during the test.
+    # For tests that call new_event_loop() in setUp, we restore all three
+    # globals in the finally block after unittest.main().
+    code += (
+        "import asyncio as _mpos_a\n"
+        "_mpos_saved_task_queue = _mpos_a.core._task_queue\n"
+        "_mpos_saved_io_queue = _mpos_a.core._io_queue\n"
+        "_mpos_saved_cur_task = _mpos_a.core.cur_task\n"
+        "\n"
+        "def _mpos_restore_asyncio():\n"
+        "    _mpos_a.core._task_queue = _mpos_saved_task_queue\n"
+        "    _mpos_a.core._io_queue = _mpos_saved_io_queue\n"
+        "    _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
+        "\n"
+        "_mpos_orig_run = _mpos_a.run\n"
+        "def _mpos_safe_run(coro):\n"
+        "    try:\n"
+        "        return _mpos_orig_run(coro)\n"
+        "    finally:\n"
+        "        _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
+        "_mpos_a.run = _mpos_safe_run\n"
+        "\n"
+        "_mpos_orig_new_loop = _mpos_a.new_event_loop\n"
+        "def _mpos_safe_new_loop():\n"
+        "    return _mpos_orig_new_loop()\n"
+        "_mpos_a.new_event_loop = _mpos_safe_new_loop\n"
+        "\n"
+        "_mpos_orig_loop_rtc = _mpos_a.Loop.run_until_complete\n"
+        "def _mpos_safe_loop_rtc(aw):\n"
+        "    try:\n"
+        "        return _mpos_orig_loop_rtc(aw)\n"
+        "    finally:\n"
+        "        _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
+        "_mpos_a.Loop.run_until_complete = staticmethod(_mpos_safe_loop_rtc)\n"
+    )
+
     code += "import mpos; mpos.TaskManager.disable()\n"
     if coverage:
         code += "import mpos.coverage\n"
         code += "mpos.coverage.start()\n"
         code += "_cov_stop = mpos.coverage.stop\n"
-    code += ("sys.modules.pop('_runner_test', None)\n"
-             "import _runner_test as _test_mod\n")
-    code += "import unittest\n"
-    code += "result = unittest.main(module=_test_mod)\n"
-    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+    code += "try:\n"
+    code += "    sys.modules.pop('_runner_test', None)\n"
+    code += "    import _runner_test as _test_mod\n"
+    code += "    import unittest\n"
+    code += "    result = unittest.main(module=_test_mod)\n"
+    code += ("    print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     if coverage:
-        code += ("_cov_rpt = {}\n"
-                 "try:\n"
-                 "    _cov_stop()\n"
-                 "    _cov_rpt = mpos.coverage._tracker.report_json()\n"
-                 "except Exception:\n"
-                 "    pass\n")
-        code += "print('=== COVERAGE_DATA ===')\n"
-        code += "print(_cov_rpt)\n"
-        code += "print('=== END_COVERAGE_DATA ===')\n"
+        code += ("    _cov_rpt = {}\n"
+                 "    try:\n"
+                 "        _cov_stop()\n"
+                 "        _cov_rpt = mpos.coverage._tracker.report_json()\n"
+                 "    except Exception:\n"
+                 "        pass\n")
+        code += "    print('=== COVERAGE_DATA ===')\n"
+        code += "    print(_cov_rpt)\n"
+        code += "    print('=== END_COVERAGE_DATA ===')\n"
+    code += "finally:\n"
+    code += "    _mpos_restore_asyncio()\n"
     return code
 
 

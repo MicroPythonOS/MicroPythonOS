@@ -75,6 +75,8 @@ def _capture_task(coro):
 
 **Task capture triggers cascading side effects.** When `TaskManager.create_task` is mocked to `run_until_complete` synchronously, any task that internally spawns more tasks also runs synchronously in the same call. E.g. mocking `_update_all_click` reaches `_run_update_all` → `refresh_list` → `download_app_index` → `create_apps_list` → `_stop_all_timers`. Every link in the chain needs a mock (`_raw_timer`, `refresh_list`, etc.) even if your test goal is narrow. The crash surfaces far from the mocked entry point — watch the stack trace for the full cascade.
 
+**`asyncio.core` stores the event loop in module-level globals.** `_task_queue`, `_io_queue`, `cur_task`, and the `SingletonGenerator` (created once as a default-argument in `sleep_ms`) are all shared. `asyncio.new_event_loop()` replaces `_task_queue` and `_io_queue` globally — if called from a test setUp running inside the TaskManager's event loop (paste mode via aiorepl), the outer loop's orphaned queue is GC'd and its tasks become dangling pointers. `asyncio.run()` also shares these globals; when the inner `run_until_complete` sets `cur_task = None` on exit, the outer loop resumes with a stale task pointer → SIGSEGV. **For tests that need `asyncio.run()` inside a running event loop:** save/restore `cur_task` around the call. For tests that call `new_event_loop()`, restore all three globals after `unittest.main()`. See `_build_import_runner_code()` in `mpos_controller.py` for the standard monkeypatches applied to all tests.
+
 ## Development rules
 
 - **TDD:** write failing test → fix → test passes.
