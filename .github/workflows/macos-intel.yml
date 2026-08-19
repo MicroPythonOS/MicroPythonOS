@@ -126,7 +126,7 @@ jobs:
 
       - name: Run unit tests on macOS
         run: |
-          ./scripts/test_runner.py
+          ./scripts/test_runner.py --timeout 600
 
       - name: Restore native/viper decorators
         if: always()
