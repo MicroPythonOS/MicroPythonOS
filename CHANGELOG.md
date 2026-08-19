@@ -26,7 +26,7 @@ OS:
 - main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
 
 Testing:
-- tests: use animate=False for all close_drawer() calls in the topmenu drawer test to avoid hanging on macOS CI (where micropython.schedule() dispatch of LVGL animation callbacks from paste-mode REPL is unreliable)
+- tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test — _wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
 - test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, _task_queue, _io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
 - test_download_manager: temporarily set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing

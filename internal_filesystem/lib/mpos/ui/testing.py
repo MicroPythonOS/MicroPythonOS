@@ -315,9 +315,6 @@ def wait_for_render(iterations=10):
         task_handler_running = False
 
     if task_handler_running:
-        for _ in range(max(iterations // 2, 1)):
-            lv.task_handler()
-            time.sleep(0.01)
         for _ in range(iterations):
             time.sleep(0.01)
         return

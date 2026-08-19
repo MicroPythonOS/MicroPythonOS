@@ -33,10 +33,14 @@ from mpos.ui import topmenu
 # ---------------------------------------------------------------------------
 
 def _wait_ms(ms):
-    start = time.ticks_ms()
-    while time.ticks_diff(time.ticks_ms(), start) < ms:
-        lv.task_handler()
-        time.sleep(0.01)
+    """Sleep for *ms* milliseconds without touching the LVGL task handler.
+
+    The timer-driven TaskHandler pumps LVGL during ``time.sleep()`` yields
+    without direct ``lv.task_handler()`` calls that can block forever
+    (observed on macOS ARM CI after many process cycles where SDL event
+    polling hangs).
+    """
+    time.sleep(ms / 1000.0)
 
 
 def _wait_drawer_open(timeout=6):
