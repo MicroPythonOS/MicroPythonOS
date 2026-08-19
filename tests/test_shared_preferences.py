@@ -422,11 +422,11 @@ class TestSharedPreferences(unittest.TestCase):
 
         # Use os.stat() instead of os.path.exists() for MicroPython
         try:
-            os.stat("data")
-            data_exists = True
+            os.stat("prefs")
+            prefs_exists = True
         except OSError:
-            data_exists = False
-        self.assertTrue(data_exists)
+            prefs_exists = False
+        self.assertTrue(prefs_exists)
 
         try:
             os.stat(self.test_dir)
