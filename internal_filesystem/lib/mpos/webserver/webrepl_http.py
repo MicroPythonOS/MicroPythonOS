@@ -1,7 +1,6 @@
 import os
 import socket
 import uio
-import struct
 
 import _webrepl
 from . import webrepl
@@ -12,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from mpos.ui.display_metrics import DisplayMetrics
-from mpos.ui.testing import capture_screenshot
+from mpos.ui.testing import capture_screenshot, encode_bmp
 
 WEBREPL_HTML_PATH = "builtin/html/webrepl_inlined_minified.html.gz" # built by MicroPythonOS/webrepl/inline_minify_webrepl.py
 
@@ -79,46 +78,11 @@ def _send_response(cl, status, content_type, body, extra_headers=None):
     cl.close()
 
 
-def _build_bmp_header(width, height, pixel_data_size):
-    bmp_header_size = 54
-    file_size = bmp_header_size + pixel_data_size
-    header = bytearray(bmp_header_size)
-    header[0:2] = b"BM"
-    header[2:6] = struct.pack("<I", file_size)
-    header[10:14] = struct.pack("<I", bmp_header_size)
-    header[14:18] = struct.pack("<I", 40)
-    header[18:22] = struct.pack("<I", width)
-    header[22:26] = struct.pack("<i", -height)
-    header[26:28] = struct.pack("<H", 1)
-    header[28:30] = struct.pack("<H", 24)
-    header[30:34] = struct.pack("<I", 0)
-    header[34:38] = struct.pack("<I", pixel_data_size)
-    return header
-
-
 def _snapshot_to_bmp(all_layers=False):
     width = DisplayMetrics.width()
     height = DisplayMetrics.height()
-    rgb_size = width * height * 3
-    row_stride = ((width * 3 + 3) // 4) * 4
-    pixel_data_size = row_stride * height
-
     rgb_buffer = capture_screenshot(width=width, height=height, color_format=lv.COLOR_FORMAT.RGB888, all_layers=all_layers)
-
-    bmp = bytearray(54 + pixel_data_size)
-    bmp[0:54] = _build_bmp_header(width, height, pixel_data_size)
-
-    view = memoryview(bmp)[54:]
-    if row_stride == width * 3:
-        view[:rgb_size] = rgb_buffer
-    else:
-        for y in range(height):
-            src_start = y * width * 3
-            src_end = src_start + width * 3
-            dest_start = y * row_stride
-            view[dest_start : dest_start + width * 3] = rgb_buffer[src_start:src_end]
-
-    return bmp
+    return encode_bmp(rgb_buffer, width, height)
 
 
 def _send_file_response(cl, path, content_type, extra_headers=None):

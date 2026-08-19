@@ -41,8 +41,11 @@ Usage in apps:
         simulate_click(area.x1 + 10, area.y1 + 10)
 """
 
+import gc
 import logging
 import lvgl as lv
+import os
+import struct
 import sys
 import time
 
@@ -466,6 +469,91 @@ def _blend_child(dst, src_argb, ox, oy, cw, ch, w, h, bpp, fmt):
                         dst[di + 1] = (src_argb[si + 1] * a + gd * ad * ai // 255) // oa
                         dst[di + 2] = (src_argb[si + 2] * a + rd * ad * ai // 255) // oa
                     dst[di + 3] = oa
+
+
+_BMP_HEADER_SIZE = 54
+
+
+def encode_bmp(pixels, width, height):
+    """
+    Encode an LVGL RGB888 buffer as a 24-bit BMP image.
+
+    Both formats hold three bytes per pixel, blue first, so the scanlines
+    are copied rather than converted.
+
+    Args:
+        pixels: Buffer holding width * height pixels of 3 bytes, blue first
+        width: Image width in pixels
+        height: Image height in pixels
+
+    Returns:
+        bytearray: The complete BMP file
+    """
+    rgb_size = width * height * 3
+    row_stride = ((width * 3 + 3) // 4) * 4
+    pixel_data_size = row_stride * height
+    bmp = bytearray(_BMP_HEADER_SIZE + pixel_data_size)
+
+    header = memoryview(bmp)[:_BMP_HEADER_SIZE]
+    header[0:2] = b"BM"
+    header[2:6] = struct.pack("<I", _BMP_HEADER_SIZE + pixel_data_size)
+    header[10:14] = struct.pack("<I", _BMP_HEADER_SIZE)
+    header[14:18] = struct.pack("<I", 40)
+    header[18:22] = struct.pack("<I", width)
+    header[22:26] = struct.pack("<i", -height)  # negative: rows run top to bottom
+    header[26:28] = struct.pack("<H", 1)
+    header[28:30] = struct.pack("<H", 24)
+    header[30:34] = struct.pack("<I", 0)
+    header[34:38] = struct.pack("<I", pixel_data_size)
+
+    view = memoryview(bmp)[_BMP_HEADER_SIZE:]
+    if row_stride == width * 3:
+        view[:rgb_size] = pixels
+    else:
+        for y in range(height):
+            src_start = y * width * 3
+            view[y * row_stride:y * row_stride + width * 3] = pixels[src_start:src_start + width * 3]
+    return bmp
+
+
+def screenshot_filename(now=None):
+    """Return a timestamped screenshot name, e.g. screenshot-20260818-221624.bmp."""
+    if now is None:
+        now = time.localtime()
+    return "screenshot-{:04d}{:02d}{:02d}-{:02d}{:02d}{:02d}.bmp".format(*now[:6])
+
+
+def save_screenshot_bmp(filepath=None, width=None, height=None, all_layers=True):
+    """
+    Capture the current screen and write it as a BMP file.
+
+    Args:
+        filepath: Where to write. Defaults to a timestamped name in the
+                  working directory, as an absolute path: the caller cannot
+                  see which directory that is, and on desktop it is the
+                  internal_filesystem the emulator was started in.
+        width: Screen width in pixels (default: the display width)
+        height: Screen height in pixels (default: the display height)
+        all_layers: Include lv.layer_top() overlays such as the status bar
+                    (default: True)
+
+    Returns:
+        str: The path that was written
+    """
+    from mpos.ui.display_metrics import DisplayMetrics
+    if width is None:
+        width = DisplayMetrics.width()
+    if height is None:
+        height = DisplayMetrics.height()
+    if filepath is None:
+        cwd = os.getcwd()
+        filepath = (cwd if cwd.endswith("/") else cwd + "/") + screenshot_filename()
+    gc.collect()  # the capture needs one contiguous frame buffer, plus one per overlay
+    pixels = capture_screenshot(width=width, height=height, color_format=lv.COLOR_FORMAT.RGB888,
+                                all_layers=all_layers)
+    with open(filepath, "wb") as f:
+        f.write(encode_bmp(pixels, width, height))
+    return filepath
 
 
 def get_all_widgets_with_text(obj, widgets=None):
