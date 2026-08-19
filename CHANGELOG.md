@@ -21,8 +21,8 @@ OS:
 - aiorepl: stop Ctrl-D in the non-raw REPL loop from shutting asyncio down; it now ends the line like Ctrl-C
 - boot: disable the Ctrl-C interrupt character while mpos.main boots (restored on the REPL fallback paths), so hosts connecting over serial mid-boot (e.g. mpremote entering raw REPL) can no longer silently abort the boot scripts and leave the OS half-started at the REPL
 - lvgl_micropython: add general-punctuation glyphs to Montserrat fonts
-- lvgl_micropython: add native-decorator bytecode fallback for builds without a native emitter like the unix port on aarch64 (Apple Silicon macOS) and the wasm/web port
 - lvgl_micropython: compress Montserrat 10-18 fonts to save ~19 KB of flash space
+- lvgl_micropython: add native-decorator bytecode fallback for builds without a native emitter like the unix port on aarch64 (Apple Silicon macOS) and the wasm/web port
 - main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
 
 Testing:
