@@ -47,6 +47,7 @@ import json
 import os
 import platform
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -412,6 +413,22 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
     return True, merged
 
 
+def _install_test_apps(port=None):
+    install_script = os.path.join(REPO_ROOT, "scripts", "install_test_apps.sh")
+    if not os.path.isfile(install_script):
+        print("WARNING: install_test_apps.sh not found, skipping app install")
+        return
+    cmd = ["bash", install_script]
+    if port:
+        cmd.extend(["--serial-port", port])
+    print("Installing test apps (use --no-install-test-apps to skip)...")
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError:
+        print("ERROR: test app installation failed")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run MicroPythonOS unit tests on desktop or device",
@@ -423,6 +440,10 @@ def main():
     parser.add_argument(
         "--ondevice", action="store_true",
         help="Run on a connected device instead of desktop",
+    )
+    parser.add_argument(
+        "--no-install-test-apps", action="store_true",
+        help="Skip automatic install of test apps when --ondevice is used",
     )
     parser.add_argument(
         "--port", default=None,
@@ -492,6 +513,9 @@ def main():
         os.environ["MPOS_TEST_PORT"] = args.port
     if args.ondevice and not os.environ.get("MPOS_TEST_PORT"):
         os.environ["MPOS_TEST_PORT"] = "/dev/ttyACM0"
+
+    if args.ondevice and not args.no_install_test_apps:
+        _install_test_apps(args.port)
 
     backend = "serial" if args.ondevice else "process"
     tests_dir = args.tests_dir or TESTS_DIR
