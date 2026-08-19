@@ -265,7 +265,7 @@ def open_drawer():
     if _drawer_slider:
         lv.group_focus_obj(_drawer_slider)
 
-def close_drawer(to_launcher=False):
+def close_drawer(to_launcher=False, animate=True):
     global drawer_open, _pre_drawer_focused
     if _drawer_panel is None or not drawer_open:
         return
@@ -276,7 +276,7 @@ def close_drawer(to_launcher=False):
     if not to_launcher and fg is not None and "launcher" not in fg:
         if __debug__: logger.debug("close_drawer: also closing bar because to_launcher is %s and foreground_app_name is %s", to_launcher, fg)
         close_bar(animate=False)
-    _drawer_panel.hide()
+    _drawer_panel.hide(animate=animate)
     _remove_focusables_from_group(_drawer_focusables)
     _remove_focusables_from_group(_drawer_notif_focusables)
     # Restore focus to wherever it was before the drawer was opened.

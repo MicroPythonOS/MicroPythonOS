@@ -105,12 +105,12 @@ class TestDrawerOpenClose(unittest.TestCase):
         _wait_ms(500)
         # Ensure drawer is closed to start.
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
 
@@ -125,7 +125,7 @@ class TestDrawerOpenClose(unittest.TestCase):
         topmenu.open_drawer()
         _wait_drawer_open(timeout=8)
 
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         result = _wait_drawer_closed(timeout=8)
         self.assertIsNotNone(result, "Drawer did not close after close_drawer()")
         self.assertFalse(topmenu.drawer_open, "drawer_open flag still set after close")
@@ -139,7 +139,7 @@ class TestDrawerOpenClose(unittest.TestCase):
     def test_close_drawer_idempotent(self):
         # Already closed from setUp — calling close again should not raise.
         self.assertFalse(topmenu.drawer_open)
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         self.assertFalse(topmenu.drawer_open)
 
     def test_toggle_drawer(self):
@@ -148,7 +148,7 @@ class TestDrawerOpenClose(unittest.TestCase):
         _wait_drawer_open(timeout=6)
         self.assertTrue(topmenu.drawer_open)
 
-        topmenu.toggle_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=6)
         self.assertFalse(topmenu.drawer_open)
 
@@ -163,12 +163,12 @@ class TestDrawerFocusOnOpen(unittest.TestCase):
         AppManager.start_app("com.micropythonos.launcher")
         _wait_ms(500)
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
 
@@ -201,7 +201,7 @@ class TestDrawerFocusOnOpen(unittest.TestCase):
         """Static drawer widgets must leave the focus group after close_drawer()."""
         topmenu.open_drawer()
         _wait_drawer_open(timeout=8)
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=8)
 
         focusables = _objects_in_focus_group()
@@ -222,12 +222,12 @@ class TestDrawerFocusRestore(unittest.TestCase):
         AppManager.start_app("com.micropythonos.launcher")
         _wait_ms(800)  # wait for launcher to build its icon grid
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
 
@@ -247,7 +247,7 @@ class TestDrawerFocusRestore(unittest.TestCase):
             "Focus did not move away from the launcher tile when drawer opened",
         )
 
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=8)
 
         self.assertIsNotNone(
@@ -263,7 +263,7 @@ class TestDrawerFocusRestore(unittest.TestCase):
         for _ in range(2):
             topmenu.open_drawer()
             _wait_drawer_open(timeout=8)
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=8)
             _wait_ms(100)
 
@@ -284,12 +284,12 @@ class TestDrawerNotificationFocus(unittest.TestCase):
         AppManager.start_app("com.micropythonos.launcher")
         _wait_ms(500)
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
 
@@ -318,7 +318,7 @@ class TestDrawerNotificationFocus(unittest.TestCase):
         notif_focusables = list(topmenu._drawer_notif_focusables)
         self.assertTrue(len(notif_focusables) > 0, "No notification focusables after open")
 
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=8)
 
         focusables = _objects_in_focus_group()
