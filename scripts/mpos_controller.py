@@ -1359,6 +1359,10 @@ for s in t:
         code = _build_test_code(test_path, tests_dir)
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
         fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", code))
+        for helper in re.findall(r"^from (\w+) import", code, re.M):
+            helper_path = os.path.join(host_test_dir, helper + ".py")
+            if os.path.exists(helper_path):
+                fixture_names.add(helper + ".py")
         if fixture_names:
             subprocess.run(
                 _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),

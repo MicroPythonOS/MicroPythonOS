@@ -70,6 +70,7 @@ ONDEVICE_SKIP = {
     "test_connectivity_manager_reconnect.py",
     "test_graphical_appstore_scanqr.py",
     "test_osupdate.py",
+    "test_retrogo_launcher.py",
     "test_wifi_service.py",
 }
 
