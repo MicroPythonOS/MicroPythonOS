@@ -184,26 +184,36 @@ class CameraActivity(Activity):
             mpos_ui.add_focus_highlight(button, width=2)
         lv.group_focus_obj(self.close_button)
 
-    # Merge common, mode-specific, and board-specific camera defaults.
+# Merge common, mode-specific, and board-specific camera defaults.
     def _get_camera_defaults(self, mode_defaults):
         defaults = {}
         defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
         defaults.update(mode_defaults)
-        defaults["vflip"] = CameraManager.get_cameras()[0].get_default_vflip()
+        cameras = CameraManager.get_cameras()
+        if cameras:
+            defaults["vflip"] = cameras[0].get_default_vflip()
         return defaults
 
     def start_cam(self):
         # Init camera:
-        firstcam = CameraManager.get_cameras()[0]
+        cameras = CameraManager.get_cameras()
+        if not cameras:
+            self.cam = None
+            self.status_label.set_text(self.STATUS_NO_CAMERA)
+            self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+            return False
+        firstcam = cameras[0]
         self.cam = firstcam.init(self.width, self.height, self.colormode)
         if self.cam:
             self.image.set_rotation(-10 * firstcam.get_rotation_degrees()) # counter the rotation so * -1 and convert to tens-of-a-degree for LVGL
-            # Apply saved camera settings, only for internal camera for now:
+            # Apply saved camera settings, for internal camera for now:
             firstcam.apply_settings(self.cam, self.scanqr_prefs if self.scanqr_mode else self.prefs) # needs to be done AFTER the camera is initialized
             # Start refreshing:
             if __debug__: logger.debug("Camera app initialized, continuing...")
             self.update_preview_image()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
+            return True
+        return False
 
     def stop_cam(self):
         if self.capture_timer:
