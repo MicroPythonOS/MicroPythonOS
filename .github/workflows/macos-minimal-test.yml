@@ -2,6 +2,11 @@ name: macOS Intel — minimal drawer test (debug)
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to test (branch, tag, or commit SHA)"
+        required: true
+        default: main
 
 jobs:
   test:
@@ -22,6 +27,7 @@ jobs:
       - name: Checkout repository with submodules
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           submodules: recursive
 
       - name: Install dependencies via Homebrew
