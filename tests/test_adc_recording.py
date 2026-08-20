@@ -54,7 +54,17 @@ class TestADCRecording(unittest.TestCase):
         
         # Wait for recording to finish (plus a buffer for thread startup/shutdown)
         # Simulation mode might be slower or faster depending on system load
-        time.sleep(duration_ms / 1000.0 + 1.0)
+        deadline = time.time() + 10.0
+        file_size = 0
+        while time.time() < deadline:
+            time.sleep(0.5)
+            try:
+                st = os.stat(self.test_file)
+                file_size = st[6]
+                if file_size > 44:
+                    break
+            except OSError:
+                file_size = 0
         
         # Verify file exists
         try:

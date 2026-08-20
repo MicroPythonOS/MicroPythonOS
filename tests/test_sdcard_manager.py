@@ -4,6 +4,9 @@ from mpos import SDCardManager
 
 class TestSDCardManager(unittest.TestCase):
 
+    def setUp(self):
+        SDCardManager._instance = None
+
     def test_unmounted_by_default(self):
         self.assertFalse(SDCardManager.is_mounted())
         self.assertIsNone(SDCardManager.get_mount_point())
