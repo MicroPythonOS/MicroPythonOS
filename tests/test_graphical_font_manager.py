@@ -27,6 +27,8 @@ def _reset_font_manager():
     FontManager._ttf_font_cache.clear()
     FontManager._emoji_map = None
     FontManager._emoji_strings = None
+    FontManager._emoji_codepoints = None
+    FontManager._emoji_codepoints_sorted = None
     FontManager._emoji_src_lookup_cache.clear()
     FontManager._emoji_sequence_lookup_cache.clear()
     FontManager._imgfont_scaled_src_cache.clear()
@@ -241,6 +243,16 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         for cp in FontManager.getEmojiCodepoints():
             self.assertTrue(cp >= 0x100, "Codepoint should not be plain ASCII")
             self.assertTrue(cp <= 0x10FFFF, "Codepoint should be within Unicode range")
+
+    def test_isemoji_codepoint_identifies_available_emoji(self):
+        self.assertTrue(FontManager.isEmojiCodepoint(ord("😀")))
+        self.assertFalse(FontManager.isEmojiCodepoint(ord("A")))
+
+    def test_isemoji_codepoint_reuses_cached_index(self):
+        FontManager.isEmojiCodepoint(ord("😀"))
+        codepoints = FontManager._emoji_codepoints
+        FontManager.isEmojiCodepoint(ord("A"))
+        self.assertIs(FontManager._emoji_codepoints, codepoints)
 
     def test_emoji_tier_loaded_after_getemoji(self):
         """After getEmojiCodepoints(), the 32x32 tier is populated."""

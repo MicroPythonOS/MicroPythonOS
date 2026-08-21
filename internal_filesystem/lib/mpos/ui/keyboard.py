@@ -310,12 +310,8 @@ class MposKeyboard:
         if not text:
             return False
 
-        emoji_codepoints = FontManager.getEmojiCodepoints()
-        if not emoji_codepoints:
-            return False
-
         for char in text:
-            if ord(char) in emoji_codepoints:
+            if FontManager.isEmojiCodepoint(ord(char)):
                 return True
         return False
 
