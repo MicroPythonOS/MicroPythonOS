@@ -22,7 +22,6 @@ import unittest
 
 import lvgl as lv
 
-import mpos
 from mpos import AppManager, DownloadManager, Intent, TaskManager
 from mpos.ui import QR_SYMBOL
 from mpos.ui.testing import find_label_with_text, wait_for_render
@@ -137,6 +136,27 @@ class TestGraphicalAppStoreScanQR(unittest.TestCase):
         # Index refresh fails (stubbed offline), so the "No connection" dialog shows.
         label = find_label_with_text(lv.layer_top(), "No connection")
         self.assertIsNotNone(label, "unknown app with no index should show the 'No connection' dialog")
+
+    def test_deeplink_to_installed_app_resolves_before_index_download(self):
+        # A deep link to an installed app must open its detail screen from
+        # phase 1 (local app list) alone — by the time the index download
+        # starts, the pending deep link should already be consumed.
+        pending_at_download = []
+
+        async def _recording_download(url, **kwargs):
+            import mpos.ui
+            for entry in mpos.ui.screen_stack:
+                activity = entry[0]
+                if activity.__class__.__name__ == "AppStore":
+                    pending_at_download.append(activity._pending_deeplink)
+            raise OSError("no network in test")
+        DownloadManager.download_url = staticmethod(_recording_download)
+
+        intent = Intent(extras={"deeplink_fullname": HELLOWORLD})
+        self._start_appstore(intent=intent)
+        self.assertIsNotNone(find_label_with_text(lv.screen_active(), "HelloWorld"))
+        self.assertEqual(pending_at_download, [None],
+                         "deep link should be resolved before the index download runs")
 
     def test_deeplink_intent_opens_detail(self):
         intent = Intent(extras={"deeplink_fullname": HELLOWORLD})

@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
+
 Board Support:
 - UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
 - unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError "invalid micropython decorator"
