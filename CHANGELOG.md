@@ -12,6 +12,8 @@ Builtin Apps:
 Frameworks:
 - AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open
+- Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a "No camera found" status instead of crashing on get_cameras()[0]
+- DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with "can't create thread"
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
 - Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
@@ -29,6 +31,8 @@ OS:
 
 Testing:
 - tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test — _wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
+- topmenu drawer test: use animate=False for all close_drawer() calls; close_drawer() now accepts an animate parameter matching the existing close_bar() API
+- notification_manager: skip buzzer-based notification sounds on macOS (sys.platform == "darwin") — macOS desktop audio uses afplay, not buzzer emulation, and the buzzer Output registered by board/linux.py (buzzer_pin=-1) causes intermittent hangs on headless macOS CI runners when DesktopRTTTLStream triggers the afplay path for notification sounds
 - test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, _task_queue, _io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
 - test_download_manager: temporarily set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
