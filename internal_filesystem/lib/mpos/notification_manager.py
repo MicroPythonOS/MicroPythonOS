@@ -1,4 +1,5 @@
 import logging
+import sys
 import time
 
 from .shared_preferences import SharedPreferences
@@ -189,6 +190,13 @@ class NotificationManager:
                 return
             output = cls._find_buzzer_output()
             if output is None:
+                return
+
+            # macOS desktop audio goes through afplay, not buzzer emulation;
+            # the buzzer Output registered by board/linux.py (pin=-1) is only
+            # for app discovery. Playing a notification sound through this
+            # output on macOS can hang the process on headless CI runners.
+            if sys.platform == "darwin":
                 return
 
             now = time.ticks_ms()
