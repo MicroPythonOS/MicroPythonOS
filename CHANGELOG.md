@@ -18,6 +18,7 @@ Frameworks:
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
 
 OS:
+- builtin: compress the frozen /builtin filesystem archive (freezefs --compress), saving ~39 KB of firmware flash, and strip development junk (__pycache__, .DS_Store, backup files) from it during the build (#268)
 - aiorepl: survive stdin EOF (host disconnect) by polling for reconnection instead of exiting, so the serial console no longer dies permanently after mpremote/raw-REPL connection attempts
 - aiorepl: stop Ctrl-D in the non-raw REPL loop from shutting asyncio down; it now ends the line like Ctrl-C
 - boot: disable the Ctrl-C interrupt character while mpos.main boots (restored on the REPL fallback paths), so hosts connecting over serial mid-boot (e.g. mpremote entering raw REPL) can no longer silently abort the boot scripts and leave the OS half-started at the REPL
