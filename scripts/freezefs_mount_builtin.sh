@@ -36,7 +36,7 @@ if [ $result -ne 0 ]; then
 fi
 
 pushd "$mydir"/../freezeFS/
-# --compress saves ~78 KB of firmware (issue #268). Safe for runtime use:
+# --compress saves ~39 KiB of firmware (issue #268). Safe for runtime use:
 # .mpy imports and icon reads are binary-mode, which freezefs streams without
 # loading whole files into RAM; only text-mode ("r") opens decompress fully,
 # and the only such reads from /builtin are ~0.5 KB MANIFEST.JSON files.
