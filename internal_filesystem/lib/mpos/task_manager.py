@@ -50,6 +50,8 @@ class TaskManager:
 
     @classmethod
     def create_task(cls, coroutine):
+        if cls.disabled:
+            return None
         task = asyncio.create_task(coroutine)
         cls.task_list.append(task)
         return task

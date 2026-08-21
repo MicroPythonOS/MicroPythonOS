@@ -101,8 +101,18 @@ def _build_test_code(test_path, tests_dir=None):
     code += "sys.path.insert(0, 'lib')\n"
     if tests_dir:
         code += "sys.path.append(%r)\n" % tests_dir
-    code += "try:\n import mpos; mpos.TaskManager.disable()\n"
-    code += "except Exception:\n pass\n"
+    code += "try:\n"
+    code += "    import mpos; mpos.TaskManager.disable()\n"
+    code += "    import asyncio as _tc_asyncio\n"
+    code += "    def _tc_patched(cls, coroutine):\n"
+    code += "        if cls.disabled:\n"
+    code += "            return None\n"
+    code += "        task = _tc_asyncio.create_task(coroutine)\n"
+    code += "        cls.task_list.append(task)\n"
+    code += "        return task\n"
+    code += "    mpos.TaskManager.create_task = classmethod(_tc_patched)\n"
+    code += "except Exception:\n"
+    code += "    pass\n"
     code += "import unittest\n"
     code += """\
 for _k in list(globals().keys()):
