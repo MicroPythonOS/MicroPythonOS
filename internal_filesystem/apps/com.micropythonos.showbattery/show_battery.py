@@ -59,28 +59,29 @@ class ShowBattery(Activity):
         )
 
         self.layer = lv.layer_t()
-        self.canvas.init_layer(self.layer)
+        # Reuse these drawing objects to avoid allocations for every graph segment.
+        self.line_dsc = lv.draw_line_dsc_t()
+        lv.draw_line_dsc_t.init(self.line_dsc)
+        self.line_dsc.width = 2
+        self.line_dsc.round_end = 1
+        self.line_dsc.round_start = 1
+        self.line_start = lv.point_precise_t()
+        self.line_end = lv.point_precise_t()
+
         self.setContentView(main_content)
 
     def draw_line(self, color, x1, y1, x2, y2):
-        dsc = lv.draw_line_dsc_t()
-        lv.draw_line_dsc_t.init(dsc)
-        dsc.color = color
-        dsc.width = 2
-        dsc.round_end = 1
-        dsc.round_start = 1
-        dsc.p1 = lv.point_precise_t()
-        dsc.p1.x = x1
-        dsc.p1.y = y1
-        dsc.p2 = lv.point_precise_t()
-        dsc.p2.x = x2
-        dsc.p2.y = y2
-        lv.draw_line(self.layer, dsc)
-        self.canvas.finish_layer(self.layer)
+        self.line_start.x = x1
+        self.line_start.y = y1
+        self.line_end.x = x2
+        self.line_end.y = y2
+        self.line_dsc.color = color
+        self.line_dsc.p1 = self.line_start
+        self.line_dsc.p2 = self.line_end
+        lv.draw_line(self.layer, self.line_dsc)
 
     def draw_graph(self):
         self.canvas.fill_bg(lv.color_white(), lv.OPA.COVER)
-        self.canvas.clean()
 
         w = self.canvas_width
         h = self.canvas_height
@@ -90,6 +91,7 @@ class ShowBattery(Activity):
 
         v_range = max(MAX_VOLTAGE - MIN_VOLTAGE, 0.01)
 
+        self.canvas.init_layer(self.layer)
         for i in range(1, len(self.history_v)):
             x1 = int((i - 1) * w / HISTORY_LEN)
             x2 = int(i * w / HISTORY_LEN)
@@ -102,6 +104,7 @@ class ShowBattery(Activity):
 
             self.draw_line(DARKPINK, x1, yv1, x2, yv2)
             self.draw_line(BLACK, x1, yp1, x2, yp2)
+        self.canvas.finish_layer(self.layer)
 
     def onResume(self, screen):
         super().onResume(screen)
