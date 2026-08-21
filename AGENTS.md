@@ -26,6 +26,15 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py` (not run by test_runner.py).  
 **Details:** `tests/README.md`
 
+### Deploying lib/ changes to device
+
+Frozen modules in the firmware shadow filesystem `.py` files even though `sys.path = ['lib', '', '.frozen']`. To test a modified framework file at `internal_filesystem/lib/mpos/ui/*.py` on device:
+
+- **`./scripts/install.sh`** — copies the entire `lib/` directory to device flash (`lib/mpos/` → `:/lib/mpos/`), overriding frozen modules. Slow but comprehensive; run once to populate the tree.
+- **`python3 lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py connect /dev/ttyACM0 cp internal_filesystem/<path> :<path>`** — copies a single file. Fast but only works after `install.sh` has already created the target directory structure on flash.
+
+After deploying, relay-reset so the device boots with the new files (the module cache is cleared on reset).
+
 ### Code coverage (desktop only)
 
 **Build with coverage:** `./scripts/build_mpos.sh unix coverage` or `make build-mpos-unix-coverage`  

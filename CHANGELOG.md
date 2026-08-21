@@ -19,6 +19,7 @@ Frameworks:
 - FontManager: cache emoji codepoints for keyboard input by @fdb
 - Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
+- View: clear the shared default focus group before the screen is deleted to prevent dangling LVGL pointer accumulation across activity transitions
 
 OS:
 - aiorepl: survive stdin EOF (host disconnect) by polling for reconnection instead of exiting, so the serial console no longer dies permanently after mpremote/raw-REPL connection attempts
