@@ -33,12 +33,12 @@ OS:
 - sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
-- tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test — _wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
+- tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test; wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
 - topmenu drawer test: use animate=False for all close_drawer() calls; close_drawer() now accepts an animate parameter matching the existing close_bar() API
-- notification_manager: skip buzzer-based notification sounds on macOS (sys.platform == 'darwin') — macOS desktop audio uses afplay, not buzzer emulation, and the buzzer Output registered by board/linux.py (buzzer_pin=-1) causes intermittent hangs on headless macOS CI runners when DesktopRTTTLStream triggers the afplay path for notification sounds
-- test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, _task_queue, _io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
-- test_download_manager: temporarily set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
+- test_runner: disable notification sound on macOS/darwin in the settings because it causes a hang on the headless (soundcardless?) macOS CI runners
+- test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, task_queue, io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
+- test_download_manager: set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
 - test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
 - test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration
 

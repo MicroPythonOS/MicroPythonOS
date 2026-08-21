@@ -203,36 +203,6 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
         "_mpos_a.Loop.run_until_complete = staticmethod(_mpos_safe_loop_rtc)\n"
     )
 
-    code += (
-        "# On macOS CI runners, audio hardware is absent and playing\n"
-        "# notification sounds through the buzzer can hang the process.\n"
-        "# Write an empty notification_sound setting before any test runs\n"
-        "# so NotificationManager._play_notification_sound() bails out\n"
-        "# at the `if not rtttl: return` guard without touching audio.\n"
-        "if sys.platform == 'darwin':\n"
-        "    import os as _mpos_os\n"
-        "    import ujson as _mpos_ujson\n"
-        "    _mpos_dir = 'prefs/com.micropythonos.settings'\n"
-        "    _mpos_config_path = _mpos_dir + '/config.json'\n"
-        "    _mpos_config = {}\n"
-        "    try:\n"
-        "        _mpos_os.mkdir('prefs')\n"
-        "    except OSError:\n"
-        "        pass\n"
-        "    try:\n"
-        "        _mpos_os.mkdir(_mpos_dir)\n"
-        "    except OSError:\n"
-        "        pass\n"
-        "    try:\n"
-        "        with open(_mpos_config_path) as _mpos_f:\n"
-        "            _mpos_config = _mpos_ujson.load(_mpos_f)\n"
-        "    except (OSError, ValueError):\n"
-        "        pass\n"
-        "    _mpos_config['notification_sound'] = ''\n"
-        "    with open(_mpos_config_path, 'w') as _mpos_f:\n"
-        "        _mpos_ujson.dump(_mpos_config, _mpos_f)\n"
-        "    print('MPOS_TEST_RUNNER: disabled notification sounds for macOS headless CI')\n"
-    )
     code += "import mpos; mpos.TaskManager.disable()\n"
     if coverage:
         code += "import mpos.coverage\n"
@@ -634,6 +604,28 @@ class ProcessBackend:
         )
 
     def start(self):
+        # On macOS CI runners, audio hardware is absent and playing
+        # notification sounds through the buzzer can hang the process.
+        # Write an empty notification_sound setting to the prefs config
+        # BEFORE the binary boots, so NotificationManager reads it
+        # during startup and never touches audio hardware.
+        if sys.platform == "darwin":
+            import json as _json
+            _prefs_dir = os.path.join(self.cwd, "prefs",
+                                      "com.micropythonos.settings")
+            _config_path = os.path.join(_prefs_dir, "config.json")
+            os.makedirs(_prefs_dir, exist_ok=True)
+            _config = {}
+            try:
+                with open(_config_path) as _f:
+                    _config = _json.load(_f)
+            except (FileNotFoundError, ValueError):
+                pass
+            _config["notification_sound"] = ""
+            with open(_config_path, "w") as _f:
+                _json.dump(_config, _f)
+            print("MPOS_TEST_RUNNER: disabled notification sounds for macOS CI (pre-boot)")
+
         # Kill any leftover lvgl_micropy_unix processes from previous runs
         self._kill_stale_processes(self.binary)
         time.sleep(0.3)
