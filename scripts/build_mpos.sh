@@ -353,6 +353,29 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		"$frozenmanifest"
     set +x
 	popd
+
+	# Report firmware size vs the OTA partition budget so headroom erosion is
+	# visible on every build, not only when the esp-idf size check finally
+	# fails at 0 bytes (see #268). Warn when less than 32 KiB remains.
+	builddir=build-$BOARD
+	[ -n "$BOARD_VARIANT" ] && builddir=build-$BOARD-$BOARD_VARIANT
+	fwbin="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/$builddir/micropython.bin
+	if [ -f "$fwbin" ]; then
+		fwsize=$(stat -f%z "$fwbin" 2>/dev/null || stat -c%s "$fwbin")
+		headroom=$((partition_size - fwsize))
+		echo ""
+		echo "=== Firmware size check ($target) ==="
+		echo "image:     $fwsize bytes"
+		echo "partition: $partition_size bytes"
+		echo "headroom:  $headroom bytes"
+		if [ "$headroom" -lt 0 ]; then
+			echo "ERROR: firmware exceeds the app partition by $((-headroom)) bytes!"
+			exit 1
+		elif [ "$headroom" -lt 32768 ]; then
+			echo "WARNING: less than 32 KiB of partition headroom left!"
+		fi
+		echo "====================================="
+	fi
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# Full cleanup: old .o from upstream MicroPython builds would cause link errors
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
