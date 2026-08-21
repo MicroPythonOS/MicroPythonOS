@@ -178,6 +178,7 @@ with MPOSController(backend='process') as mpos:
 - No `bytearray * int` → `bytearray(); [out.extend(buf) for _ in range(n)]`.
 - Some builds lack `random.Random`/`shuffle` → Fisher-Yates with `randint`. Prefer tiny LCG for deterministic jitter.
 - `logging.Logger.log()` formats via `msg % args` — always include `%s` when passing variables.
+- `asyncio.TimeoutError` is NOT an `OSError` subclass on MicroPython. Catching `except OSError` for socket operations will silently miss timeouts — use `except (OSError, asyncio.TimeoutError)`.
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 
@@ -214,6 +215,7 @@ Critical gotchas:
 - `Pin.init(Pin.OUT)` silently overrides peripheral GPIO routing → no output, no error. Fix: deinit + re-create peripheral.
 - Shared RMT pin: re-create RMT driver (not just `pin.init`).
 - `asyncio.create_task()` from outside the event loop (timer callbacks, thread, boot services) does NOT wake the event loop — tasks queue up and execute with unpredictable delay (~6s typical on ESP32-S3). Architectures that rely on a `create_task()`-spawned loop polling a flag will fail. Instead, call `create_task()` directly from each callback (see `appstore_core._network_changed` for the proven pattern).
+- `TaskManager.create_task()` crashes at C level when `TaskManager.disable()` is True (the test runner disables TaskManager). If any activity `onResume` callback calls `create_task()`, the device reboots silently — no Python traceback, no issue on desktop. Fix: guard `create_task` with `if cls.disabled: return None` in source AND mirror in `mpos_controller.py:_build_test_code` runtime patch (frozen modules shadow flash files).
 - Services that call `start()` → `register_callback()` → `create_task(_run_loop())` at boot: the callback path works (fired via timer ISR on main thread), but the run-loop task may face scheduling delays. Don't rely on the run-loop for time-sensitive work — treat it as best-effort periodic background check.
 
 ### BLE
