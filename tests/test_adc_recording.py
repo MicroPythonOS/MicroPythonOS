@@ -51,13 +51,22 @@ class TestADCRecording(unittest.TestCase):
         )
         
         self.assertTrue(success, "AudioManager.record_wav_adc returned False")
-        
-        # Wait for recording to finish (plus a buffer for thread startup/shutdown)
-        # Simulation mode might be slower or faster depending on system load
+
+        self.assertTrue(
+            AudioManager.get()._active_sessions,
+            "No active sessions — recording thread likely failed to start or crashed",
+        )
+
+        # Give the recording thread its first scheduling window.
+        # On ESP32, _thread tasks run at low FreeRTOS priority and are
+        # starved until the main thread yields via time.sleep().
+        time.sleep(0.5)
+
+        # Wait for recording to finish (plus a buffer for thread startup/shutdown).
         deadline = time.time() + 10.0
         file_size = 0
         while time.time() < deadline:
-            time.sleep(0.5)
+            time.sleep(0.1)
             try:
                 st = os.stat(self.test_file)
                 file_size = st[6]
@@ -65,7 +74,9 @@ class TestADCRecording(unittest.TestCase):
                     break
             except OSError:
                 file_size = 0
-        
+            if not AudioManager.get()._active_sessions:
+                break
+
         # Verify file exists
         try:
             st = os.stat(self.test_file)
@@ -74,7 +85,7 @@ class TestADCRecording(unittest.TestCase):
         except OSError:
             file_exists = False
             file_size = 0
-            
+
         self.assertTrue(file_exists, f"Recording file {self.test_file} was not created")
         
         # Verify file size is reasonable
