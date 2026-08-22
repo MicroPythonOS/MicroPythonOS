@@ -315,6 +315,7 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
                                 log_f, "RX",
                                 b"<detected 'Starting asyncio REPL...'>\n",
                             )
+                            time.sleep(10)
                             return True
                     time.sleep(0.1)
             finally:

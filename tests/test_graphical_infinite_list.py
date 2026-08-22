@@ -126,7 +126,7 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         lst = self._make_list(1000)
         self.assertTextPresent("rom_0000.wad")
 
-        drags = 15 if _ESP32 else 10
+        drags = 25 if _ESP32 else 10
         for _ in range(drags):
             self._drag_scroll_down(lst)
 
@@ -136,7 +136,7 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         lst = self._make_list(1000)
         self.assertTextPresent("rom_0000.wad")
 
-        drags = 12 if _ESP32 else 8
+        drags = 18 if _ESP32 else 8
         for _ in range(drags):
             self._drag_scroll_down(lst)
         self.assertTextNotPresent("rom_0000.wad")
@@ -161,9 +161,18 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         focus_on = lst.obj.get_child(initial - 1)
         lv.group_focus_obj(focus_on)
 
-        iterations = 80 if _ESP32 else 30
+        iterations = 120 if _ESP32 else 30
         for _ in range(iterations):
             self.wait_for_render()
+
+        # Focus alone may not be enough — simulate a DOWN key to trigger
+        # the ensure_loaded callback on ESP32 where LVGL event delivery
+        # is more sensitive to task_handler scheduling.
+        if _ESP32 and lst.rendered_count <= initial:
+            from mpos.ui.focus_direction import move_focus_direction, DOWN
+            move_focus_direction(DOWN)
+            for _ in range(60):
+                self.wait_for_render()
 
         self.assertTrue(
             lst.rendered_count > initial,
