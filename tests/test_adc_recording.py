@@ -74,8 +74,6 @@ class TestADCRecording(unittest.TestCase):
                     break
             except OSError:
                 file_size = 0
-            if not AudioManager.get()._active_sessions:
-                break
 
         # Verify file exists
         try:
