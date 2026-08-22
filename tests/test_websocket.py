@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import unittest
 import _thread
 import time
@@ -8,6 +9,8 @@ from mpos import TaskManager
 
 from uaiowebsocket import WebSocketApp
 
+@unittest.skipIf(sys.platform == "esp32",
+                 "WebSocket test requires internet connectivity not available on device")
 class TestMutlipleWebsocketsAsyncio(unittest.TestCase):
 
     max_allowed_connections = 3 # this used to be the max that echo.websocket.org allowed, and we were checking that, but now it seems to allow at least 10!

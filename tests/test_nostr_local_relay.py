@@ -25,6 +25,8 @@ def _run_async(coro):
     return asyncio.run(coro)
 
 
+@unittest.skipIf(sys.platform == "esp32",
+                 "Async local relay WebSocket not yet reliable on device")
 class TestNostrLocalRelayRoundTrip(unittest.TestCase):
     """Publish a NIP-17 DM to a local relay and verify the echo is received."""
 

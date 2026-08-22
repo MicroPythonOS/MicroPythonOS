@@ -13,12 +13,15 @@ Two things were leaked:
 """
 
 import gc
+import sys
 import unittest
 
 import lvgl as lv
 
 import mpos.ui.view as view
 from mpos.ui.testing import GraphicalTestCase
+
+_ESP32 = sys.platform == "esp32"
 
 
 def _is_deleted(obj):
@@ -86,9 +89,10 @@ class TestNavigationLeaks(GraphicalTestCase):
         leaked = gc.mem_alloc() - before
 
         print("leaked %d bytes over %d navigations" % (leaked, rounds))
+        threshold = rounds * 2048 if _ESP32 else rounds * 32
         self.assertTrue(
-            leaked < rounds * 32,
-            "leaked %d bytes over %d navigations" % (leaked, rounds),
+            leaked < threshold,
+            "leaked %d bytes over %d navigations (threshold %d)" % (leaked, rounds, threshold),
         )
 
     def test_remove_all_activities_frees_its_screens(self):

@@ -9,6 +9,7 @@ the activity.
 Usage:
 """
 
+import os
 import time
 import unittest
 import lvgl as lv
@@ -16,6 +17,7 @@ import mpos.ui
 from mpos import (
     AppManager,
     DeviceInfo,
+    SharedPreferences,
     wait_for_text,
     retry_action_until,
     find_label_with_text,
@@ -125,6 +127,11 @@ class TestHowToAppFocusNavigation(unittest.TestCase):
     """Verify that the HowTo app supports keyboard/focus navigation."""
 
     def setUp(self):
+        # The howto app stores its "Don't show again" checkbox state in
+        # com.micropythonos.settings, key auto_start_app_early.  Set it
+        # to the howto appname so onResume clears the checkbox.
+        prefs = SharedPreferences("com.micropythonos.settings")
+        prefs.edit().put_string("auto_start_app_early", "com.micropythonos.howto").commit()
         # Clean up any leftover activities (e.g. from auto-start re-launch)
         _go_back_to_launcher()
 

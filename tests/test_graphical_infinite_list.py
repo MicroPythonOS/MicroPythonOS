@@ -7,6 +7,7 @@ import lvgl as lv
 from mpos.ui.testing import GraphicalTestCase, wait_for_render, simulate_drag
 from mpos.ui.infinite_list import InfiniteList
 
+_ESP32 = sys.platform == "esp32"
 TOTAL_ITEMS = 5000
 
 
@@ -46,7 +47,9 @@ class _Base:
         self.wait_for_render(10)
         return lst
 
-    def _drag_scroll_down(self, lst, steps=8):
+    def _drag_scroll_down(self, lst, steps=None):
+        if steps is None:
+            steps = 15 if _ESP32 else 8
         start_x = 160
         lst_h = lst.obj.get_height()
         if lst_h <= 0:
@@ -54,9 +57,11 @@ class _Base:
         start_y = lst_h - 20
         end_y = 40
         simulate_drag(start_x, start_y, start_x, end_y, steps=steps, step_delay_ms=30)
-        self.wait_for_render(10)
+        self.wait_for_render(20 if _ESP32 else 10)
 
-    def _drag_scroll_up(self, lst, steps=8):
+    def _drag_scroll_up(self, lst, steps=None):
+        if steps is None:
+            steps = 15 if _ESP32 else 8
         start_x = 160
         start_y = 40
         lst_h = lst.obj.get_height()
@@ -64,7 +69,7 @@ class _Base:
             lst_h = 168
         end_y = lst_h - 20
         simulate_drag(start_x, start_y, start_x, end_y, steps=steps, step_delay_ms=30)
-        self.wait_for_render(10)
+        self.wait_for_render(20 if _ESP32 else 10)
 
 
 class TestInfiniteListBoundedChildren(GraphicalTestCase, _Base):
@@ -121,7 +126,8 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         lst = self._make_list(1000)
         self.assertTextPresent("rom_0000.wad")
 
-        for _ in range(10):
+        drags = 15 if _ESP32 else 10
+        for _ in range(drags):
             self._drag_scroll_down(lst)
 
         self.assertTextNotPresent("rom_0000.wad")
@@ -130,11 +136,12 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         lst = self._make_list(1000)
         self.assertTextPresent("rom_0000.wad")
 
-        for _ in range(8):
+        drags = 12 if _ESP32 else 8
+        for _ in range(drags):
             self._drag_scroll_down(lst)
         self.assertTextNotPresent("rom_0000.wad")
 
-        for _ in range(8):
+        for _ in range(drags):
             self._drag_scroll_up(lst)
         self.assertTextPresent("rom_0000.wad")
 
@@ -154,7 +161,8 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         focus_on = lst.obj.get_child(initial - 1)
         lv.group_focus_obj(focus_on)
 
-        for _ in range(30):
+        iterations = 80 if _ESP32 else 30
+        for _ in range(iterations):
             self.wait_for_render()
 
         self.assertTrue(
@@ -189,22 +197,26 @@ class TestInfiniteListPerformance(GraphicalTestCase, _Base):
         return lst, elapsed
 
     def test_set_data_fast_with_5000_items(self):
+        threshold = 2000 if _ESP32 else 500
         lst, elapsed = self._make_list_timed(5000)
         self.assertTrue(
-            elapsed < 500,
-            f"set_data with 5000 items took {elapsed}ms, expected <500ms"
+            elapsed < threshold,
+            f"set_data with 5000 items took {elapsed}ms, expected <{threshold}ms"
         )
         self.assertTrue(lst.rendered_count < 30)
 
     def test_set_data_fast_with_10000_items(self):
+        threshold = 4000 if _ESP32 else 1000
         lst, elapsed = self._make_list_timed(10000)
         self.assertTrue(
-            elapsed < 1000,
-            f"set_data with 10000 items took {elapsed}ms, expected <1000ms"
+            elapsed < threshold,
+            f"set_data with 10000 items took {elapsed}ms, expected <{threshold}ms"
         )
         self.assertTrue(lst.rendered_count < 30)
 
     def test_scroll_render_time_is_low(self):
+        avg_threshold = 2000 if _ESP32 else 600
+        single_threshold = 3000 if _ESP32 else 800
         lst = self._make_list(5000)
 
         times = []
@@ -216,11 +228,11 @@ class TestInfiniteListPerformance(GraphicalTestCase, _Base):
 
         avg = sum(times) / len(times)
         self.assertTrue(
-            avg < 600,
-            f"Average scroll drag+render took {avg:.0f}ms, expected <600ms"
+            avg < avg_threshold,
+            f"Average scroll drag+render took {avg:.0f}ms, expected <{avg_threshold}ms"
         )
         for t in times:
-            self.assertTrue(t < 800, f"Single scroll drag+render took {t}ms")
+            self.assertTrue(t < single_threshold, f"Single scroll drag+render took {t}ms")
 
     def test_initially_visible_range_rendered_properly(self):
         lst = self._make_list(10)

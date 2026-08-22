@@ -16,9 +16,13 @@ Key behaviors tested:
 Usage:
 """
 
+import sys
 import unittest
 from mpos.ui.testing import GraphicalTestCase, wait_for_widget
 import lvgl as lv
+
+_ESP32 = sys.platform == "esp32"
+_IMG_TIMEOUT = 15.0 if _ESP32 else 5.0
 
 
 class TestFsDriverInvalidImage(GraphicalTestCase):
@@ -29,13 +33,19 @@ class TestFsDriverInvalidImage(GraphicalTestCase):
     # Fixed invalid path
     INVALID_IMAGE_PATH = "M:/path/to/nonexistent_image.png"
 
-    def _wait_image_dimension(self, img, predicate, expected, timeout=5.0, interval=0.05):
+    def _wait_image_dimension(self, img, predicate, expected, timeout=None, interval=0.05):
         """
         Poll until the image dimensions satisfy predicate(w, h) == expected.
 
         This avoids flaky sleep-based waiting by actively checking the condition
         with a timeout, like other graphical tests in this repo.
         """
+        if timeout is None:
+            timeout = _IMG_TIMEOUT
+
+        # Give LVGL time to start decoding before polling.
+        self.wait_for_render(30)
+
         def _check():
             return predicate(img.get_width(), img.get_height()) == expected
 
@@ -105,7 +115,7 @@ class TestFsDriverInvalidImage(GraphicalTestCase):
         print(f"Step 2: Loading VALID image on same widget: {self.VALID_IMAGE_PATH}")
         img.set_src(self.VALID_IMAGE_PATH)
         loaded = self._wait_image_dimension(
-            img, lambda w, h: w > 0 and h > 0, True, timeout=5.0
+            img, lambda w, h: w > 0 and h > 0, True
         )
         w2 = img.get_width()
         h2 = img.get_height()
@@ -142,7 +152,7 @@ class TestFsDriverInvalidImage(GraphicalTestCase):
         img_valid.set_src(self.VALID_IMAGE_PATH)
         img_valid.align(lv.ALIGN.BOTTOM_MID, 0, -10)
         loaded = self._wait_image_dimension(
-            img_valid, lambda w, h: w > 0 and h > 0, True, timeout=5.0
+            img_valid, lambda w, h: w > 0 and h > 0, True
         )
 
         w = img_valid.get_width()
@@ -181,7 +191,7 @@ class TestFsDriverInvalidImage(GraphicalTestCase):
             img_good.set_src(self.VALID_IMAGE_PATH)
             img_good.align(lv.ALIGN.TOP_LEFT, i * 100, 80)
             loaded = self._wait_image_dimension(
-                img_good, lambda w, h: w > 0 and h > 0, True, timeout=5.0
+                img_good, lambda w, h: w > 0 and h > 0, True
             )
 
             w = img_good.get_width()

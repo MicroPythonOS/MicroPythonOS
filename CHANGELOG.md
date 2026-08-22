@@ -41,6 +41,13 @@ Testing:
 - test_download_manager: set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
 - test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
 - test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration
+- on-device: skip websocket (requires internet), nostr_local_relay (WebSocket on localhost unreliable), and scan_bluetooth simulation-mode detection (BLE-dependent)
+- on-device: relax timing thresholds for infinite_list (scroll drags, render waits, set_data) and navigation_leaks (32→2048 bytes/round) on ESP32 where the slower CPU exceeds desktop expectations
+- on-device: increase timeouts for about_app (10→15s), launcher_splash dialog (8→15s), and fs_driver image loading (5→15s with upfront render wait) to account for device latency
+- howto_app: clear auto_start_app_early SharedPreferences in setUp so the "Don't show again" checkbox reliably starts unchecked
+- focus_direction: skip stale objects on inactive screens during find_closest_obj_in_direction navigation, preventing widgets from a previous screen (still in the default focus group) from becoming navigation targets
+- focus_layer_top test: clear the default focus group in setUp to prevent inactive-screen widgets from the test harness from polluting directional navigation
+- test_runner: remove aggressive remove_all_objs() from GraphicalTestCase.setUp runtime patch (keeps only the TaskManager.create_task disabled guard)
 
 0.17.3
 ======
