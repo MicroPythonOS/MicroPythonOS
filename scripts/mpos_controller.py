@@ -1452,11 +1452,11 @@ class MPOSController:
     def stop(self):
         self._backend.stop()
 
-    def exec(self, code):
-        return self._backend.exec(code)
+    def exec(self, code, timeout=30):
+        return self._backend.exec(code, timeout=timeout)
 
-    def exec_multiline(self, code):
-        return self._backend.exec_multiline(code)
+    def exec_multiline(self, code, timeout=30):
+        return self._backend.exec_multiline(code, timeout=timeout)
 
     def eval(self, expr):
         return self._backend.eval(expr)

@@ -3,6 +3,7 @@
 # Uses timer-based sampling with double buffering in C for high performance
 # Maintains compatibility with AudioManager and existing recording framework
 
+import gc
 import logging
 import sys
 import time
@@ -174,10 +175,10 @@ class ADCRecordStream:
             # Open file for appending audio data
             f = open(self.file_path, 'ab')
 
-            # Chunk size for reading
-            # For ADC, we want a reasonable chunk size to minimize overhead
-            # 4096 samples = 8192 bytes = ~0.25s at 16kHz
-            chunk_samples = 4096
+            # Small chunks to avoid mp_obj_new_bytes heap allocation
+            # failures on ESP32 (8 KB contiguous can fail under
+            # fragmentation).  512 samples → 1 KB allocation.
+            chunk_samples = 512
 
             sample_offset = 0
 
@@ -206,16 +207,10 @@ class ADCRecordStream:
                         time.sleep_ms(int((chunk_samples) / self.sample_rate * 1000))
 
                     else:
-                        # Read from C module
-                        # adc_mic.read(chunk_samples, unit_id, adc_channel_list, adc_channel_num, sample_rate_hz, atten)
-                        # Returns bytes object
-
-                        # unit_id: 0 (ADC_UNIT_1)
-                        # adc_channel_list: [self.adc_channel]
-                        # adc_channel_num: 1
-                        # sample_rate_hz: self.sample_rate
-                        # atten: 2 (ADC_ATTEN_DB_6)
-
+                        # Compact heap before allocating mp_obj_new_bytes
+                        # in adc_mic.read().  Fragmented heap can cause
+                        # 1+ KB allocations to fail on ESP32.
+                        gc.collect()
                         data = adc_mic.read(
                             chunk_samples,
                             self.adc_unit,
@@ -225,12 +220,20 @@ class ADCRecordStream:
                             self.DEFAULT_ATTEN
                         )
 
+                        if not data:
+                            gc.collect()
+                            data = adc_mic.read(
+                                chunk_samples,
+                                self.adc_unit,
+                                [self.adc_channel],
+                                1,
+                                self.sample_rate,
+                                self.DEFAULT_ATTEN
+                            )
+
                         if data:
                             f.write(data)
                             self._bytes_recorded += len(data)
-                        else:
-                            # No data available yet, short sleep
-                            time.sleep_ms(10)
 
             finally:
                 f.close()
@@ -242,6 +245,8 @@ class ADCRecordStream:
                         self._update_wav_header(self.file_path, self._bytes_recorded)
                 except Exception as e:
                     logger.error("Error updating header: %s", e)
+
+            time.sleep_ms(100)
 
             elapsed_ms = time.ticks_diff(time.ticks_ms(), self._start_time_ms)
             if __debug__: logger.debug("Finished recording %s bytes (%sms)", self._bytes_recorded, elapsed_ms)
