@@ -1003,7 +1003,7 @@ class SerialBackend:
             self.ser.rts = False
             time.sleep(1.5)
         self.repl = AIOREPLClient(_SerialStream(self.ser))
-        self.repl.wait_for_boot(timeout=15)
+        self.repl.wait_for_boot(timeout=20)
         self._cache_display_resolution()
         return True
 
@@ -1061,7 +1061,7 @@ class SerialBackend:
         try:
             stream = _SerialStream(ser)
             repl = AIOREPLClient(stream)
-            repl.wait_for_boot(timeout=15)
+            repl.wait_for_boot(timeout=20)
             ser.write(b"import machine; machine.reset()\r\n")
         finally:
             try:
@@ -1137,7 +1137,7 @@ class SerialBackend:
             raise RuntimeError("Not connected — call start() first")
         self.ser.write(b"\x04")
         time.sleep(0.5)
-        self.repl.wait_for_boot(timeout=15)
+        self.repl.wait_for_boot(timeout=20)
         return True
 
     def __del__(self):
@@ -1335,7 +1335,7 @@ print("OK")
                 tmppath = tmp.name
             subprocess.run(
                 _mpremote_cmd(self.port, "cp", ":/_mpos_tree.json", tmppath),
-                capture_output=True, timeout=15
+                capture_output=True, timeout=20
             )
             with open(tmppath) as f:
                 return _json.load(f)
@@ -1386,7 +1386,7 @@ for s in t:
         if fixture_names:
             subprocess.run(
                 _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),
-                capture_output=True, timeout=15,
+                capture_output=True, timeout=20,
             )
             for name in sorted(fixture_names):
                 host_fixture = os.path.join(host_test_dir, name)
@@ -1521,7 +1521,7 @@ class MPOSController:
     def backscreen(self):
         return self.exec("import mpos.ui ; mpos.ui.back_screen()")
 
-    def dismiss_onboarding(self, timeout=15):
+    def dismiss_onboarding(self, timeout=20):
         """Close the first-run 'How to Navigate' tutorial overlay if present."""
         deadline = time.time() + timeout
         while time.time() < deadline:
