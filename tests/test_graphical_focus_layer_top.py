@@ -131,6 +131,12 @@ class TestLayerTopDetection(GraphicalTestCase):
 class TestModalOverlayFocusRedirect(GraphicalTestCase):
     """Verify that move_focus_direction redirects to layer_top on first keypress."""
 
+    def setUp(self):
+        super().setUp()
+        g = lv.group_get_default()
+        if g:
+            g.remove_all_objs()
+
     def _make_screen_button(self, text):
         btn = lv.button(self.screen)
         lbl = lv.label(btn)

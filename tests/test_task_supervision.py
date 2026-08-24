@@ -42,9 +42,12 @@ class TestCreateSupervisedTask(unittest.TestCase):
         from mpos.task_manager import TaskManager
         self.TaskManager = TaskManager
         self._orig_keep_running = TaskManager.keep_running
+        self._orig_disabled = TaskManager.disabled
+        TaskManager.enable()
 
     def tearDown(self):
         self.TaskManager.keep_running = self._orig_keep_running
+        self.TaskManager.disabled = self._orig_disabled
 
     def _run(self, coro):
         return asyncio.run(coro)

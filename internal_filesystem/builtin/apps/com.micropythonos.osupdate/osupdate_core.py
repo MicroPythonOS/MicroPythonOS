@@ -319,6 +319,7 @@ class UpdateManager:
 
     BOOT_INITIAL_DELAY = 90 # how long to wait after startup to check for updates
     BOOT_CHECK_INTERVAL = 60 * 60 * 24 # how often to check for updates
+    LOOP_POLL_INTERVAL = 60 # granularity for the _run_loop wait loop
     WIFI_WAIT_TIMEOUT = 300
     WIFI_CHECK_INTERVAL = 5
 
@@ -431,10 +432,10 @@ class UpdateManager:
             else:
                 if __debug__: logger.debug("offline, skipping check")
 
-            for _ in range(self.BOOT_CHECK_INTERVAL):
+            for _ in range(self.BOOT_CHECK_INTERVAL // self.LOOP_POLL_INTERVAL):
                 if not self._running:
                     return
-                await TaskManager.sleep(1)
+                await TaskManager.sleep(self.LOOP_POLL_INTERVAL)
 
     def stop(self):
         if __debug__: logger.debug("stopping")

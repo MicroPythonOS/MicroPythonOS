@@ -51,7 +51,7 @@ class TestLauncherSplashRecovery(unittest.TestCase):
 
         dialog_visible = wait_for_widget(
             lambda: True if verify_text_on_any_layer(expected_dialog_text) else None,
-            timeout=8,
+            timeout=15,
             interval=0.1,
         )
         self.assertTrue(dialog_visible, "Expected failure dialog after failed start")

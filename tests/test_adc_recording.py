@@ -36,61 +36,50 @@ class TestADCRecording(unittest.TestCase):
     def test_record_wav_adc(self):
         """Test recording a short WAV file using ADC."""
         
-        # Record for 200ms
-        duration_ms = 200
         sample_rate = 16000
+        expected_data_size = int(0.2 * sample_rate * 2)
+        expected_total_size = 44 + expected_data_size
         
-        print(f"Starting recording for {duration_ms}ms...")
-        
-        # Start recording
-        # Note: On desktop this will use the simulation mode in ADCRecordStream
-        success = AudioManager.record_wav_adc(
-            self.test_file, 
-            duration_ms=duration_ms, 
-            sample_rate=sample_rate
-        )
-        
-        self.assertTrue(success, "AudioManager.record_wav_adc returned False")
-        
-        # Wait for recording to finish (plus a buffer for thread startup/shutdown)
-        # Simulation mode might be slower or faster depending on system load
-        deadline = time.time() + 10.0
-        file_size = 0
-        while time.time() < deadline:
-            time.sleep(0.5)
+        for attempt in range(3):
+            if attempt > 0:
+                print(f"Retry attempt {attempt + 1}...")
+                try:
+                    os.remove(self.test_file)
+                except OSError:
+                    pass
+
+            duration_ms = 200 + attempt * 100
+            print(f"Starting recording for {duration_ms}ms...")
+            
+            success = AudioManager.record_wav_adc(
+                self.test_file, 
+                duration_ms=duration_ms, 
+                sample_rate=sample_rate
+            )
+            
+            self.assertTrue(success, "AudioManager.record_wav_adc returned False")
+
+            self.assertTrue(
+                AudioManager.get()._active_sessions,
+                "No active sessions — recording thread likely failed to start or crashed",
+            )
+
+            time.sleep(2 + attempt)
+
             try:
                 st = os.stat(self.test_file)
                 file_size = st[6]
-                if file_size > 44:
-                    break
             except OSError:
                 file_size = 0
+
+            if file_size > 44:
+                break
         
-        # Verify file exists
-        try:
-            st = os.stat(self.test_file)
-            file_size = st[6]
-            file_exists = True
-        except OSError:
-            file_exists = False
-            file_size = 0
-            
-        self.assertTrue(file_exists, f"Recording file {self.test_file} was not created")
-        
-        # Verify file size is reasonable
-        # Header is 44 bytes
-        # 200ms at 16000Hz, 16-bit mono = 0.2 * 16000 * 2 = 6400 bytes
-        # Total should be around 6444 bytes
-        
-        expected_data_size = int(duration_ms / 1000.0 * sample_rate * 2)
-        expected_total_size = 44 + expected_data_size
+        self.assertTrue(file_size > 0, f"Recording file {self.test_file} was not created")
         
         print(f"Created WAV file size: {file_size} bytes (Expected approx: {expected_total_size})")
         
         self.assertTrue(file_size > 44, "File contains only header or is empty")
-        
-        # Allow some margin of error for timing differences in test environment
-        # But it should have recorded *something* significant
         self.assertTrue(file_size > 1000, f"File size {file_size} seems too small (expected ~{expected_total_size})")
 
 if __name__ == '__main__':

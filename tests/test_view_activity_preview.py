@@ -15,7 +15,10 @@ class TestViewActivityPreview(unittest.TestCase):
         try:
             os.stat(self._TMP_DIR)
         except OSError:
-            os.mkdir(self._TMP_DIR)
+            try:
+                os.mkdir(self._TMP_DIR)
+            except OSError:
+                self._TMP_DIR = "."
 
     def tearDown(self):
         for path in self._files:

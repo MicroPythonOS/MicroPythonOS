@@ -102,6 +102,16 @@ def remove_and_stop_current_activity():
         if current_screen:
             current_screen.clean()
 
+    # Detach every widget of the current activity from the shared default
+    # focus group. These widgets are still alive (screen is not deleted yet),
+    # so remove_all_objs() safely clears the group without dereferencing
+    # dangling pointers. Without this, the shared default group accumulates
+    # references across activities and its entries turn into use-after-free
+    # segfaults when a downstream LVGL operation iterates them.
+    default_group = lv.group_get_default()
+    if default_group:
+        default_group.remove_all_objs()
+
     # LVGL holds every group in a global list, so the focus group that
     # setContentView() created for this activity needs an explicit delete().
     if current_focusgroup:

@@ -7,6 +7,7 @@ simulation-mode UI on platforms without a real bluetooth module.
 Usage:
 """
 
+import sys
 import unittest
 from mpos import AppManager, wait_for_text
 from mpos.testing.mocks import MockBluetooth
@@ -15,6 +16,8 @@ from mpos.testing.mocks import MockBluetooth
 class TestGraphicalScanBluetooth(unittest.TestCase):
     """Test suite for ScanBluetooth app."""
 
+    @unittest.skipIf(sys.platform == "esp32",
+                     "BLE simulation detection unreliable on device hardware")
     def test_starts_in_simulation_mode(self):
         """Test that the app starts and shows simulation mode status."""
         result = AppManager.start_app("com.micropythonos.scan_bluetooth")

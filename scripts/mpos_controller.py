@@ -101,8 +101,24 @@ def _build_test_code(test_path, tests_dir=None):
     code += "sys.path.insert(0, 'lib')\n"
     if tests_dir:
         code += "sys.path.append(%r)\n" % tests_dir
-    code += "try:\n import mpos; mpos.TaskManager.disable()\n"
-    code += "except Exception:\n pass\n"
+    code += "try:\n"
+    code += "    import mpos; mpos.TaskManager.disable()\n"
+    code += "    import asyncio as _tc_asyncio\n"
+    code += "    def _tc_patched(cls, coroutine):\n"
+    code += "        if cls.disabled:\n"
+    code += "            return None\n"
+    code += "        async def _tc_cleanup():\n"
+    code += "            try:\n"
+    code += "                return await coroutine\n"
+    code += "            finally:\n"
+    code += "                if task in cls.task_list:\n"
+    code += "                    cls.task_list.remove(task)\n"
+    code += "        task = _tc_asyncio.create_task(_tc_cleanup())\n"
+    code += "        cls.task_list.append(task)\n"
+    code += "        return task\n"
+    code += "    mpos.TaskManager.create_task = classmethod(_tc_patched)\n"
+    code += "except Exception:\n"
+    code += "    pass\n"
     code += "import unittest\n"
     code += """\
 for _k in list(globals().keys()):
@@ -114,6 +130,14 @@ for _k in list(globals().keys()):
         except Exception:
             pass
 """
+    # Strip the file's own main-guard: in paste mode __name__ == "__main__",
+    # so unittest.main() would run the suite and then the runner below would
+    # run it again on already-mutated UI state (crashes on device). The
+    # import-based runner keeps __name__ != "__main__", which is why desktop
+    # never saw this.
+    test_content = test_content.replace(
+        'if __name__ == "__main__":\n    unittest.main()\n', ""
+    )
     code += test_content + "\n"
     code += """\
 suite = unittest.TestSuite()
@@ -461,6 +485,78 @@ class AIOREPLClient:
         """Execute multi-line *code* (paste mode handles it natively)."""
         return self.exec(code, timeout=timeout)
 
+    def exec_streaming(self, code, timeout=30, line_callback=None):
+        """Execute *code*, calling *line_callback* for each line of actual output.
+
+        Same paste-mode protocol as ``exec()``, but flushes filtered output
+        line-by-line instead of returning it all at the end.  Returns the
+        full filtered result (same as ``exec()``) so callers can still
+        inspect for success markers.
+        """
+        self._drain(0.1)
+
+        self.stream.write(b"\x05")
+        time.sleep(0.2)
+        self._drain(0.5)
+
+        payload = ("print('{}')\n".format(SENTINEL)
+                    + code.rstrip()
+                    + "\nprint('{}')".format(END_MARKER))
+        self.stream.write(payload.encode("utf-8"))
+        self.stream.write(b"\x04")
+
+        endings = (END_MARKER.encode() + b"\n", END_MARKER.encode() + b"\r\n")
+        start_marker = SENTINEL.encode()
+        end_marker = END_MARKER.encode()
+        start_line = start_marker + b"\n"
+
+        data = b""
+        output_started = False
+        tail_idx = 0
+        seen_end = False
+
+        t0 = time.monotonic()
+        while True:
+            if data.endswith(endings):
+                break
+            if not self._data_waiting(0.01):
+                if timeout is not None and time.monotonic() - t0 > timeout:
+                    break
+                continue
+            chunk = self.stream.read(1)
+            if not chunk:
+                continue
+            data += chunk
+
+            if not output_started:
+                idx = data.find(start_line)
+                if idx >= 0:
+                    output_started = True
+                    tail_idx = idx + len(start_line)
+            elif line_callback is not None:
+                tail = data[tail_idx:]
+                while b"\n" in tail:
+                    nl = tail.index(b"\n")
+                    line_bytes = tail[:nl].rstrip(b"\r")
+                    tail_idx += nl + 1
+                    if line_bytes == end_marker:
+                        seen_end = True
+                        break
+                    line_callback(line_bytes + b"\n")
+                    tail = data[tail_idx:]
+                if seen_end:
+                    break
+
+        self._drain(0.5)
+        result = data
+        idx = result.rfind(start_marker)
+        if idx >= 0:
+            result = result[idx + len(start_marker):]
+        idx = result.rfind(end_marker)
+        if idx >= 0:
+            result = result[:idx]
+        return result.strip()
+
     def eval(self, expression):
         raw = self.exec("print(repr({}))".format(expression))
         return ast.literal_eval(raw.decode("utf-8"))
@@ -584,6 +680,28 @@ class ProcessBackend:
         )
 
     def start(self):
+        # On macOS CI runners, audio hardware is absent and playing
+        # notification sounds through the buzzer can hang the process.
+        # Write an empty notification_sound setting to the prefs config
+        # BEFORE the binary boots, so NotificationManager reads it
+        # during startup and never touches audio hardware.
+        if sys.platform == "darwin":
+            import json as _json
+            _prefs_dir = os.path.join(self.cwd, "prefs",
+                                      "com.micropythonos.settings")
+            _config_path = os.path.join(_prefs_dir, "config.json")
+            os.makedirs(_prefs_dir, exist_ok=True)
+            _config = {}
+            try:
+                with open(_config_path) as _f:
+                    _config = _json.load(_f)
+            except (FileNotFoundError, ValueError):
+                pass
+            _config["notification_sound"] = ""
+            with open(_config_path, "w") as _f:
+                _json.dump(_config, _f)
+            print("MPOS_TEST_RUNNER: disabled notification sounds for macOS CI (pre-boot)")
+
         # Kill any leftover lvgl_micropy_unix processes from previous runs
         self._kill_stale_processes(self.binary)
         time.sleep(0.3)
@@ -894,7 +1012,7 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
         if self.repl is None:
             self.start()
         dest_path = os.path.join(self.cwd, "_runner_test.py")
@@ -904,7 +1022,10 @@ for s in t:
             f.write(content)
         try:
             code = _build_import_runner_code(tests_dir, coverage=coverage)
-            out = self.exec_multiline(code, timeout=timeout)
+            if line_callback is not None:
+                out = self.repl.exec_streaming(code, timeout=timeout, line_callback=line_callback)
+            else:
+                out = self.exec_multiline(code, timeout=timeout)
             out_str = out.decode("utf-8", errors="replace")
             passed = "TEST WAS A SUCCESS" in out_str
             return passed, out
@@ -963,7 +1084,7 @@ class SerialBackend:
             self.ser.rts = False
             time.sleep(1.5)
         self.repl = AIOREPLClient(_SerialStream(self.ser))
-        self.repl.wait_for_boot(timeout=15)
+        self.repl.wait_for_boot(timeout=20)
         self._cache_display_resolution()
         return True
 
@@ -1021,7 +1142,7 @@ class SerialBackend:
         try:
             stream = _SerialStream(ser)
             repl = AIOREPLClient(stream)
-            repl.wait_for_boot(timeout=15)
+            repl.wait_for_boot(timeout=20)
             ser.write(b"import machine; machine.reset()\r\n")
         finally:
             try:
@@ -1097,7 +1218,7 @@ class SerialBackend:
             raise RuntimeError("Not connected — call start() first")
         self.ser.write(b"\x04")
         time.sleep(0.5)
-        self.repl.wait_for_boot(timeout=15)
+        self.repl.wait_for_boot(timeout=20)
         return True
 
     def __del__(self):
@@ -1195,44 +1316,24 @@ class SerialBackend:
         _os.unlink(tmppath)
 
     def press(self, x, y):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:  # DISPLAY_ROTATION._270
-            tx = self._height - 1 - y
-            ty = x
-        else:
-            tx, ty = x, y
         self.exec(
             "from mpos.ui.testing import simulate_click, wait_for_render; "
             "simulate_click({}, {}); "
-            "wait_for_render()".format(tx, ty)
+            "wait_for_render()".format(x, y)
         )
 
     def long_press(self, x, y, duration_ms=1000):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:  # DISPLAY_ROTATION._270
-            tx = self._height - 1 - y
-            ty = x
-        else:
-            tx, ty = x, y
         self.exec(
             "from mpos.ui.testing import simulate_click, wait_for_render; "
             "simulate_click({}, {}, press_duration_ms={}); "
-            "wait_for_render()".format(tx, ty, duration_ms)
+            "wait_for_render()".format(x, y, duration_ms)
         )
 
     def drag(self, x1, y1, x2, y2):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:
-            tx1 = self._height - 1 - y1
-            ty1 = x1
-            tx2 = self._height - 1 - y2
-            ty2 = x2
-        else:
-            tx1, ty1, tx2, ty2 = x1, y1, x2, y2
         self.exec(
             "from mpos.ui.testing import simulate_drag, wait_for_render; "
             "simulate_drag({}, {}, {}, {}); "
-            "wait_for_render()".format(tx1, ty1, tx2, ty2)
+            "wait_for_render()".format(x1, y1, x2, y2)
         )
 
     def press_key(self, key):
@@ -1315,7 +1416,7 @@ print("OK")
                 tmppath = tmp.name
             subprocess.run(
                 _mpremote_cmd(self.port, "cp", ":/_mpos_tree.json", tmppath),
-                capture_output=True, timeout=15
+                capture_output=True, timeout=20
             )
             with open(tmppath) as f:
                 return _json.load(f)
@@ -1354,8 +1455,9 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300):
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
         import subprocess, re
+        import threading
         code = _build_test_code(test_path, tests_dir)
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
         fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", code))
@@ -1366,7 +1468,7 @@ for s in t:
         if fixture_names:
             subprocess.run(
                 _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),
-                capture_output=True, timeout=15,
+                capture_output=True, timeout=20,
             )
             for name in sorted(fixture_names):
                 host_fixture = os.path.join(host_test_dir, name)
@@ -1386,16 +1488,29 @@ for s in t:
         b64 = base64.b64encode(code.encode("utf-8")).decode("ascii")
         code = ("import ubinascii\n"
                 "exec(ubinascii.a2b_base64({!r}))".format(b64))
+        cmd = _mpremote_cmd(self.port, "exec", code)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out_parts = []
+
+        def _read_stream(stream, parts):
+            for raw_line in iter(stream.readline, b""):
+                parts.append(raw_line)
+                if line_callback is not None:
+                    line_callback(raw_line)
+
+        t = threading.Thread(target=_read_stream, args=(proc.stdout, out_parts))
+        t.daemon = True
+        t.start()
+
         try:
-            result = subprocess.run(
-                _mpremote_cmd(self.port, "exec", code),
-                capture_output=True, timeout=timeout + 60,
-            )
+            proc.wait(timeout=timeout + 60)
         except subprocess.TimeoutExpired:
-            # device hung mid-test (e.g. froze while exec-ing the test); report the
-            # failure here so the runner can retry (with --reset it power-cycles).
+            proc.kill()
+            t.join(timeout=5)
             return False, "<test timed out after {}s>\n".format(timeout).encode()
-        out = result.stdout
+
+        t.join(timeout=5)
+        out = b"".join(out_parts)
         out_str = out.decode("utf-8", errors="replace")
         passed = "TEST WAS A SUCCESS" in out_str
         return passed, out
@@ -1420,11 +1535,11 @@ class MPOSController:
     def stop(self):
         self._backend.stop()
 
-    def exec(self, code):
-        return self._backend.exec(code)
+    def exec(self, code, timeout=30):
+        return self._backend.exec(code, timeout=timeout)
 
-    def exec_multiline(self, code):
-        return self._backend.exec_multiline(code)
+    def exec_multiline(self, code, timeout=30):
+        return self._backend.exec_multiline(code, timeout=timeout)
 
     def eval(self, expr):
         return self._backend.eval(expr)
@@ -1501,7 +1616,7 @@ class MPOSController:
     def backscreen(self):
         return self.exec("import mpos.ui ; mpos.ui.back_screen()")
 
-    def dismiss_onboarding(self, timeout=15):
+    def dismiss_onboarding(self, timeout=20):
         """Close the first-run 'How to Navigate' tutorial overlay if present."""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -1558,8 +1673,8 @@ class MPOSController:
     def find_text(self, text):
         return self._backend.find_text(text)
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
-        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage)
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
+        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage, line_callback=line_callback)
 
     @property
     def display_size(self):
@@ -1686,7 +1801,7 @@ def main():
         )
         result = subprocess.run(
             _mpremote_cmd(args.serial_port, "fs", "cp", "-r", apppath, ":/apps/"),
-            capture_output=True, timeout=60
+            capture_output=True, timeout=600
         )
         if result.returncode != 0:
             print("error:", result.stderr.decode().strip(), file=sys.stderr)

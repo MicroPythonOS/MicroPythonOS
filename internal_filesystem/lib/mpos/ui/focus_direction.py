@@ -202,17 +202,28 @@ def is_better_candidate(src, rect1, rect2, direction):
 # Focus group traversal
 # ---------------------------------------------------------------------------
 
-def _is_on_layer_top(obj):
-    """Return True if obj is a descendant of lv.layer_top()."""
-    top = lv.layer_top()
-    if not top:
+def _is_descendant_of(obj, ancestor):
+    if obj is None or ancestor is None:
         return False
     parent = obj.get_parent()
     while parent is not None:
-        if parent is top:
+        if parent is ancestor:
             return True
         parent = parent.get_parent()
     return False
+
+
+def _is_on_layer_top(obj):
+    """Return True if obj is a descendant of lv.layer_top()."""
+    return _is_descendant_of(obj, lv.layer_top())
+
+
+def _is_on_active_screen(obj):
+    """Return True if obj is a descendant of the active screen."""
+    sc = lv.screen_active()
+    if sc is None:
+        return False
+    return obj is sc or _is_descendant_of(obj, sc)
 
 
 def is_object_in_focus_group(focus_group, obj):
@@ -296,6 +307,11 @@ def find_closest_obj_in_direction(focus_group, current_focused, direction_degree
         # Enforce layer constraint: only consider candidates in the active layer.
         if _is_on_layer_top(obj) != top_layer_active:
             return
+
+        # During normal-screen navigation, skip objects on stale (inactive) screens.
+        if not top_layer_active and not _is_on_layer_top(obj):
+            if not _is_on_active_screen(obj):
+                return
 
         if is_object_in_focus_group(focus_group, obj):
             dest = _get_rect(obj)

@@ -2,7 +2,7 @@
 """Run MicroPythonOS unit tests on desktop or physical/QEMU device.
 
 Usage:
-    python3 scripts/test_runner.py [test_file ...] [--ondevice] [--port PORT] [--reset] [--relayport PORT] [--coverage]
+    python3 scripts/test_runner.py [test_file ...] [--ondevice] [--port PORT] [--reset] [--relayport PORT] [--coverage] [--resume]
 
 Examples:
     # Desktop — run all tests
@@ -37,6 +37,9 @@ Examples:
 
     # Physical device — log serial traffic to a file (watch with: tail -f serial.log)
     python3 scripts/test_runner.py tests/test_adpcm_ima.py --ondevice --logserial /tmp/serial.log
+
+    # Resume full test suite from a given test
+    python3 scripts/test_runner.py --resume tests/test_notification_manager.py --ondevice --reset --relayport /dev/ttyUSB0
 
     MPOS_TEST_PORT env var sets the default serial port (default: /dev/ttyACM0).
 """
@@ -294,10 +297,17 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
 
     print("waiting for device at {} to boot...".format(device_port))
     last_err = None
+    seen_port = False
     for _ in range(20):
         if not os.path.exists(device_port):
             time.sleep(3)
             continue
+        if not seen_port:
+            # The port node can appear before the USB stack finished
+            # re-enumerating (observed with usbip passthrough). Opening too
+            # early can wedge the connection, so let it settle first.
+            seen_port = True
+            time.sleep(20)
         try:
             ser = _serial.Serial(
                 device_port, 115200, timeout=0.5, write_timeout=2,
@@ -315,6 +325,7 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
                                 log_f, "RX",
                                 b"<detected 'Starting asyncio REPL...'>\n",
                             )
+                            time.sleep(10)
                             return True
                     time.sleep(0.1)
             finally:
@@ -343,6 +354,10 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
     else:
         be = ProcessBackend(**backend_kwargs)
 
+    def _line_cb(line_bytes):
+        sys.stdout.write(line_bytes.decode("utf-8", errors="replace"))
+        sys.stdout.flush()
+
     try:
         if reset and backend == "serial":
             if relay_port:
@@ -356,6 +371,7 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
         )
         passed, out = be.run_test_file(
             test_path, tests_dir=tests_dir, timeout=timeout,
+            line_callback=_line_cb,
             **({"coverage": coverage} if backend == "process" else {})
         )
         _serial_log_write(log_f, "RX", out)
@@ -376,7 +392,6 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
 
         passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f)
         out_str = out.decode("utf-8", errors="replace")
-        sys.stdout.write(out_str)
 
         if passed:
             return True, out
@@ -488,6 +503,12 @@ def main():
         "--coverage-load", default=None,
         help="Load existing coverage JSON from FILE and merge with this run's results",
     )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Resume the full test suite from the provided test file(s). "
+             "Discovers all test files alphabetically and runs from the "
+             "alphabetically first provided test onward.",
+    )
     args = parser.parse_args()
 
     _warned = False
@@ -527,7 +548,34 @@ def main():
 
     _cleanup_config()
 
-    if args.test_files:
+    if args.resume:
+        if not args.test_files:
+            print("ERROR: --resume requires at least one test file to resume from")
+            sys.exit(1)
+        provided = {}
+        for f in args.test_files:
+            path = os.path.abspath(f)
+            if not os.path.isfile(path):
+                print("ERROR: {} is not a file".format(path))
+                sys.exit(1)
+            provided[os.path.basename(path)] = True
+        all_files = sorted(glob.glob(os.path.join(TESTS_DIR, "test_*.py")))
+        all_files = [f for f in all_files if not os.path.basename(f).startswith("notondevice_")]
+        if args.ondevice:
+            all_files = [f for f in all_files if os.path.basename(f) not in ONDEVICE_SKIP]
+        start_idx = None
+        for i, f in enumerate(all_files):
+            if os.path.basename(f) in provided:
+                start_idx = i
+                break
+        if start_idx is None:
+            print("ERROR: provided test file(s) not found in discovered test suite")
+            sys.exit(1)
+        test_files = all_files[start_idx:]
+        print("Resuming from {} ({} test(s) remaining)".format(
+            os.path.basename(test_files[0]), len(test_files),
+        ))
+    elif args.test_files:
         test_files = [os.path.abspath(f) for f in args.test_files]
         for f in test_files:
             if not os.path.isfile(f):

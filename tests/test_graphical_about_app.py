@@ -92,13 +92,13 @@ class TestGraphicalAboutApp(unittest.TestCase):
         self.assertTrue(result, "Failed to start About app")
 
         self.assertTrue(
-            wait_for_text("Release version:", timeout=10),
+            wait_for_text("Release version:", timeout=15),
             "About app did not load within timeout",
         )
 
         os_version = BuildInfo.version.release
         self.assertTrue(
-            wait_for_text(os_version, timeout=5),
+            wait_for_text(os_version, timeout=10),
             f"OS version '{os_version}' not found on screen"
         )
 

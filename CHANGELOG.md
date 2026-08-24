@@ -3,7 +3,7 @@ Future release (next version)
 
 Board Support:
 - UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
-- unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError "invalid micropython decorator"
+- unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError 'invalid micropython decorator'
 
 Builtin Apps:
 - AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
@@ -11,11 +11,17 @@ Builtin Apps:
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 
 Frameworks:
-- AppManager: apps can declare URL handlers via "urlPattern" in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
-- Camera: after decoding a QR code in free-scan mode, show an "Open in App Store" / "Open link" chip when the code is an app link the OS can open
+- AppManager: apps can declare URL handlers via 'urlPattern' in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
+- Camera: after decoding a QR code in free-scan mode, show an 'Open in App Store' / 'Open link' chip when the code is an app link the OS can open
+- Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
+- DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
-- FontManager: stop leaking an app's TTF and emoji fonts after the app closes, by @fdb
+- FontManager: stop leaking an app's TTF and emoji fonts after the app closes by @fdb
+- FontManager: cache emoji codepoints for keyboard input by @fdb
+- Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
+- TaskManager: create_task returns None when the task manager is disabled, preventing C-level crashes from asyncio.create_task on ESP32 when called from a disabled test runner context
+- View: clear the shared default focus group before the screen is deleted to prevent dangling LVGL pointer accumulation across activity transitions
 
 OS:
 - builtin: compress the frozen /builtin filesystem archive (freezefs --compress), saving ~39 KB of firmware flash, and strip development junk (__pycache__, .DS_Store, backup files) from it during the build (#268)
@@ -26,14 +32,24 @@ OS:
 - lvgl_micropython: compress Montserrat 10-18 fonts to save ~19 KB of flash space
 - lvgl_micropython: add native-decorator bytecode fallback for builds without a native emitter like the unix port on aarch64 (Apple Silicon macOS) and the wasm/web port
 - main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
+- sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
-- tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test — _wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
-- test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, _task_queue, _io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
-- test_download_manager: temporarily set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
+- tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test; wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
+- topmenu drawer test: use animate=False for all close_drawer() calls; close_drawer() now accepts an animate parameter matching the existing close_bar() API
+- test_runner: disable notification sound on macOS/darwin in the settings because it causes a hang on the headless (soundcardless?) macOS CI runners
+- test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, task_queue, io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
+- test_download_manager: set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
 - test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
 - test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration
+- on-device: skip websocket (requires internet), nostr_local_relay (WebSocket on localhost unreliable), and scan_bluetooth simulation-mode detection (BLE-dependent)
+- on-device: relax timing thresholds for infinite_list (scroll drags, render waits, set_data) and navigation_leaks (32→2048 bytes/round) on ESP32 where the slower CPU exceeds desktop expectations
+- on-device: increase timeouts for about_app (10→15s), launcher_splash dialog (8→15s), and fs_driver image loading (5→15s with upfront render wait) to account for device latency
+- howto_app: clear auto_start_app_early SharedPreferences in setUp so the "Don't show again" checkbox reliably starts unchecked
+- focus_direction: skip stale objects on inactive screens during find_closest_obj_in_direction navigation, preventing widgets from a previous screen (still in the default focus group) from becoming navigation targets
+- focus_layer_top test: clear the default focus group in setUp to prevent inactive-screen widgets from the test harness from polluting directional navigation
+- test_runner: remove aggressive remove_all_objs() from GraphicalTestCase.setUp runtime patch (keeps only the TaskManager.create_task disabled guard)
 
 0.17.3
 ======
