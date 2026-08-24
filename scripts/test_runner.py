@@ -294,10 +294,17 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
 
     print("waiting for device at {} to boot...".format(device_port))
     last_err = None
+    seen_port = False
     for _ in range(20):
         if not os.path.exists(device_port):
             time.sleep(3)
             continue
+        if not seen_port:
+            # The port node can appear before the USB stack finished
+            # re-enumerating (observed with usbip passthrough). Opening too
+            # early can wedge the connection, so let it settle first.
+            seen_port = True
+            time.sleep(8)
         try:
             ser = _serial.Serial(
                 device_port, 115200, timeout=0.5, write_timeout=2,

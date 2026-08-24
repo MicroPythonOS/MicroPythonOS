@@ -35,6 +35,10 @@ Frozen modules in the firmware shadow filesystem `.py` files even though `sys.pa
 
 After deploying, relay-reset so the device boots with the new files (the module cache is cleared on reset).
 
+**WARNING — flash shadows replace whole directories, not single files:** once `:/lib/mpos/` exists on flash, its modules come from flash ONLY. Deleting one flash file (e.g. after instrumenting it) does NOT fall back to frozen — you get `ImportError`. Never `fs rm` a shadow file; re-copy the original from `internal_filesystem/` instead. Also keep vintages consistent: mixing current-repo copies with an older install causes subtle crashes — if in doubt, re-run full `install.sh`.
+
+**USB/IP + relay reset:** the `/dev/ttyACM0` node can appear before USB enumeration finishes; opening serial too early wedges the usbip session (URB `-104` unlinks, reads return nothing). `_relay_reset` settles 8s after first seeing the node. Manual recovery: relay-cycle, wait ≥20s, poke with raw pyserial `\r\n` until `>>>`.
+
 ### Code coverage (desktop only)
 
 **Build with coverage:** `./scripts/build_mpos.sh unix coverage` or `make build-mpos-unix-coverage`  
@@ -56,6 +60,7 @@ Self-contained HTML — overview stats, per-file coverage %, expand inline sourc
 - Test CWD = `internal_filesystem/`. `sys.path.insert(0, ".")` assumes that root.
 - `--reset` (device only): hard-resets via `machine.reset()`, waits for `"Starting asyncio REPL..."` (NOT just `>>>`). Boot: 2–40s.
 - USB/IP passthrough: close serial fd before reset; retry open up to 20× (3s apart).
+- Serial (paste-mode) test runs strip the file's `if __name__ == "__main__": unittest.main()` block — in paste mode `__name__ == "__main__"`, so without stripping, `unittest.main()` AND the appended TextTestRunner would run the suite twice on already-mutated UI state. Desktop import-runner (`_build_import_runner_code`) is immune (`__name__` = module name), which is why such bugs only appear on device.
 - Use helpers in `internal_filesystem/lib/mpos/ui/testing.py`. Follow `tests/README.md` for graphical tests.
 
 **After any code change:** grep for tests importing changed modules, run them. Do NOT skip.  
@@ -64,7 +69,7 @@ Self-contained HTML — overview stats, per-file coverage %, expand inline sourc
 **Capturing logger output in tests:** add custom handler to logger, access `record.message` in `emit()`. Restore handlers in `finally:`.  
 **Test decorators:** `@unittest.skipIf` must be directly above the function — no module-level code between.
 
-**Most common test segfault cause:** passing a non-LVGL Python object (mock, plain instance) as parent to any LVGL widget constructor. Mock the calling method instead, or use real `lv.obj()` (graphical test).
+**Most common test segfault cause:** passing a non-LVGL Python object (mock, plain instance) as parent to any LVGL widget constructor. Mock the calling method instead, or use real `lv.obj()` (graphical test). Known live one: AppStore detail-navigation tests segfault ESP32 asynchronously right after `_launch_activity` returns (breadcrumbs: N3 present/N4 missing); quarantined via `_skip_detail_navigation_on_esp32` in `tests/test_graphical_appstore_focus.py`.
 
 **Never cache `asyncio.get_event_loop()` in `setUp`.** The test runner may create a fresh event loop between `setUp` and the test method, making a cached reference stale. Get the loop fresh at call time — inside the test method or inside the task-capture callback:
 
@@ -141,7 +146,7 @@ Key methods: `exec()`, `eval()`, `startapp()`, `run_app_with_file()`, `run_test_
 - `wait_for_text("text", timeout=10)`, `expect_text("text")`.
 - `startapp(name, intent={...})`, `run_app_with_file(app, file)`.
 - Notification bar: `mpos.eval("mpos.ui.topmenu.bar_open")`, height 24px.
-- Serial rotation (270°): `press()` auto-transforms coords.
+- Coordinates are LOGICAL (rotated content-space) everywhere: on-device `simulate_click`/`simulate_drag` and host `press()`/`drag()` all take the same logical coords; the rotation transform (e.g. 270°) is applied once, inside `_touch_read_cb` (`testing.py`). Do NOT pre-transform in callers — THIS SEEMS WRONG in older notes that said press() transforms; it no longer does.
 
 **Debugging workflow:**
 1. Widget tree first (`get_widget_tree()`) — layout, types, coords, states.

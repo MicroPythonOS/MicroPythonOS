@@ -1139,8 +1139,24 @@ def _touch_read_cb(indev_drv, data):
         data: Input device data structure to fill
     """
     global _touch_x, _touch_y, _touch_pressed
-    data.point.x = _touch_x
-    data.point.y = _touch_y
+    x = _touch_x
+    y = _touch_y
+    disp = lv.display_get_default()
+    rot = disp.get_rotation() if disp else 0
+    if rot == 3:
+        tx = disp.get_vertical_resolution() - 1 - y
+        ty = x
+    elif rot == 1:
+        tx = y
+        ty = disp.get_horizontal_resolution() - 1 - x
+    elif rot == 2:
+        tx = disp.get_horizontal_resolution() - 1 - x
+        ty = disp.get_vertical_resolution() - 1 - y
+    else:
+        tx = x
+        ty = y
+    data.point.x = tx
+    data.point.y = ty
     if _touch_pressed:
         data.state = lv.INDEV_STATE.PRESSED
     else:

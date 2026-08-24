@@ -124,6 +124,14 @@ for _k in list(globals().keys()):
         except Exception:
             pass
 """
+    # Strip the file's own main-guard: in paste mode __name__ == "__main__",
+    # so unittest.main() would run the suite and then the runner below would
+    # run it again on already-mutated UI state (crashes on device). The
+    # import-based runner keeps __name__ != "__main__", which is why desktop
+    # never saw this.
+    test_content = test_content.replace(
+        'if __name__ == "__main__":\n    unittest.main()\n', ""
+    )
     code += test_content + "\n"
     code += """\
 suite = unittest.TestSuite()
@@ -1227,44 +1235,24 @@ class SerialBackend:
         _os.unlink(tmppath)
 
     def press(self, x, y):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:  # DISPLAY_ROTATION._270
-            tx = self._height - 1 - y
-            ty = x
-        else:
-            tx, ty = x, y
         self.exec(
             "from mpos.ui.testing import simulate_click, wait_for_render; "
             "simulate_click({}, {}); "
-            "wait_for_render()".format(tx, ty)
+            "wait_for_render()".format(x, y)
         )
 
     def long_press(self, x, y, duration_ms=1000):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:  # DISPLAY_ROTATION._270
-            tx = self._height - 1 - y
-            ty = x
-        else:
-            tx, ty = x, y
         self.exec(
             "from mpos.ui.testing import simulate_click, wait_for_render; "
             "simulate_click({}, {}, press_duration_ms={}); "
-            "wait_for_render()".format(tx, ty, duration_ms)
+            "wait_for_render()".format(x, y, duration_ms)
         )
 
     def drag(self, x1, y1, x2, y2):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:
-            tx1 = self._height - 1 - y1
-            ty1 = x1
-            tx2 = self._height - 1 - y2
-            ty2 = x2
-        else:
-            tx1, ty1, tx2, ty2 = x1, y1, x2, y2
         self.exec(
             "from mpos.ui.testing import simulate_drag, wait_for_render; "
             "simulate_drag({}, {}, {}, {}); "
-            "wait_for_render()".format(tx1, ty1, tx2, ty2)
+            "wait_for_render()".format(x1, y1, x2, y2)
         )
 
     def press_key(self, key):
@@ -1718,7 +1706,7 @@ def main():
         )
         result = subprocess.run(
             _mpremote_cmd(args.serial_port, "fs", "cp", "-r", apppath, ":/apps/"),
-            capture_output=True, timeout=60
+            capture_output=True, timeout=600
         )
         if result.returncode != 0:
             print("error:", result.stderr.decode().strip(), file=sys.stderr)
