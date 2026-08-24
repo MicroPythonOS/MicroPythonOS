@@ -354,6 +354,10 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
     else:
         be = ProcessBackend(**backend_kwargs)
 
+    def _line_cb(line_bytes):
+        sys.stdout.write(line_bytes.decode("utf-8", errors="replace"))
+        sys.stdout.flush()
+
     try:
         if reset and backend == "serial":
             if relay_port:
@@ -367,6 +371,7 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
         )
         passed, out = be.run_test_file(
             test_path, tests_dir=tests_dir, timeout=timeout,
+            line_callback=_line_cb,
             **({"coverage": coverage} if backend == "process" else {})
         )
         _serial_log_write(log_f, "RX", out)
@@ -387,7 +392,6 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
 
         passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f)
         out_str = out.decode("utf-8", errors="replace")
-        sys.stdout.write(out_str)
 
         if passed:
             return True, out

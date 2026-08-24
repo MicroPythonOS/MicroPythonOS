@@ -485,6 +485,78 @@ class AIOREPLClient:
         """Execute multi-line *code* (paste mode handles it natively)."""
         return self.exec(code, timeout=timeout)
 
+    def exec_streaming(self, code, timeout=30, line_callback=None):
+        """Execute *code*, calling *line_callback* for each line of actual output.
+
+        Same paste-mode protocol as ``exec()``, but flushes filtered output
+        line-by-line instead of returning it all at the end.  Returns the
+        full filtered result (same as ``exec()``) so callers can still
+        inspect for success markers.
+        """
+        self._drain(0.1)
+
+        self.stream.write(b"\x05")
+        time.sleep(0.2)
+        self._drain(0.5)
+
+        payload = ("print('{}')\n".format(SENTINEL)
+                    + code.rstrip()
+                    + "\nprint('{}')".format(END_MARKER))
+        self.stream.write(payload.encode("utf-8"))
+        self.stream.write(b"\x04")
+
+        endings = (END_MARKER.encode() + b"\n", END_MARKER.encode() + b"\r\n")
+        start_marker = SENTINEL.encode()
+        end_marker = END_MARKER.encode()
+        start_line = start_marker + b"\n"
+
+        data = b""
+        output_started = False
+        tail_idx = 0
+        seen_end = False
+
+        t0 = time.monotonic()
+        while True:
+            if data.endswith(endings):
+                break
+            if not self._data_waiting(0.01):
+                if timeout is not None and time.monotonic() - t0 > timeout:
+                    break
+                continue
+            chunk = self.stream.read(1)
+            if not chunk:
+                continue
+            data += chunk
+
+            if not output_started:
+                idx = data.find(start_line)
+                if idx >= 0:
+                    output_started = True
+                    tail_idx = idx + len(start_line)
+            elif line_callback is not None:
+                tail = data[tail_idx:]
+                while b"\n" in tail:
+                    nl = tail.index(b"\n")
+                    line_bytes = tail[:nl].rstrip(b"\r")
+                    tail_idx += nl + 1
+                    if line_bytes == end_marker:
+                        seen_end = True
+                        break
+                    line_callback(line_bytes + b"\n")
+                    tail = data[tail_idx:]
+                if seen_end:
+                    break
+
+        self._drain(0.5)
+        result = data
+        idx = result.rfind(start_marker)
+        if idx >= 0:
+            result = result[idx + len(start_marker):]
+        idx = result.rfind(end_marker)
+        if idx >= 0:
+            result = result[:idx]
+        return result.strip()
+
     def eval(self, expression):
         raw = self.exec("print(repr({}))".format(expression))
         return ast.literal_eval(raw.decode("utf-8"))
@@ -940,7 +1012,7 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
         if self.repl is None:
             self.start()
         dest_path = os.path.join(self.cwd, "_runner_test.py")
@@ -950,7 +1022,10 @@ for s in t:
             f.write(content)
         try:
             code = _build_import_runner_code(tests_dir, coverage=coverage)
-            out = self.exec_multiline(code, timeout=timeout)
+            if line_callback is not None:
+                out = self.repl.exec_streaming(code, timeout=timeout, line_callback=line_callback)
+            else:
+                out = self.exec_multiline(code, timeout=timeout)
             out_str = out.decode("utf-8", errors="replace")
             passed = "TEST WAS A SUCCESS" in out_str
             return passed, out
@@ -1380,8 +1455,9 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300):
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
         import subprocess, re
+        import threading
         code = _build_test_code(test_path, tests_dir)
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
         fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", code))
@@ -1412,16 +1488,29 @@ for s in t:
         b64 = base64.b64encode(code.encode("utf-8")).decode("ascii")
         code = ("import ubinascii\n"
                 "exec(ubinascii.a2b_base64({!r}))".format(b64))
+        cmd = _mpremote_cmd(self.port, "exec", code)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out_parts = []
+
+        def _read_stream(stream, parts):
+            for raw_line in iter(stream.readline, b""):
+                parts.append(raw_line)
+                if line_callback is not None:
+                    line_callback(raw_line)
+
+        t = threading.Thread(target=_read_stream, args=(proc.stdout, out_parts))
+        t.daemon = True
+        t.start()
+
         try:
-            result = subprocess.run(
-                _mpremote_cmd(self.port, "exec", code),
-                capture_output=True, timeout=timeout + 60,
-            )
+            proc.wait(timeout=timeout + 60)
         except subprocess.TimeoutExpired:
-            # device hung mid-test (e.g. froze while exec-ing the test); report the
-            # failure here so the runner can retry (with --reset it power-cycles).
+            proc.kill()
+            t.join(timeout=5)
             return False, "<test timed out after {}s>\n".format(timeout).encode()
-        out = result.stdout
+
+        t.join(timeout=5)
+        out = b"".join(out_parts)
         out_str = out.decode("utf-8", errors="replace")
         passed = "TEST WAS A SUCCESS" in out_str
         return passed, out
@@ -1584,8 +1673,8 @@ class MPOSController:
     def find_text(self, text):
         return self._backend.find_text(text)
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
-        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage)
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
+        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage, line_callback=line_callback)
 
     @property
     def display_size(self):
