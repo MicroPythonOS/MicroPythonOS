@@ -735,8 +735,9 @@ class AppStore(Activity):
         if not self._icon_queue:
             if self._download_in_progress:
                 return
-            self._raw_timer.delete()
-            self._raw_timer = None
+            if self._raw_timer:
+                self._raw_timer.delete()
+                self._raw_timer = None
             return
         idx = self._find_best_app_index(self._icon_queue)
         app, stage = self._icon_queue.pop(idx)
