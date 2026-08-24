@@ -436,6 +436,11 @@ class AppStore(Activity):
         self.create_apps_list()
         self._update_category_dropdown()
 
+        # A deep link to an app that is already known locally (e.g. installed)
+        # can open its detail screen right now, without waiting for the index
+        # download. Unknown apps keep waiting for Phase 2.
+        self._try_early_deeplink()
+
         # Phase 2: download store index and merge in new apps
         try:
             response = await DownloadManager.download_url(json_url)
@@ -908,6 +913,16 @@ class AppStore(Activity):
             if app.fullname == fullname:
                 return app
         return None
+
+    def _try_early_deeplink(self):
+        """Open a pending deep link now if the app is already resolvable."""
+        fullname = getattr(self, "_pending_deeplink", None)
+        if not fullname:
+            return
+        app = self._find_store_app(fullname)
+        if app:
+            self._pending_deeplink = None
+            self.show_app_detail(app)
 
     def _resolve_pending_deeplink(self, index_available=True):
         fullname = getattr(self, "_pending_deeplink", None)

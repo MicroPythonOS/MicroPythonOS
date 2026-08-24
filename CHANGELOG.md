@@ -6,7 +6,8 @@ Board Support:
 - unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError 'invalid micropython decorator'
 
 Builtin Apps:
-- AppStore: add 'Scan QR' button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 
 Frameworks:
@@ -23,6 +24,7 @@ Frameworks:
 - View: clear the shared default focus group before the screen is deleted to prevent dangling LVGL pointer accumulation across activity transitions
 
 OS:
+- builtin: compress the frozen /builtin filesystem archive (freezefs --compress), saving ~39 KB of firmware flash, and strip development junk (__pycache__, .DS_Store, backup files) from it during the build (#268)
 - aiorepl: survive stdin EOF (host disconnect) by polling for reconnection instead of exiting, so the serial console no longer dies permanently after mpremote/raw-REPL connection attempts
 - aiorepl: stop Ctrl-D in the non-raw REPL loop from shutting asyncio down; it now ends the line like Ctrl-C
 - boot: disable the Ctrl-C interrupt character while mpos.main boots (restored on the REPL fallback paths), so hosts connecting over serial mid-boot (e.g. mpremote entering raw REPL) can no longer silently abort the boot scripts and leave the OS half-started at the REPL
