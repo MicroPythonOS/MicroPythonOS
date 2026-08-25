@@ -52,11 +52,17 @@ class AppManager:
     # [{app_fullname, entrypoint, classname, url_pattern}, ...]
     _url_handler_specs = []
 
+    # Manifest-declared service specs collected during refresh_apps().
+    # action → [{fullname, entrypoint, classname, delay_s}, ...]
+    _service_specs = {}
+
     # Lazily imported handler classes: (app_fullname, entrypoint, classname) → class
     _handler_class_cache = {}
 
     # Map from handler class back to its owning app fullname (populated lazily).
     _handler_app_fullname = {}
+
+    CACHE_PATH = "cache/system/apps.json"
 
     @classmethod
     def register_activity(cls, action, activity_cls):
@@ -356,32 +362,191 @@ class AppManager:
         cls._by_fullname = {}
         cls._file_handler_specs = {}
         cls._url_handler_specs = []
+        cls._service_specs = {}
         cls._handler_class_cache = {}
         cls._handler_app_fullname = {}
+
+    @classmethod
+    def _register_app_handlers_and_services(cls, app):
+        for act in app.activities:
+            entrypoint = act.get("entrypoint")
+            classname = act.get("classname")
+            if not entrypoint or not classname:
+                continue
+            for f in act.get("intent_filters", []):
+                action = f.get("action")
+                if not action:
+                    continue
+                mime_type = f.get("mimeType")
+                path_pattern = f.get("pathPattern")
+                if mime_type or path_pattern:
+                    cls._register_file_handler_spec(
+                        action, app.fullname, entrypoint, classname,
+                        mime_type=mime_type, path_pattern=path_pattern,
+                    )
+                url_pattern = f.get("urlPattern")
+                if url_pattern:
+                    cls._register_url_handler_spec(
+                        app.fullname, entrypoint, classname, url_pattern,
+                    )
+
+        for svc in app.services:
+            svc_entrypoint = svc.get("entrypoint")
+            svc_classname = svc.get("classname")
+            if not svc_entrypoint or not svc_classname:
+                continue
+            for svc_filter in svc.get("intent_filters", []):
+                svc_action = svc_filter.get("action")
+                if not svc_action:
+                    continue
+                spec = {
+                    "fullname": app.fullname,
+                    "entrypoint": svc_entrypoint,
+                    "classname": svc_classname,
+                    "delay_s": svc_filter.get("delay_s", 0),
+                }
+                if svc_action not in cls._service_specs:
+                    cls._service_specs[svc_action] = []
+                cls._service_specs[svc_action].append(spec)
+
+    @classmethod
+    def _load_cache(cls):
+        import ujson
+        try:
+            with open(cls.CACHE_PATH, "r") as f:
+                cache = ujson.load(f)
+        except Exception:
+            return False
+
+        source_counts = cache.get("source_counts", {})
+        for source_dir, expected_count in source_counts.items():
+            try:
+                actual_count = len(os.listdir(source_dir))
+            except Exception:
+                return False
+            if actual_count != expected_count:
+                return False
+
+        try:
+            from ..app.app import App
+            cls._app_list = []
+            cls._by_fullname = {}
+            cls._file_handler_specs = {}
+            cls._url_handler_specs = []
+            cls._service_specs = {}
+
+            for app_data in cache.get("apps", []):
+                source = app_data["source"]
+                fullname = app_data["fullname"]
+                app = App(
+                    name=app_data.get("name", "Unknown"),
+                    publisher=app_data.get("publisher", "Unknown"),
+                    short_description=app_data.get("short_description", ""),
+                    long_description=app_data.get("long_description", ""),
+                    icon_url=app_data.get("icon_url", ""),
+                    download_url=app_data.get("download_url", ""),
+                    fullname=fullname,
+                    version=app_data.get("version", "0.0.0"),
+                    category=app_data.get("categories", ""),
+                    activities=app_data.get("activities", []),
+                    services=app_data.get("services", []),
+                    installed_path=f"{source}/{fullname}",
+                    icon_path=f"{source}/{fullname}/icon_64x64.png",
+                    blur_hash=app_data.get("blur_hash"),
+                    rating_average=app_data.get("rating_average"),
+                    rating_count=app_data.get("rating_count", 0),
+                )
+                cls._app_list.append(app)
+                cls._by_fullname[fullname] = app
+                cls._register_app_handlers_and_services(app)
+        except Exception as e:
+            logger.error("failed to reconstruct apps from cache: %s", e)
+            cls._app_list = []
+            cls._by_fullname = {}
+            cls._file_handler_specs = {}
+            cls._url_handler_specs = []
+            cls._service_specs = {}
+            return False
+
+        if __debug__: logger.debug("loaded %d apps from cache", len(cls._app_list))
+        return True
+
+    @classmethod
+    def _save_cache(cls):
+        cache_dir = "cache/system"
+        try:
+            os.mkdir("cache")
+        except OSError:
+            pass
+        try:
+            os.mkdir(cache_dir)
+        except OSError:
+            pass
+
+        source_counts = {}
+        for app in cls._app_list:
+            installed_path = app.installed_path or ""
+            parts = installed_path.rsplit("/", 1)
+            source = parts[0] if len(parts) > 1 else "apps"
+            source_counts[source] = source_counts.get(source, 0) + 1
+
+        apps_data = []
+        for app in cls._app_list:
+            installed_path = app.installed_path or ""
+            parts = installed_path.rsplit("/", 1)
+            source = parts[0] if len(parts) > 1 else "apps"
+            apps_data.append({
+                "name": app.name,
+                "publisher": app.publisher,
+                "short_description": app.short_description,
+                "long_description": app.long_description,
+                "icon_url": app.icon_url,
+                "download_url": app.download_url,
+                "fullname": app.fullname,
+                "version": app.version,
+                "categories": app.categories,
+                "activities": app.activities,
+                "services": app.services,
+                "source": source,
+                "blur_hash": app.blur_hash,
+                "rating_average": app.rating_average,
+                "rating_count": app.rating_count,
+            })
+
+        cache = {
+            "source_counts": source_counts,
+            "apps": apps_data,
+        }
+
+        import ujson
+        try:
+            with open(cls.CACHE_PATH, "w") as f:
+                ujson.dump(cache, f)
+            if __debug__: logger.debug("saved %d apps to cache", len(cls._app_list))
+        except Exception as e:
+            logger.warning("failed to save app cache: %s", e)
 
     @classmethod
     def refresh_apps(cls):
         if __debug__: logger.debug("Finding apps...")
 
-        cls.clear()                     # <-- this guarantees both containers are empty
-        seen = set()                     # avoid processing the same fullname twice
+        if cls._load_cache():
+            cls._app_list.sort(key=lambda a: a.name.lower())
+            return
+
+        cls.clear()
+        seen = set()
         apps_dir         = "apps"
         apps_dir_builtin = "builtin/" + apps_dir
-        # relative paths are here for local-file desktop runs and also ESP32 builds
-        # "/" + apps_dir_builtin is here for frozen-only desktop runs (no local files)
-        # "/" + apps_dir_builtin is not here because there's no use case for it currently
         for base in (apps_dir, apps_dir_builtin, "/" + apps_dir_builtin):
             try:
-                # ---- does the directory exist? --------------------------------
                 st = os.stat(base)
-                if not (st[0] & 0x4000):          # 0x4000 = directory bit
+                if not (st[0] & 0x4000):
                     continue
 
-                # ---- iterate over immediate children -------------------------
                 for name in os.listdir(base):
                     full_path = "{}/{}".format(base, name)
 
-                    # ---- is it a directory? ---------------------------------
                     try:
                         st = os.stat(full_path)
                         if not (st[0] & 0x4000):
@@ -392,12 +557,10 @@ class AppManager:
 
                     fullname = name
 
-                    # ---- skip duplicates ------------------------------------
                     if fullname in seen:
                         continue
                     seen.add(fullname)
 
-                    # ---- parse the manifest ---------------------------------
                     try:
                         from ..app.app import App
                         app = App.from_manifest(full_path)
@@ -409,38 +572,16 @@ class AppManager:
                         logger.warning("skipping %s: missing or invalid MANIFEST.JSON", full_path)
                         continue
 
-                    # ---- store in both containers ---------------------------
                     cls._app_list.append(app)
                     cls._by_fullname[fullname] = app
 
-                    # ---- register manifest file-type handlers (lazy) -------
-                    for act in app.activities:
-                        entrypoint = act.get("entrypoint")
-                        classname = act.get("classname")
-                        if not entrypoint or not classname:
-                            continue
-                        for f in act.get("intent_filters", []):
-                            action = f.get("action")
-                            if not action:
-                                continue
-                            mime_type = f.get("mimeType")
-                            path_pattern = f.get("pathPattern")
-                            if mime_type or path_pattern:
-                                cls._register_file_handler_spec(
-                                    action, app.fullname, entrypoint, classname,
-                                    mime_type=mime_type, path_pattern=path_pattern,
-                                )
-                            url_pattern = f.get("urlPattern")
-                            if url_pattern:
-                                cls._register_url_handler_spec(
-                                    app.fullname, entrypoint, classname, url_pattern,
-                                )
+                    cls._register_app_handlers_and_services(app)
 
             except Exception as e:
                 logger.error("handling %s got exception: %s", base, e)
 
-        # ---- sort the list by display name (case-insensitive) ------------
         cls._app_list.sort(key=lambda a: a.name.lower())
+        cls._save_cache()
 
     @staticmethod
     async def download_and_install_package(download_url, fullname, download_url_size=None, progress_callback=None):
@@ -859,71 +1000,112 @@ class AppManager:
         return result
 
     @classmethod
+    def _import_service_from_spec(cls, spec):
+        app = cls.get(spec["fullname"])
+        if app is None or not app.installed_path:
+            return None
+        import sys
+        entrypoint = spec["entrypoint"]
+        classname = spec["classname"]
+        path_before = sys.path[:]
+        try:
+            pkg = cls._package_info(app, entrypoint)
+            if pkg:
+                parent, module_name = pkg
+                if parent and parent not in sys.path:
+                    sys.path.insert(0, parent)
+                cls._del_module_tree(module_name)
+                module = __import__(module_name, None, None, [classname])
+            else:
+                entrypoint_path = app.installed_path + "/" + entrypoint
+                cwd = entrypoint_path.rsplit("/", 1)[0] if "/" in entrypoint else app.installed_path
+                if cwd and cwd not in sys.path:
+                    sys.path.insert(0, cwd)
+                module_name = entrypoint.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                module = __import__(module_name)
+            return getattr(module, classname, None)
+        except Exception as e:
+            logger.error("failed to import service %s from %s: %s", classname, app.fullname, e)
+            return None
+        finally:
+            sys.path = path_before
+
+    @classmethod
     def get_services_for_action(cls, action):
         """Returns list of (app_fullname, ServiceClass) for services matching action."""
-        import sys
         results = []
-        for app in cls.get_app_list():
-            for svc in app.services:
-                for f in svc.get("intent_filters", []):
-                    if f.get("action") != action:
-                        continue
-                    entrypoint = svc.get("entrypoint")
-                    classname = svc.get("classname")
-                    if not entrypoint or not classname:
-                        continue
-                    path_before = sys.path[:]
-                    try:
-                        pkg = cls._package_info(app, entrypoint)
-                        if pkg:
-                            parent, module_name = pkg
-                            if parent and parent not in sys.path:
-                                sys.path.insert(0, parent)
-                            cls._del_module_tree(module_name)
-                            module = __import__(module_name, None, None, [classname])
-                        else:
-                            entrypoint_path = app.installed_path + "/" + entrypoint
-                            cwd = entrypoint_path.rsplit("/", 1)[0] if "/" in entrypoint else app.installed_path
-                            if cwd and cwd not in sys.path:
-                                sys.path.insert(0, cwd)
-                            module_name = entrypoint.rsplit("/", 1)[-1].rsplit(".", 1)[0]
-                            module = __import__(module_name)
-                        service_cls = getattr(module, classname, None)
-                        if service_cls:
-                            results.append((app.fullname, service_cls))
-                    except Exception as e:
-                        logger.error("failed to import service %s from %s: %s", classname, app.fullname, e)
-                    finally:
-                        sys.path = path_before
+        for spec in cls._service_specs.get(action, []):
+            service_cls = cls._import_service_from_spec(spec)
+            if service_cls:
+                results.append((spec["fullname"], service_cls))
         for fullname, service_cls in cls._service_registry.get(action, []):
             results.append((fullname, service_cls))
         return results
 
     @classmethod
-    def start_boot_services(cls):
-        import sys
+    def _start_service_instance(cls, fullname, service_cls):
         from .intent import Intent
 
-        services = cls.get_services_for_action("boot_completed")
-        if not services:
+        boot_intent = Intent(action="boot_completed")
+        instance = service_cls()
+        instance.appFullName = fullname
+        instance.onCreate()
+        instance.onStart(boot_intent)
+        if __debug__: logger.debug("started %s from %s", service_cls.__name__, fullname)
+        return instance
+
+    @classmethod
+    async def _run_deferred_boot_service(cls, spec):
+        import asyncio
+        await asyncio.sleep(spec["delay_s"])
+        service_cls = cls._import_service_from_spec(spec)
+        if service_cls is None:
+            return
+        try:
+            cls._start_service_instance(spec["fullname"], service_cls)
+        except Exception as e:
+            logger.error("failed to start deferred service %s from %s: %s",
+                         spec["classname"], spec["fullname"], e)
+            import sys
+            sys.print_exception(e)
+
+    @classmethod
+    def start_boot_services(cls):
+        import sys
+        from mpos.task_manager import TaskManager
+
+        specs = cls._service_specs.get("boot_completed", [])
+        framework_services = cls._service_registry.get("boot_completed", [])
+
+        deferred = [s for s in specs if s.get("delay_s", 0) > 0]
+        immediate = [s for s in specs if s.get("delay_s", 0) == 0]
+
+        if not immediate and not framework_services and not deferred:
             if __debug__: logger.debug("no boot services found")
             return
 
-        boot_intent = Intent(action="boot_completed")
-        _service_instances = {}
-
-        for fullname, service_cls in services:
+        for spec in immediate:
             try:
-                instance = service_cls()
-                instance.appFullName = fullname
-                key = (fullname, service_cls.__name__)
-                _service_instances[key] = instance
-                instance.onCreate()
-                instance.onStart(boot_intent)
-                if __debug__: logger.debug("started %s from %s", service_cls.__name__, fullname)
+                service_cls = cls._import_service_from_spec(spec)
+                if service_cls:
+                    cls._start_service_instance(spec["fullname"], service_cls)
             except Exception as e:
-                logger.error("failed to start %s from %s: %s", service_cls.__name__, fullname, e)
+                logger.error("failed to start %s from %s: %s",
+                             spec["classname"], spec["fullname"], e)
                 sys.print_exception(e)
+
+        for fullname, service_cls in framework_services:
+            try:
+                cls._start_service_instance(fullname, service_cls)
+            except Exception as e:
+                logger.error("failed to start %s from %s: %s",
+                             service_cls.__name__, fullname, e)
+                sys.print_exception(e)
+
+        if deferred:
+            if __debug__: logger.debug("scheduling %d deferred boot services", len(deferred))
+            for spec in deferred:
+                TaskManager.create_task(cls._run_deferred_boot_service(spec))
 
     @staticmethod
     def restart_launcher():
