@@ -730,6 +730,20 @@ class AppStore(Activity):
         update_label.add_flag(lv.obj.FLAG.HIDDEN)
         self._update_labels[app.fullname] = update_label
         item.move_to_index(index)
+        sel_cat = getattr(self, "_selected_category", None)
+        if sel_cat == "Installed" and not app.installed_path:
+            item.add_flag(lv.obj.FLAG.HIDDEN)
+        elif sel_cat == "Updates":
+            try:
+                from appstore_core import AppUpdateManager
+                updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
+            except Exception:
+                updatable_set = set()
+            if app.fullname not in updatable_set:
+                item.add_flag(lv.obj.FLAG.HIDDEN)
+        elif sel_cat and sel_cat not in ("All", "Work In Progress"):
+            if not app.categories or sel_cat not in app.categories:
+                item.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _stop_all_timers(self):
         if self._raw_timer:
