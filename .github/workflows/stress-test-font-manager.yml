@@ -1,0 +1,194 @@
+name: Stress-test font_manager.py on macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Number of iterations'
+        required: false
+        default: '65'
+        type: string
+
+jobs:
+  build-arm64:
+    runs-on: macos-14
+    timeout-minutes: 120
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_ANALYTICS: 1
+      LDFLAGS: -L/opt/homebrew/opt/libffi/lib
+      CPPFLAGS: -I/opt/homebrew/opt/libffi/include
+      PKG_CONFIG_PATH: /opt/homebrew/opt/libffi/lib/pkgconfig
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+
+      - name: Install dependencies via Homebrew
+        run: |
+          xcode-select --install || true
+          brew install pkg-config libffi ninja make sdl2-compat
+
+      - name: Build LVGL MicroPython for macOS arm64
+        run: |
+          ./scripts/build_mpos.sh macOS
+
+      - name: Upload built binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-arm64-bin
+          path: lvgl_micropython/build/lvgl_micropy_macOS
+          retention-days: 1
+
+
+  build-intel:
+    runs-on: macos-15-intel
+    timeout-minutes: 120
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_ANALYTICS: 1
+      LDFLAGS: -L/usr/local/opt/libffi/lib
+      CPPFLAGS: -I/usr/local/opt/libffi/include
+      PKG_CONFIG_PATH: /usr/local/opt/libffi/lib/pkgconfig
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+
+      - name: Install dependencies via Homebrew
+        run: |
+          xcode-select --install || true
+          brew install pkg-config libffi ninja make SDL2
+
+      - name: Build LVGL MicroPython for macOS Intel
+        run: |
+          ./scripts/build_mpos.sh macOS
+
+      - name: Upload built binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-intel-bin
+          path: lvgl_micropython/build/lvgl_micropy_macOS
+          retention-days: 1
+
+
+  stress-test-arm64:
+    needs: build-arm64
+    runs-on: macos-14
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install dependencies via Homebrew
+        run: |
+          xcode-select --install || true
+          brew install pkg-config libffi ninja make sdl2-compat
+
+      - name: Download built binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: macos-arm64-bin
+
+      - name: Install binary to expected path
+        run: |
+          mkdir -p lvgl_micropython/build
+          cp lvgl_micropy_macOS lvgl_micropython/build/lvgl_micropy_macOS
+          chmod +x lvgl_micropython/build/lvgl_micropy_macOS
+
+      - name: Disable native/viper decorators
+        run: |
+          find -L internal_filesystem -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+            if [ -L "$f" ]; then continue; fi
+            sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/' "$f"
+          done
+          find -L internal_filesystem -name '*.py.bak' -type f -exec rm -f {} +
+
+      - name: Stress-test font_manager (arm64)
+        id: stress
+        run: |
+          ITERATIONS=${{ github.event.inputs.iterations || 65 }}
+          FAILED=0
+          PASSED=0
+
+          for i in $(seq 1 "$ITERATIONS"); do
+            echo "::group::Run $i / $ITERATIONS"
+            if ./scripts/test_runner.py tests/test_graphical_font_manager.py 2>&1 | tail -5; then
+              PASSED=$((PASSED + 1))
+              echo "::endgroup::"
+            else
+              FAILED=$((FAILED + 1))
+              echo "::endgroup::"
+              echo "::error::FAILED at run $i"
+            fi
+          done
+
+          echo "arm64 results: $PASSED passed, $FAILED failed out of $ITERATIONS"
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::Stress test FAILED: $FAILED / $ITERATIONS runs failed"
+            exit 1
+          fi
+          echo "Stress test PASSED: all $ITERATIONS runs succeeded"
+
+
+  stress-test-intel:
+    needs: build-intel
+    runs-on: macos-15-intel
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install dependencies via Homebrew
+        run: |
+          xcode-select --install || true
+          brew install pkg-config libffi ninja make SDL2
+
+      - name: Download built binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: macos-intel-bin
+
+      - name: Install binary to expected path
+        run: |
+          mkdir -p lvgl_micropython/build
+          cp lvgl_micropy_macOS lvgl_micropython/build/lvgl_micropy_macOS
+          chmod +x lvgl_micropython/build/lvgl_micropy_macOS
+
+      - name: Disable native/viper decorators
+        run: |
+          find -L internal_filesystem -name '*.py' -type f -print0 | while IFS= read -r -d '' f; do
+            if [ -L "$f" ]; then continue; fi
+            sed -i.bak -E 's/^([[:space:]]*)(@micropython\.(native|viper)[[:space:]]*)$/\1#\2/' "$f"
+          done
+          find -L internal_filesystem -name '*.py.bak' -type f -exec rm -f {} +
+
+      - name: Stress-test font_manager (Intel)
+        id: stress
+        run: |
+          ITERATIONS=${{ github.event.inputs.iterations || 65 }}
+          FAILED=0
+          PASSED=0
+
+          for i in $(seq 1 "$ITERATIONS"); do
+            echo "::group::Run $i / $ITERATIONS"
+            if ./scripts/test_runner.py tests/test_graphical_font_manager.py 2>&1 | tail -5; then
+              PASSED=$((PASSED + 1))
+              echo "::endgroup::"
+            else
+              FAILED=$((FAILED + 1))
+              echo "::endgroup::"
+              echo "::error::FAILED at run $i"
+            fi
+          done
+
+          echo "intel results: $PASSED passed, $FAILED failed out of $ITERATIONS"
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::Stress test FAILED: $FAILED / $ITERATIONS runs failed"
+            exit 1
+          fi
+          echo "Stress test PASSED: all $ITERATIONS runs succeeded"
