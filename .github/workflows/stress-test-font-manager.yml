@@ -1,3 +1,22 @@
+# Stress-test workflow for font_manager.py on macOS (arm64 + Intel).
+#
+# Why: lv.snapshot_take_to_buf inside _render_scaled_image_src can SIGSEGV
+# the binary at the C level on macOS SDL — Python except handlers cannot
+# catch it. The crash is heisenbug-grade: it happened once on commit
+# 3120e0a1 (macOS Intel CI) and never again across 130 local + CI runs.
+# Keep this workflow so we can quickly probe whether a new failure is a
+# recurrence or an unrelated regression.
+#
+# Launch:  gh workflow run stress-test-font-manager.yml --ref main -f iterations=65
+#     or go to https://github.com/MicroPythonOS/MicroPythonOS/actions/workflows/stress-test-font-manager.yml
+#     and click "Run workflow".
+#
+# Results history
+# ─────────────────────────────────────────────────────────────────────
+# Date        Commit    arm64             Intel             Notes
+# 2025-08-25  a8859c59  65/65 passed      65/65 passed      Original stress-test; zero repro
+# ─────────────────────────────────────────────────────────────────────
+
 name: Stress-test font_manager.py on macOS
 
 on:
