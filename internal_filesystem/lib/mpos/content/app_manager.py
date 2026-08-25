@@ -419,11 +419,14 @@ class AppManager:
             return False
 
         source_counts = cache.get("source_counts", {})
-        for source_dir, expected_count in source_counts.items():
+        for source_dir in ("apps", "builtin/apps", "/builtin/apps"):
+            expected_count = source_counts.get(source_dir, 0)
             try:
                 actual_count = len(os.listdir(source_dir))
             except Exception:
-                return False
+                if expected_count != 0:
+                    return False
+                continue
             if actual_count != expected_count:
                 return False
 
