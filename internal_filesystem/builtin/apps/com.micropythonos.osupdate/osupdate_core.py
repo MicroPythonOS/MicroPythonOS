@@ -317,7 +317,6 @@ def round_up_to_multiple(n, multiple):
 class UpdateManager:
     _instance = None
 
-    BOOT_INITIAL_DELAY = 90 # how long to wait after startup to check for updates
     BOOT_CHECK_INTERVAL = 60 * 60 * 24 # how often to check for updates
     LOOP_POLL_INTERVAL = 60 # granularity for the _run_loop wait loop
     WIFI_WAIT_TIMEOUT = 300
@@ -418,8 +417,6 @@ class UpdateManager:
         TaskManager.create_task(self._run_loop())
 
     async def _run_loop(self):
-        await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
-
         while self._running:
             if self._check_in_progress:
                 await TaskManager.sleep(1)
