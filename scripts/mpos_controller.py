@@ -1467,7 +1467,10 @@ for s in t:
                 fixture_names.add(helper + ".py")
         if fixture_names:
             subprocess.run(
-                _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),
+                _mpremote_cmd(
+                    self.port, "exec",
+                    "import os\ntry:\n os.mkdir('tests')\nexcept OSError:\n pass",
+                ),
                 capture_output=True, timeout=20,
             )
             for name in sorted(fixture_names):

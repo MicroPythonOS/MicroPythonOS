@@ -43,6 +43,8 @@ class TestADCRecording(unittest.TestCase):
         for attempt in range(3):
             if attempt > 0:
                 print(f"Retry attempt {attempt + 1}...")
+                AudioManager.stop()
+                time.sleep(0.5)
                 try:
                     os.remove(self.test_file)
                 except OSError:
