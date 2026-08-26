@@ -1,3 +1,4 @@
+import gc
 import logging
 import lvgl as lv
 
@@ -68,19 +69,12 @@ def _remove_focusables_from_group(focusables):
     group = lv.group_get_default()
     if not group or not focusables:
         return
-    to_remove = set(id(w) for w in focusables)
-    # Collect all current objects that should survive.
-    survivors = []
-    for i in range(group.get_obj_count()):
-        obj = group.get_obj_by_index(i)
-        if obj is not None and id(obj) not in to_remove:
-            survivors.append(obj)
-    group.remove_all_objs()
-    for obj in survivors:
-        try:
-            group.add_obj(obj)
-        except Exception:
-            pass
+    for w in focusables:
+        if w is not None:
+            try:
+                lv.group_remove_obj(w)
+            except Exception:
+                pass
 
 
 def _icon_is_image_path(icon):
@@ -279,6 +273,7 @@ def close_drawer(to_launcher=False, animate=True):
     _drawer_panel.hide(animate=animate)
     _remove_focusables_from_group(_drawer_focusables)
     _remove_focusables_from_group(_drawer_notif_focusables)
+    gc.collect()
     # Restore focus to wherever it was before the drawer was opened.
     if _pre_drawer_focused is not None:
         try:
@@ -304,6 +299,7 @@ def close_bar(animate=True):
     bar_open = False
     _bar_panel.hide(animate=animate)
     _remove_focusables_from_group(_bar_focusables)
+    gc.collect()
 
 
 

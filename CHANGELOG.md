@@ -23,6 +23,7 @@ Frameworks:
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
 - TaskManager: create_task returns None when the task manager is disabled, preventing C-level crashes from asyncio.create_task on ESP32 when called from a disabled test runner context
 - View: clear the shared default focus group before the screen is deleted to prevent dangling LVGL pointer accumulation across activity transitions
+- topmenu: replace group.remove_all_objs() + rebuild with per-object lv.group_remove_obj() in _remove_focusables_from_group, avoiding DEFOCUSED event dispatch mid-cleanup and eliminating repeated linked-list node allocations that fragmented the LVGL heap
 
 OS:
 - builtin: compress the frozen /builtin filesystem archive (freezefs --compress), saving ~39 KB of firmware flash, and strip development junk (__pycache__, .DS_Store, backup files) from it during the build (#268)
