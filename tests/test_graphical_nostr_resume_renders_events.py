@@ -5,6 +5,7 @@ chat list should still render stored messages. This test pre-populates the
 chat cache and verifies the chat list shows the message preview.
 """
 
+import gc
 import os
 import shutil
 import sys
@@ -195,6 +196,7 @@ class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
             pass
 
     def test_default_channel_visible_on_first_open(self):
+        gc.collect()
         result = AppManager.start_app(APP_FULLNAME)
         self.assertTrue(result, "Nostr app should start")
         wait_for_render(10)

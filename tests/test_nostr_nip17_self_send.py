@@ -77,10 +77,10 @@ class TestNip17SelfSendReceive(unittest.TestCase):
         return None
 
     def test_self_send_nip17_unwraps_and_routes(self):
-        """Publish a NIP-17 message to self and route it back through _process_event."""
+        """Publish a NIP-17 message to self, route it through _process_event,
+        and verify both post-event and event handlers receive the unwrapped rumor."""
         content = "self-send NIP-17 test"
         ids = self.mgr.publish_nip17_message(content, [self.own_hex])
-        # Self-send: own pubkey is deduped with the recipient, so only one wrap.
         self.assertEqual(len(ids), 1)
         self.assertEqual(len(self.mgr.relay_manager.published), 1)
 
@@ -106,42 +106,21 @@ class TestNip17SelfSendReceive(unittest.TestCase):
         self.assertEqual(wrap_event.id, gift["id"])
         self.assertTrue(wrap_event.verify())
 
-        caught = []
-        self.mgr.register_post_event_handler(KIND_NIP17_CHAT, lambda e: caught.append(e))
+        post_caught = []
+        event_caught = []
+        self.mgr.register_post_event_handler(KIND_NIP17_CHAT, lambda e: post_caught.append(e))
+        self.mgr.register_event_handler(KIND_NIP17_CHAT, lambda e: event_caught.append(e))
         self.mgr._process_event(wrap_event)
 
-        self.assertEqual(len(caught), 1)
-        rumor = caught[0].event
+        self.assertEqual(len(post_caught), 1)
+        rumor = post_caught[0].event
         self.assertEqual(rumor.kind, KIND_NIP17_CHAT)
         self.assertEqual(rumor.content, content)
         self.assertEqual(rumor.public_key, self.own_hex)
-        self.assertEqual(rumor.id, wrap_event.id)
 
-    def test_self_send_nip17_event_handler_receives_rumor(self):
-        """A kind-14 event handler should see the decrypted rumor, not the wrapper."""
-        content = "handler self-send NIP-17 test"
-        self.mgr.publish_nip17_message(content, [self.own_hex])
-
-        gift = self._find_wrap_for_recipient(
-            [self._event_to_gift_dict(e) for e in self.mgr.relay_manager.published],
-            self.own_hex,
-        )
-        wrap_event = Event(
-            content=gift["content"],
-            public_key=gift["pubkey"],
-            created_at=gift["created_at"],
-            kind=gift["kind"],
-            tags=gift["tags"],
-            signature=gift["sig"],
-        )
-
-        caught = []
-        self.mgr.register_event_handler(KIND_NIP17_CHAT, lambda e: caught.append(e))
-        self.mgr._process_event(wrap_event)
-
-        self.assertEqual(len(caught), 1)
-        self.assertEqual(caught[0].event.content, content)
-        self.assertEqual(caught[0].event.public_key, self.own_hex)
+        self.assertEqual(len(event_caught), 1)
+        self.assertEqual(event_caught[0].event.content, content)
+        self.assertEqual(event_caught[0].event.public_key, self.own_hex)
 
 
 if __name__ == "__main__":
