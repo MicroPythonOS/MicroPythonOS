@@ -217,7 +217,6 @@ class AppUpdateManager:
 
     _instance = None
 
-    BOOT_INITIAL_DELAY = 120       # seconds to wait after boot before first check
     BOOT_CHECK_INTERVAL = 60 * 60 * 24  # re-check every 24 h
     LOOP_POLL_INTERVAL = 60  # granularity for the _run_loop wait loop
     WIFI_CHECK_INTERVAL = 5
@@ -286,8 +285,6 @@ class AppUpdateManager:
         TaskManager.create_task(self._run_loop())
 
     async def _run_loop(self):
-        await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
-
         while self._running:
             if self._check_in_progress:
                 await TaskManager.sleep(1)

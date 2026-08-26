@@ -8,11 +8,14 @@ Board Support:
 Builtin Apps:
 - AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
 - AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
-- AppStore: fix _insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the "Installed" view during phase 2
+- AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the "Installed" view
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
+- AppStore and OSUpdate: defer boot service import and start by 120s and 90s respectively via delay_s in manifest intent_filter, moving their module imports out of the boot path
 
 Frameworks:
 - AppManager: apps can declare URL handlers via 'urlPattern' in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
+- AppManager: boot services can declare delay_s in their intent_filter; services with delay_s > 0 are imported and started asynchronously after the delay, keeping non-critical module imports out of the boot path
+- AppManager: manifest cache at /cache/system/apps.json with directory-count-based invalidation, skipping os.listdir/os.stat/json.load per app on subsequent boots when no apps were added or removed
 - Camera: after decoding a QR code in free-scan mode, show an 'Open in App Store' / 'Open link' chip when the code is an app link the OS can open
 - Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
 - DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'

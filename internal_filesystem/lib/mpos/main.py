@@ -369,7 +369,10 @@ mpos.ui.change_task_handler()
 
 # Start launcher first so it's always at bottom of stack
 started_launcher = False
+import utime
+_t0 = utime.ticks_ms()
 launcher_app = AppManager.get_launcher()
+logger.warning("refresh_apps took %d ms", utime.ticks_diff(utime.ticks_ms(), _t0))
 if launcher_app is None:
     logger.warning("No launcher app found")
 else:
