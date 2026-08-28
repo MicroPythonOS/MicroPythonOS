@@ -280,6 +280,14 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
     board to drop, power back on, then poll the device serial port until it
     reappears and "Starting asyncio REPL..." confirms main.py ran to
     completion (same sentinel used by SerialBackend.hard_reset).
+
+    The ESP32-S3 briefly enumerates as 303a:1001 (USB JTAG) before
+    re-enumerating as 303a:4001 (CDC). Opening /dev/ttyACM0 during the
+    1001 window wedges the port (SerialException: device reports readiness
+    but returned no data) and, if we sleep 20s after the first appearance,
+    we miss the boot sentinel entirely (it prints ~8s after the 4001
+    appears). So we poll for the CDC PID 0x4001 specifically and settle
+    only ~1s after it appears.
     """
     print("Power-cycling device via relay on {}...".format(relay_port))
     _serial_log_write(log_f, "REL", b"\xA0\x01\x00\xA1")
@@ -297,17 +305,79 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
 
     print("waiting for device at {} to boot...".format(device_port))
     last_err = None
-    seen_port = False
+
+    # ── Phase 1: wait for CDC (0x4001) to appear, skip transient JTAG (0x1001) ─
+    try:
+        import serial.tools.list_ports as _list_ports
+        _has_list_ports = True
+    except ImportError:
+        _has_list_ports = False
+
+    def _pid_for_port():
+        if not _has_list_ports:
+            return None
+        try:
+            for p in _list_ports.comports():
+                if p.device == device_port:
+                    return p.pid
+        except Exception:
+            return None
+        return None
+
+    if _has_list_ports:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            pid = _pid_for_port()
+            exists = os.path.exists(device_port)
+            if pid == 0x4001:
+                # CDC appeared — brief settle for USB stack, not 20s
+                time.sleep(1.0)
+                break
+            if pid == 0x1001:
+                # JTAG bootloader, will disappear and reappear as 4001
+                time.sleep(0.2)
+                continue
+            if pid is None and exists:
+                # list_ports hasn't caught up yet, or non-ESP device
+                # If port exists but pid unknown, wait a bit and retry;
+                # treat as potential 4001 after a short delay.
+                time.sleep(0.2)
+                # Check again — if still no pid after 1s, assume it's CDC
+                # (fallback for kernels that don't report pid)
+                pid2 = _pid_for_port()
+                if pid2 is None and os.path.exists(device_port):
+                    # Give the re-enumeration gap (1001 -> gap -> 4001) time
+                    # to finish: peek a few times for 1001 before settling.
+                    time.sleep(0.8)
+                    pid3 = _pid_for_port()
+                    if pid3 == 0x1001:
+                        continue
+                    if pid3 == 0x4001 or pid3 is None:
+                        time.sleep(1.0)
+                        break
+                continue
+            time.sleep(0.2)
+        # If we timed out waiting for 4001, fall through to the generic
+        # outer retry loop below which will also wait for the port.
+
+    else:
+        # Fallback without list_ports: original settle but shorter (3s, not 20)
+        for _ in range(10):
+            if os.path.exists(device_port):
+                time.sleep(3)
+                break
+            time.sleep(0.5)
+
     for _ in range(20):
         if not os.path.exists(device_port):
-            time.sleep(3)
+            time.sleep(1)
             continue
-        if not seen_port:
-            # The port node can appear before the USB stack finished
-            # re-enumerating (observed with usbip passthrough). Opening too
-            # early can wedge the connection, so let it settle first.
-            seen_port = True
-            time.sleep(20)
+        # If we still see JTAG PID, skip this iteration
+        if _has_list_ports:
+            pid = _pid_for_port()
+            if pid == 0x1001:
+                time.sleep(0.3)
+                continue
         try:
             ser = _serial.Serial(
                 device_port, 115200, timeout=0.5, write_timeout=2,
@@ -316,7 +386,12 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
                 t0 = time.monotonic()
                 data = b""
                 while time.monotonic() - t0 < min(boot_timeout, 60):
-                    chunk = ser.read(4096)
+                    try:
+                        chunk = ser.read(4096)
+                    except _serial.SerialException as e:
+                        # Disconnected during re-enumeration (1001->4001 gap)
+                        last_err = e
+                        break
                     if chunk:
                         data += chunk
                         _serial_log_write(log_f, "RX", chunk)
@@ -328,11 +403,15 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None):
                             time.sleep(10)
                             return True
                     time.sleep(0.1)
+                # Inner timeout without marker — will retry outer loop
+                # Keep last data tail for debugging if log_f set
+                if data:
+                    _serial_log_write(log_f, "RX", b"<no marker in this window, retry>\n")
             finally:
                 ser.close()
         except (OSError, _serial.SerialException) as e:
             last_err = e
-            time.sleep(3)
+            time.sleep(1)
     raise RuntimeError(
         "Device at {} not reachable after relay reset: {}".format(
             device_port, last_err
