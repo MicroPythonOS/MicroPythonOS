@@ -158,20 +158,6 @@ def _build_test_code(test_path, tests_dir=None):
         code += "sys.path.append(%r)\n" % tests_dir
     code += "try:\n"
     code += "    import mpos; mpos.TaskManager.disable()\n"
-    code += "    import asyncio as _tc_asyncio\n"
-    code += "    def _tc_patched(cls, coroutine):\n"
-    code += "        if cls.disabled:\n"
-    code += "            return None\n"
-    code += "        async def _tc_cleanup():\n"
-    code += "            try:\n"
-    code += "                return await coroutine\n"
-    code += "            finally:\n"
-    code += "                if task in cls.task_list:\n"
-    code += "                    cls.task_list.remove(task)\n"
-    code += "        task = _tc_asyncio.create_task(_tc_cleanup())\n"
-    code += "        cls.task_list.append(task)\n"
-    code += "        return task\n"
-    code += "    mpos.TaskManager.create_task = classmethod(_tc_patched)\n"
     code += "except Exception:\n"
     code += "    pass\n"
     code += "import unittest\n"
@@ -1529,12 +1515,16 @@ for s in t:
         return self._width, self._height
 
     def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
-        import subprocess, re
-        import threading
-        code = _build_test_code(test_path, tests_dir)
+        import subprocess, re, tempfile
+        if self.repl is None:
+            self.start()
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
-        fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", code))
-        for helper in re.findall(r"^from (\w+) import", code, re.M):
+        with open(test_path) as f:
+            test_content = f.read()
+
+        # Collect and stage fixtures the test refers to via ../tests/<asset>.
+        fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", test_content))
+        for helper in re.findall(r"^from (\w+) import", test_content, re.M):
             helper_path = os.path.join(host_test_dir, helper + ".py")
             if os.path.exists(helper_path):
                 fixture_names.add(helper + ".py")
@@ -1555,41 +1545,47 @@ for s in t:
                                   host_fixture, ":tests/{}".format(name)),
                     capture_output=True, timeout=60,
                 )
-            code = code.replace("../tests/", "tests/")
-        # Base64-encode the code so multibyte UTF-8 (e.g. emoji in string
-        # literals) survives the trip through mpremote's byte-at-a-time
-        # raw REPL transport. The device decodes back to exact bytes before
-        # compiling, so non-ASCII source arrives intact.
-        import base64
-        b64 = base64.b64encode(code.encode("utf-8")).decode("ascii")
-        code = ("import ubinascii\n"
-                "exec(ubinascii.a2b_base64({!r}))".format(b64))
-        cmd = _mpremote_cmd(self.port, "exec", code)
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out_parts = []
+            # Device fixtures live under /tests, not ../tests — rewrite the
+            # path so M:../tests/x.ttf resolves to the staged /tests/x.ttf.
+            test_content = test_content.replace("../tests/", "tests/")
 
-        def _read_stream(stream, parts):
-            for raw_line in iter(stream.readline, b""):
-                parts.append(raw_line)
-                if line_callback is not None:
-                    line_callback(raw_line)
-
-        t = threading.Thread(target=_read_stream, args=(proc.stdout, out_parts))
-        t.daemon = True
-        t.start()
-
+        # Stage the test on the device as _runner_test.py, then run only a
+        # *short* paste-mode import snippet. Inlining the whole test body
+        # into a single paste-mode payload (the old base64 approach) spikes
+        # the heap and, over the echoed 256-byte serial writes, deadlocks
+        # the link with "Write timeout" on large tests. mpremote's `cp` has
+        # real flow control, so large bodies ride that instead.
+        fd, tmpname = tempfile.mkstemp(suffix=".py")
         try:
-            proc.wait(timeout=timeout + 60)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            t.join(timeout=5)
-            return False, "<test timed out after {}s>\n".format(timeout).encode()
+            os.write(fd, test_content.encode("utf-8"))
+            os.close(fd)
+            subprocess.run(
+                _mpremote_cmd(self.port, "cp", tmpname, ":_runner_test.py"),
+                capture_output=True, timeout=120,
+            )
+        finally:
+            try:
+                os.remove(tmpname)
+            except OSError:
+                pass
 
-        t.join(timeout=5)
-        out = b"".join(out_parts)
-        out_str = out.decode("utf-8", errors="replace")
-        passed = "TEST WAS A SUCCESS" in out_str
-        return passed, out
+        code = _build_import_runner_code(tests_dir, coverage=coverage)
+        last_err = None
+        for attempt in range(3):
+            try:
+                if line_callback is not None:
+                    out = self.repl.exec_streaming(
+                        code, timeout=timeout, line_callback=line_callback
+                    )
+                else:
+                    out = self.exec_multiline(code, timeout=timeout)
+                out_str = out.decode("utf-8", errors="replace")
+                passed = "TEST WAS A SUCCESS" in out_str
+                return passed, out
+            except Exception as e:
+                last_err = e
+                time.sleep(2)
+        return False, ("<serial exec failed after 3 attempts: {}>\n".format(last_err)).encode()
 
 
 # ── MPOSController ──────────────────────────────────────────────────

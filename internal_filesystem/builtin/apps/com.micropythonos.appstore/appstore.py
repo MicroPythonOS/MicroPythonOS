@@ -501,6 +501,12 @@ class AppStore(Activity):
                 logger.warning("could not process store app %s: %s", app_data.get("fullname", "?"), e)
 
         # Insert new apps at their sorted positions (avoids rebuilding entire list)
+        # If the activity is no longer in the foreground (e.g. test called
+        # back_screen() while the download was in flight), the list widgets may
+        # have been deleted — inserting into a stale list can segfault LVGL.
+        if not self.has_foreground():
+            self._resolve_pending_deeplink()
+            return
         for app in new_apps:
             idx = self._find_sorted_insert_index(app)
             self.apps.insert(idx, app)
@@ -508,19 +514,29 @@ class AppStore(Activity):
 
         # ponytail: rebuild whole list so installed apps get their rating labels
         # (ratings were patched after Phase 1 already painted the list)
-        self.create_apps_list()
-        self._update_category_dropdown()
+        if self.has_foreground():
+            self.create_apps_list()
+            self._update_category_dropdown()
         self._resolve_pending_deeplink()
 
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
+        # Guard against being called after the activity was removed (e.g. async
+        # download completing after back_screen). Acting on deleted LVGL objects
+        # can hard-fault the device.
+        if not getattr(self, "main_screen", None) or not self.has_foreground():
+            if __debug__: logger.debug("create_apps_list skipped: not in foreground")
+            return
 
         self._stop_all_timers()
         self._icon_queue.clear()
         self._download_in_progress = False
 
         if __debug__: logger.debug("hiding please wait label")
-        self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
+        try:
+            self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
+        except Exception:
+            return
 
         # Determine top offset (update button may be visible)
         button_visible = not self.update_all_button.has_flag(lv.obj.FLAG.HIDDEN)
@@ -658,6 +674,8 @@ class AppStore(Activity):
     def _insert_app_list_item(self, app, index):
         """Create LVGL widgets for an app and insert at the given index in the list."""
         if not hasattr(self, "apps_list") or not self.apps_list:
+            return
+        if not self.has_foreground():
             return
         sel_cat = getattr(self, "_selected_category", None)
         if sel_cat == "Installed":
