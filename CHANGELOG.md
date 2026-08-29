@@ -20,6 +20,7 @@ Frameworks:
 - Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
 - DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
+- FileExplorer: pick mode with a path_pattern now lists only matching files (directories stay listed) — non-matching files could never be selected and taps on them were silently ignored, so listing them was pure clutter; browse mode still lists everything
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes by @fdb
 - FontManager: cache emoji codepoints for keyboard input by @fdb
 - Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
