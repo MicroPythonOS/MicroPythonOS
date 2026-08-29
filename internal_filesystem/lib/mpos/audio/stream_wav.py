@@ -484,71 +484,92 @@ class WAVStream:
 
         if player is None:
             logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
-            elapsed_ms = 0
-            while self._keep_running:
+
+        # Honor repeat_count like the I2S path does. repeat_count is re-read
+        # every pass so set_repeat() changes apply mid-playback.
+        self._repeat_played = 0
+        while self._keep_running:
+            if self._repeat_played >= self.repeat_count:
+                break
+            self._repeat_played += 1
+            self._progress_samples = 0
+
+            if player is None:
                 if self._duration_ms is None:
                     break
-                time.sleep_ms(100)
-                elapsed_ms += 100
-                if self._playback_rate:
-                    self._progress_samples = min(
-                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                        self._total_samples
-                    )
-                if elapsed_ms >= self._duration_ms:
-                    break
-        else:
-            pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
-            qpid = _shell_quote(pid_file)
-            if player == "afplay":
-                cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
-                    max(0.0, min(1.0, self.volume / 100.0)),
-                    quoted,
-                    qpid
-                )
-            elif player == "ffplay":
-                cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
-                    self.volume,
-                    quoted,
-                    qpid
-                )
-            elif player == "aplay":
-                cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+                elapsed_ms = 0
+                while self._keep_running:
+                    time.sleep_ms(100)
+                    elapsed_ms += 100
+                    if self._playback_rate:
+                        self._progress_samples = min(
+                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            self._total_samples
+                        )
+                    if elapsed_ms >= self._duration_ms:
+                        break
             else:
-                cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
-
-            os.system(cmd)
-
-            start_ticks = time.ticks_ms()
-            while self._keep_running:
-                time.sleep_ms(100)
-                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                if self._playback_rate:
-                    self._progress_samples = min(
-                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                        self._total_samples
+                pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
+                qpid = _shell_quote(pid_file)
+                if player == "afplay":
+                    cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
+                        max(0.0, min(1.0, self.volume / 100.0)),
+                        quoted,
+                        qpid
                     )
-                if elapsed_ms >= (self._duration_ms or 0):
-                    break
+                elif player == "ffplay":
+                    cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
+                        self.volume,
+                        quoted,
+                        qpid
+                    )
+                elif player == "aplay":
+                    cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+                else:
+                    cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
 
-            _stop_desktop_player(pid_file, not self._keep_running)
+                os.system(cmd)
+
+                start_ticks = time.ticks_ms()
+                while self._keep_running:
+                    time.sleep_ms(100)
+                    elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                    if self._playback_rate:
+                        self._progress_samples = min(
+                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            self._total_samples
+                        )
+                    if elapsed_ms >= (self._duration_ms or 0):
+                        break
+
+                _stop_desktop_player(pid_file, not self._keep_running)
 
         if self.on_complete:
             self.on_complete("Finished: %s" % self.file_path)
 
     async def _monitor_web_audio(self, webio):
-        start_ticks = time.ticks_ms()
         try:
+            # The first pass was already started by _play_desktop(). Honor
+            # repeat_count like the I2S path; it is re-read every pass so
+            # set_repeat() changes apply mid-playback.
+            self._repeat_played = 1
             while self._keep_running:
-                await asyncio.sleep_ms(100)
-                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                if self._playback_rate:
-                    self._progress_samples = min(
-                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                        self._total_samples
-                    )
-                if elapsed_ms >= (self._duration_ms or 0):
+                start_ticks = time.ticks_ms()
+                self._progress_samples = 0
+                while self._keep_running:
+                    await asyncio.sleep_ms(100)
+                    elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                    if self._playback_rate:
+                        self._progress_samples = min(
+                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            self._total_samples
+                        )
+                    if elapsed_ms >= (self._duration_ms or 0):
+                        break
+                if not self._keep_running or self._repeat_played >= self.repeat_count:
                     break
+                self._repeat_played += 1
+                webio.audio_play(self.file_path, self.volume)
             if not self._keep_running:
                 webio.audio_stop()
             if self.on_complete:

@@ -22,6 +22,7 @@ Frameworks:
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes by @fdb
 - FontManager: cache emoji codepoints for keyboard input by @fdb
+- AudioManager/WAVStream: desktop (afplay/ffplay/aplay/paplay and the no-player timing simulation) and web playback now honor set_repeat()/repeat_count like the ESP32 I2S path, so the MusicPlayer Repeat checkbox and other repeat users no longer silently play once on desktop builds; repeat_count is re-read each pass so set_repeat() changes apply mid-playback
 - Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
 - TaskManager: create_task returns None when the task manager is disabled, preventing C-level crashes from asyncio.create_task on ESP32 when called from a disabled test runner context
