@@ -456,6 +456,54 @@ btn.add_event_cb(cb, lv.EVENT.CLICKED, None)
     except ImportError:
         check(True, "screenshot_image skipped (pillow not installed)")
 
+    # click_button must click the labelled widget's own button, not a clickable
+    # ancestor (screens and plain containers are clickable by default). The
+    # nested button sits away from the container center so the old
+    # outermost-first match would miss it.
+    mpos.exec("""
+import lvgl as lv
+scr = lv.obj()
+lv.screen_load(scr)
+cont = lv.obj(scr)
+cont.set_size(300, 220)
+cont.center()
+nbtn = lv.button(cont)
+nbtn.set_size(120, 40)
+nbtn.align(lv.ALIGN.BOTTOM_RIGHT, 0, 0)
+lv.label(nbtn).set_text("Nested Button")
+nstatus = lv.label(cont)
+nstatus.set_text("nested idle")
+nstatus.align(lv.ALIGN.TOP_MID, 0, 0)
+nbtn.add_event_cb(lambda e: nstatus.set_text("nested clicked"), lv.EVENT.CLICKED, None)
+""")
+    time.sleep(0.3)
+    mpos.click_button("Nested Button")
+    check(
+        mpos.wait_for_text("nested clicked", timeout=5),
+        "click_button clicks innermost clickable for nested labels",
+    )
+
+    # long_press must deliver LONG_PRESSED. The simulated indev has to keep
+    # reporting the pressed state during the hold, because nothing else runs
+    # the LVGL loop while an exec'd sleep blocks the aiorepl task.
+    mpos.exec("""
+import lvgl as lv
+scr2 = lv.obj()
+lv.screen_load(scr2)
+lbtn = lv.button(scr2)
+lbtn.set_size(120, 50)
+lbtn.center()
+lv.label(lbtn).set_text("LP Button")
+lstatus = lv.label(scr2)
+lstatus.set_text("lp idle")
+lstatus.align(lv.ALIGN.TOP_MID, 0, 10)
+lbtn.add_event_cb(lambda e: lstatus.set_text("lp fired"), lv.EVENT.LONG_PRESSED, None)
+""")
+    time.sleep(0.3)
+    lp_btn = mpos.find_widget(type="button")
+    mpos.long_press(lp_btn["center_x"], lp_btn["center_y"])
+    check(mpos.wait_for_text("lp fired", timeout=5), "long_press delivers LONG_PRESSED")
+
 
 def test_app_management(mpos, is_serial=False, cli_binary=None, serial_port=None):
     section("App management (install / list / remove)")
