@@ -2,6 +2,7 @@ Future release (next version)
 =====
 
 Board Support:
+- Add Waveshare ESP32-S3-Touch-LCD-3.5 (3.5" 320x480 ST7796 over SPI with LCD reset/CS on a PCA9554 IO expander, FT6336 touch, QMI8658 IMU, AXP2101 battery management); vendors the st7796 display driver and adds a PCA9554 expander driver
 - UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
 - unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError 'invalid micropython decorator'
 
