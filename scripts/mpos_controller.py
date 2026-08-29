@@ -94,6 +94,33 @@ def _count_usb_serial_devices():
     )
 
 
+# Self-check pasted into every test run right after `import unittest`.
+# unittest's assert methods are plain `assert` statements, which
+# mpy-cross -O3 strips. When unittest resolves to such a build (e.g. the
+# frozen lib of a prod firmware, already imported at boot before lib/ is
+# prepended to sys.path), every assertion is a silent no-op and the whole
+# suite reports vacuously green. Abort loudly instead of "passing".
+_ASSERT_SELF_CHECK_CODE = (
+    "try:\n"
+    "    unittest.TestCase().assertTrue(False)\n"
+    "    _mpos_asserts_work = False\n"
+    "except AssertionError:\n"
+    "    _mpos_asserts_work = True\n"
+    "if not _mpos_asserts_work:\n"
+    "    print("
+    "'MPOS_TEST_RUNNER FATAL: unittest assertions are no-ops: unittest "
+    "was imported from a build with assert statements stripped "
+    "(mpy-cross -O3, e.g. the frozen lib of a prod firmware), so test "
+    "results would be vacuously green. Use a dev build, or ensure a "
+    "non-optimized lib/ is on sys.path before unittest is first "
+    "imported.')\n"
+)
+
+
+def _indent(code, prefix):
+    return "".join(prefix + line + "\n" for line in code.splitlines())
+
+
 def _build_test_code(test_path, tests_dir=None):
     with open(test_path) as f:
         test_content = f.read()
@@ -120,6 +147,7 @@ def _build_test_code(test_path, tests_dir=None):
     code += "except Exception:\n"
     code += "    pass\n"
     code += "import unittest\n"
+    code += _ASSERT_SELF_CHECK_CODE
     code += """\
 for _k in list(globals().keys()):
     _v = globals()[_k]
@@ -149,9 +177,12 @@ for _k in dir():
                 suite.addTest(_v)
         except Exception:
             pass
-result = unittest.TextTestRunner().run(suite)
 """
-    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+    code += "if not _mpos_asserts_work:\n"
+    code += "    print('TEST WAS A FAILURE')\n"
+    code += "else:\n"
+    code += "    result = unittest.TextTestRunner().run(suite)\n"
+    code += ("    print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     return code
 
@@ -213,11 +244,15 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
         code += "mpos.coverage.start()\n"
         code += "_cov_stop = mpos.coverage.stop\n"
     code += "try:\n"
-    code += "    sys.modules.pop('_runner_test', None)\n"
-    code += "    import _runner_test as _test_mod\n"
     code += "    import unittest\n"
-    code += "    result = unittest.main(module=_test_mod)\n"
-    code += ("    print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+    code += _indent(_ASSERT_SELF_CHECK_CODE, "    ")
+    code += "    if not _mpos_asserts_work:\n"
+    code += "        print('TEST WAS A FAILURE')\n"
+    code += "    else:\n"
+    code += "        sys.modules.pop('_runner_test', None)\n"
+    code += "        import _runner_test as _test_mod\n"
+    code += "        result = unittest.main(module=_test_mod)\n"
+    code += ("        print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     if coverage:
         code += ("    _cov_rpt = {}\n"
