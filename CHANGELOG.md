@@ -40,7 +40,8 @@ OS:
 - sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
-- test_runner/mpos_controller: self-check that unittest assertions actually raise before running a suite, and fail the run with a clear diagnostic when unittest resolves to a build with assert statements stripped (mpy-cross -O3, e.g. the frozen lib of a prod firmware) — previously every assertion was a silent no-op and whole suites reported vacuously green
+- test_runner/mpos_controller: self-check that unittest assertions actually raise before running a suite; when boot cached a stripped copy (mpy-cross -O3, e.g. a frozen lib imported before lib/ is on sys.path), repair it by grafting the working assert methods from the filesystem lib/unittest, and only fail the run with a clear diagnostic when no working unittest is available — previously every assertion was a silent no-op and whole suites reported vacuously green
+- mpos_controller: write paste-mode payloads in chunks, draining the echoed input between chunks — a large payload written in one call deadlocked once payload plus echo filled the PTY buffers, hanging exec() until timeout
 - tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test; wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
 - topmenu drawer test: use animate=False for all close_drawer() calls; close_drawer() now accepts an animate parameter matching the existing close_bar() API
 - test_runner: disable notification sound on macOS/darwin in the settings because it causes a hang on the headless (soundcardless?) macOS CI runners
