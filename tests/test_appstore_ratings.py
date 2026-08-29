@@ -270,6 +270,7 @@ class TestBadgehubPatchesRatingOnInstalled(unittest.TestCase):
         store._update_category_dropdown = lambda: None
         store._builtin_fullnames = set()
         store._wip_apps = []
+        store._has_foreground = True
         return store
 
     def test_phase2_patches_rating_on_installed_app(self):

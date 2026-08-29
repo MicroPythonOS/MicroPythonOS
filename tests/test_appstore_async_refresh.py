@@ -153,6 +153,7 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         store._icon_queue = []
         store._blurhash_queue = []
         store._wip_apps = []
+        store._has_foreground = True
         return store
 
     # ------------------------------------------------------------------
@@ -290,6 +291,7 @@ class TestAppStoreUpdateAllRecheck(unittest.TestCase):
         store.update_all_label = MockStateLabel()
         store.main_screen = MockLabel()
         store.apps = []
+        store._has_foreground = True
         return store
 
     def test_update_all_calls_refresh_before_recheck(self):
@@ -352,6 +354,7 @@ class TestAppStoreDataFlow(unittest.TestCase):
         store._wip_apps = []
         # Bypass LVGL UI creation — these tests verify data flow, not rendering
         store.create_apps_list = lambda: None
+        store._has_foreground = True
         return store
 
     # ------------------------------------------------------------------
@@ -512,6 +515,7 @@ class TestAppStoreHideWip(unittest.TestCase):
         store._update_category_dropdown = lambda: None
         store._builtin_fullnames = set()
         store._wip_apps = []
+        store._has_foreground = True
         return store
 
     def test_hide_wip_filters_work_in_progress(self):

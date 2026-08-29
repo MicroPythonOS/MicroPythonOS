@@ -782,6 +782,7 @@ class TestAppUpdateRunAll(unittest.TestCase):
         store.update_all_label = MockLabel()
         store.main_screen = MockLabel()
         store.apps = []
+        store._has_foreground = True
         return store
 
     def tearDown(self):
@@ -1025,6 +1026,7 @@ class TestAppUpdateRunAllClearsUpdatableApps(unittest.TestCase):
         store.apps = []
         store._update_labels = {}
         store._wip_apps = []
+        store._has_foreground = True
         return store
 
     def test_run_update_all_forces_clear_of_updatable_apps(self):
@@ -1099,6 +1101,7 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         store.main_screen = MockLabel()
         store.apps = []
         store._update_labels = {}
+        store._has_foreground = True
         return store
 
     def test_sync_update_banner_shows_button_when_updates_available(self):
@@ -1286,6 +1289,7 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
         store._icon_queue = []
         store._download_in_progress = False
         store._icon_pipeline = "none"
+        store._has_foreground = True
         return store
 
     def test_update_all_button_click_triggers_installs(self):
