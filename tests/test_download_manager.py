@@ -569,11 +569,19 @@ class TestDownloadManager(unittest.TestCase):
 
     def test_sync_download_with_progress_callback(self):
         """Test synchronous download with progress callback."""
+        import asyncio
+
         progress_calls = []
 
         async def track_progress(percent):
             progress_calls.append(percent)
 
+        # download_url() checks asyncio.current_task() to decide sync vs async.
+        # When running inside the test runner's paste mode the outer event loop
+        # is active, so we temporarily set cur_task=None to exercise the sync
+        # path.
+        saved_cur = asyncio.core.cur_task
+        asyncio.core.cur_task = None
         try:
             # Synchronous download with async progress callback
             data = DownloadManager.download_url(
@@ -583,6 +591,8 @@ class TestDownloadManager(unittest.TestCase):
         except Exception as e:
             self.skipTest(f"MicroPythonOS.com unavailable: {e}")
             return
+        finally:
+            asyncio.core.cur_task = saved_cur
 
         self.assertIsNotNone(data)
         self.assertIsInstance(data, bytes)

@@ -145,6 +145,11 @@ class TestGraphicalAppStoreScanQR(unittest.TestCase):
 
         async def _recording_download(url, **kwargs):
             import mpos.ui
+            # Only record the app-index download; opening the detail screen also
+            # fetches BadgeHub project details, which is unrelated to the timing
+            # this test is checking.
+            if "project-summaries" not in url:
+                raise OSError("no network in test")
             for entry in mpos.ui.screen_stack:
                 activity = entry[0]
                 if activity.__class__.__name__ == "AppStore":
