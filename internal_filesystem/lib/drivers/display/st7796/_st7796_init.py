@@ -18,6 +18,7 @@ _PWR3 = const(0xC2)
 _VCMPCTL = const(0xC5)
 _PGC = const(0xE0)
 _NGC = const(0xE1)
+_INVON = const(0x21)
 _DISPON = const(0x29)
 
 _EM = const(0xB7)
@@ -117,6 +118,11 @@ def init(self):
     self.set_params(_CSCON, param_mv[:1])
 
     time.sleep_ms(120)  # NOQA
+
+    # IPS panels are normally-inverted: without INVON the whole display
+    # renders in negative (verified on the Waveshare ESP32-S3-Touch-LCD-3.5).
+    # The st7789 driver does the same for the same reason.
+    self.set_params(_INVON)
 
     self.set_params(_DISPON)
 
