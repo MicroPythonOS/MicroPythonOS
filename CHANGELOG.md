@@ -18,6 +18,7 @@ Frameworks:
 - AppManager: apps can declare URL handlers via 'urlPattern' in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - AppManager: boot services can declare delay_s in their intent_filter; services with delay_s > 0 are imported and started asynchronously after the delay, keeping non-critical module imports out of the boot path
 - AppManager: manifest cache at /cache/system/apps.json with directory-count-based invalidation, skipping os.listdir/os.stat/json.load per app on subsequent boots when no apps were added or removed
+- AudioManager: WAVStream on ESP32 waits for the actual remaining queued audio after the last I2S write (wall-clock vs queued duration) instead of a fixed ibuf/bytes_per_second sleep, which delayed on_complete by up to 2 seconds for low-sample-rate clips (e.g. 8 kHz mono) and by ~0.4-0.7s for typical 22 kHz clips
 - Camera: after decoding a QR code in free-scan mode, show an 'Open in App Store' / 'Open link' chip when the code is an app link the OS can open
 - Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
 - DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'

@@ -140,3 +140,16 @@ class TestComputePlaybackRate(unittest.TestCase):
         rate, factor = WAVStream.compute_playback_rate(44100, 8000)
         self.assertEqual(rate, 44100)
         self.assertEqual(factor, 1)
+
+
+class TestComputeDrainMs(unittest.TestCase):
+
+    def test_wall_clock_behind_audio_waits_for_the_difference(self):
+        self.assertEqual(WAVStream.compute_drain_ms(3000, 2900), 100)
+
+    def test_wall_clock_caught_up_means_no_wait(self):
+        self.assertEqual(WAVStream.compute_drain_ms(3000, 3000), 0)
+
+    def test_wall_clock_ahead_of_audio_means_no_wait(self):
+        # e.g. playback stalled and ran long: never sleep a negative amount
+        self.assertEqual(WAVStream.compute_drain_ms(2000, 4171), 0)
