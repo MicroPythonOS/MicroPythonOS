@@ -15,6 +15,7 @@ import unittest
 import lvgl as lv
 
 sys.path.append("apps")
+sys.path.append("tests")
 
 from com_micropythonos_nostr.chat_model import (
     DEFAULT_CHANNEL_ID,
@@ -32,6 +33,13 @@ from mpos import AppManager, wait_for_render
 from mpos.ui.testing import click_label, find_label_with_text, wait_for_text
 
 from nostr.event import Event
+
+# On device this replaces unittest.main with a direct setUp/test/tearDown
+# executor that avoids a MicroPython unittest harness hard fault when the
+# Nostr app starts background services. On desktop it is a no-op.
+from _mpos_device_unittest import patch_unittest_main
+
+patch_unittest_main()
 
 
 class TestNostrChatListResumeRendersEvents(unittest.TestCase):
@@ -91,6 +99,10 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
         store.add_message(channel_chat_id(DEFAULT_CHANNEL_ID), message, mark_unread=False)
         store.flush_index()
         wait_for_render(5)
+        # Let any async cleanup and LVGL timers settle before the test starts
+        # the Nostr app; otherwise start_app can hard-fault on device.
+        time.sleep(3)
+        gc.collect()
 
     def tearDown(self):
         try:
