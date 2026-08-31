@@ -9,6 +9,7 @@ import gc
 import os
 import shutil
 import sys
+import time
 import unittest
 
 import lvgl as lv
@@ -37,7 +38,17 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
     """Reopening Nostr should show stored channel events in the chat list."""
 
     def setUp(self):
-        AppManager.restart_launcher()
+        # Stop any running Nostr activity and the background service first.
+        # AppManager.restart_launcher() is flaky on-device and can hard-fault
+        # when services are still waking up, so we return to a clean state by
+        # stopping the service and clearing the activity stack directly.
+        from mpos import ui
+        ui.remove_and_stop_all_activities()
+        wait_for_render(5)
+
+        # Stop NostrManager before touching its cache files to avoid races.
+        mgr = NostrManager.get_instance()
+        mgr.stop()
         wait_for_render(5)
 
         # Clean up any stale chat cache.
@@ -157,37 +168,20 @@ class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
     """A brand new Nostr install should list the default public channel."""
 
     def setUp(self):
-        # Aggressively stop any running Nostr activity and its flush timer
-        # before wiping prefs, to avoid timer callback racing rmtree.
+        # Stop any running Nostr activity and the background service first.
+        # AppManager.restart_launcher() is flaky on-device and can hard-fault
+        # when services are still waking up, so we return to a clean state by
+        # stopping the service and clearing the activity stack directly.
         from mpos import ui
         ui.remove_and_stop_all_activities()
-        wait_for_render(10)  # Give LVGL time to fully tear down activities
+        wait_for_render(5)
 
-        # Stop NostrManager and its main task to cancel any pending callbacks
+        # Stop NostrManager before wiping prefs to avoid file/timer races.
         mgr = NostrManager.get_instance()
         mgr.stop()
-        mgr._main_task = None
-        mgr._cleanup_done = True
-        mgr._subscriptions = []
-        mgr._subscription_ids = {}
-        mgr._default_relays = []
-        mgr._nostr_configured = False
-        mgr._nostr_private_key = None
-        mgr._nwc_configured = False
-        mgr._nwc_relays = []
-        mgr._nwc_private_key = None
-        mgr._nwc_nwc_url = None
-        mgr.events = []
-        mgr.connected = False
-        mgr.relay_manager = None
-        wait_for_render(5)  # Wait for stop to complete
-
-        # Now restart launcher to get clean state
-        AppManager.restart_launcher()
-        wait_for_render(10)  # Give launcher time to fully start
+        wait_for_render(5)
 
         # Wipe prefs with a delay to let any timer callbacks settle
-        import time
         time.sleep(2)
         gc.collect()
         try:
