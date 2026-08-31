@@ -296,6 +296,10 @@ class NostrManager:
 
         # Error callback
         self._error_cb = None
+        # Last NWC error forwarded to _error_cb (dedupe: identical
+        # errors repeat every poll, e.g. UNAUTHORIZED on a retired
+        # connection; re-painting the same message each minute is noise)
+        self._last_nwc_error = None
 
         # Lifecycle
         self.keep_running = False
@@ -1232,8 +1236,37 @@ class NostrManager:
             if __debug__:
                 logger.debug("NostrManager: decrypted NWC: %s", decrypted)
             response = json.loads(decrypted)
+
+            error = response.get("error")
+            if error:
+                # NIP-47 error reply, e.g. UNAUTHORIZED when the wallet
+                # service has retired the connection. Without this branch the
+                # error was silently discarded and the UI sat on
+                # "Connecting..." forever, indistinguishable from a dead
+                # relay. An error reply IS wallet-service activity, so also
+                # reset the silence watchdog: reconnecting can't fix an
+                # unauthorized connection, and tearing down a relay that is
+                # answering only masks the real problem.
+                self._polls_since_last_event = 0
+                msg = "NWC {}: {} ({})".format(
+                    response.get("result_type") or "request",
+                    error.get("message") or "unknown error",
+                    error.get("code") or "?",
+                )
+                logger.warning("NostrManager: %s", msg)
+                # Dedupe on the error itself (code + message), NOT the full
+                # msg: get_balance and list_transactions errors alternate
+                # every poll, and a same-as-last check on the full string
+                # would forward every single reply.
+                dedupe_key = (error.get("code"), error.get("message"))
+                if self._error_cb and dedupe_key != self._last_nwc_error:
+                    self._last_nwc_error = dedupe_key
+                    self._error_cb(msg)
+                return
+
             result = response.get("result")
             if result:
+                self._last_nwc_error = None
                 if result.get("balance") is not None:
                     new_balance = round(int(result["balance"]) / 1000)
                     logger.info("NostrManager: NWC balance: %s", new_balance)

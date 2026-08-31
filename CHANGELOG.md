@@ -2,6 +2,7 @@ Future release (next version)
 =====
 
 Frameworks:
+- Nostr: surface NIP-47 (NWC) error replies through the error callback instead of silently discarding them. An UNAUTHORIZED reply (e.g. a retired wallet connection) previously left apps stuck on their connecting state forever, indistinguishable from a dead relay; identical repeated errors are forwarded once, and an error reply now also resets the relay silence watchdog since the wallet service is demonstrably answering
 - SDCardManager integrates the old 'sdcard' functionality, which has been removed
 
 OS:
