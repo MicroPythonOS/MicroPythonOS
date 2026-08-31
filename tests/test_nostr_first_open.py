@@ -31,10 +31,17 @@ class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
     """A brand new Nostr install should list the default public channel."""
 
     def setUp(self):
-        # Match the manual test order that worked: restart launcher FIRST,
-        # then wipe prefs and reset NostrManager.
-        AppManager.restart_launcher()
-        wait_for_render(10)
+        # Stop any running Nostr activity and the background service first.
+        # AppManager.restart_launcher() is flaky on-device and can hard-fault
+        # when services are still waking up, so we return to a clean state by
+        # stopping the service and clearing the activity stack directly.
+        from mpos import ui
+        ui.remove_and_stop_all_activities()
+        wait_for_render(5)
+
+        mgr = NostrManager.get_instance()
+        mgr.stop()
+        wait_for_render(5)
 
         # Wipe prefs with a delay to let any timer callbacks settle
         import time

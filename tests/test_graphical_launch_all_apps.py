@@ -12,8 +12,17 @@ import time
 
 # This is a graphical test - needs boot and main to run first
 # Add tests directory to path for helpers
+sys.path.append("tests")
 
 from mpos import wait_for_render, ui, AppManager
+
+# On device this replaces unittest.main with a direct setUp/test/tearDown
+# executor that avoids a MicroPython unittest harness hard fault during the
+# long app-launch loop. On desktop it is a no-op.
+from _mpos_device_unittest import patch_unittest_main
+
+patch_unittest_main()
+
 
 def _native_supported():
     try:
