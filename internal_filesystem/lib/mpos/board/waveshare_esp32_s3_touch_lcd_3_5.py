@@ -291,7 +291,7 @@ CameraManager.add_camera(CameraManager.Camera(
     deinit=deinit_cam,
     capture=capture_cam,
     apply_settings=apply_cam_settings,
-    rotation_degrees=-90,  # tuned on hardware: preview needs 90 degrees clockwise correction
+    rotation_degrees=90,  # tuned on hardware (was -90 for the _90 UI; flipped with the _270 orientation)
 ))
 
 if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_3_5.py finished")
