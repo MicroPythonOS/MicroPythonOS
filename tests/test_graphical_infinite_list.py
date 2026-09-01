@@ -217,23 +217,45 @@ class TestInfiniteListPerformance(GraphicalTestCase, _Base):
         elapsed = time.ticks_diff(time.ticks_ms(), t0)
         return lst, elapsed
 
-    def test_set_data_fast_with_5000_items(self):
-        threshold = 2000 if _ESP32 else 500
-        lst, elapsed = self._make_list_timed(5000)
-        self.assertTrue(
-            elapsed < threshold,
-            f"set_data with 5000 items took {elapsed}ms, expected <{threshold}ms"
-        )
-        self.assertTrue(lst.rendered_count < 30)
+    def test_set_data_is_fast_and_virtualized(self):
+        """set_data should be fast for large lists and not scale with item count.
 
-    def test_set_data_fast_with_10000_items(self):
-        threshold = 4000 if _ESP32 else 1000
-        lst, elapsed = self._make_list_timed(10000)
+        Self-calibrate against a small list on the same machine; absolute
+        thresholds are too flaky on slow CI runners. The 5000/10000 item lists
+        should not be dramatically slower than the 100-item baseline (all three
+        render the same bounded window).
+        """
+        absolute_cap = 4000 if _ESP32 else 2000
+
+        base_lst, base_elapsed = self._make_list_timed(100)
+        self.assertTrue(base_lst.rendered_count < 30)
+
+        lst_5k, elapsed_5k = self._make_list_timed(5000)
+        self.assertTrue(lst_5k.rendered_count < 30)
+
+        lst_10k, elapsed_10k = self._make_list_timed(10000)
+        self.assertTrue(lst_10k.rendered_count < 30)
+
+        ratio_5k = elapsed_5k / base_elapsed if base_elapsed > 0 else 0
+        ratio_10k = elapsed_10k / base_elapsed if base_elapsed > 0 else 0
+
         self.assertTrue(
-            elapsed < threshold,
-            f"set_data with 10000 items took {elapsed}ms, expected <{threshold}ms"
+            ratio_5k < 10,
+            f"set_data with 5000 items is {ratio_5k:.1f}x slower than 100 items; expected <10x"
         )
-        self.assertTrue(lst.rendered_count < 30)
+        self.assertTrue(
+            ratio_10k < 10,
+            f"set_data with 10000 items is {ratio_10k:.1f}x slower than 100 items; expected <10x"
+        )
+
+        self.assertTrue(
+            elapsed_5k < absolute_cap,
+            f"set_data with 5000 items took {elapsed_5k}ms, expected <{absolute_cap}ms"
+        )
+        self.assertTrue(
+            elapsed_10k < absolute_cap,
+            f"set_data with 10000 items took {elapsed_10k}ms, expected <{absolute_cap}ms"
+        )
 
     def test_scroll_render_time_is_low(self):
         # Self-calibrate on a modest list on the same machine, then compare the
