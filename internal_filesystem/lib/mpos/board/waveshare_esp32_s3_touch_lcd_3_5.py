@@ -108,7 +108,10 @@ InputManager.register_indev(indev)
 
 # Landscape, like the other MPOS boards; must be done after initializing the
 # display and creating the touch driver so both agree on the orientation.
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90)
+# _270 rather than _90 so the UI is upright with the board oriented USB
+# cable to the left / BOOT+RESET buttons at the bottom, the natural desk
+# position for this enclosure. Rotation only takes effect at init.
+mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._270)
 
 # === POWER MANAGEMENT (AXP2101) ===
 # Battery charge/percentage via the PMU instead of a raw ADC pin.
