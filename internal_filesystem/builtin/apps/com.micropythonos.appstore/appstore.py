@@ -15,16 +15,9 @@ logger = logging.getLogger(__name__)
 
 class AppStore(Activity):
 
-    _GITHUB_PROD_BASE_URL = "https://apps.micropythonos.com"
-    _GITHUB_LIST = "/app_index.json"
-
-    _BADGEHUB_TEST_BASE_URL = "https://badgehub.p1m.nl/api/v3"
-    _BADGEHUB_PROD_BASE_URL = "https://badgehub.eu/api/v3"
-    _BADGEHUB_LIST = f"project-summaries?badge=mpos_api_{BuildInfo.version.api_level}"
-    _BADGEHUB_DETAILS = "projects"
-
-    _BACKEND_API_GITHUB = "github"
-    _BACKEND_API_BADGEHUB = "badgehub"
+    _BADGEHUB_BASE_URL = "https://badgehub.eu/api/v3"
+    _BADGEHUB_LIST_URL = f"https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_{BuildInfo.version.api_level}"
+    _BADGEHUB_DETAILS_URL = "https://badgehub.eu/api/v3/projects"
 
     _ICON_SIZE = 64
     _TOP_BAR_HEIGHT = 44
@@ -40,12 +33,6 @@ class AppStore(Activity):
     _DEFAULT_ICON_PIPELINE = 'blurhash'
     _DEFAULT_HIDE_WIP = True
     _SPECIAL_CATEGORIES = {"All", "Work In Progress", "Installed", "Updates"}
-
-    # Hardcoded list for now:
-    backends = [
-        ("BadgeHub.eu", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
-        ("Apps.MicroPythonOS.com", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
-    ]
 
     apps = []
     can_check_network = True
@@ -67,7 +54,6 @@ class AppStore(Activity):
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
-        self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self._hide_wip = self.prefs.get_string("hide_wip", "true") == "true"
         self._wip_apps = []
         self._refresh_in_progress = False
@@ -240,8 +226,7 @@ class AppStore(Activity):
                 continue
             if not download_url:
                 from appstore_core import fetch_badgehub_project_details
-                base_url = AppStore._BADGEHUB_PROD_BASE_URL
-                details_url = base_url + "/projects/" + fullname
+                details_url = AppStore._BADGEHUB_DETAILS_URL + "/" + fullname
                 self.update_all_label.set_text(f"Checking {app_data.get('name', fullname)}...")
                 details = await fetch_badgehub_project_details(details_url)
                 download_url = details.get("download_url")
@@ -284,18 +269,12 @@ class AppStore(Activity):
             if __debug__: logger.debug("refresh already in progress, skipping")
             return
         self._refresh_in_progress = True
-        TaskManager.create_task(self._download_app_index_wrapper(self.get_backend_list_url_from_settings()))
+        TaskManager.create_task(self._download_app_index_wrapper(AppStore._BADGEHUB_LIST_URL))
 
     def settings_button_tap(self, event):
         intent = Intent(activity_class=SettingsActivity)
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
-            {"title": "AppStore Backend",
-             "key": "backend",
-             "ui": "radiobuttons",
-             "default_value": self._DEFAULT_BACKEND,
-             "ui_options": [(backend[0], AppStore.get_backend_pref_string(index)) for index, backend in enumerate(AppStore.backends)],
-             "changed_callback": self.backend_changed},
             {"title": "App List Icons",
              "key": "icon_pipeline",
              "ui": "radiobuttons",
@@ -327,10 +306,6 @@ class AppStore(Activity):
              "changed_callback": self._update_notifications_changed},
         ])
         self.startActivity(intent)
-
-    def backend_changed(self, new_value):
-        if __debug__: logger.debug("backend changed to %s", new_value)
-        self.refresh_list()
 
     def _hide_wip_changed(self, new_value):
         self._hide_wip = new_value == "true"
@@ -472,50 +447,34 @@ class AppStore(Activity):
             self._resolve_pending_deeplink(index_available=False)
             return
 
-        backend_type = self.get_backend_type_from_settings()
         installed_by_fullname = {app.fullname: app for app in self.apps}
         new_apps = []
         for app_data in parsed:
             try:
-                if backend_type == self._BACKEND_API_BADGEHUB:
-                    if app_data.get("slug") in installed_by_fullname:
-                        existing = installed_by_fullname[app_data.get("slug")]
-                        store_version = app_data.get("version")
-                        if store_version:
-                            existing._remote_version = store_version
-                        ratings = app_data.get("ratings") or {}
-                        existing.rating_average = ratings.get("average")
-                        existing.rating_count = ratings.get("count", 0)
-                        if app_data.get("development_status") == "work_in_progress":
-                            self._wip_apps.append(existing)
-                        continue
-                    if app_data.get("slug") in self._builtin_fullnames:
-                        continue
-                    app = AppStore.badgehub_app_to_mpos_app(app_data)
+                fullname = app_data.get("slug")
+                if not fullname:
+                    continue
+                if fullname in installed_by_fullname:
+                    existing = installed_by_fullname[fullname]
+                    store_version = app_data.get("version")
+                    if store_version:
+                        existing._remote_version = store_version
+                    ratings = app_data.get("ratings") or {}
+                    existing.rating_average = ratings.get("average")
+                    existing.rating_count = ratings.get("count", 0)
                     if app_data.get("development_status") == "work_in_progress":
-                        self._wip_apps.append(app)
-                        if self._hide_wip:
-                            continue
-                    new_apps.append(app)
-                else:
-                    fullname = app_data["fullname"]
-                    if fullname in self._builtin_fullnames:
+                        self._wip_apps.append(existing)
+                    continue
+                if fullname in self._builtin_fullnames:
+                    continue
+                app = AppStore.badgehub_app_to_mpos_app(app_data)
+                if app_data.get("development_status") == "work_in_progress":
+                    self._wip_apps.append(app)
+                    if self._hide_wip:
                         continue
-                    if fullname in installed_by_fullname:
-                        existing = installed_by_fullname[fullname]
-                        existing.icon_url = app_data["icon_url"]
-                        existing.download_url = app_data["download_url"]
-                        existing._remote_version = app_data["version"]
-                    else:
-                        new_apps.append(App(
-                            app_data["name"], app_data["publisher"],
-                            app_data["short_description"], app_data["long_description"],
-                            app_data["icon_url"], app_data["download_url"],
-                            fullname, app_data["version"],
-                            app_data["category"], app_data["activities"],
-                        ))
+                new_apps.append(app)
             except Exception as e:
-                logger.warning("could not process store app %s: %s", app_data.get("fullname", "?"), e)
+                logger.warning("could not process store app %s: %s", app_data.get("slug", "?"), e)
 
         # Insert new apps at their sorted positions (avoids rebuilding entire list)
         # If the activity is no longer in the foreground (e.g. test called
@@ -998,20 +957,6 @@ class AppStore(Activity):
         close.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
         mbox.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CANCEL, None)
 
-    def _get_backend_config(self):
-        """Get backend configuration tuple (type, list_url, details_url)"""
-        pref_string = self.prefs.get_string("backend", self._DEFAULT_BACKEND)
-        return AppStore.backend_pref_string_to_backend(pref_string)
-
-    def get_backend_type_from_settings(self):
-        return self._get_backend_config()[0]
-
-    def get_backend_list_url_from_settings(self):
-        return self._get_backend_config()[1]
-
-    def get_backend_details_url_from_settings(self):
-        return self._get_backend_config()[2]
-
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
         name = bhapp.get("name")
@@ -1029,23 +974,6 @@ class AppStore(Activity):
         rating_average = ratings.get("average")
         rating_count = ratings.get("count", 0)
         return App(name, None, short_description, None, icon_url, None, fullname, bhapp.get("version"), category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
-
-    @staticmethod
-    def get_backend_pref_string(index):
-        backend_info = AppStore.backends[index]
-        if backend_info:
-            api = backend_info[1]
-            base_url = backend_info[2]
-            list_suffix  = backend_info[3]
-            details_suffix = backend_info[4]
-            toreturn = api + "," + base_url + "/" + list_suffix
-            if api == AppStore._BACKEND_API_BADGEHUB:
-                toreturn += "," + base_url + "/" + details_suffix
-            return toreturn
-
-    @staticmethod
-    def backend_pref_string_to_backend(string):
-        return string.split(",")
 
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):

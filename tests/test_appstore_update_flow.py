@@ -56,7 +56,7 @@ class MockPrefs:
     """Mimics SharedPreferences(app_id) — first arg is app_id, not data."""
 
     def __init__(self, app_id, filename=None):
-        self._data = {"backend": "github,https://apps.micropythonos.com/app_index.json"}
+        self._data = {}
 
     def get_string(self, key, default=None):
         return self._data.get(key, default)
@@ -318,13 +318,13 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         mpos.AppManager.is_update_available = staticmethod(_fake)
         return orig
 
-    def test_check_for_updates_finds_updates_github_format(self):
+    def test_check_for_updates_finds_updates(self):
         ctx = self._patch_aum()
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
-                {"fullname": "com.test.b", "name": "TestB", "version": "1.0", "download_url": "http://x/b.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
+                {"slug": "com.test.b", "name": "TestB", "version": "1.0"},
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.a": True, "com.test.b": False})
@@ -348,7 +348,7 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "1.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "1.0"},
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.a": False})
@@ -376,12 +376,6 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.alpha": True, "com.test.beta": False})
-            orig_get_url = ctx["aum"]._get_index_url_and_type
-
-            def _fake_get_url():
-                return ("https://badgehub.eu/api/v3/project-summaries", "badgehub")
-
-            ctx["aum"]._get_index_url_and_type = _fake_get_url
             try:
                 import asyncio
                 loop = asyncio.get_event_loop()
@@ -396,7 +390,6 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
                 dm.DownloadManager.download_url = orig_dl
                 import mpos
                 mpos.AppManager.is_update_available = orig_iav
-                ctx["aum"]._get_index_url_and_type = orig_get_url
         finally:
             self._unpatch(ctx)
 
@@ -474,7 +467,7 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         try:
             import json, time
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
             ])
             ctx["aum"]._last_check_ts = time.ticks_ms()
             orig_dl = self._mock_download_url(return_value=app_index)
@@ -501,7 +494,7 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
             ctx["aum"]._last_check_ts = time.ticks_ms()
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.a": True})
@@ -554,7 +547,7 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
             ])
             states_seen = []
 
@@ -782,7 +775,6 @@ class TestAppUpdateRunAll(unittest.TestCase):
 
         store = AppStore()
         store.prefs = MockPrefs(None)
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
@@ -1024,7 +1016,6 @@ class TestAppUpdateRunAllClearsUpdatableApps(unittest.TestCase):
 
         store = AppStore()
         store.prefs = MockPrefs(None)
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
@@ -1100,7 +1091,6 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
 
         store = AppStore()
         store.prefs = MockPrefs(None)
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
@@ -1280,7 +1270,6 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
         from appstore import AppStore
         store = AppStore()
         store.prefs = MockPrefs(None)
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store._data_loaded = True
@@ -1466,7 +1455,7 @@ class TestAppUpdateNotificationsSetting(unittest.TestCase):
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.a": True})
@@ -1512,7 +1501,7 @@ class TestAppUpdateNotificationsSetting(unittest.TestCase):
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.a": True})

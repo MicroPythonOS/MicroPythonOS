@@ -2,7 +2,8 @@
 
 This module implements the QR-code app discovery link format:
 
-    https://apps.micropythonos.com/app/<app_id>[?v=<min_version>&s=<source>]
+    https://badgehub.eu/page/project/<app_id>[?v=<min_version>&s=<source>]
+    https://badgehub.eu/<app_id>[?...]           (shorthand)
     micropythonos://app/<app_id>[?...]           (accepted alias, never emitted)
     mpos://app/<app_id>[?...]                    (short form of the alias)
 
@@ -33,7 +34,7 @@ MAX_URL_LENGTH = 512
 MAX_APP_ID_LENGTH = 64
 MAX_PARAM_LENGTH = 64
 
-STORE_HOSTS = ("apps.micropythonos.com",)
+STORE_HOSTS = ("badgehub.eu",)
 STORE_SCHEMES = ("micropythonos", "mpos")
 APPSTORE_FULLNAME = "com.micropythonos.appstore"
 
@@ -126,9 +127,9 @@ def parse_store_link(text):
     """Parse an official app-store link.
 
     Returns {"fullname": ..., "min_version": ... or None, "source": ... or None}
-    for a valid link, None for everything else. Accepts both the canonical
-    https form and the micropythonos:// or mpos:// alias. The app id is folded to
-    lowercase (store app ids are lowercase by convention; QR alphanumeric
+    for a valid link, None for everything else. Accepts the canonical BadgeHub
+    https forms and the micropythonos:// or mpos:// alias. The app id is folded
+    to lowercase (store app ids are lowercase by convention; QR alphanumeric
     mode uppercases everything).
     """
     parts = split_url(text)
@@ -139,9 +140,13 @@ def parse_store_link(text):
         if host not in STORE_HOSTS:
             return None
         # Case-insensitive prefix: QR alphanumeric mode uppercases the path too.
-        if path[:5].lower() != "/app/":
+        path_prefix = path[:14].lower()
+        if path_prefix == "/page/project/":
+            app_id = path[14:]
+        elif path.startswith("/") and path.count("/") == 1:
+            app_id = path[1:]
+        else:
             return None
-        app_id = path[5:]
     elif scheme in STORE_SCHEMES:
         # micropythonos://app/<id> parses as host="app", path="/<id>"
         if host != "app":

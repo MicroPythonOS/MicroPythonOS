@@ -27,7 +27,7 @@ from mpos.ui import QR_SYMBOL
 from mpos.ui.testing import find_label_with_text, wait_for_render
 
 HELLOWORLD = "com.micropythonos.helloworld"
-STORE_LINK = "https://apps.micropythonos.com/app/" + HELLOWORLD
+STORE_LINK = "https://badgehub.eu/page/project/" + HELLOWORLD
 
 
 def _get_top_activity():
@@ -130,7 +130,7 @@ class TestGraphicalAppStoreScanQR(unittest.TestCase):
         appstore = _get_top_activity()
         appstore.scanqr_result_callback({
             "result_code": True,
-            "data": "https://apps.micropythonos.com/app/com.example.does_not_exist",
+            "data": "https://badgehub.eu/page/project/com.example.does_not_exist",
         })
         self._drain()
         # Index refresh fails (stubbed offline), so the "No connection" dialog shows.

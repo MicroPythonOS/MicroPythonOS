@@ -224,7 +224,8 @@ class AppUpdateManager:
     NOTIFICATION_ID = "appstore.updates_available"
     ICON_PATH = "M:builtin/apps/com.micropythonos.appstore/icon_64x64.png"
 
-    _PREF_KEY_BACKEND = "backend"
+    _BADGEHUB_INDEX_URL = "https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_%s" % BuildInfo.version.api_level
+
     _PREF_KEY_UPDATE_NOTIFICATIONS = "update_notifications"
 
     @classmethod
@@ -330,23 +331,15 @@ class AppUpdateManager:
     # Core update check
     # ------------------------------------------------------------------
 
-    def _get_index_url_and_type(self):
-        prefs = SharedPreferences("com.micropythonos.appstore")
-        pref_string = prefs.get_string(self._PREF_KEY_BACKEND, "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_%s,https://badgehub.eu/api/v3/projects" % BuildInfo.version.api_level)
-        parts = pref_string.split(",")
-        backend_type = parts[0]
-        list_url = parts[1]
-        return list_url, backend_type
-
     def _update_notifications_enabled(self):
         prefs = SharedPreferences("com.micropythonos.appstore")
         return prefs.get_string(self._PREF_KEY_UPDATE_NOTIFICATIONS, "true") == "true"
 
     async def check_for_updates(self, index_url=None, force=False):
-        """Download the app index and compare versions against installed apps.
+        """Download the BadgeHub app index and compare versions against installed apps.
 
-        ``index_url`` defaults to the production index.  The AppStore UI
-        may pass its own backend URL when the user has changed the backend setting.
+        ``index_url`` defaults to the production BadgeHub index. Tests and the
+        AppStore UI may pass a custom URL.
         """
         if not force and not self._update_notifications_enabled():
             if __debug__: logger.debug("update notifications disabled, skipping background check")
@@ -365,9 +358,8 @@ class AppUpdateManager:
         try:
             self._set_state(AppUpdateState.CHECKING_UPDATES)
 
-            backend_type = "github"
             if index_url is None:
-                index_url, backend_type = self._get_index_url_and_type()
+                index_url = self._BADGEHUB_INDEX_URL
 
             try:
                 response = await DownloadManager.download_url(index_url)
@@ -389,25 +381,17 @@ class AppUpdateManager:
             updatable = []
             for app_data in apps_json:
                 try:
-                    if backend_type == "badgehub":
-                        fullname = app_data.get("slug")
-                        remote_version = app_data.get("version")
-                        if not fullname or not remote_version:
-                            continue
-                        if AppManager.is_update_available(fullname, remote_version):
-                            updatable.append({
-                                "fullname": fullname,
-                                "version": remote_version,
-                                "name": app_data.get("name", fullname),
-                                "download_url": None,
-                            })
-                    else:
-                        fullname = app_data.get("fullname")
-                        remote_version = app_data.get("version")
-                        if not fullname or not remote_version:
-                            continue
-                        if AppManager.is_update_available(fullname, remote_version):
-                            updatable.append(app_data)
+                    fullname = app_data.get("slug")
+                    remote_version = app_data.get("version")
+                    if not fullname or not remote_version:
+                        continue
+                    if AppManager.is_update_available(fullname, remote_version):
+                        updatable.append({
+                            "fullname": fullname,
+                            "version": remote_version,
+                            "name": app_data.get("name", fullname),
+                            "download_url": None,
+                        })
                 except Exception as e:
                     logger.error("error checking %s: %s", app_data, e)
 

@@ -6,7 +6,7 @@ Board Support:
 - unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError 'invalid micropython decorator'
 
 Builtin Apps:
-- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://badgehub.eu/page/project/APP_ID, https://badgehub.eu/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
 - AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
 - AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the "Installed" view
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
