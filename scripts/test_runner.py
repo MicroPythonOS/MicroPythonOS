@@ -41,6 +41,9 @@ Examples:
     # Resume full test suite from a given test
     python3 scripts/test_runner.py --resume tests/test_notification_manager.py --ondevice --reset --relayport /dev/ttyUSB0
 
+    # Throttle the desktop process to simulate a slow CI runner (desktop only)
+    python3 scripts/test_runner.py --cpulimit 10 tests/test_graphical_infinite_list.py
+
     MPOS_TEST_PORT env var sets the default serial port (default: /dev/ttyACM0).
 """
 
@@ -50,6 +53,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -699,9 +703,10 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None, usb_unbin
     )
 
 
-def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None, log_f=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True):
+def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None, log_f=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True, cpulimit=None):
     backend_kwargs = {}
     be = None
+    cpulimit_proc = None
     if backend == "serial":
         port = os.environ.get("MPOS_TEST_PORT", "/dev/ttyACM0")
         backend_kwargs = {"port": port, "reset": False}
@@ -751,6 +756,14 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
             be = ProcessBackend(**backend_kwargs)
         # Ensure backend is started (initializes repl for serial backend)
         be.start()
+        # Throttle the desktop process to simulate a slow CI runner.
+        if cpulimit is not None and backend == "process":
+            print("Throttling desktop process to {}% CPU with cpulimit".format(cpulimit))
+            cpulimit_proc = subprocess.Popen(
+                ["cpulimit", "-p", str(be.proc.pid), "-l", str(cpulimit), "-q"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         # Give the serial connection time to stabilize after reset/start
         # ESP32-S3 USB CDC can be unstable after power-on; wait longer
         time.sleep(10)
@@ -765,6 +778,15 @@ def _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset=False,
         )
         _serial_log_write(log_f, "RX", out)
     finally:
+        if cpulimit_proc is not None:
+            try:
+                cpulimit_proc.terminate()
+                cpulimit_proc.wait(timeout=2)
+            except Exception:
+                try:
+                    cpulimit_proc.kill()
+                except Exception:
+                    pass
         if be is not None:
             be.stop()
 
@@ -794,13 +816,13 @@ def _is_usb_wedge(err):
         return False
 
 
-def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None, log_f=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True):
+def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=False, coverage=False, relay_port=None, log_f=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True, cpulimit=None):
     for attempt in range(1, MAX_RETRIES + 1):
         if attempt > 1:
             print("Retry attempt {} for {}".format(attempt, test_path))
 
         try:
-            passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f, usb_unbind, usb_reset_hub, usb_settle, usb_recovery)
+            passed, out = _run_one_test(test_path, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f, usb_unbind, usb_reset_hub, usb_settle, usb_recovery, cpulimit)
         except Exception as e:
             if _is_usb_wedge(e):
                 # Not a crash — the CDC link wedged. Power-cycling via relay
@@ -823,7 +845,7 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
     return False, out
 
 
-def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False, relay_port=None, logserial=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True):
+def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False, relay_port=None, logserial=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True, cpulimit=None):
     failed = []
     merged = {}
     log_f = _serial_log_open(logserial) if logserial else None
@@ -834,7 +856,7 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
                 tempfile.gettempdir(),
                 f.replace("/", "_").lstrip("_") + ".log",
             )
-            ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f, usb_unbind, usb_reset_hub, usb_settle, usb_recovery)
+            ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f, usb_unbind, usb_reset_hub, usb_settle, usb_recovery, cpulimit)
             if not ok:
                 failed.append(f)
                 print("WARNING: {} failed!".format(f))
@@ -918,6 +940,12 @@ def main():
         help="Collect line coverage (desktop only, requires mpcov build variant)",
     )
     parser.add_argument(
+        "--cpulimit", type=int, default=None, metavar="PERCENT",
+        help="Throttle the desktop MicroPython process to PERCENT%% CPU (desktop only). "
+             "Useful for reproducing timing-sensitive failures on slow CI runners. "
+             "Requires cpulimit to be installed.",
+    )
+    parser.add_argument(
         "--coverage-save", default=None,
         help="Save merged coverage JSON to FILE (use with --coverage-load to merge runs)",
     )
@@ -964,6 +992,16 @@ def main():
     if args.coverage and args.ondevice:
         print("ERROR: --coverage only works with desktop backend")
         sys.exit(1)
+    if args.cpulimit is not None:
+        if args.ondevice:
+            print("WARNING: --cpulimit has no effect with --ondevice, ignoring")
+            args.cpulimit = None
+        elif args.cpulimit < 1 or args.cpulimit > 100:
+            print("ERROR: --cpulimit must be between 1 and 100")
+            sys.exit(1)
+        elif shutil.which("cpulimit") is None:
+            print("ERROR: --cpulimit requires cpulimit to be installed")
+            sys.exit(1)
     if args.reset and not args.ondevice:
         print("WARNING: --reset has no effect without --ondevice, ignoring")
     if args.relayport and not args.ondevice:
@@ -1034,6 +1072,7 @@ def main():
         args.relayport, args.logserial,
         usb_unbind=args.usb_unbind, usb_reset_hub=args.usb_reset_hub,
         usb_settle=args.usb_settle, usb_recovery=args.usb_recovery,
+        cpulimit=args.cpulimit,
     )
 
     if args.coverage:
