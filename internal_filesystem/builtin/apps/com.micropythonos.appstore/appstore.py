@@ -316,6 +316,15 @@ class AppStore(Activity):
                  ("Show", "false"),
              ],
              "changed_callback": self._hide_wip_changed},
+            {"title": "Update notifications",
+             "key": "update_notifications",
+             "ui": "radiobuttons",
+             "default_value": "true",
+             "ui_options": [
+                 ("On", "true"),
+                 ("Off", "false"),
+             ],
+             "changed_callback": self._update_notifications_changed},
         ])
         self.startActivity(intent)
 
@@ -326,6 +335,14 @@ class AppStore(Activity):
     def _hide_wip_changed(self, new_value):
         self._hide_wip = new_value == "true"
         self.refresh_list()
+
+    def _update_notifications_changed(self, new_value):
+        if new_value != "true":
+            try:
+                from appstore_core import AppUpdateManager
+                AppUpdateManager.get_instance().clear_updates_notification()
+            except Exception as e:
+                logger.warning("could not clear update notification: %s", e)
 
     def _category_changed(self, event):
         if getattr(self, "_rebuilding_dropdown", False):

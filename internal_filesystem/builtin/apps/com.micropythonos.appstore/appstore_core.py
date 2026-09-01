@@ -225,6 +225,7 @@ class AppUpdateManager:
     ICON_PATH = "M:builtin/apps/com.micropythonos.appstore/icon_64x64.png"
 
     _PREF_KEY_BACKEND = "backend"
+    _PREF_KEY_UPDATE_NOTIFICATIONS = "update_notifications"
 
     @classmethod
     def get_instance(cls):
@@ -337,12 +338,19 @@ class AppUpdateManager:
         list_url = parts[1]
         return list_url, backend_type
 
+    def _update_notifications_enabled(self):
+        prefs = SharedPreferences("com.micropythonos.appstore")
+        return prefs.get_string(self._PREF_KEY_UPDATE_NOTIFICATIONS, "true") == "true"
+
     async def check_for_updates(self, index_url=None, force=False):
         """Download the app index and compare versions against installed apps.
 
         ``index_url`` defaults to the production index.  The AppStore UI
         may pass its own backend URL when the user has changed the backend setting.
         """
+        if not force and not self._update_notifications_enabled():
+            if __debug__: logger.debug("update notifications disabled, skipping background check")
+            return
         if self._check_in_progress:
             return
         # deduplicate against _network_changed callback triggering first check
@@ -420,6 +428,9 @@ class AppUpdateManager:
     # ------------------------------------------------------------------
 
     def _notify_updates_available(self):
+        if not self._update_notifications_enabled():
+            if __debug__: logger.debug("update notifications disabled, skipping notification")
+            return
         if self._suppress_notifications:
             if __debug__: logger.debug("suppressing notification (AppStore in foreground)")
             return
@@ -440,3 +451,6 @@ class AppUpdateManager:
 
     def _clear_notification(self):
         NotificationManager.cancel(self.NOTIFICATION_ID)
+
+    def clear_updates_notification(self):
+        self._clear_notification()
