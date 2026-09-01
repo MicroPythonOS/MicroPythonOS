@@ -156,27 +156,39 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
     def test_focusing_last_item_loads_more(self):
         lst = self._make_list(200)
         initial = lst.rendered_count
-        g = lv.group_get_default()
+        initial_last = lst.rendered_range[1]
 
         focus_on = lst.obj.get_child(initial - 1)
         lv.group_focus_obj(focus_on)
 
-        iterations = 120 if _ESP32 else 30
-        for _ in range(iterations):
+        # The FOCUSED callback triggers ensure_loaded() which loads more
+        # items.  LVGL may also scroll to the focused item and the InfiniteList
+        # cleanup may recycle rows, so rendered_count can drop again.  Check the
+        # rendered range (not the count) to prove more items were loaded.
+        def _loaded_more():
+            first, last = lst.rendered_range
+            return last > initial_last
+
+        max_iterations = 120 if _ESP32 else 40
+        for _ in range(max_iterations):
+            if _loaded_more():
+                break
             self.wait_for_render()
 
         # Focus alone may not be enough — simulate a DOWN key to trigger
         # the ensure_loaded callback on ESP32 where LVGL event delivery
         # is more sensitive to task_handler scheduling.
-        if _ESP32 and lst.rendered_count <= initial:
+        if _ESP32 and not _loaded_more():
             from mpos.ui.focus_direction import move_focus_direction, DOWN
             move_focus_direction(DOWN)
             for _ in range(60):
+                if _loaded_more():
+                    break
                 self.wait_for_render()
 
         self.assertTrue(
-            lst.rendered_count > initial,
-            f"Expected >{initial} rendered after focusing last item, got {lst.rendered_count}"
+            _loaded_more(),
+            f"Expected rendered range to advance beyond {initial_last} after focusing last item, got {lst.rendered_range}"
         )
 
 
