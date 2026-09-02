@@ -297,6 +297,12 @@ def wait_for_render(iterations=10):
     all UI updates, animations, and layout changes are complete.
     Essential for tests to avoid race conditions.
 
+    Always drives lv.task_handler() directly, even when a background
+    task_handler is running.  On slow / CPU-starved hosts the
+    background timer may not give the handler enough cycles to finish
+    animations within a fixed iteration budget.  Driving frames
+    manually here makes progress deterministic.
+
     Args:
         iterations: Number of task handler iterations to run (default: 10)
 
@@ -307,24 +313,10 @@ def wait_for_render(iterations=10):
         assert verify_text_present(lv.screen_active(), "Welcome")
     """
     import time
-    task_handler_running = False
-    try:
-        import mpos
-
-        task_handler = getattr(getattr(mpos, "ui", None), "task_handler", None)
-        if task_handler is not None:
-            task_handler_running = task_handler.is_running()
-    except Exception:
-        task_handler_running = False
-
-    if task_handler_running:
-        for _ in range(iterations):
-            time.sleep(0.01)
-        return
-
     for _ in range(iterations):
+        lv.tick_inc(16)   # ~60 fps — gives LVGL enough virtual time to run anims
         lv.task_handler()
-        time.sleep(0.01)  # Small delay between iterations
+        time.sleep(0.01)  # Small delay to let SDL/OS events process
 
 
 def capture_screenshot(filepath=None, width=320, height=240, color_format=lv.COLOR_FORMAT.RGB565, all_layers=False):
