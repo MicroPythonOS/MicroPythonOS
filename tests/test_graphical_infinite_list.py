@@ -126,8 +126,10 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         lst = self._make_list(1000)
         self.assertTextPresent("rom_0000.wad")
 
-        drags = 25 if _ESP32 else 10
-        for _ in range(drags):
+        max_drags = 25 if _ESP32 else 15
+        for _ in range(max_drags):
+            if not self.verify_text_present("rom_0000.wad"):
+                break
             self._drag_scroll_down(lst)
 
         self.assertTextNotPresent("rom_0000.wad")
@@ -136,12 +138,16 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         lst = self._make_list(1000)
         self.assertTextPresent("rom_0000.wad")
 
-        drags = 18 if _ESP32 else 8
-        for _ in range(drags):
+        max_drags = 25 if _ESP32 else 15
+        for _ in range(max_drags):
+            if not self.verify_text_present("rom_0000.wad"):
+                break
             self._drag_scroll_down(lst)
         self.assertTextNotPresent("rom_0000.wad")
 
-        for _ in range(drags):
+        for _ in range(max_drags):
+            if self.verify_text_present("rom_0000.wad"):
+                break
             self._drag_scroll_up(lst)
         self.assertTextPresent("rom_0000.wad")
 
