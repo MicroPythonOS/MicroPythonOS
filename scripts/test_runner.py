@@ -833,6 +833,15 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
                     continue
                 out = "<USB CDC wedged after {} attempts: {}>\n".format(MAX_RETRIES, e).encode()
                 return False, out
+            if "not reachable after relay reset" in str(e):
+                # The relay power-cycle did not bring the CDC port back up in
+                # time. Retry the whole test (which re-runs _relay_reset).
+                _serial_log_write(log_f, "USB", "relay reset failed on {}: {}".format(os.path.basename(test_path), e).encode())
+                print("WARNING: relay reset failed ({}) — retrying...".format(e))
+                if attempt < MAX_RETRIES:
+                    continue
+                out = "<relay reset failed after {} attempts: {}>\n".format(MAX_RETRIES, e).encode()
+                return False, out
             raise
 
         out_str = out.decode("utf-8", errors="replace")
