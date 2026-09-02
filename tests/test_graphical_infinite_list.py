@@ -161,16 +161,23 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
         focus_on = lst.obj.get_child(initial - 1)
         lv.group_focus_obj(focus_on)
 
-        # The FOCUSED callback triggers ensure_loaded() which loads more
-        # items.  LVGL may also scroll to the focused item and the InfiniteList
-        # cleanup may recycle rows, so rendered_count can drop again.  Check the
-        # rendered range (not the count) to prove more items were loaded.
+        # The FOCUSED callback fires synchronously during group_focus_obj()
+        # and calls ensure_loaded(), which extends _last (loads more items).
+        # But SCROLL_ON_FOCUS then scrolls the focused row into view, firing
+        # the InfiniteList scroll handler, which recycles far-away rows and
+        # can drop _last back down — non-deterministically under CPU load.
+        # So we cannot assert on the *current* rendered_range after polling;
+        # we must capture the *peak* _last reached at any point.  The peak
+        # advancing past initial_last proves focusing the last item loaded
+        # more items, regardless of subsequent scroll-driven recycling.
+        peak_last = max(initial_last, lst.rendered_range[1])
+
         def _loaded_more():
-            first, last = lst.rendered_range
-            return last > initial_last
+            return peak_last > initial_last
 
         max_iterations = 120 if _ESP32 else 40
         for _ in range(max_iterations):
+            peak_last = max(peak_last, lst.rendered_range[1])
             if _loaded_more():
                 break
             self.wait_for_render()
@@ -182,13 +189,15 @@ class TestInfiniteListScrolling(GraphicalTestCase, _Base):
             from mpos.ui.focus_direction import move_focus_direction, DOWN
             move_focus_direction(DOWN)
             for _ in range(60):
+                peak_last = max(peak_last, lst.rendered_range[1])
                 if _loaded_more():
                     break
                 self.wait_for_render()
 
         self.assertTrue(
             _loaded_more(),
-            f"Expected rendered range to advance beyond {initial_last} after focusing last item, got {lst.rendered_range}"
+            f"Expected rendered range to advance beyond {initial_last} after focusing last item, "
+            f"peak _last seen was {peak_last} (current range {lst.rendered_range})"
         )
 
 
