@@ -854,7 +854,27 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
     return False, out
 
 
+def _print_run_summary(total, completed, failed):
+    passed = completed - len(failed)
+    if completed == total and not failed:
+        print("GOOD: all {} tests passed".format(total))
+    elif completed == total:
+        print("FAILED: {}/{} tests".format(len(failed), total))
+        for f in failed:
+            print("  {}".format(f))
+    else:
+        print(
+            "SUMMARY: {}/{} tests completed, {} passed, {} failed".format(
+                completed, total, passed, len(failed)
+            )
+        )
+        for f in failed:
+            print("  {}".format(f))
+
+
 def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False, relay_port=None, logserial=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True, cpulimit=None):
+    total = len(test_files)
+    completed = 0
     failed = []
     merged = {}
     log_f = _serial_log_open(logserial) if logserial else None
@@ -866,6 +886,7 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
                 f.replace("/", "_").lstrip("_") + ".log",
             )
             ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f, usb_unbind, usb_reset_hub, usb_settle, usb_recovery, cpulimit)
+            completed += 1
             if not ok:
                 failed.append(f)
                 print("WARNING: {} failed!".format(f))
@@ -875,13 +896,8 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
     finally:
         if log_f is not None:
             log_f.close()
-    if failed:
-        print("FAILED: {}/{} tests".format(len(failed), len(test_files)))
-        for f in failed:
-            print("  {}".format(f))
-        return False, merged
-    print("GOOD: all {} tests passed".format(len(test_files)))
-    return True, merged
+        _print_run_summary(total, completed, failed)
+    return len(failed) == 0, merged
 
 
 def _install_test_apps(port=None):
