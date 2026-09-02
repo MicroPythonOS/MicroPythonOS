@@ -570,7 +570,7 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None, usb_unbin
         return None
 
     if _has_list_ports:
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             pid = _pid_for_port()
             exists = os.path.exists(device_port)
@@ -604,7 +604,7 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None, usb_unbin
                 continue
             time.sleep(0.2)
         else:
-            print(f"  [Phase 1] Timeout after 30s, falling back")
+            print(f"  [Phase 1] Timeout after 45s, falling back")
         # If we timed out waiting for 4001, fall through to the generic
         # outer retry loop below which will also wait for the port.
 
