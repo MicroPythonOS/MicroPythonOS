@@ -134,6 +134,88 @@ from mpos import SensorManager
 
 SensorManager.init(i2c_bus, address=IMU_ADDR, mounted_position=SensorManager.FACING_EARTH)
 
+# === AUDIO (ES8311 codec, onboard speaker connector + microphone) ===
+# I2S pins from Waveshare's demo code (01_audio_out / 04_es8311_example):
+# MCLK=12, BCLK=13, LRCK/WS=15, ESP32->codec (playback)=16, codec->ESP32
+# (microphone)=14. Codec control is I2C @0x18 on the shared bus. The
+# board has no separate speaker-amp enable pin in Waveshare's examples,
+# so only the codec's DAC soft-mute is used for pop suppression.
+_es8311 = None
+try:
+    import time as _time
+
+    import drivers.codec.es8311 as es8311_drv
+
+    class _CodecI2C:
+        """Adapt the lcd_bus i2c wrapper to the machine.I2C-style API the
+        ES8311 driver expects (writeto_mem/readfrom_mem_into)."""
+
+        def __init__(self, bus, dev_id):
+            self._dev = i2c.I2C.Device(bus=bus, dev_id=dev_id, reg_bits=8)
+
+        def writeto_mem(self, addr, reg, data):
+            self._dev.write_mem(reg, data)
+
+        def readfrom_mem_into(self, addr, reg, buf):
+            self._dev.read_mem(reg, buf=buf)
+
+    _es8311 = es8311_drv.ES8311(_CodecI2C(i2c_bus, 0x18))
+    # 76% was picked by ear on real hardware: the driver's 85% default is
+    # audibly distorted through the speaker connector, 70% is clean but
+    # quiet, 76% is the loudest clean setting.
+    _es8311.set_dac_volume(76)
+except Exception as e:
+    logger.error("ES8311 init failed: %s" % (e))
+
+
+def _audio_on_open():
+    """Called after MCLK starts and before I2S init: release DAC soft-mute."""
+    if _es8311:
+        _time.sleep_ms(10)
+        _es8311.dac_mute(False)
+
+
+def _audio_on_close():
+    """Called before I2S deinit: soft-mute the DAC to suppress pops."""
+    if _es8311:
+        _es8311.dac_mute(True)
+        _time.sleep_ms(20)
+
+
+if _es8311:
+    from mpos import AudioManager
+
+    AudioManager.add(
+        AudioManager.Output(
+            name="Speaker",
+            kind="i2s",
+            channels=1,
+            i2s_pins={
+                'mck': 12,  # MCLK - 256 x sample_rate during playback
+                'sck': 13,  # BCLK
+                'ws':  15,  # LRCK
+                'sd':  16,  # I2S TX (ESP32 -> ES8311 DAC)
+            },
+            on_open=_audio_on_open,
+            on_close=_audio_on_close,
+        )
+    )
+
+    AudioManager.add(
+        AudioManager.Input(
+            name="Microphone",
+            kind="i2s",
+            channels=1,
+            i2s_pins={
+                'mck':   12,
+                'sck':   13,
+                'ws':    15,
+                'sd_in': 14,  # I2S RX (ES8311 ADC -> ESP32)
+            },
+            preferred_sample_rate=16000,
+        )
+    )
+
 # === CAMERA ===
 # The board has a camera CONNECTOR (OV5640/OV2640 supported) but no camera is
 # included. Camera init is intentionally not set up here; if you attach one,
