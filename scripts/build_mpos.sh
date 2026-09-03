@@ -422,6 +422,18 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	ensure_mpconfig_define MICROPY_PY_WEBREPL
 	ensure_mpconfig_define MICROPY_PY_OS_DUPTERM
 
+	# builder/unix.py force-checks-out SDL release-2.30.2, which no longer
+	# compiles on macOS with current Xcode Command Line Tools (SDL_cocoawindow.m
+	# messages the forward-declared SDLOpenGLContext when SDL_OPENGL is off;
+	# recent clang makes that an error). SDL fixed it on the 2.32 line, so the
+	# patch moves the checkout to release-2.32.8. Existence-guarded so MPOS
+	# still builds against older pinned lvgl_micropython SHAs without it.
+	sdl_patch="$codebasedir"/lvgl_micropython/unix_sdl_release_2_32_8.patch
+	if [ -f "$sdl_patch" ]; then
+		echo "Applying lvgl_micropython SDL release-2.32.8 checkout patch..."
+		apply_patch "$codebasedir"/lvgl_micropython "$sdl_patch"
+	fi
+
 	# sdl2 has been removed from Homebrew in favor of sdl2-compat on some runners,
 	# but the lvgl_micropython macOS builder still queries the sdl2 formula. Point
 	# it at sdl2-compat so the brew info / LDFLAGS / CFLAGS discovery works.
