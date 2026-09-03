@@ -217,9 +217,81 @@ if _es8311:
     )
 
 # === CAMERA ===
-# The board has a camera CONNECTOR (OV5640/OV2640 supported) but no camera is
-# included. Camera init is intentionally not set up here; if you attach one,
-# see waveshare_esp32_s3_touch_lcd_2.py for the CameraManager pattern (the
-# connector pinout is in the schematic linked above).
+# The board has a camera connector (OV5640/OV2640 supported, none included).
+# Pins from Waveshare's demo code (03_camera_web_server): the SCCB control
+# bus shares the board's main I2C pins (sda=8/scl=7) with touch/codec/
+# expander — Waveshare's own examples drive them together, and the sensor
+# is auto-detected by the camera driver. PWDN/RESET are not wired (-1).
+from mpos import CameraManager
+
+
+def init_cam(width, height, colormode):
+    toreturn = None
+    try:
+        from camera import Camera, GrabMode, PixelFormat
+
+        frame_size = CameraManager.resolution_to_framesize(width, height)
+        if __debug__: logger.debug("init_cam: FrameSize %s for %sx%s" % (frame_size, width, height))
+
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                cam = Camera(
+                        data_pins=[45, 47, 48, 46, 42, 40, 39, 21],  # Y2..Y9
+                        vsync_pin=17,
+                        href_pin=18,
+                        # SCCB shares the board's main I2C bus (sda=8/scl=7)
+                        # with touch/codec/expander. Reuse the existing bus
+                        # driver (port 0) instead of fighting it: concurrent
+                        # touch polling otherwise garbles sensor config
+                        # (wrong colors) and touch reads (dead buttons).
+                        sda_pin=-1,
+                        scl_pin=-1,
+                        sccb_i2c_port=0,
+                        pclk_pin=41,
+                        xclk_pin=38,
+                        xclk_freq=20000000,
+                        powerdown_pin=-1,
+                        reset_pin=-1,
+                        pixel_format=PixelFormat.RGB565 if colormode else PixelFormat.GRAYSCALE,
+                        frame_size=frame_size,
+                        grab_mode=GrabMode.LATEST,
+                        fb_count=1
+                    )
+                toreturn = cam
+                break
+            except Exception as e:
+                if attempt < max_attempts - 1:
+                    logger.error("init_cam attempt %s failed: %s, retrying..." % (attempt, e))
+                else:
+                    logger.error("init_cam final exception: %s" % (e))
+                    break
+    except Exception as e:
+        logger.error("init_cam exception: %s" % (e))
+    return toreturn
+
+
+def deinit_cam(cam):
+    cam.deinit()
+
+
+def capture_cam(cam_obj, colormode):
+    return cam_obj.capture()
+
+
+def apply_cam_settings(cam_obj, prefs):
+    return CameraManager.ov_apply_camera_settings(cam_obj, prefs)
+
+
+CameraManager.add_camera(CameraManager.Camera(
+    lens_facing=CameraManager.CameraCharacteristics.LENS_FACING_BACK,
+    name="Camera connector (OV5640/OV2640)",
+    vendor="OmniVision",
+    init=init_cam,
+    deinit=deinit_cam,
+    capture=capture_cam,
+    apply_settings=apply_cam_settings,
+    rotation_degrees=90,  # tuned on hardware (was -90 for the _90 UI; flipped with the _270 orientation)
+))
 
 if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_3_5.py finished")
