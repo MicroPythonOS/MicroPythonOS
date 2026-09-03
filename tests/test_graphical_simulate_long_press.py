@@ -7,6 +7,7 @@ state for the whole press duration. A short click must NOT deliver
 LONG_PRESSED.
 """
 
+import time
 import unittest
 
 import lvgl as lv
@@ -41,25 +42,41 @@ class TestGraphicalSimulateLongPress(unittest.TestCase):
         self.button.get_coords(area)
         return (area.x1 + area.x2) // 2, (area.y1 + area.y2) // 2
 
+    def _wait_until(self, predicate, timeout_ms=2000):
+        """Poll wait_for_render() until predicate() is true or timeout expires."""
+        deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
+        while time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            if predicate():
+                return True
+            wait_for_render()
+        return False
+
     def test_long_press_fires_long_pressed(self):
         x, y = self._button_center()
         simulate_long_press(x, y)
-        wait_for_render()
+        found = self._wait_until(
+            lambda: "long_pressed" in self.events,
+            timeout_ms=2000,
+        )
         self.assertTrue(
-            "long_pressed" in self.events,
+            found,
             "simulate_long_press did not deliver LONG_PRESSED, got: %s" % self.events,
         )
 
     def test_short_click_does_not_fire_long_pressed(self):
         x, y = self._button_center()
         simulate_click(x, y)
-        wait_for_render()
+        # On slow systems SHORT_CLICKED may take a few frames to arrive.
+        found_short = self._wait_until(
+            lambda: "short_clicked" in self.events,
+            timeout_ms=1000,
+        )
         self.assertTrue(
             "long_pressed" not in self.events,
             "short click unexpectedly delivered LONG_PRESSED, got: %s" % self.events,
         )
         self.assertTrue(
-            "short_clicked" in self.events,
+            found_short,
             "short click did not deliver SHORT_CLICKED, got: %s" % self.events,
         )
 
