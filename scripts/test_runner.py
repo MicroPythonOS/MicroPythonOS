@@ -570,7 +570,7 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None, usb_unbin
         return None
 
     if _has_list_ports:
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             pid = _pid_for_port()
             exists = os.path.exists(device_port)
@@ -604,7 +604,7 @@ def _relay_reset(relay_port, device_port, boot_timeout=60, log_f=None, usb_unbin
                 continue
             time.sleep(0.2)
         else:
-            print(f"  [Phase 1] Timeout after 30s, falling back")
+            print(f"  [Phase 1] Timeout after 45s, falling back")
         # If we timed out waiting for 4001, fall through to the generic
         # outer retry loop below which will also wait for the port.
 
@@ -833,6 +833,15 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
                     continue
                 out = "<USB CDC wedged after {} attempts: {}>\n".format(MAX_RETRIES, e).encode()
                 return False, out
+            if "not reachable after relay reset" in str(e):
+                # The relay power-cycle did not bring the CDC port back up in
+                # time. Retry the whole test (which re-runs _relay_reset).
+                _serial_log_write(log_f, "USB", "relay reset failed on {}: {}".format(os.path.basename(test_path), e).encode())
+                print("WARNING: relay reset failed ({}) — retrying...".format(e))
+                if attempt < MAX_RETRIES:
+                    continue
+                out = "<relay reset failed after {} attempts: {}>\n".format(MAX_RETRIES, e).encode()
+                return False, out
             raise
 
         out_str = out.decode("utf-8", errors="replace")
@@ -845,7 +854,27 @@ def _run_with_retry(test_path, backend, tests_dir, timeout, log_path, reset=Fals
     return False, out
 
 
+def _print_run_summary(total, completed, failed):
+    passed = completed - len(failed)
+    if completed == total and not failed:
+        print("GOOD: all {} tests passed".format(total))
+    elif completed == total:
+        print("FAILED: {}/{} tests".format(len(failed), total))
+        for f in failed:
+            print("  {}".format(f))
+    else:
+        print(
+            "SUMMARY: {}/{} tests completed, {} passed, {} failed".format(
+                completed, total, passed, len(failed)
+            )
+        )
+        for f in failed:
+            print("  {}".format(f))
+
+
 def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=False, relay_port=None, logserial=None, usb_unbind=False, usb_reset_hub=False, usb_settle=5, usb_recovery=True, cpulimit=None):
+    total = len(test_files)
+    completed = 0
     failed = []
     merged = {}
     log_f = _serial_log_open(logserial) if logserial else None
@@ -857,6 +886,7 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
                 f.replace("/", "_").lstrip("_") + ".log",
             )
             ok, out = _run_with_retry(f, backend, tests_dir, timeout, log_path, reset, coverage, relay_port, log_f, usb_unbind, usb_reset_hub, usb_settle, usb_recovery, cpulimit)
+            completed += 1
             if not ok:
                 failed.append(f)
                 print("WARNING: {} failed!".format(f))
@@ -866,13 +896,8 @@ def _run_tests(test_files, backend, tests_dir, timeout, reset=False, coverage=Fa
     finally:
         if log_f is not None:
             log_f.close()
-    if failed:
-        print("FAILED: {}/{} tests".format(len(failed), len(test_files)))
-        for f in failed:
-            print("  {}".format(f))
-        return False, merged
-    print("GOOD: all {} tests passed".format(len(test_files)))
-    return True, merged
+        _print_run_summary(total, completed, failed)
+    return len(failed) == 0, merged
 
 
 def _install_test_apps(port=None):
