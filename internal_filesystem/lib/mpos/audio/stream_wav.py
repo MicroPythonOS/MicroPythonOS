@@ -295,6 +295,14 @@ class WAVStream:
         upsample_factor = (minimal_rate + original_rate - 1) // original_rate
         return original_rate * upsample_factor, upsample_factor
 
+    @staticmethod
+    def compute_drain_ms(played_ms, elapsed_ms):
+        """How much longer queued audio needs to finish playing, given the
+        duration of the audio queued so far and the wall-clock time spent
+        queueing it."""
+        drain_ms = int(played_ms) - int(elapsed_ms)
+        return drain_ms if drain_ms > 0 else 0
+
     # ----------------------------------------------------------------------
     #  Bit depth conversion functions
     # ----------------------------------------------------------------------
@@ -700,8 +708,9 @@ class WAVStream:
 
                 if __debug__: logger.debug("Playing %s bytes (volume %s%%)", data_size, self.volume)
 
-                bytes_per_second_out = playback_rate * 2 * channels
                 self._repeat_played = 0
+                play_start_ms = time.ticks_ms()
+                played_ms = 0
 
                 # Chunk decode moved to _read_decode_chunk method.
 
@@ -754,13 +763,18 @@ class WAVStream:
                         if self._keep_running:
                             time.sleep_ms(1)
 
+                    if original_rate > 0:
+                        played_ms += self._progress_samples * 1000 // original_rate
+
                 if self._i2s and self._keep_running:
-                    try:
-                        drain_ms = int((ibuf / bytes_per_second_out) * 1000)
-                        if drain_ms > 0:
-                            time.sleep_ms(drain_ms)
-                    except Exception as e:
-                        logger.error("Drain wait failed: %s", e)
+                    # Wait for queued audio to finish playing: sleep until the
+                    # wall clock catches up with the duration that was queued.
+                    # A fixed ibuf/bytes_per_second estimate overshoots badly
+                    # at low byte rates (2 extra seconds at 8 kHz mono).
+                    elapsed_ms = time.ticks_diff(time.ticks_ms(), play_start_ms)
+                    drain_ms = WAVStream.compute_drain_ms(played_ms, elapsed_ms)
+                    if drain_ms > 0:
+                        time.sleep_ms(drain_ms)
 
                 if __debug__: logger.debug("Finished playing %s", self.file_path)
                 if self.on_complete:
