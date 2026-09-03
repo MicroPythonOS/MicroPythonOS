@@ -119,7 +119,7 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
         import asyncio
         asyncio.new_event_loop()
 
-    def test_rate_cont_visible_when_installed_and_badgehub(self):
+    def test_rate_cont_visible_when_installed(self):
         import mpos
         from app_detail import AppDetail
 
@@ -129,10 +129,7 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
         try:
             detail = AppDetail()
             detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None})()
-            detail.appstore = type("AppStore", (), {
-                "get_backend_type_from_settings": lambda self: "badgehub",
-                "_BACKEND_API_BADGEHUB": "badgehub",
-            })()
+            detail.appstore = type("AppStore", (), {})()
 
             class MockObj:
                 def __init__(self):
@@ -161,10 +158,7 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
         try:
             detail = AppDetail()
             detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None})()
-            detail.appstore = type("AppStore", (), {
-                "get_backend_type_from_settings": lambda self: "badgehub",
-                "_BACKEND_API_BADGEHUB": "badgehub",
-            })()
+            detail.appstore = type("AppStore", (), {})()
 
             class MockObj:
                 def __init__(self):
@@ -191,10 +185,7 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
         try:
             detail = AppDetail()
             detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None})()
-            detail.appstore = type("AppStore", (), {
-                "get_backend_type_from_settings": lambda self: "badgehub",
-                "_BACKEND_API_BADGEHUB": "badgehub",
-            })()
+            detail.appstore = type("AppStore", (), {})()
 
             class MockObj:
                 def __init__(self):
@@ -206,36 +197,6 @@ class TestAppDetailRateContVisibility(unittest.TestCase):
 
             detail.rate_cont = MockObj()
             detail._rated = True
-            detail._sync_rate_cont()
-            self.assertTrue(detail.rate_cont._hidden)
-        finally:
-            mpos.AppManager.is_installed_by_name = orig_installed
-
-    def test_rate_cont_hidden_when_github_backend(self):
-        import mpos
-        from app_detail import AppDetail
-
-        orig_installed = mpos.AppManager.is_installed_by_name
-        mpos.AppManager.is_installed_by_name = lambda name: True
-
-        try:
-            detail = AppDetail()
-            detail.app = type("App", (), {"fullname": "com.test.app", "rating_average": None})()
-            detail.appstore = type("AppStore", (), {
-                "get_backend_type_from_settings": lambda self: "github",
-                "_BACKEND_API_BADGEHUB": "badgehub",
-            })()
-
-            class MockObj:
-                def __init__(self):
-                    self._hidden = True
-                def add_flag(self, f):
-                    self._hidden = True
-                def remove_flag(self, f):
-                    self._hidden = False
-
-            detail.rate_cont = MockObj()
-            detail._rated = False
             detail._sync_rate_cont()
             self.assertTrue(detail.rate_cont._hidden)
         finally:
@@ -256,10 +217,7 @@ class TestBadgehubPatchesRatingOnInstalled(unittest.TestCase):
         from appstore import AppStore
 
         store = AppStore()
-        store.prefs = type("Prefs", (), {
-            "get_string": lambda self, k, d: "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0,https://badgehub.eu/api/v3/projects"
-        })()
-        store._DEFAULT_BACKEND = "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0,https://badgehub.eu/api/v3/projects"
+        store.prefs = type("Prefs", (), {"get_string": lambda self, k, d: d})()
         store._hide_wip = hide_wip
         store.please_wait_label = type("Lbl", (), {"add_flag": lambda s, f: None, "remove_flag": lambda s, f: None})()
         store._refresh_in_progress = False
@@ -270,6 +228,7 @@ class TestBadgehubPatchesRatingOnInstalled(unittest.TestCase):
         store._update_category_dropdown = lambda: None
         store._builtin_fullnames = set()
         store._wip_apps = []
+        store._has_foreground = True
         return store
 
     def test_phase2_patches_rating_on_installed_app(self):

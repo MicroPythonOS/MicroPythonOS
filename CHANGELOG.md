@@ -8,7 +8,7 @@ Board Support:
 - unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError 'invalid micropython decorator'
 
 Builtin Apps:
-- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://badgehub.eu/page/project/APP_ID, https://badgehub.eu/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
 - AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
 - AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the "Installed" view
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
@@ -17,15 +17,17 @@ Builtin Apps:
 Frameworks:
 - AppManager: apps can declare URL handlers via 'urlPattern' in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - AppManager: boot services can declare delay_s in their intent_filter; services with delay_s > 0 are imported and started asynchronously after the delay, keeping non-critical module imports out of the boot path
-- AppManager: manifest cache at /cache/system/apps.json with directory-count-based invalidation, skipping os.listdir/os.stat/json.load per app on subsequent boots when no apps were added or removed
 - AudioManager: WAVStream on ESP32 waits for the actual remaining queued audio after the last I2S write (wall-clock vs queued duration) instead of a fixed ibuf/bytes_per_second sleep, which delayed on_complete by up to 2 seconds for low-sample-rate clips (e.g. 8 kHz mono) and by ~0.4-0.7s for typical 22 kHz clips
 - Camera: after decoding a QR code in free-scan mode, show an 'Open in App Store' / 'Open link' chip when the code is an app link the OS can open
 - Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
 - DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
+- FileExplorer: pick mode with a path_pattern now lists only matching files (directories stay listed) — non-matching files could never be selected and taps on them were silently ignored, so listing them was pure clutter; browse mode still lists everything
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes by @fdb
 - FontManager: cache emoji codepoints for keyboard input by @fdb
+- AudioManager/WAVStream: desktop (afplay/ffplay/aplay/paplay and the no-player timing simulation) and web playback now honor set_repeat()/repeat_count like the ESP32 I2S path, so the MusicPlayer Repeat checkbox and other repeat users no longer silently play once on desktop builds; repeat_count is re-read each pass so set_repeat() changes apply mid-playback
 - Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
+- SharedPreferences: get_dict_item() and get_list_item_dict() now return copies like get_dict()/get_list() already did, so mutating a returned item no longer corrupts prefs.data in place — which made a following put+commit of that item look like a no-op, silently skipping the write and losing the change on the next load
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
 - TaskManager: create_task returns None when the task manager is disabled, preventing C-level crashes from asyncio.create_task on ESP32 when called from a disabled test runner context
 - View: clear the shared default focus group before the screen is deleted to prevent dangling LVGL pointer accumulation across activity transitions
@@ -43,6 +45,10 @@ OS:
 - sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
+- mpos.ui.testing: simulate_click() now pumps simulated-indev reads during the press hold, so LONG_PRESSED fires even when nothing else runs the LVGL loop during the sleep (e.g. MPOSController.long_press() exec'd via aiorepl, which blocks the scheduler)
+- mpos_controller: click_button() now clicks the innermost clickable widget containing the labelled text instead of the outermost clickable ancestor (often the screen itself), which sent clicks to the screen center for nested labels
+- test_runner/mpos_controller: self-check that unittest assertions actually raise before running a suite; when boot cached a stripped copy (mpy-cross -O3, e.g. a frozen lib imported before lib/ is on sys.path), repair it by grafting the working assert methods from the filesystem lib/unittest, and only fail the run with a clear diagnostic when no working unittest is available — previously every assertion was a silent no-op and whole suites reported vacuously green
+- mpos_controller: write paste-mode payloads in chunks, draining the echoed input between chunks — a large payload written in one call deadlocked once payload plus echo filled the PTY buffers, hanging exec() until timeout
 - tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test; wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
 - topmenu drawer test: use animate=False for all close_drawer() calls; close_drawer() now accepts an animate parameter matching the existing close_bar() API
 - test_runner: disable notification sound on macOS/darwin in the settings because it causes a hang on the headless (soundcardless?) macOS CI runners

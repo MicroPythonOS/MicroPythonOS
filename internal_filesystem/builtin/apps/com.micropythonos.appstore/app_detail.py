@@ -50,9 +50,7 @@ class AppDetail(Activity):
     def _sync_rate_cont(self):
         if self.rate_cont is None:
             return
-        backend_type = self.appstore.get_backend_type_from_settings()
-        badgehub = (backend_type == self.appstore._BACKEND_API_BADGEHUB)
-        if badgehub and AppManager.is_installed_by_name(self.app.fullname) and not self._rated:
+        if AppManager.is_installed_by_name(self.app.fullname) and not self._rated:
             self.rate_cont.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             self.rate_cont.add_flag(lv.obj.FLAG.HIDDEN)
@@ -256,12 +254,7 @@ class AppDetail(Activity):
     def onResume(self, screen):
         self._sync_open_button()
         self._sync_rate_cont()
-        backend_type = self.appstore.get_backend_type_from_settings()
-        if backend_type == self.appstore._BACKEND_API_BADGEHUB:
-            TaskManager.create_task(self.fetch_and_set_app_details())
-        else:
-            if __debug__: logger.debug("no need to fetch app details (index already complete)")
-            self._start_icon_download()
+        TaskManager.create_task(self.fetch_and_set_app_details())
 
     def _start_icon_download(self):
         if not self.app.icon_data and self.app.icon_url and not self._icon_download_started:
@@ -433,12 +426,10 @@ class AppDetail(Activity):
             self._action_in_progress = False
             self._hide_progress_bar()
             return
-        backend_type = self.appstore.get_backend_type_from_settings()
-        if backend_type == self.appstore._BACKEND_API_BADGEHUB:
-            revision = getattr(app_obj, "revision", None)
-            if revision is not None:
-                from appstore_core import report_badgehub_install
-                TaskManager.create_task(report_badgehub_install(app_obj.fullname, revision))
+        revision = getattr(app_obj, "revision", None)
+        if revision is not None:
+            from appstore_core import report_badgehub_install
+            TaskManager.create_task(report_badgehub_install(app_obj.fullname, revision))
         await self._update_progress(100, wait=False)
         self._hide_progress_bar()
         self._action_in_progress = False
@@ -461,7 +452,7 @@ class AppDetail(Activity):
 
     async def fetch_badgehub_app_details(self, app_obj):
         from appstore_core import fetch_badgehub_project_details
-        details_url = self.appstore.get_backend_details_url_from_settings() + "/" + app_obj.fullname
+        details_url = self.appstore._BADGEHUB_DETAILS_URL + "/" + app_obj.fullname
         result = await fetch_badgehub_project_details(details_url)
         if not result:
             return

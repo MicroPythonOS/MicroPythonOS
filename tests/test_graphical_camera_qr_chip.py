@@ -19,7 +19,7 @@ from mpos.content import deeplink
 from mpos.ui.camera_activity import CameraActivity
 from mpos.ui.testing import wait_for_render
 
-STORE_LINK = "https://apps.micropythonos.com/app/com.micropythonos.helloworld"
+STORE_LINK = "https://badgehub.eu/page/project/com.micropythonos.helloworld"
 
 
 class TestGraphicalCameraQRChip(unittest.TestCase):
