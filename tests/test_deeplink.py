@@ -61,6 +61,19 @@ class TestParseStoreLink(unittest.TestCase):
             self.assertIsNotNone(link, text)
             self.assertEqual(link["fullname"], "com.example.paint", text)
 
+    def test_www_host_accepted(self):
+        link = deeplink.parse_store_link("https://www.badgehub.eu/page/project/com.example.paint")
+        self.assertIsNotNone(link)
+        self.assertEqual(link["fullname"], "com.example.paint")
+
+    def test_uppercase_query_keys(self):
+        # QR alphanumeric mode uppercases the query keys as well as the path.
+        link = deeplink.parse_store_link(
+            "HTTPS://BADGEHUB.EU/PAGE/PROJECT/COM.EXAMPLE.PAINT?V=1.2&S=BADGE")
+        self.assertIsNotNone(link)
+        self.assertEqual(link["min_version"], "1.2")
+        self.assertEqual(link["source"], "BADGE")
+
     def test_surrounding_whitespace_stripped(self):
         link = deeplink.parse_store_link("  https://badgehub.eu/page/project/com.example.paint\n")
         self.assertIsNotNone(link)
@@ -132,6 +145,8 @@ class TestHandlerPatternValidation(unittest.TestCase):
     def test_reserved_store_host_rejected(self):
         self.assertIsNotNone(deeplink.validate_handler_pattern(
             "https://badgehub.eu/page/project/*"))
+        self.assertIsNotNone(deeplink.validate_handler_pattern(
+            "https://www.badgehub.eu/page/project/*"))
 
     def test_reserved_scheme_rejected(self):
         self.assertIsNotNone(deeplink.validate_handler_pattern("micropythonos://app/*"))
