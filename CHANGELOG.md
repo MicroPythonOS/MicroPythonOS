@@ -13,26 +13,30 @@ Builtin Apps:
 - AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the "Installed" view
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
 - AppStore and OSUpdate: defer boot service import and start by 120s and 90s respectively via delay_s in manifest intent_filter, moving their module imports out of the boot path
+- AppStore: guard against segfault when the activity leaves the foreground during an async download (e.g. back_screen() while the index is downloading)
 
 Frameworks:
 - AppManager: apps can declare URL handlers via 'urlPattern' in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - AppManager: boot services can declare delay_s in their intent_filter; services with delay_s > 0 are imported and started asynchronously after the delay, keeping non-critical module imports out of the boot path
-- AudioManager: WAVStream on ESP32 waits for the actual remaining queued audio after the last I2S write (wall-clock vs queued duration) instead of a fixed ibuf/bytes_per_second sleep, which delayed on_complete by up to 2 seconds for low-sample-rate clips (e.g. 8 kHz mono) and by ~0.4-0.7s for typical 22 kHz clips
-- AudioManager: WAVStream on desktop (afplay/ffplay/aplay/paplay and the no-player timing simulation) and web playback now honor set_repeat()/repeat_count like the ESP32 I2S path, so the MusicPlayer Repeat checkbox and other repeat users no longer silently play once on desktop builds; repeat_count is re-read each pass so set_repeat() changes apply mid-playback
+- AudioManager: WAVStream on ESP32 drains remaining I2S audio by wall-clock instead of a fixed sleep, fixing on_complete delays of up to 2s for low-sample-rate clips
+- AudioManager: WAVStream on desktop and web now honors set_repeat()/repeat_count (was ESP32-only), so the MusicPlayer Repeat checkbox works across all platforms
 - Camera: after decoding a QR code in free-scan mode, show an 'Open in App Store' / 'Open link' chip when the code is an app link the OS can open
 - Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
 - DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
+- fs_driver: widen callback exception handling from OSError to Exception, supporting non-seekable streams like DeflateIO
 - FileExplorer: pick mode with a path_pattern now lists only matching files (directories stay listed) — non-matching files could never be selected and taps on them were silently ignored, so listing them was pure clutter; browse mode still lists everything
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes by @fdb
 - FontManager: cache emoji codepoints for keyboard input by @fdb
 - Nostr: surface NIP-47 (NWC) error replies through the error callback instead of silently discarding them. An UNAUTHORIZED reply (e.g. a retired wallet connection) previously left apps stuck on their connecting state forever, indistinguishable from a dead relay; identical repeated errors are forwarded once, and an error reply now also resets the relay silence watchdog since the wallet service is demonstrably answering
 - Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
-- SharedPreferences: get_dict_item() and get_list_item_dict() now return copies like get_dict()/get_list() already did, so mutating a returned item no longer corrupts prefs.data in place — which made a following put+commit of that item look like a no-op, silently skipping the write and losing the change on the next load
+- SharedPreferences: get_dict_item() and get_list_item_dict() now return copies, fixing silent write loss when mutating returned items
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
 - TaskManager: create_task returns None when the task manager is disabled, preventing C-level crashes from asyncio.create_task on ESP32 when called from a disabled test runner context
 - topmenu: replace group.remove_all_objs() + rebuild with per-object lv.group_remove_obj() in _remove_focusables_from_group, avoiding DEFOCUSED event dispatch mid-cleanup and eliminating repeated linked-list node allocations that fragmented the LVGL heap
+- topmenu: close_drawer() now accepts an animate parameter, matching the existing close_bar() API
 - View: clear the shared default focus group before the screen is deleted to prevent dangling LVGL pointer accumulation across activity transitions
+- focus_direction: skip stale widgets from inactive screens during navigation
 
 OS:
 - builtin: compress the frozen /builtin filesystem archive (freezefs --compress), saving ~39 KB of firmware flash, and strip development junk (__pycache__, .DS_Store, backup files) from it during the build (#268)
@@ -46,25 +50,20 @@ OS:
 - sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
-- mpos.ui.testing: simulate_click() now pumps simulated-indev reads during the press hold, so LONG_PRESSED fires even when nothing else runs the LVGL loop during the sleep (e.g. MPOSController.long_press() exec'd via aiorepl, which blocks the scheduler)
-- mpos_controller: click_button() now clicks the innermost clickable widget containing the labelled text instead of the outermost clickable ancestor (often the screen itself), which sent clicks to the screen center for nested labels
-- test_runner/mpos_controller: self-check that unittest assertions actually raise before running a suite; when boot cached a stripped copy (mpy-cross -O3, e.g. a frozen lib imported before lib/ is on sys.path), repair it by grafting the working assert methods from the filesystem lib/unittest, and only fail the run with a clear diagnostic when no working unittest is available — previously every assertion was a silent no-op and whole suites reported vacuously green
-- mpos_controller: write paste-mode payloads in chunks, draining the echoed input between chunks — a large payload written in one call deadlocked once payload plus echo filled the PTY buffers, hanging exec() until timeout
-- tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test; wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
-- topmenu drawer test: use animate=False for all close_drawer() calls; close_drawer() now accepts an animate parameter matching the existing close_bar() API
-- test_runner: disable notification sound on macOS/darwin in the settings because it causes a hang on the headless (soundcardless?) macOS CI runners
-- test_runner: monkeypatch asyncio.run / new_event_loop / Loop.run_until_complete with wrappers that save and restore the outer asyncio.core globals (cur_task, task_queue, io_queue) so tests running inside the TaskManager's event loop via paste mode no longer segfault on nested asyncio operations
+- mpos.ui.testing: simulate_click() now pumps simulated-indev reads during the hold, so LONG_PRESSED fires even when the scheduler is blocked
+- mpos_controller: click_button() now clicks the innermost clickable widget containing the text, instead of the outermost ancestor that sent clicks to the screen center
+- test_runner/mpos_controller: self-check that unittest assertions aren't no-ops from an -O3 build; auto-repair from lib/unittest when possible, and fail loudly with a diagnostic when not — previously stripped assertions reported vacuously green
+- mpos_controller: write paste-mode payloads in chunks, draining echoed input between chunks to avoid PTY-buffer deadlock
+- test_runner: USB device unbind/rebind and automatic recovery when relay reset fails to bring the device back; also CDC PID polling (0x4001/0x1001) for ESP32-S3 USB enumeration
+- test_runner: disable notification sound on macOS/darwin in the settings because it causes a hang on headless CI runners
+- test_runner: save/restore asyncio.core globals around nested event loops, preventing segfaults when tests run inside the TaskManager's paste-mode event loop
 - test_runner: catch subprocess timeout when a device freezes mid-test so the runner can retry (with --reset) instead of crashing
-- test_download_manager: set asyncio.core.cur_task=None around synchronous download_url() calls so the sync auto-detection path is exercised even when running inside the test runner's active event loop
 - test_battery_voltage: skip ADC/caching/voltage classes on boards that override BatteryManager to read the io_expander (no battery ADC, e.g. fri3d_2026)
 - test_calibration_check_bug: use the real IMU (auto-detected) instead of hardware mocks; save/restore calibration
 - on-device: skip websocket (requires internet), nostr_local_relay (WebSocket on localhost unreliable), and scan_bluetooth simulation-mode detection (BLE-dependent)
 - on-device: relax timing thresholds for infinite_list (scroll drags, render waits, set_data) and navigation_leaks (32→2048 bytes/round) on ESP32 where the slower CPU exceeds desktop expectations
 - on-device: increase timeouts for about_app (10→15s), launcher_splash dialog (8→15s), and fs_driver image loading (5→15s with upfront render wait) to account for device latency
 - howto_app: clear auto_start_app_early SharedPreferences in setUp so the "Don't show again" checkbox reliably starts unchecked
-- focus_direction: skip stale objects on inactive screens during find_closest_obj_in_direction navigation, preventing widgets from a previous screen (still in the default focus group) from becoming navigation targets
-- focus_layer_top test: clear the default focus group in setUp to prevent inactive-screen widgets from the test harness from polluting directional navigation
-- test_runner: remove aggressive remove_all_objs() from GraphicalTestCase.setUp runtime patch (keeps only the TaskManager.create_task disabled guard)
 
 0.17.3
 ======
