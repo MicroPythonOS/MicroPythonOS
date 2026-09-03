@@ -51,6 +51,15 @@ def rgb565_to_rgb888(v):
 class TestCameraPreviewScaledBlit(unittest.TestCase):
 
     def setUp(self):
+        # Own a bare screen: the active screen left behind by earlier
+        # graphical tests (or the live launcher) may carry a layout that
+        # repositions children, which would move the image away from the
+        # coordinates sampled below.
+        self.prev_screen = lv.screen_active()
+        self.screen = lv.obj()
+        self.screen.set_style_pad_all(0, 0)
+        self.screen.set_style_border_width(0, 0)
+        lv.screen_load(self.screen)
         self.saved_cameras = CameraManager._cameras
         CameraManager._cameras = [
             CameraManager.Camera(
@@ -66,10 +75,12 @@ class TestCameraPreviewScaledBlit(unittest.TestCase):
         if getattr(self, 'activity', None) and self.activity.image:
             self.activity.image_dsc.data = None
             self.activity.image.delete()
+        lv.screen_load(self.prev_screen)
+        self.screen.delete()
 
     def _show_preview(self):
         self.activity = CameraActivity()
-        self.activity.image = lv.image(lv.screen_active())
+        self.activity.image = lv.image(self.screen)
         self.activity.image.set_pos(0, 0)
         self.activity.width = SRC_W
         self.activity.height = SRC_H
@@ -89,10 +100,12 @@ class TestCameraPreviewScaledBlit(unittest.TestCase):
 
     def _assert_bars(self, shot, rendered_w, msg):
         bar_w = rendered_w // len(BAR_COLORS)
+        img = self.activity.image
+        x0, y0 = img.get_x(), img.get_y()
         errors = []
         for i, expected565 in enumerate(BAR_COLORS):
-            x = i * bar_w + bar_w // 2
-            got = self._sample(shot, x, 100)
+            x = x0 + i * bar_w + bar_w // 2
+            got = self._sample(shot, x, y0 + 100)
             want = rgb565_to_rgb888(expected565)
             if any(abs(g - w) > 40 for g, w in zip(got, want)):
                 errors.append("bar %d at x=%d: want RGB%s got RGB%s" % (i, x, want, got))
@@ -111,6 +124,10 @@ class TestCameraPreviewScaledBlit(unittest.TestCase):
     def test_unscaled_preview_colors(self):
         self._show_preview()
         self.activity.image.set_scale(256)  # force 1:1 control
+        # Shrink the widget to its content: update_preview_image sized it for
+        # the scaled preview, and a scaled image is placed about its pivot, so
+        # unscaled content would sit centered (offset) inside the larger box.
+        self.activity.image.set_size(SRC_W, SRC_H)
         wait_for_render()
         shot = self._screenshot()
         self._assert_bars(shot, SRC_W, "1:1 blit (scale=256)")
