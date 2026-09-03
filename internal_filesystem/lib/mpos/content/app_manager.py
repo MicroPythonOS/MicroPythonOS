@@ -62,8 +62,6 @@ class AppManager:
     # Map from handler class back to its owning app fullname (populated lazily).
     _handler_app_fullname = {}
 
-    CACHE_PATH = "cache/system/apps.json"
-
     @classmethod
     def register_activity(cls, action, activity_cls):
         """Called by each activity module to register itself."""
@@ -410,132 +408,8 @@ class AppManager:
                 cls._service_specs[svc_action].append(spec)
 
     @classmethod
-    def _load_cache(cls):
-        import ujson
-        try:
-            with open(cls.CACHE_PATH, "r") as f:
-                cache = ujson.load(f)
-        except Exception:
-            return False
-
-        source_counts = cache.get("source_counts", {})
-        for source_dir in ("apps", "builtin/apps", "/builtin/apps"):
-            expected_count = source_counts.get(source_dir, 0)
-            try:
-                actual_count = len(os.listdir(source_dir))
-            except Exception:
-                if expected_count != 0:
-                    return False
-                continue
-            if actual_count != expected_count:
-                return False
-
-        try:
-            from ..app.app import App
-            cls._app_list = []
-            cls._by_fullname = {}
-            cls._file_handler_specs = {}
-            cls._url_handler_specs = []
-            cls._service_specs = {}
-
-            for app_data in cache.get("apps", []):
-                source = app_data["source"]
-                fullname = app_data["fullname"]
-                app = App(
-                    name=app_data.get("name", "Unknown"),
-                    publisher=app_data.get("publisher", "Unknown"),
-                    short_description=app_data.get("short_description", ""),
-                    long_description=app_data.get("long_description", ""),
-                    icon_url=app_data.get("icon_url", ""),
-                    download_url=app_data.get("download_url", ""),
-                    fullname=fullname,
-                    version=app_data.get("version", "0.0.0"),
-                    category=app_data.get("categories", ""),
-                    activities=app_data.get("activities", []),
-                    services=app_data.get("services", []),
-                    installed_path=f"{source}/{fullname}",
-                    icon_path=f"{source}/{fullname}/icon_64x64.png",
-                    blur_hash=app_data.get("blur_hash"),
-                    rating_average=app_data.get("rating_average"),
-                    rating_count=app_data.get("rating_count", 0),
-                )
-                cls._app_list.append(app)
-                cls._by_fullname[fullname] = app
-                cls._register_app_handlers_and_services(app)
-        except Exception as e:
-            logger.error("failed to reconstruct apps from cache: %s", e)
-            cls._app_list = []
-            cls._by_fullname = {}
-            cls._file_handler_specs = {}
-            cls._url_handler_specs = []
-            cls._service_specs = {}
-            return False
-
-        if __debug__: logger.debug("loaded %d apps from cache", len(cls._app_list))
-        return True
-
-    @classmethod
-    def _save_cache(cls):
-        cache_dir = "cache/system"
-        try:
-            os.mkdir("cache")
-        except OSError:
-            pass
-        try:
-            os.mkdir(cache_dir)
-        except OSError:
-            pass
-
-        source_counts = {}
-        for app in cls._app_list:
-            installed_path = app.installed_path or ""
-            parts = installed_path.rsplit("/", 1)
-            source = parts[0] if len(parts) > 1 else "apps"
-            source_counts[source] = source_counts.get(source, 0) + 1
-
-        apps_data = []
-        for app in cls._app_list:
-            installed_path = app.installed_path or ""
-            parts = installed_path.rsplit("/", 1)
-            source = parts[0] if len(parts) > 1 else "apps"
-            apps_data.append({
-                "name": app.name,
-                "publisher": app.publisher,
-                "short_description": app.short_description,
-                "long_description": app.long_description,
-                "icon_url": app.icon_url,
-                "download_url": app.download_url,
-                "fullname": app.fullname,
-                "version": app.version,
-                "categories": app.categories,
-                "activities": app.activities,
-                "services": app.services,
-                "source": source,
-                "blur_hash": app.blur_hash,
-                "rating_average": app.rating_average,
-                "rating_count": app.rating_count,
-            })
-
-        cache = {
-            "source_counts": source_counts,
-            "apps": apps_data,
-        }
-
-        import ujson
-        try:
-            with open(cls.CACHE_PATH, "w") as f:
-                ujson.dump(cache, f)
-            if __debug__: logger.debug("saved %d apps to cache", len(cls._app_list))
-        except Exception as e:
-            logger.warning("failed to save app cache: %s", e)
-
-    @classmethod
     def refresh_apps(cls):
         if __debug__: logger.debug("Finding apps...")
-
-        if cls._load_cache():
-            cls._app_list.sort(key=lambda a: a.name.lower())
-            return
 
         cls.clear()
         seen = set()
@@ -584,7 +458,6 @@ class AppManager:
                 logger.error("handling %s got exception: %s", base, e)
 
         cls._app_list.sort(key=lambda a: a.name.lower())
-        cls._save_cache()
 
     @staticmethod
     async def download_and_install_package(download_url, fullname, download_url_size=None, progress_callback=None):

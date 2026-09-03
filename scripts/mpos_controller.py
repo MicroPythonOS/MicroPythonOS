@@ -94,6 +94,61 @@ def _count_usb_serial_devices():
     )
 
 
+# Self-check pasted into every test run right after `import unittest`.
+# unittest's assert methods are plain `assert` statements, which
+# mpy-cross -O3 strips. When unittest resolves to such a build (e.g. a
+# frozen copy already imported at boot, before lib/ is prepended to
+# sys.path), every assertion is a silent no-op and the whole suite
+# reports vacuously green.
+#
+# When that happens, try to self-heal: import the filesystem
+# lib/unittest (sys.path has lib/ first here) and graft its working
+# assert methods onto the cached module's TestCase, so classes that
+# already subclassed it (e.g. GraphicalTestCase) are repaired too.
+# Only when no working unittest is available does the run abort loudly
+# instead of "passing".
+_ASSERT_SELF_CHECK_CODE = (
+    "def _mpos_asserts_ok(_ut):\n"
+    "    try:\n"
+    "        _ut.TestCase().assertTrue(False)\n"
+    "        return False\n"
+    "    except AssertionError:\n"
+    "        return True\n"
+    "_mpos_asserts_work = _mpos_asserts_ok(unittest)\n"
+    "if not _mpos_asserts_work:\n"
+    "    _mpos_stripped_ut = sys.modules.pop('unittest', None)\n"
+    "    try:\n"
+    "        import unittest as _mpos_fresh_ut\n"
+    "    except ImportError:\n"
+    "        _mpos_fresh_ut = None\n"
+    "    if _mpos_stripped_ut is not None:\n"
+    "        sys.modules['unittest'] = _mpos_stripped_ut\n"
+    "    if (_mpos_fresh_ut is not None\n"
+    "            and _mpos_fresh_ut is not _mpos_stripped_ut\n"
+    "            and _mpos_asserts_ok(_mpos_fresh_ut)):\n"
+    "        for _mpos_name in dir(_mpos_fresh_ut.TestCase):\n"
+    "            if _mpos_name.startswith('assert'):\n"
+    "                setattr(_mpos_stripped_ut.TestCase, _mpos_name,\n"
+    "                        getattr(_mpos_fresh_ut.TestCase, _mpos_name))\n"
+    "        _mpos_asserts_work = _mpos_asserts_ok(unittest)\n"
+    "        if _mpos_asserts_work:\n"
+    "            print('MPOS_TEST_RUNNER: repaired stripped unittest assert "
+    "methods using lib/unittest')\n"
+    "if not _mpos_asserts_work:\n"
+    "    print("
+    "'MPOS_TEST_RUNNER FATAL: unittest assertions are no-ops: unittest "
+    "was imported from a build with assert statements stripped "
+    "(mpy-cross -O3, e.g. the frozen lib of a prod firmware), no working "
+    "lib/unittest was available to repair it, and test results would be "
+    "vacuously green. Use a dev build, or ensure a non-optimized "
+    "lib/unittest is on sys.path.')\n"
+)
+
+
+def _indent(code, prefix):
+    return "".join(prefix + line + "\n" for line in code.splitlines())
+
+
 def _build_test_code(test_path, tests_dir=None):
     with open(test_path) as f:
         test_content = f.read()
@@ -103,23 +158,10 @@ def _build_test_code(test_path, tests_dir=None):
         code += "sys.path.append(%r)\n" % tests_dir
     code += "try:\n"
     code += "    import mpos; mpos.TaskManager.disable()\n"
-    code += "    import asyncio as _tc_asyncio\n"
-    code += "    def _tc_patched(cls, coroutine):\n"
-    code += "        if cls.disabled:\n"
-    code += "            return None\n"
-    code += "        async def _tc_cleanup():\n"
-    code += "            try:\n"
-    code += "                return await coroutine\n"
-    code += "            finally:\n"
-    code += "                if task in cls.task_list:\n"
-    code += "                    cls.task_list.remove(task)\n"
-    code += "        task = _tc_asyncio.create_task(_tc_cleanup())\n"
-    code += "        cls.task_list.append(task)\n"
-    code += "        return task\n"
-    code += "    mpos.TaskManager.create_task = classmethod(_tc_patched)\n"
     code += "except Exception:\n"
     code += "    pass\n"
     code += "import unittest\n"
+    code += _ASSERT_SELF_CHECK_CODE
     code += """\
 for _k in list(globals().keys()):
     _v = globals()[_k]
@@ -149,9 +191,12 @@ for _k in dir():
                 suite.addTest(_v)
         except Exception:
             pass
-result = unittest.TextTestRunner().run(suite)
 """
-    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+    code += "if not _mpos_asserts_work:\n"
+    code += "    print('TEST WAS A FAILURE')\n"
+    code += "else:\n"
+    code += "    result = unittest.TextTestRunner().run(suite)\n"
+    code += ("    print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     return code
 
@@ -213,11 +258,15 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
         code += "mpos.coverage.start()\n"
         code += "_cov_stop = mpos.coverage.stop\n"
     code += "try:\n"
-    code += "    sys.modules.pop('_runner_test', None)\n"
-    code += "    import _runner_test as _test_mod\n"
     code += "    import unittest\n"
-    code += "    result = unittest.main(module=_test_mod)\n"
-    code += ("    print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+    code += _indent(_ASSERT_SELF_CHECK_CODE, "    ")
+    code += "    if not _mpos_asserts_work:\n"
+    code += "        print('TEST WAS A FAILURE')\n"
+    code += "    else:\n"
+    code += "        sys.modules.pop('_runner_test', None)\n"
+    code += "        import _runner_test as _test_mod\n"
+    code += "        result = unittest.main(module=_test_mod)\n"
+    code += ("        print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     if coverage:
         code += ("    _cov_rpt = {}\n"
@@ -379,6 +428,16 @@ class AIOREPLClient:
         r, _, _ = select.select([self.stream], [], [], timeout)
         return bool(r)
 
+    def _write_pasted(self, payload, chunk_size=256):
+        """Write a paste-mode payload in chunks, draining the echo between
+        chunks. aiorepl echoes every pasted byte back; writing a large
+        payload in one call can deadlock once the payload plus its echo
+        fill the PTY buffers, because nothing reads the echo until the
+        write completes."""
+        for i in range(0, len(payload), chunk_size):
+            self.stream.write(payload[i:i + chunk_size])
+            self._drain(0.02)
+
     def _drain(self, timeout=0.5):
         data = b""
         t0 = time.monotonic()
@@ -486,7 +545,7 @@ class AIOREPLClient:
         payload = ("print('{}')\n".format(SENTINEL)
                    + code.rstrip()
                    + "\nprint('{}')".format(END_MARKER))
-        self.stream.write(payload.encode("utf-8"))
+        self._write_pasted(payload.encode("utf-8"))
         self.stream.write(b"\x04")
 
         # aiorepl echoes all paste-mode input, so ``>>>`` in source
@@ -527,7 +586,7 @@ class AIOREPLClient:
         payload = ("print('{}')\n".format(SENTINEL)
                     + code.rstrip()
                     + "\nprint('{}')".format(END_MARKER))
-        self.stream.write(payload.encode("utf-8"))
+        self._write_pasted(payload.encode("utf-8"))
         self.stream.write(b"\x04")
 
         endings = (END_MARKER.encode() + b"\n", END_MARKER.encode() + b"\r\n")
@@ -1463,12 +1522,16 @@ for s in t:
         return self._width, self._height
 
     def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
-        import subprocess, re
-        import threading
-        code = _build_test_code(test_path, tests_dir)
+        import subprocess, re, tempfile
+        if self.repl is None:
+            self.start()
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
-        fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", code))
-        for helper in re.findall(r"^from (\w+) import", code, re.M):
+        with open(test_path) as f:
+            test_content = f.read()
+
+        # Collect and stage fixtures the test refers to via ../tests/<asset>.
+        fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", test_content))
+        for helper in re.findall(r"^from (\w+) import", test_content, re.M):
             helper_path = os.path.join(host_test_dir, helper + ".py")
             if os.path.exists(helper_path):
                 fixture_names.add(helper + ".py")
@@ -1489,41 +1552,47 @@ for s in t:
                                   host_fixture, ":tests/{}".format(name)),
                     capture_output=True, timeout=60,
                 )
-            code = code.replace("../tests/", "tests/")
-        # Base64-encode the code so multibyte UTF-8 (e.g. emoji in string
-        # literals) survives the trip through mpremote's byte-at-a-time
-        # raw REPL transport. The device decodes back to exact bytes before
-        # compiling, so non-ASCII source arrives intact.
-        import base64
-        b64 = base64.b64encode(code.encode("utf-8")).decode("ascii")
-        code = ("import ubinascii\n"
-                "exec(ubinascii.a2b_base64({!r}))".format(b64))
-        cmd = _mpremote_cmd(self.port, "exec", code)
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out_parts = []
+            # Device fixtures live under /tests, not ../tests — rewrite the
+            # path so M:../tests/x.ttf resolves to the staged /tests/x.ttf.
+            test_content = test_content.replace("../tests/", "tests/")
 
-        def _read_stream(stream, parts):
-            for raw_line in iter(stream.readline, b""):
-                parts.append(raw_line)
-                if line_callback is not None:
-                    line_callback(raw_line)
-
-        t = threading.Thread(target=_read_stream, args=(proc.stdout, out_parts))
-        t.daemon = True
-        t.start()
-
+        # Stage the test on the device as _runner_test.py, then run only a
+        # *short* paste-mode import snippet. Inlining the whole test body
+        # into a single paste-mode payload (the old base64 approach) spikes
+        # the heap and, over the echoed 256-byte serial writes, deadlocks
+        # the link with "Write timeout" on large tests. mpremote's `cp` has
+        # real flow control, so large bodies ride that instead.
+        fd, tmpname = tempfile.mkstemp(suffix=".py")
         try:
-            proc.wait(timeout=timeout + 60)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            t.join(timeout=5)
-            return False, "<test timed out after {}s>\n".format(timeout).encode()
+            os.write(fd, test_content.encode("utf-8"))
+            os.close(fd)
+            subprocess.run(
+                _mpremote_cmd(self.port, "cp", tmpname, ":_runner_test.py"),
+                capture_output=True, timeout=120,
+            )
+        finally:
+            try:
+                os.remove(tmpname)
+            except OSError:
+                pass
 
-        t.join(timeout=5)
-        out = b"".join(out_parts)
-        out_str = out.decode("utf-8", errors="replace")
-        passed = "TEST WAS A SUCCESS" in out_str
-        return passed, out
+        code = _build_import_runner_code(tests_dir, coverage=coverage)
+        last_err = None
+        for attempt in range(3):
+            try:
+                if line_callback is not None:
+                    out = self.repl.exec_streaming(
+                        code, timeout=timeout, line_callback=line_callback
+                    )
+                else:
+                    out = self.exec_multiline(code, timeout=timeout)
+                out_str = out.decode("utf-8", errors="replace")
+                passed = "TEST WAS A SUCCESS" in out_str
+                return passed, out
+            except Exception as e:
+                last_err = e
+                time.sleep(2)
+        return False, ("<serial exec failed after 3 attempts: {}>\n".format(last_err)).encode()
 
 
 # ── MPOSController ──────────────────────────────────────────────────

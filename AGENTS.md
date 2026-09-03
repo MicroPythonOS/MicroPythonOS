@@ -26,6 +26,21 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py` (not run by test_runner.py).  
 **Details:** `tests/README.md`
 
+**Options:**  
+`--ondevice` — run on connected device (serial). `--no-install-test-apps` skips test-app install.  
+`--port <port>` — serial port (overrides `MPOS_TEST_PORT` env).  
+`--relayport <port>` — USB power relay port; with `--reset`, power-cycles device instead of `machine.reset()`.  
+`--reset` — hard-reset device before each test.  
+`--resume` — resume suite from first provided test file (alphabetical order).  
+`--cpulimit <pct>` — throttle desktop MicroPython to simulate slow CI (requires `cpulimit` installed).  
+`--logserial <file>` — log all serial traffic to file; watch with `tail -f`.  
+`--coverage` — line coverage (desktop only, requires mpcov build). `--coverage-save`/`--coverage-load` for merged runs.  
+`--usb-unbind` — cleanly unbind/rebind USB between resets to reduce xhci wedging.  
+`--usb-reset-hub` — reset xhci host controller after relay power-on.  
+`--usb-settle <s>` — USB settle time after unbind/bind (default: 5).  
+`--no-usb-recovery` — disable automatic USB recovery on I/O error.  
+`--timeout <s>` — per-test timeout. `--tests-dir <dir>` — add dir to `sys.path` for test helpers.
+
 ### Deploying lib/ changes to device
 
 Frozen modules in the firmware shadow filesystem `.py` files even though `sys.path = ['lib', '', '.frozen']`. To test a modified framework file at `internal_filesystem/lib/mpos/ui/*.py` on device:

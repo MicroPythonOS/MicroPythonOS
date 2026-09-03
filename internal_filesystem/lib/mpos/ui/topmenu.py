@@ -39,6 +39,7 @@ notification_bar = None
 notification_icon_label = None   # bell indicator in the top bar (label only – no image in the bar)
 drawer_notifications_title = None
 drawer_notifications_container = None
+drawer = None
 
 _notifications_listener_registered = False
 
@@ -306,6 +307,10 @@ def close_bar(animate=True):
 
 def create_notification_bar():
     global notification_bar, notification_icon_label, _bar_panel
+    # The bar is a singleton; recreating it would leak timers that reference
+    # the old labels and eventually crash when they fire.
+    if notification_bar is not None:
+        return
     # Create notification bar
     notification_bar = lv.obj(lv.layer_top())
     notification_bar.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
@@ -415,6 +420,10 @@ def create_notification_bar():
 
 def create_drawer():
     global drawer, drawer_notifications_title, drawer_notifications_container, _drawer_panel
+    # The drawer is a singleton; recreating it would leak duplicate widgets,
+    # focusables and event callbacks onto layer_top.
+    if drawer is not None:
+        return
     drawer = lv.obj(lv.layer_top())
     drawer_height = DisplayMetrics.pct_of_height(90)
     shown_y = AppearanceManager.NOTIFICATION_BAR_HEIGHT

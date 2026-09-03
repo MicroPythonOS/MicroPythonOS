@@ -8,28 +8,33 @@ class TestParseStoreLink(unittest.TestCase):
     """Parser tests for official app-store deep links."""
 
     def test_canonical_https_link(self):
-        link = deeplink.parse_store_link("https://apps.micropythonos.com/app/com.example.paint")
+        link = deeplink.parse_store_link("https://badgehub.eu/page/project/com.example.paint")
         self.assertIsNotNone(link)
         self.assertEqual(link["fullname"], "com.example.paint")
         self.assertIsNone(link["min_version"])
         self.assertIsNone(link["source"])
 
+    def test_shorthand_https_link(self):
+        link = deeplink.parse_store_link("https://badgehub.eu/com.example.paint")
+        self.assertIsNotNone(link)
+        self.assertEqual(link["fullname"], "com.example.paint")
+
     def test_query_params(self):
         link = deeplink.parse_store_link(
-            "https://apps.micropythonos.com/app/com.example.paint?v=1.2.3&s=badge")
+            "https://badgehub.eu/page/project/com.example.paint?v=1.2.3&s=badge")
         self.assertEqual(link["fullname"], "com.example.paint")
         self.assertEqual(link["min_version"], "1.2.3")
         self.assertEqual(link["source"], "badge")
 
     def test_unknown_params_ignored(self):
         link = deeplink.parse_store_link(
-            "https://apps.micropythonos.com/app/com.example.paint?x=1&v=2")
+            "https://badgehub.eu/page/project/com.example.paint?x=1&v=2")
         self.assertEqual(link["fullname"], "com.example.paint")
         self.assertEqual(link["min_version"], "2")
 
     def test_invalid_version_param_dropped(self):
         link = deeplink.parse_store_link(
-            "https://apps.micropythonos.com/app/com.example.paint?v=1.2evil")
+            "https://badgehub.eu/page/project/com.example.paint?v=1.2evil")
         self.assertIsNotNone(link)
         self.assertIsNone(link["min_version"])
 
@@ -41,7 +46,7 @@ class TestParseStoreLink(unittest.TestCase):
 
     def test_uppercase_qr_alphanumeric_mode(self):
         # QR codes in alphanumeric mode encode everything uppercase.
-        link = deeplink.parse_store_link("HTTPS://APPS.MICROPYTHONOS.COM/APP/COM.EXAMPLE.PAINT")
+        link = deeplink.parse_store_link("HTTPS://BADGEHUB.EU/PAGE/PROJECT/COM.EXAMPLE.PAINT")
         self.assertIsNotNone(link)
         self.assertEqual(link["fullname"], "com.example.paint")
 
@@ -51,59 +56,59 @@ class TestParseStoreLink(unittest.TestCase):
         for text in ("MicroPythonOS://app/com.example.paint",
                      "MPOS://APP/COM.EXAMPLE.PAINT",
                      "Mpos://App/Com.Example.Paint",
-                     "Https://Apps.MicroPythonOS.com/App/com.example.paint"):
+                     "Https://badgehub.eu/page/project/com.example.paint"):
             link = deeplink.parse_store_link(text)
             self.assertIsNotNone(link, text)
             self.assertEqual(link["fullname"], "com.example.paint", text)
 
     def test_surrounding_whitespace_stripped(self):
-        link = deeplink.parse_store_link("  https://apps.micropythonos.com/app/com.example.paint\n")
+        link = deeplink.parse_store_link("  https://badgehub.eu/page/project/com.example.paint\n")
         self.assertIsNotNone(link)
 
     def test_fragment_discarded(self):
-        link = deeplink.parse_store_link("https://apps.micropythonos.com/app/com.example.paint#frag")
+        link = deeplink.parse_store_link("https://badgehub.eu/page/project/com.example.paint#frag")
         self.assertIsNotNone(link)
         self.assertEqual(link["fullname"], "com.example.paint")
 
     def test_rejects_http(self):
-        self.assertIsNone(deeplink.parse_store_link("http://apps.micropythonos.com/app/com.example.paint"))
+        self.assertIsNone(deeplink.parse_store_link("http://badgehub.eu/page/project/com.example.paint"))
 
     def test_rejects_lookalike_host_suffix(self):
         self.assertIsNone(deeplink.parse_store_link(
-            "https://apps.micropythonos.com.evil.example/app/com.example.paint"))
+            "https://badgehub.eu.evil.example/app/com.example.paint"))
 
     def test_rejects_lookalike_host_prefix(self):
         self.assertIsNone(deeplink.parse_store_link(
-            "https://evilapps.micropythonos.com.example/app/com.example.paint"))
+            "https://evilbadgehub.eu.example/app/com.example.paint"))
 
     def test_rejects_userinfo_trick(self):
         self.assertIsNone(deeplink.parse_store_link(
-            "https://apps.micropythonos.com@evil.example/app/com.example.paint"))
+            "https://badgehub.eu@evil.example/app/com.example.paint"))
 
     def test_rejects_port(self):
         self.assertIsNone(deeplink.parse_store_link(
-            "https://apps.micropythonos.com:8443/app/com.example.paint"))
+            "https://badgehub.eu:8443/app/com.example.paint"))
 
     def test_rejects_wrong_path_prefix(self):
-        self.assertIsNone(deeplink.parse_store_link("https://apps.micropythonos.com/repo/x"))
-        self.assertIsNone(deeplink.parse_store_link("https://apps.micropythonos.com/"))
+        self.assertIsNone(deeplink.parse_store_link("https://badgehub.eu/repo/x"))
+        self.assertIsNone(deeplink.parse_store_link("https://badgehub.eu/"))
 
     def test_rejects_subpath_and_traversal(self):
         self.assertIsNone(deeplink.parse_store_link(
-            "https://apps.micropythonos.com/app/com.example.paint/extra"))
+            "https://badgehub.eu/page/project/com.example.paint/extra"))
         self.assertIsNone(deeplink.parse_store_link(
-            "https://apps.micropythonos.com/app/../etc"))
+            "https://badgehub.eu/page/project/../etc"))
 
     def test_rejects_empty_or_bad_charset_id(self):
-        self.assertIsNone(deeplink.parse_store_link("https://apps.micropythonos.com/app/"))
-        self.assertIsNone(deeplink.parse_store_link("https://apps.micropythonos.com/app/bad%20id"))
-        self.assertIsNone(deeplink.parse_store_link("https://apps.micropythonos.com/app/spa ce"))
+        self.assertIsNone(deeplink.parse_store_link("https://badgehub.eu/page/project/"))
+        self.assertIsNone(deeplink.parse_store_link("https://badgehub.eu/page/project/bad%20id"))
+        self.assertIsNone(deeplink.parse_store_link("https://badgehub.eu/page/project/spa ce"))
 
     def test_rejects_overlong_input(self):
         self.assertIsNone(deeplink.parse_store_link(
-            "https://apps.micropythonos.com/app/" + "a" * 600))
+            "https://badgehub.eu/page/project/" + "a" * 600))
         self.assertIsNone(deeplink.parse_store_link(
-            "https://apps.micropythonos.com/app/" + "a" * 65))
+            "https://badgehub.eu/page/project/" + "a" * 65))
 
     def test_rejects_garbage(self):
         for garbage in (None, 42, "", "hello", "WIFI:T:WPA;S:x;P:y;;",
@@ -126,7 +131,7 @@ class TestHandlerPatternValidation(unittest.TestCase):
 
     def test_reserved_store_host_rejected(self):
         self.assertIsNotNone(deeplink.validate_handler_pattern(
-            "https://apps.micropythonos.com/app/*"))
+            "https://badgehub.eu/page/project/*"))
 
     def test_reserved_scheme_rejected(self):
         self.assertIsNotNone(deeplink.validate_handler_pattern("micropythonos://app/*"))
@@ -189,7 +194,7 @@ class TestUrlHandlerRegistry(unittest.TestCase):
         self.assertEqual(handlers[0].app_fullname, "com.acme.store")
 
     def test_reserved_pattern_rejected_at_registration(self):
-        self.assertFalse(self._register("com.evil.app", "https://apps.micropythonos.com/app/*", _FakeHandlerA))
+        self.assertFalse(self._register("com.evil.app", "https://badgehub.eu/page/project/*", _FakeHandlerA))
         self.assertFalse(self._register("com.evil.app", "micropythonos://app/*", _FakeHandlerA))
         self.assertFalse(self._register("com.evil.app", "mpos://app/*", _FakeHandlerA))
         self.assertEqual(AppManager._url_handler_specs, [])
@@ -221,7 +226,7 @@ class TestOpenActionLabel(unittest.TestCase):
 
     def test_store_link(self):
         self.assertEqual(
-            deeplink.open_action_label("https://apps.micropythonos.com/app/com.example.paint"),
+            deeplink.open_action_label("https://badgehub.eu/page/project/com.example.paint"),
             "Open in App Store")
 
     def test_registered_handler(self):
@@ -256,7 +261,7 @@ class TestOpenUrl(unittest.TestCase):
         AppManager._url_handler_specs = self._saved_specs
 
     def test_store_link_starts_appstore_with_extras(self):
-        handled = deeplink.open_url("https://apps.micropythonos.com/app/com.example.paint?v=2.0")
+        handled = deeplink.open_url("https://badgehub.eu/page/project/com.example.paint?v=2.0")
         self.assertTrue(handled)
         self.assertEqual(len(self.started), 1)
         fullname, intent = self.started[0]

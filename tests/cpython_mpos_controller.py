@@ -77,6 +77,7 @@ def run_tests(mpos, only=None, is_serial=False, cli_binary=None, serial_port=Non
         "helpers": test_controller_helpers,
         "readuntil": test_read_until,
         "mpremoteport": test_mpremote_port,
+        "assertguard": test_assert_guard,
     }
     if only:
         names = [s.strip() for s in only.split(",")]
@@ -196,6 +197,35 @@ def test_mpremote_port(mpos, is_serial=False, cli_binary=None, serial_port=None)
         )
     finally:
         builtins.__import__ = real_import
+
+
+def test_assert_guard(mpos, is_serial=False, cli_binary=None, serial_port=None):
+    section("unittest assertion self-check (run_test_file)")
+
+    # A failing assertion must never produce a passing run. On builds where
+    # unittest resolves to a lib compiled with mpy-cross -O3 (assert
+    # statements stripped, e.g. the frozen lib of a prod firmware), the
+    # runner's self-check must abort the run instead of reporting vacuous
+    # success; on dev builds the assertion itself fails the run.
+    os.makedirs("tmp", exist_ok=True)
+    failing_test = os.path.join("tmp", "_assert_guard_test.py")
+    with open(failing_test, "w") as f:
+        f.write(
+            "import unittest\n"
+            "\n"
+            "\n"
+            "class TestMustFail(unittest.TestCase):\n"
+            "    def test_failing_assert(self):\n"
+            "        self.assertTrue(False)\n"
+        )
+    try:
+        passed, out = mpos.run_test_file(failing_test)
+        check(
+            passed is False,
+            "run with a failing assertion is not reported as a success",
+        )
+    finally:
+        os.remove(failing_test)
 
 
 def test_basic(mpos, is_serial=False, cli_binary=None, serial_port=None):

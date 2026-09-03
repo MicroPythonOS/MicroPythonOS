@@ -6,7 +6,7 @@ Board Support:
 - unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError 'invalid micropython decorator'
 
 Builtin Apps:
-- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://apps.micropythonos.com/app/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://badgehub.eu/page/project/APP_ID, https://badgehub.eu/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
 - AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
 - AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the "Installed" view
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
@@ -15,7 +15,6 @@ Builtin Apps:
 Frameworks:
 - AppManager: apps can declare URL handlers via 'urlPattern' in manifest intent_filters; patterns matching the official store host, mpos:// or micropythonos:// are reserved and rejected; multiple matching handlers open the chooser
 - AppManager: boot services can declare delay_s in their intent_filter; services with delay_s > 0 are imported and started asynchronously after the delay, keeping non-critical module imports out of the boot path
-- AppManager: manifest cache at /cache/system/apps.json with directory-count-based invalidation, skipping os.listdir/os.stat/json.load per app on subsequent boots when no apps were added or removed
 - Camera: after decoding a QR code in free-scan mode, show an 'Open in App Store' / 'Open link' chip when the code is an app link the OS can open
 - Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
 - DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'
@@ -42,6 +41,8 @@ OS:
 Testing:
 - mpos.ui.testing: simulate_click() now pumps simulated-indev reads during the press hold, so LONG_PRESSED fires even when nothing else runs the LVGL loop during the sleep (e.g. MPOSController.long_press() exec'd via aiorepl, which blocks the scheduler)
 - mpos_controller: click_button() now clicks the innermost clickable widget containing the labelled text instead of the outermost clickable ancestor (often the screen itself), which sent clicks to the screen center for nested labels
+- test_runner/mpos_controller: self-check that unittest assertions actually raise before running a suite; when boot cached a stripped copy (mpy-cross -O3, e.g. a frozen lib imported before lib/ is on sys.path), repair it by grafting the working assert methods from the filesystem lib/unittest, and only fail the run with a clear diagnostic when no working unittest is available — previously every assertion was a silent no-op and whole suites reported vacuously green
+- mpos_controller: write paste-mode payloads in chunks, draining the echoed input between chunks — a large payload written in one call deadlocked once payload plus echo filled the PTY buffers, hanging exec() until timeout
 - tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test; wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles
 - topmenu drawer test: use animate=False for all close_drawer() calls; close_drawer() now accepts an animate parameter matching the existing close_bar() API
 - test_runner: disable notification sound on macOS/darwin in the settings because it causes a hang on the headless (soundcardless?) macOS CI runners
