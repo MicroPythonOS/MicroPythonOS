@@ -5,7 +5,7 @@ Future release (next version)
 ======
 
 Board Support:
-- Add Waveshare ESP32-S3-Touch-LCD-3.5 (3.5" 320x480 ST7796 over SPI with LCD reset/CS on a PCA9554 IO expander, FT6336 touch, QMI8658 IMU, AXP2101 battery management); vendors the st7796 display driver and adds a PCA9554 expander driver
+- Add Waveshare ESP32-S3-Touch-LCD-3.5 (3.5' 320x480 ST7796 over SPI with LCD reset/CS on a PCA9554 IO expander, FT6336 touch, QMI8658 IMU, AXP2101 battery management); vendors the st7796 display driver and adds a PCA9554 expander driver
 - UNIHIKER K10: improve two-button navigation, correct camera preview orientation, and restore button input after camera operations
 - unix/macOS/web: compiler fallback to bytecode on architectures without a native emitter (e.g. macOS on Apple Silicon) instead of runtime-loaded apps using @micropython.native/@micropython.viper failing to import with SyntaxError 'invalid micropython decorator'
 - Waveshare ESP32-S3-Touch-LCD-3.5: ES8311 audio support (speaker output + microphone input over I2S, DAC volume default tuned by ear on hardware)
@@ -13,8 +13,8 @@ Board Support:
 Builtin Apps:
 - AppStore and OSUpdate: defer boot service import and start by 120s and 90s respectively via delay_s in manifest intent_filter, moving their module imports out of the boot path
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
-- AppStore: add "Scan QR" button that opens an app's detail screen from a scanned app link (https://badgehub.eu/page/project/APP_ID, https://badgehub.eu/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
-- AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the "Installed" view
+- AppStore: add 'Scan QR' button that opens an app's detail screen from a scanned app link (https://badgehub.eu/page/project/APP_ID, https://badgehub.eu/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the 'Installed' view
 - AppStore: guard against segfault when the activity leaves the foreground during an async download (e.g. back_screen() while the index is downloading)
 - AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
 
@@ -53,7 +53,7 @@ OS:
 - sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
-- howto_app: clear auto_start_app_early SharedPreferences in setUp so the "Don't show again" checkbox reliably starts unchecked
+- howto_app: clear auto_start_app_early SharedPreferences in setUp so the 'Don't show again' checkbox reliably starts unchecked
 - mpos.ui.testing: simulate_click() now pumps simulated-indev reads during the hold, so LONG_PRESSED fires even when the scheduler is blocked
 - mpos_controller: click_button() now clicks the innermost clickable widget containing the text, instead of the outermost ancestor that sent clicks to the screen center
 - mpos_controller: write paste-mode payloads in chunks, draining echoed input between chunks to avoid PTY-buffer deadlock
