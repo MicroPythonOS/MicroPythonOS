@@ -22,6 +22,7 @@ Frameworks:
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes by @fdb
 - FontManager: cache emoji codepoints for keyboard input by @fdb
 - Screenshot: move the BMP encoder out of the web server into mpos.ui.testing.encode_bmp(), which both now share, and add save_screenshot_bmp() to capture the screen straight into a file
+- SharedPreferences: get_dict_item() and get_list_item_dict() now return copies like get_dict()/get_list() already did, so mutating a returned item no longer corrupts prefs.data in place — which made a following put+commit of that item look like a no-op, silently skipping the write and losing the change on the next load
 - TaskManager: add create_supervised_task(restart_on_return=True) and use it for the aiorepl console, so it is restarted when it exits
 - TaskManager: create_task returns None when the task manager is disabled, preventing C-level crashes from asyncio.create_task on ESP32 when called from a disabled test runner context
 - View: clear the shared default focus group before the screen is deleted to prevent dangling LVGL pointer accumulation across activity transitions

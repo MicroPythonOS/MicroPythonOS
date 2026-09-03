@@ -276,6 +276,47 @@ class TestSharedPreferences(unittest.TestCase):
         self.assertEqual(theme["color"], "blue")
         self.assertEqual(prefs.get_dict_item("settings", "nonexistent"), {})
 
+    def test_get_dict_item_returns_copy(self):
+        """Mutating a returned dict item must not change the stored data."""
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_dict_item("buttons", "b1", {"name": "one"}).commit()
+
+        item = prefs.get_dict_item("buttons", "b1")
+        item["name"] = "mutated"
+        item["extra"] = True
+
+        self.assertEqual(prefs.get_dict_item("buttons", "b1"), {"name": "one"})
+
+    def test_get_list_item_dict_returns_copy(self):
+        """Mutating a returned list item must not change the stored data."""
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_list("configs", [{"key": "value"}]).commit()
+
+        item = prefs.get_list_item_dict("configs", 0)
+        item["key"] = "mutated"
+
+        self.assertEqual(prefs.get_list_item_dict("configs", 0), {"key": "value"})
+
+    def test_mutated_dict_item_still_persists_on_commit(self):
+        """Get-mutate-put of a dict item must be written to disk.
+
+        When get_dict_item returned the live nested dict, mutating it made
+        the later commit look like a no-op (temp_data compared equal to the
+        already-mutated prefs.data), so nothing was written and the change
+        was lost on the next load.
+        """
+        prefs = SharedPreferences(self.test_app_name)
+        prefs.edit().put_dict_item("buttons", "b1", {"name": "one"}).commit()
+
+        config = prefs.get_dict_item("buttons", "b1")
+        config["loop"] = True
+        prefs.edit().put_dict_item("buttons", "b1", config).commit()
+
+        reloaded = SharedPreferences(self.test_app_name)
+        self.assertEqual(
+            reloaded.get_dict_item("buttons", "b1"), {"name": "one", "loop": True}
+        )
+
     def test_get_dict_item_field(self):
         """Test getting a specific field from a dict item."""
         prefs = SharedPreferences(self.test_app_name)
