@@ -19,6 +19,7 @@ Frameworks:
 - Camera: gracefully handle boards with no camera hardware (e.g. fri3d_2026) — show a 'No camera found' status instead of crashing on get_cameras()[0]
 - DNS (async_dns): single-flight lookups per name with a synchronous fallback when no worker thread can be spawned (e.g. boot-time thread pressure), so concurrent websocket/download connections no longer fail with 'can't create thread'
 - DeepLink: new mpos.content.deeplink module with strict app-link parsing (exact host allowlist, identity-only links) and URL dispatch
+- FileExplorer: pick mode with a path_pattern now lists only matching files (directories stay listed) — non-matching files could never be selected and taps on them were silently ignored, so listing them was pure clutter; browse mode still lists everything
 - FontManager: stop leaking an app's TTF and emoji fonts after the app closes by @fdb
 - FontManager: cache emoji codepoints for keyboard input by @fdb
 - AudioManager/WAVStream: desktop (afplay/ffplay/aplay/paplay and the no-player timing simulation) and web playback now honor set_repeat()/repeat_count like the ESP32 I2S path, so the MusicPlayer Repeat checkbox and other repeat users no longer silently play once on desktop builds; repeat_count is re-read each pass so set_repeat() changes apply mid-playback
