@@ -34,7 +34,7 @@ MAX_URL_LENGTH = 512
 MAX_APP_ID_LENGTH = 64
 MAX_PARAM_LENGTH = 64
 
-STORE_HOSTS = ("badgehub.eu",)
+STORE_HOSTS = ("badgehub.eu", "www.badgehub.eu")
 STORE_SCHEMES = ("micropythonos", "mpos")
 APPSTORE_FULLNAME = "com.micropythonos.appstore"
 
@@ -89,7 +89,11 @@ def split_url(text):
 
 
 def _parse_query(query):
-    """Parse a query string into a dict; malformed pairs are skipped."""
+    """Parse a query string into a dict; malformed pairs are skipped.
+
+    Keys are folded to lowercase (QR alphanumeric mode uppercases the
+    whole payload); values are kept as-is.
+    """
     params = {}
     if not query:
         return params
@@ -97,7 +101,7 @@ def _parse_query(query):
         eq = pair.find("=")
         if eq <= 0:
             continue
-        key = pair[:eq]
+        key = pair[:eq].lower()
         value = pair[eq + 1:]
         if len(value) > MAX_PARAM_LENGTH:
             continue
