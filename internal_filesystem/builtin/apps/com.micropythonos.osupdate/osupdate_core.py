@@ -1,5 +1,7 @@
 import logging
 
+import random
+import time
 import ujson
 
 from mpos import (
@@ -246,14 +248,26 @@ class UpdateDownloader:
             raise
 
 
+_UPDATE_MIRRORS = (
+    "https://updates.micropythonos.com",
+    "https://updates.micropythonos.org",
+)
+
+
 class UpdateChecker:
 
-    def __init__(self, download_manager=None, json_module=None):
+    def __init__(self, download_manager=None, json_module=None, rng=None):
         self.download_manager = download_manager if download_manager else DownloadManager
         self.json = json_module if json_module else ujson
+        self.rng = rng if rng else random
+        # Track which mirror was used for the current check so that the
+        # download_url returned by that mirror is used for the download too.
+        self._chosen_mirror = None
 
     def get_update_url(self, hardware_id):
-        return f"https://updates.micropythonos.com/osupdate_{hardware_id}.json"
+        idx = self.rng.getrandbits(1) % len(_UPDATE_MIRRORS)
+        self._chosen_mirror = _UPDATE_MIRRORS[idx]
+        return f"{self._chosen_mirror}/osupdate_{hardware_id}.json"
 
     async def fetch_update_info(self, hardware_id):
         url = self.get_update_url(hardware_id)
@@ -303,8 +317,8 @@ def round_up_to_multiple(n, multiple):
 class UpdateManager:
     _instance = None
 
-    BOOT_INITIAL_DELAY = 180 # how long to wait after startup to check for updates
     BOOT_CHECK_INTERVAL = 60 * 60 * 24 # how often to check for updates
+    LOOP_POLL_INTERVAL = 60 # granularity for the _run_loop wait loop
     WIFI_WAIT_TIMEOUT = 300
     WIFI_CHECK_INTERVAL = 5
 
@@ -325,6 +339,7 @@ class UpdateManager:
         self._state_callback = None
         self._running = False
         self._check_in_progress = False
+        self._last_check_ts = None
         self._suppress_notifications = False
 
     def set_state_callback(self, callback):
@@ -402,8 +417,6 @@ class UpdateManager:
         TaskManager.create_task(self._run_loop())
 
     async def _run_loop(self):
-        await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
-
         while self._running:
             if self._check_in_progress:
                 await TaskManager.sleep(1)
@@ -416,10 +429,10 @@ class UpdateManager:
             else:
                 if __debug__: logger.debug("offline, skipping check")
 
-            for _ in range(self.BOOT_CHECK_INTERVAL):
+            for _ in range(self.BOOT_CHECK_INTERVAL // self.LOOP_POLL_INTERVAL):
                 if not self._running:
                     return
-                await TaskManager.sleep(1)
+                await TaskManager.sleep(self.LOOP_POLL_INTERVAL)
 
     def stop(self):
         if __debug__: logger.debug("stopping")
@@ -428,18 +441,27 @@ class UpdateManager:
             self.connectivity_manager.unregister_callback(self._network_changed)
 
     def check_for_update_now(self):
-        """Kick off a one-off update check if none is already in progress."""
-        if self._check_in_progress:
-            return
+        """Kick off an update check now. Resets any stale check still in flight."""
+        self._check_in_progress = False
+        self._last_check_ts = None
         TaskManager.create_task(self.check_for_update())
 
     async def check_for_update(self):
         if self._check_in_progress:
             return
+        # deduplicate against _network_changed callback triggering first check
+        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks.
+        # _last_check_ts starts as None: on ESP32 ticks_ms() counts from boot, so
+        # treating "never checked" as 0 would block the first check for 60s of uptime.
+        now = time.ticks_ms()
+        if self._last_check_ts is not None and now - self._last_check_ts < 60000:
+            return
+        self._last_check_ts = now
         self._check_in_progress = True
         try:
             self.set_state(UpdateState.CHECKING_UPDATE)
             hwid = DeviceInfo.hardware_id
+            if __debug__: logger.debug("checking for updates (hwid=%s)", hwid)
             update_info = await self.update_checker.fetch_update_info(hwid)
             comparison = _get_version_comparison(
                 update_info["version"],
@@ -466,8 +488,12 @@ class UpdateManager:
         except Exception as e:
             logger.error("check_for_update got exception: %s", e)
             if DownloadManager.is_network_error(e):
-                logger.warning("network error while checking for updates, waiting for WiFi")
-                self.set_state(UpdateState.WAITING_WIFI)
+                if self.connectivity_manager and self.connectivity_manager.is_online():
+                    logger.warning("server unreachable while checking for updates (network is online)")
+                    self.set_state(UpdateState.ERROR)
+                else:
+                    logger.warning("network error while checking for updates, waiting for WiFi")
+                    self.set_state(UpdateState.WAITING_WIFI)
             else:
                 self.set_state(UpdateState.ERROR)
             self._clear_update_available_notification()

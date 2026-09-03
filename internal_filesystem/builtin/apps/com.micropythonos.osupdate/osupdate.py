@@ -91,9 +91,15 @@ class OSUpdate(Activity):
         self._um.set_state_callback(self._on_um_state_change)
         self._um.suppress_notifications = True
         current_state = self._um.get_state()
-        self._sync_ui(current_state)
+        if current_state == UpdateState.CHECKING_UPDATE:
+            self._um.set_state(UpdateState.IDLE)
+            current_state = UpdateState.IDLE
         if current_state == UpdateState.IDLE:
-            self._um.check_for_update_now()
+            if self._um.connectivity_manager and not self._um.connectivity_manager.is_online():
+                self._um.set_state(UpdateState.WAITING_WIFI)
+            else:
+                self._um.check_for_update_now()
+        self._sync_ui(self._um.get_state())
 
     def onPause(self, screen):
         self._um.clear_state_callback()
@@ -118,7 +124,7 @@ class OSUpdate(Activity):
             self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
         elif state == UpdateState.CHECKING_UPDATE:
             self.status_label.set_text("Checking for OS updates...")
-            self.check_again_button.add_flag(lv.obj.FLAG.HIDDEN)
+            self.check_again_button.remove_flag(lv.obj.FLAG.HIDDEN)
         elif state == UpdateState.UPDATE_AVAILABLE:
             info = self._um.get_update_info()
             self._update_install_button(info["comparison"] if info else "newer")

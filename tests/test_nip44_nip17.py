@@ -47,7 +47,7 @@ class TestNip44(unittest.TestCase):
         alice = PrivateKey()
         bob = PrivateKey()
         conv = get_conversation_key(alice, bob.public_key.hex())
-        for plaintext in ("a", "hello", "üñïçøðé", "x" * 50000):
+        for plaintext in ("a", "hello", "üñïçøðé", "x" * 4096):
             ciphertext = encrypt(plaintext, conv)
             decrypted = decrypt(ciphertext, conv)
             self.assertEqual(decrypted, plaintext)

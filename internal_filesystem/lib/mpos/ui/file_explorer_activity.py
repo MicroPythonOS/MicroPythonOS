@@ -210,11 +210,25 @@ class FileExplorerActivity(Activity):
             self._path_to_btn[fullpath] = btn
 
         for f in files:
+            if not self._should_list_file(f):
+                continue
             fullpath = path + f
             btn = self._list.add_button(None, lv.SYMBOL.FILE + "  " + f)
             btn.add_event_cb(lambda e, p=fullpath: self._on_item_clicked(e, p, False), lv.EVENT.CLICKED, None)
             btn.add_event_cb(lambda e, p=fullpath: self._on_any_long_press(e, p), lv.EVENT.LONG_PRESSED, None)
             self._path_to_btn[fullpath] = btn
+
+    def _should_list_file(self, filename):
+        """In pick mode with a path_pattern, list only matching files.
+
+        Non-matching files could never be selected anyway (taps on them
+        were silently ignored), so listing them was pure clutter.
+        Directories are always listed: they stay navigable in browse mode
+        and selectable as a whole in pick mode.
+        """
+        if self._mode != self.MODE_PICK or not self._path_pattern:
+            return True
+        return self._path_matches(filename)
 
     def _on_item_clicked(self, e, path, is_dir):
         target = e.get_target_obj()

@@ -5,7 +5,48 @@
 
 # Copy this file to / on the device's internal storage to have it run automatically instead of relying on the frozen-in files.
 import sys
-sys.path.insert(0, "lib")
+
+
+def _lib_override_is_safe():
+    """Refuse a lib/ override whose mpos is from a different release.
+
+    The web-installer image ships a full lib/ on the data partition, and OTA
+    updates only replace the firmware partition — so after the first update
+    that changes a framework API, the stale lib/mpos shadows the new frozen
+    modules and the OS crashes at boot (e.g. the 0.16.1+ launcher reading
+    app.categories against a 0.16.0 App class: 'App' object has no attribute
+    'categories'). Compare release strings and skip lib/ on mismatch so the
+    device boots the self-consistent frozen tree instead.
+
+    The frozen release is obtained by importing mpos.build_info BEFORE lib/
+    is on sys.path; the import is then purged from sys.modules so a valid
+    lib/ override can still shadow mpos normally afterwards. The lib/ side
+    is read as plain text (no import) to keep stale code off the path.
+    """
+    try:
+        with open("lib/mpos/build_info.py") as f:
+            lib_src = f.read()
+    except OSError:
+        return True  # no lib/mpos on flash -> nothing can skew
+    try:
+        from mpos.build_info import BuildInfo
+        frozen_release = BuildInfo.version.release
+        for name in list(sys.modules):
+            if name == "mpos" or name.startswith("mpos."):
+                del sys.modules[name]
+    except Exception:
+        return True  # no frozen mpos (bare interpreter): lib/ is all we have
+    if ('release = "%s"' % frozen_release) in lib_src:
+        return True
+    print("WARNING: lib/ on the data partition is from a different release "
+          "than this firmware (frozen release: %s). Skipping the lib/ "
+          "override so the OS can boot; delete or update /lib to silence "
+          "this warning." % frozen_release)
+    return False
+
+
+if _lib_override_is_safe():
+    sys.path.insert(0, "lib")
 
 print(f"{sys.version=}")
 print(f"{sys.implementation=}")
@@ -37,3 +78,7 @@ except Exception as e:
     time.sleep(5) # sleep so the user has time to connect to serial console
     sys.print_exception(e) # print it after the sleep so user can see it on serial console
     print("MicroPythonOS exiting.")
+    # mpos.main disables the Ctrl-C interrupt character during boot; restore it for the REPL shell.
+    import micropython
+    if hasattr(micropython, "kbd_intr"):
+        micropython.kbd_intr(3)

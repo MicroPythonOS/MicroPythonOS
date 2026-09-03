@@ -10,6 +10,7 @@ import sdl_display
 from drivers.indev.sdl_keyboard import MposSDLKeyboard
 
 import mpos.clipboard
+import mpos
 import mpos.ui
 import mpos.ui.focus_direction
 from mpos import InputManager
@@ -155,6 +156,7 @@ if _webio:
         from drivers.indev.fri3d_2026_expander import Fri3d2026Expander
 
         web_expander = WebExpander()
+        mpos.io_expander = web_expander
         web_buttons_indev = Fri3d2026Expander(web_expander)
         group = lv.group_get_default()
         if group:
@@ -237,6 +239,5 @@ CameraManager.add_camera(CameraManager.Camera(
 
 
 if __debug__: logger.debug("linux.py finished")
-
 
 

@@ -9,12 +9,18 @@ the activity.
 Usage:
 """
 
+import os
+import sys
 import time
 import unittest
 import lvgl as lv
 import mpos.ui
+
+_ESP32 = sys.platform == "esp32"
 from mpos import (
     AppManager,
+    DeviceInfo,
+    SharedPreferences,
     wait_for_text,
     retry_action_until,
     find_label_with_text,
@@ -63,12 +69,15 @@ def _checkbox_checked_state(checkbox):
     return bool(checkbox.get_state() & lv.STATE.CHECKED)
 
 
-def _toggle_checkbox_with_retries(checkbox, expected_checked, attempts=3):
+def _toggle_checkbox_with_retries(checkbox, expected_checked, attempts=None):
+    if attempts is None:
+        attempts = 5 if _ESP32 else 3
+    timeout_val = 3.0 if _ESP32 else 1.5
     result = retry_action_until(
         lambda: (lv.group_focus_obj(checkbox), _wait_ms(50), _click_focused()),
         lambda: checkbox if _checkbox_checked_state(checkbox) == expected_checked else None,
         attempts=attempts,
-        timeout=1.5,
+        timeout=timeout_val,
         interval=0.05,
     )
     return result is not None
@@ -124,6 +133,11 @@ class TestHowToAppFocusNavigation(unittest.TestCase):
     """Verify that the HowTo app supports keyboard/focus navigation."""
 
     def setUp(self):
+        # The howto app stores its "Don't show again" checkbox state in
+        # com.micropythonos.settings, key auto_start_app_early.  Set it
+        # to the howto appname so onResume clears the checkbox.
+        prefs = SharedPreferences("com.micropythonos.settings")
+        prefs.edit().put_string("auto_start_app_early", "com.micropythonos.howto").commit()
         # Clean up any leftover activities (e.g. from auto-start re-launch)
         _go_back_to_launcher()
 
@@ -226,3 +240,43 @@ class TestHowToAppFocusNavigation(unittest.TestCase):
             f"HowTo should not be the foreground app after closing. "
             f"Got: {foreground}",
         )
+
+
+class TestHowToAppK10FocusNavigation(unittest.TestCase):
+    def setUp(self):
+        self._hardware_id = DeviceInfo.get_hardware_id()
+        _go_back_to_launcher()
+        DeviceInfo.set_hardware_id("unihiker_k10")
+
+        result = AppManager.start_app("com.micropythonos.howto")
+        self.assertTrue(result, "HowTo app failed to launch")
+        self.assertTrue(
+            wait_for_text("Open a drop-down: B next. Hold B: previous.", timeout=10),
+            "K10 HowTo instructions did not load within timeout",
+        )
+        _wait_ms(200)
+
+    def tearDown(self):
+        try:
+            checkbox = _find_checkbox(lv.screen_active())
+            if checkbox:
+                checkbox.add_state(lv.STATE.CHECKED)
+            _go_back_to_launcher()
+        finally:
+            DeviceInfo.set_hardware_id(self._hardware_id)
+
+    def test_k10_keeps_static_help_out_of_the_focus_cycle(self):
+        screen = lv.screen_active()
+        checkbox = _find_checkbox(screen)
+        close_button = find_button_with_text(screen, "Close")
+        group = lv.group_get_default()
+
+        self.assertIsNotNone(checkbox, "Could not find checkbox in K10 HowTo")
+        self.assertIsNotNone(close_button, "Could not find Close button in K10 HowTo")
+        self.assertIsNotNone(group, "No default focus group")
+        self.assertIs(
+            _focused_obj(),
+            close_button,
+            "K10 HowTo should focus Close so the two-button user can exit immediately",
+        )
+        self.assertEqual(group.get_obj_count(), 2)

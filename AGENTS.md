@@ -26,6 +26,34 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 **CPython controller tests:** `python3 tests/cpython_mpos_controller.py` (not run by test_runner.py).  
 **Details:** `tests/README.md`
 
+**Options:**  
+`--ondevice` — run on connected device (serial). `--no-install-test-apps` skips test-app install.  
+`--port <port>` — serial port (overrides `MPOS_TEST_PORT` env).  
+`--relayport <port>` — USB power relay port; with `--reset`, power-cycles device instead of `machine.reset()`.  
+`--reset` — hard-reset device before each test.  
+`--resume` — resume suite from first provided test file (alphabetical order).  
+`--cpulimit <pct>` — throttle desktop MicroPython to simulate slow CI (requires `cpulimit` installed).  
+`--logserial <file>` — log all serial traffic to file; watch with `tail -f`.  
+`--coverage` — line coverage (desktop only, requires mpcov build). `--coverage-save`/`--coverage-load` for merged runs.  
+`--usb-unbind` — cleanly unbind/rebind USB between resets to reduce xhci wedging.  
+`--usb-reset-hub` — reset xhci host controller after relay power-on.  
+`--usb-settle <s>` — USB settle time after unbind/bind (default: 5).  
+`--no-usb-recovery` — disable automatic USB recovery on I/O error.  
+`--timeout <s>` — per-test timeout. `--tests-dir <dir>` — add dir to `sys.path` for test helpers.
+
+### Deploying lib/ changes to device
+
+Frozen modules in the firmware shadow filesystem `.py` files even though `sys.path = ['lib', '', '.frozen']`. To test a modified framework file at `internal_filesystem/lib/mpos/ui/*.py` on device:
+
+- **`./scripts/install.sh`** — copies the entire `lib/` directory to device flash (`lib/mpos/` → `:/lib/mpos/`), overriding frozen modules. Slow but comprehensive; run once to populate the tree.
+- **`python3 lvgl_micropython/lib/micropython/tools/mpremote/mpremote.py connect /dev/ttyACM0 cp internal_filesystem/<path> :<path>`** — copies a single file. Fast but only works after `install.sh` has already created the target directory structure on flash.
+
+After deploying, relay-reset so the device boots with the new files (the module cache is cleared on reset).
+
+**WARNING — flash shadows replace whole directories, not single files:** once `:/lib/mpos/` exists on flash, its modules come from flash ONLY. Deleting one flash file (e.g. after instrumenting it) does NOT fall back to frozen — you get `ImportError`. Never `fs rm` a shadow file; re-copy the original from `internal_filesystem/` instead. Also keep vintages consistent: mixing current-repo copies with an older install causes subtle crashes — if in doubt, re-run full `install.sh`.
+
+**USB/IP + relay reset:** the `/dev/ttyACM0` node can appear before USB enumeration finishes; opening serial too early wedges the usbip session (URB `-104` unlinks, reads return nothing). `_relay_reset` settles 8s after first seeing the node. Manual recovery: relay-cycle, wait ≥20s, poke with raw pyserial `\r\n` until `>>>`.
+
 ### Code coverage (desktop only)
 
 **Build with coverage:** `./scripts/build_mpos.sh unix coverage` or `make build-mpos-unix-coverage`  
@@ -47,6 +75,7 @@ Self-contained HTML — overview stats, per-file coverage %, expand inline sourc
 - Test CWD = `internal_filesystem/`. `sys.path.insert(0, ".")` assumes that root.
 - `--reset` (device only): hard-resets via `machine.reset()`, waits for `"Starting asyncio REPL..."` (NOT just `>>>`). Boot: 2–40s.
 - USB/IP passthrough: close serial fd before reset; retry open up to 20× (3s apart).
+- Serial (paste-mode) test runs strip the file's `if __name__ == "__main__": unittest.main()` block — in paste mode `__name__ == "__main__"`, so without stripping, `unittest.main()` AND the appended TextTestRunner would run the suite twice on already-mutated UI state. Desktop import-runner (`_build_import_runner_code`) is immune (`__name__` = module name), which is why such bugs only appear on device.
 - Use helpers in `internal_filesystem/lib/mpos/ui/testing.py`. Follow `tests/README.md` for graphical tests.
 
 **After any code change:** grep for tests importing changed modules, run them. Do NOT skip.  
@@ -55,7 +84,27 @@ Self-contained HTML — overview stats, per-file coverage %, expand inline sourc
 **Capturing logger output in tests:** add custom handler to logger, access `record.message` in `emit()`. Restore handlers in `finally:`.  
 **Test decorators:** `@unittest.skipIf` must be directly above the function — no module-level code between.
 
-**Most common test segfault cause:** passing a non-LVGL Python object (mock, plain instance) as parent to any LVGL widget constructor. Mock the calling method instead, or use real `lv.obj()` (graphical test).
+**Most common test segfault cause:** passing a non-LVGL Python object (mock, plain instance) as parent to any LVGL widget constructor. Mock the calling method instead, or use real `lv.obj()` (graphical test). Known live one: AppStore detail-navigation tests segfault ESP32 asynchronously right after `_launch_activity` returns (breadcrumbs: N3 present/N4 missing); quarantined via `_skip_detail_navigation_on_esp32` in `tests/test_graphical_appstore_focus.py`.
+
+**Never cache `asyncio.get_event_loop()` in `setUp`.** The test runner may create a fresh event loop between `setUp` and the test method, making a cached reference stale. Get the loop fresh at call time — inside the test method or inside the task-capture callback:
+
+```python
+# WRONG — loop may be stale
+def setUp(self):
+    self._loop = asyncio.get_event_loop()
+
+def _capture_task(coro):
+    self._loop.run_until_complete(coro)  # boom
+
+# RIGHT — fresh lookup
+def _capture_task(coro):
+    import asyncio as _asyncio
+    _asyncio.get_event_loop().run_until_complete(coro)
+```
+
+**Task capture triggers cascading side effects.** When `TaskManager.create_task` is mocked to `run_until_complete` synchronously, any task that internally spawns more tasks also runs synchronously in the same call. E.g. mocking `_update_all_click` reaches `_run_update_all` → `refresh_list` → `download_app_index` → `create_apps_list` → `_stop_all_timers`. Every link in the chain needs a mock (`_raw_timer`, `refresh_list`, etc.) even if your test goal is narrow. The crash surfaces far from the mocked entry point — watch the stack trace for the full cascade.
+
+**`asyncio.core` stores the event loop in module-level globals.** `_task_queue`, `_io_queue`, `cur_task`, and the `SingletonGenerator` (created once as a default-argument in `sleep_ms`) are all shared. `asyncio.new_event_loop()` replaces `_task_queue` and `_io_queue` globally — if called from a test setUp running inside the TaskManager's event loop (paste mode via aiorepl), the outer loop's orphaned queue is GC'd and its tasks become dangling pointers. `asyncio.run()` also shares these globals; when the inner `run_until_complete` sets `cur_task = None` on exit, the outer loop resumes with a stale task pointer → SIGSEGV. **For tests that need `asyncio.run()` inside a running event loop:** save/restore `cur_task` around the call. For tests that call `new_event_loop()`, restore all three globals after `unittest.main()`. See `_build_import_runner_code()` in `mpos_controller.py` for the standard monkeypatches applied to all tests.
 
 ## Development rules
 
@@ -64,6 +113,16 @@ Self-contained HTML — overview stats, per-file coverage %, expand inline sourc
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
 - **Batch edits:** constrain to exact patterns. Broad edits can silently delete unrelated code. If damage occurs, restore from git and re-apply a precise script.
 - **Implement missing functionality** rather than working around it.
+- **Observe before fixing, not after.** When a bug involves UI state or runtime data, use `mpos-controller` (`exec`, `get_widget_tree`, `eval`) to inspect the actual running system before coding a fix. Do NOT spend more than 2 rounds of static code analysis without validating assumptions against the live process.
+
+### Debugging shared-object / identity bugs
+
+The AppStore and AppManager share App objects by reference — `self.apps`, `_by_fullname`, and `_app_list` may all point to the same instance. Mutating any attribute on one path silently changes it everywhere. When tracing a bug where a value is "wrong" despite looking correct in isolation:
+
+1. **Check object identity first:** `a is b` on the suspected candidates. Use `mpos-controller exec` to test.
+2. **Mock objects hide identity bugs.** A test mock that creates a fresh object won't catch mutations propagated through shared references. Write at least one test that uses the real objects from the cache (`AppManager._by_fullname`) — not mock copies.
+3. **Prefer filesystem reads over cache reads for installed state.** The cache can go stale or be corrupted by shared-object writes. For installed-app data (version, installed status), reading MANIFEST.JSON directly from `apps/` or `builtin/apps/` is more reliable than `_by_fullname`.
+4. **Don't overwrite fields on shared objects.** If an App object lives in both the AppManager cache and the store list, use a separate attribute (e.g., `_remote_version`) for store-specific data instead of mutating shared fields like `version`.
 
 ### Logging
 
@@ -102,7 +161,7 @@ Key methods: `exec()`, `eval()`, `startapp()`, `run_app_with_file()`, `run_test_
 - `wait_for_text("text", timeout=10)`, `expect_text("text")`.
 - `startapp(name, intent={...})`, `run_app_with_file(app, file)`.
 - Notification bar: `mpos.eval("mpos.ui.topmenu.bar_open")`, height 24px.
-- Serial rotation (270°): `press()` auto-transforms coords.
+- Coordinates are LOGICAL (rotated content-space) everywhere: on-device `simulate_click`/`simulate_drag` and host `press()`/`drag()` all take the same logical coords; the rotation transform (e.g. 270°) is applied once, inside `_touch_read_cb` (`testing.py`). Do NOT pre-transform in callers — THIS SEEMS WRONG in older notes that said press() transforms; it no longer does.
 
 **Debugging workflow:**
 1. Widget tree first (`get_widget_tree()`) — layout, types, coords, states.
@@ -139,6 +198,7 @@ with MPOSController(backend='process') as mpos:
 - No `bytearray * int` → `bytearray(); [out.extend(buf) for _ in range(n)]`.
 - Some builds lack `random.Random`/`shuffle` → Fisher-Yates with `randint`. Prefer tiny LCG for deterministic jitter.
 - `logging.Logger.log()` formats via `msg % args` — always include `%s` when passing variables.
+- `asyncio.TimeoutError` is NOT an `OSError` subclass on MicroPython. Catching `except OSError` for socket operations will silently miss timeouts — use `except (OSError, asyncio.TimeoutError)`.
 
 ### LVGL (import as `lv`, docs at `lvgl_micropython/lib/lvgl/docs/`)
 
@@ -170,9 +230,13 @@ Critical gotchas:
 - Viper: `ba[i]` returns `object` → `int()` cast. int16 sign extension: `v = int(ba[i]) | (int(ba[i+1]) << 8); if v & 0x8000: v -= 65536`.
 
 ### ESP32
+- Remember that MicroPythonOS often runs on resource constrained hardware
 - `sys.platform` always `'esp32'` (S3, C3, etc.).
 - `Pin.init(Pin.OUT)` silently overrides peripheral GPIO routing → no output, no error. Fix: deinit + re-create peripheral.
 - Shared RMT pin: re-create RMT driver (not just `pin.init`).
+- `asyncio.create_task()` from outside the event loop (timer callbacks, thread, boot services) does NOT wake the event loop — tasks queue up and execute with unpredictable delay (~6s typical on ESP32-S3). Architectures that rely on a `create_task()`-spawned loop polling a flag will fail. Instead, call `create_task()` directly from each callback (see `appstore_core._network_changed` for the proven pattern).
+- `TaskManager.create_task()` crashes at C level when `TaskManager.disable()` is True (the test runner disables TaskManager). If any activity `onResume` callback calls `create_task()`, the device reboots silently — no Python traceback, no issue on desktop. Fix: guard `create_task` with `if cls.disabled: return None` in source AND mirror in `mpos_controller.py:_build_test_code` runtime patch (frozen modules shadow flash files).
+- Services that call `start()` → `register_callback()` → `create_task(_run_loop())` at boot: the callback path works (fired via timer ISR on main thread), but the run-loop task may face scheduling delays. Don't rely on the run-loop for time-sensitive work — treat it as best-effort periodic background check.
 
 ### BLE
 - 31-byte advertising cap (NimBLE). No extended advertising. Scan response = separate 31 bytes.

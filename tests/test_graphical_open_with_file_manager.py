@@ -34,11 +34,15 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
     def setUp(self):
         """Create a temporary directory with sample files."""
         self.test_path = TEST_DIR
+        # Be robust against leftover directories from interrupted runs.
         try:
             shutil.rmtree(self.test_path)
         except OSError:
             pass
-        os.mkdir(self.test_path)
+        try:
+            os.mkdir(self.test_path)
+        except OSError:
+            pass
         for name in ("sample.wav", "sample.png", "sample.txt", "sample.rtttl"):
             with open("{}/{}".format(self.test_path, name), "wb") as f:
                 if name == "sample.rtttl":
@@ -48,11 +52,19 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
     def tearDown(self):
         """Go back to the launcher and remove the temporary files."""
-        for _ in range(5):
-            if len(mpos.ui.screen_stack) <= 1:
-                break
+        # Give each screen transition time to finish: the LVGL screen animations
+        # are 500ms, so 300ms is too tight on slow CI runners. Use a deadline
+        # loop and wait 600ms after each back_screen() so the next one starts
+        # from a settled state.
+        deadline = time.ticks_add(time.ticks_ms(), 8000)
+        while (
+            len(mpos.ui.screen_stack) > 1
+            and time.ticks_diff(deadline, time.ticks_ms()) > 0
+        ):
             mpos.ui.back_screen()
-            _wait_ms(300)
+            _wait_ms(600)
+        # Final settle so the launcher screen is fully loaded before the next test.
+        _wait_ms(600)
         try:
             shutil.rmtree(self.test_path)
         except OSError:
@@ -61,13 +73,15 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
     def _start_file_manager(self):
         result = AppManager.start_app("com.micropythonos.file_manager")
         self.assertTrue(result, "File Manager failed to launch")
+        # Let the 500ms screen-load animation settle before we start polling.
+        _wait_ms(600)
         self.assertTrue(
-            wait_for_text(TEST_DIR, timeout=10),
+            wait_for_text(TEST_DIR, timeout=20),
             "Test directory not visible in File Manager",
         )
         click_label(TEST_DIR)
         self.assertTrue(
-            wait_for_text("sample.wav", timeout=10),
+            wait_for_text("sample.wav", timeout=20),
             "Could not navigate into test directory",
         )
 
@@ -77,7 +91,7 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
         self.assertTrue(click_label("sample.wav"), "Could not click sample.wav")
         self.assertTrue(
-            wait_for_text("Stop", timeout=10),
+            wait_for_text("Stop", timeout=20),
             "Music Player did not open",
         )
         self.assertEqual(
@@ -92,7 +106,7 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
         self.assertTrue(click_label("sample.rtttl"), "Could not click sample.rtttl")
         self.assertTrue(
-            wait_for_text("Stop", timeout=10),
+            wait_for_text("Stop", timeout=20),
             "Music Player did not open",
         )
         self.assertEqual(
@@ -107,7 +121,7 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
         self.assertTrue(click_label("sample.png"), "Could not click sample.png")
         self.assertTrue(
-            wait_for_text("sample.png", timeout=10),
+            wait_for_text("sample.png", timeout=20),
             "Image View did not open with the selected PNG file",
         )
         self.assertEqual(
@@ -122,11 +136,11 @@ class TestGraphicalOpenWithFileManager(unittest.TestCase):
 
         self.assertTrue(click_label("sample.txt"), "Could not click sample.txt")
         self.assertTrue(
-            wait_for_text("sample.txt", timeout=10),
+            wait_for_text("sample.txt", timeout=20),
             "Fallback ViewActivity did not show the file path",
         )
         self.assertTrue(
-            wait_for_text("dummy", timeout=10),
+            wait_for_text("dummy", timeout=20),
             "Fallback ViewActivity did not show the file contents",
         )
 

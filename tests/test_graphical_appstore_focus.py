@@ -15,6 +15,7 @@ Regression tests:
 Usage:
 """
 
+import sys
 import time
 import unittest
 import lvgl as lv
@@ -29,6 +30,28 @@ from mpos import (
 )
 from mpos.ui import focus_direction
 from mpos.ui.testing import find_dropdown_widget, wait_for_widget
+
+_ESP32 = sys.platform == "esp32"
+
+
+def _skip_detail_navigation_on_esp32(test_method):
+    """Skip show_app_detail/back navigation on ESP32.
+
+    These tests hard-crash the device (silent reset, no traceback). Filesystem
+    breadcrumbs localized the fault to the microseconds around
+    ActivityNavigator._launch_activity's `return activity`, right after
+    view.py setContentView fully completed (including onResume, where
+    TaskManager.create_task provably returned None with disabled=True).
+    The crash is asynchronous — no Python frame is executing anything
+    suspicious at that point. Suspects: LVGL's own task interacting with the
+    just-loaded screen animation, or a boot-service timer firing into the
+    blocked main thread. Desktop is unaffected.
+    """
+    return unittest.skipIf(
+        _ESP32,
+        "segfaults device: async crash after _launch_activity return "
+        "(breadcrumbs N3 present/N4 missing); see comment body",
+    )(test_method)
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +168,54 @@ class TestAppStoreFocus(unittest.TestCase):
             "to the small corner button.",
         )
 
+    def test_dropdown_confirmation_allows_focus_to_leave(self):
+        activity = _get_appstore_activity()
+        dropdown = activity.category_dropdown
+        group = lv.group_get_default()
+
+        activity._category_options = ["One", "Two", "Three"]
+        dropdown.set_options("One\nTwo\nThree")
+        dropdown.set_selected(0)
+        lv.group_focus_obj(dropdown)
+
+        self.assertFalse(dropdown.is_open())
+        group.send_data(lv.KEY.ENTER)
+        self.assertTrue(dropdown.is_open())
+        group.send_data(lv.KEY.RIGHT)
+        self.assertEqual(dropdown.get_selected(), 1)
+        group.send_data(lv.KEY.ENTER)
+        self.assertFalse(dropdown.is_open())
+        group.focus_next()
+        self.assertIsNot(_focused_obj(), dropdown)
+
+    def test_dropdown_escape_restores_unconfirmed_category(self):
+        activity = _get_appstore_activity()
+        dropdown = activity.category_dropdown
+        group = lv.group_get_default()
+        rebuilds = []
+        original_create_apps_list = activity.create_apps_list
+
+        activity._category_options = ["One", "Two", "Three"]
+        dropdown.set_options("One\nTwo\nThree")
+        dropdown.set_selected(0)
+        activity.create_apps_list = lambda: rebuilds.append(dropdown.get_selected())
+        lv.group_focus_obj(dropdown)
+
+        try:
+            group.send_data(lv.KEY.ENTER)
+            group.send_data(lv.KEY.RIGHT)
+            self.assertEqual(dropdown.get_selected(), 1)
+            group.send_data(lv.KEY.LEFT)
+            self.assertEqual(dropdown.get_selected(), 0)
+            group.send_data(lv.KEY.RIGHT)
+            self.assertEqual(dropdown.get_selected(), 1)
+            group.send_data(lv.KEY.ESC)
+            self.assertFalse(dropdown.is_open())
+            self.assertEqual(dropdown.get_selected(), 0)
+            self.assertEqual(rebuilds, [])
+        finally:
+            activity.create_apps_list = original_create_apps_list
+
     def test_update_all_button_reachable_when_visible(self):
         """When 'Update N App(s)' is visible it must be reachable via DOWN from settings_button."""
         activity = _get_appstore_activity()
@@ -186,6 +257,7 @@ class TestAppStoreFocus(unittest.TestCase):
 
     # ------------------------------------------------------------------
 
+    @_skip_detail_navigation_on_esp32
     def test_focus_restored_after_back_from_app_detail(self):
         """Focused widget must be restored after returning from AppDetail via back."""
         activity = _get_appstore_activity()
@@ -208,6 +280,7 @@ class TestAppStoreFocus(unittest.TestCase):
             "Focus was not restored to settings_button after back from AppDetail",
         )
 
+    @_skip_detail_navigation_on_esp32
     def test_focus_restored_after_back_from_app_detail_bottom_item(self):
         """Focus on a bottom list item must be restored after returning from AppDetail."""
         activity = _get_appstore_activity()

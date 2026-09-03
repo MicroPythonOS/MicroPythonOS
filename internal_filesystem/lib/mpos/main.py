@@ -1,6 +1,15 @@
 # Uncomment this line if you want to be dropped to a REPL shell without loading any MicroPythonOS code:
 # raise RuntimeError("/lib/mpos/main.py: dropping to REPL shell without loading any MicroPythonOS code")
 
+import micropython
+
+# Hosts connecting over serial mid-boot (e.g. mpremote entering raw REPL) send Ctrl-C,
+# which would abort the boot scripts and leave the OS half-started at the REPL shell.
+# Disable the interrupt character until the REPL is up; aiorepl manages it afterwards,
+# and the ends of this file restore it on the fall-back-to-REPL paths.
+if hasattr(micropython, "kbd_intr"):
+    micropython.kbd_intr(-1)
+
 import lvgl as lv
 import os
 import logging
@@ -236,6 +245,16 @@ def detect_board():
                     return "fri3d_2024"
                 restore_i2c(sda=9, scl=18)
 
+            if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_3_5 ?")
+            if i2c0 := fail_save_i2c(sda=8, scl=7):
+                # PCA9554 IO expander (LCD reset/CS) + FT6336 touch: this pair on
+                # this bus is unique to the ESP32-S3-Touch-LCD-3.5 (the freenove
+                # board's FT6336G sits on sda=16/scl=15, the unihiker's expander
+                # on sda=47/scl=48).
+                if single_address_i2c_scan(i2c0, 0x20) and single_address_i2c_scan(i2c0, 0x38):
+                    return "waveshare_esp32_s3_touch_lcd_3_5"
+                restore_i2c(sda=8, scl=7)
+
         else: # not is_esp32s3
 
             if __debug__: logger.debug("m5stack_core2 ?")
@@ -360,7 +379,10 @@ mpos.ui.change_task_handler()
 
 # Start launcher first so it's always at bottom of stack
 started_launcher = False
+import utime
+_t0 = utime.ticks_ms()
 launcher_app = AppManager.get_launcher()
+logger.warning("refresh_apps took %d ms", utime.ticks_diff(utime.ticks_ms(), _t0))
 if launcher_app is None:
     logger.warning("No launcher app found")
 else:
@@ -403,3 +425,7 @@ except KeyboardInterrupt as k:
     if __debug__: logger.debug("TaskManager.start() got KeyboardInterrupt, falling back to REPL shell...") # only works if no aiorepl is running
 except Exception as e:
     logger.error("TaskManager.start() got exception: %s", e)
+
+# Falling through to the REPL shell: restore the Ctrl-C interrupt character for it.
+if hasattr(micropython, "kbd_intr"):
+    micropython.kbd_intr(3)

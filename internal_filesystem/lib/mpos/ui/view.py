@@ -2,11 +2,18 @@ import logging
 import lvgl as lv
 import sys
 
+from .font_manager import FontManager
+from .input_manager import InputManager
 from .topmenu import open_bar, close_drawer
 
 logger = logging.getLogger(__name__)
 
 screen_stack = []
+
+# Screen that outlived its activity because it was still on the display when
+# the activity was removed. It cannot be deleted right away, so the next
+# screen load frees it through LVGL's auto_del.
+_orphan_screen = None
 
 
 def close_top_layer_msgboxes():
@@ -22,7 +29,7 @@ def close_top_layer_msgboxes():
         i += 1
 
 def setContentView(new_activity, new_screen):
-    global screen_stack
+    global screen_stack, _orphan_screen
     if screen_stack:
         current_activity, current_screen, current_focusgroup, _ = screen_stack[-1]
         try:
@@ -50,7 +57,11 @@ def setContentView(new_activity, new_screen):
             show_app_error_dialog(
                 new_activity.appFullName, e, is_lifecycle=True
             )
-    lv.screen_load_anim(new_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, 500, 0, False)
+    # An orphaned screen has no activity left to own it, so let the load
+    # animation delete it once it is off the display.
+    auto_del = _orphan_screen is not None and _orphan_screen == lv.screen_active()
+    _orphan_screen = None
+    lv.screen_load_anim(new_screen, lv.SCREEN_LOAD_ANIM.OVER_LEFT, 500, 0, auto_del)
     if new_activity:
         try:
             new_activity.onResume(new_screen)
@@ -66,8 +77,11 @@ def remove_and_stop_all_activities():
     global screen_stack
     while len(screen_stack):
         remove_and_stop_current_activity()
+    # Every app is gone. Drop the cached TTF fonts.
+    FontManager._clear_cache()
 
 def remove_and_stop_current_activity():
+    global _orphan_screen
     current_activity, current_screen, current_focusgroup, _ = screen_stack.pop()
     if current_activity:
         try:
@@ -88,12 +102,42 @@ def remove_and_stop_current_activity():
         if current_screen:
             current_screen.clean()
 
+    # Detach every widget of the current activity from the shared default
+    # focus group. These widgets are still alive (screen is not deleted yet),
+    # so remove_all_objs() safely clears the group without dereferencing
+    # dangling pointers. Without this, the shared default group accumulates
+    # references across activities and its entries turn into use-after-free
+    # segfaults when a downstream LVGL operation iterates them.
+    default_group = lv.group_get_default()
+    if default_group:
+        default_group.remove_all_objs()
+
+    # LVGL holds every group in a global list, so the focus group that
+    # setContentView() created for this activity needs an explicit delete().
+    if current_focusgroup:
+        current_focusgroup.delete()
+
+    # clean() empties a screen but keeps the screen object itself. Delete it,
+    # unless LVGL still points at it (shown, animating, or queued to load) —
+    # deleting those would leave a dangling pointer, so hand such a screen to
+    # the auto_del of the next screen load instead.
+    if current_screen:
+        display = lv.display_get_default()
+        if display and current_screen in (
+            display.get_screen_active(),
+            display.get_screen_prev(),
+            display.get_screen_loading(),
+        ):
+            _orphan_screen = current_screen
+        else:
+            current_screen.delete()
+
 def finish_current_activity():
     """Remove the current activity and resume the one below it.
 
     This is the direct "finish" path; it does not ask onBackPressed().
     """
-    global screen_stack
+    global screen_stack, _orphan_screen
 
     if len(screen_stack) <= 1:
         logger.warning("Can't finish — stack empty")
@@ -106,6 +150,8 @@ def finish_current_activity():
     # Load previous
     prev_activity, prev_screen, prev_focusgroup, prev_focused = screen_stack[-1]
     if __debug__: logger.debug("finish_current_activity got %s, %s, %s, %s", prev_activity, prev_screen, prev_focusgroup, prev_focused)
+    # auto_del below deletes the screen just popped, so it is no longer orphaned.
+    _orphan_screen = None
     lv.screen_load_anim(prev_screen, lv.SCREEN_LOAD_ANIM.OVER_RIGHT, 500, 0, True)
 
     default_group = lv.group_get_default()
@@ -113,19 +159,31 @@ def finish_current_activity():
         from .focus import move_focusgroup_objects
         move_focusgroup_objects(prev_focusgroup, default_group)
         if prev_focused is not None:
-            lv.group_focus_obj(prev_focused)
+            try:
+                lv.group_focus_obj(prev_focused)
+            except lv.LvReferenceError:
+                pass
 
     if prev_activity:
         prev_activity.onResume(prev_screen)
 
     if len(screen_stack) == 1:
         open_bar()
+        # Only the launcher is left. Drop the app fonts from the cache, so
+        # the GC can reclaim them. A font that app code still holds stays
+        # alive until that code is gone too.
+        FontManager._clear_cache()
 
     return True
 
 
 def back_screen():
     global screen_stack
+    if InputManager.is_back_screen_disabled():
+        cb = InputManager._back_screen_cb
+        if cb:
+            cb()
+        return False
 
     from . import topmenu
     if topmenu.drawer_open:

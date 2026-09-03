@@ -4,7 +4,8 @@ import logging
 import lvgl as lv
 
 from mpos import Activity, App, AppManager, BuildInfo, Intent, DownloadManager, SettingsActivity, SharedPreferences, TaskManager
-from mpos.ui import STAR_SYMBOL
+from mpos.ui import QR_SYMBOL, STAR_SYMBOL
+from mpos.content import deeplink
 
 from app_detail import AppDetail
 from blurhash import blurhash_to_image_dsc, generate_raw_app_icon
@@ -14,16 +15,9 @@ logger = logging.getLogger(__name__)
 
 class AppStore(Activity):
 
-    _GITHUB_PROD_BASE_URL = "https://apps.micropythonos.com"
-    _GITHUB_LIST = "/app_index.json"
-
-    _BADGEHUB_TEST_BASE_URL = "https://badgehub.p1m.nl/api/v3"
-    _BADGEHUB_PROD_BASE_URL = "https://badgehub.eu/api/v3"
-    _BADGEHUB_LIST = f"project-summaries?badge=mpos_api_{BuildInfo.version.api_level}"
-    _BADGEHUB_DETAILS = "projects"
-
-    _BACKEND_API_GITHUB = "github"
-    _BACKEND_API_BADGEHUB = "badgehub"
+    _BADGEHUB_BASE_URL = "https://badgehub.eu/api/v3"
+    _BADGEHUB_LIST_URL = f"https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_{BuildInfo.version.api_level}"
+    _BADGEHUB_DETAILS_URL = "https://badgehub.eu/api/v3/projects"
 
     _ICON_SIZE = 64
     _TOP_BAR_HEIGHT = 44
@@ -38,13 +32,7 @@ class AppStore(Activity):
     _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
     _DEFAULT_ICON_PIPELINE = 'blurhash'
     _DEFAULT_HIDE_WIP = True
-    _SPECIAL_CATEGORIES = {"Work In Progress", "Updates"}
-
-    # Hardcoded list for now:
-    backends = [
-        ("BadgeHub.eu", _BACKEND_API_BADGEHUB, _BADGEHUB_PROD_BASE_URL, _BADGEHUB_LIST, _BADGEHUB_DETAILS),
-        ("Apps.MicroPythonOS.com", _BACKEND_API_GITHUB, _GITHUB_PROD_BASE_URL, _GITHUB_LIST, None),
-    ]
+    _SPECIAL_CATEGORIES = {"All", "Work In Progress", "Installed", "Updates"}
 
     apps = []
     can_check_network = True
@@ -66,7 +54,6 @@ class AppStore(Activity):
 
     def onCreate(self):
         self.prefs = SharedPreferences(self.appFullName)
-        self._DEFAULT_BACKEND = AppStore.get_backend_pref_string(0)
         self._hide_wip = self.prefs.get_string("hide_wip", "true") == "true"
         self._wip_apps = []
         self._refresh_in_progress = False
@@ -96,13 +83,24 @@ class AppStore(Activity):
         settings_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
         settings_label.center()
 
+        self.scanqr_button = lv.button(self.top_bar)
+        self.scanqr_button.set_size(self._TOP_BAR_BUTTON_SIZE, self._TOP_BAR_BUTTON_SIZE)
+        self.scanqr_button.align(lv.ALIGN.RIGHT_MID, -5, 0)
+        self.scanqr_button.add_event_cb(self.scanqr_button_tap, lv.EVENT.CLICKED, None)
+        scanqr_label = lv.label(self.scanqr_button)
+        scanqr_label.set_text(QR_SYMBOL)
+        scanqr_label.set_style_text_font(lv.font_montserrat_24, lv.PART.MAIN)
+        scanqr_label.center()
+
         self.category_dropdown = lv.dropdown(self.top_bar)
-        self.category_dropdown.set_size(lv.pct(75), self._TOP_BAR_HEIGHT - 6)
+        self.category_dropdown.set_size(lv.pct(55), self._TOP_BAR_HEIGHT - 6)
         self.category_dropdown.align_to(self.settings_button, lv.ALIGN.OUT_RIGHT_MID, 8, 0)
-        self.category_dropdown.set_options("All Categories")
+        self.category_dropdown.set_options("All")
         self.category_dropdown.add_event_cb(self._category_changed, lv.EVENT.VALUE_CHANGED, None)
-        self._category_options = ["All Categories"]
+        self._category_options = ["All"]
         self._selected_category = self.getIntent().extras.get("category")
+        self._pending_deeplink = self.getIntent().extras.get("deeplink_fullname")
+        self._default_to_installed = self._selected_category is None and self._pending_deeplink is None
 
         # ---- "Update N App(s)" button (hidden until updates are found) ----
         self.update_all_button = lv.button(self.main_screen)
@@ -171,7 +169,7 @@ class AppStore(Activity):
             from appstore_core import AppUpdateManager
             um = AppUpdateManager.get_instance()
             self._sync_update_banner(state, um.updatable_apps)
-            if self._selected_category == "Updates" and getattr(self, '_data_loaded', False):
+            if getattr(self, '_selected_category', None) == "Updates" and getattr(self, '_data_loaded', False):
                 self.create_apps_list()
         except Exception as e:
             logger.warning("state change error: %s", e)
@@ -228,8 +226,7 @@ class AppStore(Activity):
                 continue
             if not download_url:
                 from appstore_core import fetch_badgehub_project_details
-                base_url = AppStore._BADGEHUB_PROD_BASE_URL
-                details_url = base_url + "/projects/" + fullname
+                details_url = AppStore._BADGEHUB_DETAILS_URL + "/" + fullname
                 self.update_all_label.set_text(f"Checking {app_data.get('name', fullname)}...")
                 details = await fetch_badgehub_project_details(details_url)
                 download_url = details.get("download_url")
@@ -272,18 +269,12 @@ class AppStore(Activity):
             if __debug__: logger.debug("refresh already in progress, skipping")
             return
         self._refresh_in_progress = True
-        TaskManager.create_task(self._download_app_index_wrapper(self.get_backend_list_url_from_settings()))
+        TaskManager.create_task(self._download_app_index_wrapper(AppStore._BADGEHUB_LIST_URL))
 
     def settings_button_tap(self, event):
         intent = Intent(activity_class=SettingsActivity)
         intent.putExtra("prefs", self.prefs)
         intent.putExtra("settings", [
-            {"title": "AppStore Backend",
-             "key": "backend",
-             "ui": "radiobuttons",
-             "default_value": self._DEFAULT_BACKEND,
-             "ui_options": [(backend[0], AppStore.get_backend_pref_string(index)) for index, backend in enumerate(AppStore.backends)],
-             "changed_callback": self.backend_changed},
             {"title": "App List Icons",
              "key": "icon_pipeline",
              "ui": "radiobuttons",
@@ -304,22 +295,36 @@ class AppStore(Activity):
                  ("Show", "false"),
              ],
              "changed_callback": self._hide_wip_changed},
+            {"title": "Update notifications",
+             "key": "update_notifications",
+             "ui": "radiobuttons",
+             "default_value": "true",
+             "ui_options": [
+                 ("On", "true"),
+                 ("Off", "false"),
+             ],
+             "changed_callback": self._update_notifications_changed},
         ])
         self.startActivity(intent)
-
-    def backend_changed(self, new_value):
-        if __debug__: logger.debug("backend changed to %s", new_value)
-        self.refresh_list()
 
     def _hide_wip_changed(self, new_value):
         self._hide_wip = new_value == "true"
         self.refresh_list()
 
+    def _update_notifications_changed(self, new_value):
+        if new_value != "true":
+            try:
+                from appstore_core import AppUpdateManager
+                AppUpdateManager.get_instance().clear_updates_notification()
+            except Exception as e:
+                logger.warning("could not clear update notification: %s", e)
+
     def _category_changed(self, event):
         if getattr(self, "_rebuilding_dropdown", False):
             return
         idx = self.category_dropdown.get_selected()
-        self._selected_category = self._category_options[idx] if idx > 0 else None
+        cat = self._category_options[idx]
+        self._selected_category = None if cat == "All" else cat
         self.create_apps_list()
 
     def _update_category_dropdown(self):
@@ -332,17 +337,18 @@ class AppStore(Activity):
                 cat_counts[cat] = cat_counts.get(cat, 0) + 1
             total += 1
         sorted_cats = [c for c in sorted(cat_counts.keys()) if c != "Adult" and c not in AppStore._SPECIAL_CATEGORIES]
-        top_cats = []
+        top_cats = ["Installed", "Updates"]
         if self._wip_apps:
             top_cats.append("Work In Progress")
-        top_cats.append("Updates")
-        self._category_options = ["All Categories"] + top_cats + sorted_cats
+        top_cats.append("All")
+        self._category_options = top_cats + sorted_cats
         if "Adult" in cat_counts:
             self._category_options.append("Adult")
-        display = ["All Categories (%d)" % total]
+        display = []
         for cat_name in top_cats:
-            if cat_name == "Work In Progress":
-                display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
+            if cat_name == "Installed":
+                n_installed = sum(1 for app in self.apps if app.installed_path is not None)
+                display.append("%s (%d)" % (cat_name, n_installed))
             elif cat_name == "Updates":
                 try:
                     from appstore_core import AppUpdateManager
@@ -350,14 +356,21 @@ class AppStore(Activity):
                 except Exception:
                     n_updates = 0
                 display.append("%s (%d)" % (cat_name, n_updates))
+            elif cat_name == "Work In Progress":
+                display.append("%s (%d)" % (cat_name, len(self._wip_apps)))
+            elif cat_name == "All":
+                display.append("%s (%d)" % (cat_name, total))
         for cat_name in sorted_cats:
             display.append("%s (%d)" % (cat_name, cat_counts[cat_name]))
         if "Adult" in cat_counts:
             display.append("Adult (%d)" % cat_counts["Adult"])
         self._rebuilding_dropdown = True
         self.category_dropdown.set_options("\n".join(display))
-        if self._selected_category and self._selected_category in self._category_options:
-            self.category_dropdown.set_selected(self._category_options.index(self._selected_category))
+        selected_cat = getattr(self, "_selected_category", None)
+        if selected_cat and selected_cat in self._category_options:
+            self.category_dropdown.set_selected(self._category_options.index(selected_cat))
+        elif selected_cat is None and "All" in self._category_options:
+            self.category_dropdown.set_selected(self._category_options.index("All"))
         else:
             selected = self.category_dropdown.get_selected()
             if selected < len(self._category_options):
@@ -406,64 +419,70 @@ class AppStore(Activity):
                 self._builtin_fullnames.add(installed_app.fullname)
                 continue
             self.apps.append(installed_app)
+        if getattr(self, "_default_to_installed", False):
+            self._default_to_installed = False
+            n_installed = sum(1 for app in self.apps if app.installed_path is not None)
+            if n_installed > 0:
+                self._selected_category = "Installed"
         self._data_loaded = True
         self.create_apps_list()
         self._update_category_dropdown()
+
+        # A deep link to an app that is already known locally (e.g. installed)
+        # can open its detail screen right now, without waiting for the index
+        # download. Unknown apps keep waiting for Phase 2.
+        self._try_early_deeplink()
 
         # Phase 2: download store index and merge in new apps
         try:
             response = await DownloadManager.download_url(json_url)
         except Exception as e:
             if __debug__: logger.debug("store index unavailable (%s), showing installed apps only", e)
+            self._resolve_pending_deeplink(index_available=False)
             return
         try:
             parsed = json.loads(response)
         except Exception as e:
             logger.warning("could not parse store index: %s", e)
+            self._resolve_pending_deeplink(index_available=False)
             return
 
-        backend_type = self.get_backend_type_from_settings()
         installed_by_fullname = {app.fullname: app for app in self.apps}
         new_apps = []
         for app_data in parsed:
             try:
-                if backend_type == self._BACKEND_API_BADGEHUB:
-                    if app_data.get("slug") in installed_by_fullname:
-                        existing = installed_by_fullname[app_data.get("slug")]
-                        ratings = app_data.get("ratings") or {}
-                        existing.rating_average = ratings.get("average")
-                        existing.rating_count = ratings.get("count", 0)
-                        if app_data.get("development_status") == "work_in_progress":
-                            self._wip_apps.append(existing)
-                        continue
-                    if app_data.get("slug") in self._builtin_fullnames:
-                        continue
-                    app = AppStore.badgehub_app_to_mpos_app(app_data)
+                fullname = app_data.get("slug")
+                if not fullname:
+                    continue
+                if fullname in installed_by_fullname:
+                    existing = installed_by_fullname[fullname]
+                    store_version = app_data.get("version")
+                    if store_version:
+                        existing._remote_version = store_version
+                    ratings = app_data.get("ratings") or {}
+                    existing.rating_average = ratings.get("average")
+                    existing.rating_count = ratings.get("count", 0)
                     if app_data.get("development_status") == "work_in_progress":
-                        self._wip_apps.append(app)
-                        if self._hide_wip:
-                            continue
-                    new_apps.append(app)
-                else:
-                    fullname = app_data["fullname"]
-                    if fullname in self._builtin_fullnames:
+                        self._wip_apps.append(existing)
+                    continue
+                if fullname in self._builtin_fullnames:
+                    continue
+                app = AppStore.badgehub_app_to_mpos_app(app_data)
+                if app_data.get("development_status") == "work_in_progress":
+                    self._wip_apps.append(app)
+                    if self._hide_wip:
                         continue
-                    if fullname in installed_by_fullname:
-                        existing = installed_by_fullname[fullname]
-                        existing.icon_url = app_data["icon_url"]
-                        existing.download_url = app_data["download_url"]
-                    else:
-                        new_apps.append(App(
-                            app_data["name"], app_data["publisher"],
-                            app_data["short_description"], app_data["long_description"],
-                            app_data["icon_url"], app_data["download_url"],
-                            fullname, app_data["version"],
-                            app_data["category"], app_data["activities"],
-                        ))
+                new_apps.append(app)
             except Exception as e:
-                logger.warning("could not process store app %s: %s", app_data.get("fullname", "?"), e)
+                logger.warning("could not process store app %s: %s", app_data.get("slug", "?"), e)
 
         # Insert new apps at their sorted positions (avoids rebuilding entire list)
+        # If the activity is no longer in the foreground (e.g. test called
+        # back_screen() while the download was in flight), the list widgets may
+        # have been deleted — inserting into a stale list can segfault LVGL.
+        if not self.has_foreground():
+            self._resolve_pending_deeplink()
+            return
         for app in new_apps:
             idx = self._find_sorted_insert_index(app)
             self.apps.insert(idx, app)
@@ -471,18 +490,29 @@ class AppStore(Activity):
 
         # ponytail: rebuild whole list so installed apps get their rating labels
         # (ratings were patched after Phase 1 already painted the list)
-        self.create_apps_list()
-        self._update_category_dropdown()
+        if self.has_foreground():
+            self.create_apps_list()
+            self._update_category_dropdown()
+        self._resolve_pending_deeplink()
 
     def create_apps_list(self):
         if __debug__: logger.debug("create_apps_list")
+        # Guard against being called after the activity was removed (e.g. async
+        # download completing after back_screen). Acting on deleted LVGL objects
+        # can hard-fault the device.
+        if not getattr(self, "main_screen", None) or not self.has_foreground():
+            if __debug__: logger.debug("create_apps_list skipped: not in foreground")
+            return
 
         self._stop_all_timers()
         self._icon_queue.clear()
         self._download_in_progress = False
 
         if __debug__: logger.debug("hiding please wait label")
-        self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
+        try:
+            self.please_wait_label.add_flag(lv.obj.FLAG.HIDDEN)
+        except Exception:
+            return
 
         # Determine top offset (update button may be visible)
         button_visible = not self.update_all_button.has_flag(lv.obj.FLAG.HIDDEN)
@@ -500,21 +530,28 @@ class AppStore(Activity):
         self._icon_widgets = {}
         self._update_labels = {}
         if __debug__: logger.debug("create_apps_list iterating")
-        apps_to_show = self._wip_apps if self._selected_category == "Work In Progress" else self.apps
-        if self._selected_category == "Updates":
+        sel_cat = getattr(self, "_selected_category", None)
+        apps_to_show = self._wip_apps if sel_cat == "Work In Progress" else self.apps
+        installed_set = set()
+        if sel_cat == "Installed":
+            installed_set = {app.fullname for app in self.apps if app.installed_path is not None}
+        if sel_cat == "Updates":
             try:
                 from appstore_core import AppUpdateManager
                 updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
             except Exception:
                 updatable_set = set()
         for app in apps_to_show:
-            if self._selected_category:
-                if self._selected_category == "Work In Progress":
+            if sel_cat:
+                if sel_cat == "Work In Progress":
                     pass
-                elif self._selected_category == "Updates":
+                elif sel_cat == "Installed":
+                    if app.fullname not in installed_set:
+                        continue
+                elif sel_cat == "Updates":
                     if app.fullname not in updatable_set:
                         continue
-                elif not app.categories or self._selected_category not in app.categories:
+                elif not app.categories or sel_cat not in app.categories:
                     continue
             if __debug__: logger.debug(app)
             item = self.apps_list.add_button(None, "")
@@ -573,9 +610,27 @@ class AppStore(Activity):
         if self._icon_queue:
             self._raw_timer = lv.timer_create(self._process_icon_queue, self._GENERATE_APP_ICON_BENCHMARK*self._WAIT_FACTOR_APP_ICON, None)
         try:
-            from appstore_core import AppUpdateManager
-            um = AppUpdateManager.get_instance()
-            self._sync_update_banner(um.current_state, um.updatable_apps)
+            from appstore_core import AppUpdateManager, AppUpdateState
+            updatable = []
+            for app in self.apps:
+                installed_path = getattr(app, "installed_path", None)
+                if not installed_path:
+                    continue
+                remote = getattr(app, "_remote_version", None)
+                if not remote:
+                    continue
+                if AppManager.is_update_available(app.fullname, remote):
+                    updatable.append({
+                        "fullname": app.fullname,
+                        "version": remote,
+                        "name": app.name,
+                        "download_url": app.download_url,
+                    })
+            AppUpdateManager.get_instance().updatable_apps = updatable
+            if updatable:
+                AppUpdateManager.get_instance().current_state = AppUpdateState.UPDATES_AVAILABLE
+            state = AppUpdateState.UPDATES_AVAILABLE if updatable else AppUpdateState.NO_UPDATES
+            self._sync_update_banner(state, updatable)
         except Exception:
             pass
         if __debug__: logger.debug("create_apps_list done")
@@ -596,6 +651,23 @@ class AppStore(Activity):
         """Create LVGL widgets for an app and insert at the given index in the list."""
         if not hasattr(self, "apps_list") or not self.apps_list:
             return
+        if not self.has_foreground():
+            return
+        sel_cat = getattr(self, "_selected_category", None)
+        if sel_cat == "Installed":
+            if app.installed_path is None:
+                return
+        elif sel_cat == "Updates":
+            try:
+                from appstore_core import AppUpdateManager
+                updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
+            except Exception:
+                updatable_set = set()
+            if app.fullname not in updatable_set:
+                return
+        elif sel_cat and sel_cat not in AppStore._SPECIAL_CATEGORIES:
+            if not app.categories or sel_cat not in app.categories:
+                return
         item = self.apps_list.add_button(None, "")
         item.set_style_pad_all(0, lv.PART.MAIN)
         item.set_size(lv.pct(100), lv.SIZE_CONTENT)
@@ -652,6 +724,20 @@ class AppStore(Activity):
         update_label.add_flag(lv.obj.FLAG.HIDDEN)
         self._update_labels[app.fullname] = update_label
         item.move_to_index(index)
+        sel_cat = getattr(self, "_selected_category", None)
+        if sel_cat == "Installed" and not app.installed_path:
+            item.add_flag(lv.obj.FLAG.HIDDEN)
+        elif sel_cat == "Updates":
+            try:
+                from appstore_core import AppUpdateManager
+                updatable_set = {a.get("fullname") for a in (AppUpdateManager.get_instance().updatable_apps or [])}
+            except Exception:
+                updatable_set = set()
+            if app.fullname not in updatable_set:
+                item.add_flag(lv.obj.FLAG.HIDDEN)
+        elif sel_cat and sel_cat not in ("All", "Work In Progress"):
+            if not app.categories or sel_cat not in app.categories:
+                item.add_flag(lv.obj.FLAG.HIDDEN)
 
     def _stop_all_timers(self):
         if self._raw_timer:
@@ -662,8 +748,9 @@ class AppStore(Activity):
         if not self._icon_queue:
             if self._download_in_progress:
                 return
-            self._raw_timer.delete()
-            self._raw_timer = None
+            if self._raw_timer:
+                self._raw_timer.delete()
+                self._raw_timer = None
             return
         idx = self._find_best_app_index(self._icon_queue)
         app, stage = self._icon_queue.pop(idx)
@@ -787,19 +874,88 @@ class AppStore(Activity):
         intent.putExtra("appstore", self)
         self.startActivity(intent)
 
-    def _get_backend_config(self):
-        """Get backend configuration tuple (type, list_url, details_url)"""
-        pref_string = self.prefs.get_string("backend", self._DEFAULT_BACKEND)
-        return AppStore.backend_pref_string_to_backend(pref_string)
+    # ------------------------------------------------------------------
+    # QR scanning and deep links
+    # ------------------------------------------------------------------
 
-    def get_backend_type_from_settings(self):
-        return self._get_backend_config()[0]
+    def scanqr_button_tap(self, event):
+        from mpos.ui.camera_activity import CameraActivity
+        self.startActivityForResult(
+            Intent(activity_class=CameraActivity).putExtra("scanqr_intent", True),
+            self.scanqr_result_callback,
+        )
 
-    def get_backend_list_url_from_settings(self):
-        return self._get_backend_config()[1]
+    def scanqr_result_callback(self, result):
+        if not isinstance(result, dict) or not result.get("result_code"):
+            return
+        data = result.get("data")
+        link = deeplink.parse_store_link(data)
+        if link:
+            self.open_app_by_fullname(link["fullname"])
+            return
+        # Not a store link: offer it to third-party URL handlers.
+        if isinstance(data, str) and deeplink.open_url(data):
+            return
+        preview = data if isinstance(data, str) else repr(data)
+        if len(preview) > 128:
+            preview = preview[:128] + "..."
+        self._show_scan_message("Not an app link", "This QR code is not a MicroPythonOS app link:\n\n%s" % preview)
 
-    def get_backend_details_url_from_settings(self):
-        return self._get_backend_config()[2]
+    def open_app_by_fullname(self, fullname):
+        """Open the detail screen for a store app, refreshing the index if needed."""
+        app = self._find_store_app(fullname)
+        if app:
+            self.show_app_detail(app)
+            return
+        self._pending_deeplink = fullname
+        if self._data_loaded and not self._refresh_in_progress:
+            self.refresh_list()
+        # Otherwise the index download is already underway and
+        # _resolve_pending_deeplink() will run when it finishes.
+
+    def _find_store_app(self, fullname):
+        for app in self.apps:
+            if app.fullname == fullname:
+                return app
+        for app in self._wip_apps:
+            if app.fullname == fullname:
+                return app
+        return None
+
+    def _try_early_deeplink(self):
+        """Open a pending deep link now if the app is already resolvable."""
+        fullname = getattr(self, "_pending_deeplink", None)
+        if not fullname:
+            return
+        app = self._find_store_app(fullname)
+        if app:
+            self._pending_deeplink = None
+            self.show_app_detail(app)
+
+    def _resolve_pending_deeplink(self, index_available=True):
+        fullname = getattr(self, "_pending_deeplink", None)
+        if not fullname:
+            return
+        self._pending_deeplink = None
+        app = self._find_store_app(fullname)
+        if app:
+            self.show_app_detail(app)
+        elif not index_available:
+            self._show_scan_message("No connection",
+                                    "Could not download the app index to look up '%s'.\nCheck your network connection and try again." % fullname)
+        else:
+            self._show_scan_message("App not found",
+                                    "App '%s' is not in the App Store.\nIt may have been removed, or your device may need a system update." % fullname)
+
+    def _show_scan_message(self, title, text):
+        mbox = lv.msgbox(lv.layer_top())
+        mbox.add_title(title)
+        mbox.add_text(text)
+        ok = mbox.add_footer_button("OK")
+        ok.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
+        close = mbox.add_close_button()
+        close.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CLICKED, None)
+        mbox.add_event_cb(lambda e: mbox.delete(), lv.EVENT.CANCEL, None)
 
     @staticmethod
     def badgehub_app_to_mpos_app(bhapp):
@@ -817,24 +973,7 @@ class AppStore(Activity):
         ratings = bhapp.get("ratings") or {}
         rating_average = ratings.get("average")
         rating_count = ratings.get("count", 0)
-        return App(name, None, short_description, None, icon_url, None, fullname, None, category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
-
-    @staticmethod
-    def get_backend_pref_string(index):
-        backend_info = AppStore.backends[index]
-        if backend_info:
-            api = backend_info[1]
-            base_url = backend_info[2]
-            list_suffix  = backend_info[3]
-            details_suffix = backend_info[4]
-            toreturn = api + "," + base_url + "/" + list_suffix
-            if api == AppStore._BACKEND_API_BADGEHUB:
-                toreturn += "," + base_url + "/" + details_suffix
-            return toreturn
-
-    @staticmethod
-    def backend_pref_string_to_backend(string):
-        return string.split(",")
+        return App(name, None, short_description, None, icon_url, None, fullname, bhapp.get("version"), category, None, blur_hash=blur_hash, rating_average=rating_average, rating_count=rating_count)
 
     @staticmethod
     def _apply_default_styles(widget, border=0, radius=0, pad=0):

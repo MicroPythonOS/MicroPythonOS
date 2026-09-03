@@ -28,6 +28,60 @@ def _fs_open_cb(drv, path, mode):
         logger.error("fs_open_callback(%s) exception: %s", path, e)
         return None
 
+    # FreezeFS/DeflateIO files (builtin assets like emojis) are presented as
+    # non-seekable streams. LVGL's image decoder and snapshot code require
+    # seek/tell, so wrap such files into a seekable in-memory buffer.
+    try:
+        has_seek = hasattr(f, 'seek') and hasattr(f, 'tell')
+        # DeflateIO exposes seek as missing, but also check callable
+        if not has_seek:
+            raise AttributeError("missing seek/tell")
+        # Probe that seek actually works (DeflateIO raises AttributeError)
+        f.seek(0, 1)
+    except Exception:
+        try:
+            data = f.read()
+            try:
+                f.close()
+            except Exception:
+                pass
+            # Prefer io.BytesIO when available (MicroPython may not have it)
+            try:
+                import io
+                f = io.BytesIO(data)
+            except Exception:
+                # Minimal in-memory seekable wrapper
+                class _MemFile:
+                    def __init__(self, d):
+                        self._d = d
+                        self._pos = 0
+                    def read(self, n=-1):
+                        if n is None or n < 0:
+                            n = len(self._d) - self._pos
+                        chunk = self._d[self._pos:self._pos+n]
+                        self._pos += len(chunk)
+                        return chunk
+                    def seek(self, offset, whence=0):
+                        if whence == 0:
+                            self._pos = offset
+                        elif whence == 1:
+                            self._pos += offset
+                        elif whence == 2:
+                            self._pos = len(self._d) + offset
+                        self._pos = max(0, min(self._pos, len(self._d)))
+                        return self._pos
+                    def tell(self):
+                        return self._pos
+                    def close(self):
+                        pass
+                    def write(self, b):
+                        # Not needed for read-only emoji assets
+                        raise OSError("read-only")
+                f = _MemFile(data)
+        except Exception as e:
+            logger.error("fs_open_callback(%s) wrap seekable failed: %s", path, e)
+            return None
+
     return {'file' : f, 'path': path}
 
 
@@ -56,7 +110,8 @@ def _fs_read_cb(drv, fs_file, buf, btr, br):
 def _fs_seek_cb(drv, fs_file, pos, whence):
     try:
         fs_file.__cast__()['file'].seek(pos, whence)
-    except OSError as e:
+    except Exception as e:
+        # DeflateIO and other non-seekable streams raise AttributeError on device
         logger.error("fs_seek_callback(%s) exception: %s", fs_file.__cast__()['path'], e)
         return lv.FS_RES.UNKNOWN
 
@@ -67,7 +122,7 @@ def _fs_tell_cb(drv, fs_file, pos):
     try:
         tpos = fs_file.__cast__()['file'].tell()
         pos.__dereference__(4)[0:4] = struct.pack("<L", tpos)
-    except OSError as e:
+    except Exception as e:
         logger.error("fs_tell_callback(%s) exception: %s", fs_file.__cast__()['path'], e)
         return lv.FS_RES.UNKNOWN
 

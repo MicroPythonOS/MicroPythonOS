@@ -8,6 +8,7 @@ import time
 from ..time import epoch_seconds
 from .camera_settings import CameraSettingsActivity
 from ..camera_manager import CameraManager
+from ..device_info import DeviceInfo
 from .. import ui as mpos_ui
 from ..app.activity import Activity
 
@@ -42,6 +43,8 @@ class CameraActivity(Activity):
     snap_button = None
     status_label = None
     status_label_cont = None
+    open_link_button = None
+    open_link_label = None
 
     def onCreate(self):
         self.main_screen = lv.obj()
@@ -87,6 +90,7 @@ class CameraActivity(Activity):
         snap_label = lv.label(self.snap_button)
         snap_label.set_text(lv.SYMBOL.OK)
         snap_label.center()
+        self._add_focusable_buttons()
 
         self.status_label_cont = lv.obj(self.main_screen)
         self.status_label_cont.set_style_bg_color(lv.color_white(), lv.PART.MAIN)
@@ -97,6 +101,17 @@ class CameraActivity(Activity):
         self.status_label.set_long_mode(lv.label.LONG_MODE.WRAP)
         self.status_label.set_width(lv.pct(100))
         self.status_label.center()
+
+        # Action chip shown when a decoded QR is an app link the OS can open
+        # (official store link or a registered urlPattern handler).
+        self._last_qr_text = None
+        self.open_link_button = lv.button(self.status_label_cont)
+        self.open_link_button.align(lv.ALIGN.BOTTOM_MID, 0, 0)
+        self.open_link_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self.open_link_button.add_event_cb(self._open_link_click, lv.EVENT.CLICKED, None)
+        self.open_link_label = lv.label(self.open_link_button)
+        self.open_link_label.set_text("")
+        self.open_link_label.center()
 
         if mpos_ui.DisplayMetrics.width() < mpos_ui.DisplayMetrics.height():
             # poster
@@ -156,18 +171,49 @@ class CameraActivity(Activity):
         self.qr_button.set_size(self.button_width, self.button_height)
         self.snap_button.set_style_radius(self.button_width, lv.PART.MAIN)
 
+    def _add_focusable_buttons(self):
+        # K10 has only A and B, so give camera controls visible focus and a stable start.
+        if DeviceInfo.get_hardware_id() != "unihiker_k10":
+            return
+        for button in (
+            self.close_button,
+            self.settings_button,
+            self.qr_button,
+            self.snap_button,
+        ):
+            mpos_ui.add_focus_highlight(button, width=2)
+        lv.group_focus_obj(self.close_button)
+
+# Merge common, mode-specific, and board-specific camera defaults.
+    def _get_camera_defaults(self, mode_defaults):
+        defaults = {}
+        defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
+        defaults.update(mode_defaults)
+        cameras = CameraManager.get_cameras()
+        if cameras:
+            defaults["vflip"] = cameras[0].get_default_vflip()
+        return defaults
+
     def start_cam(self):
         # Init camera:
-        firstcam = CameraManager.get_cameras()[0]
+        cameras = CameraManager.get_cameras()
+        if not cameras:
+            self.cam = None
+            self.status_label.set_text(self.STATUS_NO_CAMERA)
+            self.status_label_cont.remove_flag(lv.obj.FLAG.HIDDEN)
+            return False
+        firstcam = cameras[0]
         self.cam = firstcam.init(self.width, self.height, self.colormode)
         if self.cam:
             self.image.set_rotation(-10 * firstcam.get_rotation_degrees()) # counter the rotation so * -1 and convert to tens-of-a-degree for LVGL
-            # Apply saved camera settings, only for internal camera for now:
+            # Apply saved camera settings, for internal camera for now:
             firstcam.apply_settings(self.cam, self.scanqr_prefs if self.scanqr_mode else self.prefs) # needs to be done AFTER the camera is initialized
             # Start refreshing:
             if __debug__: logger.debug("Camera app initialized, continuing...")
             self.update_preview_image()
             self.capture_timer = lv.timer_create(self.try_capture, 100, None)
+            return True
+        return False
 
     def stop_cam(self):
         if self.capture_timer:
@@ -184,10 +230,7 @@ class CameraActivity(Activity):
         if self.scanqr_mode:
             if __debug__: logger.debug("loading scanqr settings...")
             if not self.scanqr_prefs:
-                # Merge common and scanqr-specific defaults
-                scanqr_defaults = {}
-                scanqr_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
-                scanqr_defaults.update(CameraSettingsActivity.SCANQR_DEFAULTS)
+                scanqr_defaults = self._get_camera_defaults(CameraSettingsActivity.SCANQR_DEFAULTS)
                 self.scanqr_prefs = SharedPreferences(
                     self.appFullName,
                     filename=self.SCANQR_CONFIG,
@@ -199,10 +242,7 @@ class CameraActivity(Activity):
             self.colormode = self.scanqr_prefs.get_bool("colormode")
         else:
             if not self.prefs:
-                # Merge common and normal-specific defaults
-                normal_defaults = {}
-                normal_defaults.update(CameraSettingsActivity.COMMON_DEFAULTS)
-                normal_defaults.update(CameraSettingsActivity.NORMAL_DEFAULTS)
+                normal_defaults = self._get_camera_defaults(CameraSettingsActivity.NORMAL_DEFAULTS)
                 self.prefs = SharedPreferences(self.appFullName, defaults=normal_defaults)
             # Defaults come from constructor, no need to pass them here
             self.width = self.prefs.get_int("resolution_width")
@@ -210,13 +250,20 @@ class CameraActivity(Activity):
             self.colormode = self.prefs.get_bool("colormode")
 
     def update_preview_image(self):
+        color_format = lv.COLOR_FORMAT.L8
+        if self.colormode:
+            firstcam = CameraManager.get_cameras()[0]
+            if firstcam.get_rgb565_byte_swap():
+                color_format = lv.COLOR_FORMAT.RGB565_SWAPPED
+            else:
+                color_format = lv.COLOR_FORMAT.RGB565
         self.image_dsc = lv.image_dsc_t({
             "header": {
                 "magic": lv.IMAGE_HEADER_MAGIC,
                 "w": self.width,
                 "h": self.height,
                 "stride": self.width * (2 if self.colormode else 1),
-                "cf": lv.COLOR_FORMAT.RGB565 if self.colormode else lv.COLOR_FORMAT.L8
+                "cf": color_format
             },
             'data_size': self.width * self.height * (2 if self.colormode else 1),
             'data': None # Will be updated per frame
@@ -267,6 +314,7 @@ class CameraActivity(Activity):
             self.finish()
         else:
             self.status_label.set_text(result) # in the future, the status_label text should be copy-paste-able
+            self._maybe_offer_open_link(result)
             self.stop_qr_decoding()
 
     def snap_button_click(self, e):
@@ -306,9 +354,29 @@ class CameraActivity(Activity):
         except OSError as e:
             logger.error("Error writing to file: %s" % (e))
     
+    def _maybe_offer_open_link(self, text):
+        """Show the action chip when a decoded QR is an openable app link."""
+        from mpos.content import deeplink
+        label = deeplink.open_action_label(text)
+        if label:
+            self._last_qr_text = text
+            self.open_link_label.set_text(label)
+            self.open_link_button.remove_flag(lv.obj.FLAG.HIDDEN)
+        else:
+            self._last_qr_text = None
+            self.open_link_button.add_flag(lv.obj.FLAG.HIDDEN)
+
+    def _open_link_click(self, event):
+        from mpos.content import deeplink
+        if self._last_qr_text:
+            deeplink.open_url(self._last_qr_text)
+
     def start_qr_decoding(self):
         if __debug__: logger.debug("Activating live QR decoding...")
         self.scanqr_mode = True
+        if self.open_link_button:
+            self.open_link_button.add_flag(lv.obj.FLAG.HIDDEN)
+        self._last_qr_text = None
         oldwidth = self.width
         oldheight = self.height
         oldcolormode = self.colormode

@@ -48,8 +48,8 @@ class MockLabel:
 class MockPrefs:
     """Minimal SharedPreferences stand-in."""
 
-    def __init__(self, backend="github,https://apps.micropythonos.com/app_index.json"):
-        self._data = {"backend": backend}
+    def __init__(self):
+        self._data = {}
 
     def get_string(self, key, default=None):
         return self._data.get(key, default)
@@ -81,6 +81,10 @@ class MockAppUpdateManager:
 
     def check_for_updates_now(self, index_url=None):
         self.check_calls.append("check_for_updates_now")
+        import mpos
+        async def _noop():
+            pass
+        mpos.TaskManager.create_task(_noop())
 
     @classmethod
     def get_instance(cls):
@@ -139,7 +143,6 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
 
         store = AppStore()
         store.prefs = MockPrefs()
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
@@ -149,6 +152,7 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         store._icon_queue = []
         store._blurhash_queue = []
         store._wip_apps = []
+        store._has_foreground = True
         return store
 
     # ------------------------------------------------------------------
@@ -209,7 +213,7 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         store = self._make_store()
         store.create_apps_list = lambda: None
         # Provide a dummy JSON string that parses into one app.
-        json_data = '[{"name":"Test","publisher":"T","short_description":"sd","long_description":"ld","icon_url":"http://i.png","download_url":"http://a.zip","fullname":"com.test.a","version":"1","category":"test","activities":[]}]'
+        json_data = '[{"slug":"com.test.a","name":"Test","description":"sd","version":"1","categories":["test"]}]'
 
         async def _fake_download(url):
             return json_data
@@ -279,13 +283,13 @@ class TestAppStoreUpdateAllRecheck(unittest.TestCase):
         from appstore import AppStore
         store = AppStore()
         store.prefs = MockPrefs()
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store.update_all_button = MockStateLabel()
         store.update_all_label = MockStateLabel()
         store.main_screen = MockLabel()
         store.apps = []
+        store._has_foreground = True
         return store
 
     def test_update_all_calls_refresh_before_recheck(self):
@@ -339,7 +343,6 @@ class TestAppStoreDataFlow(unittest.TestCase):
 
         store = AppStore()
         store.prefs = MockPrefs()
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store._data_loaded = False
@@ -348,6 +351,7 @@ class TestAppStoreDataFlow(unittest.TestCase):
         store._wip_apps = []
         # Bypass LVGL UI creation — these tests verify data flow, not rendering
         store.create_apps_list = lambda: None
+        store._has_foreground = True
         return store
 
     # ------------------------------------------------------------------
@@ -374,7 +378,7 @@ class TestAppStoreDataFlow(unittest.TestCase):
             AppManager._app_list = orig_list
 
     def test_phase2_merges_store_only_apps(self):
-        """Phase 2 appends store-only apps and patches icon_url/download_url on installed ones."""
+        """Phase 2 appends store-only apps and patches ratings/version on installed ones."""
         from mpos import App, AppManager
         import asyncio
         import mpos.net.download_manager as dm
@@ -386,18 +390,16 @@ class TestAppStoreDataFlow(unittest.TestCase):
 
         json_data = json.dumps([
             {
-                "name": "ExistingApp", "publisher": "Pub",
-                "short_description": "desc", "long_description": "",
-                "icon_url": "http://i.png", "download_url": "http://a.zip",
-                "fullname": "com.test.existing", "version": "2.0",
-                "category": "test", "activities": [],
+                "slug": "com.test.existing", "name": "ExistingApp",
+                "description": "desc", "version": "2.0",
+                "categories": ["test"],
+                "ratings": {"average": 4.5, "count": 10},
             },
             {
-                "name": "NewApp", "publisher": "Pub2",
-                "short_description": "new", "long_description": "",
-                "icon_url": "http://i2.png", "download_url": "http://a2.zip",
-                "fullname": "com.test.new", "version": "1.0",
-                "category": "test", "activities": [],
+                "slug": "com.test.new", "name": "NewApp",
+                "description": "new", "version": "1.0",
+                "categories": ["test"],
+                "icon_map": {"64x64": {"url": "http://i2.png"}},
             },
         ])
 
@@ -414,11 +416,12 @@ class TestAppStoreDataFlow(unittest.TestCase):
             )
             # Both apps should be present
             self.assertEqual(len(store.apps), 2)
-            # Existing app should have icon_url and download_url patched
+            # Existing app should have remote version and ratings patched
             existing = [a for a in store.apps
                         if a.fullname == "com.test.existing"][0]
-            self.assertEqual(existing.icon_url, "http://i.png")
-            self.assertEqual(existing.download_url, "http://a.zip")
+            self.assertEqual(existing._remote_version, "2.0")
+            self.assertEqual(existing.rating_average, 4.5)
+            self.assertEqual(existing.rating_count, 10)
             # New store-only app should be present
             new = [a for a in store.apps
                    if a.fullname == "com.test.new"][0]
@@ -494,10 +497,7 @@ class TestAppStoreHideWip(unittest.TestCase):
         from appstore import AppStore
 
         store = AppStore()
-        store.prefs = MockPrefs(
-            backend="badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_0,https://badgehub.eu/api/v3/projects"
-        )
-        store._DEFAULT_BACKEND = store.prefs.get_string("backend")
+        store.prefs = MockPrefs()
         store._hide_wip = hide_wip
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
@@ -508,6 +508,7 @@ class TestAppStoreHideWip(unittest.TestCase):
         store._update_category_dropdown = lambda: None
         store._builtin_fullnames = set()
         store._wip_apps = []
+        store._has_foreground = True
         return store
 
     def test_hide_wip_filters_work_in_progress(self):
@@ -614,10 +615,7 @@ class TestAppDetailUpdateRecheck(unittest.TestCase):
         from app_detail import AppDetail
         detail = AppDetail()
         detail.app = type("App", (), {"fullname": "com.test.a"})()
-        detail.appstore = type("AppStore", (), {
-            "get_backend_type_from_settings": lambda self: "github",
-            "_BACKEND_API_BADGEHUB": "badgehub",
-        })()
+        detail.appstore = type("AppStore", (), {})()
         return detail
 
     def test_trigger_update_recheck_calls_refresh_apps(self):
@@ -640,8 +638,87 @@ class TestAppDetailUpdateRecheck(unittest.TestCase):
         )
 
 
-class TestAppDetailBadgehubFileSelection(unittest.TestCase):
-    """Ensure AppDetail selects the correct .mpk when BadgeHub lists several."""
+class TestAppDetailRefreshBeforeAddButtons(unittest.TestCase):
+    """Ensure AppDetail.refresh_apps is called BEFORE add_action_buttons after install."""
+
+    def setUp(self):
+        import asyncio
+        import mpos
+        import appstore_core
+
+        asyncio.new_event_loop()
+
+        self._orig_refresh = mpos.AppManager.refresh_apps
+        self._orig_dl = mpos.AppManager.download_and_install_package
+        self._orig_create = mpos.TaskManager.create_task
+
+        self._tracked_events = []
+        mpos.AppManager.refresh_apps = lambda: self._tracked_events.append("refresh_apps")
+
+        self._orig_aum = appstore_core.AppUpdateManager
+        appstore_core.AppUpdateManager = MockAppUpdateManager
+        MockAppUpdateManager.clear_instance()
+
+    def tearDown(self):
+        import mpos
+        import appstore_core
+        mpos.AppManager.refresh_apps = self._orig_refresh
+        mpos.AppManager.download_and_install_package = self._orig_dl
+        mpos.TaskManager.create_task = self._orig_create
+        appstore_core.AppUpdateManager = self._orig_aum
+
+    def test_download_and_install_refreshes_before_add_action_buttons(self):
+        """After install, AppManager.refresh_apps must run BEFORE add_action_buttons
+        so is_update_available() reads the fresh installed version."""
+        import asyncio
+        import mpos
+        from app_detail import AppDetail
+
+        async def _fake_dl(url, fullname, **kwargs):
+            pass
+
+        mpos.AppManager.download_and_install_package = _fake_dl
+
+        detail = AppDetail()
+        detail.app = type("App", (), {
+            "fullname": "com.test.a",
+            "download_url": "https://example.com/a.mpk",
+        })()
+        detail.appstore = type("AppStore", (), {})()
+
+        events = self._tracked_events
+
+        orig_aab = detail.add_action_buttons
+        detail.add_action_buttons = lambda *a: events.append("add_action_buttons")
+
+        class MockBar:
+            def add_flag(self, f): pass
+            def remove_flag(self, f): pass
+            def set_value(self, v, w): pass
+
+        detail.install_button = type("Btn", (), {"add_state": lambda s: None, "remove_state": lambda s: None})()
+        detail.install_label = type("Lbl", (), {"set_text": lambda t: None})()
+        detail.buttoncont = type("Obj", (), {})()
+        detail.progress_bar = MockBar()
+
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(detail.download_and_install(
+                detail.app, "apps/com.test.a"
+            ))
+
+            self.assertIn("add_action_buttons", events,
+                          "add_action_buttons must be called after install")
+            self.assertIn("refresh_apps", events,
+                          "AppManager.refresh_apps must be called after install")
+            refresh_idx = events.index("refresh_apps")
+            aab_idx = events.index("add_action_buttons")
+            self.assertTrue(
+                refresh_idx < aab_idx,
+                "refresh_apps (%d) must be called BEFORE add_action_buttons (%d)" % (refresh_idx, aab_idx),
+            )
+        finally:
+            detail.add_action_buttons = orig_aab
 
     def _make_files(self):
         return [
@@ -773,8 +850,7 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
             "AppStore",
             (),
             {
-                "get_backend_details_url_from_settings": lambda self: "https://badgehub.eu/api/v3/projects",
-                "_BACKEND_API_BADGEHUB": "badgehub",
+                "_BADGEHUB_DETAILS_URL": "https://badgehub.eu/api/v3/projects",
             },
         )()
 
@@ -789,7 +865,7 @@ class TestAppDetailBadgehubFileSelection(unittest.TestCase):
         finally:
             dm.DownloadManager.download_url = orig_dl
 
-        self.assertEqual(app_obj.version, "0.6.0")
+        self.assertEqual(app_obj._remote_version, "0.6.0")
         self.assertIsNotNone(app_obj.download_url)
         self.assertTrue(
             app_obj.download_url.endswith("com.lightningpiggy.displaywallet_0.6.0.mpk"),
@@ -912,10 +988,7 @@ class TestBadgehubReportInstall(unittest.TestCase):
                 "download_url": "https://badgehub.eu/file.mpk",
                 "revision": 42,
             })()
-            detail.appstore = type("AppStore", (), {
-                "get_backend_type_from_settings": lambda self: "badgehub",
-                "_BACKEND_API_BADGEHUB": "badgehub",
-            })()
+            detail.appstore = type("AppStore", (), {})()
 
             detail.install_button = self.MockBtn()
             detail.install_label = self.MockLbl()
@@ -964,10 +1037,7 @@ class TestBadgehubReportInstall(unittest.TestCase):
                 "fullname": "com.test.app",
                 "download_url": "https://badgehub.eu/file.mpk",
             })()
-            detail.appstore = type("AppStore", (), {
-                "get_backend_type_from_settings": lambda self: "badgehub",
-                "_BACKEND_API_BADGEHUB": "badgehub",
-            })()
+            detail.appstore = type("AppStore", (), {})()
             detail.install_button = self.MockBtn()
             detail.install_label = self.MockLbl()
             detail.progress_bar = self.MockBar()

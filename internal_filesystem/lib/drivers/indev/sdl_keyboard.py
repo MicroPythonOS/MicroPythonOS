@@ -1,8 +1,11 @@
+import logging
 import lvgl as lv
 from micropython import const  # NOQA
 import micropython  # NOQA  # NOQA
 import keypad_framework
 import mpos.clipboard
+
+logger = logging.getLogger(__name__)
 
 KEY_UNKNOWN = 0
 KEY_BACKSPACE = 8  # LV_KEY_BACKSPACE
@@ -52,6 +55,7 @@ KEY_CARET = 94  # ^
 KEY_UNDERSCORE = 95  # _
 KEY_BACKQUOTE = 96  # `
 KEY_a = 97  # a
+KEY_s = 115  # s
 KEY_z = 122  # z
 KEY_DELETE = 127  # LV_KEY_DEL
 
@@ -239,6 +243,16 @@ class MposSDLKeyboard(keypad_framework.KeypadDriver):
                 if clipboard_text:
                     self.paste_text_callback(clipboard_text)
                 return
+
+        # CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a screenshot in the current directory
+        if (state == 1 and key == KEY_s and mod & MOD_KEY_SHIFT
+                and mod & (MOD_KEY_CTRL | MOD_KEY_META)):
+            from mpos.ui.testing import save_screenshot_bmp
+            try:
+                print(f"Saved screenshot to {save_screenshot_bmp()}")
+            except Exception as e:
+                logger.warning("Could not save screenshot: %s", e)
+            return
 
         # Skip modifier keys and SDL-specific large keycodes (>= 2^30), except keypad, nav, and func keys
         if (key in {KEY_LSHIFT, KEY_RSHIFT, KEY_LCTRL, KEY_RCTRL, KEY_LALT, KEY_RALT,

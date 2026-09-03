@@ -246,9 +246,12 @@ class SharedPreferences:
     def get_list_item_dict(self, list_key, index, default=None):
         """Retrieve an entire dictionary from a list at the specified index."""
         try:
-            return self.data.get(list_key, [])[index]
+            item = self.data.get(list_key, [])[index]
         except (IndexError, TypeError):
             return default if default is not None else {}
+        if isinstance(item, dict):
+            return dict(item)  # return a copy — callers must not mutate prefs.data directly
+        return item
 
     # Generic methods for dictionary-based structures
     def get_dict_item_field(self, dict_key, item_key, field, default=None):
@@ -261,9 +264,12 @@ class SharedPreferences:
     def get_dict_item(self, dict_key, item_key, default=None):
         """Retrieve the entire configuration for an item in a dictionary by item_key."""
         try:
-            return self.data.get(dict_key, {}).get(item_key, default if default is not None else {})
+            item = self.data.get(dict_key, {}).get(item_key, default if default is not None else {})
         except (KeyError, TypeError):
             return default if default is not None else {}
+        if isinstance(item, dict):
+            return dict(item)  # return a copy — callers must not mutate prefs.data directly
+        return item
 
     def get_dict_keys(self, dict_key):
         """Retrieve a list of all keys in a dictionary at dict_key."""

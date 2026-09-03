@@ -295,6 +295,14 @@ class WAVStream:
         upsample_factor = (minimal_rate + original_rate - 1) // original_rate
         return original_rate * upsample_factor, upsample_factor
 
+    @staticmethod
+    def compute_drain_ms(played_ms, elapsed_ms):
+        """How much longer queued audio needs to finish playing, given the
+        duration of the audio queued so far and the wall-clock time spent
+        queueing it."""
+        drain_ms = int(played_ms) - int(elapsed_ms)
+        return drain_ms if drain_ms > 0 else 0
+
     # ----------------------------------------------------------------------
     #  Bit depth conversion functions
     # ----------------------------------------------------------------------
@@ -484,71 +492,92 @@ class WAVStream:
 
         if player is None:
             logger.warning("Desktop audio: no player found (afplay/ffplay/aplay/paplay); simulating timing")
-            elapsed_ms = 0
-            while self._keep_running:
+
+        # Honor repeat_count like the I2S path does. repeat_count is re-read
+        # every pass so set_repeat() changes apply mid-playback.
+        self._repeat_played = 0
+        while self._keep_running:
+            if self._repeat_played >= self.repeat_count:
+                break
+            self._repeat_played += 1
+            self._progress_samples = 0
+
+            if player is None:
                 if self._duration_ms is None:
                     break
-                time.sleep_ms(100)
-                elapsed_ms += 100
-                if self._playback_rate:
-                    self._progress_samples = min(
-                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                        self._total_samples
-                    )
-                if elapsed_ms >= self._duration_ms:
-                    break
-        else:
-            pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
-            qpid = _shell_quote(pid_file)
-            if player == "afplay":
-                cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
-                    max(0.0, min(1.0, self.volume / 100.0)),
-                    quoted,
-                    qpid
-                )
-            elif player == "ffplay":
-                cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
-                    self.volume,
-                    quoted,
-                    qpid
-                )
-            elif player == "aplay":
-                cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+                elapsed_ms = 0
+                while self._keep_running:
+                    time.sleep_ms(100)
+                    elapsed_ms += 100
+                    if self._playback_rate:
+                        self._progress_samples = min(
+                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            self._total_samples
+                        )
+                    if elapsed_ms >= self._duration_ms:
+                        break
             else:
-                cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
-
-            os.system(cmd)
-
-            start_ticks = time.ticks_ms()
-            while self._keep_running:
-                time.sleep_ms(100)
-                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                if self._playback_rate:
-                    self._progress_samples = min(
-                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                        self._total_samples
+                pid_file = "/tmp/mpos_audio_%d.pid" % id(self)
+                qpid = _shell_quote(pid_file)
+                if player == "afplay":
+                    cmd = "afplay -v %.2f %s >/dev/null 2>&1 & echo $! > %s" % (
+                        max(0.0, min(1.0, self.volume / 100.0)),
+                        quoted,
+                        qpid
                     )
-                if elapsed_ms >= (self._duration_ms or 0):
-                    break
+                elif player == "ffplay":
+                    cmd = "ffplay -nodisp -autoexit -loglevel quiet -volume %d %s >/dev/null 2>&1 & echo $! > %s" % (
+                        self.volume,
+                        quoted,
+                        qpid
+                    )
+                elif player == "aplay":
+                    cmd = "aplay -q %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
+                else:
+                    cmd = "paplay %s >/dev/null 2>&1 & echo $! > %s" % (quoted, qpid)
 
-            _stop_desktop_player(pid_file, not self._keep_running)
+                os.system(cmd)
+
+                start_ticks = time.ticks_ms()
+                while self._keep_running:
+                    time.sleep_ms(100)
+                    elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                    if self._playback_rate:
+                        self._progress_samples = min(
+                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            self._total_samples
+                        )
+                    if elapsed_ms >= (self._duration_ms or 0):
+                        break
+
+                _stop_desktop_player(pid_file, not self._keep_running)
 
         if self.on_complete:
             self.on_complete("Finished: %s" % self.file_path)
 
     async def _monitor_web_audio(self, webio):
-        start_ticks = time.ticks_ms()
         try:
+            # The first pass was already started by _play_desktop(). Honor
+            # repeat_count like the I2S path; it is re-read every pass so
+            # set_repeat() changes apply mid-playback.
+            self._repeat_played = 1
             while self._keep_running:
-                await asyncio.sleep_ms(100)
-                elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
-                if self._playback_rate:
-                    self._progress_samples = min(
-                        int(elapsed_ms / 1000.0 * self._playback_rate),
-                        self._total_samples
-                    )
-                if elapsed_ms >= (self._duration_ms or 0):
+                start_ticks = time.ticks_ms()
+                self._progress_samples = 0
+                while self._keep_running:
+                    await asyncio.sleep_ms(100)
+                    elapsed_ms = time.ticks_diff(time.ticks_ms(), start_ticks)
+                    if self._playback_rate:
+                        self._progress_samples = min(
+                            int(elapsed_ms / 1000.0 * self._playback_rate),
+                            self._total_samples
+                        )
+                    if elapsed_ms >= (self._duration_ms or 0):
+                        break
+                if not self._keep_running or self._repeat_played >= self.repeat_count:
                     break
+                self._repeat_played += 1
+                webio.audio_play(self.file_path, self.volume)
             if not self._keep_running:
                 webio.audio_stop()
             if self.on_complete:
@@ -679,8 +708,9 @@ class WAVStream:
 
                 if __debug__: logger.debug("Playing %s bytes (volume %s%%)", data_size, self.volume)
 
-                bytes_per_second_out = playback_rate * 2 * channels
                 self._repeat_played = 0
+                play_start_ms = time.ticks_ms()
+                played_ms = 0
 
                 # Chunk decode moved to _read_decode_chunk method.
 
@@ -733,13 +763,18 @@ class WAVStream:
                         if self._keep_running:
                             time.sleep_ms(1)
 
+                    if original_rate > 0:
+                        played_ms += self._progress_samples * 1000 // original_rate
+
                 if self._i2s and self._keep_running:
-                    try:
-                        drain_ms = int((ibuf / bytes_per_second_out) * 1000)
-                        if drain_ms > 0:
-                            time.sleep_ms(drain_ms)
-                    except Exception as e:
-                        logger.error("Drain wait failed: %s", e)
+                    # Wait for queued audio to finish playing: sleep until the
+                    # wall clock catches up with the duration that was queued.
+                    # A fixed ibuf/bytes_per_second estimate overshoots badly
+                    # at low byte rates (2 extra seconds at 8 kHz mono).
+                    elapsed_ms = time.ticks_diff(time.ticks_ms(), play_start_ms)
+                    drain_ms = WAVStream.compute_drain_ms(played_ms, elapsed_ms)
+                    if drain_ms > 0:
+                        time.sleep_ms(drain_ms)
 
                 if __debug__: logger.debug("Finished playing %s", self.file_path)
                 if self.on_complete:

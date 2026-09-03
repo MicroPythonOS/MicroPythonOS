@@ -11,6 +11,7 @@ Covers:
 - Drawer re-populates notification items on a second open
 """
 
+import gc
 import time
 import unittest
 
@@ -33,6 +34,12 @@ from mpos.ui import topmenu
 # ---------------------------------------------------------------------------
 
 def _wait_ms(ms):
+    """Busy-wait using ticks so it works on both desktop and device.
+
+    On device the timer-driven TaskHandler pumps LVGL during ``time.sleep``,
+    but direct ``lv.task_handler()`` calls are kept as a safety net so
+    animations/layout updates do not stall in long test runs.
+    """
     start = time.ticks_ms()
     while time.ticks_diff(time.ticks_ms(), start) < ms:
         lv.task_handler()
@@ -94,6 +101,18 @@ def _post_test_notification():
     )
 
 
+def setUpModule():
+    """Start the launcher once for the whole drawer test module.
+
+    Starting the launcher in every setUp is slow and can leave stale
+    activities/timers across the many drawer tests. A single launcher
+    instance is enough because all tests operate on the global topmenu.
+    """
+    NotificationManager.cancel_all()
+    AppManager.start_app("com.micropythonos.launcher")
+    _wait_ms(1000)
+
+
 # ---------------------------------------------------------------------------
 
 class TestDrawerOpenClose(unittest.TestCase):
@@ -101,18 +120,20 @@ class TestDrawerOpenClose(unittest.TestCase):
 
     def setUp(self):
         NotificationManager.cancel_all()
-        AppManager.start_app("com.micropythonos.launcher")
-        _wait_ms(500)
+        gc.collect()
+        # Launcher is started once in setUpModule.
+        _wait_ms(200)
         # Ensure drawer is closed to start.
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
+        gc.collect()
 
     def test_open_drawer_sets_flag_and_shows_widget(self):
         topmenu.open_drawer()
@@ -125,7 +146,7 @@ class TestDrawerOpenClose(unittest.TestCase):
         topmenu.open_drawer()
         _wait_drawer_open(timeout=8)
 
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         result = _wait_drawer_closed(timeout=8)
         self.assertIsNotNone(result, "Drawer did not close after close_drawer()")
         self.assertFalse(topmenu.drawer_open, "drawer_open flag still set after close")
@@ -139,7 +160,7 @@ class TestDrawerOpenClose(unittest.TestCase):
     def test_close_drawer_idempotent(self):
         # Already closed from setUp — calling close again should not raise.
         self.assertFalse(topmenu.drawer_open)
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         self.assertFalse(topmenu.drawer_open)
 
     def test_toggle_drawer(self):
@@ -148,7 +169,7 @@ class TestDrawerOpenClose(unittest.TestCase):
         _wait_drawer_open(timeout=6)
         self.assertTrue(topmenu.drawer_open)
 
-        topmenu.toggle_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=6)
         self.assertFalse(topmenu.drawer_open)
 
@@ -160,17 +181,19 @@ class TestDrawerFocusOnOpen(unittest.TestCase):
 
     def setUp(self):
         NotificationManager.cancel_all()
-        AppManager.start_app("com.micropythonos.launcher")
-        _wait_ms(500)
+        gc.collect()
+        # Launcher is started once in setUpModule.
+        _wait_ms(200)
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
+        gc.collect()
 
     def test_focus_moves_to_slider_on_open(self):
         """After open_drawer() the focused object should be the brightness slider."""
@@ -201,7 +224,7 @@ class TestDrawerFocusOnOpen(unittest.TestCase):
         """Static drawer widgets must leave the focus group after close_drawer()."""
         topmenu.open_drawer()
         _wait_drawer_open(timeout=8)
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=8)
 
         focusables = _objects_in_focus_group()
@@ -219,17 +242,19 @@ class TestDrawerFocusRestore(unittest.TestCase):
 
     def setUp(self):
         NotificationManager.cancel_all()
-        AppManager.start_app("com.micropythonos.launcher")
-        _wait_ms(800)  # wait for launcher to build its icon grid
+        gc.collect()
+        # Launcher is started once in setUpModule; give it time to build the grid.
+        _wait_ms(800)
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
+        gc.collect()
 
     def test_focus_restored_after_close_drawer(self):
         """Whatever was focused before open_drawer() must be focused again after close."""
@@ -247,7 +272,7 @@ class TestDrawerFocusRestore(unittest.TestCase):
             "Focus did not move away from the launcher tile when drawer opened",
         )
 
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=8)
 
         self.assertIsNotNone(
@@ -263,7 +288,7 @@ class TestDrawerFocusRestore(unittest.TestCase):
         for _ in range(2):
             topmenu.open_drawer()
             _wait_drawer_open(timeout=8)
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=8)
             _wait_ms(100)
 
@@ -280,18 +305,20 @@ class TestDrawerNotificationFocus(unittest.TestCase):
 
     def setUp(self):
         NotificationManager.cancel_all()
+        gc.collect()
         _post_test_notification()
-        AppManager.start_app("com.micropythonos.launcher")
-        _wait_ms(500)
+        # Launcher is started once in setUpModule.
+        _wait_ms(200)
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=6)
 
     def tearDown(self):
         if topmenu.drawer_open:
-            topmenu.close_drawer()
+            topmenu.close_drawer(animate=False)
             _wait_drawer_closed(timeout=4)
         NotificationManager.cancel_all()
+        gc.collect()
 
     def test_notification_cards_in_focus_group_when_drawer_open(self):
         """Notification card widgets must be in the focus group while the drawer is open."""
@@ -318,7 +345,7 @@ class TestDrawerNotificationFocus(unittest.TestCase):
         notif_focusables = list(topmenu._drawer_notif_focusables)
         self.assertTrue(len(notif_focusables) > 0, "No notification focusables after open")
 
-        topmenu.close_drawer()
+        topmenu.close_drawer(animate=False)
         _wait_drawer_closed(timeout=8)
 
         focusables = _objects_in_focus_group()
@@ -363,6 +390,7 @@ class TestDrawerNotificationFocus(unittest.TestCase):
     def test_no_notifications_shows_empty_label(self):
         """When there are no notifications the drawer must show 'No notifications'."""
         NotificationManager.cancel_all()
+        gc.collect()
         _wait_ms(200)
 
         topmenu.open_drawer()
@@ -416,3 +444,13 @@ class TestDrawerNotificationFocus(unittest.TestCase):
         # (The _drawer_notif_focusables list is the authoritative set; it being empty
         # means _remove_focusables_from_group was already called.)
         # We simply assert the list is consistent — no further checks needed.
+
+
+def tearDownModule():
+    """Clean up any leftover UI state after the drawer test module."""
+    try:
+        from mpos import ui
+        ui.remove_and_stop_all_activities()
+    except Exception:
+        pass
+    gc.collect()

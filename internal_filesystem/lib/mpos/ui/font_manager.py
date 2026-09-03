@@ -22,6 +22,8 @@ class FontManager:
     # probes, and repeated per-codepoint fallback walks.
     _emoji_map = None  # dict of hex-key -> src path, populated on first use
     _emoji_strings = None  # list of complete emoji strings, populated on first use
+    _emoji_codepoints = None
+    _emoji_codepoints_sorted = None
     _builtin_font_records = None
     _composed_font_cache = {}
     _ttf_font_cache = {}
@@ -102,6 +104,17 @@ lips,🫦
 
     @classmethod
     def getFont(cls, size=None, ttf=None, family=None, emoji=False):
+        """Return a font for use in this app's widgets.
+
+        size picks the closest builtin size, family picks a builtin family
+        (e.g. "Montserrat"), ttf loads a custom font from a .ttf file, and
+        emoji=True adds emoji support on top of the chosen font.
+
+        Fonts are cached, so it is cheap to call getFont() again. When
+        your app closes, the OS drops custom (ttf=) fonts from the cache.
+        The garbage collector then reclaims each font once nothing uses
+        it. A font that you still hold stays valid.
+        """
         target_size = cls._normalize_size(size)
 
         if ttf is None:
@@ -113,6 +126,32 @@ lips,🫦
             return base_font
 
         return cls._get_composed_font(base_font)
+
+    @classmethod
+    def _clear_cache(cls):
+        """Drop the cached TTF fonts and the emoji fonts composed on them.
+
+        LVGL allocates from the MicroPython GC heap in this build
+        (lv_conf.h sets LV_USE_STDLIB_MALLOC to LV_STDLIB_MPY). So it is
+        enough to drop the cache references: the GC reclaims a font once
+        nothing uses it, and keeps a font that an app, a widget, or a
+        style still holds. Never destroy fonts here: destroy frees memory
+        that an app can still draw with, and that crashes the device.
+
+        Emoji fonts composed on builtin fonts stay cached. The builtin
+        font list bounds their count, so they are not a per-app leak.
+        """
+        if not cls._ttf_font_cache:
+            return
+
+        ttf_ids = set()
+        for font in cls._ttf_font_cache.values():
+            ttf_ids.add(cls._font_identity(font))
+
+        for cache_key in list(cls._composed_font_cache.keys()):
+            if cache_key[0] in ttf_ids:
+                del cls._composed_font_cache[cache_key]
+        cls._ttf_font_cache.clear()
 
     @classmethod
     def normalizeEmojiText(cls, text):
@@ -258,32 +297,34 @@ lips,🫦
         if key in cls._ttf_font_cache:
             return cls._ttf_font_cache[key]
 
-        cls._assert_ttf_exists(ttf_path)
-        font = lv.tiny_ttf_create_file(ttf_path, size)
+        # tiny_ttf_create_file keeps a file open that only a destroy call
+        # closes. We never destroy (the GC reclaims dropped fonts), so
+        # load the file into memory. The font keeps the data alive.
+        data = cls._read_ttf(ttf_path)
+        font = lv.tiny_ttf_create_data(data, len(data), size)
         cls._ttf_font_cache[key] = font
         return font
 
     @classmethod
-    def _assert_ttf_exists(cls, ttf_path):
+    def _read_ttf(cls, ttf_path):
         path = ttf_path
         if isinstance(path, str) and path.startswith("M:"):
             path = path[2:]
         try:
-            os.stat(path)
+            with open(path, "rb") as ttf_file:
+                return ttf_file.read()
         except OSError:
             raise OSError("TTF file not found: {}".format(ttf_path))
 
     @classmethod
     def getEmojiCodepoints(cls):
         cls._ensure_emoji_map()
-        all_cps = set()
-        for key in cls._emoji_map:
-            try:
-                cp = int(key.split("-")[0], 16)
-                all_cps.add(cp)
-            except Exception:
-                pass
-        return sorted(all_cps)
+        return list(cls._emoji_codepoints_sorted)
+
+    @classmethod
+    def isEmojiCodepoint(cls, codepoint):
+        cls._ensure_emoji_map()
+        return codepoint in cls._emoji_codepoints
 
     @classmethod
     def getEmojiStrings(cls):
@@ -329,32 +370,30 @@ lips,🫦
         Falls back to a safe wide range if no emojis are loaded yet."""
         if cls._emoji_cp_bounds is not None:
             return cls._emoji_cp_bounds
-        lo = None
-        hi = None
-        for key in cls._emoji_map or {}:
-            try:
-                cp = int(key.split("-")[0], 16)
-            except Exception:
-                continue
-            if lo is None or cp < lo: lo = cp
-            if hi is None or cp > hi: hi = cp
-        if lo is None:
+        cls._ensure_emoji_map()
+        if not cls._emoji_codepoints:
             # No emojis loaded — accept everything so behaviour matches the
             # unpatched code path. Caller should re-create the font once
             # the map is populated.
             return (0, 0xFFFFFFFF)
-        cls._emoji_cp_bounds = (lo, hi)
+        cls._emoji_cp_bounds = (min(cls._emoji_codepoints), max(cls._emoji_codepoints))
         return cls._emoji_cp_bounds
 
     @classmethod
     def _ensure_emoji_map(cls):
         if cls._emoji_map is None:
-            cls._emoji_map = cls._build_emoji_map()
+            (
+                cls._emoji_map,
+                cls._emoji_strings,
+                cls._emoji_codepoints,
+                cls._emoji_codepoints_sorted,
+            ) = cls._build_emoji_map()
 
     @classmethod
     def _build_emoji_map(cls):
         emoji_map = {}
         emoji_strings = set()
+        emoji_codepoints = set()
 
         entries = cls._list_dir_names(_EMOJI_DIR_PATH)
         if entries is None:
@@ -363,8 +402,7 @@ lips,🫦
             except Exception:
                 cwd = "?"
             logger.warning("could not list emoji dir '%s' (cwd=%s)", _EMOJI_DIR_PATH, cwd)
-            cls._emoji_strings = []
-            return emoji_map
+            return emoji_map, [], emoji_codepoints, []
 
         for name in entries:
             if not name.lower().endswith(".png"):
@@ -372,23 +410,20 @@ lips,🫦
 
             name_without_ext = name[:-4]
             segments = name_without_ext.split("-")
-            valid = True
-            for seg in segments:
-                try:
-                    int(seg, 16)
-                except Exception:
-                    valid = False
-                    break
-            if not valid:
+            try:
+                codepoints = [int(seg, 16) for seg in segments]
+            except Exception:
                 logger.warning("skip non-hex emoji file: %s", name)
                 continue
 
             # Build the full renderable emoji string (e.g. flag sequences, variation selectors).
             try:
-                emoji_string = "".join(chr(int(seg, 16)) for seg in segments)
+                emoji_string = "".join(chr(codepoint) for codepoint in codepoints)
                 emoji_strings.add(emoji_string)
             except Exception:
                 pass
+
+            emoji_codepoints.add(codepoints[0])
 
             base_key = segments[0].upper()
             full_key = name_without_ext.upper()
@@ -402,8 +437,7 @@ lips,🫦
                 emoji_map[base_key] = _EMOJI_SRC_PREFIX + name
 
         if __debug__: logger.debug("loaded %s emoji png mappings from %s", len(emoji_map), _EMOJI_DIR_PATH)
-        cls._emoji_strings = sorted(emoji_strings)
-        return emoji_map
+        return emoji_map, sorted(emoji_strings), emoji_codepoints, sorted(emoji_codepoints)
 
     @classmethod
     def _get_emoji_src(cls, codepoint, target_height):

@@ -94,6 +94,61 @@ def _count_usb_serial_devices():
     )
 
 
+# Self-check pasted into every test run right after `import unittest`.
+# unittest's assert methods are plain `assert` statements, which
+# mpy-cross -O3 strips. When unittest resolves to such a build (e.g. a
+# frozen copy already imported at boot, before lib/ is prepended to
+# sys.path), every assertion is a silent no-op and the whole suite
+# reports vacuously green.
+#
+# When that happens, try to self-heal: import the filesystem
+# lib/unittest (sys.path has lib/ first here) and graft its working
+# assert methods onto the cached module's TestCase, so classes that
+# already subclassed it (e.g. GraphicalTestCase) are repaired too.
+# Only when no working unittest is available does the run abort loudly
+# instead of "passing".
+_ASSERT_SELF_CHECK_CODE = (
+    "def _mpos_asserts_ok(_ut):\n"
+    "    try:\n"
+    "        _ut.TestCase().assertTrue(False)\n"
+    "        return False\n"
+    "    except AssertionError:\n"
+    "        return True\n"
+    "_mpos_asserts_work = _mpos_asserts_ok(unittest)\n"
+    "if not _mpos_asserts_work:\n"
+    "    _mpos_stripped_ut = sys.modules.pop('unittest', None)\n"
+    "    try:\n"
+    "        import unittest as _mpos_fresh_ut\n"
+    "    except ImportError:\n"
+    "        _mpos_fresh_ut = None\n"
+    "    if _mpos_stripped_ut is not None:\n"
+    "        sys.modules['unittest'] = _mpos_stripped_ut\n"
+    "    if (_mpos_fresh_ut is not None\n"
+    "            and _mpos_fresh_ut is not _mpos_stripped_ut\n"
+    "            and _mpos_asserts_ok(_mpos_fresh_ut)):\n"
+    "        for _mpos_name in dir(_mpos_fresh_ut.TestCase):\n"
+    "            if _mpos_name.startswith('assert'):\n"
+    "                setattr(_mpos_stripped_ut.TestCase, _mpos_name,\n"
+    "                        getattr(_mpos_fresh_ut.TestCase, _mpos_name))\n"
+    "        _mpos_asserts_work = _mpos_asserts_ok(unittest)\n"
+    "        if _mpos_asserts_work:\n"
+    "            print('MPOS_TEST_RUNNER: repaired stripped unittest assert "
+    "methods using lib/unittest')\n"
+    "if not _mpos_asserts_work:\n"
+    "    print("
+    "'MPOS_TEST_RUNNER FATAL: unittest assertions are no-ops: unittest "
+    "was imported from a build with assert statements stripped "
+    "(mpy-cross -O3, e.g. the frozen lib of a prod firmware), no working "
+    "lib/unittest was available to repair it, and test results would be "
+    "vacuously green. Use a dev build, or ensure a non-optimized "
+    "lib/unittest is on sys.path.')\n"
+)
+
+
+def _indent(code, prefix):
+    return "".join(prefix + line + "\n" for line in code.splitlines())
+
+
 def _build_test_code(test_path, tests_dir=None):
     with open(test_path) as f:
         test_content = f.read()
@@ -101,9 +156,12 @@ def _build_test_code(test_path, tests_dir=None):
     code += "sys.path.insert(0, 'lib')\n"
     if tests_dir:
         code += "sys.path.append(%r)\n" % tests_dir
-    code += "try:\n import mpos; mpos.TaskManager.disable()\n"
-    code += "except Exception:\n pass\n"
+    code += "try:\n"
+    code += "    import mpos; mpos.TaskManager.disable()\n"
+    code += "except Exception:\n"
+    code += "    pass\n"
     code += "import unittest\n"
+    code += _ASSERT_SELF_CHECK_CODE
     code += """\
 for _k in list(globals().keys()):
     _v = globals()[_k]
@@ -114,6 +172,14 @@ for _k in list(globals().keys()):
         except Exception:
             pass
 """
+    # Strip the file's own main-guard: in paste mode __name__ == "__main__",
+    # so unittest.main() would run the suite and then the runner below would
+    # run it again on already-mutated UI state (crashes on device). The
+    # import-based runner keeps __name__ != "__main__", which is why desktop
+    # never saw this.
+    test_content = test_content.replace(
+        'if __name__ == "__main__":\n    unittest.main()\n', ""
+    )
     code += test_content + "\n"
     code += """\
 suite = unittest.TestSuite()
@@ -125,9 +191,12 @@ for _k in dir():
                 suite.addTest(_v)
         except Exception:
             pass
-result = unittest.TextTestRunner().run(suite)
 """
-    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+    code += "if not _mpos_asserts_work:\n"
+    code += "    print('TEST WAS A FAILURE')\n"
+    code += "else:\n"
+    code += "    result = unittest.TextTestRunner().run(suite)\n"
+    code += ("    print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     return code
 
@@ -137,27 +206,80 @@ def _build_import_runner_code(tests_dir=None, coverage=False, coverage_paths=Non
     code += "sys.path.insert(0, 'lib')\n"
     if tests_dir:
         code += "sys.path.append(%r)\n" % tests_dir
+
+    # Save outer asyncio event loop state before test code corrupts it.
+    # MicroPython asyncio stores the entire event loop in module-level
+    # globals (_task_queue, _io_queue, cur_task).  Tests that call
+    # asyncio.run(), new_event_loop(), or Loop.run_until_complete() from
+    # within the running TaskManager event loop (via the aiorepl paste
+    # mode) corrupt them, causing SIGSEGV in task_queue_push.
+    #
+    # The inner run_until_complete sets cur_task = None on exit, which is
+    # the primary corruption.  Sharing _task_queue and _io_queue is safe
+    # — the outer loop is idle in wait_io_event() during the test.
+    # For tests that call new_event_loop() in setUp, we restore all three
+    # globals in the finally block after unittest.main().
+    code += (
+        "import asyncio as _mpos_a\n"
+        "_mpos_saved_task_queue = _mpos_a.core._task_queue\n"
+        "_mpos_saved_io_queue = _mpos_a.core._io_queue\n"
+        "_mpos_saved_cur_task = _mpos_a.core.cur_task\n"
+        "\n"
+        "def _mpos_restore_asyncio():\n"
+        "    _mpos_a.core._task_queue = _mpos_saved_task_queue\n"
+        "    _mpos_a.core._io_queue = _mpos_saved_io_queue\n"
+        "    _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
+        "\n"
+        "_mpos_orig_run = _mpos_a.run\n"
+        "def _mpos_safe_run(coro):\n"
+        "    try:\n"
+        "        return _mpos_orig_run(coro)\n"
+        "    finally:\n"
+        "        _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
+        "_mpos_a.run = _mpos_safe_run\n"
+        "\n"
+        "_mpos_orig_new_loop = _mpos_a.new_event_loop\n"
+        "def _mpos_safe_new_loop():\n"
+        "    return _mpos_orig_new_loop()\n"
+        "_mpos_a.new_event_loop = _mpos_safe_new_loop\n"
+        "\n"
+        "_mpos_orig_loop_rtc = _mpos_a.Loop.run_until_complete\n"
+        "def _mpos_safe_loop_rtc(aw):\n"
+        "    try:\n"
+        "        return _mpos_orig_loop_rtc(aw)\n"
+        "    finally:\n"
+        "        _mpos_a.core.cur_task = _mpos_saved_cur_task\n"
+        "_mpos_a.Loop.run_until_complete = staticmethod(_mpos_safe_loop_rtc)\n"
+    )
+
     code += "import mpos; mpos.TaskManager.disable()\n"
     if coverage:
         code += "import mpos.coverage\n"
         code += "mpos.coverage.start()\n"
         code += "_cov_stop = mpos.coverage.stop\n"
-    code += ("sys.modules.pop('_runner_test', None)\n"
-             "import _runner_test as _test_mod\n")
-    code += "import unittest\n"
-    code += "result = unittest.main(module=_test_mod)\n"
-    code += ("print('TEST WAS A SUCCESS' if result.wasSuccessful() "
+    code += "try:\n"
+    code += "    import unittest\n"
+    code += _indent(_ASSERT_SELF_CHECK_CODE, "    ")
+    code += "    if not _mpos_asserts_work:\n"
+    code += "        print('TEST WAS A FAILURE')\n"
+    code += "    else:\n"
+    code += "        sys.modules.pop('_runner_test', None)\n"
+    code += "        import _runner_test as _test_mod\n"
+    code += "        result = unittest.main(module=_test_mod)\n"
+    code += ("        print('TEST WAS A SUCCESS' if result.wasSuccessful() "
              "else 'TEST WAS A FAILURE')\n")
     if coverage:
-        code += ("_cov_rpt = {}\n"
-                 "try:\n"
-                 "    _cov_stop()\n"
-                 "    _cov_rpt = mpos.coverage._tracker.report_json()\n"
-                 "except Exception:\n"
-                 "    pass\n")
-        code += "print('=== COVERAGE_DATA ===')\n"
-        code += "print(_cov_rpt)\n"
-        code += "print('=== END_COVERAGE_DATA ===')\n"
+        code += ("    _cov_rpt = {}\n"
+                 "    try:\n"
+                 "        _cov_stop()\n"
+                 "        _cov_rpt = mpos.coverage._tracker.report_json()\n"
+                 "    except Exception:\n"
+                 "        pass\n")
+        code += "    print('=== COVERAGE_DATA ===')\n"
+        code += "    print(_cov_rpt)\n"
+        code += "    print('=== END_COVERAGE_DATA ===')\n"
+    code += "finally:\n"
+    code += "    _mpos_restore_asyncio()\n"
     return code
 
 
@@ -233,6 +355,31 @@ def _widget_matches(widget, type=None, text=None, clickable=None):
     return True
 
 
+def _find_clickable_by_text(tree, text):
+    """Find the innermost clickable widget whose own text or descendant label
+    text matches *text*.
+
+    Walking outermost-first would return a clickable ancestor (screens and
+    plain containers are clickable by default) whose center may not even be
+    over the labelled widget, so the click would land on a sibling.
+    """
+    def walk(nodes, ancestors):
+        if not isinstance(nodes, list):
+            return None
+        for widget in nodes:
+            path = ancestors + [widget]
+            if widget.get("text") == text:
+                for candidate in reversed(path):
+                    if candidate.get("clickable"):
+                        return candidate
+            found = walk(widget.get("children"), path)
+            if found is not None:
+                return found
+        return None
+
+    return walk(tree, [])
+
+
 # ── Stream ──────────────────────────────────────────────────────────
 
 class _PTYStream:
@@ -281,6 +428,16 @@ class AIOREPLClient:
         r, _, _ = select.select([self.stream], [], [], timeout)
         return bool(r)
 
+    def _write_pasted(self, payload, chunk_size=256):
+        """Write a paste-mode payload in chunks, draining the echo between
+        chunks. aiorepl echoes every pasted byte back; writing a large
+        payload in one call can deadlock once the payload plus its echo
+        fill the PTY buffers, because nothing reads the echo until the
+        write completes."""
+        for i in range(0, len(payload), chunk_size):
+            self.stream.write(payload[i:i + chunk_size])
+            self._drain(0.02)
+
     def _drain(self, timeout=0.5):
         data = b""
         t0 = time.monotonic()
@@ -294,10 +451,19 @@ class AIOREPLClient:
         return data
 
     def read_until(self, ending, timeout=30):
+        # A device REPL emits CRLF line endings; the desktop PTY (OPOST
+        # cleared) emits bare LF. Accept both, or an *ending* that expects
+        # "\n" never matches over serial and every exec waits out its full
+        # timeout — then still returns the right bytes, because the caller
+        # recovers the sentinels with rfind. Correct output, 30s late, on
+        # every call: that is what made serial sessions mysteriously slow.
+        endings = (ending,)
+        if ending.endswith(b"\n") and not ending.endswith(b"\r\n"):
+            endings = (ending, ending[:-1] + b"\r\n")
         data = b""
         t0 = time.monotonic()
         while True:
-            if data.endswith(ending):
+            if data.endswith(endings):
                 break
             if not self._data_waiting(0.01):
                 if timeout is not None and time.monotonic() - t0 > timeout:
@@ -379,7 +545,7 @@ class AIOREPLClient:
         payload = ("print('{}')\n".format(SENTINEL)
                    + code.rstrip()
                    + "\nprint('{}')".format(END_MARKER))
-        self.stream.write(payload.encode("utf-8"))
+        self._write_pasted(payload.encode("utf-8"))
         self.stream.write(b"\x04")
 
         # aiorepl echoes all paste-mode input, so ``>>>`` in source
@@ -402,6 +568,78 @@ class AIOREPLClient:
     def exec_multiline(self, code, timeout=30):
         """Execute multi-line *code* (paste mode handles it natively)."""
         return self.exec(code, timeout=timeout)
+
+    def exec_streaming(self, code, timeout=30, line_callback=None):
+        """Execute *code*, calling *line_callback* for each line of actual output.
+
+        Same paste-mode protocol as ``exec()``, but flushes filtered output
+        line-by-line instead of returning it all at the end.  Returns the
+        full filtered result (same as ``exec()``) so callers can still
+        inspect for success markers.
+        """
+        self._drain(0.1)
+
+        self.stream.write(b"\x05")
+        time.sleep(0.2)
+        self._drain(0.5)
+
+        payload = ("print('{}')\n".format(SENTINEL)
+                    + code.rstrip()
+                    + "\nprint('{}')".format(END_MARKER))
+        self._write_pasted(payload.encode("utf-8"))
+        self.stream.write(b"\x04")
+
+        endings = (END_MARKER.encode() + b"\n", END_MARKER.encode() + b"\r\n")
+        start_marker = SENTINEL.encode()
+        end_marker = END_MARKER.encode()
+        start_line = start_marker + b"\n"
+
+        data = b""
+        output_started = False
+        tail_idx = 0
+        seen_end = False
+
+        t0 = time.monotonic()
+        while True:
+            if data.endswith(endings):
+                break
+            if not self._data_waiting(0.01):
+                if timeout is not None and time.monotonic() - t0 > timeout:
+                    break
+                continue
+            chunk = self.stream.read(1)
+            if not chunk:
+                continue
+            data += chunk
+
+            if not output_started:
+                idx = data.find(start_line)
+                if idx >= 0:
+                    output_started = True
+                    tail_idx = idx + len(start_line)
+            elif line_callback is not None:
+                tail = data[tail_idx:]
+                while b"\n" in tail:
+                    nl = tail.index(b"\n")
+                    line_bytes = tail[:nl].rstrip(b"\r")
+                    tail_idx += nl + 1
+                    if line_bytes == end_marker:
+                        seen_end = True
+                        break
+                    line_callback(line_bytes + b"\n")
+                    tail = data[tail_idx:]
+                if seen_end:
+                    break
+
+        self._drain(0.5)
+        result = data
+        idx = result.rfind(start_marker)
+        if idx >= 0:
+            result = result[idx + len(start_marker):]
+        idx = result.rfind(end_marker)
+        if idx >= 0:
+            result = result[:idx]
+        return result.strip()
 
     def eval(self, expression):
         raw = self.exec("print(repr({}))".format(expression))
@@ -526,6 +764,28 @@ class ProcessBackend:
         )
 
     def start(self):
+        # On macOS CI runners, audio hardware is absent and playing
+        # notification sounds through the buzzer can hang the process.
+        # Write an empty notification_sound setting to the prefs config
+        # BEFORE the binary boots, so NotificationManager reads it
+        # during startup and never touches audio hardware.
+        if sys.platform == "darwin":
+            import json as _json
+            _prefs_dir = os.path.join(self.cwd, "prefs",
+                                      "com.micropythonos.settings")
+            _config_path = os.path.join(_prefs_dir, "config.json")
+            os.makedirs(_prefs_dir, exist_ok=True)
+            _config = {}
+            try:
+                with open(_config_path) as _f:
+                    _config = _json.load(_f)
+            except (FileNotFoundError, ValueError):
+                pass
+            _config["notification_sound"] = ""
+            with open(_config_path, "w") as _f:
+                _json.dump(_config, _f)
+            print("MPOS_TEST_RUNNER: disabled notification sounds for macOS CI (pre-boot)")
+
         # Kill any leftover lvgl_micropy_unix processes from previous runs
         self._kill_stale_processes(self.binary)
         time.sleep(0.3)
@@ -771,17 +1031,8 @@ for i in range(steps + 1):
         self.press(widget["center_x"], widget["center_y"])
 
     def _find_button_by_text(self, tree, text):
-        """Find a clickable widget whose own text or child label text matches."""
-        for widget, _parent in _find_widgets(
-            tree, lambda w: _widget_matches(w, clickable=True)
-        ):
-            if widget.get("text") == text:
-                return widget
-            for child, _p in _find_widgets(
-                widget.get("children", []), lambda w: w.get("text") == text
-            ):
-                return widget
-        return None
+        """Find the innermost clickable widget whose own text or child label text matches."""
+        return _find_clickable_by_text(tree, text)
 
     def wait_for_text(self, text, timeout=10, disappear=False):
         """Wait until *text* appears (or disappears) on screen. Returns True on success."""
@@ -836,7 +1087,7 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
         if self.repl is None:
             self.start()
         dest_path = os.path.join(self.cwd, "_runner_test.py")
@@ -846,7 +1097,10 @@ for s in t:
             f.write(content)
         try:
             code = _build_import_runner_code(tests_dir, coverage=coverage)
-            out = self.exec_multiline(code, timeout=timeout)
+            if line_callback is not None:
+                out = self.repl.exec_streaming(code, timeout=timeout, line_callback=line_callback)
+            else:
+                out = self.exec_multiline(code, timeout=timeout)
             out_str = out.decode("utf-8", errors="replace")
             passed = "TEST WAS A SUCCESS" in out_str
             return passed, out
@@ -905,7 +1159,7 @@ class SerialBackend:
             self.ser.rts = False
             time.sleep(1.5)
         self.repl = AIOREPLClient(_SerialStream(self.ser))
-        self.repl.wait_for_boot(timeout=15)
+        self.repl.wait_for_boot(timeout=20)
         self._cache_display_resolution()
         return True
 
@@ -963,7 +1217,7 @@ class SerialBackend:
         try:
             stream = _SerialStream(ser)
             repl = AIOREPLClient(stream)
-            repl.wait_for_boot(timeout=15)
+            repl.wait_for_boot(timeout=20)
             ser.write(b"import machine; machine.reset()\r\n")
         finally:
             try:
@@ -1039,7 +1293,7 @@ class SerialBackend:
             raise RuntimeError("Not connected — call start() first")
         self.ser.write(b"\x04")
         time.sleep(0.5)
-        self.repl.wait_for_boot(timeout=15)
+        self.repl.wait_for_boot(timeout=20)
         return True
 
     def __del__(self):
@@ -1137,44 +1391,24 @@ class SerialBackend:
         _os.unlink(tmppath)
 
     def press(self, x, y):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:  # DISPLAY_ROTATION._270
-            tx = self._height - 1 - y
-            ty = x
-        else:
-            tx, ty = x, y
         self.exec(
             "from mpos.ui.testing import simulate_click, wait_for_render; "
             "simulate_click({}, {}); "
-            "wait_for_render()".format(tx, ty)
+            "wait_for_render()".format(x, y)
         )
 
     def long_press(self, x, y, duration_ms=1000):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:  # DISPLAY_ROTATION._270
-            tx = self._height - 1 - y
-            ty = x
-        else:
-            tx, ty = x, y
         self.exec(
             "from mpos.ui.testing import simulate_click, wait_for_render; "
             "simulate_click({}, {}, press_duration_ms={}); "
-            "wait_for_render()".format(tx, ty, duration_ms)
+            "wait_for_render()".format(x, y, duration_ms)
         )
 
     def drag(self, x1, y1, x2, y2):
-        rot = getattr(self, "_rotation", 0)
-        if rot == 3:
-            tx1 = self._height - 1 - y1
-            ty1 = x1
-            tx2 = self._height - 1 - y2
-            ty2 = x2
-        else:
-            tx1, ty1, tx2, ty2 = x1, y1, x2, y2
         self.exec(
             "from mpos.ui.testing import simulate_drag, wait_for_render; "
             "simulate_drag({}, {}, {}, {}); "
-            "wait_for_render()".format(tx1, ty1, tx2, ty2)
+            "wait_for_render()".format(x1, y1, x2, y2)
         )
 
     def press_key(self, key):
@@ -1213,17 +1447,8 @@ class SerialBackend:
         self.press(widget["center_x"], widget["center_y"])
 
     def _find_button_by_text(self, tree, text):
-        """Find a clickable widget whose own text or child label text matches."""
-        for widget, _parent in _find_widgets(
-            tree, lambda w: _widget_matches(w, clickable=True)
-        ):
-            if widget.get("text") == text:
-                return widget
-            for child, _p in _find_widgets(
-                widget.get("children", []), lambda w: w.get("text") == text
-            ):
-                return widget
-        return None
+        """Find the innermost clickable widget whose own text or child label text matches."""
+        return _find_clickable_by_text(tree, text)
 
     def wait_for_text(self, text, timeout=10, disappear=False):
         """Wait until *text* appears (or disappears) on screen. Returns True on success."""
@@ -1257,7 +1482,7 @@ print("OK")
                 tmppath = tmp.name
             subprocess.run(
                 _mpremote_cmd(self.port, "cp", ":/_mpos_tree.json", tmppath),
-                capture_output=True, timeout=15
+                capture_output=True, timeout=20
             )
             with open(tmppath) as f:
                 return _json.load(f)
@@ -1296,32 +1521,78 @@ for s in t:
     def display_size(self):
         return self._width, self._height
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300):
-        import subprocess, re
-        code = _build_test_code(test_path, tests_dir)
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
+        import subprocess, re, tempfile
+        if self.repl is None:
+            self.start()
         host_test_dir = os.path.dirname(os.path.abspath(test_path))
-        mpk_names = set(re.findall(r"\.\./tests/(com\.micropythonos\.ziptest_[^\"]+\.mpk)", code))
-        if mpk_names:
+        with open(test_path) as f:
+            test_content = f.read()
+
+        # Collect and stage fixtures the test refers to via ../tests/<asset>.
+        fixture_names = set(re.findall(r"\.\./tests/([^\"]+\.(?:mpk|ttf))", test_content))
+        for helper in re.findall(r"^from (\w+) import", test_content, re.M):
+            helper_path = os.path.join(host_test_dir, helper + ".py")
+            if os.path.exists(helper_path):
+                fixture_names.add(helper + ".py")
+        if fixture_names:
             subprocess.run(
-                _mpremote_cmd(self.port, "exec", "import os; os.mkdir('tests')"),
-                capture_output=True, timeout=15,
+                _mpremote_cmd(
+                    self.port, "exec",
+                    "import os\ntry:\n os.mkdir('tests')\nexcept OSError:\n pass",
+                ),
+                capture_output=True, timeout=20,
             )
-            for name in sorted(mpk_names):
-                host_mpk = os.path.join(host_test_dir, name)
+            for name in sorted(fixture_names):
+                host_fixture = os.path.join(host_test_dir, name)
+                if not os.path.exists(host_fixture):
+                    continue
                 subprocess.run(
                     _mpremote_cmd(self.port, "cp",
-                                  host_mpk, ":tests/{}".format(name)),
+                                  host_fixture, ":tests/{}".format(name)),
                     capture_output=True, timeout=60,
                 )
-            code = code.replace("../tests/", "tests/")
-        result = subprocess.run(
-            _mpremote_cmd(self.port, "exec", code),
-            capture_output=True, timeout=timeout + 60,
-        )
-        out = result.stdout
-        out_str = out.decode("utf-8", errors="replace")
-        passed = "TEST WAS A SUCCESS" in out_str
-        return passed, out
+            # Device fixtures live under /tests, not ../tests — rewrite the
+            # path so M:../tests/x.ttf resolves to the staged /tests/x.ttf.
+            test_content = test_content.replace("../tests/", "tests/")
+
+        # Stage the test on the device as _runner_test.py, then run only a
+        # *short* paste-mode import snippet. Inlining the whole test body
+        # into a single paste-mode payload (the old base64 approach) spikes
+        # the heap and, over the echoed 256-byte serial writes, deadlocks
+        # the link with "Write timeout" on large tests. mpremote's `cp` has
+        # real flow control, so large bodies ride that instead.
+        fd, tmpname = tempfile.mkstemp(suffix=".py")
+        try:
+            os.write(fd, test_content.encode("utf-8"))
+            os.close(fd)
+            subprocess.run(
+                _mpremote_cmd(self.port, "cp", tmpname, ":_runner_test.py"),
+                capture_output=True, timeout=120,
+            )
+        finally:
+            try:
+                os.remove(tmpname)
+            except OSError:
+                pass
+
+        code = _build_import_runner_code(tests_dir, coverage=coverage)
+        last_err = None
+        for attempt in range(3):
+            try:
+                if line_callback is not None:
+                    out = self.repl.exec_streaming(
+                        code, timeout=timeout, line_callback=line_callback
+                    )
+                else:
+                    out = self.exec_multiline(code, timeout=timeout)
+                out_str = out.decode("utf-8", errors="replace")
+                passed = "TEST WAS A SUCCESS" in out_str
+                return passed, out
+            except Exception as e:
+                last_err = e
+                time.sleep(2)
+        return False, ("<serial exec failed after 3 attempts: {}>\n".format(last_err)).encode()
 
 
 # ── MPOSController ──────────────────────────────────────────────────
@@ -1343,11 +1614,11 @@ class MPOSController:
     def stop(self):
         self._backend.stop()
 
-    def exec(self, code):
-        return self._backend.exec(code)
+    def exec(self, code, timeout=30):
+        return self._backend.exec(code, timeout=timeout)
 
-    def exec_multiline(self, code):
-        return self._backend.exec_multiline(code)
+    def exec_multiline(self, code, timeout=30):
+        return self._backend.exec_multiline(code, timeout=timeout)
 
     def eval(self, expr):
         return self._backend.eval(expr)
@@ -1424,7 +1695,7 @@ class MPOSController:
     def backscreen(self):
         return self.exec("import mpos.ui ; mpos.ui.back_screen()")
 
-    def dismiss_onboarding(self, timeout=15):
+    def dismiss_onboarding(self, timeout=20):
         """Close the first-run 'How to Navigate' tutorial overlay if present."""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -1481,8 +1752,8 @@ class MPOSController:
     def find_text(self, text):
         return self._backend.find_text(text)
 
-    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False):
-        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage)
+    def run_test_file(self, test_path, tests_dir=None, timeout=300, coverage=False, line_callback=None):
+        return self._backend.run_test_file(test_path, tests_dir=tests_dir, timeout=timeout, coverage=coverage, line_callback=line_callback)
 
     @property
     def display_size(self):
@@ -1609,7 +1880,7 @@ def main():
         )
         result = subprocess.run(
             _mpremote_cmd(args.serial_port, "fs", "cp", "-r", apppath, ":/apps/"),
-            capture_output=True, timeout=60
+            capture_output=True, timeout=600
         )
         if result.returncode != 0:
             print("error:", result.stderr.decode().strip(), file=sys.stderr)

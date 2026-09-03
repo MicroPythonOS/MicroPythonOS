@@ -32,14 +32,17 @@ _DEFAULT_RELAYS = [
     "wss://relay.0xchat.com",
 ]
 
-if not os.getenv("MPOS_RUN_NETWORK_TESTS"):
+def _getenv(name):
+    return os.getenv(name) if hasattr(os, "getenv") else None
+
+if not _getenv("MPOS_RUN_NETWORK_TESTS"):
     print(
         "SKIP: test_nostr_nip17_self_send_real_relays requires "
         "MPOS_RUN_NETWORK_TESTS=1 (depends on live relay uptime)"
     )
 
 @unittest.skipUnless(
-    os.getenv("MPOS_RUN_NETWORK_TESTS"),
+    _getenv("MPOS_RUN_NETWORK_TESTS"),
     "live-relay integration test; depends on external relay uptime. "
     "Set MPOS_RUN_NETWORK_TESTS=1 to run.",
 )

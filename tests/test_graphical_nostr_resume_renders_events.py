@@ -5,14 +5,17 @@ chat list should still render stored messages. This test pre-populates the
 chat cache and verifies the chat list shows the message preview.
 """
 
+import gc
 import os
 import shutil
 import sys
+import time
 import unittest
 
 import lvgl as lv
 
 sys.path.append("apps")
+sys.path.append("tests")
 
 from com_micropythonos_nostr.chat_model import (
     DEFAULT_CHANNEL_ID,
@@ -31,12 +34,29 @@ from mpos.ui.testing import click_label, find_label_with_text, wait_for_text
 
 from nostr.event import Event
 
+# On device this replaces unittest.main with a direct setUp/test/tearDown
+# executor that avoids a MicroPython unittest harness hard fault when the
+# Nostr app starts background services. On desktop it is a no-op.
+from _mpos_device_unittest import patch_unittest_main
+
+patch_unittest_main()
+
 
 class TestNostrChatListResumeRendersEvents(unittest.TestCase):
     """Reopening Nostr should show stored channel events in the chat list."""
 
     def setUp(self):
-        AppManager.restart_launcher()
+        # Stop any running Nostr activity and the background service first.
+        # AppManager.restart_launcher() is flaky on-device and can hard-fault
+        # when services are still waking up, so we return to a clean state by
+        # stopping the service and clearing the activity stack directly.
+        from mpos import ui
+        ui.remove_and_stop_all_activities()
+        wait_for_render(5)
+
+        # Stop NostrManager before touching its cache files to avoid races.
+        mgr = NostrManager.get_instance()
+        mgr.stop()
         wait_for_render(5)
 
         # Clean up any stale chat cache.
@@ -79,6 +99,10 @@ class TestNostrChatListResumeRendersEvents(unittest.TestCase):
         store.add_message(channel_chat_id(DEFAULT_CHANNEL_ID), message, mark_unread=False)
         store.flush_index()
         wait_for_render(5)
+        # Let any async cleanup and LVGL timers settle before the test starts
+        # the Nostr app; otherwise start_app can hard-fault on device.
+        time.sleep(3)
+        gc.collect()
 
     def tearDown(self):
         try:
@@ -156,18 +180,33 @@ class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
     """A brand new Nostr install should list the default public channel."""
 
     def setUp(self):
-        AppManager.restart_launcher()
+        # Stop any running Nostr activity and the background service first.
+        # AppManager.restart_launcher() is flaky on-device and can hard-fault
+        # when services are still waking up, so we return to a clean state by
+        # stopping the service and clearing the activity stack directly.
+        from mpos import ui
+        ui.remove_and_stop_all_activities()
         wait_for_render(5)
 
-        # Simulate a fresh install by wiping the app's prefs directory and
-        # dropping any in-memory EventStore singleton.
+        # Stop NostrManager before wiping prefs to avoid file/timer races.
+        mgr = NostrManager.get_instance()
+        mgr.stop()
+        wait_for_render(5)
+
+        # Wipe prefs with a delay to let any timer callbacks settle
+        time.sleep(2)
+        gc.collect()
         try:
             shutil.rmtree(f"prefs/{APP_FULLNAME}")
         except OSError:
             pass
+        time.sleep(2)
+        gc.collect()
         EventStore._instances.clear()
+        time.sleep(1)
+        gc.collect()
 
-        # Reset NostrManager so each test starts from the same state.
+        # Final NostrManager reset
         mgr = NostrManager.get_instance()
         mgr.stop()
         mgr._main_task = None
@@ -184,6 +223,7 @@ class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
         mgr.events = []
         mgr.connected = False
         mgr.relay_manager = None
+        wait_for_render(5)
 
     def tearDown(self):
         try:
@@ -195,6 +235,7 @@ class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
             pass
 
     def test_default_channel_visible_on_first_open(self):
+        gc.collect()
         result = AppManager.start_app(APP_FULLNAME)
         self.assertTrue(result, "Nostr app should start")
         wait_for_render(10)

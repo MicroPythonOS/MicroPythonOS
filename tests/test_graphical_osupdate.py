@@ -1,6 +1,10 @@
+import sys
 import unittest
 import lvgl as lv
 import mpos
+
+_ESP32 = sys.platform == "esp32"
+_APP_LOAD_TIMEOUT = 20 if _ESP32 else 10
 
 from mpos import (
     wait_for_text,
@@ -24,7 +28,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
 
         self.assertTrue(result, "Failed to start OSUpdate app")
         self.assertTrue(
-            wait_for_text("Installed OS version", timeout=10),
+            wait_for_text("Installed OS version", timeout=_APP_LOAD_TIMEOUT),
             "OSUpdate app did not show version label within timeout"
         )
 
@@ -36,7 +40,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         self.assertTrue(
-            wait_for_text("Installed OS version", timeout=10),
+            wait_for_text("Installed OS version", timeout=_APP_LOAD_TIMEOUT),
             "OSUpdate app did not load within timeout"
         )
 
@@ -55,7 +59,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         self.assertTrue(
-            wait_for_text("Installed OS version", timeout=10),
+            wait_for_text("Installed OS version", timeout=_APP_LOAD_TIMEOUT),
             "OSUpdate app did not load within timeout"
         )
 
@@ -71,7 +75,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         self.assertTrue(
-            wait_for_text("Installed OS version:", timeout=10),
+            wait_for_text("Installed OS version:", timeout=_APP_LOAD_TIMEOUT),
             "Version label did not appear within timeout"
         )
 
@@ -90,7 +94,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         self.assertTrue(
-            wait_for_text("Installed OS version", timeout=10),
+            wait_for_text("Installed OS version", timeout=_APP_LOAD_TIMEOUT),
             "OSUpdate app did not load within timeout"
         )
 
@@ -106,7 +110,7 @@ class TestOSUpdateGraphicalUI(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         self.assertTrue(
-            wait_for_text("Installed OS version", timeout=10),
+            wait_for_text("Installed OS version", timeout=_APP_LOAD_TIMEOUT),
             "OSUpdate app did not load within timeout"
         )
 
@@ -127,7 +131,7 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         self.assertTrue(
-            wait_for_text("Installed OS version", timeout=10),
+            wait_for_text("Installed OS version", timeout=_APP_LOAD_TIMEOUT),
             "OSUpdate app did not load within timeout"
         )
 
@@ -147,7 +151,7 @@ class TestOSUpdateGraphicalStatusMessages(unittest.TestCase):
         result = AppManager.start_app("com.micropythonos.osupdate")
         self.assertTrue(result)
         self.assertTrue(
-            wait_for_text("Installed OS version", timeout=10),
+            wait_for_text("Installed OS version", timeout=_APP_LOAD_TIMEOUT),
             "OSUpdate app did not load within timeout"
         )
 

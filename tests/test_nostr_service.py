@@ -507,9 +507,12 @@ class TestNostrManagerConnectivity(unittest.TestCase):
     def setUp(self):
         self.mgr = NostrManager.get_instance()
         # Ensure direct _run() calls in these tests do not block waiting for
-        # an NTP-synced clock.
+        # an NTP-synced clock. Restore the real staticmethod afterwards so the
+        # leak does not corrupt TestTimeZoneTimeIsSet (which runs later).
         from mpos.time_zone import TimeZone
+        self._orig_time_is_set = TimeZone.time_is_set
         TimeZone.time_is_set = lambda: True
+        self.addCleanup(self._restore_time_is_set)
         if self.mgr._main_task is not None and self.mgr._main_task is not True:
             try:
                 self.mgr._main_task.cancel()
@@ -531,6 +534,10 @@ class TestNostrManagerConnectivity(unittest.TestCase):
         self.mgr.keep_running = False
         self.mgr._cleanup_done = True
         self.mgr._main_task = True  # suppress async task creation in tests
+
+    def _restore_time_is_set(self):
+        from mpos.time_zone import TimeZone
+        TimeZone.time_is_set = self._orig_time_is_set
 
     def test_run_resets_main_task_after_failed_relay_connection(self):
         """If no relay connects, _run() must reset state so start() can retry."""

@@ -36,8 +36,11 @@ if [ $result -ne 0 ]; then
 fi
 
 pushd "$mydir"/../freezeFS/
-python3 -m freezefs --target /builtin --on-import mount "$tempdir" freezefs_mount_builtin.py
-#python3 -m freezefs --target /builtin --on-import mount --compress --wbits 14 "$tempdir" freezefs_mount_builtin.py
+# --compress saves ~39 KiB of firmware (issue #268). Safe for runtime use:
+# .mpy imports and icon reads are binary-mode, which freezefs streams without
+# loading whole files into RAM; only text-mode ("r") opens decompress fully,
+# and the only such reads from /builtin are ~0.5 KB MANIFEST.JSON files.
+python3 -m freezefs --target /builtin --on-import mount --compress --wbits 14 "$tempdir" freezefs_mount_builtin.py
 popd
 
 rm -rf "$tempdir"

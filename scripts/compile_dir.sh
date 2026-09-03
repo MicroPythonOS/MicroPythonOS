@@ -42,6 +42,14 @@ mkdir -p "$outdir"
 # Follow symlinks so linked app directories are copied as real files.
 cp -RL "$indir"/* "$outdir"
 
+# Strip development junk that must never ship inside the firmware image:
+# CPython __pycache__/.pyc (e.g. from a desktop `python3 -m py_compile` syntax
+# check -- gitignored, so invisible in `git status`, but a single stray .pyc
+# froze 64 KiB into local builds and looked like issue #268), macOS .DS_Store,
+# and editor backup files.
+find "$outdir" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null
+find "$outdir" \( -name "*.pyc" -o -name ".DS_Store" -o -name "*.bak" -o -name "*~" \) -type f -delete
+
 find -L "$outdir" -iname "*.py" | while read pyfile; do
 	if [ -L "$pyfile" ]; then
 		oldtarget=$(readlink -f "$pyfile")

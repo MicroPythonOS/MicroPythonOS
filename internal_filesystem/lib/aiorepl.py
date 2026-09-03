@@ -114,9 +114,11 @@ async def task(g=None, prompt="--> "):
             curs = 0  # cursor offset from end of cmd buffer
             while True:
                 b = await s.read(1)
-                # MPOS: return on EOF to avoid infinite prompt spam with /dev/null (differs from upstream).
+                # MPOS: on EOF (host disconnected or /dev/null), keep the task alive and
+                # poll for reconnection without re-printing the prompt (differs from upstream).
                 if not b:  # Handle EOF/empty read
-                    return
+                    await asyncio.sleep_ms(500)
+                    continue
                 pc = c  # save previous character
                 c = ord(b)
                 pt = t  # save previous time
@@ -182,9 +184,18 @@ async def task(g=None, prompt="--> "):
                             break
 
                         sys.stdout.write("\n")
-                        # Shutdown asyncio.
-                        asyncio.new_event_loop()
-                        return
+                        # MPOS: upstream shuts asyncio down here with
+                        # asyncio.new_event_loop(). On MPOS that discards the
+                        # OS's entire task queue -- the app, TaskManager's
+                        # main task, and this REPL task with it -- and then
+                        # returns, which the supervisor reads as "finished
+                        # normally, nothing to restart". The console is then
+                        # dead until a power cycle while the LVGL UI, driven
+                        # by a hardware timer, carries on as if nothing
+                        # happened. A stray Ctrl-D outside the raw-REPL
+                        # protocol must not be able to do that, so end the
+                        # line like Ctrl-C does and keep serving.
+                        break
                     elif c == CHAR_CTRL_E:
                         sys.stdout.write("paste mode; Ctrl-C to cancel, Ctrl-D to finish\n===\n")
                         paste = True

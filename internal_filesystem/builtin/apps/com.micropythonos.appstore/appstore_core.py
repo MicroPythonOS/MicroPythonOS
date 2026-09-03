@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 
+import time
 import ujson
 
 from mpos import (
@@ -216,14 +217,16 @@ class AppUpdateManager:
 
     _instance = None
 
-    BOOT_INITIAL_DELAY = 120       # seconds to wait after boot before first check
     BOOT_CHECK_INTERVAL = 60 * 60 * 24  # re-check every 24 h
+    LOOP_POLL_INTERVAL = 60  # granularity for the _run_loop wait loop
     WIFI_CHECK_INTERVAL = 5
 
     NOTIFICATION_ID = "appstore.updates_available"
     ICON_PATH = "M:builtin/apps/com.micropythonos.appstore/icon_64x64.png"
 
-    _PREF_KEY_BACKEND = "backend"
+    _BADGEHUB_INDEX_URL = "https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_%s" % BuildInfo.version.api_level
+
+    _PREF_KEY_UPDATE_NOTIFICATIONS = "update_notifications"
 
     @classmethod
     def get_instance(cls):
@@ -238,6 +241,7 @@ class AppUpdateManager:
         self.current_state = AppUpdateState.IDLE
         self._running = False
         self._check_in_progress = False
+        self._last_check_ts = None
         self._connectivity_manager = None
         self._state_callback = None
         self._suppress_notifications = False
@@ -283,8 +287,6 @@ class AppUpdateManager:
         TaskManager.create_task(self._run_loop())
 
     async def _run_loop(self):
-        await TaskManager.sleep(self.BOOT_INITIAL_DELAY)
-
         while self._running:
             if self._check_in_progress:
                 await TaskManager.sleep(1)
@@ -295,10 +297,10 @@ class AppUpdateManager:
             else:
                 if __debug__: logger.debug("offline, skipping check")
 
-            for _ in range(self.BOOT_CHECK_INTERVAL):
+            for _ in range(self.BOOT_CHECK_INTERVAL // self.LOOP_POLL_INTERVAL):
                 if not self._running:
                     return
-                await TaskManager.sleep(1)
+                await TaskManager.sleep(self.LOOP_POLL_INTERVAL)
 
     def stop(self):
         if __debug__: logger.debug("stopping")
@@ -310,7 +312,7 @@ class AppUpdateManager:
         """Kick off a one-off update check if none is already in progress."""
         if self._check_in_progress:
             return
-        TaskManager.create_task(self.check_for_updates(index_url))
+        TaskManager.create_task(self.check_for_updates(index_url, force=True))
 
     def _network_changed(self, online):
         if __debug__: logger.debug("network %s", "ONLINE" if online else "OFFLINE")
@@ -329,29 +331,35 @@ class AppUpdateManager:
     # Core update check
     # ------------------------------------------------------------------
 
-    def _get_index_url_and_type(self):
+    def _update_notifications_enabled(self):
         prefs = SharedPreferences("com.micropythonos.appstore")
-        pref_string = prefs.get_string(self._PREF_KEY_BACKEND, "badgehub,https://badgehub.eu/api/v3/project-summaries?badge=mpos_api_%s,https://badgehub.eu/api/v3/projects" % BuildInfo.version.api_level)
-        parts = pref_string.split(",")
-        backend_type = parts[0]
-        list_url = parts[1]
-        return list_url, backend_type
+        return prefs.get_string(self._PREF_KEY_UPDATE_NOTIFICATIONS, "true") == "true"
 
-    async def check_for_updates(self, index_url=None):
-        """Download the app index and compare versions against installed apps.
+    async def check_for_updates(self, index_url=None, force=False):
+        """Download the BadgeHub app index and compare versions against installed apps.
 
-        ``index_url`` defaults to the production index.  The AppStore UI
-        may pass its own backend URL when the user has changed the backend setting.
+        ``index_url`` defaults to the production BadgeHub index. Tests and the
+        AppStore UI may pass a custom URL.
         """
+        if not force and not self._update_notifications_enabled():
+            if __debug__: logger.debug("update notifications disabled, skipping background check")
+            return
         if self._check_in_progress:
             return
+        # deduplicate against _network_changed callback triggering first check
+        # before _run_loop initial delay expires; 60s cooldown still allows 24h rechecks.
+        # _last_check_ts starts as None: on ESP32 ticks_ms() counts from boot, so
+        # treating "never checked" as 0 would block the first check for 60s of uptime.
+        now = time.ticks_ms()
+        if not force and self._last_check_ts is not None and now - self._last_check_ts < 60000:
+            return
+        self._last_check_ts = now
         self._check_in_progress = True
         try:
             self._set_state(AppUpdateState.CHECKING_UPDATES)
 
-            backend_type = "github"
             if index_url is None:
-                index_url, backend_type = self._get_index_url_and_type()
+                index_url = self._BADGEHUB_INDEX_URL
 
             try:
                 response = await DownloadManager.download_url(index_url)
@@ -373,25 +381,17 @@ class AppUpdateManager:
             updatable = []
             for app_data in apps_json:
                 try:
-                    if backend_type == "badgehub":
-                        fullname = app_data.get("slug")
-                        remote_version = app_data.get("version")
-                        if not fullname or not remote_version:
-                            continue
-                        if AppManager.is_update_available(fullname, remote_version):
-                            updatable.append({
-                                "fullname": fullname,
-                                "version": remote_version,
-                                "name": app_data.get("name", fullname),
-                                "download_url": None,
-                            })
-                    else:
-                        fullname = app_data.get("fullname")
-                        remote_version = app_data.get("version")
-                        if not fullname or not remote_version:
-                            continue
-                        if AppManager.is_update_available(fullname, remote_version):
-                            updatable.append(app_data)
+                    fullname = app_data.get("slug")
+                    remote_version = app_data.get("version")
+                    if not fullname or not remote_version:
+                        continue
+                    if AppManager.is_update_available(fullname, remote_version):
+                        updatable.append({
+                            "fullname": fullname,
+                            "version": remote_version,
+                            "name": app_data.get("name", fullname),
+                            "download_url": None,
+                        })
                 except Exception as e:
                     logger.error("error checking %s: %s", app_data, e)
 
@@ -412,6 +412,9 @@ class AppUpdateManager:
     # ------------------------------------------------------------------
 
     def _notify_updates_available(self):
+        if not self._update_notifications_enabled():
+            if __debug__: logger.debug("update notifications disabled, skipping notification")
+            return
         if self._suppress_notifications:
             if __debug__: logger.debug("suppressing notification (AppStore in foreground)")
             return
@@ -432,3 +435,6 @@ class AppUpdateManager:
 
     def _clear_notification(self):
         NotificationManager.cancel(self.NOTIFICATION_ID)
+
+    def clear_updates_notification(self):
+        self._clear_notification()

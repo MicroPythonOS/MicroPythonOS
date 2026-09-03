@@ -42,7 +42,8 @@ from .ui.camera_activity import CameraActivity
 from .ui.file_explorer_activity import FileExplorerActivity
 from .ui.keyboard import MposKeyboard
 from .ui.testing import (
-    wait_for_render, capture_screenshot, simulate_click, simulate_drag, get_widget_coords,
+    wait_for_render, capture_screenshot, save_screenshot_bmp, simulate_click, simulate_drag,
+    get_widget_coords,
     find_label_with_text, verify_text_present, print_screen_labels, find_text_on_screen,
     click_button, click_label, click_keyboard_button, find_button_with_text,
     get_all_widgets_with_text, find_setting_value_label, get_setting_value_text,
@@ -58,7 +59,13 @@ from .ui.input_manager import InputManager
 from .ui.appearance_manager import AppearanceManager
 from .ui.event import get_event_name, print_event
 from .ui.view import setContentView, back_screen
+from .ui.input_manager import InputManager
 from .ui.topmenu import open_bar, close_bar, open_drawer, drawer_open
+
+set_back_screen_disabled = InputManager.set_back_screen_disabled
+is_back_screen_disabled = InputManager.is_back_screen_disabled
+set_drawer_open_disabled = InputManager.set_drawer_open_disabled
+is_drawer_open_disabled = InputManager.is_drawer_open_disabled
 from .ui.focus import save_and_clear_current_focusgroup, add_focus_highlight, add_focus_border
 from .ui.gesture_navigation import handle_back_swipe, handle_top_swipe
 from .ui.widget_animator import WidgetAnimator
@@ -100,7 +107,9 @@ __all__ = (
     "SensorManager",
     "get_event_name", "print_event",
     "setContentView", "back_screen",
+    "set_back_screen_disabled", "is_back_screen_disabled",
     "open_bar", "close_bar", "open_drawer", "drawer_open",
+    "set_drawer_open_disabled", "is_drawer_open_disabled",
     "save_and_clear_current_focusgroup", "add_focus_highlight", "add_focus_border",
     "handle_back_swipe", "handle_top_swipe",
     "get_foreground_app",
@@ -109,7 +118,8 @@ __all__ = (
     "focus_direction",
     "NumberFormat",
     # Testing utilities
-    "wait_for_render", "capture_screenshot", "simulate_click", "simulate_drag", "get_widget_coords",
+    "wait_for_render", "capture_screenshot", "save_screenshot_bmp", "simulate_click", "simulate_drag",
+    "get_widget_coords",
     "find_label_with_text", "verify_text_present", "print_screen_labels", "find_text_on_screen",
     "click_button", "click_label", "click_keyboard_button", "find_button_with_text",
     "get_all_widgets_with_text", "find_setting_value_label", "get_setting_value_text",

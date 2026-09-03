@@ -26,7 +26,15 @@ class TaskManager:
             logger.warning("Not starting TaskManager because it's been disabled.")
             return
         cls.keep_running = True
-        asyncio.run(TaskManager._asyncio_thread(10)) # 100ms is too high, causes lag. 10ms is fine. not sure if 1ms would be better...
+        while cls.keep_running is True:
+            try:
+                asyncio.run(TaskManager._asyncio_thread(10)) # 100ms is too high, causes lag. 10ms is fine. not sure if 1ms would be better...
+            except KeyboardInterrupt:
+                # A KeyboardInterrupt raised inside any task escapes MicroPython's
+                # run_until_complete (it only catches CancelledError and Exception),
+                # which would tear down every task. The task queue survives the
+                # unwind, so re-entering asyncio.run resumes the remaining tasks.
+                logger.warning("asyncio loop got KeyboardInterrupt, resuming remaining tasks")
 
     @classmethod
     def stop(cls):
@@ -42,9 +50,45 @@ class TaskManager:
 
     @classmethod
     def create_task(cls, coroutine):
-        task = asyncio.create_task(coroutine)
+        if cls.disabled:
+            return None
+
+        async def _run_task():
+            try:
+                return await coroutine
+            finally:
+                if task in cls.task_list:
+                    cls.task_list.remove(task)
+
+        task = asyncio.create_task(_run_task())
         cls.task_list.append(task)
         return task
+
+    @classmethod
+    def create_supervised_task(cls, coroutine_factory, restart_delay_ms=200,
+                               restart_on_return=False):
+        """Keep a task alive across crashes.
+
+        restart_on_return also restarts it when the coroutine finishes
+        normally. Use it for tasks that are only ever meant to stop when
+        the device does -- the serial console above all, where any quiet
+        exit path leaves no way back in short of a power cycle.
+        """
+        async def _supervisor():
+            while True:
+                try:
+                    await coroutine_factory()
+                    if not restart_on_return:
+                        return
+                    logger.warning("supervised task returned, restarting it")
+                except asyncio.CancelledError:
+                    raise
+                except KeyboardInterrupt as e:
+                    logger.warning("supervised task got KeyboardInterrupt, restarting it: %s", e)
+                except Exception as e:
+                    logger.warning("supervised task died, restarting it: %s", e)
+                await asyncio.sleep_ms(restart_delay_ms)
+        return cls.create_task(_supervisor())
 
     @classmethod
     def list_tasks(cls):

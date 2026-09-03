@@ -27,6 +27,8 @@ def _reset_font_manager():
     FontManager._ttf_font_cache.clear()
     FontManager._emoji_map = None
     FontManager._emoji_strings = None
+    FontManager._emoji_codepoints = None
+    FontManager._emoji_codepoints_sorted = None
     FontManager._emoji_src_lookup_cache.clear()
     FontManager._emoji_sequence_lookup_cache.clear()
     FontManager._imgfont_scaled_src_cache.clear()
@@ -159,6 +161,150 @@ class TestFontManagerGetFont(GraphicalTestCase):
         self.assertEqual(ptr.value, -int(base.base_line))
 
 
+class TestFontManagerClearCache(GraphicalTestCase):
+    """Tests for FontManager._clear_cache()."""
+
+    def setUp(self):
+        super().setUp()
+        _reset_font_manager()
+
+    def test_clear_cache_empties_ttf_cache(self):
+        """_clear_cache() drops every cached TTF font."""
+        FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        self.assertTrue(len(FontManager._ttf_font_cache) > 0)
+
+        FontManager._clear_cache()
+
+        self.assertEqual(len(FontManager._ttf_font_cache), 0)
+
+    def test_clear_cache_drops_composed_ttf_fonts(self):
+        """_clear_cache() drops composed fonts together with their TTF."""
+        base = FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=True)
+        base_id = FontManager._font_identity(base)
+        composed_keys = [k for k in FontManager._composed_font_cache if k[0] == base_id]
+        self.assertTrue(len(composed_keys) > 0)
+
+        FontManager._clear_cache()
+
+        remaining = [k for k in FontManager._composed_font_cache if k[0] == base_id]
+        self.assertEqual(len(remaining), 0)
+
+    def test_clear_cache_keeps_builtin_composed_fonts(self):
+        """Composed fonts over builtin fonts stay cached."""
+        composed = FontManager.getFont(size=16, family="Montserrat", emoji=True)
+
+        FontManager._clear_cache()
+
+        self.assertIs(
+            FontManager.getFont(size=16, family="Montserrat", emoji=True), composed
+        )
+
+    def test_clear_cache_allows_reload(self):
+        """getFont() loads a TTF again after _clear_cache()."""
+        FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        FontManager._clear_cache()
+
+        font = FontManager.getFont(size=24, ttf=_TEST_TTF_PATH, emoji=False)
+        self.assertIsNotNone(font)
+        self.assertTrue(font.get_line_height() > 0)
+
+    def test_clear_cache_on_empty_caches(self):
+        """_clear_cache() is safe when the cache is empty."""
+        FontManager._clear_cache()
+        self.assertEqual(len(FontManager._ttf_font_cache), 0)
+
+
+class TestFontManagerAppHeldFont(GraphicalTestCase):
+    """Regression test for the MeshCore crash.
+
+    MeshCore keeps its TTF font in a module global. It applies the font
+    each time it builds a chat channel screen. When #248 destroyed the
+    font on the back navigation, the global pointed to freed memory, and
+    the next channel screen crashed the device. A held font must stay
+    valid for as long as the app can apply it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        _reset_font_manager()
+        import mpos.ui
+        for _ in range(10):
+            if len(mpos.ui.screen_stack) <= 1:
+                break
+            mpos.ui.back_screen()
+            self.wait_for_render()
+        # The OS drops cached fonts when only the launcher remains (stack
+        # length 1). If this test environment has no launcher, push a
+        # stand-in, so the stack floor is 1, like on a running system.
+        self._pushed_launcher_standin = False
+        if not mpos.ui.screen_stack:
+            self._push_activity()
+            self._pushed_launcher_standin = True
+
+    def tearDown(self):
+        import mpos.ui
+        from mpos.ui.view import finish_current_activity
+        for _ in range(10):
+            if len(mpos.ui.screen_stack) <= 1:
+                break
+            finish_current_activity()
+            self.wait_for_render()
+        if self._pushed_launcher_standin and mpos.ui.screen_stack:
+            mpos.ui.remove_and_stop_current_activity()
+            self.wait_for_render()
+        super().tearDown()
+
+    def _push_activity(self, build_screen=None):
+        from mpos import Activity
+        import mpos.ui
+        activity = Activity()
+        screen = lv.obj(None)
+        if build_screen:
+            build_screen(screen)
+        mpos.ui.setContentView(activity, screen)
+        self.wait_for_render()
+        return activity
+
+    def test_held_font_survives_sub_activity_finish(self):
+        """A font held in a variable stays valid across a sub-activity
+        finish. The OS drops it from the cache once the app is gone."""
+        import mpos.ui
+        from mpos.ui.view import finish_current_activity
+
+        # App home activity (like the MeshCore home tabs).
+        self._push_activity()
+
+        # The app loads the TTF once and keeps the reference. It applies
+        # the font inside a sub-activity (like a chat channel screen).
+        held_font = FontManager.getFont(size=14, ttf=_TEST_TTF_PATH)
+
+        def build_channel(screen):
+            label = lv.label(screen)
+            label.set_style_text_font(held_font, lv.PART.MAIN)
+            label.set_text("chat channel")
+
+        self._push_activity(build_channel)
+
+        # Back out of the sub-activity. The app still runs, so the held
+        # font must stay valid, although no widget draws with it now.
+        finish_current_activity()
+        self.wait_for_render()
+        self.assertEqual(len(FontManager._ttf_font_cache), 1)
+
+        # Re-enter the sub-activity and apply the held font again. With
+        # #248 the font was destroyed here, and this render crashed.
+        self._push_activity(build_channel)
+        self.wait_for_render(10)
+
+        # Quit the app. Only the launcher is left, so the cache is dropped.
+        finish_current_activity()
+        self.wait_for_render()
+        finish_current_activity()
+        self.wait_for_render()
+        self.assertEqual(len(FontManager._ttf_font_cache), 0)
+
+
 class TestFontManagerListFonts(GraphicalTestCase):
     """Tests for FontManager.listFonts()."""
 
@@ -241,6 +387,16 @@ class TestFontManagerEmojiCodepoints(GraphicalTestCase):
         for cp in FontManager.getEmojiCodepoints():
             self.assertTrue(cp >= 0x100, "Codepoint should not be plain ASCII")
             self.assertTrue(cp <= 0x10FFFF, "Codepoint should be within Unicode range")
+
+    def test_isemoji_codepoint_identifies_available_emoji(self):
+        self.assertTrue(FontManager.isEmojiCodepoint(ord("😀")))
+        self.assertFalse(FontManager.isEmojiCodepoint(ord("A")))
+
+    def test_isemoji_codepoint_reuses_cached_index(self):
+        FontManager.isEmojiCodepoint(ord("😀"))
+        codepoints = FontManager._emoji_codepoints
+        FontManager.isEmojiCodepoint(ord("A"))
+        self.assertIs(FontManager._emoji_codepoints, codepoints)
 
     def test_emoji_tier_loaded_after_getemoji(self):
         """After getEmojiCodepoints(), the 32x32 tier is populated."""

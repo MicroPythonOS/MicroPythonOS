@@ -1,3 +1,4 @@
+import gc
 import logging
 import lvgl as lv
 
@@ -33,12 +34,12 @@ _drawer_panel = None
 # State variables (kept in sync with panel.is_open for external code)
 drawer_open = False
 bar_open = False
-
 # Widgets:
 notification_bar = None
 notification_icon_label = None   # bell indicator in the top bar (label only – no image in the bar)
 drawer_notifications_title = None
 drawer_notifications_container = None
+drawer = None
 
 _notifications_listener_registered = False
 
@@ -69,19 +70,12 @@ def _remove_focusables_from_group(focusables):
     group = lv.group_get_default()
     if not group or not focusables:
         return
-    to_remove = set(id(w) for w in focusables)
-    # Collect all current objects that should survive.
-    survivors = []
-    for i in range(group.get_obj_count()):
-        obj = group.get_obj_by_index(i)
-        if obj is not None and id(obj) not in to_remove:
-            survivors.append(obj)
-    group.remove_all_objs()
-    for obj in survivors:
-        try:
-            group.add_obj(obj)
-        except Exception:
-            pass
+    for w in focusables:
+        if w is not None:
+            try:
+                lv.group_remove_obj(w)
+            except Exception:
+                pass
 
 
 def _icon_is_image_path(icon):
@@ -103,8 +97,8 @@ def _set_notification_icon(notification):
 
 
 def _notification_pressed(event, notification_id):
-    NotificationManager.trigger(notification_id)
     close_drawer()
+    NotificationManager.trigger(notification_id)
 
 
 def _build_drawer_notification_item(parent, notification):
@@ -238,11 +232,20 @@ def _register_notifications_listener():
 def toggle_drawer():
     if drawer_open:
         close_drawer()
-    else:
+    elif not InputManager.is_drawer_open_disabled():
         open_drawer()
+    else:
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
 
 def open_drawer():
     global drawer_open, _pre_drawer_focused
+    if InputManager.is_drawer_open_disabled():
+        cb = InputManager._drawer_open_cb
+        if cb:
+            cb()
+        return
     if _drawer_panel is None or drawer_open:
         return
     # Save the currently focused widget so we can restore it on close.
@@ -257,7 +260,7 @@ def open_drawer():
     if _drawer_slider:
         lv.group_focus_obj(_drawer_slider)
 
-def close_drawer(to_launcher=False):
+def close_drawer(to_launcher=False, animate=True):
     global drawer_open, _pre_drawer_focused
     if _drawer_panel is None or not drawer_open:
         return
@@ -268,9 +271,10 @@ def close_drawer(to_launcher=False):
     if not to_launcher and fg is not None and "launcher" not in fg:
         if __debug__: logger.debug("close_drawer: also closing bar because to_launcher is %s and foreground_app_name is %s", to_launcher, fg)
         close_bar(animate=False)
-    _drawer_panel.hide()
+    _drawer_panel.hide(animate=animate)
     _remove_focusables_from_group(_drawer_focusables)
     _remove_focusables_from_group(_drawer_notif_focusables)
+    gc.collect()
     # Restore focus to wherever it was before the drawer was opened.
     if _pre_drawer_focused is not None:
         try:
@@ -296,12 +300,17 @@ def close_bar(animate=True):
     bar_open = False
     _bar_panel.hide(animate=animate)
     _remove_focusables_from_group(_bar_focusables)
+    gc.collect()
 
 
 
 
 def create_notification_bar():
     global notification_bar, notification_icon_label, _bar_panel
+    # The bar is a singleton; recreating it would leak timers that reference
+    # the old labels and eventually crash when they fire.
+    if notification_bar is not None:
+        return
     # Create notification bar
     notification_bar = lv.obj(lv.layer_top())
     notification_bar.set_size(lv.pct(100), AppearanceManager.NOTIFICATION_BAR_HEIGHT)
@@ -370,18 +379,16 @@ def create_notification_bar():
 
     # Update time
     def update_time(timer):
-        hours = mpos.time.localtime()[3]
-        minutes = mpos.time.localtime()[4]
-        seconds = mpos.time.localtime()[5]
-        time_label.set_text(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
-    
+        now = mpos.time.localtime()
+        time_label.set_text(f"{now[3]:02d}:{now[4]:02d}:{now[5]:02d}")
+
     def update_wifi_icon(timer):
         from mpos import WifiService
         if WifiService.is_connected():
             wifi_icon.remove_flag(lv.obj.FLAG.HIDDEN)
         else:
             wifi_icon.add_flag(lv.obj.FLAG.HIDDEN)
-    
+
     # Get temperature sensor via SensorManager
     from mpos import SensorManager
     temp_sensor = None
@@ -400,7 +407,7 @@ def create_notification_bar():
                 temp_label.set_text("--°C")
         else:
             temp_label.set_text("42°C")
-    
+
     lv.timer_create(update_time, CLOCK_UPDATE_INTERVAL, None)
     lv.timer_create(update_temperature, TEMPERATURE_UPDATE_INTERVAL, None)
     #lv.timer_create(update_memfree, MEMFREE_UPDATE_INTERVAL, None)
@@ -408,11 +415,15 @@ def create_notification_bar():
 
     _register_notifications_listener()
     _refresh_notification_widgets()
-    
+
 
 
 def create_drawer():
     global drawer, drawer_notifications_title, drawer_notifications_container, _drawer_panel
+    # The drawer is a singleton; recreating it would leak duplicate widgets,
+    # focusables and event callbacks onto layer_top.
+    if drawer is not None:
+        return
     drawer = lv.obj(lv.layer_top())
     drawer_height = DisplayMetrics.pct_of_height(90)
     shown_y = AppearanceManager.NOTIFICATION_BAR_HEIGHT

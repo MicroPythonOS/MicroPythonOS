@@ -276,6 +276,8 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_readsize_progsize.patch
 	echo "Applying lvgl_micropython esp32 network wlan country Japan patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_country_japan.patch
+	echo "Applying lvgl_micropython esp32 network wlan config country patch..."
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/network_wlan_config_country.patch
 
 	partition_size=3670016 # 3.5MiB is enough and is the maximum for the Fri3d 2024/2026 devices due to the partition table
 	flash_size="16"
@@ -351,6 +353,29 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		"$frozenmanifest"
     set +x
 	popd
+
+	# Report firmware size vs the OTA partition budget so headroom erosion is
+	# visible on every build, not only when the esp-idf size check finally
+	# fails at 0 bytes (see #268). Warn when less than 32 KiB remains.
+	builddir=build-$BOARD
+	[ -n "$BOARD_VARIANT" ] && builddir=build-$BOARD-$BOARD_VARIANT
+	fwbin="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/$builddir/micropython.bin
+	if [ -f "$fwbin" ]; then
+		fwsize=$(stat -f%z "$fwbin" 2>/dev/null || stat -c%s "$fwbin")
+		headroom=$((partition_size - fwsize))
+		echo ""
+		echo "=== Firmware size check ($target) ==="
+		echo "image:     $fwsize bytes"
+		echo "partition: $partition_size bytes"
+		echo "headroom:  $headroom bytes"
+		if [ "$headroom" -lt 0 ]; then
+			echo "ERROR: firmware exceeds the app partition by $((-headroom)) bytes!"
+			exit 1
+		elif [ "$headroom" -lt 32768 ]; then
+			echo "WARNING: less than 32 KiB of partition headroom left!"
+		fi
+		echo "====================================="
+	fi
 elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 	# Full cleanup: old .o from upstream MicroPython builds would cause link errors
 	rm -rf ./lvgl_micropython/lib/micropython/ports/unix/build-standard/ 2>/dev/null
@@ -366,6 +391,19 @@ elif [ "$target" == "unix" -o "$target" == "macOS" ]; then
 
 	echo "Applying unix auto-import main patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
+
+	# Desktop builds on architectures without a native emitter (e.g. macOS on
+	# aarch64) can't compile @micropython.native/@micropython.viper decorators
+	# in RUNTIME-loaded .py files (apps/, on-disk lib/): the compiler raises
+	# "invalid micropython decorator". disable_native_viper only covers frozen
+	# code. This patch makes the compiler fall back to bytecode instead.
+	# Existence-guarded so MPOS still builds against older pinned
+	# lvgl_micropython SHAs that don't ship the patch yet.
+	native_fallback_patch="$codebasedir"/lvgl_micropython/unix_native_decorator_fallback.patch
+	if [ -f "$native_fallback_patch" ]; then
+		echo "Applying unix native-decorator bytecode fallback patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$native_fallback_patch"
+	fi
 
 	manifest=$(readlink -f "$codebasedir"/manifests/manifest.py)
 	frozenmanifest="FROZEN_MANIFEST=$manifest"
@@ -484,6 +522,15 @@ elif [ "$target" == "web" ]; then
 
 	echo "Applying unix auto-import main patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/unix_autoimport_main.patch
+
+	# Same native/viper-decorator bytecode fallback as the unix/macOS build:
+	# the wasm build has no native emitter either, so runtime-loaded apps
+	# using those decorators would fail to import in the browser.
+	native_fallback_patch="$codebasedir"/lvgl_micropython/unix_native_decorator_fallback.patch
+	if [ -f "$native_fallback_patch" ]; then
+		echo "Applying unix native-decorator bytecode fallback patch..."
+		apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$native_fallback_patch"
+	fi
 
 	# Apply the web-port modifications to the lvgl_micropython submodule. These
 	# live in THIS (MicroPythonOS) repo under scripts/web_port/ so the entire web

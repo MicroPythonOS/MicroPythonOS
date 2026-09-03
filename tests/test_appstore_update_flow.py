@@ -56,7 +56,7 @@ class MockPrefs:
     """Mimics SharedPreferences(app_id) — first arg is app_id, not data."""
 
     def __init__(self, app_id, filename=None):
-        self._data = {"backend": "github,https://apps.micropythonos.com/app_index.json"}
+        self._data = {}
 
     def get_string(self, key, default=None):
         return self._data.get(key, default)
@@ -70,6 +70,13 @@ class MockPrefs:
 
     def commit(self):
         pass
+
+
+class MockPrefsNotificationsOff(MockPrefs):
+    def get_string(self, key, default=None):
+        if key == "update_notifications":
+            return "false"
+        return super().get_string(key, default)
 
 
 class MockConnectivityManager:
@@ -97,6 +104,62 @@ class MockConnectivityManager:
     def reset_instance(cls):
         if hasattr(cls, "_inst"):
             delattr(cls, "_inst")
+
+
+class MockDropdown:
+    """Captures LVGL dropdown set_options calls."""
+
+    def __init__(self):
+        self._options = ""
+        self._selected = 0
+
+    def set_options(self, text):
+        self._options = text
+
+    def get_selected(self):
+        return self._selected
+
+    def set_selected(self, idx):
+        self._selected = idx
+
+
+class _MockAUM:
+    """Mock AppUpdateManager with controllable updatable_apps."""
+
+    _instance = None
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    @classmethod
+    def reset_instance(cls):
+        cls._instance = None
+
+    def __init__(self):
+        self.updatable_apps = []
+        self.current_state = "idle"
+        self._state_callback = None
+        self._suppress_notifications = False
+
+    def set_state_callback(self, cb):
+        self._state_callback = cb
+
+    def clear_state_callback(self):
+        self._state_callback = None
+
+    def check_for_updates_now(self, index_url=None):
+        pass
+
+    @property
+    def suppress_notifications(self):
+        return self._suppress_notifications
+
+    @suppress_notifications.setter
+    def suppress_notifications(self, value):
+        self._suppress_notifications = bool(value)
 
 
 # ---------------------------------------------------------------------------
@@ -255,13 +318,13 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         mpos.AppManager.is_update_available = staticmethod(_fake)
         return orig
 
-    def test_check_for_updates_finds_updates_github_format(self):
+    def test_check_for_updates_finds_updates(self):
         ctx = self._patch_aum()
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
-                {"fullname": "com.test.b", "name": "TestB", "version": "1.0", "download_url": "http://x/b.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
+                {"slug": "com.test.b", "name": "TestB", "version": "1.0"},
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.a": True, "com.test.b": False})
@@ -285,7 +348,7 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "1.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "1.0"},
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.a": False})
@@ -313,12 +376,6 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
             ])
             orig_dl = self._mock_download_url(return_value=app_index)
             orig_iav = self._mock_is_update_available({"com.test.alpha": True, "com.test.beta": False})
-            orig_get_url = ctx["aum"]._get_index_url_and_type
-
-            def _fake_get_url():
-                return ("https://badgehub.eu/api/v3/project-summaries", "badgehub")
-
-            ctx["aum"]._get_index_url_and_type = _fake_get_url
             try:
                 import asyncio
                 loop = asyncio.get_event_loop()
@@ -333,7 +390,6 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
                 dm.DownloadManager.download_url = orig_dl
                 import mpos
                 mpos.AppManager.is_update_available = orig_iav
-                ctx["aum"]._get_index_url_and_type = orig_get_url
         finally:
             self._unpatch(ctx)
 
@@ -393,6 +449,79 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         finally:
             self._unpatch(ctx)
 
+    def test_check_for_updates_cooldown_blocks_recheck(self):
+        ctx = self._patch_aum()
+        try:
+            import time
+            ctx["aum"]._last_check_ts = time.ticks_ms()
+            import asyncio
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(ctx["aum"].check_for_updates())
+            self.assertEqual(ctx["aum"].current_state, ctx["AppUpdateState"].IDLE,
+                             "cooldown should block recheck within 60s")
+        finally:
+            self._unpatch(ctx)
+
+    def test_check_for_updates_force_bypasses_cooldown(self):
+        ctx = self._patch_aum()
+        try:
+            import json, time
+            app_index = json.dumps([
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
+            ])
+            ctx["aum"]._last_check_ts = time.ticks_ms()
+            orig_dl = self._mock_download_url(return_value=app_index)
+            orig_iav = self._mock_is_update_available({"com.test.a": True})
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(ctx["aum"].check_for_updates(force=True))
+                self.assertEqual(ctx["aum"].current_state, ctx["AppUpdateState"].UPDATES_AVAILABLE,
+                                 "force=True should bypass cooldown and complete the check")
+            finally:
+                import mpos.net.download_manager as dm
+                dm.DownloadManager.download_url = orig_dl
+                import mpos
+                mpos.AppManager.is_update_available = orig_iav
+        finally:
+            self._unpatch(ctx)
+
+    def test_check_for_updates_now_uses_force(self):
+        ctx = self._patch_aum()
+        try:
+            ctx["aum"]._check_in_progress = False
+            import time
+            ctx["aum"]._last_check_ts = time.ticks_ms()
+            import json
+            app_index = json.dumps([
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
+            ])
+            orig_dl = self._mock_download_url(return_value=app_index)
+            orig_iav = self._mock_is_update_available({"com.test.a": True})
+            import mpos
+            tasks = []
+            orig_ct = mpos.TaskManager.create_task
+
+            def _capture_and_await(coro):
+                tasks.append(coro)
+                import asyncio
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(coro)
+
+            mpos.TaskManager.create_task = _capture_and_await
+            try:
+                ctx["aum"].check_for_updates_now()
+                self.assertEqual(ctx["aum"].current_state, ctx["AppUpdateState"].UPDATES_AVAILABLE,
+                                 "check_for_updates_now should force-bypass cooldown")
+            finally:
+                mpos.TaskManager.create_task = orig_ct
+                import mpos.net.download_manager as dm
+                dm.DownloadManager.download_url = orig_dl
+                import mpos as mp
+                mp.AppManager.is_update_available = orig_iav
+        finally:
+            self._unpatch(ctx)
+
     def test_check_for_updates_now_skips_when_check_in_progress(self):
         ctx = self._patch_aum()
         try:
@@ -418,7 +547,7 @@ class TestAppUpdateManagerCheck(unittest.TestCase):
         try:
             import json
             app_index = json.dumps([
-                {"fullname": "com.test.a", "name": "TestA", "version": "2.0", "download_url": "http://x/a.mpk"},
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
             ])
             states_seen = []
 
@@ -646,13 +775,13 @@ class TestAppUpdateRunAll(unittest.TestCase):
 
         store = AppStore()
         store.prefs = MockPrefs(None)
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
         store.update_all_label = MockLabel()
         store.main_screen = MockLabel()
         store.apps = []
+        store._has_foreground = True
         return store
 
     def tearDown(self):
@@ -809,6 +938,146 @@ class TestAppUpdateRunAll(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Gap #4b: _run_update_all must force-clear stale updatable_apps after installs
+# ---------------------------------------------------------------------------
+
+class TestAppUpdateRunAllClearsUpdatableApps(unittest.TestCase):
+    def setUp(self):
+        import asyncio
+        import mpos
+        import appstore_core
+
+        asyncio.new_event_loop()
+
+        MockConnectivityManager.reset_instance()
+        self._orig_cm = appstore_core.ConnectivityManager
+        appstore_core.ConnectivityManager = MockConnectivityManager
+
+        self._orig_sp = appstore_core.SharedPreferences
+        appstore_core.SharedPreferences = MockPrefs
+
+        notify_calls = []
+        cancel_calls = []
+
+        def _fake_notify(n):
+            notify_calls.append(n)
+
+        def _fake_cancel(nid):
+            cancel_calls.append(nid)
+
+        self._orig_notify = mpos.NotificationManager.notify
+        self._orig_cancel = mpos.NotificationManager.cancel
+        mpos.NotificationManager.notify = _fake_notify
+        mpos.NotificationManager.cancel = _fake_cancel
+        self._notify_calls = notify_calls
+        self._cancel_calls = cancel_calls
+
+        self._orig_dl = mpos.AppManager.download_and_install_package
+        self._install_calls = []
+
+        async def _fake_dl(url, fullname, **kwargs):
+            self._install_calls.append((url, fullname))
+
+        mpos.AppManager.download_and_install_package = _fake_dl
+
+        self._orig_refresh = mpos.AppManager.refresh_apps
+        self._refresh_calls = []
+        mpos.AppManager.refresh_apps = lambda: self._refresh_calls.append(True)
+
+        self.tasks_created = []
+        self._orig_create_task = mpos.TaskManager.create_task
+
+        def _capture_task(coro):
+            self.tasks_created.append(coro)
+
+        mpos.TaskManager.create_task = _capture_task
+
+        appstore_core.AppUpdateManager._instance = None
+        self.aum = appstore_core.AppUpdateManager.get_instance()
+        self.aum._suppress_notifications = True
+
+    def tearDown(self):
+        import mpos
+        import appstore_core
+
+        mpos.AppManager.download_and_install_package = self._orig_dl
+        mpos.AppManager.refresh_apps = self._orig_refresh
+        mpos.TaskManager.create_task = self._orig_create_task
+        mpos.NotificationManager.notify = self._orig_notify
+        mpos.NotificationManager.cancel = self._orig_cancel
+
+        appstore_core.ConnectivityManager = self._orig_cm
+        appstore_core.SharedPreferences = self._orig_sp
+        appstore_core.AppUpdateManager._instance = None
+        MockConnectivityManager.reset_instance()
+
+    def _make_store(self):
+        from appstore import AppStore
+
+        store = AppStore()
+        store.prefs = MockPrefs(None)
+        store.please_wait_label = MockLabel()
+        store._refresh_in_progress = False
+        store.update_all_button = MockLabel()
+        store.update_all_label = MockLabel()
+        store.main_screen = MockLabel()
+        store.apps = []
+        store._update_labels = {}
+        store._wip_apps = []
+        store._has_foreground = True
+        return store
+
+    def test_run_update_all_forces_clear_of_updatable_apps(self):
+        import mpos.net.download_manager as dm
+        import json
+        import asyncio
+        import mpos
+
+        store = self._make_store()
+
+        store.refresh_list = lambda: None
+
+        index_json = json.dumps([])
+
+        async def _fake_download(url):
+            return index_json
+
+        orig_download = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_fake_download)
+
+        orig_iav = mpos.AppManager.is_update_available
+        mpos.AppManager.is_update_available = staticmethod(lambda fn, v: False)
+
+        self.aum.updatable_apps = [
+            {"fullname": "com.test.a", "name": "TestA", "download_url": "http://x/a.mpk"},
+        ]
+        self.aum.current_state = __import__("appstore_core").AppUpdateState.UPDATES_AVAILABLE
+
+        check_tasks = []
+        mpos.TaskManager.create_task = lambda c: check_tasks.append(c)
+
+        try:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(store._run_update_all([
+                {"fullname": "com.test.a", "name": "TestA", "download_url": "http://x/a.mpk"},
+            ]))
+
+            self.assertTrue(self._refresh_calls, "AppManager.refresh_apps must be called")
+
+            for task in check_tasks:
+                loop.run_until_complete(task)
+
+            self.assertEqual(
+                len(self.aum.updatable_apps),
+                0,
+                "updatable_apps must be cleared after all updates are installed (force recheck)",
+            )
+        finally:
+            dm.DownloadManager.download_url = orig_download
+            mpos.AppManager.is_update_available = orig_iav
+
+
+# ---------------------------------------------------------------------------
 # Gap #5: Post-update UI cleanup
 # ---------------------------------------------------------------------------
 
@@ -822,7 +1091,6 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
 
         store = AppStore()
         store.prefs = MockPrefs(None)
-        store._DEFAULT_BACKEND = "github,https://apps.micropythonos.com/app_index.json"
         store.please_wait_label = MockLabel()
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
@@ -830,6 +1098,7 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
         store.main_screen = MockLabel()
         store.apps = []
         store._update_labels = {}
+        store._has_foreground = True
         return store
 
     def test_sync_update_banner_shows_button_when_updates_available(self):
@@ -937,6 +1206,336 @@ class TestAppUpdatePostUpdate(unittest.TestCase):
                              "list should NOT be rebuilt when viewing non-Updates category")
         finally:
             AppUpdateManager._instance = None
+
+
+# ---------------------------------------------------------------------------
+# Bug reproduction: AppStore reads from wrong data source before auto-check
+# ---------------------------------------------------------------------------
+
+class TestAppStorePreAutoCheck(unittest.TestCase):
+    """When the AppStore is opened before the auto-update background check:
+    - create_apps_list() correctly identifies updatable apps via local check
+      and writes the results to AppUpdateManager.updatable_apps
+    - All consumers (_update_all_click, _update_category_dropdown) then see
+      consistent data
+    """
+
+    def setUp(self):
+        import asyncio
+        import mpos
+        import appstore_core
+
+        asyncio.new_event_loop()
+
+        self._orig_aum = appstore_core.AppUpdateManager
+        appstore_core.AppUpdateManager = _MockAUM
+        _MockAUM.reset_instance()
+
+        self._install_calls = []
+        self._orig_dl_install = mpos.AppManager.download_and_install_package
+
+        async def _fake_install(url, fullname, **kwargs):
+            self._install_calls.append((url, fullname))
+
+        mpos.AppManager.download_and_install_package = _fake_install
+
+        self._tasks_created = []
+        self._orig_create_task = mpos.TaskManager.create_task
+
+        def _capture_task(coro):
+            self._tasks_created.append(coro)
+            import asyncio as _asyncio
+            _asyncio.get_event_loop().run_until_complete(coro)
+
+        mpos.TaskManager.create_task = _capture_task
+
+        self._orig_refresh = mpos.AppManager.refresh_apps
+        self._refresh_calls = []
+        mpos.AppManager.refresh_apps = lambda: self._refresh_calls.append(True)
+
+        self._orig_iav = mpos.AppManager.is_update_available
+        mpos.AppManager.is_update_available = staticmethod(lambda fn, v: True)
+
+    def tearDown(self):
+        import mpos
+        import appstore_core
+        appstore_core.AppUpdateManager = self._orig_aum
+        _MockAUM.reset_instance()
+        mpos.AppManager.download_and_install_package = self._orig_dl_install
+        mpos.TaskManager.create_task = self._orig_create_task
+        mpos.AppManager.refresh_apps = self._orig_refresh
+        mpos.AppManager.is_update_available = self._orig_iav
+
+    def _make_store(self):
+        from appstore import AppStore
+        store = AppStore()
+        store.prefs = MockPrefs(None)
+        store.please_wait_label = MockLabel()
+        store._refresh_in_progress = False
+        store._data_loaded = True
+        store.update_all_button = MockLabel()
+        store.update_all_label = MockLabel()
+        store.main_screen = MockLabel()
+        store.apps = []
+        store._update_labels = {}
+        store._wip_apps = []
+        store._builtin_fullnames = set()
+        store.category_dropdown = None
+        store._raw_timer = None
+        store._icon_queue = []
+        store._download_in_progress = False
+        store._icon_pipeline = "none"
+        store._has_foreground = True
+        return store
+
+    def test_update_all_button_click_triggers_installs(self):
+        """Bug 1: _update_all_click reads AppUpdateManager.updatable_apps
+        which is empty before auto-check. The fix makes create_apps_list()
+        write its local results to the singleton."""
+        store = self._make_store()
+        self.assertFalse(_MockAUM.get_instance().updatable_apps,
+                         "pre-condition: singleton must be empty before create_apps_list")
+
+        store.refresh_list = lambda: None
+        from mpos import App
+        app = App("TestApp", "Pub", "desc", "", "", "http://x/a.mpk", "com.test.a", "1.0")
+        app.installed_path = "apps/com.test.a"
+        app._remote_version = "2.0"
+        app.short_description = "desc"
+        app.categories = ["Tools"]
+        store.apps = [app]
+
+        store.create_apps_list()
+
+        self.assertEqual(len(_MockAUM.get_instance().updatable_apps), 1,
+                         "create_apps_list() must write to AppUpdateManager.updatable_apps")
+        self.assertFalse(store.update_all_button.has_flag(HIDDEN_FLAG),
+                         "button should be visible after local check")
+
+        store._update_all_click(None)
+
+        self.assertTrue(self._install_calls,
+                        "button click should trigger installs, not silently return")
+
+    def test_updates_dropdown_shows_correct_count(self):
+        """Bug 2: _update_category_dropdown reads AppUpdateManager.updatable_apps
+        which is empty before auto-check. The fix makes create_apps_list()
+        write its local results to the singleton before the dropdown is built."""
+        store = self._make_store()
+        self.assertFalse(_MockAUM.get_instance().updatable_apps,
+                         "pre-condition: singleton must be empty before create_apps_list")
+
+        from mpos import App
+        app = App("TestApp", "Pub", "desc", "", "", "", "com.test.a", "1.0")
+        app.installed_path = "apps/com.test.a"
+        app._remote_version = "2.0"
+        app.short_description = "desc"
+        app.categories = ["Tools"]
+        store.apps = [app]
+
+        mock_dd = MockDropdown()
+        store.category_dropdown = mock_dd
+
+        store.create_apps_list()
+
+        self.assertEqual(len(_MockAUM.get_instance().updatable_apps), 1,
+                         "create_apps_list() must write to AppUpdateManager.updatable_apps")
+        self.assertIn("Updates (1)", mock_dd._options,
+                      "dropdown should show 'Updates (1)' after create_apps_list() populates the singleton")
+
+    def test_on_resume_syncs_with_auto_check(self):
+        """Scenario 6 regression guard: when the user returns to AppStore
+        after the auto-check ran in the background, onResume must sync the
+        banner with the check's current state."""
+        store = self._make_store()
+
+        from appstore_core import AppUpdateState
+        aum = _MockAUM.get_instance()
+        aum.updatable_apps = [
+            {"fullname": "com.test.a", "name": "AppA"},
+            {"fullname": "com.test.b", "name": "AppB"},
+        ]
+        aum.current_state = AppUpdateState.UPDATES_AVAILABLE
+
+        store.onResume(MockLabel())
+
+        self.assertEqual(store.update_all_label._text, "Update 2 Apps")
+        self.assertFalse(store.update_all_button.has_flag(HIDDEN_FLAG))
+
+
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Update notifications setting
+# ---------------------------------------------------------------------------
+
+class TestAppUpdateNotificationsSetting(unittest.TestCase):
+    def setUp(self):
+        import asyncio
+        asyncio.new_event_loop()
+
+    def tearDown(self):
+        MockConnectivityManager.reset_instance()
+
+    def _patch_aum(self, prefs_cls=MockPrefs, suppress=False):
+        import appstore_core
+        from appstore_core import AppUpdateManager, AppUpdateState
+        import mpos
+
+        MockConnectivityManager.reset_instance()
+        orig_cm = appstore_core.ConnectivityManager
+        appstore_core.ConnectivityManager = MockConnectivityManager
+
+        orig_sp = appstore_core.SharedPreferences
+        appstore_core.SharedPreferences = prefs_cls
+
+        notify_calls = []
+        cancel_calls = []
+
+        def _fake_notify(n):
+            notify_calls.append(n)
+
+        def _fake_cancel(nid):
+            cancel_calls.append(nid)
+
+        orig_notify = mpos.NotificationManager.notify
+        orig_cancel = mpos.NotificationManager.cancel
+        mpos.NotificationManager.notify = _fake_notify
+        mpos.NotificationManager.cancel = _fake_cancel
+
+        AppUpdateManager._instance = None
+        aum = AppUpdateManager.get_instance()
+        aum._suppress_notifications = suppress
+
+        return {
+            "aum": aum,
+            "AppUpdateState": AppUpdateState,
+            "appstore_core": appstore_core,
+            "orig_cm": orig_cm,
+            "orig_sp": orig_sp,
+            "orig_notify": orig_notify,
+            "orig_cancel": orig_cancel,
+            "notify_calls": notify_calls,
+            "cancel_calls": cancel_calls,
+        }
+
+    def _unpatch(self, ctx):
+        import mpos
+        ctx["appstore_core"].ConnectivityManager = ctx["orig_cm"]
+        ctx["appstore_core"].SharedPreferences = ctx["orig_sp"]
+        mpos.NotificationManager.notify = ctx["orig_notify"]
+        mpos.NotificationManager.cancel = ctx["orig_cancel"]
+        ctx["appstore_core"].AppUpdateManager._instance = None
+        MockConnectivityManager.reset_instance()
+
+    def _mock_download_url(self, return_value=None, exception=None):
+        import mpos.net.download_manager as dm
+
+        async def _dl(url):
+            if exception:
+                raise exception
+            return return_value
+
+        orig = dm.DownloadManager.download_url
+        dm.DownloadManager.download_url = staticmethod(_dl)
+        return orig
+
+    def _mock_is_update_available(self, results):
+        import mpos
+        orig = mpos.AppManager.is_update_available
+
+        def _fake(fullname, version):
+            return results.get(fullname, False)
+
+        mpos.AppManager.is_update_available = staticmethod(_fake)
+        return orig
+
+    def test_background_check_runs_when_notifications_on(self):
+        ctx = self._patch_aum(prefs_cls=MockPrefs, suppress=False)
+        try:
+            import json
+            app_index = json.dumps([
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
+            ])
+            orig_dl = self._mock_download_url(return_value=app_index)
+            orig_iav = self._mock_is_update_available({"com.test.a": True})
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(ctx["aum"].check_for_updates())
+                self.assertEqual(ctx["aum"].current_state, ctx["AppUpdateState"].UPDATES_AVAILABLE)
+                self.assertEqual(len(ctx["aum"].updatable_apps), 1)
+                self.assertEqual(ctx["aum"].updatable_apps[0]["fullname"], "com.test.a")
+                self.assertEqual(len(ctx["notify_calls"]), 1)
+                self.assertEqual(ctx["notify_calls"][0].text, "1 app can be updated")
+            finally:
+                import mpos.net.download_manager as dm
+                dm.DownloadManager.download_url = orig_dl
+                import mpos
+                mpos.AppManager.is_update_available = orig_iav
+        finally:
+            self._unpatch(ctx)
+
+    def test_background_check_skipped_when_notifications_off(self):
+        ctx = self._patch_aum(prefs_cls=MockPrefsNotificationsOff, suppress=False)
+        try:
+            orig_dl = self._mock_download_url(return_value="[]")
+            orig_iav = self._mock_is_update_available({})
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(ctx["aum"].check_for_updates())
+                self.assertEqual(ctx["aum"].current_state, ctx["AppUpdateState"].IDLE)
+                self.assertEqual(len(ctx["aum"].updatable_apps), 0)
+                self.assertEqual(len(ctx["notify_calls"]), 0)
+            finally:
+                import mpos.net.download_manager as dm
+                dm.DownloadManager.download_url = orig_dl
+                import mpos
+                mpos.AppManager.is_update_available = orig_iav
+        finally:
+            self._unpatch(ctx)
+
+    def test_force_check_runs_when_notifications_off(self):
+        ctx = self._patch_aum(prefs_cls=MockPrefsNotificationsOff, suppress=False)
+        try:
+            import json
+            app_index = json.dumps([
+                {"slug": "com.test.a", "name": "TestA", "version": "2.0"},
+            ])
+            orig_dl = self._mock_download_url(return_value=app_index)
+            orig_iav = self._mock_is_update_available({"com.test.a": True})
+            try:
+                import asyncio
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(ctx["aum"].check_for_updates(force=True))
+                self.assertEqual(ctx["aum"].current_state, ctx["AppUpdateState"].UPDATES_AVAILABLE)
+                self.assertEqual(len(ctx["aum"].updatable_apps), 1)
+                self.assertEqual(len(ctx["notify_calls"]), 0)
+            finally:
+                import mpos.net.download_manager as dm
+                dm.DownloadManager.download_url = orig_dl
+                import mpos
+                mpos.AppManager.is_update_available = orig_iav
+        finally:
+            self._unpatch(ctx)
+
+    def test_notify_skipped_when_notifications_off(self):
+        ctx = self._patch_aum(prefs_cls=MockPrefsNotificationsOff, suppress=False)
+        try:
+            ctx["aum"].updatable_apps = [{"fullname": "com.test.a", "name": "TestA"}]
+            ctx["aum"]._notify_updates_available()
+            self.assertEqual(len(ctx["notify_calls"]), 0)
+        finally:
+            self._unpatch(ctx)
+
+    def test_clear_updates_notification(self):
+        ctx = self._patch_aum(prefs_cls=MockPrefs, suppress=False)
+        try:
+            ctx["aum"].clear_updates_notification()
+            self.assertEqual(ctx["cancel_calls"], ["appstore.updates_available"])
+        finally:
+            self._unpatch(ctx)
 
 
 if __name__ == "__main__":
