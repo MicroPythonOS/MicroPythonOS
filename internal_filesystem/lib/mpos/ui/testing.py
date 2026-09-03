@@ -1227,8 +1227,15 @@ def simulate_click(x, y, press_duration_ms=100):
     time.sleep(0.02)
     _touch_indev.read()
 
-    # Wait for press duration
-    time.sleep(press_duration_ms / 1000.0)
+    # Wait for press duration, pumping indev reads so LVGL sees a sustained
+    # press. Without these reads LONG_PRESSED never fires in contexts where
+    # nothing else runs the LVGL loop during the sleep (e.g. aiorepl exec).
+    remaining_ms = press_duration_ms
+    while remaining_ms > 0:
+        step_ms = min(20, remaining_ms)
+        time.sleep(step_ms / 1000.0)
+        _touch_indev.read()
+        remaining_ms -= step_ms
 
     # Release the touch
     _touch_pressed = False

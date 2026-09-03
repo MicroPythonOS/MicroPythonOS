@@ -39,6 +39,8 @@ OS:
 - sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
+- mpos.ui.testing: simulate_click() now pumps simulated-indev reads during the press hold, so LONG_PRESSED fires even when nothing else runs the LVGL loop during the sleep (e.g. MPOSController.long_press() exec'd via aiorepl, which blocks the scheduler)
+- mpos_controller: click_button() now clicks the innermost clickable widget containing the labelled text instead of the outermost clickable ancestor (often the screen itself), which sent clicks to the screen center for nested labels
 - test_runner/mpos_controller: self-check that unittest assertions actually raise before running a suite; when boot cached a stripped copy (mpy-cross -O3, e.g. a frozen lib imported before lib/ is on sys.path), repair it by grafting the working assert methods from the filesystem lib/unittest, and only fail the run with a clear diagnostic when no working unittest is available — previously every assertion was a silent no-op and whole suites reported vacuously green
 - mpos_controller: write paste-mode payloads in chunks, draining the echoed input between chunks — a large payload written in one call deadlocked once payload plus echo filled the PTY buffers, hanging exec() until timeout
 - tests: eliminate all direct lv.task_handler() calls from the topmenu drawer test; wait_ms now uses pure time.sleep() instead of a tight lv.task_handler() polling loop, preventing an unrecoverable hang when SDL event polling blocks on macOS ARM CI after many process cycles

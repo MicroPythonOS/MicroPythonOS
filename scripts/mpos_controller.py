@@ -355,6 +355,31 @@ def _widget_matches(widget, type=None, text=None, clickable=None):
     return True
 
 
+def _find_clickable_by_text(tree, text):
+    """Find the innermost clickable widget whose own text or descendant label
+    text matches *text*.
+
+    Walking outermost-first would return a clickable ancestor (screens and
+    plain containers are clickable by default) whose center may not even be
+    over the labelled widget, so the click would land on a sibling.
+    """
+    def walk(nodes, ancestors):
+        if not isinstance(nodes, list):
+            return None
+        for widget in nodes:
+            path = ancestors + [widget]
+            if widget.get("text") == text:
+                for candidate in reversed(path):
+                    if candidate.get("clickable"):
+                        return candidate
+            found = walk(widget.get("children"), path)
+            if found is not None:
+                return found
+        return None
+
+    return walk(tree, [])
+
+
 # ── Stream ──────────────────────────────────────────────────────────
 
 class _PTYStream:
@@ -1006,17 +1031,8 @@ for i in range(steps + 1):
         self.press(widget["center_x"], widget["center_y"])
 
     def _find_button_by_text(self, tree, text):
-        """Find a clickable widget whose own text or child label text matches."""
-        for widget, _parent in _find_widgets(
-            tree, lambda w: _widget_matches(w, clickable=True)
-        ):
-            if widget.get("text") == text:
-                return widget
-            for child, _p in _find_widgets(
-                widget.get("children", []), lambda w: w.get("text") == text
-            ):
-                return widget
-        return None
+        """Find the innermost clickable widget whose own text or child label text matches."""
+        return _find_clickable_by_text(tree, text)
 
     def wait_for_text(self, text, timeout=10, disappear=False):
         """Wait until *text* appears (or disappears) on screen. Returns True on success."""
@@ -1431,17 +1447,8 @@ class SerialBackend:
         self.press(widget["center_x"], widget["center_y"])
 
     def _find_button_by_text(self, tree, text):
-        """Find a clickable widget whose own text or child label text matches."""
-        for widget, _parent in _find_widgets(
-            tree, lambda w: _widget_matches(w, clickable=True)
-        ):
-            if widget.get("text") == text:
-                return widget
-            for child, _p in _find_widgets(
-                widget.get("children", []), lambda w: w.get("text") == text
-            ):
-                return widget
-        return None
+        """Find the innermost clickable widget whose own text or child label text matches."""
+        return _find_clickable_by_text(tree, text)
 
     def wait_for_text(self, text, timeout=10, disappear=False):
         """Wait until *text* appears (or disappears) on screen. Returns True on success."""
