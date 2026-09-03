@@ -245,6 +245,16 @@ def detect_board():
                     return "fri3d_2024"
                 restore_i2c(sda=9, scl=18)
 
+            if __debug__: logger.debug("waveshare_esp32_s3_touch_lcd_3_5 ?")
+            if i2c0 := fail_save_i2c(sda=8, scl=7):
+                # PCA9554 IO expander (LCD reset/CS) + FT6336 touch: this pair on
+                # this bus is unique to the ESP32-S3-Touch-LCD-3.5 (the freenove
+                # board's FT6336G sits on sda=16/scl=15, the unihiker's expander
+                # on sda=47/scl=48).
+                if single_address_i2c_scan(i2c0, 0x20) and single_address_i2c_scan(i2c0, 0x38):
+                    return "waveshare_esp32_s3_touch_lcd_3_5"
+                restore_i2c(sda=8, scl=7)
+
         else: # not is_esp32s3
 
             if __debug__: logger.debug("m5stack_core2 ?")
