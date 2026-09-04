@@ -50,6 +50,7 @@ OS:
 - lvgl_micropython: add native-decorator bytecode fallback for builds without a native emitter like the unix port on aarch64 (Apple Silicon macOS) and the wasm/web port
 - lvgl_micropython: compress Montserrat 10-18 fonts to save ~19 KB of flash space
 - main.py: skip the lib/ override when lib/mpos is from a different release than the frozen firmware, instead of letting a stale lib/ (as flashed by the web installer) shadow the new frozen modules after an OTA update and crash the launcher at boot (#239)
+- nostr: improve connection management, watchdog, error management
 - sdl_keyboard: CTRL-SHIFT-S (CMD-SHIFT-S on macOS) saves a timestamped BMP screenshot in the current directory, at the screen's own pixel size instead of the scaled SDL window
 
 Testing:
