@@ -1228,6 +1228,14 @@ class NostrManager:
 
     def _process_nwc_event(self, event):
         """Decrypt and process an NWC response/notification event."""
+        # Any event on the NWC subscription is wallet-service activity, even
+        # one we cannot decrypt or do not understand: the relay delivered it,
+        # so reconnecting the relay cannot help. Reset the silence watchdog
+        # here, before decryption, instead of only on usable results.
+        if self._polls_since_last_event > 0:
+            if __debug__:
+                logger.debug("NostrManager: NWC watchdog counter reset (event kind=%s)", getattr(event, "kind", "?"))
+        self._polls_since_last_event = 0
         try:
             decrypted = self._nwc_private_key.decrypt_message(
                 event.content,
@@ -1304,15 +1312,34 @@ class NostrManager:
         """Watchdog reconnect: close, wait, reopen, re-subscribe."""
         logger.warning("NostrManager: watchdog reconnecting relay (silent for %s polls)",
             self._polls_since_last_event)
+        old_manager = self.relay_manager
         try:
-            await self.relay_manager.close_connections()
+            await old_manager.close_connections()
         except Exception as e:
-                    logger.warning("NostrManager: close during reconnect failed: %s", e)
+            logger.warning("NostrManager: close during reconnect failed: %s", e)
+
+        # close_connections() can fail part-way (it is best-effort per relay),
+        # leaving websocket tasks alive. Make sure none survive the swap: a
+        # surviving task keeps delivering into its relay's bound pool.
+        old_relays = getattr(old_manager, 'relays', {}) or {}
+        for relay in old_relays.values():
+            task = getattr(relay, 'task', None)
+            if task is not None:
+                try:
+                    task.cancel()
+                except Exception:
+                    pass
 
         await TaskManager.sleep(2)
 
-        old_relay_urls = list(self.relay_manager.relays.keys()) if hasattr(self.relay_manager, 'relays') else []
+        old_relay_urls = list(old_relays.keys())
         self.relay_manager = RelayManager()
+        # Keep the ONE message pool for the lifetime of the manager: the
+        # consumer loop polls self.relay_manager.message_pool, and every Relay
+        # binds the pool it was given at add_relay() time. A fresh pool here
+        # would split-brain the receive path — anything still delivered by a
+        # not-yet-dead old websocket lands in the old pool that nobody reads.
+        self.relay_manager.message_pool = old_manager.message_pool
         self._relay_connected_state = {}
         for url in old_relay_urls:
             self.relay_manager.add_relay(url)
