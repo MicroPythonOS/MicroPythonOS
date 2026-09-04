@@ -65,7 +65,9 @@ class TestGraphicalSimulateLongPress(unittest.TestCase):
 
     def test_short_click_does_not_fire_long_pressed(self):
         x, y = self._button_center()
-        simulate_click(x, y)
+        # Use a very short press duration so that even severe OS sleep jitter on
+        # slow CI runners cannot accidentally cross LVGL's long-press threshold.
+        simulate_click(x, y, press_duration_ms=20)
         # On slow systems SHORT_CLICKED may take a few frames to arrive.
         found_short = self._wait_until(
             lambda: "short_clicked" in self.events,
