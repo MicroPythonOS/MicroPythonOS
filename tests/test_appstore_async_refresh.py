@@ -825,7 +825,7 @@ class TestAppDetailRefreshBeforeAddButtons(unittest.TestCase):
             '"name":"Lightning Piggy",'
             '"description":"Display wallet",'
             '"long_description":"See https://www.LightningPiggy.com",'
-            '"author":"LightningPiggy Foundation",'
+            '"author":"The Lightning Piggy Project",'
             '"icon_map":{"64x64":"icon-64x64.png"},'
             '"version":"0.6.0",'
             '"badges":["mpos_api_0"]}}}'
