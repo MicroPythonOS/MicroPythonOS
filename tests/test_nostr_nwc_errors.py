@@ -31,6 +31,7 @@ class _FakeKey:
 
 
 class _FakeEvent:
+    kind = 23195
     content = "irrelevant-ciphertext"
     public_key = "wallet-pubkey"
 
@@ -124,6 +125,125 @@ class TestNwcErrorSurfacing(unittest.TestCase):
     def test_error_without_cb_does_not_raise(self):
         mgr = _bare_manager(_ERROR_REPLY)
         mgr._process_nwc_event(_FakeEvent())
+
+
+class _RaisingKey:
+    def decrypt_message(self, content, pubkey):
+        raise ValueError("bad ciphertext")
+
+
+class TestNwcWatchdogCountsAnyEvent(unittest.TestCase):
+    """Bug 2 of #287 (broad form): any event on the NWC subscription is
+    wallet-service activity and must reset the silence watchdog, even if it
+    cannot be decrypted or carries neither result nor error."""
+
+    def test_unknown_reply_resets_watchdog(self):
+        mgr = _bare_manager(json.dumps({"result_type": "something_new"}))
+        mgr._process_nwc_event(_FakeEvent())
+        self.assertEqual(mgr._polls_since_last_event, 0)
+
+    def test_undecryptable_reply_resets_watchdog(self):
+        mgr = _bare_manager("unused")
+        mgr._nwc_private_key = _RaisingKey()
+        mgr._process_nwc_event(_FakeEvent())  # must not raise
+        self.assertEqual(mgr._polls_since_last_event, 0)
+
+
+class _FakeTask:
+    def __init__(self):
+        self.cancelled = False
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class _FakeRelay:
+    def __init__(self, url, pool):
+        self.url = url
+        self.message_pool = pool
+        self.task = _FakeTask()
+        self.connected = True
+
+
+class _FakeRelayManager:
+    """Mimics nostr.relay_manager.RelayManager: a fresh MessagePool per
+    instance, relays bind the pool current at add_relay() time."""
+    instances = []
+
+    def __init__(self, fail_close=False):
+        self.message_pool = object()
+        self.relays = {}
+        self._fail_close = fail_close
+        _FakeRelayManager.instances.append(self)
+
+    def add_relay(self, url, *a, **kw):
+        self.relays[url] = _FakeRelay(url, self.message_pool)
+
+    async def close_connections(self):
+        if self._fail_close:
+            raise OSError("socket already gone")
+
+    async def open_connections(self, *a, **kw):
+        return None
+
+    def connected_relays(self):
+        return len(self.relays)
+
+
+class TestReconnectKeepsMessagePool(unittest.TestCase):
+    """Bug 3 of #287: the watchdog reconnect must not split-brain the receive
+    path. The rebuilt manager reuses the existing MessagePool (so relays
+    added afterwards, and any old websocket still delivering, feed the pool
+    the consumer loop reads) and old relay tasks are cancelled even when
+    close_connections() fails part-way."""
+
+    def setUp(self):
+        import asyncio
+        asyncio.new_event_loop()
+        import nostr_service
+        self._orig_rm = nostr_service.RelayManager
+        self._orig_sleep = nostr_service.TaskManager.sleep
+        nostr_service.RelayManager = _FakeRelayManager
+
+        async def _no_sleep(*a, **kw):
+            return None
+        nostr_service.TaskManager.sleep = _no_sleep
+        _FakeRelayManager.instances = []
+
+    def tearDown(self):
+        import nostr_service
+        nostr_service.RelayManager = self._orig_rm
+        nostr_service.TaskManager.sleep = self._orig_sleep
+
+    def _reconnect(self, fail_close):
+        import asyncio
+        mgr = _bare_manager("unused")
+        old = _FakeRelayManager(fail_close=fail_close)
+        old.add_relay("wss://relay.example")
+        old_pool = old.message_pool
+        old_task = old.relays["wss://relay.example"].task
+        mgr.relay_manager = old
+        mgr.keep_running = True
+        mgr._relay_connected_state = {}
+        mgr._subscription_ids = {}
+        mgr._send_subscriptions_to_relays = lambda urls: None
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(mgr._reconnect_relay())
+        return mgr, old, old_pool, old_task
+
+    def test_pool_reused_and_tasks_cancelled_on_clean_close(self):
+        mgr, old, old_pool, old_task = self._reconnect(fail_close=False)
+        self.assertIsNot(mgr.relay_manager, old)
+        self.assertIs(mgr.relay_manager.message_pool, old_pool)
+        self.assertIs(mgr.relay_manager.relays["wss://relay.example"].message_pool, old_pool)
+        self.assertTrue(old_task.cancelled)
+        self.assertEqual(mgr._polls_since_last_event, 0)
+
+    def test_pool_reused_and_tasks_cancelled_when_close_fails(self):
+        mgr, old, old_pool, old_task = self._reconnect(fail_close=True)
+        self.assertIs(mgr.relay_manager.message_pool, old_pool)
+        self.assertIs(mgr.relay_manager.relays["wss://relay.example"].message_pool, old_pool)
+        self.assertTrue(old_task.cancelled)
 
 
 if __name__ == "__main__":
