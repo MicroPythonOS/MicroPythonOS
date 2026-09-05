@@ -13,7 +13,7 @@ Board Support:
 Builtin Apps:
 - AppStore and OSUpdate: defer boot service import and start by 120s and 90s respectively via delay_s in manifest intent_filter, moving their module imports out of the boot path
 - AppStore and OSUpdate: fix cooldown blocking the first update check for 60s after boot on ESP32 (ticks_ms counts from boot)
-- AppStore: add 'Scan QR' button that opens an app's detail screen from a scanned app link (https://badgehub.eu/page/project/APP_ID, https://badgehub.eu/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
+- AppStore: add 'Scan QR' button that opens an app's detail screen from a scanned app link (https://badgehub.eu/page/project/APP_ID, micropythonos://app/APP_ID or mpos://app/APP_ID)
 - AppStore: fix insert_app_list_item not hiding items that don't match the selected category filter, causing remote-only apps to leak into the 'Installed' view
 - AppStore: guard against segfault when the activity leaves the foreground during an async download (e.g. back_screen() while the index is downloading)
 - AppStore: open a QR deep link's app detail screen immediately when the app is already known locally, instead of waiting for the index download
