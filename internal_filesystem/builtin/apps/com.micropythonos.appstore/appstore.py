@@ -142,6 +142,11 @@ class AppStore(Activity):
                 # slots: rebuild once with slots (re-queues icons as needed).
                 self.create_apps_list()
                 return
+            if self._icon_pipeline == "none" and any(getattr(app, "image_icon_widget", None) is not None for app in self.apps):
+                # Rows were built with icons: rebuild once without icon
+                # slots (full-width labels with side margins).
+                self.create_apps_list()
+                return
             for app in self.apps:
                 if not app.image_icon_widget:
                     continue

@@ -1364,6 +1364,84 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Icon pipeline toggle: returning from settings must refresh the list both ways
+# ---------------------------------------------------------------------------
+
+class TestAppStoreIconPipelineResume(unittest.TestCase):
+    """Switching App List Icons Blocky->None in settings then backing out to
+    the list left stale icon rows until restart: onResume only rebuilt for
+    the None->icons direction. It must rebuild for icons->None too."""
+
+    def setUp(self):
+        import asyncio
+        import appstore_core
+
+        asyncio.new_event_loop()
+
+        self._orig_aum = appstore_core.AppUpdateManager
+        appstore_core.AppUpdateManager = _MockAUM
+        _MockAUM.reset_instance()
+
+    def tearDown(self):
+        import appstore_core
+        appstore_core.AppUpdateManager = self._orig_aum
+        _MockAUM.reset_instance()
+
+    def _make_store(self, pipeline, widgets):
+        from appstore import AppStore
+        from mpos import App
+        store = AppStore()
+        store.prefs = MockPrefs(None)
+        store.please_wait_label = MockLabel()
+        store._refresh_in_progress = False
+        store._data_loaded = True
+        store.update_all_button = MockLabel()
+        store.update_all_label = MockLabel()
+        store.main_screen = MockLabel()
+        store._update_labels = {}
+        store._wip_apps = []
+        store._builtin_fullnames = set()
+        store.category_dropdown = None
+        store._raw_timer = None
+        store._icon_queue = []
+        store._download_in_progress = False
+        store._has_foreground = True
+        store._icon_pipeline = pipeline
+        store.apps_list = MockLabel()
+        store._sync_update_banner = lambda *a: None
+        store.apps = []
+        for i, widget in enumerate(widgets):
+            app = App("App%d" % i, "Pub", "desc", "", "", "", "com.test.app%d" % i, "1.0")
+            app.image_icon_widget = widget
+            store.apps.append(app)
+        return store
+
+    def _resume(self, store):
+        rebuilds = []
+        store.create_apps_list = lambda: rebuilds.append(True)
+        store.onResume(MockLabel())
+        return rebuilds
+
+    def test_resume_rebuilds_when_icons_disabled_with_stale_widgets(self):
+        store = self._make_store("none", [object(), object()])
+        rebuilds = self._resume(store)
+        self.assertEqual(len(rebuilds), 1,
+                         "Blocky->None must rebuild the list to drop icon slots")
+
+    def test_resume_skips_rebuild_when_already_iconless(self):
+        store = self._make_store("none", [None, None])
+        rebuilds = self._resume(store)
+        self.assertEqual(len(rebuilds), 0,
+                         "no rebuild when rows already have no icon slots")
+
+    def test_resume_rebuilds_when_icons_enabled_without_slots(self):
+        store = self._make_store("blurhash", [None, None])
+        rebuilds = self._resume(store)
+        self.assertEqual(len(rebuilds), 1,
+                         "None->Blocky must still rebuild the list with icon slots")
+
+
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # Update notifications setting
