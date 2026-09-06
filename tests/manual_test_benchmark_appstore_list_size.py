@@ -83,7 +83,11 @@ def _wait_pipeline_done(timeout_ms):
     deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
     activity = _get_appstore_activity()
     while time.ticks_diff(deadline, time.ticks_ms()) > 0:
-        if not activity._icon_queue and not activity._raw_timer:
+        try:
+            visible = activity._visible_apps()
+        except Exception:
+            visible = []
+        if not visible or all(getattr(a, "_icon_stage", None) in ("blurhash", "download") for a in visible):
             return True
         lv.task_handler()
         time.sleep(0.02)
@@ -92,11 +96,11 @@ def _wait_pipeline_done(timeout_ms):
 
 def _cleanup_apps_list(activity):
     activity._stop_all_timers()
-    activity._icon_queue.clear()
     for app in activity.apps:
         app.image_icon_widget = None
         app._icon_dsc = None
         app._icon_buf = None
+        app._icon_stage = None
     if hasattr(activity, "apps_list") and activity.apps_list:
         activity.apps_list.delete()
         activity.apps_list = None
@@ -175,12 +179,12 @@ class TestAppStoreStress(unittest.TestCase):
         print("alloc_start   — gc.mem_alloc() BEFORE creating the LVGL list (bytes).")
         print("free_list     — gc.mem_free() AFTER create_apps_list() builds widgets.")
         print("alloc_list    — gc.mem_alloc() AFTER create_apps_list() builds widgets.")
-        print("free_icons    — gc.mem_free() AFTER all raw+blurhash icons are rendered,")
+        print("free_icons    — gc.mem_free() AFTER visible raw+blurhash icons are rendered,")
         print("                 or after 300s timeout (whatever came first).")
         print("alloc_icons   — gc.mem_alloc() AFTER icon pipeline finished/timed out.")
         print("t_list_ms     — wall-clock time for create_apps_list() alone (ms).")
         print("t_icons_ms    — wall-clock time from start of create_apps_list() until")
-        print("                 the icon queue emptied (or 300s timeout).  Includes")
+        print("                 the visible icons finished (or 300s timeout).  Includes")
         print("                 t_list_ms.  Subtract them to get pure icon-render time.")
         print("icons?        — 'yes' = pipeline finished, 'TIMEOUT' = hit 300s limit,")
         print("                 'no' = pipeline still running after 300s (unlikely).")
@@ -195,8 +199,8 @@ class TestAppStoreStress(unittest.TestCase):
         print("  total wall-clock per batch  = t_icons_ms + ~500ms cleanup + 200ms settle")
         print()
         print("Flow per batch:")
-        print("  1. generate N App() objects  2. create_apps_list()  3. wait for icon")
-        print("     pipeline (raw→blurhash per app, one at a time) or 300s timeout")
+        print("  1. generate N App() objects  2. create_apps_list()  3. wait for visible")
+        print("     icons (raw immediately, blurhash capped per 250ms tick) or 300s timeout")
         print("  4. scroll test  5. delete all widgets, clear queues, gc")
         print()
 

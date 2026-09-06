@@ -1281,8 +1281,8 @@ class TestAppStorePreAutoCheck(unittest.TestCase):
         store._wip_apps = []
         store._builtin_fullnames = set()
         store.category_dropdown = None
-        store._raw_timer = None
-        store._icon_queue = []
+        store._icon_timer = None
+        store._displayed_apps = []
         store._download_in_progress = False
         store._icon_pipeline = "none"
         store._has_foreground = True
@@ -1402,8 +1402,8 @@ class TestAppStoreIconPipelineResume(unittest.TestCase):
         store._wip_apps = []
         store._builtin_fullnames = set()
         store.category_dropdown = None
-        store._raw_timer = None
-        store._icon_queue = []
+        store._icon_timer = None
+        store._displayed_apps = []
         store._download_in_progress = False
         store._has_foreground = True
         store._icon_pipeline = pipeline
@@ -1439,6 +1439,189 @@ class TestAppStoreIconPipelineResume(unittest.TestCase):
         rebuilds = self._resume(store)
         self.assertEqual(len(rebuilds), 1,
                          "None->Blocky must still rebuild the list with icon slots")
+
+
+# ---------------------------------------------------------------------------
+# Viewport icon loader: only visible rows get icon work, for every pipeline
+# ---------------------------------------------------------------------------
+
+class _MockIconWidget:
+    def __init__(self):
+        self.src_count = 0
+
+    def set_src(self, src):
+        self.src_count += 1
+
+    def set_scale(self, scale):
+        pass
+
+
+class _MockRow:
+    def __init__(self, y, h):
+        self._y = y
+        self._h = h
+
+    def get_y(self):
+        return self._y
+
+    def get_height(self):
+        return self._h
+
+
+class _MockAppsList:
+    def __init__(self, count, row_h=64, list_h=320, scroll_y=0):
+        self._rows = [_MockRow(i * row_h, row_h) for i in range(count)]
+        self._list_h = list_h
+        self._scroll_y = scroll_y
+
+    def update_layout(self):
+        pass
+
+    def get_scroll_y(self):
+        return self._scroll_y
+
+    def get_height(self):
+        return self._list_h
+
+    def get_child_count(self):
+        return len(self._rows)
+
+    def get_child(self, i):
+        return self._rows[i]
+
+
+class TestAppStoreViewportIconLoader(unittest.TestCase):
+    _HASH = "UBMOZfK1GG%LBBNG,;Rj2skq=eE1s9n4S5Na"
+
+    def setUp(self):
+        import asyncio
+        asyncio.new_event_loop()
+
+    def _make_store(self, pipeline, n, scroll_y=0, **app_kwargs):
+        from appstore import AppStore
+        from mpos import App
+        store = AppStore()
+        store._icon_pipeline = pipeline
+        store._icon_timer = None
+        store._displayed_apps = []
+        store._download_in_progress = False
+        store._has_foreground = True
+        store.apps_list = _MockAppsList(n, scroll_y=scroll_y)
+        store.apps = []
+        for i in range(n):
+            app = App("App%d" % i, "Pub", "desc", "", app_kwargs.get("icon_url", ""), "",
+                      "com.test.app%d" % i, "1.0",
+                      blur_hash=app_kwargs.get("blur_hash"),
+                      icon_data=app_kwargs.get("icon_data"))
+            app.image_icon_widget = _MockIconWidget()
+            if "stage" in app_kwargs:
+                app._icon_stage = app_kwargs["stage"]
+            store.apps.append(app)
+        store._displayed_apps = list(store.apps)
+        return store
+
+    def _stages(self, store):
+        return [getattr(a, "_icon_stage", None) for a in store.apps]
+
+    def test_raw_pipeline_loads_visible_plus_margin_only(self):
+        store = self._make_store("raw", 20)
+        store._load_viewport_icons(None)
+        stages = self._stages(store)
+        self.assertEqual(stages[:10], ["raw"] * 10,
+                         "visible rows plus one viewport margin should get raw icons")
+        self.assertEqual(stages[10:], [None] * 10,
+                         "far off-screen rows must not burn icon work")
+
+    def test_scrolling_loads_newly_visible_rows(self):
+        store = self._make_store("raw", 20)
+        store._load_viewport_icons(None)
+        store.apps_list._scroll_y = 640
+        store._load_viewport_icons(None)
+        self.assertTrue(all(s == "raw" for s in self._stages(store)),
+                        "after scrolling, every row should have a raw icon")
+
+    def test_blurhash_capped_per_tick(self):
+        store = self._make_store("blurhash", 20, blur_hash=self._HASH, stage="raw")
+        store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store).count("blurhash"), 2,
+                         "only two blurhash decodes per tick")
+        store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store).count("blurhash"), 4,
+                         "next tick advances the next two visible rows")
+
+    def test_download_kicked_once_for_visible(self):
+        import mpos
+        store = self._make_store("download", 20, icon_url="http://x/a.mpk", stage="raw")
+        tasks = []
+        orig_create_task = mpos.TaskManager.create_task
+        mpos.TaskManager.create_task = lambda coro: tasks.append(coro)
+        try:
+            store._load_viewport_icons(None)
+            self.assertEqual(len(tasks), 1,
+                             "one download kicked for the first visible row needing it")
+            self.assertTrue(store._download_in_progress)
+            store._load_viewport_icons(None)
+            self.assertEqual(len(tasks), 1,
+                             "no second download while one is in flight")
+        finally:
+            mpos.TaskManager.create_task = orig_create_task
+
+    def test_cached_icons_restored_without_regeneration(self):
+        store = self._make_store("raw", 3)
+        restored = []
+        raws = []
+        store._restore_cached_icon = lambda app, widget: restored.append(app.fullname) or True
+        store._set_raw_icon = lambda app: raws.append(app.fullname)
+        store._load_viewport_icons(None)
+        self.assertEqual(len(restored), 3)
+        self.assertEqual(raws, [],
+                         "restored rows must not regenerate raw icons")
+
+    def test_finished_and_widgetless_rows_skipped(self):
+        store = self._make_store("blurhash", 3, blur_hash=self._HASH, stage="blurhash")
+        store.apps[1].image_icon_widget = None
+        calls = []
+        store._set_raw_icon = lambda app: calls.append(app)
+        store._set_icon_widget = lambda app: calls.append(app)
+        store._load_viewport_icons(None)
+        self.assertEqual(calls, [],
+                         "finished rows and rows without widgets need no work")
+
+    def test_broken_geometry_falls_back_to_all(self):
+        store = self._make_store("raw", 4)
+        store.apps_list = MockLabel()
+        store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store), ["raw"] * 4,
+                         "geometry failure must degrade to loading everything")
+
+    def test_timer_lifecycle(self):
+        store = self._make_store("raw", 2)
+        created = []
+        deleted = []
+
+        class _FakeTimer:
+            def delete(self):
+                deleted.append(True)
+
+        store._create_timer = lambda cb, ms: created.append(ms) or _FakeTimer()
+        store._start_icon_timer()
+        self.assertEqual(created, [store._ICON_TICK_MS])
+        self.assertIsNotNone(store._icon_timer)
+        self.assertEqual(self._stages(store), ["raw"] * 2,
+                         "starting the timer also does one immediate pass")
+        store._stop_all_timers()
+        self.assertEqual(len(deleted), 1)
+        self.assertIsNone(store._icon_timer)
+
+    def test_no_timer_when_icons_disabled(self):
+        store = self._make_store("none", 2)
+        created = []
+        store._create_timer = lambda cb, ms: created.append(ms)
+        self.assertIsNone(store._icon_timer)
+        store._start_icon_timer()
+        self.assertEqual(created, [],
+                         "no loader timer when icons are disabled")
+        self.assertIsNone(store._icon_timer)
 
 
 # ---------------------------------------------------------------------------

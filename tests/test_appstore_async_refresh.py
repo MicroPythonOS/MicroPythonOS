@@ -147,10 +147,9 @@ class TestAppStoreAsyncRefresh(unittest.TestCase):
         store._refresh_in_progress = False
         store.update_all_button = MockLabel()
         store.main_screen = MockLabel()
-        store._raw_timer = None
-        store._blurhash_timer = None
-        store._icon_queue = []
-        store._blurhash_queue = []
+        store._icon_timer = None
+        store._displayed_apps = []
+        store._download_in_progress = False
         store._wip_apps = []
         store._has_foreground = True
         return store
