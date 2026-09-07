@@ -29,8 +29,10 @@ class AppStore(Activity):
     _BLURHASH_APP_ICON_BENCHMARK = 76 # ms
     _DOWNLOAD_ICON_INTERVAL = 3000 # ms between icon downloads
     _ICON_TICK_MS = 250 # viewport icon loader period
-    _BLURHASH_PER_TICK = 2 # max blurhash decodes per loader tick
+    _BLURHASH_PER_TICK = 1 # max blurhash decodes per loader tick
+    _RAW_PER_TICK = 4 # max raw icons generated per loader tick
     _PRELOAD_VIEWPORTS = 1 # extra viewports of icons to preload above/below
+    _SETTLE_TICKS = 2 # quiet ticks after scrolling before icons resume
 
     _STAGE_RANK = {'raw': 1, 'blurhash': 2, 'download': 3}
     _DEFAULT_ICON_PIPELINE = 'blurhash'
@@ -63,6 +65,9 @@ class AppStore(Activity):
         self._data_loaded = False
         self._icon_timer = None
         self._displayed_apps = []
+        self._scroll_hold = False
+        self._last_scroll_y = None
+        self._stable_ticks = 0
         self._download_in_progress = False
         self._icon_pipeline = self.prefs.get_string("icon_pipeline", self._DEFAULT_ICON_PIPELINE)
         self.main_screen = lv.obj()
@@ -549,6 +554,8 @@ class AppStore(Activity):
                 app.image_icon_widget = None
             self.apps_list.delete()
         self.apps_list = lv.list(self.main_screen)
+        self.apps_list.add_event_cb(self._on_list_scroll, lv.EVENT.SCROLL_BEGIN, None)
+        self.apps_list.add_event_cb(self._on_list_scroll, lv.EVENT.SCROLL_END, None)
         self._apply_default_styles(self.apps_list)
         self.apps_list.set_size(lv.pct(100), list_h)
         self.apps_list.align(lv.ALIGN.TOP_LEFT, 0, list_top)
@@ -756,12 +763,43 @@ class AppStore(Activity):
         except Exception:
             return list(displayed)
 
+    def _on_list_scroll(self, event):
+        code = event.get_code()
+        if code == lv.EVENT.SCROLL_BEGIN:
+            self._scroll_hold = True
+        elif code == lv.EVENT.SCROLL_END:
+            self._scroll_hold = False
+            self._stable_ticks = 0
+
+    def _scrolling_now(self):
+        try:
+            cur = self.apps_list.get_scroll_y()
+        except Exception:
+            return False
+        last = getattr(self, "_last_scroll_y", None)
+        self._last_scroll_y = cur
+        if last is None or cur is None:
+            self._stable_ticks = self._SETTLE_TICKS
+            return False
+        if getattr(self, "_scroll_hold", False) or cur != last:
+            self._stable_ticks = 0
+            if cur == last:
+                self._scroll_hold = False
+            return True
+        stable = getattr(self, "_stable_ticks", 0)
+        if stable < self._SETTLE_TICKS:
+            self._stable_ticks = stable + 1
+            return True
+        return False
+
     def _load_viewport_icons(self, timer):
         if self._icon_pipeline == "none":
             return
         if not getattr(self, "apps_list", None):
             return
         if not self.has_foreground():
+            return
+        if self._scrolling_now():
             return
         try:
             visible = self._visible_apps()
@@ -771,30 +809,33 @@ class AppStore(Activity):
             return
         target = self._STAGE_RANK.get(self._icon_pipeline, 1)
         blurhash_left = self._BLURHASH_PER_TICK
+        raw_left = self._RAW_PER_TICK
         for app in visible:
             try:
-                blurhash_left = self._load_one_icon(app, target, blurhash_left)
+                blurhash_left, raw_left = self._load_one_icon(app, target, blurhash_left, raw_left)
             except Exception as e:
                 if __debug__: logger.debug("icon load skipped for %s: %s", getattr(app, "fullname", "?"), e)
 
-    def _load_one_icon(self, app, target, blurhash_left):
+    def _load_one_icon(self, app, target, blurhash_left, raw_left):
         widget = getattr(app, "image_icon_widget", None)
         if not widget:
-            return blurhash_left
+            return blurhash_left, raw_left
         stage = getattr(app, "_icon_stage", None)
         if stage == "download" or (target == 2 and stage == "blurhash") or (target == 1 and stage == "raw"):
-            return blurhash_left
+            return blurhash_left, raw_left
         if app.icon_data:
             self._set_icon_widget(app)
-            return blurhash_left
+            return blurhash_left, raw_left
         if stage is None:
             if self._restore_cached_icon(app, widget):
-                return blurhash_left
+                return blurhash_left, raw_left
+            if raw_left <= 0:
+                return blurhash_left, raw_left
             self._set_raw_icon(app)
-            return blurhash_left
+            return blurhash_left, raw_left - 1
         if target >= 2 and app.blur_hash and stage == "raw":
             if blurhash_left <= 0:
-                return blurhash_left
+                return blurhash_left, raw_left
             blurhash_left -= 1
             dsc, buf = blurhash_to_image_dsc(app.blur_hash, 16, 16)
             if dsc is not None:
@@ -808,13 +849,13 @@ class AppStore(Activity):
                         widget.set_scale(4 * 256)
                     except Exception:
                         pass
-            return blurhash_left
+            return blurhash_left, raw_left
         if target >= 3 and app.icon_url and not app.icon_data:
             if self._download_in_progress:
-                return blurhash_left
+                return blurhash_left, raw_left
             self._download_in_progress = True
             TaskManager.create_task(self._do_download(app))
-        return blurhash_left
+        return blurhash_left, raw_left
 
     def _set_raw_icon(self, app):
         try:

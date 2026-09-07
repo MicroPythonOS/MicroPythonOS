@@ -1490,6 +1490,14 @@ class _MockAppsList:
         return self._rows[i]
 
 
+class _FakeScrollEvent:
+    def __init__(self, code):
+        self._code = code
+
+    def get_code(self):
+        return self._code
+
+
 class TestAppStoreViewportIconLoader(unittest.TestCase):
     _HASH = "UBMOZfK1GG%LBBNG,;Rj2skq=eE1s9n4S5Na"
 
@@ -1527,27 +1535,88 @@ class TestAppStoreViewportIconLoader(unittest.TestCase):
         store = self._make_store("raw", 20)
         store._load_viewport_icons(None)
         stages = self._stages(store)
-        self.assertEqual(stages[:10], ["raw"] * 10,
-                         "visible rows plus one viewport margin should get raw icons")
-        self.assertEqual(stages[10:], [None] * 10,
+        self.assertEqual(stages[:4], ["raw"] * 4,
+                         "first tick fills up to the per-tick raw cap")
+        self.assertEqual(stages[4:], [None] * 16,
                          "far off-screen rows must not burn icon work")
-
-    def test_scrolling_loads_newly_visible_rows(self):
-        store = self._make_store("raw", 20)
         store._load_viewport_icons(None)
+        store._load_viewport_icons(None)
+        stages = self._stages(store)
+        self.assertEqual(stages[:10], ["raw"] * 10,
+                         "remaining visible rows fill in on the next quiet ticks")
+        self.assertEqual(stages[10:], [None] * 10)
+
+    def test_scrolling_skips_ticks_then_loads_new_rows(self):
+        store = self._make_store("raw", 20)
+        for _ in range(3):
+            store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store)[:10], ["raw"] * 10)
         store.apps_list._scroll_y = 640
         store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store)[10:], [None] * 10,
+                         "the tick that observes motion must do no icon work")
+        for _ in range(8):
+            store._load_viewport_icons(None)
         self.assertTrue(all(s == "raw" for s in self._stages(store)),
-                        "after scrolling, every row should have a raw icon")
+                        "after scrolling stops, new rows fill in")
+
+    def test_scroll_hold_freezes_loader(self):
+        import lvgl as lv
+        store = self._make_store("raw", 20)
+        store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store)[:4], ["raw"] * 4)
+        store._on_list_scroll(_FakeScrollEvent(lv.EVENT.SCROLL_BEGIN))
+        for i in range(1, 5):
+            store.apps_list._scroll_y = i * 64
+            store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store)[:4], ["raw"] * 4)
+        self.assertEqual(self._stages(store)[4:], [None] * 16,
+                         "no icon work while scrolling is held or moving")
+        store._on_list_scroll(_FakeScrollEvent(lv.EVENT.SCROLL_END))
+        store._load_viewport_icons(None)
+        store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store)[4:], [None] * 16,
+                         "settle ticks after scroll end still do no work")
+        store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store)[:8], ["raw"] * 8,
+                         "work resumes once scrolling settles")
+
+    def test_missed_scroll_end_auto_recovers(self):
+        import lvgl as lv
+        store = self._make_store("raw", 20)
+        store._last_scroll_y = 0
+        store._stable_ticks = store._SETTLE_TICKS
+        store._on_list_scroll(_FakeScrollEvent(lv.EVENT.SCROLL_BEGIN))
+        for _ in range(4):
+            store._load_viewport_icons(None)
+        self.assertEqual(self._stages(store)[:4], ["raw"] * 4,
+                         "a stale hold must clear once scrolling is stable")
+
+    def test_scroll_hold_blocks_download_kick(self):
+        import lvgl as lv
+        import mpos
+        store = self._make_store("download", 20, icon_url="http://x/a.mpk", stage="raw")
+        store._last_scroll_y = 0
+        store._stable_ticks = store._SETTLE_TICKS
+        store._on_list_scroll(_FakeScrollEvent(lv.EVENT.SCROLL_BEGIN))
+        tasks = []
+        orig_create_task = mpos.TaskManager.create_task
+        mpos.TaskManager.create_task = lambda coro: tasks.append(coro)
+        try:
+            store._load_viewport_icons(None)
+            self.assertEqual(tasks, [])
+            self.assertFalse(store._download_in_progress)
+        finally:
+            mpos.TaskManager.create_task = orig_create_task
 
     def test_blurhash_capped_per_tick(self):
         store = self._make_store("blurhash", 20, blur_hash=self._HASH, stage="raw")
         store._load_viewport_icons(None)
-        self.assertEqual(self._stages(store).count("blurhash"), 2,
-                         "only two blurhash decodes per tick")
+        self.assertEqual(self._stages(store).count("blurhash"), 1,
+                         "only one blurhash decode per tick")
         store._load_viewport_icons(None)
-        self.assertEqual(self._stages(store).count("blurhash"), 4,
-                         "next tick advances the next two visible rows")
+        self.assertEqual(self._stages(store).count("blurhash"), 2,
+                         "next quiet tick advances the next visible row")
 
     def test_download_kicked_once_for_visible(self):
         import mpos
@@ -1560,6 +1629,7 @@ class TestAppStoreViewportIconLoader(unittest.TestCase):
             self.assertEqual(len(tasks), 1,
                              "one download kicked for the first visible row needing it")
             self.assertTrue(store._download_in_progress)
+            store._stable_ticks = store._SETTLE_TICKS
             store._load_viewport_icons(None)
             self.assertEqual(len(tasks), 1,
                              "no second download while one is in flight")
