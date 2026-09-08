@@ -15,9 +15,10 @@ MicroPythonOS: GUI + OS for microcontrollers. Source: `internal_filesystem/` (1:
 
 ### lvgl_micropython submodule branching
 
+To keep it easy to manage/sync with upsteam lvgl_micropython, we keep the changes in either:
+
 - **Patch files** (`.patch` applied by `build_mpos.sh`): commit directly on `integration`. No topic branch needed — the patch file is the topic.
-- **Direct C/C++ source edits**: must go on a `topic/<name>` branch, then merge into `integration`.
-- Branch naming: `topic/<kebab-case>` (e.g. `topic/wifi-country-japan`).
+- **Direct edits**: must go on a `topic/<name>` branch, then merge into `integration`. Branch naming: `topic/<kebab-case>` (e.g. `topic/wifi-country-japan`).
 
 ## Testing
 

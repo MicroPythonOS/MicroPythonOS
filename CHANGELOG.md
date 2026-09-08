@@ -4,7 +4,6 @@ Future release (next version)
 Builtin Apps:
 - AppStore: speedup loading from 18 to 6 seconds
 - AppStore: load list icons lazily for visible rows only (250ms viewport loader, capped per-tick work) instead of rendering every icon upfront
-- AppStore: pause list icon loading while scrolling (resume after it settles) so scrolling stays smooth and taps register
 
 Frameworks:
 - InfiniteList: dynamic initial list sizing instead of hard-coded 18 items
