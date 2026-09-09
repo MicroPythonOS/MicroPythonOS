@@ -37,6 +37,8 @@ typedef struct _mp_obj_usbdisp_t {
 
 static const mp_obj_type_t mp_type_usbdisp;
 
+static mp_obj_t usbdisp_force_reenum(mp_obj_t self_in);
+
 static bool s_usb_disp_inited = false;
 
 static mp_obj_usbdisp_t *usbdisp_get_self(mp_obj_t self_in) {
@@ -64,12 +66,21 @@ static mp_obj_t usbdisp_make_new(const mp_obj_type_t *type, size_t n_args, size_
         s_usb_disp_inited = true;
     }
 
-    usb_disp_t *d = usb_disp_add(
-        (uint8_t)parsed[ARG_port].u_int,
-        0, 0,
-        (uint16_t)parsed[ARG_width].u_int,
-        (uint16_t)parsed[ARG_height].u_int,
-        parsed[ARG_ignore_edid].u_bool);
+    // Upstream has no remove API and ESP32 allows a single display, so a
+    // slot once added is taken forever. Reuse it: this makes REPL retries
+    // after a boot-time timeout and repeated constructions work. The
+    // original width/height config is kept; use set_mode() to change it.
+    usb_disp_t *d;
+    if (usb_disp_count() > 0) {
+        d = usb_disp_at(0);
+    } else {
+        d = usb_disp_add(
+            (uint8_t)parsed[ARG_port].u_int,
+            0, 0,
+            (uint16_t)parsed[ARG_width].u_int,
+            (uint16_t)parsed[ARG_height].u_int,
+            parsed[ARG_ignore_edid].u_bool);
+    }
     if (d == NULL) {
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("usb_disp_add failed"));
     }
@@ -199,6 +210,8 @@ static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_vid_obj, usbdisp_vid);
 static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_pid_obj, usbdisp_pid);
 static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_stat_bytes_obj, usbdisp_stat_bytes);
 
+static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_force_reenum_obj, usbdisp_force_reenum);
+
 static const mp_rom_map_elem_t usbdisp_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_start), MP_ROM_PTR(&usbdisp_start_obj) },
     { MP_ROM_QSTR(MP_QSTR_poll), MP_ROM_PTR(&usbdisp_poll_obj) },
@@ -208,6 +221,7 @@ static const mp_rom_map_elem_t usbdisp_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_update_565), MP_ROM_PTR(&usbdisp_update_565_obj) },
     { MP_ROM_QSTR(MP_QSTR_fill), MP_ROM_PTR(&usbdisp_fill_obj) },
     { MP_ROM_QSTR(MP_QSTR_flush), MP_ROM_PTR(&usbdisp_flush_obj) },
+    { MP_ROM_QSTR(MP_QSTR_force_reenum), MP_ROM_PTR(&usbdisp_force_reenum_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_mode), MP_ROM_PTR(&usbdisp_set_mode_obj) },
     { MP_ROM_QSTR(MP_QSTR_blank), MP_ROM_PTR(&usbdisp_blank_obj) },
     { MP_ROM_QSTR(MP_QSTR_chip_name), MP_ROM_PTR(&usbdisp_chip_name_obj) },
@@ -231,6 +245,15 @@ static mp_obj_t mp_usb_disp_set_log(mp_obj_t on_in) {
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_log_obj, mp_usb_disp_set_log);
+
+// force_reenum() - root-port power cycle: virtual replug of the whole USB
+// subtree. Recovers wedged adapters and stack-disabled ports, and
+// re-triggers enumeration (e.g. after the adapter finished booting).
+static mp_obj_t usbdisp_force_reenum(mp_obj_t self_in) {
+    mp_obj_usbdisp_t *self = usbdisp_get_self(self_in);
+    usb_disp_force_reenum(self->disp);
+    return mp_const_none;
+}
 
 static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_usb_disp) },
