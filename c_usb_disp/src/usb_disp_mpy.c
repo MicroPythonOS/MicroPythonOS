@@ -12,6 +12,7 @@
 #include "py/obj.h"
 #include "py/runtime.h"
 
+#include "usb/usb_host.h"
 #include "usb_disp.h"
 
 // Upstream's default usb_disp_log is a no-op outside Arduino. Route all
@@ -165,12 +166,6 @@ static mp_obj_t usbdisp_set_mode(mp_obj_t self_in, mp_obj_t w_in, mp_obj_t h_in)
     return mp_obj_new_bool(ok);
 }
 
-// blank(on) - blank/unblank the screen
-static mp_obj_t usbdisp_blank(mp_obj_t self_in, mp_obj_t on_in) {
-    mp_obj_usbdisp_t *self = usbdisp_get_self(self_in);
-    return mp_obj_new_bool(usb_disp_blank(self->disp, mp_obj_is_true(on_in)));
-}
-
 static mp_obj_t usbdisp_chip_name(mp_obj_t self_in) {
     mp_obj_usbdisp_t *self = usbdisp_get_self(self_in);
     const char *name = usb_disp_chip_name(self->disp);
@@ -178,21 +173,6 @@ static mp_obj_t usbdisp_chip_name(mp_obj_t self_in) {
         return mp_const_none;
     }
     return mp_obj_new_str(name, strlen(name));
-}
-
-static mp_obj_t usbdisp_vid(mp_obj_t self_in) {
-    mp_obj_usbdisp_t *self = usbdisp_get_self(self_in);
-    return mp_obj_new_int(usb_disp_vid(self->disp));
-}
-
-static mp_obj_t usbdisp_pid(mp_obj_t self_in) {
-    mp_obj_usbdisp_t *self = usbdisp_get_self(self_in);
-    return mp_obj_new_int(usb_disp_pid(self->disp));
-}
-
-static mp_obj_t usbdisp_stat_bytes(mp_obj_t self_in) {
-    mp_obj_usbdisp_t *self = usbdisp_get_self(self_in);
-    return mp_obj_new_int_from_ull(usb_disp_stat_bytes(self->disp));
 }
 
 static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_start_obj, usbdisp_start);
@@ -204,11 +184,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(usbdisp_update_565_obj, 6, 6, usbdisp
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(usbdisp_fill_obj, 6, 6, usbdisp_fill);
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(usbdisp_flush_obj, 1, 2, usbdisp_flush);
 static MP_DEFINE_CONST_FUN_OBJ_3(usbdisp_set_mode_obj, usbdisp_set_mode);
-static MP_DEFINE_CONST_FUN_OBJ_2(usbdisp_blank_obj, usbdisp_blank);
 static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_chip_name_obj, usbdisp_chip_name);
-static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_vid_obj, usbdisp_vid);
-static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_pid_obj, usbdisp_pid);
-static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_stat_bytes_obj, usbdisp_stat_bytes);
 
 static MP_DEFINE_CONST_FUN_OBJ_1(usbdisp_force_reenum_obj, usbdisp_force_reenum);
 
@@ -223,11 +199,7 @@ static const mp_rom_map_elem_t usbdisp_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_flush), MP_ROM_PTR(&usbdisp_flush_obj) },
     { MP_ROM_QSTR(MP_QSTR_force_reenum), MP_ROM_PTR(&usbdisp_force_reenum_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_mode), MP_ROM_PTR(&usbdisp_set_mode_obj) },
-    { MP_ROM_QSTR(MP_QSTR_blank), MP_ROM_PTR(&usbdisp_blank_obj) },
     { MP_ROM_QSTR(MP_QSTR_chip_name), MP_ROM_PTR(&usbdisp_chip_name_obj) },
-    { MP_ROM_QSTR(MP_QSTR_vid), MP_ROM_PTR(&usbdisp_vid_obj) },
-    { MP_ROM_QSTR(MP_QSTR_pid), MP_ROM_PTR(&usbdisp_pid_obj) },
-    { MP_ROM_QSTR(MP_QSTR_stat_bytes), MP_ROM_PTR(&usbdisp_stat_bytes_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usbdisp_locals_dict, usbdisp_locals_table);
@@ -246,6 +218,24 @@ static mp_obj_t mp_usb_disp_set_log(mp_obj_t on_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_log_obj, mp_usb_disp_set_log);
 
+// bus_devices() - list of USB device addresses currently seen by the host
+// stack. Hubs and the adapter show up here once enumerated, whether or not
+// our display claimed them. Empty list = nothing sensed (cable/power/stack).
+// Safe to call from any thread; never raises.
+static mp_obj_t mp_usb_disp_bus_devices(void) {
+    uint8_t addrs[16];
+    int n = 0;
+    mp_obj_t list = mp_obj_new_list(0, NULL);
+    if (usb_host_device_addr_list_fill((int)sizeof(addrs), addrs, &n) != ESP_OK) {
+        return list;
+    }
+    for (int i = 0; i < n; i++) {
+        mp_obj_list_append(list, mp_obj_new_int(addrs[i]));
+    }
+    return list;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_disp_bus_devices_obj, mp_usb_disp_bus_devices);
+
 // force_reenum() - root-port power cycle: virtual replug of the whole USB
 // subtree. Recovers wedged adapters and stack-disabled ports, and
 // re-triggers enumeration (e.g. after the adapter finished booting).
@@ -259,6 +249,7 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_usb_disp) },
     { MP_ROM_QSTR(MP_QSTR_USBDisp), MP_ROM_PTR(&mp_type_usbdisp) },
     { MP_ROM_QSTR(MP_QSTR_set_log), MP_ROM_PTR(&mp_usb_disp_set_log_obj) },
+    { MP_ROM_QSTR(MP_QSTR_bus_devices), MP_ROM_PTR(&mp_usb_disp_bus_devices_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_disp_module_globals, usb_disp_module_globals_table);

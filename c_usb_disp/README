@@ -6,11 +6,13 @@ Python driver: internal_filesystem/lib/drivers/display/usb_disp/
 Shared board helper: internal_filesystem/lib/mpos/board/usb_display.py
 
 upstream/ holds a vendored snapshot (see upstream/VERSION). Only the
-ESP32-relevant sources are copied (upstream/CMakeLists.txt ESP-IDF branch):
+ESP32-relevant sources are used (upstream/CMakeLists.txt ESP-IDF branch):
 usb_disp.cpp, usb_disp.h, usb_disp_hal.h, usb_disp_hal_esp32.cpp,
-usb_disp_prot.h, usb_disp_prot_dl-1xx.cpp, usb_disp_prot_t6.cpp,
-usb_disp_prot_t6_jpeg.h, usb_disp_prot_ms91xx.cpp, usb_disp_model.h.
+usb_disp_prot.h, usb_disp_prot_dl-1xx.cpp, usb_disp_model.h.
 Deliberately excluded: hal_pico/hal_teensy/hal_libusb, lgfx/, pio/.
+usb_disp_prot_t6.cpp / usb_disp_prot_ms91xx.cpp (+ jpeg header) are vendored
+but only compiled on ESP32-P4 (they need USB High-Speed; empty stubs
+elsewhere) to save flash.
 To update: re-copy those files from a new upstream checkout, refresh
 upstream/VERSION, keep upstream/LICENSE.Pico_USB_Disp, rebuild.
 
@@ -23,3 +25,8 @@ Build lessons (do not regress):
 - ESP_PLATFORM must be an INTERFACE compile definition, not just a
   CFLAGS_EXTRA flag: the esp32 port also compiles usermod sources into the
   top-level micropython.elf target, which ignores MICROPY_CPP_FLAGS.
+- Hotplug needs settle time (DisplayLink boots 1-2s, the stack resets ports
+  in ms): hub downstream ports via lvgl_micropython/usb_ext_port_settle.patch
+  (inert without -DMPOS_USB_PORT_SETTLE_MS, set in --usbdisplay builds) and
+  the root port via CONFIG_USB_HOST_DEBOUNCE_DELAY_MS. Without these, the
+  first reset wedges the adapter until its next power cut.

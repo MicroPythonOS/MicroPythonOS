@@ -14,11 +14,18 @@ set(C_USB_DISP_UPSTREAM ${CMAKE_CURRENT_LIST_DIR}/upstream)
 set(C_USB_DISP_SOURCES
     ${C_USB_DISP_UPSTREAM}/usb_disp.cpp
     ${C_USB_DISP_UPSTREAM}/usb_disp_prot_dl-1xx.cpp
-    ${C_USB_DISP_UPSTREAM}/usb_disp_prot_t6.cpp
-    ${C_USB_DISP_UPSTREAM}/usb_disp_prot_ms91xx.cpp
     ${C_USB_DISP_UPSTREAM}/usb_disp_hal_esp32.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/usb_disp_mpy.c
 )
+
+# T6/MS91xx need USB High-Speed (ESP32-P4 only); on S2/S3 they compile to
+# empty stubs, so leave them out entirely to save flash.
+if(IDF_TARGET STREQUAL "esp32p4")
+    list(APPEND C_USB_DISP_SOURCES
+        ${C_USB_DISP_UPSTREAM}/usb_disp_prot_t6.cpp
+        ${C_USB_DISP_UPSTREAM}/usb_disp_prot_ms91xx.cpp
+    )
+endif()
 
 target_sources(usermod_c_usb_disp INTERFACE ${C_USB_DISP_SOURCES})
 

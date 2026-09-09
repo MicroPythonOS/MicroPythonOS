@@ -208,6 +208,13 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropy
 echo "Applying lvgl_micropython/lib/lvgl/src/libs/tjpgd scaling fix patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropython/lib_lvgl_src_libs_tjpgd_fix_scaling.patch
 
+# USB display adapter support: settle delay before the first hub-port reset,
+# so slow-booting devices (DisplayLink needs 1-2s) are not wedged by an
+# immediate reset. Inert without -DMPOS_USB_PORT_SETTLE_MS (only --usbdisplay
+# builds define it), so all other builds are unaffected.
+echo "Applying lvgl_micropython/lib/esp-idf USB ext-port settle patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/lvgl_micropython/usb_ext_port_settle.patch
+
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
 # Pre-existence check so MPOS still builds against older pinned
@@ -330,7 +337,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
             # USB display adapter (needs the adapter behind a USB hub to
             # enumerate: explicit IDF usb_host external-hub support, off by
             # default -> downstream devices never enumerate).
-            extra_configs="$extra_configs CONFIG_USB_HOST_HUBS_SUPPORTED=y CONFIG_USB_HOST_HUB_MULTI_LEVEL=y"
+            # DEBOUNCE_DELAY 2000: root-port settle so a directly attached
+            # slow-booting adapter is awake before its first reset (hub
+            # downstream ports are covered by the ext-port settle patch).
+            extra_configs="$extra_configs CONFIG_USB_HOST_HUBS_SUPPORTED=y CONFIG_USB_HOST_HUB_MULTI_LEVEL=y CONFIG_USB_HOST_DEBOUNCE_DELAY_MS=2000"
         fi
 	fi
 
@@ -343,7 +353,12 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	frozenmanifest="FROZEN_MANIFEST=$manifest" # Comment this out if you want to make a build without any frozen files, just an empty MicroPython + whatever files you have on the internal storage
 	echo "Note that you can also prevent the builtin filesystem from being mounted by umounting it and creating a builtin/ folder."
 	pushd "$codebasedir"/lvgl_micropython/
-	rm -rf lib/micropython/ports/esp32/build-$BOARD-$BOARD_VARIANT
+	# MPOS_NO_CLEAN=1 skips the build-dir wipe for fast iteration when only
+	# frozen .py files changed (ninja rebuilds incrementally). C/CMake/config
+	# changes still need a clean build.
+	if [ "${MPOS_NO_CLEAN:-0}" != "1" ]; then
+		rm -rf lib/micropython/ports/esp32/build-$BOARD-$BOARD_VARIANT
+	fi
 
 	# For more info on the options, see https://github.com/lvgl-micropython/lvgl_micropython
 	# --optimize-size: optimize for size
@@ -369,7 +384,8 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# Pico_USB_Disp's platform detection in the QSTR pre-pass too (the real
 	# compiles get it via the usermod INTERFACE definition).
 	if [ "$usbdisplay" == "1" ]; then
-		export CFLAGS_EXTRA="-DMICROPY_HW_ENABLE_USBDEV=0 -DESP_PLATFORM"
+		export CFLAGS_EXTRA="-DMICROPY_HW_ENABLE_USBDEV=0 -DESP_PLATFORM -DMPOS_USB_PORT_SETTLE_MS=2000"
+		export MPOS_NO_USBDEV=1
 		usb_disp_usermod="USER_C_MODULE=$codebasedir/c_usb_disp/micropython.cmake"
 	else
 		usb_disp_usermod=""
@@ -384,6 +400,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		"$frozenmanifest"
     set +x
     unset CFLAGS_EXTRA
+    unset MPOS_NO_USBDEV
 	popd
 
 	# Report firmware size vs the OTA partition budget so headroom erosion is
