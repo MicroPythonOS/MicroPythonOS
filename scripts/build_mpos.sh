@@ -88,6 +88,17 @@ reset_web_port_changes() {
 target="$1"
 buildtype="$2"
 
+# USB display adapter support is opt-in and ESP32-S3-only (needs USB OTG):
+# ./scripts/build_mpos.sh esp32s3 --usbdisplay
+usbdisplay=0
+if [[ "$*" == *--usbdisplay* ]]; then
+	if [ "$target" == "esp32s3" ]; then
+		usbdisplay=1
+	else
+		echo "WARNING: --usbdisplay is only supported for the esp32s3 target, ignoring it"
+	fi
+fi
+
 if [ -z "$target" ]; then
     echo "Usage: $0 target"
     echo "Usage: $0 <esp32 or esp32-small or unix or macOS or web>"
@@ -97,6 +108,7 @@ if [ -z "$target" ]; then
     echo "Example: $0 esp32"
     echo "Example: $0 esp32-small"
     echo "Example: $0 esp32s3"
+    echo "Example: $0 esp32s3 --usbdisplay (USB display adapter support, ESP32-S3 USB host)"
     echo "Example: $0 unphone"
     echo "Example: $0 lilygo_t4"
     echo "Example: $0 clean"
@@ -314,6 +326,12 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
         #extra_configs="$extra_configs --py-freertos"
         # Enable UART based REPL, in addition to the USB-CDC or JTAG REPL. Can be disabled with esp.uart_repl(False)
         extra_configs="$extra_configs --enable-uart-repl=y"
+        if [ "$usbdisplay" == "1" ]; then
+            # USB display adapter (needs the adapter behind a USB hub to
+            # enumerate: explicit IDF usb_host external-hub support, off by
+            # default -> downstream devices never enumerate).
+            extra_configs="$extra_configs CONFIG_USB_HOST_HUBS_SUPPORTED=y CONFIG_USB_HOST_HUB_MULTI_LEVEL=y"
+        fi
 	fi
 
 	if [ "$BOARD_VARIANT" == "SPIRAM" -o "$BOARD_VARIANT" == "SPIRAM_OCT" ]; then
@@ -344,14 +362,28 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# CONFIG_SPIRAM_XIP_FROM_PSRAM: load entire firmware into RAM to reduce SD vs PSRAM contention (recommended at https://github.com/MicroPythonOS/MicroPythonOS/issues/17)
 	ccache_arg=""
 	[ "${MPOS_CCACHE:-0}" = "1" ] && ccache_arg="--ccache"
+	# USB display adapter support (./build_mpos.sh esp32s3 --usbdisplay):
+	# frees the S3 OTG peripheral for the IDF usb_host stack by disabling
+	# MicroPython's TinyUSB device mode (USB-serial REPL goes away, console
+	# remains over UART REPL / USB-Serial-JTAG). -DESP_PLATFORM is needed by
+	# Pico_USB_Disp's platform detection in the QSTR pre-pass too (the real
+	# compiles get it via the usermod INTERFACE definition).
+	if [ "$usbdisplay" == "1" ]; then
+		export CFLAGS_EXTRA="-DMICROPY_HW_ENABLE_USBDEV=0 -DESP_PLATFORM"
+		usb_disp_usermod="USER_C_MODULE=$codebasedir/c_usb_disp/micropython.cmake"
+	else
+		usb_disp_usermod=""
+	fi
 	set -x
 	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
+		$usb_disp_usermod \
 		CONFIG_ADC_MIC_TASK_CORE=1 \
 		$extra_configs \
 		"$frozenmanifest"
     set +x
+    unset CFLAGS_EXTRA
 	popd
 
 	# Report firmware size vs the OTA partition budget so headroom erosion is

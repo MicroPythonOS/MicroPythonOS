@@ -1,0 +1,3 @@
+Pico_USB_Disp v1.0.0 (MIT, https://github.com/htlabnet/Pico_USB_Disp)
+Upstream commit 3d76208f8f191a74c88f63ee4db533479b07511f (2026-07-27)
+Vendored 2026-09-09. Only the ESP32-relevant sources are copied; see ../README.

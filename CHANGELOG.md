@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Board Support:
+- ESP32-S3: experimental USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195) via `./scripts/build_mpos.sh esp32s3 --usbdisplay`; drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum — smaller modes use a sub-25MHz pixel clock real monitors cannot sync to), falling back to the onboard LCD when no adapter is present (MaTouch ESP32-S3 2.8" and Waveshare ESP32-S3-Touch-LCD-2 board files)
+
 Builtin Apps:
 - AppStore: speedup loading from 18 to 6 seconds
 - AppStore: load list icons lazily for visible rows only (250ms viewport loader, capped per-tick work) instead of rendering every icon upfront

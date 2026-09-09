@@ -37,12 +37,21 @@ except Exception as e:
     machine.reset()
 
 
-display_bus = lcd_bus.SPIBus(
-    spi_bus=spi_bus,
-    freq=SPI_FREQ,
-    dc=LCD_DC,
-    cs=LCD_CS,
-)
+_usb_ok = False
+try:
+    from mpos.board.usb_display import try_init_usb_display
+    mpos.ui.main_display = try_init_usb_display()
+    _usb_ok = True
+except Exception as e:
+    logger.error("USB display init failed: %s, falling back to onboard LCD" % (e))
+
+if not _usb_ok:
+    display_bus = lcd_bus.SPIBus(
+        spi_bus=spi_bus,
+        freq=SPI_FREQ,
+        dc=LCD_DC,
+        cs=LCD_CS,
+    )
 
  # lv.color_format_get_size(lv.COLOR_FORMAT.RGB565) = 2 bytes per pixel * 320 * 240 px = 153600 bytes
  # The default was /10 so 15360 bytes.
@@ -58,25 +67,25 @@ display_bus = lcd_bus.SPIBus(
 # 147200 (320*230*2) is fine!
 # 140800 (320*220*2) is fine!
 
-_BUFFER_SIZE = const(320 * 45 * 2) # 28800
-fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+    _BUFFER_SIZE = const(320 * 45 * 2) # 28800
+    fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+    fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-mpos.ui.main_display = st7789.ST7789(
-    data_bus=display_bus,
-    frame_buffer1=fb1,
-    frame_buffer2=fb2,
-    display_width=240,
-    display_height=320,
-    color_space=lv.COLOR_FORMAT.RGB565,
-    color_byte_order=st7789.BYTE_ORDER_BGR,
-    rgb565_byte_swap=True,
-    backlight_pin=LCD_BL,
-    backlight_on_state=st7789.STATE_PWM,
-) # triggers lv.init()
-mpos.ui.main_display.init()
-mpos.ui.main_display.set_power(True)
-mpos.ui.main_display.set_backlight(100)
+    mpos.ui.main_display = st7789.ST7789(
+        data_bus=display_bus,
+        frame_buffer1=fb1,
+        frame_buffer2=fb2,
+        display_width=240,
+        display_height=320,
+        color_space=lv.COLOR_FORMAT.RGB565,
+        color_byte_order=st7789.BYTE_ORDER_BGR,
+        rgb565_byte_swap=True,
+        backlight_pin=LCD_BL,
+        backlight_on_state=st7789.STATE_PWM,
+    ) # triggers lv.init()
+    mpos.ui.main_display.init()
+    mpos.ui.main_display.set_power(True)
+    mpos.ui.main_display.set_backlight(100)
 
 # Touch handling:
 i2c_bus = i2c.I2C.Bus(host=0, scl=47, sda=48, freq=400000, use_locks=False)
@@ -84,7 +93,8 @@ touch_dev = i2c.I2C.Device(bus=i2c_bus, dev_id=0x15, reg_bits=8)
 indev = cst816s.CST816S(touch_dev, startup_rotation=lv.DISPLAY_ROTATION._180) # button in top left, good
 InputManager.register_indev(indev)
 
-mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
+if not _usb_ok:
+    mpos.ui.main_display.set_rotation(lv.DISPLAY_ROTATION._90) # must be done after initializing display and creating the touch drivers, to ensure proper handling
 
 # Battery voltage ADC measuring
 from mpos import BatteryManager

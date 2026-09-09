@@ -1,0 +1,25 @@
+c_usb_disp: MicroPython binding for Pico_USB_Disp (USB display adapters).
+
+ESP32-only: DisplayLink DL-1xx via the in-tree IDF usb_host stack.
+Build with: ./scripts/build_mpos.sh esp32s3 --usbdisplay
+Python driver: internal_filesystem/lib/drivers/display/usb_disp/
+Shared board helper: internal_filesystem/lib/mpos/board/usb_display.py
+
+upstream/ holds a vendored snapshot (see upstream/VERSION). Only the
+ESP32-relevant sources are copied (upstream/CMakeLists.txt ESP-IDF branch):
+usb_disp.cpp, usb_disp.h, usb_disp_hal.h, usb_disp_hal_esp32.cpp,
+usb_disp_prot.h, usb_disp_prot_dl-1xx.cpp, usb_disp_prot_t6.cpp,
+usb_disp_prot_t6_jpeg.h, usb_disp_prot_ms91xx.cpp, usb_disp_model.h.
+Deliberately excluded: hal_pico/hal_teensy/hal_libusb, lgfx/, pio/.
+To update: re-copy those files from a new upstream checkout, refresh
+upstream/VERSION, keep upstream/LICENSE.Pico_USB_Disp, rebuild.
+
+Build lessons (do not regress):
+- Do NOT target_link_libraries() idf:: component aliases here. usermod.cmake
+  recurses INTERFACE_LINK_LIBRARIES into MICROPY_INC_USERMOD, which drags
+  every transitive IDF include dir (including relative ones) into main's
+  idf_component_register and breaks configure. Include dirs are propagated
+  lcd_bus-style via idf_component_get_property instead.
+- ESP_PLATFORM must be an INTERFACE compile definition, not just a
+  CFLAGS_EXTRA flag: the esp32 port also compiles usermod sources into the
+  top-level micropython.elf target, which ignores MICROPY_CPP_FLAGS.
