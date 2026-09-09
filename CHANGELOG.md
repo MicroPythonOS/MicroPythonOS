@@ -2,7 +2,7 @@ Future release (next version)
 =====
 
 Board Support:
-- ESP32-S3: experimental USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195) via `./scripts/build_mpos.sh esp32s3 --usbdisplay`; drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum — smaller modes use a sub-25MHz pixel clock real monitors cannot sync to), falling back to the onboard LCD when no adapter is present (MaTouch ESP32-S3 2.8" and Waveshare ESP32-S3-Touch-LCD-2 board files)
+- ESP32-S3: experimental USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195) via `./scripts/build_mpos.sh esp32s3 --usbdisplay`; drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum — smaller modes use a sub-25MHz pixel clock real monitors cannot sync to), falling back to the onboard LCD when no adapter is present (MaTouch ESP32-S3 2.8" and Waveshare ESP32-S3-Touch-LCD-2 board files); live-switch between panel and USB at runtime with auto-revert on unplug, plus an IDF usb_host settle delay so hotplugged adapters enumerate instead of wedging
 
 0.18.1
 ======

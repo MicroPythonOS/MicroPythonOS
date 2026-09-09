@@ -13,6 +13,7 @@ _panel_backlight = None
 _active = "panel"
 _switching = False
 _poll_timer = None
+_pump_suspended = False
 
 
 def is_available():
@@ -59,11 +60,23 @@ def try_init_usb_display(width=640, height=480, timeout_s=10, buf_lines=16):
         color_space=lv.COLOR_FORMAT.RGB565,
     )
     display.init()
+    _load_blank(display)
     _usb_dev = dev
     _usb_display = display
     _active = "usb"
     _ensure_poll_timer()
     return display
+
+
+def _load_blank(display):
+    prev = lv.display_get_default()
+    display.set_default()
+    try:
+        lv.screen_load(lv.obj())
+    finally:
+        if prev is not None:
+            prev.set_default()
+    logger.warning("sw blank ok")
 
 
 def switch_to_usb(width=640, height=480, timeout_s=0):
@@ -79,6 +92,7 @@ def switch_to_usb(width=640, height=480, timeout_s=0):
         _swap_to(display, "usb")
         return display
     finally:
+        _pump_resume()
         _switching = False
 
 
@@ -98,6 +112,7 @@ def switch_to_panel():
             _usb_display = None
         return mpos.ui.main_display
     finally:
+        _pump_resume()
         _switching = False
 
 
@@ -110,10 +125,12 @@ def _swap_to(display, name):
     logger.warning("sw teardown old=%s new=%s" % (type(old).__name__, type(display).__name__))
     indevs = InputManager.list_indevs()
     logger.warning("sw indevs=%d stack=%d" % (len(indevs), len(mpos.ui.view.screen_stack)))
+    _pump_suspend()
     for indev in indevs:
         indev.enable(False)
     remove_and_stop_all_activities()
     logger.warning("sw torn down stack=%d" % (len(mpos.ui.view.screen_stack)))
+    _load_blank(old)
     logger.warning("sw inval off")
     old.enable_invalidation(False)
     logger.warning("sw inval off old ok")
@@ -168,8 +185,39 @@ def _swap_to(display, name):
             old.enable_invalidation(True)
         except Exception as e:
             logger.error("old inval on fail: %s" % (e))
+        _pump_resume()
     _active = name
     logger.warning("switched to %s" % (name))
+
+
+def _pump_suspend():
+    global _pump_suspended
+    if _pump_suspended:
+        return
+    try:
+        import mpos.ui
+        th = getattr(mpos.ui, "task_handler", None)
+        if th is not None:
+            th.disable()
+            _pump_suspended = True
+            logger.warning("sw pump off")
+    except Exception as e:
+        logger.error("sw pump off fail: %s" % (e))
+
+
+def _pump_resume():
+    global _pump_suspended
+    if not _pump_suspended:
+        return
+    _pump_suspended = False
+    try:
+        import mpos.ui
+        th = getattr(mpos.ui, "task_handler", None)
+        if th is not None:
+            th.enable()
+            logger.warning("sw pump on")
+    except Exception as e:
+        logger.error("sw pump on fail: %s" % (e))
 
 
 def _repoint_indevs(display):

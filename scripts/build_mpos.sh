@@ -212,8 +212,8 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropy
 # so slow-booting devices (DisplayLink needs 1-2s) are not wedged by an
 # immediate reset. Inert without -DMPOS_USB_PORT_SETTLE_MS (only --usbdisplay
 # builds define it), so all other builds are unaffected.
-echo "Applying lvgl_micropython/lib/esp-idf USB ext-port settle patch..."
-apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/lvgl_micropython/usb_ext_port_settle.patch
+echo "Applying lib/esp-idf USB ext-port settle patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/usb_ext_port_settle.patch
 
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
