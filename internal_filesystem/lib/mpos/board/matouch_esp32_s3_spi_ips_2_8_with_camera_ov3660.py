@@ -48,46 +48,37 @@ spi_bus = machine.SPI.Bus(
     sck=LCD_SCLK
 )
 
-_usb_ok = False
-try:
-    from mpos.board.usb_display import try_init_usb_display
-    mpos.ui.main_display = try_init_usb_display(width=640, height=480)
-    _usb_ok = True
-except Exception as e:
-    logger.error("USB display init failed: %s, falling back to onboard LCD" % (e))
+display_bus = lcd_bus.SPIBus(
+    spi_bus=spi_bus,
+    freq=SPI_FREQ,
+    dc=LCD_DC,
+    cs=LCD_CS,
+)
 
-if not _usb_ok:
-    display_bus = lcd_bus.SPIBus(
-        spi_bus=spi_bus,
-        freq=SPI_FREQ,
-        dc=LCD_DC,
-        cs=LCD_CS,
-    )
+# Allocate frame buffers
+# Buffer size calculation: 2 bytes per pixel (RGB565) * width * height / divisor
+# Using 28800 bytes (same as Waveshare and Fri3d) for good performance
+_BUFFER_SIZE = const(28800)
+fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
 
-    # Allocate frame buffers
-    # Buffer size calculation: 2 bytes per pixel (RGB565) * width * height / divisor
-    # Using 28800 bytes (same as Waveshare and Fri3d) for good performance
-    _BUFFER_SIZE = const(28800)
-    fb1 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
-    fb2 = display_bus.allocate_framebuffer(_BUFFER_SIZE, lcd_bus.MEMORY_INTERNAL | lcd_bus.MEMORY_DMA)
+# Initialize ST7789 display
+mpos.ui.main_display = st7789.ST7789(
+    data_bus=display_bus,
+    frame_buffer1=fb1,
+    frame_buffer2=fb2,
+    display_width=TFT_VER_RES,
+    display_height=TFT_HOR_RES,
+    color_space=lv.COLOR_FORMAT.RGB565,
+    color_byte_order=st7789.BYTE_ORDER_BGR,
+    rgb565_byte_swap=True,
+    backlight_pin=LCD_BL,
+    backlight_on_state=st7789.STATE_PWM,
+)
 
-    # Initialize ST7789 display
-    mpos.ui.main_display = st7789.ST7789(
-        data_bus=display_bus,
-        frame_buffer1=fb1,
-        frame_buffer2=fb2,
-        display_width=TFT_VER_RES,
-        display_height=TFT_HOR_RES,
-        color_space=lv.COLOR_FORMAT.RGB565,
-        color_byte_order=st7789.BYTE_ORDER_BGR,
-        rgb565_byte_swap=True,
-        backlight_pin=LCD_BL,
-        backlight_on_state=st7789.STATE_PWM,
-    )
-
-    mpos.ui.main_display.init()
-    mpos.ui.main_display.set_power(True)
-    mpos.ui.main_display.set_backlight(100)
+mpos.ui.main_display.init()
+mpos.ui.main_display.set_power(True)
+mpos.ui.main_display.set_backlight(100)
 
 # Touch handling
 def init_touch():

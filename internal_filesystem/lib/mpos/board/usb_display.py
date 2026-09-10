@@ -14,6 +14,9 @@ _active = "panel"
 _switching = False
 _poll_timer = None
 _pump_suspended = False
+# Future Settings-toggle seam: when False, hotplugged displays enumerate
+# but the UI never auto-switches (manual switch_to_usb still works).
+_auto_switch = True
 
 
 def is_available():
@@ -24,15 +27,27 @@ def is_available():
         return False
 
 
+def arm_usb_display(width=640, height=480):
+    global _usb_dev
+    if not is_available():
+        return None
+    if _usb_dev is None:
+        import usb_disp
+        _usb_dev = usb_disp.USBDisp(width=width, height=height)
+    _usb_dev.start()
+    _ensure_poll_timer()
+    return _usb_dev
+
+
 # width/height default to 640x480: smallest standard DMT mode, proven to sync.
 # Never request below that: smaller modes need a sub-25MHz pixel clock that
 # real monitors cannot sync to (verified). 0,0 = EDID auto.
 def try_init_usb_display(width=640, height=480, timeout_s=10, buf_lines=16):
-    global _usb_dev, _usb_display, _active
-    import usb_disp
+    global _usb_display
     import drivers.display.usb_disp as usb_disp_driver
-    dev = usb_disp.USBDisp(width=width, height=height)
-    dev.start()
+    dev = arm_usb_display(width=width, height=height)
+    if dev is None:
+        raise RuntimeError("USB display unavailable (stock build?)")
     if timeout_s:
         logger.warning("usb wait %ss" % (timeout_s))
         deadline = time.ticks_add(time.ticks_ms(), timeout_s * 1000)
@@ -61,10 +76,7 @@ def try_init_usb_display(width=640, height=480, timeout_s=10, buf_lines=16):
     )
     display.init()
     _load_blank(display)
-    _usb_dev = dev
     _usb_display = display
-    _active = "usb"
-    _ensure_poll_timer()
     return display
 
 
@@ -271,11 +283,21 @@ def _poll_cb(t):
     except Exception as e:
         logger.error("usb poll fail: %s" % (e))
         return
-    if _active == "usb" and event and not dev.ready():
+    try:
+        ready = dev.ready()
+    except Exception:
+        return
+    if event and ready and _active == "panel" and _auto_switch:
+        logger.warning("usb ready, auto-switch")
+        try:
+            switch_to_usb(timeout_s=5)
+        except Exception as e:
+            logger.error("auto-switch fail: %s" % (e))
+    elif _active == "usb" and event and not ready:
         logger.warning("usb gone, back to panel")
         try:
             switch_to_panel()
         except Exception as e:
             logger.error("auto-revert fail: %s" % (e))
     elif event:
-        logger.warning("usb ev ready=%s %sx%s" % (dev.ready(), dev.width(), dev.height()))
+        logger.warning("usb ev ready=%s %sx%s" % (ready, dev.width(), dev.height()))
