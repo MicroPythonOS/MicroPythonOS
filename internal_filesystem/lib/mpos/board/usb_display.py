@@ -172,9 +172,12 @@ def _swap_to(display, name):
         logger.warning("sw default")
         display.set_default()
         mpos.ui.main_display = display
-        if name == "panel" and _panel_backlight is not None and _panel_backlight >= 0:
+        if name == "panel":
+            level = _panel_backlight
+            if level is None or level < 0:
+                level = _brightness_pref()
             try:
-                display.set_backlight(_panel_backlight)
+                display.set_backlight(level)
             except Exception as e:
                 logger.error("panel bl restore fail: %s" % (e))
         logger.warning("sw indevs")
@@ -242,6 +245,14 @@ def _pump_resume():
             logger.warning("sw pump on")
     except Exception as e:
         logger.error("sw pump on fail: %s" % (e))
+
+
+def _brightness_pref():
+    try:
+        from mpos import SharedPreferences
+        return SharedPreferences("com.micropythonos.settings").get_int("display_brightness", 100)
+    except Exception:
+        return 100
 
 
 def _repoint_indevs(display, old):
