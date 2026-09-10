@@ -174,10 +174,10 @@ def _swap_to(display, name):
         logger.warning("sw metrics")
         DisplayMetrics.set_resolution(display.get_horizontal_resolution(), display.get_vertical_resolution())
         DisplayMetrics.set_dpi(display.get_dpi())
+        logger.warning("sw topmenu")
+        mpos.ui.topmenu.move_to_display()
         logger.warning("sw gestures")
-        # Topmenu bar/drawer stay on the panel: singletons with timers bound
-        # to their labels, recreating them would crash. Gesture zones are
-        # recreated (one leaked set per switch, harmless).
+        # Gesture zones are recreated (one leaked set per switch, harmless).
         mpos.ui.handle_back_swipe()
         mpos.ui.handle_top_swipe()
         logger.warning("sw launcher")

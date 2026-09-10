@@ -670,6 +670,29 @@ def create_drawer():
     spacer.set_height(DisplayMetrics.pct_of_height(40))
 
 
+def move_to_display():
+    global _pre_drawer_focused
+    if notification_bar is None or drawer is None:
+        return
+    close_drawer(animate=False)
+    close_bar(animate=False)
+    _pre_drawer_focused = None
+    new_layer = lv.layer_top()
+    notification_bar.set_parent(new_layer)
+    drawer.set_parent(new_layer)
+    bar_h = AppearanceManager.NOTIFICATION_BAR_HEIGHT
+    notification_bar.set_size(lv.pct(100), bar_h)
+    notification_bar.set_pos(0, -bar_h)
+    _bar_panel.shown_y = 0
+    _bar_panel.hidden_y = -bar_h
+    drawer_h = DisplayMetrics.pct_of_height(90)
+    drawer.set_size(lv.pct(100), drawer_h)
+    _drawer_panel.shown_y = bar_h
+    _drawer_panel.hidden_y = bar_h - drawer_h
+    drawer.set_pos(0, bar_h - drawer_h)
+    logger.warning("topmenu moved, drawer_h=%d" % (drawer_h))
+
+
 def drawer_scroll_callback(event):
     global scroll_start_y
     event_code=event.get_code()
