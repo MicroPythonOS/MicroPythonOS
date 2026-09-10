@@ -255,12 +255,15 @@ def _repoint_indevs(display, old):
             break
     for indev in InputManager.list_indevs():
         logger.warning("sw indev %s" % (type(indev).__name__))
-        indev._indev_drv.set_display(new_lv_disp)
-        indev._disp_drv = new_lv_disp
-        indev._width = new_lv_disp.get_horizontal_resolution()
-        indev._height = new_lv_disp.get_vertical_resolution()
-        indev._py_disp_drv = py_disp
-        new_lv_disp.add_event_cb(indev._on_size_change, lv.EVENT.RESOLUTION_CHANGED, None)
+        drv = getattr(indev, "_indev_drv", indev)
+        drv.set_display(new_lv_disp)
+        if hasattr(indev, "_disp_drv"):
+            indev._disp_drv = new_lv_disp
+            indev._width = new_lv_disp.get_horizontal_resolution()
+            indev._height = new_lv_disp.get_vertical_resolution()
+            indev._py_disp_drv = py_disp
+        if hasattr(indev, "_on_size_change"):
+            new_lv_disp.add_event_cb(indev._on_size_change, lv.EVENT.RESOLUTION_CHANGED, None)
         indev.enable(True)
     logger.warning("sw indevs done")
 
