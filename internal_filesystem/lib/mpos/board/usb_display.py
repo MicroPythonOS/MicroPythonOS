@@ -14,6 +14,14 @@ _active = "panel"
 _switching = False
 _poll_timer = None
 _pump_suspended = False
+# USB touch exceptions: ONLY boards whose drag test disagrees with the
+# default (same orientation: scale; portrait panel to landscape USB: rotate
+# clockwise, no mirrors) get an entry. Empty by design; the panel's own
+# proven mapping is reused, so mounting knowledge is never needed here.
+_USB_TOUCH_EXC = {
+    # "board_id": {"ccw": True, "mx": True, "my": True},
+}
+_wrapped_indevs = []
 # Future Settings-toggle seam: when False, hotplugged displays enumerate
 # but the UI never auto-switches (manual switch_to_usb still works).
 _auto_switch = True
@@ -170,7 +178,11 @@ def _swap_to(display, name):
             except Exception as e:
                 logger.error("panel bl restore fail: %s" % (e))
         logger.warning("sw indevs")
-        _repoint_indevs(display)
+        _repoint_indevs(display, old)
+        if name == "usb":
+            _wrap_all_touch(display, old)
+        else:
+            _unwrap_touch()
         logger.warning("sw metrics")
         DisplayMetrics.set_resolution(display.get_horizontal_resolution(), display.get_vertical_resolution())
         DisplayMetrics.set_dpi(display.get_dpi())
@@ -232,7 +244,7 @@ def _pump_resume():
         logger.error("sw pump on fail: %s" % (e))
 
 
-def _repoint_indevs(display):
+def _repoint_indevs(display, old):
     import display_driver_framework
     from mpos import InputManager
     new_lv_disp = display._disp_drv
@@ -251,6 +263,58 @@ def _repoint_indevs(display):
         new_lv_disp.add_event_cb(indev._on_size_change, lv.EVENT.RESOLUTION_CHANGED, None)
         indev.enable(True)
     logger.warning("sw indevs done")
+
+
+def _wrap_all_touch(display, old):
+    pw = getattr(old, "display_width", None)
+    ph = getattr(old, "display_height", None)
+    uw = getattr(display, "display_width", None)
+    uh = getattr(display, "display_height", None)
+    if None in (pw, ph, uw, uh) or 0 in (pw, ph):
+        logger.error("sw touch wrap skipped (dims unknown)")
+        return
+    from mpos import DeviceInfo, InputManager
+    try:
+        exc = _USB_TOUCH_EXC.get(DeviceInfo.get_hardware_id(), {})
+    except Exception:
+        exc = {}
+    for indev in InputManager.list_indevs():
+        if not hasattr(indev, "_calc_coords") or indev in _wrapped_indevs:
+            continue
+        _wrapped_indevs.append(indev)
+        orig = indev._calc_coords
+        if (pw >= ph) == (uw >= uh):
+            sx = uw / pw
+            sy = uh / ph
+            mx = exc.get("mx", False)
+            my = exc.get("my", False)
+            def usb_calc(x, y, _o=orig):
+                px, py = _o(x, y)
+                if mx:
+                    px = pw - 1 - px
+                if my:
+                    py = ph - 1 - py
+                return (int(px * sx), int(py * sy))
+        elif exc.get("ccw", False):
+            def usb_calc(x, y, _o=orig):
+                px, py = _o(x, y)
+                return (int((ph - 1 - py) * uw / ph), int(px * uh / pw))
+        else:
+            def usb_calc(x, y, _o=orig):
+                px, py = _o(x, y)
+                return (int(py * uw / ph), int((pw - 1 - px) * uh / pw))
+        indev._calc_coords = usb_calc
+    logger.warning("sw touch wrapped=%d" % (len(_wrapped_indevs)))
+
+
+def _unwrap_touch():
+    for indev in _wrapped_indevs:
+        try:
+            del indev._calc_coords
+        except Exception as e:
+            logger.error("sw touch unwrap fail: %s" % (e))
+    del _wrapped_indevs[:]
+    logger.warning("sw touch unwrapped")
 
 
 def _delete_display(display):
