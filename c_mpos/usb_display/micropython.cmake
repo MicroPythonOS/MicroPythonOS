@@ -2,7 +2,7 @@
 # ESP32-only PoC: DisplayLink DL-1xx via the in-tree IDF usb_host stack.
 #
 # Pass as:
-#   USER_C_MODULE=<repo>/c_usb_disp/micropython.cmake
+#   USER_C_MODULE=<repo>/c_mpos/usb_display/micropython.cmake
 # ...to make.py when building for esp32. Requires CFLAGS_EXTRA to contain
 # -DMICROPY_HW_ENABLE_USBDEV=0 so the OTG peripheral is free for USB Host
 # (TinyUSB device mode would otherwise own it).

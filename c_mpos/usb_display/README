@@ -1,4 +1,4 @@
-c_usb_disp: MicroPython binding for Pico_USB_Disp (USB display adapters).
+c_mpos/usb_display: MicroPython binding for Pico_USB_Disp (USB display adapters).
 
 ESP32-only: DisplayLink DL-1xx via the in-tree IDF usb_host stack.
 Build with: ./scripts/build_mpos.sh esp32s3 --usbdisplay

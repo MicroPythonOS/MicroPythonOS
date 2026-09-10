@@ -386,7 +386,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	if [ "$usbdisplay" == "1" ]; then
 		export CFLAGS_EXTRA="-DMICROPY_HW_ENABLE_USBDEV=0 -DESP_PLATFORM -DMPOS_USB_PORT_SETTLE_MS=2000"
 		export MPOS_NO_USBDEV=1
-		usb_disp_usermod="USER_C_MODULE=$codebasedir/c_usb_disp/micropython.cmake"
+		usb_disp_usermod="USER_C_MODULE=$codebasedir/c_mpos/usb_display/micropython.cmake"
 	else
 		usb_disp_usermod=""
 	fi
