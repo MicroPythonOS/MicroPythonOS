@@ -1,0 +1,18 @@
+diff --git a/components/usb/ext_port.c b/components/usb/ext_port.c
+index eb5f40d3ea..da794721a9 100644
+--- a/components/usb/ext_port.c
++++ b/components/usb/ext_port.c
+@@ -630,6 +630,13 @@ static void handle_port_connection(ext_port_t *ext_port)
+             } else {
+                 // New device connected, flush reset attempts
+                 ext_port->dev_reset_attempts = 0;
++#ifdef MPOS_USB_PORT_SETTLE_MS
++                // MPOS USB display support: slow-booting devices
++                // (a DisplayLink adapter needs 1-2s after power-on) are
++                // wedged by an immediate port reset, so let the device
++                // boot before the first reset. Inert when undefined.
++                vTaskDelay(pdMS_TO_TICKS(MPOS_USB_PORT_SETTLE_MS));
++#endif
+                 ext_port->state = USB_PORT_STATE_RESETTING;
+                 // New device has not been enumerated yet, reset the flag
+                 ext_port->flags.has_enum_device = 0;

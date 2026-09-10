@@ -407,6 +407,15 @@ try:
 except Exception as e:
     logger.error("Couldn't start boot services: %s", e)
 
+# USB display adapter (--usbdisplay builds only): start the host stack now
+# without waiting, so later hotplugs enumerate; the poll timer switches the
+# UI over automatically if a monitor becomes ready. Never delays boot.
+try:
+    from mpos.board.usb_display import arm_usb_display
+    arm_usb_display()
+except Exception as e:
+    logger.error("USB display arm failed: %s", e)
+
 async def ota_rollback_cancel():
     try:
         from esp32 import Partition

@@ -158,7 +158,8 @@ Key methods: `exec()`, `eval()`, `startapp()`, `run_app_with_file()`, `run_test_
 - `get_visible_text()`: `lv.screen_active()` only (NOT `lv.layer_top()` — misses popups/msgboxes).
 - `get_widget_tree()`: includes `layer_top`, returns JSON (type, text, coords in content-space, flags, states). Off-screen children included.
 - `click_button("text")`: matches own or child-label text, clicks center.
-- `screenshot()`: use `all_layers=True` for popups. Serial takes ~40s.
+- `screenshot()`/`save_screenshot()` capture `screen_active()` ONLY (no `layer_top()` — drawer/bar/popups invisible). For overlays, `exec` `save_screenshot_bmp('/tmp/x.bmp', all_layers=True)` in-target (desktop shares `/tmp` with host; on device write under `/` then `read_file()`). Serial takes ~40s.
+- `drag()` on the process backend is discrete taps (`simulate_click` at interpolated points), NOT a continuous swipe — gesture/swipe tests must `exec` `simulate_drag()` in-target. (Serial `drag()` is a real drag.)
 - `wait_for_text("text", timeout=10)`, `expect_text("text")`.
 - `startapp(name, intent={...})`, `run_app_with_file(app, file)`.
 - Notification bar: `mpos.eval("mpos.ui.topmenu.bar_open")`, height 24px.

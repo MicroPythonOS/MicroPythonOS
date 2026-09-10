@@ -26,6 +26,8 @@ BAR_ANIM_DURATION = 1000
 DRAWER_ANIM_DURATION = 1000
 
 scroll_start_y = None
+_press_start_y = None
+_press_start_x = None
 
 # SlidePanel instances (created in create_notification_bar / create_drawer)
 _bar_panel = None
@@ -117,6 +119,7 @@ def _build_drawer_notification_item(parent, notification):
 
     #card.set_flex_align(lv.FLEX_ALIGN.START, lv.FLEX_ALIGN.CENTER, lv.FLEX_ALIGN.START)
     card.add_flag(lv.obj.FLAG.CLICKABLE)
+    card.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
     card.add_event_cb(
         lambda e, nid=notification.notification_id: _notification_pressed(e, nid),
         lv.EVENT.CLICKED,
@@ -425,17 +428,27 @@ def create_drawer():
     if drawer is not None:
         return
     drawer = lv.obj(lv.layer_top())
-    drawer_height = DisplayMetrics.pct_of_height(90)
+    # Fill from below the notification bar down to the bottom edge of the
+    # screen so no strip of the underlying app stays visible (and tappable)
+    # beneath the open drawer.
+    if DisplayMetrics.height():
+        drawer_height = DisplayMetrics.height() - AppearanceManager.NOTIFICATION_BAR_HEIGHT
+    else:
+        drawer_height = DisplayMetrics.pct_of_height(90)
     shown_y = AppearanceManager.NOTIFICATION_BAR_HEIGHT
     hidden_y = shown_y - drawer_height  # slides up off-screen
     drawer.set_size(lv.pct(100), drawer_height)
     drawer.set_pos(0, hidden_y)  # start hidden
     drawer.set_scroll_dir(lv.DIR.VER)
     drawer.set_scrollbar_mode(lv.SCROLLBAR_MODE.OFF)
+    drawer.add_flag(lv.obj.FLAG.CLICKABLE)
     drawer.set_style_pad_all(2, lv.PART.MAIN)
     drawer.set_style_border_width(0, lv.PART.MAIN)
     drawer.set_style_radius(0, lv.PART.MAIN)
     drawer.add_flag(lv.obj.FLAG.HIDDEN)
+    drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.PRESSED, None)
+    drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.PRESSING, None)
+    drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.RELEASED, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL_BEGIN, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL, None)
     drawer.add_event_cb(drawer_scroll_callback, lv.EVENT.SCROLL_END, None)
@@ -517,6 +530,7 @@ def create_drawer():
             editor.commit()
     slider.add_event_cb(brightness_slider_changed, lv.EVENT.VALUE_CHANGED, None)
     slider.add_event_cb(brightness_slider_released, lv.EVENT.RELEASED, None)
+    slider.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
 
     # ── Icon-only button row ─────────────────────────────────────────────────
     icon_row = lv.obj(top_group)
@@ -546,6 +560,7 @@ def create_drawer():
         close_drawer()
         AppManager.start_app("com.micropythonos.settings.wifi")
     wifi_btn.add_event_cb(wifi_event, lv.EVENT.CLICKED, None)
+    wifi_btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
     _register_focus_callbacks(wifi_btn)
     _drawer_focusables.append(wifi_btn)
 
@@ -560,6 +575,7 @@ def create_drawer():
         close_drawer()
         AppManager.start_app("com.micropythonos.settings")
     settings_btn.add_event_cb(settings_event, lv.EVENT.CLICKED, None)
+    settings_btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
     _register_focus_callbacks(settings_btn)
     _drawer_focusables.append(settings_btn)
 
@@ -579,6 +595,7 @@ def create_drawer():
         _drawer_panel.on_hidden = _on_drawer_hidden
         close_drawer(True)
     launcher_btn.add_event_cb(launcher_event, lv.EVENT.CLICKED, None)
+    launcher_btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
     _register_focus_callbacks(launcher_btn)
     _drawer_focusables.append(launcher_btn)
 
@@ -600,6 +617,7 @@ def create_drawer():
         else:
             logger.warning("machine has no reset or soft_reset method available")
     restart_btn.add_event_cb(reset_cb, lv.EVENT.CLICKED, None)
+    restart_btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
     _register_focus_callbacks(restart_btn)
     _drawer_focusables.append(restart_btn)
 
@@ -625,6 +643,7 @@ def create_drawer():
             import os
             os.system("kill $PPID")
     poweroff_btn.add_event_cb(poweroff_cb, lv.EVENT.CLICKED, None)
+    poweroff_btn.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
     _register_focus_callbacks(poweroff_btn)
     _drawer_focusables.append(poweroff_btn)
 
@@ -668,18 +687,100 @@ def create_drawer():
     spacer = lv.label(outer)
     spacer.set_text("")
     spacer.set_height(DisplayMetrics.pct_of_height(40))
+    # Let press/drag gestures on any drawer content bubble up to the drawer
+    # itself so drawer_scroll_callback sees swipe-up-to-close everywhere.
+    for _bub in (outer, top_group, brightness_row, icon_row, notif_section,
+                 drawer_notifications_container, spacer):
+        try:
+            _bub.add_flag(lv.obj.FLAG.EVENT_BUBBLE)
+        except Exception:
+            pass
+
+
+def move_to_display():
+    global _pre_drawer_focused
+    if notification_bar is None or drawer is None:
+        return
+    close_drawer(animate=False)
+    close_bar(animate=False)
+    _pre_drawer_focused = None
+    new_layer = lv.layer_top()
+    notification_bar.set_parent(new_layer)
+    drawer.set_parent(new_layer)
+    bar_h = AppearanceManager.NOTIFICATION_BAR_HEIGHT
+    notification_bar.set_size(lv.pct(100), bar_h)
+    notification_bar.set_pos(0, -bar_h)
+    _bar_panel.shown_y = 0
+    _bar_panel.hidden_y = -bar_h
+    drawer_h = DisplayMetrics.height() - bar_h if DisplayMetrics.height() else DisplayMetrics.pct_of_height(90)
+    drawer.set_size(lv.pct(100), drawer_h)
+    _drawer_panel.shown_y = bar_h
+    _drawer_panel.hidden_y = bar_h - drawer_h
+    drawer.set_pos(0, bar_h - drawer_h)
+    logger.warning("topmenu moved, drawer_h=%d" % (drawer_h))
 
 
 def drawer_scroll_callback(event):
-    global scroll_start_y
-    event_code=event.get_code()
+    global scroll_start_y, _press_start_y, _press_start_x
+    event_code = event.get_code()
+    try:
+        from .event import get_event_name as _ev_name
+        _ev_label = _ev_name(event_code)
+    except Exception:
+        _ev_label = str(event_code)
     x, y = InputManager.pointer_xy()
-    #name = mpos.ui.get_event_name(event_code)
-    if event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y is None:
+    try:
+        _t = event.get_target_obj()
+        _t_label = _t.__class__.__name__ if _t is not None else "None"
+    except Exception as _e:
+        _t_label = "<?>:%s" % (_e,)
+    if __debug__: logger.debug("drawer cb %s x=%s y=%s open=%s press=(%s,%s) scroll=%s target=%s",
+                               _ev_label, x, y, drawer_open,
+                               _press_start_x, _press_start_y, scroll_start_y, _t_label)
+    _threshold = AppearanceManager.NOTIFICATION_BAR_HEIGHT
+    if event_code == lv.EVENT.PRESSED:
+        if y >= 0:
+            _press_start_x = x
+            _press_start_y = y
+        else:
+            _press_start_x = None
+            _press_start_y = None
+    elif event_code == lv.EVENT.PRESSING:
+        if _press_start_y is not None and y >= 0:
+            _diff = y - _press_start_y
+            if __debug__: logger.debug("drawer pressing diff=%s threshold=-%s", _diff, _threshold)
+            if _diff < -_threshold:
+                if __debug__: logger.debug("drawer pressing swipe-up detected, closing")
+                _press_start_x = None
+                _press_start_y = None
+                scroll_start_y = None
+                close_drawer()
+    elif event_code == lv.EVENT.RELEASED:
+        if _press_start_y is not None and y >= 0:
+            _diff = y - _press_start_y
+            if __debug__: logger.debug("drawer released diff=%s threshold=-%s", _diff, _threshold)
+            if _diff < -_threshold:
+                if __debug__: logger.debug("drawer released swipe-up detected, closing")
+                _press_start_x = None
+                _press_start_y = None
+                scroll_start_y = None
+                close_drawer()
+                return
+        _press_start_x = None
+        _press_start_y = None
+    elif event_code == lv.EVENT.SCROLL_BEGIN and scroll_start_y is None:
         scroll_start_y = y
     elif event_code == lv.EVENT.SCROLL and scroll_start_y is not None:
         diff = y - scroll_start_y
-        if diff < -AppearanceManager.NOTIFICATION_BAR_HEIGHT:
+        if __debug__: logger.debug("drawer scroll diff=%s threshold=-%s", diff, _threshold)
+        if diff < -_threshold:
+            if __debug__: logger.debug("drawer scroll swipe-up detected, closing")
+            scroll_start_y = None
+            _press_start_x = None
+            _press_start_y = None
             close_drawer()
     elif event_code == lv.EVENT.SCROLL_END:
         scroll_start_y = None
+    elif event_code == lv.EVENT.PRESS_LOST or event_code == lv.EVENT.CANCEL:
+        _press_start_x = None
+        _press_start_y = None

@@ -1,6 +1,13 @@
 Future release (next version)
 =====
 
+Board Support:
+- ESP32-S3: experimental USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195) via `./scripts/build_mpos.sh esp32s3 --usbdisplay`; drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum — smaller modes use a sub-25MHz pixel clock real monitors cannot sync to), falling back to the onboard LCD when no adapter is present (MaTouch ESP32-S3 2.8" and Waveshare ESP32-S3-Touch-LCD-2 board files); live-switch between panel and USB at runtime with auto-revert on unplug, plus an IDF usb_host settle delay so hotplugged adapters enumerate instead of wedging
+
+Frameworks:
+- topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target
+- topmenu: drawer now extends from below the notification bar all the way to the bottom screen edge instead of a fixed 90% height, closing the tappable strip of the underlying app that stayed visible beneath it
+
 0.18.1
 ======
 
