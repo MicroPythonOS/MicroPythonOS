@@ -10,6 +10,7 @@ Frameworks:
 
 OS:
 - ESP32-S3: cap ESP-IDF log strings at the ERROR default (LOG_MAXIMUM_EQUALS_DEFAULT), saving ~42 KB of app flash (micropython.bin 3,666,864 → 3,624,784 B); MicroPython logging is unaffected, C logs can no longer be raised above ERROR at runtime
+- ESP32-S3: disable Ethernet (ETH_ENABLED=n plus the SPI-Ethernet drivers, which would otherwise force-select it back on), saving ~24 KB of app flash (micropython.bin 3,624,784 → 3,600,688 B); no supported S3 board has an Ethernet PHY
 
 0.18.1
 ======

@@ -328,7 +328,7 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
         BOARD_VARIANT=SPIRAM_OCT
         # These options disable hardware AES, SHA and MPI because they give warnings in QEMU: [AES] Error reading from GDMA buffer
         # There's a 25% https download speed penalty for this, but that's usually not the bottleneck.
-        extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y"
+        extra_configs="CONFIG_MBEDTLS_HARDWARE_AES=n CONFIG_MBEDTLS_HARDWARE_SHA=n CONFIG_MBEDTLS_HARDWARE_MPI=n CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y CONFIG_ETH_ENABLED=n CONFIG_ETH_USE_SPI_ETHERNET=n CONFIG_ETH_SPI_ETHERNET_DM9051=n CONFIG_ETH_SPI_ETHERNET_W5500=n CONFIG_ETH_SPI_ETHERNET_KSZ8851SNL=n"
         # --py-freertos: add MicroPython FreeRTOS module to expose internals
         #extra_configs="$extra_configs --py-freertos"
         # Enable UART based REPL, in addition to the USB-CDC or JTAG REPL. Can be disabled with esp.uart_repl(False)
