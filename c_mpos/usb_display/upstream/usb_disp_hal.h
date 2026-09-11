@@ -84,8 +84,10 @@ void usb_disp_hal_request_reenum(usb_disp_hal_t *h);
 // 失敗でポートごと永続 DISABLE になる (Linux xHCI はリトライする)。
 // 下記は標準のハブクラス要求でそのポートだけ再列挙させる:
 //   - watchdog (usb_disp_hal_poll から自動): 接続済み・未列挙のまま
-//     猶予 (~4s) を過ぎたポートに PORT_RESET を1回出す。有効なポート
-//     (正常動作中の機器・列挙処理中) には一切触れない。
+//     ~4s のポートに PORT_RESET を最大3回 (backoff 付き)、それでも
+//     駄目なら PORT_POWER の off/on を1回、最後まで駄目なら抜き差し
+//     まで沈黙する。有効なポート (正常動作中の機器・列挙処理中) には
+//     一切触れない。遷移と回数は [HUB] ログに常時出す。
 //     set_watchdog(false) で停止できる (既定 = 有効)。
 //   - reset_hub_port: 同じ操作の手動版。power_cycle が真なら VBUS を
 //     落として入れ直す (確実だが低速。ganged-power ハブでは sibling

@@ -665,21 +665,37 @@ static void daemon_task(void *arg) {
 // a PC but wedges on ESP32 until the whole chain is replugged.
 //
 // This watchdog sweeps every external hub with standard, read-only
-// GET_PORT_STATUS requests and issues a single SET_FEATURE(PORT_RESET)
-// on ports that stay connected-but-unenumerated past a grace period.
-// The reset is targeted (VBUS stays up, other ports untouched) and by
-// then the device has finished booting, so re-enumeration succeeds.
+// GET_PORT_STATUS requests and recovers ports that stay
+// connected-but-unenumerated: up to 3 SET_FEATURE(PORT_RESET)s with
+// growing backoff (~4s/~12s/~28s stuck time), then one PORT_POWER
+// off/on cycle, then silence until the connection flaps. The resets
+// are targeted (VBUS stays up, other ports untouched) and by the time
+// they fire the device has finished booting, so re-enumeration
+// succeeds; the power cycle is the last resort for a latched port.
 // Enabled ports (healthy mouse/display, enumeration in progress) are
 // never touched. Change bits are NEVER cleared here: clearing
 // C_CONNECTION would steal the connect event from IDF's hub driver
 // and cause the very silence this fixes.
+// Every transition and action is logged ([HUB] lines) with the
+// per-port counters, so recovery state is always visible on serial.
 // ---------------------------------------------------------------
 
 #define USB_DISP_HUB_MAX_PORTS 8   // ports tracked per hub (Terminus = 4)
 #define USB_DISP_HUB_WD_MAX 4      // hubs tracked simultaneously
-#define USB_DISP_HUB_WD_GRACE_MS 4000  // connected-unenumerated before reset
-#define USB_DISP_HUB_WD_SWEEP_MS 1000  // min interval between sweeps
-#define USB_DISP_HUB_CTRL_MS 1500      // per-transfer timeout
+#define USB_DISP_HUB_WD_GRACE_MS 4000  // episode start -> first reset due
+#define USB_DISP_HUB_WD_RESETS 3       // port resets before power cycle
+#define USB_DISP_HUB_WD_PC_GRACE_MS 8000  // power cycle -> give-up verdict
+#define USB_DISP_HUB_WD_RETRY_MS 4000     // hub comm failure -> retry sweep
+#define USB_DISP_HUB_WD_SWEEP_MS 1000     // min interval between sweeps
+#define USB_DISP_HUB_CTRL_MS 1500         // per-transfer timeout
+
+// Wait after reset N (1-based) before the next recovery step. A
+// browned-out adapter can need 10-20s, so the tail is long on purpose;
+// healthy enumerations finish before the first grace expires and never
+// see any of this.
+static const uint16_t kHubWdBackoffMs[USB_DISP_HUB_WD_RESETS] = {
+    8000, 16000, 8000,
+};
 
 // Hub class request constants (USB 2.0 spec, Tables 11-16/17/19)
 #define USB_DISP_HUB_DESC_TYPE 0x29
@@ -697,9 +713,11 @@ typedef struct {
     uint8_t hub_addr;
     uint8_t nports;  // cached hub-descriptor port count (0 = unknown)
     // Per-port stuck-episode state (index = port - 1)
-    uint32_t stuck_since[USB_DISP_HUB_MAX_PORTS];
-    uint8_t resets[USB_DISP_HUB_MAX_PORTS];
-    bool given_up[USB_DISP_HUB_MAX_PORTS];
+    uint32_t stuck_since[USB_DISP_HUB_MAX_PORTS];  // episode start ms (0 = none)
+    uint32_t next_due[USB_DISP_HUB_MAX_PORTS];     // next action due ms
+    uint8_t attempts[USB_DISP_HUB_MAX_PORTS];      // port resets issued
+    bool power_cycled[USB_DISP_HUB_MAX_PORTS];     // vbus cycle spent
+    bool given_up[USB_DISP_HUB_MAX_PORTS];         // silent until flap
 } hub_wd_t;
 
 static hub_wd_t s_hub_wd[USB_DISP_HUB_WD_MAX];
@@ -819,21 +837,26 @@ static bool hub_port_status(uint8_t hub_addr, uint8_t port, bool *connected,
 }
 
 static bool hub_reset_port(uint8_t hub_addr, uint8_t port, bool power_cycle) {
+    bool ok;
     if (power_cycle) {
         // VBUS drop: forces a from-scratch connection event through the
         // stack's own path. Ganged-power hubs may drop sibling ports too.
-        usb_disp_log("[HUB] addr=%u port=%u power cycle", hub_addr, port);
-        if (!hub_ctrl(hub_addr, 0x23, 1 /*CLEAR_FEATURE*/,
-                      USB_DISP_FEAT_PORT_POWER, port, NULL, 0, NULL)) {
-            return false;
+        ok = hub_ctrl(hub_addr, 0x23, 1 /*CLEAR_FEATURE*/,
+                      USB_DISP_FEAT_PORT_POWER, port, NULL, 0, NULL);
+        if (ok) {
+            vTaskDelay(pdMS_TO_TICKS(300));
+            ok = hub_ctrl(hub_addr, 0x23, USB_DISP_REQ_SET_FEATURE,
+                          USB_DISP_FEAT_PORT_POWER, port, NULL, 0, NULL);
         }
-        vTaskDelay(pdMS_TO_TICKS(300));
-        return hub_ctrl(hub_addr, 0x23, USB_DISP_REQ_SET_FEATURE,
-                        USB_DISP_FEAT_PORT_POWER, port, NULL, 0, NULL);
+        usb_disp_log("[HUB] addr=%u port=%u power cycle %s", hub_addr, port,
+                     ok ? "ok" : "FAIL");
+        return ok;
     }
-    usb_disp_log("[HUB] addr=%u port=%u reset", hub_addr, port);
-    return hub_ctrl(hub_addr, 0x23, USB_DISP_REQ_SET_FEATURE,
-                    USB_DISP_FEAT_PORT_RESET, port, NULL, 0, NULL);
+    ok = hub_ctrl(hub_addr, 0x23, USB_DISP_REQ_SET_FEATURE,
+                  USB_DISP_FEAT_PORT_RESET, port, NULL, 0, NULL);
+    usb_disp_log("[HUB] addr=%u port=%u reset %s", hub_addr, port,
+                 ok ? "ok" : "FAIL");
+    return ok;
 }
 
 // One watchdog sweep over all hubs on the bus. Open (class-verified)
@@ -879,38 +902,67 @@ static void hub_watchdog_step(void) {
             uint8_t idx = (uint8_t)(port - 1);
             bool conn = false, en = false, cchg = false;
             if (!hub_port_status(addr, port, &conn, &en, &cchg)) continue;
+            bool episode = (slot->stuck_since[idx] != 0 ||
+                            slot->attempts[idx] != 0 ||
+                            slot->power_cycled[idx] || slot->given_up[idx]);
             // Healthy (empty, enabled device, or freshly flapped then
-            // claimed) -> clear any episode state for this port.
+            // claimed) -> close any episode for this port, saying so.
             if (!conn || (en && !cchg)) {
+                if (episode) {
+                    usb_disp_log("[HUB] addr=%u port=%u %s, episode over "
+                                 "(stuck %lus, %u resets%s)",
+                                 addr, port, conn ? "enumerated" : "unplugged",
+                                 (unsigned long)((now - slot->stuck_since[idx]) /
+                                                 1000),
+                                 slot->attempts[idx],
+                                 slot->power_cycled[idx] ? "+power" : "");
+                }
                 slot->stuck_since[idx] = 0;
-                slot->resets[idx] = 0;
+                slot->next_due[idx] = 0;
+                slot->attempts[idx] = 0;
+                slot->power_cycled[idx] = false;
                 slot->given_up[idx] = false;
                 continue;
             }
             if (slot->given_up[idx]) continue;
             if (slot->stuck_since[idx] == 0) {
                 slot->stuck_since[idx] = now;
+                slot->attempts[idx] = 0;
+                slot->power_cycled[idx] = false;
+                slot->next_due[idx] = now + USB_DISP_HUB_WD_GRACE_MS;
                 usb_disp_log("[HUB] addr=%u port=%u connected, waiting",
                              addr, port);
                 continue;
             }
-            if ((int32_t)(now - slot->stuck_since[idx]) <
-                USB_DISP_HUB_WD_GRACE_MS) {
-                continue;
-            }
-            if (slot->resets[idx] == 0) {
-                usb_disp_log("[HUB] addr=%u port=%u unenumerated, resetting",
-                             addr, port);
+            if ((int32_t)(now - slot->next_due[idx]) < 0) continue;
+            unsigned long stuck_s =
+                (unsigned long)((now - slot->stuck_since[idx]) / 1000);
+            if (slot->attempts[idx] < USB_DISP_HUB_WD_RESETS) {
+                uint8_t att = (uint8_t)(slot->attempts[idx] + 1);
+                usb_disp_log("[HUB] addr=%u port=%u reset %u/%u (stuck %lus)",
+                             addr, port, att, USB_DISP_HUB_WD_RESETS, stuck_s);
                 if (hub_reset_port(addr, port, false)) {
-                    slot->resets[idx] = 1;
-                    slot->stuck_since[idx] = now;
+                    slot->attempts[idx] = att;
+                    slot->next_due[idx] =
+                        now + kHubWdBackoffMs[att - 1];
                 } else {
-                    slot->stuck_since[idx] = now;  // comm fail, retry later
+                    slot->next_due[idx] = now + USB_DISP_HUB_WD_RETRY_MS;
+                }
+            } else if (!slot->power_cycled[idx]) {
+                usb_disp_log("[HUB] addr=%u port=%u power cycle (stuck %lus, "
+                             "%u resets done)",
+                             addr, port, stuck_s, slot->attempts[idx]);
+                if (hub_reset_port(addr, port, true)) {
+                    slot->power_cycled[idx] = true;
+                    slot->next_due[idx] = now + USB_DISP_HUB_WD_PC_GRACE_MS;
+                } else {
+                    slot->next_due[idx] = now + USB_DISP_HUB_WD_RETRY_MS;
                 }
             } else {
                 slot->given_up[idx] = true;
-                usb_disp_log("[HUB] addr=%u port=%u stuck, giving up",
-                             addr, port);
+                usb_disp_log("[HUB] addr=%u port=%u stuck after %u resets + "
+                             "power cycle, giving up until replug",
+                             addr, port, slot->attempts[idx]);
             }
         }
     }

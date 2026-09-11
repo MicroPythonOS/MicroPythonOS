@@ -58,15 +58,27 @@ What it took to get hotplug / hot-unplug working, per level
   transparently, which is why the same hub+adapter works on a PC. Fix in
   the HAL (usb_disp_hal_esp32.cpp, --usbdisplay builds only): a hub-port
   watchdog sweeps every external hub with read-only GET_PORT_STATUS while
-  no display is attached and issues one targeted SET_FEATURE(PORT_RESET)
-  on ports stuck connected-but-unenumerated past ~4s (by then the chip
-  has booted, so re-enumeration succeeds). Enabled ports are never
+  no display is attached and recovers ports stuck connected-but-
+  unenumerated: up to 3 targeted SET_FEATURE(PORT_RESET)s with growing
+  backoff (~4s/~12s/~28s stuck time), then one PORT_POWER off/on cycle,
+  then silence until the connection flaps. Enabled ports are never
   touched; change bits are never cleared (that would steal the connect
-  event from IDF's hub driver). Manual equivalents for the REPL:
+  event from IDF's hub driver). Every transition and action is logged
+  ([HUB] lines) with per-port counters: "connected, waiting" opens an
+  episode, "reset N/3 (stuck Ns)" / "power cycle (stuck Ns, N resets
+  done)" narrate recovery, "enumerated/unplugged, episode over (stuck
+  Ns, N resets[+power])" closes it. Manual equivalents for the REPL:
   usb_disp.hub_ports() lists (hub_addr, port, connected, enabled) and
   usb_disp.reset_port(hub_addr, port) re-enumerates one port without
   disturbing the rest of the chain (unlike force_reenum's root-port
   power cycle). usb_disp.set_watchdog(False) opts out.
+- Wait guidance (measured against a DL-195 that needs 1-2s to boot,
+  longer when browned-out by rapid VBUS cycling): judge a plug only
+  after ~5s hands-off (the watchdog heals slow boots by itself);
+  leave ~2-3s between unplug and replug (VBUS drain + disconnect
+  processing; instant replugs risk the stack's "gone during reset"
+  path). Rapid port-hopping always looks broken — every replug
+  cold-boots the adapter, so it is time, not the port, that heals.
 - Monitor floor: HDMI/DVI needs >= 25 MHz pixel clock, so 640x480@60
   (25.175 MHz) is the smallest syncable mode. Anything smaller (e.g.
   320x240 @ 7.3 MHz) programs fine on the chip but no monitor locks it.
