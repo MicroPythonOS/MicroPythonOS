@@ -290,6 +290,16 @@ static mp_obj_t mp_usb_disp_set_watchdog_fn(mp_obj_t on_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_watchdog_obj, mp_usb_disp_set_watchdog_fn);
 
+// set_auto_reset_idle(on) - toggle automatic single PORT_RESET of ports
+// that sit enabled-but-unaddressed past the quiet grace (default on).
+// Bounded to one reset per plug; healthy devices are unaffected (their
+// address appears first and closes the episode).
+static mp_obj_t mp_usb_disp_set_auto_reset_idle_fn(mp_obj_t on_in) {
+    usb_disp_hal_set_auto_reset_idle(mp_obj_is_true(on_in));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_auto_reset_idle_obj, mp_usb_disp_set_auto_reset_idle_fn);
+
 static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_usb_disp) },
     { MP_ROM_QSTR(MP_QSTR_USBDisp), MP_ROM_PTR(&mp_type_usbdisp) },
@@ -298,6 +308,7 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_hub_ports), MP_ROM_PTR(&mp_usb_disp_hub_ports_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset_port), MP_ROM_PTR(&mp_usb_disp_reset_port_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_watchdog), MP_ROM_PTR(&mp_usb_disp_set_watchdog_obj) },
+    { MP_ROM_QSTR(MP_QSTR_auto_reset_idle), MP_ROM_PTR(&mp_usb_disp_set_auto_reset_idle_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_disp_module_globals, usb_disp_module_globals_table);

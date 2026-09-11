@@ -91,7 +91,8 @@ void usb_disp_hal_request_reenum(usb_disp_hal_t *h);
 //     まま有効化される場合があるため)。有効なポート (正常動作中の
 //     機器・列挙処理中) には一切触れない。遷移と回数は [HUB] ログに
 //     常時出す。エピソード無しの enabled ポートは1回だけ pointer を
-//     出し、自動では触れない。
+//     出し、auto_reset_idle (既定 on) なら 15s 後に PORT_RESET を plug
+//     毎に1回だけ自動実行する (power cycle なし)。
 //     set_watchdog(false) で停止できる (既定 = 有効)。
 //   - reset_hub_port: 同じ操作の手動版。power_cycle が真なら VBUS を
 //     落として入れ直す (確実だが低速。ganged-power ハブでは sibling
@@ -108,6 +109,10 @@ bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
                                  bool power_cycle);
 void usb_disp_hal_set_watchdog(bool on);
 bool usb_disp_hal_watchdog(void);
+void usb_disp_hal_set_auto_reset_idle(bool on);
+bool usb_disp_hal_auto_reset_idle(void);
+void usb_disp_hal_set_auto_reset_idle(bool on);
+bool usb_disp_hal_auto_reset_idle(void);
 
 // 単調ミリ秒カウンタ (コアのタイマー用)
 uint32_t usb_disp_hal_ms(void);

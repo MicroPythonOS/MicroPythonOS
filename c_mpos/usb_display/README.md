@@ -71,7 +71,13 @@ What it took to get hotplug / hot-unplug working, per level
   episode, "reset N/3 (stuck Ns)" / "power cycle (stuck Ns, N resets
   done)" narrate recovery, "enumerated/unplugged, episode over (stuck
   Ns, N resets[+power])" closes it. A port that reads enabled with no
-  episode gets one neutral pointer line naming its reset_port() call. Manual equivalents for the REPL:
+  episode gets one neutral pointer line naming its reset_port() call —
+  and, with auto_reset_idle (default on, usb_disp.auto_reset_idle()
+  toggles it at runtime), one automatic PORT_RESET after a 15s quiet
+  grace instead of staying manual-only. The quiet path is one-shot per
+  plug (never power-cycles, never repeats until unplug), and healthy
+  devices always address first and close the episode, so at most a
+  single self-healing blip can ever hit a non-display device. Manual equivalents for the REPL:
   usb_disp.hub_ports() lists (hub_addr, port, connected, enabled) and
   usb_disp.reset_port(hub_addr, port) re-enumerates one port without
   disturbing the rest of the chain (unlike force_reenum's root-port

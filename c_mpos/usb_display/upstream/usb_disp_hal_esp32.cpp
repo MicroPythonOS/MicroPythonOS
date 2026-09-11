@@ -686,6 +686,7 @@ static void daemon_task(void *arg) {
 #define USB_DISP_HUB_WD_RESETS 3       // port resets before power cycle
 #define USB_DISP_HUB_WD_PC_GRACE_MS 8000  // power cycle -> give-up verdict
 #define USB_DISP_HUB_WD_RETRY_MS 4000     // hub comm failure -> retry sweep
+#define USB_DISP_HUB_WD_QUIET_MS 15000    // idle port -> one auto-reset due
 #define USB_DISP_HUB_WD_SWEEP_MS 1000     // min interval between sweeps
 #define USB_DISP_HUB_CTRL_MS 1500         // per-transfer timeout
 
@@ -720,10 +721,13 @@ typedef struct {
     bool power_cycled[USB_DISP_HUB_MAX_PORTS];     // vbus cycle spent
     bool given_up[USB_DISP_HUB_MAX_PORTS];         // silent until flap
     bool noted[USB_DISP_HUB_MAX_PORTS];            // idle hint logged
+    bool quiet[USB_DISP_HUB_MAX_PORTS];            // idle auto-reset episode
+    bool quiet_done[USB_DISP_HUB_MAX_PORTS];       // idle reset spent
 } hub_wd_t;
 
 static hub_wd_t s_hub_wd[USB_DISP_HUB_WD_MAX];
 static bool s_watchdog_on = true;
+static bool s_auto_reset_idle = true;
 static uint32_t s_hub_wd_last_ms = 0;
 static SemaphoreHandle_t s_hub_mutex = NULL;
 static SemaphoreHandle_t s_hub_done = NULL;
@@ -869,6 +873,8 @@ static void wd_port_clear(hub_wd_t *slot, uint8_t idx) {
     slot->given_up[idx] = false;
     slot->n_at_open[idx] = 0;
     slot->noted[idx] = false;
+    slot->quiet[idx] = false;
+    slot->quiet_done[idx] = false;
 }
 
 static void wd_port_closed(hub_wd_t *slot, uint8_t idx, uint8_t addr,
@@ -946,6 +952,16 @@ static void hub_watchdog_step(void) {
                                  "(reset_port(%u,%u) if stuck)",
                                  addr, port, addr, port);
                 }
+                if (s_auto_reset_idle && !slot->quiet_done[idx]) {
+                    slot->stuck_since[idx] = now;
+                    slot->n_at_open[idx] = (uint8_t)n;
+                    slot->quiet[idx] = true;
+                    slot->next_due[idx] = now + USB_DISP_HUB_WD_QUIET_MS;
+                    usb_disp_log("[HUB] addr=%u port=%u idle, auto-reset in "
+                                 "%us",
+                                 addr, port,
+                                 USB_DISP_HUB_WD_QUIET_MS / 1000);
+                }
                 continue;
             }
             if (slot->given_up[idx]) continue;
@@ -962,6 +978,17 @@ static void hub_watchdog_step(void) {
             if ((int32_t)(now - slot->next_due[idx]) < 0) continue;
             if (n != slot->n_at_open[idx]) {
                 wd_port_closed(slot, idx, addr, port, now, "enumerated");
+                continue;
+            }
+            if (slot->quiet[idx]) {
+                usb_disp_log("[HUB] addr=%u port=%u idle reset (stuck %lus)",
+                             addr, port,
+                             (unsigned long)((now - slot->stuck_since[idx]) /
+                                             1000));
+                bool ok = hub_reset_port(addr, port, false);
+                wd_port_closed(slot, idx, addr, port, now,
+                               ok ? "idle reset done" : "idle reset FAILED");
+                slot->quiet_done[idx] = true;
                 continue;
             }
             unsigned long stuck_s =
@@ -1044,6 +1071,10 @@ bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
 void usb_disp_hal_set_watchdog(bool on) { s_watchdog_on = on; }
 
 bool usb_disp_hal_watchdog(void) { return s_watchdog_on; }
+
+void usb_disp_hal_set_auto_reset_idle(bool on) { s_auto_reset_idle = on; }
+
+bool usb_disp_hal_auto_reset_idle(void) { return s_auto_reset_idle; }
 
 // ---------------------------------------------------------------
 // HAL インターフェース実装
