@@ -78,6 +78,31 @@ bool usb_disp_hal_bulk_split(usb_disp_hal_t *h);
 // スタックが自動管理するバックエンドでは no-op でよい)
 void usb_disp_hal_request_reenum(usb_disp_hal_t *h);
 
+// ---- ハブポート回復 (低速起動デバイスの単発列挙失敗対策) ----
+// IDF の ext_port ドライバはハブポートのリセットを既定で1回しか試行
+// しないため、起動中の Full-Speed デバイスは CHECK_SHORT_DEV_DESC の
+// 失敗でポートごと永続 DISABLE になる (Linux xHCI はリトライする)。
+// 下記は標準のハブクラス要求でそのポートだけ再列挙させる:
+//   - watchdog (usb_disp_hal_poll から自動): 接続済み・未列挙のまま
+//     猶予 (~4s) を過ぎたポートに PORT_RESET を1回出す。有効なポート
+//     (正常動作中の機器・列挙処理中) には一切触れない。
+//     set_watchdog(false) で停止できる (既定 = 有効)。
+//   - reset_hub_port: 同じ操作の手動版。power_cycle が真なら VBUS を
+//     落として入れ直す (確実だが低速。ganged-power ハブでは sibling
+//     ポートも落ちる)。REPL からの回復用。
+// ESP32 以外のバックエンドでは未実装 (false/0 を返す) でよい。
+typedef struct {
+    uint8_t hub_addr;   // ハブのデバイスアドレス (bus_devices と同じ)
+    uint8_t port;       // ハブ相対ポート番号 (1 始まり)
+    bool connected;     // デバイスが接続しているか
+    bool enabled;       // ポートが有効か (wedged 状態では false)
+} usb_disp_hub_port_t;
+uint8_t usb_disp_hal_hub_ports(usb_disp_hub_port_t *out, uint8_t max);
+bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
+                                 bool power_cycle);
+void usb_disp_hal_set_watchdog(bool on);
+bool usb_disp_hal_watchdog(void);
+
 // 単調ミリ秒カウンタ (コアのタイマー用)
 uint32_t usb_disp_hal_ms(void);
 

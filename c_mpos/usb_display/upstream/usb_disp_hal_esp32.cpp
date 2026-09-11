@@ -652,6 +652,319 @@ static void daemon_task(void *arg) {
 }
 
 // ---------------------------------------------------------------
+// Hub-port watchdog (Terminus-hub + slow-booting FS device recovery)
+//
+// Background: IDF's ext_port driver attempts a hub-port reset exactly
+// once (EXT_PORT_RESET_ATTEMPTS defaults to 1). A slow-booting
+// Full-Speed device (a DisplayLink adapter needs 1-2s after VBUS)
+// that stalls the first short-descriptor read leaves the port
+// DISABLED forever ("CHECK_SHORT_DEV_DESC FAILED"), and the stack's
+// own recycle path cannot recover pre-enumeration failures
+// ("Ext hub port recycle error: ESP_ERR_INVALID_ARG"). Linux xHCI
+// retries transparently, which is why the same hub+adapter works on
+// a PC but wedges on ESP32 until the whole chain is replugged.
+//
+// This watchdog sweeps every external hub with standard, read-only
+// GET_PORT_STATUS requests and issues a single SET_FEATURE(PORT_RESET)
+// on ports that stay connected-but-unenumerated past a grace period.
+// The reset is targeted (VBUS stays up, other ports untouched) and by
+// then the device has finished booting, so re-enumeration succeeds.
+// Enabled ports (healthy mouse/display, enumeration in progress) are
+// never touched. Change bits are NEVER cleared here: clearing
+// C_CONNECTION would steal the connect event from IDF's hub driver
+// and cause the very silence this fixes.
+// ---------------------------------------------------------------
+
+#define USB_DISP_HUB_MAX_PORTS 8   // ports tracked per hub (Terminus = 4)
+#define USB_DISP_HUB_WD_MAX 4      // hubs tracked simultaneously
+#define USB_DISP_HUB_WD_GRACE_MS 4000  // connected-unenumerated before reset
+#define USB_DISP_HUB_WD_SWEEP_MS 1000  // min interval between sweeps
+#define USB_DISP_HUB_CTRL_MS 1500      // per-transfer timeout
+
+// Hub class request constants (USB 2.0 spec, Tables 11-16/17/19)
+#define USB_DISP_HUB_DESC_TYPE 0x29
+#define USB_DISP_REQ_GET_STATUS 0
+#define USB_DISP_REQ_GET_DESCRIPTOR 6
+#define USB_DISP_REQ_SET_FEATURE 3
+#define USB_DISP_FEAT_PORT_RESET 4
+#define USB_DISP_FEAT_PORT_POWER 8
+#define USB_DISP_PORT_STAT_CONNECTION 0x0001
+#define USB_DISP_PORT_STAT_ENABLE 0x0002
+#define USB_DISP_PORT_CHG_CONNECTION 0x0001
+
+typedef struct {
+    bool occupied;
+    uint8_t hub_addr;
+    uint8_t nports;  // cached hub-descriptor port count (0 = unknown)
+    // Per-port stuck-episode state (index = port - 1)
+    uint32_t stuck_since[USB_DISP_HUB_MAX_PORTS];
+    uint8_t resets[USB_DISP_HUB_MAX_PORTS];
+    bool given_up[USB_DISP_HUB_MAX_PORTS];
+} hub_wd_t;
+
+static hub_wd_t s_hub_wd[USB_DISP_HUB_WD_MAX];
+static bool s_watchdog_on = true;
+static uint32_t s_hub_wd_last_ms = 0;
+static SemaphoreHandle_t s_hub_mutex = NULL;
+static SemaphoreHandle_t s_hub_done = NULL;
+
+static void hub_xfer_cb(usb_transfer_t *xfer) {
+    SemaphoreHandle_t done = (SemaphoreHandle_t)xfer->context;
+    xSemaphoreGive(done);
+}
+
+// One hub-class control transfer, app-task context, serialized by
+// s_hub_mutex. Opens the hub (verifying class 09), submits on EP0,
+// waits, closes. Returns true on COMPLETED.
+static bool hub_ctrl(uint8_t hub_addr, uint8_t bmRequestType, uint8_t bRequest,
+                     uint16_t wValue, uint16_t wIndex,
+                     void *data, uint16_t wLength, uint16_t *actual) {
+    if (!s_started || s_client == NULL || s_hub_mutex == NULL ||
+        s_hub_done == NULL) {
+        return false;
+    }
+    if (wLength > 32) return false;
+    if (xSemaphoreTake(s_hub_mutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+        return false;
+    }
+    bool ok = false;
+    usb_device_handle_t dev = NULL;
+    usb_transfer_t *x = NULL;
+    if (usb_host_device_open(s_client, hub_addr, &dev) != ESP_OK) {
+        goto out;
+    }
+    {
+        const usb_device_desc_t *ddesc = NULL;
+        if (usb_host_get_device_descriptor(dev, &ddesc) != ESP_OK ||
+            ddesc == NULL || ddesc->bDeviceClass != 0x09) {
+            goto out;
+        }
+    }
+    if (usb_host_transfer_alloc(8 + 32, 0, &x) != ESP_OK) goto out;
+    {
+        bool dir_in = (bmRequestType & 0x80) != 0;
+        uint8_t *b = x->data_buffer;
+        b[0] = bmRequestType;
+        b[1] = bRequest;
+        b[2] = (uint8_t)wValue;
+        b[3] = (uint8_t)(wValue >> 8);
+        b[4] = (uint8_t)wIndex;
+        b[5] = (uint8_t)(wIndex >> 8);
+        b[6] = (uint8_t)wLength;
+        b[7] = (uint8_t)(wLength >> 8);
+        if (!dir_in && wLength && data) memcpy(b + 8, data, wLength);
+        x->num_bytes = 8 + wLength;
+        x->device_handle = dev;
+        x->bEndpointAddress = 0;
+        x->callback = hub_xfer_cb;
+        x->context = s_hub_done;
+        xSemaphoreTake(s_hub_done, 0);  // clear stale signal
+        if (usb_host_transfer_submit_control(s_client, x) != ESP_OK) goto out;
+        if (xSemaphoreTake(s_hub_done, pdMS_TO_TICKS(USB_DISP_HUB_CTRL_MS)) !=
+            pdTRUE) {
+            goto out;
+        }
+        if (x->status != USB_TRANSFER_STATUS_COMPLETED) {
+            usb_disp_log("[HUB] ctrl error: status=%d (bReq=%02X addr=%u)",
+                         (int)x->status, bRequest, hub_addr);
+            goto out;
+        }
+        uint16_t got =
+            (x->actual_num_bytes >= 8) ? (uint16_t)(x->actual_num_bytes - 8)
+                                       : 0;
+        if (dir_in && data && got) {
+            if (got > wLength) got = wLength;
+            memcpy(data, b + 8, got);
+        }
+        if (actual) *actual = got;
+    }
+    ok = true;
+out:
+    if (x) usb_host_transfer_free(x);
+    if (dev) usb_host_device_close(s_client, dev);
+    xSemaphoreGive(s_hub_mutex);
+    return ok;
+}
+
+static uint8_t hub_port_count(uint8_t hub_addr) {
+    uint8_t buf[16] = {0};
+    uint16_t actual = 0;
+    if (!hub_ctrl(hub_addr, 0xA0, USB_DISP_REQ_GET_DESCRIPTOR,
+                  (uint16_t)(USB_DISP_HUB_DESC_TYPE << 8), 0, buf, sizeof(buf),
+                  &actual) ||
+        actual < 3) {
+        return 0;
+    }
+    uint8_t n = buf[2];
+    if (n == 0 || n > USB_DISP_HUB_MAX_PORTS) return 0;
+    return n;
+}
+
+// Read-only port status. Never clears change bits (see banner above).
+static bool hub_port_status(uint8_t hub_addr, uint8_t port, bool *connected,
+                            bool *enabled, bool *conn_change) {
+    uint8_t buf[4] = {0};
+    uint16_t actual = 0;
+    if (!hub_ctrl(hub_addr, 0xA3, USB_DISP_REQ_GET_STATUS, 0, port, buf, 4,
+                  &actual) ||
+        actual < 4) {
+        return false;
+    }
+    uint16_t st = (uint16_t)(buf[0] | (buf[1] << 8));
+    uint16_t ch = (uint16_t)(buf[2] | (buf[3] << 8));
+    *connected = (st & USB_DISP_PORT_STAT_CONNECTION) != 0;
+    *enabled = (st & USB_DISP_PORT_STAT_ENABLE) != 0;
+    *conn_change = (ch & USB_DISP_PORT_CHG_CONNECTION) != 0;
+    return true;
+}
+
+static bool hub_reset_port(uint8_t hub_addr, uint8_t port, bool power_cycle) {
+    if (power_cycle) {
+        // VBUS drop: forces a from-scratch connection event through the
+        // stack's own path. Ganged-power hubs may drop sibling ports too.
+        usb_disp_log("[HUB] addr=%u port=%u power cycle", hub_addr, port);
+        if (!hub_ctrl(hub_addr, 0x23, 1 /*CLEAR_FEATURE*/,
+                      USB_DISP_FEAT_PORT_POWER, port, NULL, 0, NULL)) {
+            return false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(300));
+        return hub_ctrl(hub_addr, 0x23, USB_DISP_REQ_SET_FEATURE,
+                        USB_DISP_FEAT_PORT_POWER, port, NULL, 0, NULL);
+    }
+    usb_disp_log("[HUB] addr=%u port=%u reset", hub_addr, port);
+    return hub_ctrl(hub_addr, 0x23, USB_DISP_REQ_SET_FEATURE,
+                    USB_DISP_FEAT_PORT_RESET, port, NULL, 0, NULL);
+}
+
+// One watchdog sweep over all hubs on the bus. Open (class-verified)
+// failures skip the hub for this round but keep its episode state.
+static void hub_watchdog_step(void) {
+    uint32_t now = usb_disp_hal_ms();
+    if ((int32_t)(now - s_hub_wd_last_ms) < USB_DISP_HUB_WD_SWEEP_MS) return;
+    s_hub_wd_last_ms = now;
+
+    uint8_t addrs[16];
+    int n = 0;
+    if (usb_host_device_addr_list_fill((int)sizeof(addrs), addrs, &n) !=
+        ESP_OK) {
+        return;
+    }
+
+    for (int i = 0; i < n; i++) {
+        uint8_t addr = addrs[i];
+        hub_wd_t *slot = NULL;
+        hub_wd_t *free_slot = NULL;
+        for (uint8_t s = 0; s < USB_DISP_HUB_WD_MAX; s++) {
+            if (s_hub_wd[s].occupied && s_hub_wd[s].hub_addr == addr) {
+                slot = &s_hub_wd[s];
+                break;
+            }
+            if (!s_hub_wd[s].occupied && free_slot == NULL) {
+                free_slot = &s_hub_wd[s];
+            }
+        }
+        if (slot == NULL) {
+            if (free_slot == NULL) continue;  // table full, skip hub
+            memset(free_slot, 0, sizeof(*free_slot));
+            free_slot->occupied = true;
+            free_slot->hub_addr = addr;
+            slot = free_slot;
+        }
+        if (slot->nports == 0) {
+            slot->nports = hub_port_count(addr);
+            if (slot->nports == 0) continue;  // not a hub / comm failure
+            usb_disp_log("[HUB] addr=%u ports=%u", addr, slot->nports);
+        }
+        for (uint8_t port = 1; port <= slot->nports; port++) {
+            uint8_t idx = (uint8_t)(port - 1);
+            bool conn = false, en = false, cchg = false;
+            if (!hub_port_status(addr, port, &conn, &en, &cchg)) continue;
+            // Healthy (empty, enabled device, or freshly flapped then
+            // claimed) -> clear any episode state for this port.
+            if (!conn || (en && !cchg)) {
+                slot->stuck_since[idx] = 0;
+                slot->resets[idx] = 0;
+                slot->given_up[idx] = false;
+                continue;
+            }
+            if (slot->given_up[idx]) continue;
+            if (slot->stuck_since[idx] == 0) {
+                slot->stuck_since[idx] = now;
+                usb_disp_log("[HUB] addr=%u port=%u connected, waiting",
+                             addr, port);
+                continue;
+            }
+            if ((int32_t)(now - slot->stuck_since[idx]) <
+                USB_DISP_HUB_WD_GRACE_MS) {
+                continue;
+            }
+            if (slot->resets[idx] == 0) {
+                usb_disp_log("[HUB] addr=%u port=%u unenumerated, resetting",
+                             addr, port);
+                if (hub_reset_port(addr, port, false)) {
+                    slot->resets[idx] = 1;
+                    slot->stuck_since[idx] = now;
+                } else {
+                    slot->stuck_since[idx] = now;  // comm fail, retry later
+                }
+            } else {
+                slot->given_up[idx] = true;
+                usb_disp_log("[HUB] addr=%u port=%u stuck, giving up",
+                             addr, port);
+            }
+        }
+    }
+
+    // Age out hubs that left the bus (unplugged chain).
+    for (uint8_t s = 0; s < USB_DISP_HUB_WD_MAX; s++) {
+        if (!s_hub_wd[s].occupied) continue;
+        bool present = false;
+        for (int i = 0; i < n; i++) {
+            if (addrs[i] == s_hub_wd[s].hub_addr) {
+                present = true;
+                break;
+            }
+        }
+        if (!present) memset(&s_hub_wd[s], 0, sizeof(s_hub_wd[s]));
+    }
+}
+
+uint8_t usb_disp_hal_hub_ports(usb_disp_hub_port_t *out, uint8_t max) {
+    uint8_t count = 0;
+    if (out == NULL || max == 0) return 0;
+    uint8_t addrs[16];
+    int n = 0;
+    if (usb_host_device_addr_list_fill((int)sizeof(addrs), addrs, &n) !=
+        ESP_OK) {
+        return 0;
+    }
+    for (int i = 0; i < n && count < max; i++) {
+        uint8_t nports = hub_port_count(addrs[i]);
+        if (nports == 0) continue;
+        for (uint8_t port = 1; port <= nports && count < max; port++) {
+            bool conn = false, en = false, cchg = false;
+            if (!hub_port_status(addrs[i], port, &conn, &en, &cchg)) continue;
+            out[count].hub_addr = addrs[i];
+            out[count].port = port;
+            out[count].connected = conn;
+            out[count].enabled = en;
+            count++;
+        }
+    }
+    return count;
+}
+
+bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
+                                 bool power_cycle) {
+    if (port == 0 || port > USB_DISP_HUB_MAX_PORTS) return false;
+    return hub_reset_port(hub_addr, port, power_cycle);
+}
+
+void usb_disp_hal_set_watchdog(bool on) { s_watchdog_on = on; }
+
+bool usb_disp_hal_watchdog(void) { return s_watchdog_on; }
+
+// ---------------------------------------------------------------
 // HAL インターフェース実装
 // ---------------------------------------------------------------
 
@@ -671,6 +984,8 @@ usb_disp_hal_t *usb_disp_hal_add(const usb_disp_config_t *cfg) {
     h->ctrl_mutex = xSemaphoreCreateMutex();
     h->ctrl_done = xSemaphoreCreateBinary();
     h->bulk_free = xSemaphoreCreateCounting(USB_DISP_BULK_XFER_COUNT, 0);
+    if (s_hub_mutex == NULL) s_hub_mutex = xSemaphoreCreateMutex();
+    if (s_hub_done == NULL) s_hub_done = xSemaphoreCreateBinary();
     return h;
 }
 
@@ -740,6 +1055,12 @@ void usb_disp_hal_poll(usb_disp_hal_t *h) {
     if (h->pending_probe && h->dev != NULL && !h->gone) {
         h->pending_probe = false;
         probe_and_finish(h);
+    }
+    // Hub-port watchdog: heal ports the stack gave up on (single-shot
+    // enumeration of a still-booting device). Only while our display is
+    // detached, so healthy ports are never at risk.
+    if (s_watchdog_on && !h->attached) {
+        hub_watchdog_step();
     }
 }
 

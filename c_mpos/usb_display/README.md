@@ -50,6 +50,23 @@ What it took to get hotplug / hot-unplug working, per level
     locked behind IDF_EXPERIMENTAL_FEATURES, and retries are spaced ~30ms
     apart anyway (never spans a 1-2s boot). The enum-filter callback runs
     after the descriptor read, so it cannot defer the fatal first reset.
+- Slow-boot race, part 2 (replugged adapters, some hub ports): even with
+  the settle patch, a port read while the chip is still booting fails the
+  single CHECK_SHORT_DEV_DESC attempt and the port stays DISABLED forever
+  (IDF's own recycle path cannot recover pre-enumeration failures:
+  "Ext hub port recycle error: ESP_ERR_INVALID_ARG"). Linux xHCI retries
+  transparently, which is why the same hub+adapter works on a PC. Fix in
+  the HAL (usb_disp_hal_esp32.cpp, --usbdisplay builds only): a hub-port
+  watchdog sweeps every external hub with read-only GET_PORT_STATUS while
+  no display is attached and issues one targeted SET_FEATURE(PORT_RESET)
+  on ports stuck connected-but-unenumerated past ~4s (by then the chip
+  has booted, so re-enumeration succeeds). Enabled ports are never
+  touched; change bits are never cleared (that would steal the connect
+  event from IDF's hub driver). Manual equivalents for the REPL:
+  usb_disp.hub_ports() lists (hub_addr, port, connected, enabled) and
+  usb_disp.reset_port(hub_addr, port) re-enumerates one port without
+  disturbing the rest of the chain (unlike force_reenum's root-port
+  power cycle). usb_disp.set_watchdog(False) opts out.
 - Monitor floor: HDMI/DVI needs >= 25 MHz pixel clock, so 640x480@60
   (25.175 MHz) is the smallest syncable mode. Anything smaller (e.g.
   320x240 @ 7.3 MHz) programs fine on the chip but no monitor locks it.
@@ -146,7 +163,9 @@ What it took to get hotplug / hot-unplug working, per level
 --- Debugging notes ---
 - bus_devices() (stack address list) separates "nothing sensed"
   (cable/power/stack) from "hubs only" (adapter missing/wedged) from
-  "adapter present, failing" in one call.
+  "adapter present, failing" in one call. hub_ports() goes one deeper:
+  a (connected=True, enabled=False) port is one the stack gave up on —
+  reset_port() it, or wait ~5s for the watchdog's [HUB] lines.
 - Dead Ctrl-C + dead UART + alive USB tasks = main thread wedged in C;
   bisect with refr_now() per display (screenless refresh was the killer).
 - The full swap runs clean on the desktop unix build between two SDL

@@ -3,6 +3,7 @@ Future release (next version)
 
 Board Support:
 - ESP32-S3: experimental USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195) via `./scripts/build_mpos.sh esp32s3 --usbdisplay`; drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum — smaller modes use a sub-25MHz pixel clock real monitors cannot sync to), falling back to the onboard LCD when no adapter is present (MaTouch ESP32-S3 2.8" and Waveshare ESP32-S3-Touch-LCD-2 board files); live-switch between panel and USB at runtime with auto-revert on unplug, plus an IDF usb_host settle delay so hotplugged adapters enumerate instead of wedging
+- ESP32-S3 USB display: hub-port watchdog heals replugged adapters and slow-booting hub ports — IDF attempts a hub-port reset only once, so a port read while the DisplayLink chip is still booting stayed DISABLED forever (same hub+adapter works on Linux, whose xHCI retries); the HAL now re-enumerates connected-but-unenumerated ports a few seconds later via a targeted port reset, with `usb_disp.hub_ports()` / `usb_disp.reset_port()` REPL helpers for inspection and manual recovery
 
 Frameworks:
 - topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target
