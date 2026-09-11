@@ -25,6 +25,10 @@ _wrapped_indevs = []
 # Future Settings-toggle seam: when False, hotplugged displays enumerate
 # but the UI never auto-switches (manual switch_to_usb still works).
 _auto_switch = True
+_sw_idle_polls = 0
+_sw_retries = 0
+_SW_RETRY_EVERY = 5
+_SW_MAX_RETRIES = 6
 
 
 def is_available():
@@ -353,6 +357,7 @@ def _ensure_poll_timer():
 
 
 def _poll_cb(t):
+    global _sw_idle_polls, _sw_retries
     dev = _usb_dev
     if dev is None or _switching:
         return
@@ -371,11 +376,31 @@ def _poll_cb(t):
             switch_to_usb(timeout_s=5)
         except Exception as e:
             logger.error("auto-switch fail: %s" % (e))
+        _sw_idle_polls = 0
+        _sw_retries = 0
     elif _active == "usb" and event and not ready:
         logger.warning("usb gone, back to panel")
         try:
             switch_to_panel()
         except Exception as e:
             logger.error("auto-revert fail: %s" % (e))
+        _sw_idle_polls = 0
+        _sw_retries = 0
     elif event:
         logger.warning("usb ev ready=%s %sx%s" % (ready, dev.width(), dev.height()))
+        _sw_idle_polls = 0
+        _sw_retries = 0
+    elif ready and _active == "panel" and _auto_switch:
+        _sw_idle_polls += 1
+        if _sw_idle_polls >= _SW_RETRY_EVERY and _sw_retries < _SW_MAX_RETRIES:
+            _sw_idle_polls = 0
+            _sw_retries += 1
+            logger.warning("usb ready but still on panel, retry %d/%d" % (_sw_retries, _SW_MAX_RETRIES))
+            try:
+                switch_to_usb(timeout_s=5)
+            except Exception as e:
+                logger.error("auto-switch retry fail: %s" % (e))
+    else:
+        _sw_idle_polls = 0
+        if not ready:
+            _sw_retries = 0

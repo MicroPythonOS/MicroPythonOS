@@ -716,8 +716,10 @@ typedef struct {
     uint32_t stuck_since[USB_DISP_HUB_MAX_PORTS];  // episode start ms (0 = none)
     uint32_t next_due[USB_DISP_HUB_MAX_PORTS];     // next action due ms
     uint8_t attempts[USB_DISP_HUB_MAX_PORTS];      // port resets issued
+    uint8_t n_at_open[USB_DISP_HUB_MAX_PORTS];     // bus addr count at open
     bool power_cycled[USB_DISP_HUB_MAX_PORTS];     // vbus cycle spent
     bool given_up[USB_DISP_HUB_MAX_PORTS];         // silent until flap
+    bool noted[USB_DISP_HUB_MAX_PORTS];            // idle hint logged
 } hub_wd_t;
 
 static hub_wd_t s_hub_wd[USB_DISP_HUB_WD_MAX];
@@ -859,6 +861,27 @@ static bool hub_reset_port(uint8_t hub_addr, uint8_t port, bool power_cycle) {
     return ok;
 }
 
+static void wd_port_clear(hub_wd_t *slot, uint8_t idx) {
+    slot->stuck_since[idx] = 0;
+    slot->next_due[idx] = 0;
+    slot->attempts[idx] = 0;
+    slot->power_cycled[idx] = false;
+    slot->given_up[idx] = false;
+    slot->n_at_open[idx] = 0;
+    slot->noted[idx] = false;
+}
+
+static void wd_port_closed(hub_wd_t *slot, uint8_t idx, uint8_t addr,
+                           uint8_t port, uint32_t now, const char *why) {
+    usb_disp_log("[HUB] addr=%u port=%u %s, episode over (stuck %lus, %u "
+                 "resets%s)",
+                 addr, port, why,
+                 (unsigned long)((now - slot->stuck_since[idx]) / 1000),
+                 slot->attempts[idx],
+                 slot->power_cycled[idx] ? "+power" : "");
+    wd_port_clear(slot, idx);
+}
+
 // One watchdog sweep over all hubs on the bus. Open (class-verified)
 // failures skip the hub for this round but keep its episode state.
 static void hub_watchdog_step(void) {
@@ -905,23 +928,24 @@ static void hub_watchdog_step(void) {
             bool episode = (slot->stuck_since[idx] != 0 ||
                             slot->attempts[idx] != 0 ||
                             slot->power_cycled[idx] || slot->given_up[idx]);
-            // Healthy (empty, enabled device, or freshly flapped then
-            // claimed) -> close any episode for this port, saying so.
-            if (!conn || (en && !cchg)) {
+            if (!conn) {
+                if (episode) wd_port_closed(slot, idx, addr, port, now, "unplugged");
+                else wd_port_clear(slot, idx);
+                continue;
+            }
+            if (en && !cchg) {
                 if (episode) {
-                    usb_disp_log("[HUB] addr=%u port=%u %s, episode over "
-                                 "(stuck %lus, %u resets%s)",
-                                 addr, port, conn ? "enumerated" : "unplugged",
-                                 (unsigned long)((now - slot->stuck_since[idx]) /
-                                                 1000),
-                                 slot->attempts[idx],
-                                 slot->power_cycled[idx] ? "+power" : "");
+                    if (n != slot->n_at_open[idx]) {
+                        wd_port_closed(slot, idx, addr, port, now, "enumerated");
+                    }
+                    continue;
                 }
-                slot->stuck_since[idx] = 0;
-                slot->next_due[idx] = 0;
-                slot->attempts[idx] = 0;
-                slot->power_cycled[idx] = false;
-                slot->given_up[idx] = false;
+                if (!slot->noted[idx]) {
+                    slot->noted[idx] = true;
+                    usb_disp_log("[HUB] addr=%u port=%u enabled but idle "
+                                 "(reset_port(%u,%u) if stuck)",
+                                 addr, port, addr, port);
+                }
                 continue;
             }
             if (slot->given_up[idx]) continue;
@@ -929,12 +953,17 @@ static void hub_watchdog_step(void) {
                 slot->stuck_since[idx] = now;
                 slot->attempts[idx] = 0;
                 slot->power_cycled[idx] = false;
+                slot->n_at_open[idx] = (uint8_t)n;
                 slot->next_due[idx] = now + USB_DISP_HUB_WD_GRACE_MS;
                 usb_disp_log("[HUB] addr=%u port=%u connected, waiting",
                              addr, port);
                 continue;
             }
             if ((int32_t)(now - slot->next_due[idx]) < 0) continue;
+            if (n != slot->n_at_open[idx]) {
+                wd_port_closed(slot, idx, addr, port, now, "enumerated");
+                continue;
+            }
             unsigned long stuck_s =
                 (unsigned long)((now - slot->stuck_since[idx]) / 1000);
             if (slot->attempts[idx] < USB_DISP_HUB_WD_RESETS) {

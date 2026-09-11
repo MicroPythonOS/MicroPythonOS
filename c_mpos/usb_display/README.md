@@ -61,13 +61,17 @@ What it took to get hotplug / hot-unplug working, per level
   no display is attached and recovers ports stuck connected-but-
   unenumerated: up to 3 targeted SET_FEATURE(PORT_RESET)s with growing
   backoff (~4s/~12s/~28s stuck time), then one PORT_POWER off/on cycle,
-  then silence until the connection flaps. Enabled ports are never
-  touched; change bits are never cleared (that would steal the connect
+  then silence until the connection flaps. Episodes close as "enumerated"
+  only on bus-address-count growth after episode-open — never on the
+  enabled bit alone, which can read set on an unaddressed port when the
+  stack wedges mid-enumeration. Enabled ports are never touched;
+  change bits are never cleared (that would steal the connect
   event from IDF's hub driver). Every transition and action is logged
   ([HUB] lines) with per-port counters: "connected, waiting" opens an
   episode, "reset N/3 (stuck Ns)" / "power cycle (stuck Ns, N resets
   done)" narrate recovery, "enumerated/unplugged, episode over (stuck
-  Ns, N resets[+power])" closes it. Manual equivalents for the REPL:
+  Ns, N resets[+power])" closes it. A port that reads enabled with no
+  episode gets one neutral pointer line naming its reset_port() call. Manual equivalents for the REPL:
   usb_disp.hub_ports() lists (hub_addr, port, connected, enabled) and
   usb_disp.reset_port(hub_addr, port) re-enumerates one port without
   disturbing the rest of the chain (unlike force_reenum's root-port
@@ -151,7 +155,9 @@ What it took to get hotplug / hot-unplug working, per level
   timer is the whole event system (no asyncio watcher needed — the stack
   is event-driven and poll() just advances the state machine). On a READY
   transition with the panel active it auto-switches; on disconnect with
-  USB active it auto-reverts. Event-gated, so failed switches can't
+  USB active it auto-reverts. Event-gated with a bounded level retry
+  (every ~5s, max 6 per episode, budget reset by any bus event), so a
+  switch that fails transiently mid-boot still lands without a
   retry-storm. _auto_switch is the seam for the future Settings toggle.
 - Swap order (all validated on hardware): disable pump -> disable indevs
   -> remove_and_stop_all_activities() -> blank old display -> blank handled

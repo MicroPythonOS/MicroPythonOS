@@ -86,8 +86,12 @@ void usb_disp_hal_request_reenum(usb_disp_hal_t *h);
 //   - watchdog (usb_disp_hal_poll から自動): 接続済み・未列挙のまま
 //     ~4s のポートに PORT_RESET を最大3回 (backoff 付き)、それでも
 //     駄目なら PORT_POWER の off/on を1回、最後まで駄目なら抜き差し
-//     まで沈黙する。有効なポート (正常動作中の機器・列挙処理中) には
-//     一切触れない。遷移と回数は [HUB] ログに常時出す。
+//     まで沈黙する。エピソードはバスアドレス数の増加でのみ「列挙
+//     済み」として閉じる (enabled ビットだけでは閉じない — 未割当の
+//     まま有効化される場合があるため)。有効なポート (正常動作中の
+//     機器・列挙処理中) には一切触れない。遷移と回数は [HUB] ログに
+//     常時出す。エピソード無しの enabled ポートは1回だけ pointer を
+//     出し、自動では触れない。
 //     set_watchdog(false) で停止できる (既定 = 有効)。
 //   - reset_hub_port: 同じ操作の手動版。power_cycle が真なら VBUS を
 //     落として入れ直す (確実だが低速。ganged-power ハブでは sibling
