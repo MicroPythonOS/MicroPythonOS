@@ -8,6 +8,9 @@ Frameworks:
 - topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target
 - topmenu: drawer now extends from below the notification bar all the way to the bottom screen edge instead of a fixed 90% height, closing the tappable strip of the underlying app that stayed visible beneath it
 
+OS:
+- ESP32-S3: cap ESP-IDF log strings at the ERROR default (LOG_MAXIMUM_EQUALS_DEFAULT), saving ~42 KB of app flash (micropython.bin 3,666,864 → 3,624,784 B); MicroPython logging is unaffected, C logs can no longer be raised above ERROR at runtime
+
 0.18.1
 ======
 
