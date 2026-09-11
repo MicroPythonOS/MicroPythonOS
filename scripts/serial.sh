@@ -13,6 +13,8 @@
 
 device=$(find /dev/serial/by-id -iname "usb-Espressif_Systems_Espressif_Device*" | tail -n 1)
 
+# also: /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+
 if [ -z "$device" ]; then
 	echo "could not find device, defaulting to final badge 2026..."
         device=/dev/serial/by-id/usb-Espressif_Systems_Espressif_Device_9070690094340000-if00
