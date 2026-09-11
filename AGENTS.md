@@ -114,6 +114,7 @@ def _capture_task(coro):
 - **Comments/docstrings:** never add/remove/modify unless explicitly asked.
 - **Batch edits:** constrain to exact patterns. Broad edits can silently delete unrelated code. If damage occurs, restore from git and re-apply a precise script.
 - **Implement missing functionality** rather than working around it.
+- **USB display adapters:** experimental DisplayLink support lives in `c_mpos/usb_display/` — read its `README.md` before touching USB, display, touch, or topmenu code; build with `./scripts/build_mpos.sh esp32s3 --usbdisplay`.
 - **Observe before fixing, not after.** When a bug involves UI state or runtime data, use `mpos-controller` (`exec`, `get_widget_tree`, `eval`) to inspect the actual running system before coding a fix. Do NOT spend more than 2 rounds of static code analysis without validating assumptions against the live process.
 
 ### Debugging shared-object / identity bugs

@@ -102,6 +102,14 @@ What it took to get hotplug / hot-unplug working, per level
   crash when they fire. Focus entries only join groups while open, so the
   move is group-safe; drawer lands closed; brightness slider is a no-op
   on USB.
+- Drawer-close by swipe-up broke on big displays: it was detected via
+  scroll events, which only fire when content overflows the viewport (true
+  on 288px panels, false on 432px USB). Now press/release net movement
+  closes with the same threshold; the scroll path stays alongside.
+  The drawer needed FLAG.CLICKABLE for empty areas to report presses.
+- InputManager populations vary: fri3d registers a raw lv_indev_t keypad
+  next to driver wrappers, so the re-point path uses getattr with the raw
+  object as fallback instead of assuming wrappers.
 
 --- MPOS level (boot, tasks, UI lifecycle) ---
 - TaskHandler pumps LVGL via machine.Timer + micropython.schedule ON THE
@@ -123,6 +131,12 @@ What it took to get hotplug / hot-unplug working, per level
   launcher -> re-enable. The panel object is never deleted (switch-back
   needs no board re-init); the USB object is deleted on switch-back to
   free its buffers.
+- Backlight restore must go through set_backlight, never trust
+  get_backlight: fri3d overrides set_backlight with an expander lambda
+  while get_backlight reads a nonexistent pin (-1), which silently skipped
+  the restore and left the panel dark. Fall back to the
+  display_brightness setting (default 100), the same source the drawer
+  slider persists.
 - Flash budget is structural: 3.5 MiB app partition, hard size check.
   Room came from skipping the frozen usb-device framework in host builds
   (MPOS_NO_USBDEV, ~6.3 KiB, nothing imports it) and P4-gating the HS
