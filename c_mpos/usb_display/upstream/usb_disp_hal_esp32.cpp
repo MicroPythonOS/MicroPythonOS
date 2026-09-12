@@ -939,13 +939,11 @@ static void hub_watchdog_step(void) {
                 else wd_port_clear(slot, idx);
                 continue;
             }
-            if (en && !cchg) {
-                if (episode) {
-                    if (n != slot->n_at_open[idx]) {
-                        wd_port_closed(slot, idx, addr, port, now, "enumerated");
-                    }
-                    continue;
-                }
+            if (episode && n != slot->n_at_open[idx]) {
+                wd_port_closed(slot, idx, addr, port, now, "enumerated");
+                continue;
+            }
+            if (en && !cchg && !episode) {
                 if (!slot->noted[idx]) {
                     slot->noted[idx] = true;
                     usb_disp_log("[HUB] addr=%u port=%u enabled but idle "
@@ -976,10 +974,6 @@ static void hub_watchdog_step(void) {
                 continue;
             }
             if ((int32_t)(now - slot->next_due[idx]) < 0) continue;
-            if (n != slot->n_at_open[idx]) {
-                wd_port_closed(slot, idx, addr, port, now, "enumerated");
-                continue;
-            }
             if (slot->quiet[idx]) {
                 usb_disp_log("[HUB] addr=%u port=%u idle reset (stuck %lus)",
                              addr, port,
