@@ -1071,6 +1071,7 @@ static void hub_watchdog_step(bool allow_actions) {
             }
             if (episode && n != slot->n_at_open[idx]) {
                 wd_port_closed(slot, idx, addr, port, now, "enumerated");
+                slot->preexisting[idx] = true;
                 continue;
             }
             if (en && !cchg && !episode) {
@@ -1175,7 +1176,7 @@ static void hub_watchdog_step(bool allow_actions) {
                 slot->skip_until = now + wait_ms;
                 usb_disp_log("[HUB] addr=%u errors, backing off %lus", addr,
                              (unsigned long)(wait_ms / 1000));
-                if (slot->backoffs >= 3 && allow_actions) hub_escalate_maybe();
+                if (allow_actions) hub_escalate_maybe();
             } else if (slot->cerr > 5 && slot->skip_until == 0) {
                 slot->skip_until = now + 120000;
                 usb_disp_log("[HUB] addr=%u still dead, quiet 120s", addr);

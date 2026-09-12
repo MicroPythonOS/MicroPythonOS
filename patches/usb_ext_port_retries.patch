@@ -1,0 +1,22 @@
+diff --git a/components/usb/ext_port.c b/components/usb/ext_port.c
+index eb5f40d3..62cded21 100644
+--- a/components/usb/ext_port.c
++++ b/components/usb/ext_port.c
+@@ -24,6 +24,17 @@
+ #else
+ #define EXT_PORT_RESET_ATTEMPTS     1
+ #endif
++#ifdef MPOS_USB_PORT_SETTLE_MS
++// MPOS USB display support: retry hub-port resets (Linux xHCI parity
++// for fast transients like TT/DWC glitches). The Kconfig knob behind
++// this is invisible and needs IDF_EXPERIMENTAL_FEATURES, so override
++// it here instead, scoped to --usbdisplay builds (the only ones that
++// define MPOS_USB_PORT_SETTLE_MS). Slow boots are unaffected: the
++// first attempt still waits out the settle delay, and anything slower
++// falls through to the userspace watchdog as before.
++#undef EXT_PORT_RESET_ATTEMPTS
++#define EXT_PORT_RESET_ATTEMPTS     3
++#endif
+ // Delay in ms after sending the SetFeature() class specific request
+ #define EXT_PORT_RESET_RECOVERY_DELAY_MS       CONFIG_USB_HOST_EXT_PORT_RESET_RECOVERY_DELAY_MS
+ #define EXT_PORT_POWER_ON_CUSTOM_DELAY         CONFIG_USB_HOST_EXT_PORT_CUSTOM_POWER_ON_DELAY_ENABLE

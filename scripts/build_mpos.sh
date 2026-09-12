@@ -215,6 +215,13 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropy
 echo "Applying lib/esp-idf USB ext-port settle patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/usb_ext_port_settle.patch
 
+# USB display adapter support: retry hub-port resets (see the
+# CONFIG_USB_HOST_EXT_PORT_RESET_RECOVERY_DELAY_MS extra_config above
+# for rationale). Scoped to --usbdisplay builds via
+# MPOS_USB_PORT_SETTLE_MS, inert everywhere else.
+echo "Applying lib/esp-idf USB ext-port retries patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/usb_ext_port_retries.patch
+
 # USB enumerator robustness: IDF's enum.c aborts the whole board on any
 # "impossible" stage value (8 sites), but surprise removal racing an
 # enumeration corrupts the single-thread stage (proven by identical
@@ -351,6 +358,19 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
             # slow-booting adapter is awake before its first reset (hub
             # downstream ports are covered by the ext-port settle patch).
             extra_configs="$extra_configs CONFIG_USB_HOST_HUBS_SUPPORTED=y CONFIG_USB_HOST_HUB_MULTI_LEVEL=y CONFIG_USB_HOST_DEBOUNCE_DELAY_MS=2000"
+            # Retry hub-port resets (Linux parity for fast transients):
+            # EXT_PORT_RESET_ATTEMPTS=3 retries a failed port reset instead
+            # of permanently disabling the port after one CHECK_SHORT_DEV_DESC
+            # failure. Covers the fast-transient window (TT/DWC glitches);
+            # slow boots stay owned by the settle patch above plus the
+            # watchdog's seconds-later retries, and exhaustion still lands
+            # on the watchdog path. Implemented as a patch (not Kconfig):
+            # the knob is invisible and needs IDF_EXPERIMENTAL_FEATURES,
+            # which we don't want to enable tree-wide; the patch below is
+            # scoped to --usbdisplay builds via MPOS_USB_PORT_SETTLE_MS.
+            # RESET_RECOVERY_DELAY 100 (default 30, visible Kconfig):
+            # per-attempt settle.
+            extra_configs="$extra_configs CONFIG_USB_HOST_EXT_PORT_RESET_RECOVERY_DELAY_MS=100"
         fi
 	fi
 
