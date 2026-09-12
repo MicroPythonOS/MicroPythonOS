@@ -1,0 +1,219 @@
+diff --git a/components/usb/enum.c b/components/usb/enum.c
+index fc93a38f..f9dd0f30 100644
+--- a/components/usb/enum.c
++++ b/components/usb/enum.c
+@@ -298,7 +298,7 @@ static esp_err_t second_reset_request(void)
+  * @param[out] index    String index
+  * @param[out] langid   String langid
+  */
+-static inline void get_index_langid_for_stage(enum_stage_t stage, uint8_t *index, uint16_t *langid)
++static inline bool get_index_langid_for_stage(enum_stage_t stage, uint8_t *index, uint16_t *langid)
+ {
+     switch (stage) {
+     case ENUM_STAGE_GET_SHORT_LANGID_TABLE:
+@@ -322,10 +322,13 @@ static inline void get_index_langid_for_stage(enum_stage_t stage, uint8_t *index
+         *langid = ENUM_LANGID;  // Use the default LANGID
+         break;
+     default:
+-        // Should not occur
+-        abort();
+-        break;
++        // Corrupt stage (e.g. surprise removal racing enumeration):
++        // abandon this device instead of aborting the board.
++        ESP_LOGE(ENUM_TAG, "unexpected stage %d, cancelling enumeration", (int)stage);
++        p_enum_driver->single_thread.stage = ENUM_STAGE_CANCEL;
++        return false;
+     }
++    return true;
+ }
+ 
+ /**
+@@ -335,7 +338,7 @@ static inline void get_index_langid_for_stage(enum_stage_t stage, uint8_t *index
+  *
+  * @param[in] stage  Enumeration stage
+  */
+-static void control_request_general(enum_stage_t stage)
++static bool control_request_general(enum_stage_t stage)
+ {
+     usb_transfer_t *transfer = &p_enum_driver->constant.urb->transfer;
+     uint8_t ctrl_ep_mps = p_enum_driver->single_thread.dev_params.bMaxPacketSize0;
+@@ -390,11 +393,13 @@ static void control_request_general(enum_stage_t stage)
+         break;
+     }
+     default:
+-        // Should never occur
++        // Corrupt stage: abandon the enumeration instead of aborting.
++        ESP_LOGE(ENUM_TAG, "unexpected stage %d, cancelling enumeration", (int)stage);
+         p_enum_driver->single_thread.expect_num_bytes = 0;
+-        abort();
+-        break;
++        p_enum_driver->single_thread.stage = ENUM_STAGE_CANCEL;
++        return false;
+     }
++    return true;
+ }
+ 
+ /**
+@@ -404,7 +409,7 @@ static void control_request_general(enum_stage_t stage)
+  *
+  * @param[in] stage  Enumeration stage
+  */
+-static void control_request_string(enum_stage_t stage)
++static bool control_request_string(enum_stage_t stage)
+ {
+     usb_transfer_t *transfer = &p_enum_driver->constant.urb->transfer;
+     uint8_t ctrl_ep_mps = p_enum_driver->single_thread.dev_params.bMaxPacketSize0;
+@@ -412,7 +417,9 @@ static void control_request_string(enum_stage_t stage)
+     uint8_t index = 0;
+     uint16_t langid = 0;
+ 
+-    get_index_langid_for_stage(stage, &index, &langid);
++    if (!get_index_langid_for_stage(stage, &index, &langid)) {
++        return false;
++    }
+ 
+     switch (stage) {
+     case ENUM_STAGE_GET_SHORT_LANGID_TABLE:
+@@ -438,11 +445,13 @@ static void control_request_string(enum_stage_t stage)
+         break;
+     }
+     default:
+-        // Should never occur
++        // Corrupt stage: abandon the enumeration instead of aborting.
++        ESP_LOGE(ENUM_TAG, "unexpected stage %d, cancelling enumeration", (int)stage);
+         p_enum_driver->single_thread.expect_num_bytes = 0;
+-        abort();
+-        break;
++        p_enum_driver->single_thread.stage = ENUM_STAGE_CANCEL;
++        return false;
+     }
++    return true;
+ }
+ 
+ /**
+@@ -673,8 +682,8 @@ static inline int get_str_index(enum_stage_t stage)
+     default:
+         break;
+     }
+-    // Should never occurred
+-    abort();
++    // Corrupt stage: fail the parse so the state machine cancels.
++    ESP_LOGE(ENUM_TAG, "unexpected stage %d, cancelling enumeration", (int)stage);
+     return -1;
+ }
+ 
+@@ -689,7 +698,11 @@ static esp_err_t parse_full_str_desc(void)
+     usb_device_handle_t dev_hdl = p_enum_driver->single_thread.dev_hdl;
+     const usb_str_desc_t *str_desc = (usb_str_desc_t *)(transfer->data_buffer + sizeof(usb_setup_packet_t));
+ 
+-    return usbh_dev_set_str_desc(dev_hdl, str_desc, get_str_index(p_enum_driver->single_thread.stage));
++    int index = get_str_index(p_enum_driver->single_thread.stage);
++    if (index < 0) {
++        return ESP_FAIL;
++    }
++    return usbh_dev_set_str_desc(dev_hdl, str_desc, index);
+ }
+ 
+ static esp_err_t check_config(void)
+@@ -720,7 +733,9 @@ static esp_err_t control_request(enum_stage_t stage)
+     case ENUM_STAGE_GET_SHORT_CONFIG_DESC:
+     case ENUM_STAGE_GET_FULL_CONFIG_DESC:
+     case ENUM_STAGE_SET_CONFIG:
+-        control_request_general(stage);
++        if (!control_request_general(stage)) {
++            return ESP_ERR_INVALID_STATE;
++        }
+         break;
+     case ENUM_STAGE_GET_SHORT_LANGID_TABLE:
+     case ENUM_STAGE_GET_FULL_LANGID_TABLE:
+@@ -730,12 +745,16 @@ static esp_err_t control_request(enum_stage_t stage)
+     case ENUM_STAGE_GET_FULL_PROD_STR_DESC:
+     case ENUM_STAGE_GET_SHORT_SER_STR_DESC:
+     case ENUM_STAGE_GET_FULL_SER_STR_DESC:
+-        control_request_string(stage);
+-        break;
+-    default:    // Should never occur
+-        ret = ESP_ERR_INVALID_STATE;
+-        abort();
++        if (!control_request_string(stage)) {
++            return ESP_ERR_INVALID_STATE;
++        }
+         break;
++    default:    // Corrupt stage: skip the transfer, fail the stage.
++                // The state machine routes failures to CANCEL, and the
++                // stage was already normalized to CANCEL above.
++        ESP_LOGE(ENUM_TAG, "unexpected stage %d, cancelling enumeration", (int)stage);
++        p_enum_driver->single_thread.stage = ENUM_STAGE_CANCEL;
++        return ESP_ERR_INVALID_STATE;
+     }
+ 
+     ret = usbh_dev_submit_ctrl_urb(p_enum_driver->single_thread.dev_hdl, p_enum_driver->constant.urb);
+@@ -831,9 +850,10 @@ static esp_err_t control_response_handling(enum_stage_t stage)
+         ret = parse_full_str_desc();
+         break;
+     default:
+-        // Should never occurred
++        // Corrupt stage: fail so the state machine cancels.
++        ESP_LOGE(ENUM_TAG, "unexpected stage %d, cancelling enumeration", (int)stage);
++        p_enum_driver->single_thread.stage = ENUM_STAGE_CANCEL;
+         ret = ESP_ERR_INVALID_STATE;
+-        abort();
+         break;
+     }
+ 
+@@ -1021,14 +1041,9 @@ static bool set_next_stage(bool last_stage_pass)
+                 next_stage = last_stage + 1;
+             }
+         } else {
+-            // These stages cannot fail
+-            assert(last_stage != ENUM_STAGE_SET_ADDR_RECOVERY &&
+-                   last_stage != ENUM_STAGE_SELECT_CONFIG &&
+-                   last_stage != ENUM_STAGE_SECOND_RESET &&
+-                   last_stage != ENUM_STAGE_SECOND_RESET_COMPLETE &&
+-                   last_stage != ENUM_STAGE_COMPLETE &&
+-                   last_stage != ENUM_STAGE_CANCEL);
+-
++            // (No assert here: after surprise removal the stage value
++            // itself may be corrupt and name any of these. All paths
++            // below handle arbitrary values.)
+             // Last stage failed
+             switch (last_stage) {
+             // Stages that are allowed to fail skip to the next appropriate stage
+@@ -1052,15 +1067,18 @@ static bool set_next_stage(bool last_stage_pass)
+                 break;
+             case ENUM_STAGE_COMPLETE:
+             case ENUM_STAGE_CANCEL:
+-                // These stages should never fail
+-                abort();
++                // Terminal stages report failure only on corrupt input.
++                ESP_LOGE(ENUM_TAG, "terminal stage failed, cancelling enumeration");
++                next_stage = ENUM_STAGE_CANCEL;
+                 break;
+             default:
+                 // Stage is not allowed to failed. Cancel enumeration.
+-                ESP_LOGE(ENUM_TAG, "[%d:%d] %s FAILED",
++                // (Numeric stage: the value may be corrupt after surprise
++                // removal, so the name table must not be indexed with it.)
++                ESP_LOGE(ENUM_TAG, "[%d:%d] stage %d FAILED",
+                          p_enum_driver->single_thread.parent_dev_addr,
+                          p_enum_driver->single_thread.parent_port_num,
+-                         enum_stage_strings[last_stage]);
++                         (int)last_stage);
+                 next_stage = ENUM_STAGE_CANCEL;
+                 break;
+             }
+@@ -1371,8 +1389,12 @@ esp_err_t enum_process(void)
+         res = stage_complete();
+         break;
+     default:
+-        // Should never occur
+-        abort();
++        // Corrupt stage (e.g. surprise removal racing enumeration):
++        // run the cancel path instead of aborting the board.
++        ESP_LOGE(ENUM_TAG, "unexpected stage %d, cancelling enumeration",
++                 (int)stage);
++        p_enum_driver->single_thread.stage = ENUM_STAGE_CANCEL;
++        res = stage_cancel();
+         break;
+     }
+ 

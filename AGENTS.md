@@ -254,6 +254,7 @@ Critical gotchas:
 - Bug at commit Y, worked at X: `git diff X..Y --name-only`, then trace every changed line. Don't assume the bug is in the most recent file.
 - PTY I/O error (`OSError 5`) = binary crash. 139=SIGSEGV, 134=SIGABRT. Run binary directly with `-c` to reproduce.
 - Trust visual reality over code intent with UI bugs. Use `mpos.get_widget_tree()` to inspect actual coordinates.
+- A crash is ALWAYS a bug: fix the crash site first, work around it second — never avoidance alone. "Upstream code" is not immunity: this repo already patches IDF (`patches/*.patch` via `build_mpos.sh`), and a decodeable PC (`xtensa-*-elf-addr2line -e <elf>`) turns a mystery abort into a patchable line. Avoidance is only acceptable together with a fix attempt, or when the crash is in upstream code AND the workaround is genuinely easy (no permanent UX tax).
 
 ## Apps & docs
 

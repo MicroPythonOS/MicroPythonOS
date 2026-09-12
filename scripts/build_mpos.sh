@@ -215,6 +215,16 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/lvgl "$codebasedir"/lvgl_micropy
 echo "Applying lib/esp-idf USB ext-port settle patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/usb_ext_port_settle.patch
 
+# USB enumerator robustness: IDF's enum.c aborts the whole board on any
+# "impossible" stage value (8 sites), but surprise removal racing an
+# enumeration corrupts the single-thread stage (proven by identical
+# abort() crash dumps at enum.c control_request_string on hub replug).
+# Downgrade every site to log + cancel-device instead. Same repo
+# patch-file convention as above; aborts in other usb/ files are left
+# alone (none observed in the field).
+echo "Applying lib/esp-idf USB enum no-abort patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/usb_enum_no_abort.patch
+
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
 # Pre-existence check so MPOS still builds against older pinned
