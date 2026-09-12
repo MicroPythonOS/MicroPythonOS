@@ -246,40 +246,47 @@ static mp_obj_t usbdisp_force_reenum(mp_obj_t self_in) {
     return mp_const_none;
 }
 
-// hub_ports() - [(hub_addr, port, connected, enabled), ...] for every
-// external-hub port on the bus. Read-only standard hub requests; safe
-// to call any time. A port stuck at (connected=True, enabled=False) is
-// one the IDF stack gave up on (single-shot enumeration of a
-// still-booting device) - reset_port() it or wait for the watchdog.
+// hub_ports() - [(hub_addr, port, connected, enabled, high_speed), ...]
+// for every external-hub port on the bus. Read-only standard hub
+// requests; safe to call any time. A port stuck at (connected=True,
+// enabled=False) is one the IDF stack gave up on (single-shot
+// enumeration of a still-booting device) - reset_port() it or wait
+// for the watchdog. high_speed ports (hub-to-hub uplinks) are never
+// auto-reset: resetting one drops the whole subtree and crashes the
+// IDF enumerator (abort in enum.c control_request_string).
 static mp_obj_t mp_usb_disp_hub_ports_fn(void) {
     usb_disp_hub_port_t ports[32];
     uint8_t n = usb_disp_hal_hub_ports(ports, (uint8_t)sizeof(ports) / sizeof(ports[0]));
     mp_obj_t list = mp_obj_new_list(0, NULL);
     for (uint8_t i = 0; i < n; i++) {
-        mp_obj_t t[4];
+        mp_obj_t t[5];
         t[0] = mp_obj_new_int(ports[i].hub_addr);
         t[1] = mp_obj_new_int(ports[i].port);
         t[2] = mp_obj_new_bool(ports[i].connected);
         t[3] = mp_obj_new_bool(ports[i].enabled);
-        mp_obj_list_append(list, mp_obj_new_tuple(4, t));
+        t[4] = mp_obj_new_bool(ports[i].high_speed);
+        mp_obj_list_append(list, mp_obj_new_tuple(5, t));
     }
     return list;
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_disp_hub_ports_obj, mp_usb_disp_hub_ports_fn);
 
-// reset_port(hub_addr, port, power_cycle=False) - re-enumerate one hub
-// port without touching the rest of the chain. PORT_RESET (default)
-// keeps VBUS up, so an already-booted device enumerates immediately;
-// power_cycle=True drops VBUS for ~300ms first (stronger, but slow and
-// may drop sibling ports on ganged-power hubs). Manual recovery for a
-// wedged port; the watchdog does the reset variant automatically.
+// reset_port(hub_addr, port, power_cycle=False, force=False) - re-enumerate
+// one hub port without touching the rest of the chain. PORT_RESET
+// (default) keeps VBUS up, so an already-booted device enumerates
+// immediately; power_cycle=True drops VBUS for ~300ms first (stronger,
+// but slow and may drop sibling ports on ganged-power hubs).
+// High-speed ports (hub-to-hub uplinks) are refused unless force=True:
+// resetting one drops the whole subtree and crashes the IDF enumerator.
+// Manual recovery for a wedged port.
 static mp_obj_t mp_usb_disp_reset_port_fn(size_t n_args, const mp_obj_t *args) {
     uint8_t hub_addr = (uint8_t)mp_obj_get_int(args[0]);
     uint8_t port = (uint8_t)mp_obj_get_int(args[1]);
     bool power_cycle = (n_args > 2) && mp_obj_is_true(args[2]);
-    return mp_obj_new_bool(usb_disp_hal_reset_hub_port(hub_addr, port, power_cycle));
+    bool force = (n_args > 3) && mp_obj_is_true(args[3]);
+    return mp_obj_new_bool(usb_disp_hal_reset_hub_port(hub_addr, port, power_cycle, force));
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_disp_reset_port_obj, 2, 3, mp_usb_disp_reset_port_fn);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_disp_reset_port_obj, 2, 4, mp_usb_disp_reset_port_fn);
 
 // set_watchdog(on) - enable/disable the hub-port watchdog (default on).
 // The watchdog only acts while no display is attached; healthy ports
@@ -290,16 +297,6 @@ static mp_obj_t mp_usb_disp_set_watchdog_fn(mp_obj_t on_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_watchdog_obj, mp_usb_disp_set_watchdog_fn);
 
-// set_auto_reset_idle(on) - toggle automatic single PORT_RESET of ports
-// that sit enabled-but-unaddressed past the quiet grace (default on).
-// Bounded to one reset per plug; healthy devices are unaffected (their
-// address appears first and closes the episode).
-static mp_obj_t mp_usb_disp_set_auto_reset_idle_fn(mp_obj_t on_in) {
-    usb_disp_hal_set_auto_reset_idle(mp_obj_is_true(on_in));
-    return mp_const_none;
-}
-static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_auto_reset_idle_obj, mp_usb_disp_set_auto_reset_idle_fn);
-
 static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_usb_disp) },
     { MP_ROM_QSTR(MP_QSTR_USBDisp), MP_ROM_PTR(&mp_type_usbdisp) },
@@ -308,7 +305,6 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_hub_ports), MP_ROM_PTR(&mp_usb_disp_hub_ports_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset_port), MP_ROM_PTR(&mp_usb_disp_reset_port_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_watchdog), MP_ROM_PTR(&mp_usb_disp_set_watchdog_obj) },
-    { MP_ROM_QSTR(MP_QSTR_auto_reset_idle), MP_ROM_PTR(&mp_usb_disp_set_auto_reset_idle_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_disp_module_globals, usb_disp_module_globals_table);

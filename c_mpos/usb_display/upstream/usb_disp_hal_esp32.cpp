@@ -673,9 +673,12 @@ static void daemon_task(void *arg) {
 // they fire the device has finished booting, so re-enumeration
 // succeeds; the power cycle is the last resort for a latched port.
 // Enabled ports (healthy mouse/display, enumeration in progress) are
-// never touched. Change bits are NEVER cleared here: clearing
-// C_CONNECTION would steal the connect event from IDF's hub driver
-// and cause the very silence this fixes.
+// never touched. High-speed ports are never touched either: they carry
+// cascaded hubs, and resetting one drops the whole subtree, which the
+// IDF enumerator cannot survive (abort in enum.c control_request_string
+// on the resulting error cascade). Change bits are NEVER cleared here:
+// clearing C_CONNECTION would steal the connect event from IDF's hub
+// driver and cause the very silence this fixes.
 // Every transition and action is logged ([HUB] lines) with the
 // per-port counters, so recovery state is always visible on serial.
 // ---------------------------------------------------------------
@@ -686,7 +689,8 @@ static void daemon_task(void *arg) {
 #define USB_DISP_HUB_WD_RESETS 3       // port resets before power cycle
 #define USB_DISP_HUB_WD_PC_GRACE_MS 8000  // power cycle -> give-up verdict
 #define USB_DISP_HUB_WD_RETRY_MS 4000     // hub comm failure -> retry sweep
-#define USB_DISP_HUB_WD_QUIET_MS 15000    // idle port -> one auto-reset due
+#define USB_DISP_HUB_WD_BUS_SETTLE_MS 10000  // hub first seen -> dues allowed
+#define USB_DISP_HUB_WD_DEFER_MS 3000     // bus growth -> push dues out
 #define USB_DISP_HUB_WD_SWEEP_MS 1000     // min interval between sweeps
 #define USB_DISP_HUB_CTRL_MS 1500         // per-transfer timeout
 
@@ -708,6 +712,7 @@ static const uint16_t kHubWdBackoffMs[USB_DISP_HUB_WD_RESETS] = {
 #define USB_DISP_PORT_STAT_CONNECTION 0x0001
 #define USB_DISP_PORT_STAT_ENABLE 0x0002
 #define USB_DISP_PORT_CHG_CONNECTION 0x0001
+#define USB_DISP_PORT_STAT_HIGH_SPEED 0x0400
 
 typedef struct {
     bool occupied;
@@ -721,14 +726,17 @@ typedef struct {
     bool power_cycled[USB_DISP_HUB_MAX_PORTS];     // vbus cycle spent
     bool given_up[USB_DISP_HUB_MAX_PORTS];         // silent until flap
     bool noted[USB_DISP_HUB_MAX_PORTS];            // idle hint logged
-    bool quiet[USB_DISP_HUB_MAX_PORTS];            // idle auto-reset episode
-    bool quiet_done[USB_DISP_HUB_MAX_PORTS];       // idle reset spent
+    uint8_t cerr;                                  // consecutive hub failures
+    uint8_t backoffs;                              // breaker trips this lifetime
+    uint32_t skip_until;                           // breaker backoff deadline
+    uint32_t born_ms;                              // first sweep seeing hub
 } hub_wd_t;
 
 static hub_wd_t s_hub_wd[USB_DISP_HUB_WD_MAX];
 static bool s_watchdog_on = true;
-static bool s_auto_reset_idle = true;
 static uint32_t s_hub_wd_last_ms = 0;
+static int s_hub_wd_prev_n = -1;
+static uint32_t s_hub_wd_last_growth_ms = 0;
 static SemaphoreHandle_t s_hub_mutex = NULL;
 static SemaphoreHandle_t s_hub_done = NULL;
 
@@ -826,7 +834,8 @@ static uint8_t hub_port_count(uint8_t hub_addr) {
 
 // Read-only port status. Never clears change bits (see banner above).
 static bool hub_port_status(uint8_t hub_addr, uint8_t port, bool *connected,
-                            bool *enabled, bool *conn_change) {
+                            bool *enabled, bool *conn_change,
+                            bool *high_speed) {
     uint8_t buf[4] = {0};
     uint16_t actual = 0;
     if (!hub_ctrl(hub_addr, 0xA3, USB_DISP_REQ_GET_STATUS, 0, port, buf, 4,
@@ -839,6 +848,7 @@ static bool hub_port_status(uint8_t hub_addr, uint8_t port, bool *connected,
     *connected = (st & USB_DISP_PORT_STAT_CONNECTION) != 0;
     *enabled = (st & USB_DISP_PORT_STAT_ENABLE) != 0;
     *conn_change = (ch & USB_DISP_PORT_CHG_CONNECTION) != 0;
+    *high_speed = (st & USB_DISP_PORT_STAT_HIGH_SPEED) != 0;
     return true;
 }
 
@@ -873,8 +883,6 @@ static void wd_port_clear(hub_wd_t *slot, uint8_t idx) {
     slot->given_up[idx] = false;
     slot->n_at_open[idx] = 0;
     slot->noted[idx] = false;
-    slot->quiet[idx] = false;
-    slot->quiet_done[idx] = false;
 }
 
 static void wd_port_closed(hub_wd_t *slot, uint8_t idx, uint8_t addr,
@@ -901,6 +909,10 @@ static void hub_watchdog_step(void) {
         ESP_OK) {
         return;
     }
+    if (s_hub_wd_prev_n >= 0 && n > s_hub_wd_prev_n) {
+        s_hub_wd_last_growth_ms = now;
+    }
+    s_hub_wd_prev_n = n;
 
     for (int i = 0; i < n; i++) {
         uint8_t addr = addrs[i];
@@ -920,23 +932,45 @@ static void hub_watchdog_step(void) {
             memset(free_slot, 0, sizeof(*free_slot));
             free_slot->occupied = true;
             free_slot->hub_addr = addr;
+            free_slot->born_ms = now;
             slot = free_slot;
         }
         if (slot->nports == 0) {
             slot->nports = hub_port_count(addr);
-            if (slot->nports == 0) continue;  // not a hub / comm failure
+            if (slot->nports == 0) continue;  // not a hub (or not yet
+                                              // readable); retry next sweep
             usb_disp_log("[HUB] addr=%u ports=%u", addr, slot->nports);
         }
-        for (uint8_t port = 1; port <= slot->nports; port++) {
+        if (slot->skip_until != 0) {
+            if ((int32_t)(now - slot->skip_until) < 0) continue;
+            slot->skip_until = 0;
+        }
+        bool hub_ok = true;
+        if (hub_ok) for (uint8_t port = 1; port <= slot->nports; port++) {
             uint8_t idx = (uint8_t)(port - 1);
-            bool conn = false, en = false, cchg = false;
-            if (!hub_port_status(addr, port, &conn, &en, &cchg)) continue;
+            bool conn = false, en = false, cchg = false, hs = false;
+            if (!hub_port_status(addr, port, &conn, &en, &cchg, &hs)) {
+                hub_ok = false;
+                continue;
+            }
             bool episode = (slot->stuck_since[idx] != 0 ||
                             slot->attempts[idx] != 0 ||
                             slot->power_cycled[idx] || slot->given_up[idx]);
             if (!conn) {
                 if (episode) wd_port_closed(slot, idx, addr, port, now, "unplugged");
                 else wd_port_clear(slot, idx);
+                continue;
+            }
+            if (hs) {
+                if (episode && !slot->given_up[idx]) {
+                    slot->given_up[idx] = true;
+                    usb_disp_log("[HUB] addr=%u port=%u high-speed device, skipping",
+                                 addr, port);
+                } else if (!slot->noted[idx]) {
+                    slot->noted[idx] = true;
+                    usb_disp_log("[HUB] addr=%u port=%u high-speed device, skipping",
+                                 addr, port);
+                }
                 continue;
             }
             if (episode && n != slot->n_at_open[idx]) {
@@ -950,19 +984,10 @@ static void hub_watchdog_step(void) {
                                  "(reset_port(%u,%u) if stuck)",
                                  addr, port, addr, port);
                 }
-                if (s_auto_reset_idle && !slot->quiet_done[idx]) {
-                    slot->stuck_since[idx] = now;
-                    slot->n_at_open[idx] = (uint8_t)n;
-                    slot->quiet[idx] = true;
-                    slot->next_due[idx] = now + USB_DISP_HUB_WD_QUIET_MS;
-                    usb_disp_log("[HUB] addr=%u port=%u idle, auto-reset in "
-                                 "%us",
-                                 addr, port,
-                                 USB_DISP_HUB_WD_QUIET_MS / 1000);
-                }
                 continue;
             }
             if (slot->given_up[idx]) continue;
+            if (!episode && en) continue;
             if (slot->stuck_since[idx] == 0) {
                 slot->stuck_since[idx] = now;
                 slot->attempts[idx] = 0;
@@ -974,15 +999,14 @@ static void hub_watchdog_step(void) {
                 continue;
             }
             if ((int32_t)(now - slot->next_due[idx]) < 0) continue;
-            if (slot->quiet[idx]) {
-                usb_disp_log("[HUB] addr=%u port=%u idle reset (stuck %lus)",
-                             addr, port,
-                             (unsigned long)((now - slot->stuck_since[idx]) /
-                                             1000));
-                bool ok = hub_reset_port(addr, port, false);
-                wd_port_closed(slot, idx, addr, port, now,
-                               ok ? "idle reset done" : "idle reset FAILED");
-                slot->quiet_done[idx] = true;
+            if ((int32_t)(now - s_hub_wd_last_growth_ms) <
+                USB_DISP_HUB_WD_DEFER_MS) {
+                slot->next_due[idx] = now + USB_DISP_HUB_WD_DEFER_MS;
+                continue;
+            }
+            if ((int32_t)(now - slot->born_ms) < USB_DISP_HUB_WD_BUS_SETTLE_MS) {
+                slot->next_due[idx] =
+                    slot->born_ms + USB_DISP_HUB_WD_BUS_SETTLE_MS;
                 continue;
             }
             unsigned long stuck_s =
@@ -1015,6 +1039,26 @@ static void hub_watchdog_step(void) {
                              addr, port, slot->attempts[idx]);
             }
         }
+        if (hub_ok) {
+            if (slot->cerr > 5) {
+                usb_disp_log("[HUB] addr=%u responsive again", addr);
+            }
+            slot->cerr = 0;
+            slot->backoffs = 0;
+        } else {
+            if (slot->cerr < 255) slot->cerr++;
+            if (slot->cerr > 5 && slot->skip_until == 0 && slot->backoffs < 3) {
+                slot->backoffs++;
+                uint32_t wait_ms = (slot->backoffs == 1) ? 30000
+                    : (slot->backoffs == 2) ? 60000 : 120000;
+                slot->skip_until = now + wait_ms;
+                usb_disp_log("[HUB] addr=%u errors, backing off %lus", addr,
+                             (unsigned long)(wait_ms / 1000));
+            } else if (slot->cerr > 5 && slot->skip_until == 0) {
+                slot->skip_until = now + 120000;
+                usb_disp_log("[HUB] addr=%u still dead, quiet 120s", addr);
+            }
+        }
     }
 
     // Age out hubs that left the bus (unplugged chain).
@@ -1044,12 +1088,13 @@ uint8_t usb_disp_hal_hub_ports(usb_disp_hub_port_t *out, uint8_t max) {
         uint8_t nports = hub_port_count(addrs[i]);
         if (nports == 0) continue;
         for (uint8_t port = 1; port <= nports && count < max; port++) {
-            bool conn = false, en = false, cchg = false;
-            if (!hub_port_status(addrs[i], port, &conn, &en, &cchg)) continue;
+            bool conn = false, en = false, cchg = false, hs = false;
+            if (!hub_port_status(addrs[i], port, &conn, &en, &cchg, &hs)) continue;
             out[count].hub_addr = addrs[i];
             out[count].port = port;
             out[count].connected = conn;
             out[count].enabled = en;
+            out[count].high_speed = hs;
             count++;
         }
     }
@@ -1057,18 +1102,24 @@ uint8_t usb_disp_hal_hub_ports(usb_disp_hub_port_t *out, uint8_t max) {
 }
 
 bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
-                                 bool power_cycle) {
+                                 bool power_cycle, bool force) {
     if (port == 0 || port > USB_DISP_HUB_MAX_PORTS) return false;
+    bool conn = false, en = false, cchg = false, hs = false;
+    if (hub_port_status(hub_addr, port, &conn, &en, &cchg, &hs) && hs &&
+        !force) {
+        usb_disp_log("[HUB] addr=%u port=%u high-speed device, refusing reset",
+                     hub_addr, port);
+        return false;
+    }
+    if (force && hs) {
+        usb_disp_log("[HUB] addr=%u port=%u FORCED reset", hub_addr, port);
+    }
     return hub_reset_port(hub_addr, port, power_cycle);
 }
 
 void usb_disp_hal_set_watchdog(bool on) { s_watchdog_on = on; }
 
 bool usb_disp_hal_watchdog(void) { return s_watchdog_on; }
-
-void usb_disp_hal_set_auto_reset_idle(bool on) { s_auto_reset_idle = on; }
-
-bool usb_disp_hal_auto_reset_idle(void) { return s_auto_reset_idle; }
 
 // ---------------------------------------------------------------
 // HAL インターフェース実装
@@ -1164,8 +1215,19 @@ void usb_disp_hal_poll(usb_disp_hal_t *h) {
     }
     // Hub-port watchdog: heal ports the stack gave up on (single-shot
     // enumeration of a still-booting device). Only while our display is
-    // detached, so healthy ports are never at risk.
-    if (s_watchdog_on && !h->attached) {
+    // detached, so healthy ports are never at risk. Attached: drop all
+    // episode state so nothing stale can fire right after an unplug.
+    if (h->attached) {
+        for (uint8_t s = 0; s < USB_DISP_HUB_WD_MAX; s++) {
+            if (!s_hub_wd[s].occupied) continue;
+            uint8_t a = s_hub_wd[s].hub_addr;
+            uint8_t np = s_hub_wd[s].nports;
+            memset(&s_hub_wd[s], 0, sizeof(s_hub_wd[s]));
+            s_hub_wd[s].occupied = true;
+            s_hub_wd[s].hub_addr = a;
+            s_hub_wd[s].nports = np;
+        }
+    } else if (s_watchdog_on) {
         hub_watchdog_step();
     }
 }

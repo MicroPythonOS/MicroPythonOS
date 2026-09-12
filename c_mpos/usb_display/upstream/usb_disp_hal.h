@@ -89,10 +89,13 @@ void usb_disp_hal_request_reenum(usb_disp_hal_t *h);
 //     まで沈黙する。エピソードはバスアドレス数の増加でのみ「列挙
 //     済み」として閉じる (enabled ビットだけでは閉じない — 未割当の
 //     まま有効化される場合があるため)。有効なポート (正常動作中の
-//     機器・列挙処理中) には一切触れない。遷移と回数は [HUB] ログに
-//     常時出す。エピソード無しの enabled ポートは1回だけ pointer を
-//     出し、auto_reset_idle (既定 on) なら 15s 後に PORT_RESET を plug
-//     毎に1回だけ自動実行する (power cycle なし)。
+//     機器・列挙処理中) と High-Speed ポート (下流ハブ。リセットで
+//     サブツリーごと落ち IDF が abort する) には一切触れない。接続
+//     中はエピソード状態を捨てる。連続失敗するハブは 30s 休む。
+//     遷移と回数は [HUB] ログに常時出す。エピソード無しの enabled
+//     ポートは1回だけ pointer を出し、自動では触れない (idle ポートの
+//     自動リセットは uplink のハブを道連れにし得るため — 手動の
+//     reset_port() を使うこと)。
 //     set_watchdog(false) で停止できる (既定 = 有効)。
 //   - reset_hub_port: 同じ操作の手動版。power_cycle が真なら VBUS を
 //     落として入れ直す (確実だが低速。ganged-power ハブでは sibling
@@ -103,16 +106,13 @@ typedef struct {
     uint8_t port;       // ハブ相対ポート番号 (1 始まり)
     bool connected;     // デバイスが接続しているか
     bool enabled;       // ポートが有効か (wedged 状態では false)
+    bool high_speed;    // High-Speed 機器 (ハブ同士の接続等)
 } usb_disp_hub_port_t;
 uint8_t usb_disp_hal_hub_ports(usb_disp_hub_port_t *out, uint8_t max);
 bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
-                                 bool power_cycle);
+                                 bool power_cycle, bool force);
 void usb_disp_hal_set_watchdog(bool on);
 bool usb_disp_hal_watchdog(void);
-void usb_disp_hal_set_auto_reset_idle(bool on);
-bool usb_disp_hal_auto_reset_idle(void);
-void usb_disp_hal_set_auto_reset_idle(bool on);
-bool usb_disp_hal_auto_reset_idle(void);
 
 // 単調ミリ秒カウンタ (コアのタイマー用)
 uint32_t usb_disp_hal_ms(void);

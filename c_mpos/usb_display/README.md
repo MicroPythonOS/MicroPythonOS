@@ -71,17 +71,25 @@ What it took to get hotplug / hot-unplug working, per level
   episode, "reset N/3 (stuck Ns)" / "power cycle (stuck Ns, N resets
   done)" narrate recovery, "enumerated/unplugged, episode over (stuck
   Ns, N resets[+power])" closes it. A port that reads enabled with no
-  episode gets one neutral pointer line naming its reset_port() call —
-  and, with auto_reset_idle (default on, usb_disp.auto_reset_idle()
-  toggles it at runtime), one automatic PORT_RESET after a 15s quiet
-  grace instead of staying manual-only. The quiet path is one-shot per
-  plug (never power-cycles, never repeats until unplug), and healthy
-  devices always address first and close the episode, so at most a
-  single self-healing blip can ever hit a non-display device. Manual equivalents for the REPL:
-  usb_disp.hub_ports() lists (hub_addr, port, connected, enabled) and
-  usb_disp.reset_port(hub_addr, port) re-enumerates one port without
-  disturbing the rest of the chain (unlike force_reenum's root-port
-  power cycle). usb_disp.set_watchdog(False) opts out.
+  episode gets one neutral pointer line naming its reset_port() call and
+  stays manual-only: idle auto-reset was tried and retired, because an
+  unchirped hub reads full-speed just like a stuck adapter, so auto
+  resets deafened hubs and once coincided with an in-flight enumeration
+  into the abort below. Episodes open on disabled ports only (fresh
+  flaps wait for the stack to attempt first); dues defer while the bus
+  is growing or the hub is younger than 10s, so resets never collide
+  with in-flight enumerations. High-speed ports are never auto-reset:
+  they carry cascaded hubs, and resetting one drops the whole subtree,
+  which aborts the IDF enumerator (control_request_string default arm)
+  and reboots the board — proven by four identical crash dumps. A hub
+  whose EP0 stays dead gets 30s/60s/120s backoffs, then a quiet 120s
+  probe rhythm instead of log spam. Manual equivalents for the REPL:
+  usb_disp.hub_ports() lists (hub_addr, port, connected, enabled, high_speed) and
+  usb_disp.reset_port(hub_addr, port[, power_cycle[, force]]) re-enumerates
+  one port without disturbing the rest of the chain (unlike force_reenum's
+  root-port power cycle); high-speed targets are refused unless
+  force=True (never use it on an uplink mid-enumeration).
+  usb_disp.set_watchdog(False) opts out.
 - Wait guidance (measured against a DL-195 that needs 1-2s to boot,
   longer when browned-out by rapid VBUS cycling): judge a plug only
   after ~5s hands-off (the watchdog heals slow boots by itself);
