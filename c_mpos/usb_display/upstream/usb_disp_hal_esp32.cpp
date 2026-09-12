@@ -730,14 +730,14 @@ typedef struct {
     bool power_cycled[USB_DISP_HUB_MAX_PORTS];     // vbus cycle spent
     bool given_up[USB_DISP_HUB_MAX_PORTS];         // silent until flap
     bool noted[USB_DISP_HUB_MAX_PORTS];            // idle hint logged
-    bool was_conn[USB_DISP_HUB_MAX_PORTS];         // conn observed last sweep
-    bool flapped[USB_DISP_HUB_MAX_PORTS];          // 1->0 seen, arms one shot
+    bool preexisting[USB_DISP_HUB_MAX_PORTS];      // idle since before last arm
     bool quiet[USB_DISP_HUB_MAX_PORTS];            // idle auto-reset episode
     bool quiet_done[USB_DISP_HUB_MAX_PORTS];       // idle reset spent
     uint8_t cerr;                                  // consecutive hub failures
     uint8_t backoffs;                              // breaker trips this lifetime
     uint32_t skip_until;                           // breaker backoff deadline
     uint32_t born_ms;                              // first sweep seeing hub
+    bool fresh;                                    // needs first-pass marking
 } hub_wd_t;
 
 static hub_wd_t s_hub_wd[USB_DISP_HUB_WD_MAX];
@@ -747,6 +747,45 @@ static uint32_t s_hub_wd_last_ms = 0;
 static int s_hub_wd_prev_n = -1;
 static uint32_t s_hub_wd_last_growth_ms = 0;
 static uint8_t s_escalations = 0;
+static bool s_snapshot_idle = false;
+static bool s_prev_attached = false;
+
+#define USB_DISP_HUB_PERF_MAX 4
+#define USB_DISP_HUB_CTRL_SLOW_MS 500
+typedef struct {
+    uint8_t addr;
+    uint8_t fails;
+} hub_perf_t;
+static hub_perf_t s_hub_perf[USB_DISP_HUB_PERF_MAX];
+
+static uint32_t hub_timeout_ms(uint8_t hub_addr) {
+    for (uint8_t i = 0; i < USB_DISP_HUB_PERF_MAX; i++) {
+        if (s_hub_perf[i].addr == hub_addr) {
+            return s_hub_perf[i].fails ? USB_DISP_HUB_CTRL_SLOW_MS
+                                       : USB_DISP_HUB_CTRL_MS;
+        }
+    }
+    return USB_DISP_HUB_CTRL_MS;
+}
+
+static void hub_perf_note(uint8_t hub_addr, bool ok) {
+    uint8_t free_idx = USB_DISP_HUB_PERF_MAX;
+    for (uint8_t i = 0; i < USB_DISP_HUB_PERF_MAX; i++) {
+        if (s_hub_perf[i].addr == hub_addr) {
+            s_hub_perf[i].fails = ok ? 0 : (s_hub_perf[i].fails < 255
+                                                 ? (uint8_t)(s_hub_perf[i].fails + 1)
+                                                 : 255);
+            return;
+        }
+        if (s_hub_perf[i].addr == 0 && free_idx == USB_DISP_HUB_PERF_MAX) {
+            free_idx = i;
+        }
+    }
+    if (free_idx < USB_DISP_HUB_PERF_MAX) {
+        s_hub_perf[free_idx].addr = hub_addr;
+        s_hub_perf[free_idx].fails = ok ? 0 : 1;
+    }
+}
 static SemaphoreHandle_t s_hub_mutex = NULL;
 static SemaphoreHandle_t s_hub_done = NULL;
 
@@ -802,7 +841,7 @@ static bool hub_ctrl(uint8_t hub_addr, uint8_t bmRequestType, uint8_t bRequest,
         x->context = s_hub_done;
         xSemaphoreTake(s_hub_done, 0);  // clear stale signal
         if (usb_host_transfer_submit_control(s_client, x) != ESP_OK) goto out;
-        if (xSemaphoreTake(s_hub_done, pdMS_TO_TICKS(USB_DISP_HUB_CTRL_MS)) !=
+        if (xSemaphoreTake(s_hub_done, pdMS_TO_TICKS(hub_timeout_ms(hub_addr))) !=
             pdTRUE) {
             goto out;
         }
@@ -824,6 +863,7 @@ static bool hub_ctrl(uint8_t hub_addr, uint8_t bmRequestType, uint8_t bRequest,
 out:
     if (x) usb_host_transfer_free(x);
     if (dev) usb_host_device_close(s_client, dev);
+    hub_perf_note(hub_addr, ok);
     xSemaphoreGive(s_hub_mutex);
     return ok;
 }
@@ -895,6 +935,7 @@ static void wd_port_clear(hub_wd_t *slot, uint8_t idx) {
     slot->noted[idx] = false;
     slot->quiet[idx] = false;
     slot->quiet_done[idx] = false;
+    slot->preexisting[idx] = false;
 }
 
 static void wd_port_closed(hub_wd_t *slot, uint8_t idx, uint8_t addr,
@@ -942,6 +983,11 @@ static void hub_escalate_maybe(void) {
 static void hub_watchdog_step(bool allow_actions) {
     uint32_t now = usb_disp_hal_ms();
     if ((int32_t)(now - s_hub_wd_last_ms) < USB_DISP_HUB_WD_SWEEP_MS) return;
+    if (s_hub_wd_last_ms != 0 &&
+        (uint32_t)(now - s_hub_wd_last_ms) > 3000) {
+        usb_disp_log("[HUB] sweep delayed %lus",
+                     (unsigned long)((now - s_hub_wd_last_ms) / 1000));
+    }
     s_hub_wd_last_ms = now;
 
     uint8_t addrs[16];
@@ -954,6 +1000,8 @@ static void hub_watchdog_step(bool allow_actions) {
         s_hub_wd_last_growth_ms = now;
     }
     s_hub_wd_prev_n = n;
+    bool snap = s_snapshot_idle;
+    s_snapshot_idle = false;
 
     for (int i = 0; i < n; i++) {
         uint8_t addr = addrs[i];
@@ -974,6 +1022,7 @@ static void hub_watchdog_step(bool allow_actions) {
             free_slot->occupied = true;
             free_slot->hub_addr = addr;
             free_slot->born_ms = now;
+            free_slot->fresh = true;
             slot = free_slot;
         }
         if (slot->nports == 0) {
@@ -994,8 +1043,12 @@ static void hub_watchdog_step(bool allow_actions) {
                 hub_ok = false;
                 continue;
             }
-            if (!conn && slot->was_conn[idx]) slot->flapped[idx] = true;
-            slot->was_conn[idx] = conn;
+            if (slot->fresh || snap) {
+                if (!conn) slot->preexisting[idx] = false;
+                else if (en && !cchg) slot->preexisting[idx] = true;
+            } else if (!conn) {
+                slot->preexisting[idx] = false;
+            }
             bool episode = (slot->stuck_since[idx] != 0 ||
                             slot->attempts[idx] != 0 ||
                             slot->power_cycled[idx] || slot->given_up[idx]);
@@ -1027,7 +1080,7 @@ static void hub_watchdog_step(bool allow_actions) {
                                  "(reset_port(%u,%u) if stuck)",
                                  addr, port, addr, port);
                 }
-                if (s_auto_reset_idle && slot->flapped[idx] &&
+                if (s_auto_reset_idle && !slot->preexisting[idx] &&
                     !slot->quiet_done[idx]) {
                     slot->stuck_since[idx] = now;
                     slot->n_at_open[idx] = (uint8_t)n;
@@ -1063,7 +1116,7 @@ static void hub_watchdog_step(bool allow_actions) {
                 wd_port_closed(slot, idx, addr, port, now,
                                ok ? "idle reset done" : "idle reset FAILED");
                 slot->quiet_done[idx] = true;
-                slot->flapped[idx] = false;
+                slot->preexisting[idx] = true;
                 continue;
             }
             if ((int32_t)(now - s_hub_wd_last_growth_ms) <
@@ -1112,6 +1165,7 @@ static void hub_watchdog_step(bool allow_actions) {
             }
             slot->cerr = 0;
             slot->backoffs = 0;
+            slot->fresh = false;
         } else {
             if (slot->cerr < 255) slot->cerr++;
             if (slot->cerr > 5 && slot->skip_until == 0 && slot->backoffs < 3) {
@@ -1288,8 +1342,14 @@ void usb_disp_hal_poll(usb_disp_hal_t *h) {
     }
     // Hub-port watchdog: tracking always runs (so unplugs are observed
     // even while attached); recovery actions only fire while detached.
+    // On the attached->detached edge, snapshot idle ports as preexisting
+    // (uplinks and steady residents); fresh replugs unmark themselves.
     if (s_watchdog_on) {
+        if (s_prev_attached && !h->attached) s_snapshot_idle = true;
+        s_prev_attached = h->attached;
         hub_watchdog_step(!h->attached);
+    } else {
+        s_prev_attached = h->attached;
     }
 }
 

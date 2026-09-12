@@ -297,15 +297,20 @@ static mp_obj_t mp_usb_disp_set_watchdog_fn(mp_obj_t on_in) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_watchdog_obj, mp_usb_disp_set_watchdog_fn);
 
-// set_auto_reset_idle(on) - toggle automatic single PORT_RESET of idle
-// ports that flapped (unplug observed) since boot (default on). One shot
-// per flap; healthy devices address first and close the episode, and
-// ports that never flapped (e.g. hub uplinks) are never touched.
-static mp_obj_t mp_usb_disp_set_auto_reset_idle_fn(mp_obj_t on_in) {
-    usb_disp_hal_set_auto_reset_idle(mp_obj_is_true(on_in));
+// set_auto_reset_idle([on]) - with no args, return the toggle state;
+// with an arg, toggle automatic single PORT_RESET of idle ports that
+// are not marked preexisting (default on). Marks are set for idle ports
+// seen at boot, hub plug, and display-unplug snapshots, and cleared by
+// any observed disconnect, so healthy uplinks are never selected while
+// replugged adapters heal without hands. One shot per mark cycle.
+static mp_obj_t mp_usb_disp_set_auto_reset_idle_fn(size_t n_args, const mp_obj_t *args) {
+    if (n_args == 0) {
+        return mp_obj_new_bool(usb_disp_hal_auto_reset_idle());
+    }
+    usb_disp_hal_set_auto_reset_idle(mp_obj_is_true(args[0]));
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_auto_reset_idle_obj, mp_usb_disp_set_auto_reset_idle_fn);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_disp_set_auto_reset_idle_obj, 0, 1, mp_usb_disp_set_auto_reset_idle_fn);
 
 static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_usb_disp) },

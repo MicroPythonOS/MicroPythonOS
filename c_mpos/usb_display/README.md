@@ -77,11 +77,14 @@ What it took to get hotplug / hot-unplug working, per level
   watchdog state naturally. A port that reads enabled with no
   episode gets one neutral pointer line naming its reset_port() call —
   and, with auto_reset_idle (default on, usb_disp.auto_reset_idle()
-  toggles it), one automatic PORT_RESET after a 15s grace, but only if
-  that port flapped (unplug observed) since boot: healthy uplinks never
-  flap, so they can never be selected, while a replugged adapter always
-  flaps first. One shot per flap; healthy devices address first and
-  close the episode. (An earlier blind version fired on any idle port
+  toggles it, bare call reads it back), one automatic PORT_RESET after
+  a 15s grace, but only if that port is not marked preexisting: marks
+  go onto idle ports at boot, hub plug, and display-unplug snapshots
+  (uplinks are always idle then), and any observed disconnect clears
+  them — so tracking works even when the unplug itself happens mid
+  display, with no dependence on catching the transient. One shot per
+  mark cycle; healthy devices address first and close the episode.
+  (An earlier blind version fired on any idle port
   and deafened hubs, because an unchirped hub reads full-speed just
   like a stuck adapter.) Episodes open on disabled ports only (fresh
   flaps wait for the stack to attempt first); dues defer while the bus
