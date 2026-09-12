@@ -113,6 +113,8 @@ bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
                                  bool power_cycle, bool force);
 void usb_disp_hal_set_watchdog(bool on);
 bool usb_disp_hal_watchdog(void);
+void usb_disp_hal_set_auto_reset_idle(bool on);
+bool usb_disp_hal_auto_reset_idle(void);
 
 // 単調ミリ秒カウンタ (コアのタイマー用)
 uint32_t usb_disp_hal_ms(void);

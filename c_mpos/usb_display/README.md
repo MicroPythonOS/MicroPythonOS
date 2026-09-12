@@ -75,11 +75,15 @@ What it took to get hotplug / hot-unplug working, per level
   automatic root power cycle (max 3 per boot, logged loudly) — proven
   to revive hubs nothing else touches; fresh addresses reset all
   watchdog state naturally. A port that reads enabled with no
-  episode gets one neutral pointer line naming its reset_port() call and
-  stays manual-only: idle auto-reset was tried and retired, because an
-  unchirped hub reads full-speed just like a stuck adapter, so auto
-  resets deafened hubs and once coincided with an in-flight enumeration
-  into the abort below. Episodes open on disabled ports only (fresh
+  episode gets one neutral pointer line naming its reset_port() call —
+  and, with auto_reset_idle (default on, usb_disp.auto_reset_idle()
+  toggles it), one automatic PORT_RESET after a 15s grace, but only if
+  that port flapped (unplug observed) since boot: healthy uplinks never
+  flap, so they can never be selected, while a replugged adapter always
+  flaps first. One shot per flap; healthy devices address first and
+  close the episode. (An earlier blind version fired on any idle port
+  and deafened hubs, because an unchirped hub reads full-speed just
+  like a stuck adapter.) Episodes open on disabled ports only (fresh
   flaps wait for the stack to attempt first); dues defer while the bus
   is growing or the hub is younger than 10s, so resets never collide
   with in-flight enumerations. High-speed ports are never auto-reset:

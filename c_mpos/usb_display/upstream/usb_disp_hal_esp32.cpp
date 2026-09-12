@@ -665,7 +665,9 @@ static void daemon_task(void *arg) {
 // a PC but wedges on ESP32 until the whole chain is replugged.
 //
 // This watchdog sweeps every external hub with standard, read-only
-// GET_PORT_STATUS requests and recovers ports that stay
+// GET_PORT_STATUS requests. Tracking runs on every poll, attached or
+// not, so unplugs are observed even mid-display; recovery actions
+// (resets, power cycles, escalation) fire only while detached.
 // connected-but-unenumerated: up to 3 SET_FEATURE(PORT_RESET)s with
 // growing backoff (~4s/~12s/~28s stuck time), then one PORT_POWER
 // off/on cycle, then silence until the connection flaps. The resets
@@ -689,6 +691,7 @@ static void daemon_task(void *arg) {
 #define USB_DISP_HUB_WD_RESETS 3       // port resets before power cycle
 #define USB_DISP_HUB_WD_PC_GRACE_MS 8000  // power cycle -> give-up verdict
 #define USB_DISP_HUB_WD_RETRY_MS 4000     // hub comm failure -> retry sweep
+#define USB_DISP_HUB_WD_QUIET_MS 15000    // flapped idle port -> one auto-reset
 #define USB_DISP_HUB_WD_BUS_SETTLE_MS 10000  // hub first seen -> dues allowed
 #define USB_DISP_HUB_WD_DEFER_MS 3000     // bus growth -> push dues out
 #define USB_DISP_HUB_WD_SWEEP_MS 1000     // min interval between sweeps
@@ -727,6 +730,10 @@ typedef struct {
     bool power_cycled[USB_DISP_HUB_MAX_PORTS];     // vbus cycle spent
     bool given_up[USB_DISP_HUB_MAX_PORTS];         // silent until flap
     bool noted[USB_DISP_HUB_MAX_PORTS];            // idle hint logged
+    bool was_conn[USB_DISP_HUB_MAX_PORTS];         // conn observed last sweep
+    bool flapped[USB_DISP_HUB_MAX_PORTS];          // 1->0 seen, arms one shot
+    bool quiet[USB_DISP_HUB_MAX_PORTS];            // idle auto-reset episode
+    bool quiet_done[USB_DISP_HUB_MAX_PORTS];       // idle reset spent
     uint8_t cerr;                                  // consecutive hub failures
     uint8_t backoffs;                              // breaker trips this lifetime
     uint32_t skip_until;                           // breaker backoff deadline
@@ -735,6 +742,7 @@ typedef struct {
 
 static hub_wd_t s_hub_wd[USB_DISP_HUB_WD_MAX];
 static bool s_watchdog_on = true;
+static bool s_auto_reset_idle = true;
 static uint32_t s_hub_wd_last_ms = 0;
 static int s_hub_wd_prev_n = -1;
 static uint32_t s_hub_wd_last_growth_ms = 0;
@@ -885,6 +893,8 @@ static void wd_port_clear(hub_wd_t *slot, uint8_t idx) {
     slot->given_up[idx] = false;
     slot->n_at_open[idx] = 0;
     slot->noted[idx] = false;
+    slot->quiet[idx] = false;
+    slot->quiet_done[idx] = false;
 }
 
 static void wd_port_closed(hub_wd_t *slot, uint8_t idx, uint8_t addr,
@@ -924,9 +934,12 @@ static void hub_escalate_maybe(void) {
     }
 }
 
-// One watchdog sweep over all hubs on the bus. Open (class-verified)
-// failures skip the hub for this round but keep its episode state.
-static void hub_watchdog_step(void) {
+// One watchdog sweep over all hubs on the bus. Tracking (status reads,
+// flap arms, episodes, breaker) always runs; recovery actions (resets,
+// power cycles, escalation) only run when allow_actions is set, i.e.
+// while no display is attached. Open (class-verified) failures skip the
+// hub for this round but keep its episode state.
+static void hub_watchdog_step(bool allow_actions) {
     uint32_t now = usb_disp_hal_ms();
     if ((int32_t)(now - s_hub_wd_last_ms) < USB_DISP_HUB_WD_SWEEP_MS) return;
     s_hub_wd_last_ms = now;
@@ -981,6 +994,8 @@ static void hub_watchdog_step(void) {
                 hub_ok = false;
                 continue;
             }
+            if (!conn && slot->was_conn[idx]) slot->flapped[idx] = true;
+            slot->was_conn[idx] = conn;
             bool episode = (slot->stuck_since[idx] != 0 ||
                             slot->attempts[idx] != 0 ||
                             slot->power_cycled[idx] || slot->given_up[idx]);
@@ -1012,6 +1027,17 @@ static void hub_watchdog_step(void) {
                                  "(reset_port(%u,%u) if stuck)",
                                  addr, port, addr, port);
                 }
+                if (s_auto_reset_idle && slot->flapped[idx] &&
+                    !slot->quiet_done[idx]) {
+                    slot->stuck_since[idx] = now;
+                    slot->n_at_open[idx] = (uint8_t)n;
+                    slot->quiet[idx] = true;
+                    slot->next_due[idx] = now + USB_DISP_HUB_WD_QUIET_MS;
+                    usb_disp_log("[HUB] addr=%u port=%u idle, auto-reset in "
+                                 "%us",
+                                 addr, port,
+                                 USB_DISP_HUB_WD_QUIET_MS / 1000);
+                }
                 continue;
             }
             if (slot->given_up[idx]) continue;
@@ -1027,6 +1053,19 @@ static void hub_watchdog_step(void) {
                 continue;
             }
             if ((int32_t)(now - slot->next_due[idx]) < 0) continue;
+            if (!allow_actions) continue;
+            if (slot->quiet[idx]) {
+                usb_disp_log("[HUB] addr=%u port=%u idle reset (stuck %lus)",
+                             addr, port,
+                             (unsigned long)((now - slot->stuck_since[idx]) /
+                                             1000));
+                bool ok = hub_reset_port(addr, port, false);
+                wd_port_closed(slot, idx, addr, port, now,
+                               ok ? "idle reset done" : "idle reset FAILED");
+                slot->quiet_done[idx] = true;
+                slot->flapped[idx] = false;
+                continue;
+            }
             if ((int32_t)(now - s_hub_wd_last_growth_ms) <
                 USB_DISP_HUB_WD_DEFER_MS) {
                 slot->next_due[idx] = now + USB_DISP_HUB_WD_DEFER_MS;
@@ -1082,11 +1121,11 @@ static void hub_watchdog_step(void) {
                 slot->skip_until = now + wait_ms;
                 usb_disp_log("[HUB] addr=%u errors, backing off %lus", addr,
                              (unsigned long)(wait_ms / 1000));
-                if (slot->backoffs >= 3) hub_escalate_maybe();
+                if (slot->backoffs >= 3 && allow_actions) hub_escalate_maybe();
             } else if (slot->cerr > 5 && slot->skip_until == 0) {
                 slot->skip_until = now + 120000;
                 usb_disp_log("[HUB] addr=%u still dead, quiet 120s", addr);
-                hub_escalate_maybe();
+                if (allow_actions) hub_escalate_maybe();
             }
         }
     }
@@ -1150,6 +1189,10 @@ bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
 void usb_disp_hal_set_watchdog(bool on) { s_watchdog_on = on; }
 
 bool usb_disp_hal_watchdog(void) { return s_watchdog_on; }
+
+void usb_disp_hal_set_auto_reset_idle(bool on) { s_auto_reset_idle = on; }
+
+bool usb_disp_hal_auto_reset_idle(void) { return s_auto_reset_idle; }
 
 // ---------------------------------------------------------------
 // HAL インターフェース実装
@@ -1243,22 +1286,10 @@ void usb_disp_hal_poll(usb_disp_hal_t *h) {
         h->pending_probe = false;
         probe_and_finish(h);
     }
-    // Hub-port watchdog: heal ports the stack gave up on (single-shot
-    // enumeration of a still-booting device). Only while our display is
-    // detached, so healthy ports are never at risk. Attached: drop all
-    // episode state so nothing stale can fire right after an unplug.
-    if (h->attached) {
-        for (uint8_t s = 0; s < USB_DISP_HUB_WD_MAX; s++) {
-            if (!s_hub_wd[s].occupied) continue;
-            uint8_t a = s_hub_wd[s].hub_addr;
-            uint8_t np = s_hub_wd[s].nports;
-            memset(&s_hub_wd[s], 0, sizeof(s_hub_wd[s]));
-            s_hub_wd[s].occupied = true;
-            s_hub_wd[s].hub_addr = a;
-            s_hub_wd[s].nports = np;
-        }
-    } else if (s_watchdog_on) {
-        hub_watchdog_step();
+    // Hub-port watchdog: tracking always runs (so unplugs are observed
+    // even while attached); recovery actions only fire while detached.
+    if (s_watchdog_on) {
+        hub_watchdog_step(!h->attached);
     }
 }
 
