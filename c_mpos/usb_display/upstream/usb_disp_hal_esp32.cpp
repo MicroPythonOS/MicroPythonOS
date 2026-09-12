@@ -693,6 +693,7 @@ static void daemon_task(void *arg) {
 #define USB_DISP_HUB_WD_DEFER_MS 3000     // bus growth -> push dues out
 #define USB_DISP_HUB_WD_SWEEP_MS 1000     // min interval between sweeps
 #define USB_DISP_HUB_CTRL_MS 1500         // per-transfer timeout
+#define USB_DISP_HUB_WD_ESCALATE_MAX 3    // auto root cycles per boot
 
 // Wait after reset N (1-based) before the next recovery step. A
 // browned-out adapter can need 10-20s, so the tail is long on purpose;
@@ -737,6 +738,7 @@ static bool s_watchdog_on = true;
 static uint32_t s_hub_wd_last_ms = 0;
 static int s_hub_wd_prev_n = -1;
 static uint32_t s_hub_wd_last_growth_ms = 0;
+static uint8_t s_escalations = 0;
 static SemaphoreHandle_t s_hub_mutex = NULL;
 static SemaphoreHandle_t s_hub_done = NULL;
 
@@ -894,6 +896,32 @@ static void wd_port_closed(hub_wd_t *slot, uint8_t idx, uint8_t addr,
                  slot->attempts[idx],
                  slot->power_cycled[idx] ? "+power" : "");
     wd_port_clear(slot, idx);
+}
+
+// Last-resort escalation: a dead-silent hub plus stuck ports means the
+// chain needs a root power cycle (proven to revive EP0-dead hubs that
+// nothing else touches). Only while detached, capped per boot; fresh
+// hub addresses after the cycle reset all watchdog state naturally.
+static void hub_escalate_maybe(void) {
+    bool stuck = false;
+    for (uint8_t s = 0; s < USB_DISP_HUB_WD_MAX && !stuck; s++) {
+        if (!s_hub_wd[s].occupied) continue;
+        for (uint8_t p = 0; p < USB_DISP_HUB_MAX_PORTS; p++) {
+            if (s_hub_wd[s].stuck_since[p] || s_hub_wd[s].given_up[p]) {
+                stuck = true;
+                break;
+            }
+        }
+    }
+    if (!stuck) return;
+    if (s_escalations < USB_DISP_HUB_WD_ESCALATE_MAX) {
+        s_escalations++;
+        usb_disp_log("[HUB] escalating: root power cycle (%u/%u this boot)",
+                     s_escalations, USB_DISP_HUB_WD_ESCALATE_MAX);
+        usb_disp_hal_request_reenum(&s_hal[0]);
+    } else {
+        usb_disp_log("[HUB] escalation budget spent, manual force_reenum() only");
+    }
 }
 
 // One watchdog sweep over all hubs on the bus. Open (class-verified)
@@ -1054,9 +1082,11 @@ static void hub_watchdog_step(void) {
                 slot->skip_until = now + wait_ms;
                 usb_disp_log("[HUB] addr=%u errors, backing off %lus", addr,
                              (unsigned long)(wait_ms / 1000));
+                if (slot->backoffs >= 3) hub_escalate_maybe();
             } else if (slot->cerr > 5 && slot->skip_until == 0) {
                 slot->skip_until = now + 120000;
                 usb_disp_log("[HUB] addr=%u still dead, quiet 120s", addr);
+                hub_escalate_maybe();
             }
         }
     }

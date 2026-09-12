@@ -70,7 +70,11 @@ What it took to get hotplug / hot-unplug working, per level
   ([HUB] lines) with per-port counters: "connected, waiting" opens an
   episode, "reset N/3 (stuck Ns)" / "power cycle (stuck Ns, N resets
   done)" narrate recovery, "enumerated/unplugged, episode over (stuck
-  Ns, N resets[+power])" closes it. A port that reads enabled with no
+  Ns, N resets[+power])" closes it. A dead-silent hub (EP0 unresponsive
+  through 30s/60s/120s backoffs) plus stuck ports escalates once to an
+  automatic root power cycle (max 3 per boot, logged loudly) — proven
+  to revive hubs nothing else touches; fresh addresses reset all
+  watchdog state naturally. A port that reads enabled with no
   episode gets one neutral pointer line naming its reset_port() call and
   stays manual-only: idle auto-reset was tried and retired, because an
   unchirped hub reads full-speed just like a stuck adapter, so auto
