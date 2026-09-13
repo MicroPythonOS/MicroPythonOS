@@ -456,6 +456,34 @@ static mp_obj_t mp_usb_hid_claimed_addrs_fn(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_claimed_addrs_obj, mp_usb_hid_claimed_addrs_fn);
 
+// hid_parked() - [(vid, pid, kind, fails), ...] devices whose setup keeps
+// failing and are parked (fails=255) or cooling down. Parked devices stay
+// silent until a bus topology change or hid_retry().
+static mp_obj_t mp_usb_hid_parked_fn(void) {
+    usb_hid_parked_t p[4];
+    uint8_t n = usb_hid_parked(p, 4);
+    mp_obj_t list = mp_obj_new_list(0, NULL);
+    for (uint8_t i = 0; i < n; i++) {
+        mp_obj_t t[4];
+        t[0] = mp_obj_new_int(p[i].vid);
+        t[1] = mp_obj_new_int(p[i].pid);
+        const char *kind = p[i].protocol == 2 ? "mouse" : "keyboard";
+        t[2] = mp_obj_new_str(kind, strlen(kind));
+        t[3] = mp_obj_new_int(p[i].fails);
+        mp_obj_list_append(list, mp_obj_new_tuple(4, t));
+    }
+    return list;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_parked_obj, mp_usb_hid_parked_fn);
+
+// hid_retry() - clear the parked/cooldown list and rescan now. Topology
+// changes (plug/unplug) re-arm automatically; this is the manual version.
+static mp_obj_t mp_usb_hid_retry_fn(void) {
+    usb_hid_retry();
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_retry_obj, mp_usb_hid_retry_fn);
+
 static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_usb_disp) },
     { MP_ROM_QSTR(MP_QSTR_USBDisp), MP_ROM_PTR(&mp_type_usbdisp) },
@@ -471,6 +499,8 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_hid_drain), MP_ROM_PTR(&mp_usb_hid_drain_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_state), MP_ROM_PTR(&mp_usb_hid_state_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_claimed_addrs), MP_ROM_PTR(&mp_usb_hid_claimed_addrs_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_parked), MP_ROM_PTR(&mp_usb_hid_parked_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_retry), MP_ROM_PTR(&mp_usb_hid_retry_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_disp_module_globals, usb_disp_module_globals_table);

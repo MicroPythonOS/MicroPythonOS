@@ -10,6 +10,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "usb/usb_host.h" // usb_device_handle_t for held-handle sharing
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -53,6 +55,29 @@ uint8_t usb_hid_drain(usb_hid_event_t *out, uint8_t max);
 
 // Monotonic generation counter, bumped on every claim/teardown.
 uint32_t usb_hid_change_gen(void);
+
+// One parked (or cooling-down) device: setup keeps failing, so retries
+// are deferred instead of spamming the log at full rate.
+typedef struct {
+    uint16_t vid;
+    uint16_t pid;
+    uint8_t protocol; // 1 = keyboard, 2 = mouse
+    uint8_t fails;    // consecutive setup failures (255 = parked)
+} usb_hid_parked_t;
+
+// Parked/cooldown list for REPL introspection (usb_disp.hid_parked()).
+uint8_t usb_hid_parked(usb_hid_parked_t *out, uint8_t max);
+
+// Clear the parked/cooldown list and rescan now (usb_disp.hid_retry()).
+// Topology changes (plug/unplug) re-arm automatically; this is the
+// manual equivalent.
+void usb_hid_retry(void);
+
+// Open handle of a STREAMING device, if any (NULL otherwise). Lets
+// lsusb-style inspection reuse the held handle instead of reopening a
+// live device by address mid-stream (same reason the display HAL keeps
+// its own handle for lsusb).
+usb_device_handle_t usb_hid_held_handle(uint8_t addr);
 
 #ifdef __cplusplus
 }

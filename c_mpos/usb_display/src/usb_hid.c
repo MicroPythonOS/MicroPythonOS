@@ -1,7 +1,8 @@
 // Minimal USB HID host transport (boot-protocol mice + keyboards).
 // ESP32-only, rides the --usbdisplay build: shares the already-installed
 // IDF usb_host stack (daemon task, hub support, settle patch, watchdog)
-// but registers its OWN client + task, so no upstream/ file is touched.
+// but registers its OWN client + task. One small upstream hook exists:
+// lsusb reuses our held handle for streaming devices (see usb_hid_held_handle).
 //
 // Design notes:
 // - Two-stage setup avoids a deadlock: the client task (which owns event
@@ -15,12 +16,23 @@
 //   interfaces are claimed. Anything else is closed untouched, so the
 //   display claim path and lsusb-style inspection never conflict: one
 //   device may be opened by both clients at once (different interfaces).
+// - S3 HCD channel budget (verified: 8 in silicon, ~7 usable, 1 pipe =
+//   1 channel, held for the pipe's lifetime): hub + display + keyboard +
+//   mouse need 4 (default pipes) + 1 (hub status) + 1 (display bulk) + 2
+//   (HID interrupt) = 8 pipes, so the full combo can NOT fit. Policy:
+//   claim in priority order (display is external, mice before keyboards),
+//   and park losers silently with backoff instead of retry-spamming:
+//   ESP_ERR_NOT_SUPPORTED from interface_claim parks immediately (that
+//   is the channel-exhaustion signature), transient failures cool down
+//   4s/12s/28s then park. Parking clears on bus topology change or
+//   hid_retry(). See README "HCD channels" section.
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
@@ -71,6 +83,118 @@ static volatile bool s_scan_needed = false;
 static SemaphoreHandle_t s_hid_ctrl_mutex = NULL;
 static SemaphoreHandle_t s_hid_ctrl_done = NULL;
 static volatile uint32_t s_change_gen = 0;
+
+// Retry deferral: per-device setup-failure accounting so a device that
+// can never be claimed (no HCD channels left) parks silently instead of
+// failing loudly at ~1 Hz forever. Keyed by VID:PID:protocol so it
+// survives slot teardown; cleared on disconnect and on bus topology
+// change. Shared client-task/app-thread without a lock (same as the
+// other volatile flags here): fields are single-byte/short, ops are
+// idempotent, worst case is one early or late retry.
+#define HID_DEFER_MAX 4
+#define HID_DEFER_PARKED_FAILS 255
+typedef struct {
+    bool used;
+    uint16_t vid;
+    uint16_t pid;
+    uint8_t protocol;
+    volatile uint8_t fails;
+    volatile uint32_t next_due_ms;
+    volatile bool parked;
+} hid_defer_t;
+
+static hid_defer_t s_defer[HID_DEFER_MAX];
+
+// Last-seen bus topology (sorted addr snapshot). Any change re-arms
+// parked retries: a replug may have freed channels or reordered claims.
+static uint8_t s_topo_addrs[16];
+static int s_topo_n = -1;
+
+static uint32_t hid_now_ms(void) {
+    return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+static hid_defer_t *hid_defer_lookup(uint16_t vid, uint16_t pid, uint8_t protocol,
+                                     bool create) {
+    for (uint8_t i = 0; i < HID_DEFER_MAX; i++) {
+        if (s_defer[i].used && s_defer[i].vid == vid && s_defer[i].pid == pid &&
+            s_defer[i].protocol == protocol) {
+            return &s_defer[i];
+        }
+    }
+    if (!create) {
+        return NULL;
+    }
+    for (uint8_t i = 0; i < HID_DEFER_MAX; i++) {
+        if (!s_defer[i].used) {
+            memset(&s_defer[i], 0, sizeof(s_defer[i]));
+            s_defer[i].used = true;
+            s_defer[i].vid = vid;
+            s_defer[i].pid = pid;
+            s_defer[i].protocol = protocol;
+            return &s_defer[i];
+        }
+    }
+    return NULL;
+}
+
+static void hid_defer_clear_entry(hid_defer_t *d) {
+    if (d != NULL) {
+        memset(d, 0, sizeof(*d));
+    }
+}
+
+static bool hid_defer_table_empty(void) {
+    for (uint8_t i = 0; i < HID_DEFER_MAX; i++) {
+        if (s_defer[i].used) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void hid_defer_clear_all(bool log_it) {
+    bool had = !hid_defer_table_empty();
+    memset(s_defer, 0, sizeof(s_defer));
+    if (log_it && had) {
+        usb_disp_log("[HID] bus topology changed, parked retries re-armed");
+    }
+}
+
+// Record one setup failure. no_channels (ESP_ERR_NOT_SUPPORTED from
+// interface_claim) parks immediately with the budget math; transient
+// failures back off 4s/12s/28s, then park until replug/hid_retry().
+static void hid_defer_fail(hid_defer_t *d, uint16_t vid, uint16_t pid, uint8_t protocol,
+                           uint8_t addr, bool no_channels, uint32_t now_ms) {
+    static const uint16_t backoff_ms[3] = {4000, 12000, 28000};
+    if (d == NULL) {
+        return;
+    }
+    if (no_channels) {
+        d->fails = HID_DEFER_PARKED_FAILS;
+        d->parked = true;
+        usb_disp_log("[HID] %s %04X:%04X parked: no HCD channels free "
+                     "(S3 fits ~7 pipes; hub+display+kbd+mouse need 8). "
+                     "Unplug something or hid_retry().",
+                     protocol == 2 ? "mouse" : "keyboard", vid, pid);
+        (void)addr;
+        return;
+    }
+    if (d->fails < 250) {
+        d->fails++;
+    }
+    if (d->fails > 3) {
+        d->parked = true;
+        usb_disp_log("[HID] %s addr=%u giving up after %u setup failures "
+                     "(until replug/hid_retry)",
+                     protocol == 2 ? "mouse" : "keyboard", addr, d->fails);
+    } else {
+        d->next_due_ms = now_ms + backoff_ms[d->fails - 1];
+        usb_disp_log("[HID] %s addr=%u setup failed (%u/3), retry in %us",
+                     protocol == 2 ? "mouse" : "keyboard", addr, d->fails,
+                     backoff_ms[d->fails - 1] / 1000);
+    }
+}
 
 static const char *hid_kind_str(uint8_t protocol) {
     return protocol == 2 ? "mouse" : "keyboard";
@@ -252,7 +376,13 @@ static void hid_scan(void) {
             return;
         }
         usb_device_handle_t dev = NULL;
-        if (usb_host_device_open(s_hid_client, addr, &dev) != ESP_OK) {
+        esp_err_t open_err = usb_host_device_open(s_hid_client, addr, &dev);
+        if (open_err != ESP_OK) {
+            // ESP_ERR_INVALID_STATE = still enumerating / going away; the
+            // next NEW_DEV or poll rescan picks it up. Logged (not silent)
+            // because a stuck-open device never becomes a staged HID.
+            usb_disp_log("[HID] device_open failed addr=%u err=0x%X", addr,
+                         (unsigned)open_err);
             continue;
         }
         const usb_device_desc_t *ddesc = NULL;
@@ -291,8 +421,10 @@ static void hid_scan(void) {
     }
 }
 
-static void hid_teardown(hid_slot_t *slot, const char *why) {
+static void hid_teardown(hid_slot_t *slot, const char *why, bool dev_gone) {
     usb_disp_log("[HID] addr=%u %s", slot->addr, why);
+    uint16_t vid = slot->vid, pid = slot->pid;
+    uint8_t protocol = slot->protocol;
     for (uint8_t i = 0; i < USB_HID_XFER_PER_DEV; i++) {
         if (slot->xfer[i] != NULL) {
             usb_host_transfer_free(slot->xfer[i]);
@@ -306,58 +438,98 @@ static void hid_teardown(hid_slot_t *slot, const char *why) {
         slot->dev = NULL;
     }
     memset(slot, 0, sizeof(*slot));
+    if (dev_gone && (vid != 0 || pid != 0)) {
+        // Physical unplug: forget failure history so a replug starts
+        // fresh (topology tracking re-arms the rest anyway).
+        hid_defer_clear_entry(hid_defer_lookup(vid, pid, protocol, false));
+    }
     s_change_gen++;
     s_scan_needed = true;
 }
 
-// Stage 2 (app thread via hid_poll): blocking setup of staged candidates.
-static void hid_setup_staged(void) {
-    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
-        hid_slot_t *slot = &s_slots[i];
-        if (slot->state != HID_SLOT_STAGED || slot->dev == NULL || slot->gone) {
-            if (slot->state == HID_SLOT_STAGED && (slot->dev == NULL || slot->gone)) {
-                hid_teardown(slot, "staged device gone before setup");
-            }
-            continue;
+// Stage 2 (app thread via hid_poll): blocking setup of one staged slot.
+// Parked/cooling devices are skipped silently; failures feed the defer
+// table instead of retrying hot (see hid_defer_fail).
+static void hid_setup_slot(hid_slot_t *slot) {
+    uint32_t now_ms = hid_now_ms();
+    hid_defer_t *defer =
+        hid_defer_lookup(slot->vid, slot->pid, slot->protocol, true);
+    if (defer != NULL) {
+        if (defer->parked) {
+            return;
         }
-        if (!hid_ctrl(slot, 0x21, 0x0B, 0x0000, slot->iface)) {
-            usb_disp_log("[HID] addr=%u SET_PROTOCOL failed, continuing anyway",
-                         slot->addr);
+        if ((int32_t)(now_ms - defer->next_due_ms) < 0 && defer->fails > 0) {
+            return;
         }
-        hid_ctrl(slot, 0x21, 0x0A, 0x0000, slot->iface); // SET_IDLE, best effort
-        if (usb_host_interface_claim(s_hid_client, slot->dev, slot->iface, 0) != ESP_OK) {
-            hid_teardown(slot, "interface_claim failed");
-            continue;
-        }
-        bool xfers_ok = true;
-        for (uint8_t k = 0; k < USB_HID_XFER_PER_DEV; k++) {
-            if (usb_host_transfer_alloc(slot->mps, 0, &slot->xfer[k]) != ESP_OK) {
-                xfers_ok = false;
-                break;
-            }
-            slot->xfer[k]->device_handle = slot->dev;
-            slot->xfer[k]->bEndpointAddress = slot->ep_in;
-            slot->xfer[k]->callback = hid_intr_cb;
-            slot->xfer[k]->context = slot;
-            slot->xfer[k]->num_bytes = slot->mps;
-        }
-        if (!xfers_ok) {
-            hid_teardown(slot, "transfer alloc failed");
-            continue;
-        }
-        slot->state = HID_SLOT_STREAMING;
-        for (uint8_t k = 0; k < USB_HID_XFER_PER_DEV; k++) {
-            if (usb_host_transfer_submit(slot->xfer[k]) != ESP_OK) {
-                slot->xfer_err = true;
-            }
-        }
-        if (slot->xfer_err) {
-            hid_teardown(slot, "initial submit failed");
-            continue;
-        }
-        usb_disp_log("[HID] %s addr=%u streaming", hid_kind_str(slot->protocol),
+    }
+    if (!hid_ctrl(slot, 0x21, 0x0B, 0x0000, slot->iface)) {
+        usb_disp_log("[HID] addr=%u SET_PROTOCOL failed, continuing anyway",
                      slot->addr);
-        s_change_gen++;
+    }
+    hid_ctrl(slot, 0x21, 0x0A, 0x0000, slot->iface); // SET_IDLE, best effort
+    esp_err_t claim_err =
+        usb_host_interface_claim(s_hid_client, slot->dev, slot->iface, 0);
+    if (claim_err != ESP_OK) {
+        usb_disp_log("[HID] addr=%u interface_claim err=0x%X", slot->addr,
+                     (unsigned)claim_err);
+        hid_defer_fail(defer, slot->vid, slot->pid, slot->protocol, slot->addr,
+                       claim_err == ESP_ERR_NOT_SUPPORTED, now_ms);
+        hid_teardown(slot, "interface_claim failed", false);
+        return;
+    }
+    bool xfers_ok = true;
+    for (uint8_t k = 0; k < USB_HID_XFER_PER_DEV; k++) {
+        if (usb_host_transfer_alloc(slot->mps, 0, &slot->xfer[k]) != ESP_OK) {
+            xfers_ok = false;
+            break;
+        }
+        slot->xfer[k]->device_handle = slot->dev;
+        slot->xfer[k]->bEndpointAddress = slot->ep_in;
+        slot->xfer[k]->callback = hid_intr_cb;
+        slot->xfer[k]->context = slot;
+        slot->xfer[k]->num_bytes = slot->mps;
+    }
+    if (!xfers_ok) {
+        hid_defer_fail(defer, slot->vid, slot->pid, slot->protocol, slot->addr,
+                       false, now_ms);
+        hid_teardown(slot, "transfer alloc failed", false);
+        return;
+    }
+    slot->state = HID_SLOT_STREAMING;
+    for (uint8_t k = 0; k < USB_HID_XFER_PER_DEV; k++) {
+        if (usb_host_transfer_submit(slot->xfer[k]) != ESP_OK) {
+            slot->xfer_err = true;
+        }
+    }
+    if (slot->xfer_err) {
+        hid_defer_fail(defer, slot->vid, slot->pid, slot->protocol, slot->addr,
+                       false, now_ms);
+        hid_teardown(slot, "initial submit failed", false);
+        return;
+    }
+    hid_defer_clear_entry(defer);
+    usb_disp_log("[HID] %s addr=%u streaming", hid_kind_str(slot->protocol),
+                 slot->addr);
+    s_change_gen++;
+}
+
+// Stage 2 driver (app thread via hid_poll): two passes so mice win over
+// keyboards when HCD channels are scarce (S3 policy: display > mouse >
+// keyboard; the display claims through its own client and always wins).
+static void hid_setup_staged(void) {
+    for (uint8_t pass = 0; pass < 2; pass++) {
+        uint8_t want_protocol = (pass == 0) ? 2 : 1;
+        for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+            hid_slot_t *slot = &s_slots[i];
+            if (slot->state != HID_SLOT_STAGED || slot->protocol != want_protocol) {
+                continue;
+            }
+            if (slot->dev == NULL || slot->gone) {
+                hid_teardown(slot, "staged device gone before setup", true);
+                continue;
+            }
+            hid_setup_slot(slot);
+        }
     }
 }
 
@@ -373,7 +545,8 @@ static void hid_client_task(void *arg) {
             if (slot->state == HID_SLOT_STREAMING && (slot->gone || slot->xfer_err)) {
                 // Give errored transfers a moment to complete as CANCELED.
                 vTaskDelay(pdMS_TO_TICKS(50));
-                hid_teardown(slot, slot->gone ? "disconnected" : "transfer error");
+                bool gone = slot->gone;
+                hid_teardown(slot, gone ? "disconnected" : "transfer error", gone);
             }
         }
         if (s_scan_needed) {
@@ -410,8 +583,41 @@ bool usb_hid_start(void) {
     s_hid_started = true;
     s_scan_needed = true;
     xTaskCreate(hid_client_task, "usbhid_client", 4096, NULL, 5, NULL);
-    usb_disp_log("[HID] client started");
+    usb_disp_log("[HID] client started (S3 channel policy: display > mouse > keyboard)");
     return true;
+}
+
+// Bus topology snapshot: any addr-list change (plug/unplug/reenum at a
+// new address, or a missed NEW_DEV/DEV_GONE) re-arms parked retries and
+// rescans. Runs on the app thread from hid_poll().
+static void hid_topology_check(void) {
+    uint8_t addrs[16];
+    int n = 0;
+    if (usb_host_device_addr_list_fill((int)sizeof(addrs), addrs, &n) != ESP_OK) {
+        return;
+    }
+    bool same = (n == s_topo_n);
+    if (same) {
+        for (int i = 0; i < n && same; i++) {
+            bool found = false;
+            for (int k = 0; k < s_topo_n; k++) {
+                if (s_topo_addrs[k] == addrs[i]) {
+                    found = true;
+                    break;
+                }
+            }
+            same = found;
+        }
+    }
+    if (same) {
+        return;
+    }
+    if (n < (int)sizeof(s_topo_addrs)) {
+        memcpy(s_topo_addrs, addrs, (size_t)n);
+    }
+    s_topo_n = n;
+    hid_defer_clear_all(true);
+    s_scan_needed = true;
 }
 
 bool usb_hid_poll(void) {
@@ -419,6 +625,7 @@ bool usb_hid_poll(void) {
         return false;
     }
     uint32_t before = s_change_gen;
+    hid_topology_check();
     hid_setup_staged();
     // Health-check streaming claims; a dead handle means a missed DEV_GONE.
     for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
@@ -489,4 +696,39 @@ uint8_t usb_hid_drain(usb_hid_event_t *out, uint8_t max) {
 
 uint32_t usb_hid_change_gen(void) {
     return s_change_gen;
+}
+
+usb_device_handle_t usb_hid_held_handle(uint8_t addr) {
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        if (slot->state == HID_SLOT_STREAMING && slot->dev != NULL &&
+            slot->addr == addr) {
+            return slot->dev;
+        }
+    }
+    return NULL;
+}
+
+uint8_t usb_hid_parked(usb_hid_parked_t *out, uint8_t max) {
+    uint8_t n = 0;
+    if (out == NULL || max == 0) {
+        return 0;
+    }
+    for (uint8_t i = 0; i < HID_DEFER_MAX && n < max; i++) {
+        if (!s_defer[i].used || (!s_defer[i].parked && s_defer[i].fails == 0)) {
+            continue;
+        }
+        out[n].vid = s_defer[i].vid;
+        out[n].pid = s_defer[i].pid;
+        out[n].protocol = s_defer[i].protocol;
+        out[n].fails = s_defer[i].fails;
+        n++;
+    }
+    return n;
+}
+
+void usb_hid_retry(void) {
+    hid_defer_clear_all(false);
+    s_scan_needed = true;
+    usb_disp_log("[HID] manual retry re-armed");
 }

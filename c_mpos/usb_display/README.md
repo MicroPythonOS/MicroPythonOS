@@ -19,10 +19,67 @@ elsewhere) to save flash.
 To update: re-copy those files from a new upstream checkout, refresh
 upstream/VERSION, keep upstream/LICENSE.Pico_USB_Disp, rebuild.
 
-Note: the vendored sources are used UNMODIFIED. Every adaptation lives
-outside upstream/: this binding, micropython.cmake, the IDF settle patch
-(patches/usb_ext_port_settle.patch), and the Python side. If an upstream
-fix is needed, prefer updating the snapshot over forking files.
+Note: upstream/ is a vendored snapshot, but NOT untouched in practice:
+the hub-port watchdog, lsusb(), and a held-handle hook for streaming HID
+devices all live in upstream/usb_disp_hal_esp32.cpp (see git log for that
+file), alongside the IDF settle patch (patches/usb_ext_port_settle.patch)
+and this binding. Rationale: the alternative (reimplementing hub
+recovery/inspection around an unmodified HAL) would duplicate far more
+code than the surgical hooks. Rule of thumb: keep MPOS adaptations
+clearly commented and separable; if upstream ever gains the same feature,
+prefer re-vendoring over keeping the fork. New standalone features
+(e.g. src/usb_hid.c) still go outside upstream/.
+
+=====================================================================
+REPL API reference (all on `import usb_disp`, --usbdisplay builds only)
+=====================================================================
+
+USBDisp(port=0, width=0, height=0, ignore_edid=False) - adapter handle.
+Single slot on ESP32: repeated constructions reuse usb_disp_at(0)
+(original resolution kept; use set_mode() to change it).
+- start() - start the USB host for all registered ports (call once).
+- poll() -> bool - drive WAIT -> MODE_SETUP -> READY; True on
+  READY/disconnect/mode change (the 1s LVGL timer calls this).
+- ready() -> bool, width() -> int, height() -> int, chip_name().
+- update_565(x, y, w, h, buf) / fill(x, y, w, h, color) / flush(timeout_ms=100).
+- set_mode(width, height) - resolution change at 60Hz (redraw required).
+- force_reenum() - root-port power cycle: virtual replug of the whole
+  subtree. Recovers wedged adapters and stack-disabled ports, NOT a
+  wedged adapter behind externally powered hubs (power-cut the ADAPTER).
+
+Module-level inspection (read-only, safe any time):
+- bus_devices() -> [addr] - stack address list + held display/HID
+  addresses re-added (claimed devices leave the idle list).
+- lsusb() -> str - "Bus 001 Device 002: ID 17e9:028f DisplayLink ..."
+  Bus is always 001 (single OTG controller), no root-hub line.
+  Streaming HID devices are read through their held handles (never
+  reopened mid-stream); held addresses the HAL pass skipped get a
+  generic `HID mouse`/`HID keyboard` fallback line, deduped by address.
+- hub_ports() -> [(hub_addr, port, connected, enabled, high_speed)].
+  (connected=True, enabled=False) = stack gave up on this port.
+- reset_port(hub_addr, port[, power_cycle[, force]]) - re-enumerate one
+  port, rest of chain untouched. High-speed (uplink) targets refused
+  unless force=True (resetting one drops the subtree and aborts the
+  IDF enumerator - proven crash). Never reset a parked HID's port
+  (see HCD channels section).
+- set_watchdog(on) (default on), auto_reset_idle([on]) (default on;
+  bare call reads back). See the watchdog section below.
+
+HID (same module, same build):
+- hid_start() -> bool - register the HID client; False while the host
+  is down (retried automatically by the poll timer).
+- hid_poll() -> bool - pump setups/health; True on device-set change.
+- hid_drain() -> [(addr, subclass, protocol, bytes)] - raw boot
+  reports since last call (consumed by drivers/indev/usb_hid.py).
+- hid_state() -> [(addr, kind, vid, pid)] - streaming devices only.
+  kind is "mouse" or "keyboard".
+- hid_claimed_addrs() -> [addr] - held-open addresses (watchdog
+  exclusion + bus_devices/lsusb re-add).
+- hid_parked() -> [(vid, pid, kind, fails)] - parked (fails=255) or
+  cooling-down devices. Non-empty + "No more HCD channels" = channel
+  exhaustion, not a wedged device.
+- hid_retry() - clear parked/cooldown and rescan now (plug/unplug
+  re-arms automatically).
 
 =====================================================================
 What it took to get hotplug / hot-unplug working, per level
@@ -205,28 +262,30 @@ What it took to get hotplug / hot-unplug working, per level
   protocols — not from shaving. Real headroom needs partition or
   build-system work, not more trimming.
 
---- USB HID level (boot-protocol mice + keyboards, phase 1: mouse) ---
+--- USB HID level (boot-protocol mice + keyboards) ---
 - Transport is minimal on purpose (no espressif/usb_host_hid managed
   component: ~51 KB flash + a managed `usb` override that would shadow
   the in-tree component our settle patch targets). src/usb_hid.c owns a
-  second usb_host client + task on the shared stack; the display HAL is
-  untouched (one device may be opened by both clients at once).
+  second usb_host client + task on the shared stack (one device may be
+  opened by both clients at once). One upstream hook: lsusb reuses our
+  held handle for streaming HID devices instead of reopening them
+  mid-stream (same reason the display HAL keeps its own handle).
 - Two-stage setup avoids a deadlock: the client task only opens/stages
   candidates; blocking SET_PROTOCOL/SET_IDLE run in hid_poll() on the
   app thread (same pending_probe pattern as the display). Interrupt
   callbacks only memcpy into a 64-entry SPSC ring and resubmit.
-- Module API (all on usb_disp, same --usbdisplay build): hid_start()
-  (False until the host is up, retried by the 1s poll timer),
-  hid_poll() (change bool like USBDisp.poll()), hid_drain() (raw
-  (addr, subclass, protocol, bytes) tuples), hid_state()
-  ((addr, kind, vid, pid)), hid_claimed_addrs(). Parsing is
-  Python-side (drivers/indev/usb_hid.py parser registry), so new
-  device kinds never need C changes.
-- Watchdog coexistence: a healthy mouse reads exactly like a wedged
-  adapter (connected + enabled, no bus growth), which the idle
-  auto-reset would PORT_RESET ~15s after plug. While any HID device
-  is claimed, board code suppresses auto_reset_idle (restoring the
-  prior value on unplug, so a manual user setting is never forced
+- Parsing is Python-side (drivers/indev/usb_hid.py parser registry +
+  HIDHub demux: mouse events queue, keyboard keeps the latest 8-byte
+  report), so new device kinds never need C changes. USBHIDKeyboard
+  subclasses Fri3dCommunicatorKeyboard unchanged (same HID->LVGL table,
+  repeat logic, ESC/arrows nav hooks); USBMouse + keyboard share one
+  hub, armed together by arm_usb_hid(), enabled per-kind from
+  hid_state() (kind-aware _sync_usb_hid).
+- Watchdog coexistence: a healthy/enumerated HID reads exactly like a
+  wedged adapter (connected + enabled, no bus growth), which the idle
+  auto-reset would PORT_RESET ~15s after plug/park. While any HID is
+  claimed OR parked, board code suppresses auto_reset_idle (restoring
+  the prior value afterwards, so a manual user setting is never forced
   back on). The disabled-port episode path is unaffected.
 - LVGL: USBMouse subclasses PointerDriver with identity _calc_coords
   (absolute positions, no TouchCalData side effects) and
@@ -234,7 +293,52 @@ What it took to get hotplug / hot-unplug working, per level
   lv.image set via indev.set_cursor (LVGL reparents it to the sys
   layer); reparented + re-set on display swaps via the generic
   _on_display_changed hook in _repoint_indevs. Wheel scrolls the
-  object under the cursor best-effort.
+  object under the cursor best-effort. Cursor tint follows the theme
+  (black on light, white on dark) via image-recolor, re-synced on
+  every indev read.
+- lsusb() prints the descriptive string-descriptor line whenever the
+  HAL pass covers the address and appends a generic `HID mouse` /
+  `HID keyboard` line only for held addresses the HAL pass skipped
+  (dedup by address; never double-prints).
+
+--- HCD channels (the hard silicon limit, ESP32-S3) ---
+- The S3 DWC_OTG core has 8 host channels (~7 usable; one is reserved
+  per the HCD's own test). One channel is consumed per USB *pipe* and
+  held for the pipe's lifetime - transfers (URBs) multiplex on their
+  pipe's channel, so URB counts do not matter. Official doc:
+  esp-usb "USB Host" -> "Downstream Port Configuration" ->
+  "Host Channels" ("Supported amount of channels for ESP32-S3 is 8 ...
+  When there are no more free Host channels available, the device could
+  not be enumerated and its interface cannot be claimed").
+  (The "more than 4" page sometimes cited is the *Device* stack -
+  ESP32-as-peripheral endpoints. Different mode, unrelated limit.)
+- Pipe budget per setup: 1 default pipe (EP0) per enumerated device
+  (stack-held) + 1 interrupt pipe per external hub (hub driver) + 1 per
+  claimed endpoint (display bulk, HID interrupts). So hub + display +
+  keyboard + mouse = 4 + 1 + 1 + 2 = 8 pipes > ~7 channels: the full
+  combo can NEVER fit on S3, with zero leaks required. Whoever claims
+  last loses (E (xxx) HCD DWC: No more HCD channels available ->
+  EP Alloc error -> Claiming interface error).
+- S3 policy (src/usb_hid.c): claim in priority order, display >
+  mouse > keyboard (the display claims through its own client and
+  always wins; among staged HIDs, mice set up before keyboards). A
+  claim failing with ESP_ERR_NOT_SUPPORTED (the channel-exhaustion
+  signature) parks the device immediately with one explanatory line;
+  other setup failures cool down 4s/12s/28s, then park. Parked devices
+  stay silent until a bus topology change (plug/unplug/reenum, checked
+  every hid_poll) or usb_disp.hid_retry(). Unplug clears the device's
+  failure history. usb_disp.hid_parked() lists [(vid, pid, kind,
+  fails)] with fails=255 for parked.
+- Consequence for the common desk setup: behind one hub you get the
+  display + ONE hid device (mouse preferred). Keyboard-only-behind-hub
+  and mouseless setups work; hub + display + keyboard + mouse does
+  not, by physics. ESP32-P4 has 16 channels (fits everything) but is
+  not a target yet.
+- Debugging channel pressure: hid_parked() non-empty with fails=255
+  plus the "No more HCD channels" lines = exhausted, not wedged. Do NOT reset_port()
+  parked devices (they are healthy and enumerated; a reset just burns
+  a bus address and re-parks). Unplug something, or hid_retry() after
+  freeing a device.
 
 --- Debugging notes ---
 - bus_devices() (stack address list) separates "nothing sensed"

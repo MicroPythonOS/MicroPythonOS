@@ -13,6 +13,7 @@ class FakeDispMod:
         self.idle_reset = True
         self.addrs = []
         self.hid_states = []
+        self.parked_entries = []
 
     def hid_poll(self):
         return False
@@ -22,6 +23,9 @@ class FakeDispMod:
 
     def hid_state(self):
         return list(self.hid_states)
+
+    def hid_parked(self):
+        return list(self.parked_entries)
 
     def hid_start(self):
         return True
@@ -96,6 +100,28 @@ class TestHIDWatchdogExclusion(unittest.TestCase):
         usb_display._update_hid_watchdog_exclusion([])
         self.assertTrue(self.fake.idle_reset)
         self.assertIsNone(usb_display._hid_idle_prev)
+
+    def test_parked_entries_read(self):
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        self.assertEqual(
+            usb_display._hid_parked_entries(), [(0x046D, 0xC31C, "keyboard", 255)]
+        )
+
+    def test_parked_suppresses_idle_reset(self):
+        usb_display._update_hid_watchdog_exclusion([(0x046D, 0xC31C, "keyboard", 255)])
+        self.assertFalse(self.fake.idle_reset)
+        usb_display._update_hid_watchdog_exclusion([])
+        self.assertTrue(self.fake.idle_reset)
+
+    def test_poll_hid_wires_parked_to_suppression(self):
+        self.fake.addrs = []
+        self.fake.hid_states = []
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        usb_display._poll_hid()
+        self.assertFalse(self.fake.idle_reset)
+        self.fake.parked_entries = []
+        usb_display._poll_hid()
+        self.assertTrue(self.fake.idle_reset)
 
 
 class TestSyncUSBHID(GraphicalTestCase):

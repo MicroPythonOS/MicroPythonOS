@@ -18,6 +18,7 @@
 //
 
 #include "usb_disp_hal.h"
+#include "usb_hid.h" // usb_hid_held_handle() for lsusb (MPOS HID, src/)
 
 #if USB_DISP_PORT_ESP32
 
@@ -1452,6 +1453,13 @@ uint16_t usb_disp_hal_lsusb(char *out, uint16_t maxlen) {
         usb_device_handle_t held = NULL;
         if (held_addr != 0 && addrs[i] == held_addr) {
             held = s_hal[0].dev;
+        }
+        // Same for streaming HID devices (MPOS usb_hid.c): their
+        // interrupt transfers are live, so reuse the HID client's held
+        // handle for descriptor/string reads instead of reopening by
+        // address mid-stream.
+        if (held == NULL) {
+            held = usb_hid_held_handle(addrs[i]);
         }
         usb_device_handle_t dev = held;
         if (dev == NULL) {

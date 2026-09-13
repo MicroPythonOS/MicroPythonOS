@@ -121,6 +121,20 @@ def _hid_claimed():
         return []
 
 
+def _hid_parked_entries():
+    try:
+        import usb_disp
+    except ImportError:
+        return []
+    if not hasattr(usb_disp, "hid_parked"):
+        return []
+    try:
+        return list(usb_disp.hid_parked())
+    except Exception as e:
+        logger.error("usb hid parked fail: %s" % (e))
+        return []
+
+
 def _update_hid_watchdog_exclusion(claimed):
     global _hid_idle_prev
     try:
@@ -189,7 +203,12 @@ def _poll_hid():
         logger.error("usb hid poll fail: %s" % (e))
         return
     claimed = _hid_claimed()
-    _update_hid_watchdog_exclusion(claimed)
+    # Suppression covers parked devices too: a parked keyboard is
+    # enumerated (enabled port, no bus growth), so without this the
+    # watchdog would PORT_RESET it ~15s after parking whenever no other
+    # HID is claimed - pointlessly re-enumerating a healthy device that
+    # can never claim (no channels) until something unplugs.
+    _update_hid_watchdog_exclusion(claimed if claimed else _hid_parked_entries())
     _sync_usb_hid(claimed)
 
 
