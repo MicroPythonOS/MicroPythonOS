@@ -221,8 +221,9 @@ static MP_DEFINE_CONST_FUN_OBJ_1(mp_usb_disp_set_log_obj, mp_usb_disp_set_log);
 
 // bus_devices() - list of USB device addresses currently seen by the host
 // stack. Hubs and the adapter show up here once enumerated, whether or not
-// our display claimed them. Empty list = nothing sensed (cable/power/stack).
-// Safe to call from any thread; never raises.
+// our display claimed them (a claimed adapter leaves the stack's idle
+// list, so it is re-added here explicitly). Empty list = nothing sensed
+// (cable/power/stack). Safe to call from any thread; never raises.
 static mp_obj_t mp_usb_disp_bus_devices(void) {
     uint8_t addrs[16];
     int n = 0;
@@ -230,8 +231,22 @@ static mp_obj_t mp_usb_disp_bus_devices(void) {
     if (usb_host_device_addr_list_fill((int)sizeof(addrs), addrs, &n) != ESP_OK) {
         return list;
     }
+    uint8_t claimed = 0;
+    bool have_claimed = usb_disp_hal_claimed_addr(&claimed);
     for (int i = 0; i < n; i++) {
         mp_obj_list_append(list, mp_obj_new_int(addrs[i]));
+    }
+    if (have_claimed) {
+        bool seen = false;
+        for (int i = 0; i < n; i++) {
+            if (addrs[i] == claimed) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen && n < (int)sizeof(addrs)) {
+            mp_obj_list_append(list, mp_obj_new_int(claimed));
+        }
     }
     return list;
 }
@@ -288,6 +303,16 @@ static mp_obj_t mp_usb_disp_reset_port_fn(size_t n_args, const mp_obj_t *args) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_disp_reset_port_obj, 2, 4, mp_usb_disp_reset_port_fn);
 
+// lsusb() - Linux-style USB listing ("Bus 001 Device 002: ID 17e9:028f
+// DisplayLink ..."). Bus is always 001 (single OTG controller); no
+// root-hub line. Read-only, safe any time.
+static char s_lsusb_buf[2048];
+static mp_obj_t mp_usb_disp_lsusb_fn(void) {
+    uint16_t n = usb_disp_hal_lsusb(s_lsusb_buf, sizeof(s_lsusb_buf));
+    return mp_obj_new_str(s_lsusb_buf, n);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_disp_lsusb_obj, mp_usb_disp_lsusb_fn);
+
 // set_watchdog(on) - enable/disable the hub-port watchdog (default on).
 // The watchdog only acts while no display is attached; healthy ports
 // are never touched.
@@ -317,6 +342,7 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_USBDisp), MP_ROM_PTR(&mp_type_usbdisp) },
     { MP_ROM_QSTR(MP_QSTR_set_log), MP_ROM_PTR(&mp_usb_disp_set_log_obj) },
     { MP_ROM_QSTR(MP_QSTR_bus_devices), MP_ROM_PTR(&mp_usb_disp_bus_devices_obj) },
+    { MP_ROM_QSTR(MP_QSTR_lsusb), MP_ROM_PTR(&mp_usb_disp_lsusb_obj) },
     { MP_ROM_QSTR(MP_QSTR_hub_ports), MP_ROM_PTR(&mp_usb_disp_hub_ports_obj) },
     { MP_ROM_QSTR(MP_QSTR_reset_port), MP_ROM_PTR(&mp_usb_disp_reset_port_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_watchdog), MP_ROM_PTR(&mp_usb_disp_set_watchdog_obj) },

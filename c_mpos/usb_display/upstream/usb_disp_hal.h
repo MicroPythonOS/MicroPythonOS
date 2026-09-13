@@ -116,6 +116,16 @@ bool usb_disp_hal_watchdog(void);
 void usb_disp_hal_set_auto_reset_idle(bool on);
 bool usb_disp_hal_auto_reset_idle(void);
 
+// Linux-style bus listing ("Bus 001 Device 002: ID 17e9:028f ...") into
+// out (NUL-terminated); returns bytes written. Single OTG controller,
+// so the bus is always 001 and there is no root-hub line (the root
+// port has no address). Read-only, safe to call any time.
+uint16_t usb_disp_hal_lsusb(char *out, uint16_t maxlen);
+// Address of the display device held open by this client (true), or
+// false when none is held. The stack's address list only contains idle
+// devices, so callers that enumerate the bus must re-add this one.
+bool usb_disp_hal_claimed_addr(uint8_t *addr);
+
 // 単調ミリ秒カウンタ (コアのタイマー用)
 uint32_t usb_disp_hal_ms(void);
 

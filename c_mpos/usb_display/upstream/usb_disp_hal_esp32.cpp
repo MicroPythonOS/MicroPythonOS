@@ -696,6 +696,7 @@ static void daemon_task(void *arg) {
 #define USB_DISP_HUB_WD_DEFER_MS 3000     // bus growth -> push dues out
 #define USB_DISP_HUB_WD_SWEEP_MS 1000     // min interval between sweeps
 #define USB_DISP_HUB_CTRL_MS 1500         // per-transfer timeout
+#define USB_DISP_LSUSB_MAX_DEV 16         // addresses listed by lsusb
 #define USB_DISP_HUB_WD_ESCALATE_MAX 3    // auto root cycles per boot
 
 // Wait after reset N (1-based) before the next recovery step. A
@@ -792,6 +793,77 @@ static SemaphoreHandle_t s_hub_done = NULL;
 static void hub_xfer_cb(usb_transfer_t *xfer) {
     SemaphoreHandle_t done = (SemaphoreHandle_t)xfer->context;
     xSemaphoreGive(done);
+}
+
+// Raw control transfer on an already-open device handle (no open/close,
+// no class check). App-task context, serialized by s_hub_mutex.
+static bool dev_ctrl_hdl(usb_device_handle_t dev, uint8_t bmRequestType,
+                         uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
+                         void *data, uint16_t wLength, uint16_t *actual) {
+    if (!s_started || s_client == NULL || s_hub_mutex == NULL ||
+        s_hub_done == NULL || dev == NULL) {
+        return false;
+    }
+    if (wLength > 128) return false;
+    if (xSemaphoreTake(s_hub_mutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+        return false;
+    }
+    bool ok = false;
+    usb_transfer_t *x = NULL;
+    if (usb_host_transfer_alloc(8 + 128, 0, &x) != ESP_OK) goto out;
+    {
+        bool dir_in = (bmRequestType & 0x80) != 0;
+        uint8_t *b = x->data_buffer;
+        b[0] = bmRequestType;
+        b[1] = bRequest;
+        b[2] = (uint8_t)wValue;
+        b[3] = (uint8_t)(wValue >> 8);
+        b[4] = (uint8_t)wIndex;
+        b[5] = (uint8_t)(wIndex >> 8);
+        b[6] = (uint8_t)wLength;
+        b[7] = (uint8_t)(wLength >> 8);
+        if (!dir_in && wLength && data) memcpy(b + 8, data, wLength);
+        x->num_bytes = 8 + wLength;
+        x->device_handle = dev;
+        x->bEndpointAddress = 0;
+        x->callback = hub_xfer_cb;
+        x->context = s_hub_done;
+        xSemaphoreTake(s_hub_done, 0);  // clear stale signal
+        if (usb_host_transfer_submit_control(s_client, x) != ESP_OK) goto out;
+        if (xSemaphoreTake(s_hub_done,
+                           pdMS_TO_TICKS(hub_timeout_ms(0))) != pdTRUE) {
+            goto out;
+        }
+        if (x->status != USB_TRANSFER_STATUS_COMPLETED) goto out;
+        uint16_t got =
+            (x->actual_num_bytes >= 8) ? (uint16_t)(x->actual_num_bytes - 8)
+                                       : 0;
+        if (dir_in && data && got) {
+            if (got > wLength) got = wLength;
+            memcpy(data, b + 8, got);
+        }
+        if (actual) *actual = got;
+    }
+    ok = true;
+out:
+    if (x) usb_host_transfer_free(x);
+    xSemaphoreGive(s_hub_mutex);
+    return ok;
+}
+
+// Address of the display device held open by this client, if any.
+// Needed because the stack's address list only contains idle devices:
+// an opened device leaves the idle tailq and vanishes from
+// bus_devices()/lsusb unless re-added here.
+bool usb_disp_hal_claimed_addr(uint8_t *addr) {
+    struct usb_disp_hal *h = &s_hal[0];
+    if (h->dev == NULL || addr == NULL) return false;
+    usb_device_info_t info;
+    if (usb_host_device_info(h->dev, &info) != ESP_OK || info.dev_addr == 0) {
+        return false;
+    }
+    *addr = info.dev_addr;
+    return true;
 }
 
 // One hub-class control transfer, app-task context, serialized by
@@ -1239,6 +1311,208 @@ bool usb_disp_hal_reset_hub_port(uint8_t hub_addr, uint8_t port,
         usb_disp_log("[HUB] addr=%u port=%u FORCED reset", hub_addr, port);
     }
     return hub_reset_port(hub_addr, port, power_cycle);
+}
+
+// Raw control transfer to any device address (no class check).
+// App-task context, serialized by s_hub_mutex like hub_ctrl.
+static bool dev_ctrl(uint8_t dev_addr, uint8_t bmRequestType, uint8_t bRequest,
+                     uint16_t wValue, uint16_t wIndex,
+                     void *data, uint16_t wLength, uint16_t *actual) {
+    if (!s_started || s_client == NULL || s_hub_mutex == NULL ||
+        s_hub_done == NULL) {
+        return false;
+    }
+    if (wLength > 128) return false;
+    if (xSemaphoreTake(s_hub_mutex, pdMS_TO_TICKS(3000)) != pdTRUE) {
+        return false;
+    }
+    bool ok = false;
+    usb_device_handle_t dev = NULL;
+    usb_transfer_t *x = NULL;
+    if (usb_host_device_open(s_client, dev_addr, &dev) != ESP_OK) {
+        goto out;
+    }
+    if (usb_host_transfer_alloc(8 + 128, 0, &x) != ESP_OK) goto out;
+    {
+        bool dir_in = (bmRequestType & 0x80) != 0;
+        uint8_t *b = x->data_buffer;
+        b[0] = bmRequestType;
+        b[1] = bRequest;
+        b[2] = (uint8_t)wValue;
+        b[3] = (uint8_t)(wValue >> 8);
+        b[4] = (uint8_t)wIndex;
+        b[5] = (uint8_t)(wIndex >> 8);
+        b[6] = (uint8_t)wLength;
+        b[7] = (uint8_t)(wLength >> 8);
+        if (!dir_in && wLength && data) memcpy(b + 8, data, wLength);
+        x->num_bytes = 8 + wLength;
+        x->device_handle = dev;
+        x->bEndpointAddress = 0;
+        x->callback = hub_xfer_cb;
+        x->context = s_hub_done;
+        xSemaphoreTake(s_hub_done, 0);  // clear stale signal
+        if (usb_host_transfer_submit_control(s_client, x) != ESP_OK) goto out;
+        if (xSemaphoreTake(s_hub_done,
+                           pdMS_TO_TICKS(hub_timeout_ms(dev_addr))) != pdTRUE) {
+            goto out;
+        }
+        if (x->status != USB_TRANSFER_STATUS_COMPLETED) goto out;
+        uint16_t got =
+            (x->actual_num_bytes >= 8) ? (uint16_t)(x->actual_num_bytes - 8)
+                                       : 0;
+        if (dir_in && data && got) {
+            if (got > wLength) got = wLength;
+            memcpy(data, b + 8, got);
+        }
+        if (actual) *actual = got;
+    }
+    ok = true;
+out:
+    if (x) usb_host_transfer_free(x);
+    if (dev) usb_host_device_close(s_client, dev);
+    hub_perf_note(dev_addr, ok);
+    xSemaphoreGive(s_hub_mutex);
+    return ok;
+}
+
+// Control transfer to a device we hold open (hdl) or by address
+// (hdl NULL: opened and closed for the call).
+static bool lsusb_xfer(usb_device_handle_t hdl, uint8_t addr,
+                       uint8_t bmRequestType, uint8_t bRequest,
+                       uint16_t wValue, uint16_t wIndex,
+                       void *data, uint16_t wLength, uint16_t *actual) {
+    if (hdl != NULL) {
+        return dev_ctrl_hdl(hdl, bmRequestType, bRequest, wValue, wIndex,
+                            data, wLength, actual);
+    }
+    return dev_ctrl(addr, bmRequestType, bRequest, wValue, wIndex, data,
+                    wLength, actual);
+}
+
+// One USB string descriptor as NUL-terminated ASCII ('?' for the rest).
+static bool lsusb_get_str(usb_device_handle_t hdl, uint8_t dev_addr,
+                          uint8_t index, uint16_t langid,
+                          char *out, uint8_t cap) {
+    if (index == 0 || cap == 0) return false;
+    out[0] = 0;
+    uint8_t buf[66];
+    uint16_t actual = 0;
+    if (!lsusb_xfer(hdl, dev_addr, 0x80, 0x06, (uint16_t)(0x0300 | index),
+                    langid, buf, sizeof(buf), &actual) ||
+        actual < 4 || buf[1] != 0x03) {
+        return false;
+    }
+    uint8_t blen = buf[0];
+    if (blen > actual) blen = (uint8_t)actual;
+    uint8_t o = 0;
+    for (uint8_t i = 2; i + 1 < blen && o + 1 < cap; i += (uint8_t)2) {
+        uint16_t c = (uint16_t)(buf[i] | (buf[i + 1] << 8));
+        out[o++] = (c >= 0x20 && c < 0x7F) ? (char)c : '?';
+    }
+    out[o] = 0;
+    return o > 0;
+}
+
+uint16_t usb_disp_hal_lsusb(char *out, uint16_t maxlen) {
+    if (out == NULL || maxlen == 0) return 0;
+    out[0] = 0;
+    if (!s_started || s_client == NULL) return 0;
+    uint8_t addrs[USB_DISP_LSUSB_MAX_DEV];
+    int n = 0;
+    if (usb_host_device_addr_list_fill((int)sizeof(addrs), addrs, &n) !=
+        ESP_OK) {
+        return 0;
+    }
+    for (int i = 1; i < n; i++) {
+        uint8_t a = addrs[i];
+        int j = i - 1;
+        while (j >= 0 && addrs[j] > a) {
+            addrs[j + 1] = addrs[j];
+            j--;
+        }
+        addrs[j + 1] = a;
+    }
+    uint16_t used = 0;
+    uint8_t held_addr = 0;
+    usb_disp_hal_claimed_addr(&held_addr);
+    if (held_addr != 0 && n < USB_DISP_LSUSB_MAX_DEV) {
+        bool seen = false;
+        for (int k = 0; k < n; k++) {
+            if (addrs[k] == held_addr) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen) addrs[n++] = held_addr;
+    }
+    for (int i = 0; i < n; i++) {
+        // The display device held open by this client left the stack's
+        // idle list, so use our own handle for it (opening it again by
+        // address is unreliable while streaming).
+        usb_device_handle_t held = NULL;
+        if (held_addr != 0 && addrs[i] == held_addr) {
+            held = s_hal[0].dev;
+        }
+        usb_device_handle_t dev = held;
+        if (dev == NULL) {
+            if (usb_host_device_open(s_client, addrs[i], &dev) != ESP_OK) {
+                continue;
+            }
+        }
+        const usb_device_desc_t *dd = NULL;
+        bool ok =
+            (usb_host_get_device_descriptor(dev, &dd) == ESP_OK && dd != NULL);
+        uint16_t vid = 0, pid = 0;
+        uint8_t cls = 0, iman = 0, iprod = 0;
+        if (ok) {
+            vid = dd->idVendor;
+            pid = dd->idProduct;
+            cls = dd->bDeviceClass;
+            iman = dd->iManufacturer;
+            iprod = dd->iProduct;
+        }
+        if (held == NULL) {
+            usb_host_device_close(s_client, dev);
+        }
+        if (!ok) continue;
+        char manuf[32] = {0}, prod[48] = {0};
+        if (iman || iprod) {
+            uint16_t langid = 0x0409;
+            uint8_t lt[8];
+            uint16_t la = 0;
+            if (lsusb_xfer(held, addrs[i], 0x80, 0x06, 0x0300, 0, lt,
+                           sizeof(lt), &la) &&
+                la >= 4 && lt[1] == 0x03) {
+                langid = (uint16_t)(lt[2] | (lt[3] << 8));
+            }
+            if (iman) {
+                lsusb_get_str(held, addrs[i], iman, langid, manuf,
+                              sizeof(manuf));
+            }
+            if (iprod) {
+                lsusb_get_str(held, addrs[i], iprod, langid, prod,
+                              sizeof(prod));
+            }
+        }
+        char name[80];
+        if (manuf[0] && prod[0]) {
+            snprintf(name, sizeof(name), "%s %s", manuf, prod);
+        } else if (prod[0]) {
+            snprintf(name, sizeof(name), "%s", prod);
+        } else if (manuf[0]) {
+            snprintf(name, sizeof(name), "%s", manuf);
+        } else if (cls == 0x09) {
+            snprintf(name, sizeof(name), "Hub");
+        } else {
+            snprintf(name, sizeof(name), "Unknown device");
+        }
+        int w = snprintf(out + used, maxlen - used,
+                         "Bus 001 Device %03d: ID %04x:%04x %s\n", addrs[i],
+                         vid, pid, name);
+        if (w < 0 || (uint16_t)w >= maxlen - used) break;
+        used = (uint16_t)(used + w);
+    }
+    return used;
 }
 
 void usb_disp_hal_set_watchdog(bool on) { s_watchdog_on = on; }
