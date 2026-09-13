@@ -207,7 +207,12 @@ What it took to get hotplug / hot-unplug working, per level
 - bus_devices() (stack address list) separates "nothing sensed"
   (cable/power/stack) from "hubs only" (adapter missing/wedged) from
   "adapter present, failing" in one call. print(usb_disp.lsusb()) shows
-  the same bus Linux-style with VID:PID and product strings. hub_ports() goes one deeper:
+  the same bus Linux-style with VID:PID and product strings.
+- Zombie devices (address persists with dead EP0 long after unplug,
+  `Unknown device` in lsusb): suspect a dropped DEV_GONE in a burst —
+  our client queue is 32 deep for that reason. Discriminator: unplug,
+  hands off 60 s; vanishes = was live, persists = leaked (hub replug
+  clears it). hub_ports() goes one deeper:
   a (connected=True, enabled=False) port is one the stack gave up on —
   reset_port() it, or wait ~5s for the watchdog's [HUB] lines.
 - Dead Ctrl-C + dead UART + alive USB tasks = main thread wedged in C;

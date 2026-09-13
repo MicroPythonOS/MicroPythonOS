@@ -1595,7 +1595,7 @@ void usb_disp_hal_start(void) {
 
     const usb_host_client_config_t client_cfg = {
         .is_synchronous = false,
-        .max_num_event_msg = 8,
+        .max_num_event_msg = 32,
         .async = {
             .client_event_callback = client_event_cb,
             .callback_arg = NULL,
