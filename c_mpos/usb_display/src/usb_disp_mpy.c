@@ -322,12 +322,30 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_disp_reset_port_obj, 2, 4, mp_
 static char s_lsusb_buf[2048];
 static mp_obj_t mp_usb_disp_lsusb_fn(void) {
     uint16_t used = usb_disp_hal_lsusb(s_lsusb_buf, sizeof(s_lsusb_buf));
-    // Claimed HID devices left the idle list, so the HAL could not list
-    // them: append one line each from hid_state() (no string descriptors,
-    // EP0 is busy streaming; VID:PID + kind is enough to identify).
+    // HID-held devices usually stay in the stack's idle list, so the HAL
+    // pass above already printed them with full string descriptors
+    // ("PixArt Lenovo USB Optical Mouse" beats "HID mouse"). Append a
+    // generic line only for held devices the HAL pass skipped (same
+    // reason bus_devices() re-adds held addresses: a claimed device can
+    // drop out of the idle list, like the streaming display does).
+    uint8_t addrs[16];
+    int n = 0;
+    bool have_list = (usb_host_device_addr_list_fill((int)sizeof(addrs), addrs, &n) == ESP_OK);
     usb_hid_state_t st[4];
     uint8_t n_hid = usb_hid_state(st, 4);
     for (uint8_t i = 0; i < n_hid && used + 64 < sizeof(s_lsusb_buf); i++) {
+        bool seen = false;
+        if (have_list) {
+            for (int k = 0; k < n; k++) {
+                if (addrs[k] == st[i].addr) {
+                    seen = true;
+                    break;
+                }
+            }
+        }
+        if (seen) {
+            continue;
+        }
         const char *kind = st[i].protocol == 2 ? "mouse" : "keyboard";
         int w = snprintf(s_lsusb_buf + used, sizeof(s_lsusb_buf) - used,
                          "Bus 001 Device %03d: ID %04x:%04x HID %s\n",

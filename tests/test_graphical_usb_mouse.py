@@ -1,6 +1,7 @@
 import lvgl as lv
 
 from drivers.indev.usb_hid import FakeHIDSource, USBMouse
+from mpos.ui.appearance_manager import AppearanceManager
 from mpos.ui.testing import GraphicalTestCase
 
 
@@ -87,3 +88,26 @@ class TestUSBMouse(GraphicalTestCase):
         self.source.inject_mouse(wheel=-1)
         self.mouse.read()
         self.wait_for_render()
+
+    def _cursor_rgb(self):
+        c = self.mouse._cursor.get_style_image_recolor(0)
+        return (c.red, c.green, c.blue)
+
+    def test_cursor_is_black_in_light_theme(self):
+        self.assertTrue(AppearanceManager.is_light_mode())
+        self.mouse.attach_cursor()
+        self.assertEqual(self.mouse._cursor_theme, "black")
+        self.assertEqual(self._cursor_rgb(), (0, 0, 0))
+
+    def test_cursor_follows_theme_switch(self):
+        prev = AppearanceManager._is_light_mode
+        self.addCleanup(setattr, AppearanceManager, "_is_light_mode", prev)
+        self.mouse.attach_cursor()
+        AppearanceManager._is_light_mode = False
+        self.mouse._get_coords()
+        self.assertEqual(self.mouse._cursor_theme, "white")
+        self.assertEqual(self._cursor_rgb(), (255, 255, 255))
+        AppearanceManager._is_light_mode = True
+        self.mouse._get_coords()
+        self.assertEqual(self.mouse._cursor_theme, "black")
+        self.assertEqual(self._cursor_rgb(), (0, 0, 0))

@@ -143,6 +143,7 @@ class USBMouse(pointer_framework.PointerDriver):
         self._y = self._height // 2
         self._buttons = 0
         self._cursor = None
+        self._cursor_theme = None
 
     def _calc_coords(self, x, y):
         return (x, y)
@@ -193,7 +194,32 @@ class USBMouse(pointer_framework.PointerDriver):
             if wheel:
                 self._apply_wheel(wheel)
         state = self.PRESSED if self._buttons else self.RELEASED
+        self._sync_cursor_theme()
         return (state, self._x, self._y)
+
+    def _cursor_target_theme(self):
+        try:
+            from mpos.ui.appearance_manager import AppearanceManager
+            light = AppearanceManager.is_light_mode()
+        except Exception:
+            light = True
+        return "black" if light else "white"
+
+    def _sync_cursor_theme(self):
+        if self._cursor is None:
+            return
+        target = self._cursor_target_theme()
+        if target == self._cursor_theme:
+            return
+        try:
+            if target == "black":
+                self._cursor.set_style_image_recolor(lv.color_hex(0x000000), 0)  # NOQA
+            else:
+                self._cursor.set_style_image_recolor(lv.color_hex(0xFFFFFF), 0)  # NOQA
+            self._cursor.set_style_image_recolor_opa(lv.OPA.COVER, 0)  # NOQA
+        except Exception:
+            return
+        self._cursor_theme = target
 
     def _on_size_change(self, event):
         super()._on_size_change(event)
@@ -224,6 +250,7 @@ class USBMouse(pointer_framework.PointerDriver):
             self.set_cursor(cursor)
         except Exception:
             pass
+        self._sync_cursor_theme()
         return cursor
 
     def show_cursor(self):
