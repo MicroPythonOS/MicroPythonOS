@@ -1,5 +1,6 @@
 import lvgl as lv  # NOQA
 import pointer_framework
+from drivers.indev import fri3d_communicator_keyboard as communicator_keyboard
 
 
 def _to_signed(v):
@@ -86,9 +87,63 @@ class FakeHIDSource:
         wheel_b = wheel & 0xFF
         self.inject(addr, 1, 2, bytes([buttons & 0x07, dx_b, dy_b, wheel_b]))
 
+    def inject_keyboard(self, keys, modifiers=0, addr=6):
+        pad = [0] * 6
+        for i, key in enumerate(keys[:6]):
+            pad[i] = key
+        self.inject(addr, 1, 1, bytes([modifiers, 0] + pad))
+
     def drain(self):
         reports, self._reports = self._reports, []
         return reports
+
+
+class HIDHub:
+    def __init__(self, source=None):
+        self._source = source if source is not None else HIDSource()
+        self._mouse_events = []
+        self._key_report = None
+        self._key_addr = None
+
+    def pump(self):
+        try:
+            reports = self._source.drain()
+        except Exception:
+            return
+        for item in reports:
+            try:
+                addr, subclass, protocol, raw = item
+            except Exception:
+                continue
+            try:
+                parser = find_parser(subclass, protocol)
+            except Exception:
+                continue
+            if parser is None:
+                continue
+            if parser.kind == "mouse":
+                try:
+                    event = parser.parse(raw)
+                except Exception:
+                    continue
+                if event is not None:
+                    self._mouse_events.append((addr,) + tuple(event))
+            elif parser.kind == "keyboard":
+                if raw is not None and len(raw) >= 8:
+                    self._key_report = tuple(raw[:8])
+                    self._key_addr = addr
+
+    def drain_mouse(self):
+        events, self._mouse_events = self._mouse_events, []
+        return events
+
+    @property
+    def key_report(self):
+        return self._key_report
+
+    @property
+    def key_addr(self):
+        return self._key_addr
 
 
 class _IdentityCal:
@@ -132,7 +187,9 @@ class USBMouse(pointer_framework.PointerDriver):
         sensitivity=1.0,
         debug=False,
     ):
-        self._source = source if source is not None else HIDSource()
+        if source is None:
+            source = HIDSource()
+        self._hub = source if isinstance(source, HIDHub) else HIDHub(source)
         self._sensitivity = sensitivity
         super().__init__(
             touch_cal=_IdentityCal(),
@@ -169,24 +226,18 @@ class USBMouse(pointer_framework.PointerDriver):
 
     def _get_coords(self):
         try:
-            reports = self._source.drain()
+            self._hub.pump()
         except Exception:
-            reports = []
-        for item in reports:
+            pass
+        try:
+            events = self._hub.drain_mouse()
+        except Exception:
+            events = []
+        for item in events:
             try:
-                _, subclass, protocol, raw = item
+                _, buttons, dx, dy, wheel = item
             except Exception:
                 continue
-            parser = find_parser(subclass, protocol)
-            if parser is None or parser.kind != "mouse":
-                continue
-            try:
-                event = parser.parse(raw)
-            except Exception:
-                continue
-            if event is None:
-                continue
-            buttons, dx, dy, wheel = event
             self._buttons = buttons
             step = self._sensitivity
             self._x = self._clamp(int(self._x + dx * step), self._width - 1)
@@ -295,6 +346,39 @@ class USBMouse(pointer_framework.PointerDriver):
         try:
             if self in pointer_framework.PointerDriver._indevs:
                 pointer_framework.PointerDriver._indevs.remove(self)
+        except Exception:
+            pass
+        try:
+            self._indev_drv.delete()  # NOQA
+        except Exception:
+            try:
+                self.enable(False)
+            except Exception:
+                pass
+
+
+class USBHIDKeyboard(communicator_keyboard.Fri3dCommunicatorKeyboard):
+    def __init__(
+        self,
+        hub,
+        repeat_initial_delay_ms=300,
+        repeat_rate_ms=100,
+    ):
+        self._hub = hub
+        super().__init__(hub, repeat_initial_delay_ms, repeat_rate_ms)
+
+    def _poll(self):
+        try:
+            self._hub.pump()
+        except Exception:
+            pass
+        super()._poll()
+
+    def delete(self):
+        try:
+            import _indev_base
+            if self in _indev_base.IndevBase._indevs:
+                _indev_base.IndevBase._indevs.remove(self)
         except Exception:
             pass
         try:

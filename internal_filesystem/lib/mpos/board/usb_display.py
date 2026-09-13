@@ -23,6 +23,8 @@ _USB_TOUCH_EXC = {
 }
 _wrapped_indevs = []
 _usb_mouse = None
+_usb_keyboard = None
+_hid_hub = None
 _hid_idle_prev = None
 # Future Settings-toggle seam: when False, hotplugged displays enumerate
 # but the UI never auto-switches (manual switch_to_usb still works).
@@ -54,8 +56,8 @@ def arm_usb_display(width=640, height=480):
 
 
 def arm_usb_hid():
-    global _usb_mouse
-    if _usb_mouse is not None:
+    global _usb_mouse, _usb_keyboard, _hid_hub
+    if _usb_mouse is not None and _usb_keyboard is not None:
         return _usb_mouse
     try:
         import usb_disp
@@ -74,17 +76,33 @@ def arm_usb_hid():
     except Exception as e:
         logger.error("usb hid start fail: %s" % (e))
         return None
-    try:
-        _usb_mouse = usb_hid_mod.USBMouse()
-        from mpos import InputManager
-        InputManager.register_indev(_usb_mouse)
-        _usb_mouse.attach_cursor()
-        _usb_mouse.hide_cursor()
-        _usb_mouse.enable(False)
-    except Exception as e:
-        logger.error("usb hid mouse init fail: %s" % (e))
-        _usb_mouse = None
-        return None
+    from mpos import InputManager
+    if _hid_hub is None:
+        _hid_hub = usb_hid_mod.HIDHub()
+    if _usb_mouse is None:
+        try:
+            _usb_mouse = usb_hid_mod.USBMouse(source=_hid_hub)
+            InputManager.register_indev(_usb_mouse)
+            _usb_mouse.attach_cursor()
+            _usb_mouse.hide_cursor()
+            _usb_mouse.enable(False)
+        except Exception as e:
+            logger.error("usb hid mouse init fail: %s" % (e))
+            _usb_mouse = None
+    if _usb_keyboard is None:
+        try:
+            _usb_keyboard = usb_hid_mod.USBHIDKeyboard(_hid_hub)
+            try:
+                group = lv.group_get_default()
+            except Exception:
+                group = None
+            if group is not None:
+                _usb_keyboard.set_group(group)
+            InputManager.register_indev(_usb_keyboard)
+            _usb_keyboard.enable(False)
+        except Exception as e:
+            logger.error("usb hid keyboard init fail: %s" % (e))
+            _usb_keyboard = None
     _ensure_poll_timer()
     return _usb_mouse
 
@@ -126,21 +144,36 @@ def _update_hid_watchdog_exclusion(claimed):
         _hid_idle_prev = None
 
 
-def _sync_usb_mouse(claimed):
-    mouse = _usb_mouse
-    if claimed and mouse is None:
-        mouse = arm_usb_hid()
-    if mouse is None:
-        return
+def _hid_kinds(claimed):
     try:
-        if claimed:
-            mouse.enable(True)
-            mouse.show_cursor()
-        else:
-            mouse.enable(False)
-            mouse.hide_cursor()
+        import usb_disp
+    except ImportError:
+        return (False, False)
+    if not hasattr(usb_disp, "hid_state"):
+        return (bool(claimed), bool(claimed))
+    try:
+        kinds = [entry[1] for entry in usb_disp.hid_state()]
     except Exception as e:
-        logger.error("usb hid mouse sync fail: %s" % (e))
+        logger.error("usb hid kinds fail: %s" % (e))
+        return (bool(claimed), bool(claimed))
+    return ("mouse" in kinds, "keyboard" in kinds)
+
+
+def _sync_usb_hid(claimed):
+    if claimed and (_usb_mouse is None or _usb_keyboard is None):
+        arm_usb_hid()
+    has_mouse, has_keyboard = _hid_kinds(claimed)
+    try:
+        if _usb_mouse is not None:
+            _usb_mouse.enable(bool(has_mouse))
+            if has_mouse:
+                _usb_mouse.show_cursor()
+            else:
+                _usb_mouse.hide_cursor()
+        if _usb_keyboard is not None:
+            _usb_keyboard.enable(bool(has_keyboard))
+    except Exception as e:
+        logger.error("usb hid sync fail: %s" % (e))
 
 
 def _poll_hid():
@@ -157,7 +190,7 @@ def _poll_hid():
         return
     claimed = _hid_claimed()
     _update_hid_watchdog_exclusion(claimed)
-    _sync_usb_mouse(claimed)
+    _sync_usb_hid(claimed)
 
 
 # width/height default to 640x480: smallest standard DMT mode, proven to sync.

@@ -12,6 +12,30 @@ class FakeDispMod:
     def __init__(self):
         self.idle_reset = True
         self.addrs = []
+        self.hid_states = []
+
+    def hid_poll(self):
+        return False
+
+    def hid_claimed_addrs(self):
+        return list(self.addrs)
+
+    def hid_state(self):
+        return list(self.hid_states)
+
+    def hid_start(self):
+        return True
+
+    def auto_reset_idle(self, *args):
+        if not args:
+            return self.idle_reset
+        self.idle_reset = bool(args[0])
+
+
+class LegacyFakeDispMod:
+    def __init__(self):
+        self.idle_reset = True
+        self.addrs = []
 
     def hid_poll(self):
         return False
@@ -72,6 +96,90 @@ class TestHIDWatchdogExclusion(unittest.TestCase):
         usb_display._update_hid_watchdog_exclusion([])
         self.assertTrue(self.fake.idle_reset)
         self.assertIsNone(usb_display._hid_idle_prev)
+
+
+class TestSyncUSBHID(GraphicalTestCase):
+    def setUp(self):
+        super().setUp()
+        self.fake = FakeDispMod()
+        sys.modules["usb_disp"] = self.fake
+        self.prev = (usb_display._usb_mouse, usb_display._usb_keyboard, usb_display._hid_hub)
+        usb_display._usb_mouse = None
+        usb_display._usb_keyboard = None
+        usb_display._hid_hub = None
+
+    def tearDown(self):
+        sys.modules.pop("usb_disp", None)
+        for dev in (usb_display._usb_mouse, usb_display._usb_keyboard):
+            if dev is None:
+                continue
+            try:
+                InputManager.unregister_indev(dev)
+            except Exception:
+                pass
+            try:
+                dev.delete()
+            except Exception:
+                pass
+        usb_display._usb_mouse, usb_display._usb_keyboard, usb_display._hid_hub = self.prev
+
+    def _armed_with_recorders(self):
+        self.fake.addrs = [5, 6]
+        usb_display._sync_usb_hid([5, 6])
+        mouse = usb_display._usb_mouse
+        kbd = usb_display._usb_keyboard
+        self.assertIsNotNone(mouse)
+        self.assertIsNotNone(kbd)
+        mouse_calls = []
+        kbd_calls = []
+        orig_mouse_enable = mouse.enable
+        orig_kbd_enable = kbd.enable
+
+        def mouse_rec(en):
+            mouse_calls.append(bool(en))
+            return orig_mouse_enable(en)
+
+        def kbd_rec(en):
+            kbd_calls.append(bool(en))
+            return orig_kbd_enable(en)
+
+        mouse.enable = mouse_rec
+        kbd.enable = kbd_rec
+        return mouse, kbd, mouse_calls, kbd_calls
+
+    def test_mouse_only_state(self):
+        mouse, kbd, mouse_calls, kbd_calls = self._armed_with_recorders()
+        self.fake.hid_states = [(6, "mouse", 0x17EF, 0x608D)]
+        usb_display._sync_usb_hid([6])
+        self.assertEqual(mouse_calls, [True])
+        self.assertEqual(kbd_calls, [False])
+        self.assertFalse(mouse._cursor.has_flag(lv.obj.FLAG.HIDDEN))
+
+    def test_keyboard_only_state(self):
+        mouse, kbd, mouse_calls, kbd_calls = self._armed_with_recorders()
+        self.fake.hid_states = [(5, "keyboard", 0x046D, 0xC31C)]
+        usb_display._sync_usb_hid([5])
+        self.assertEqual(mouse_calls, [False])
+        self.assertEqual(kbd_calls, [True])
+        self.assertTrue(mouse._cursor.has_flag(lv.obj.FLAG.HIDDEN))
+
+    def test_empty_state_disables_both(self):
+        mouse, kbd, mouse_calls, kbd_calls = self._armed_with_recorders()
+        self.fake.hid_states = []
+        self.fake.addrs = []
+        usb_display._sync_usb_hid([])
+        self.assertEqual(mouse_calls, [False])
+        self.assertEqual(kbd_calls, [False])
+        self.assertTrue(mouse._cursor.has_flag(lv.obj.FLAG.HIDDEN))
+
+    def test_legacy_module_follows_claimed(self):
+        sys.modules["usb_disp"] = LegacyFakeDispMod()
+        usb_display._usb_mouse = None
+        usb_display._usb_keyboard = None
+        usb_display._hid_hub = None
+        usb_display._sync_usb_hid([6])
+        self.assertIsNotNone(usb_display._usb_mouse)
+        self.assertIsNotNone(usb_display._usb_keyboard)
 
 
 class TestMouseSkipsTouchWrap(GraphicalTestCase):
