@@ -22,6 +22,8 @@ _USB_TOUCH_EXC = {
     # "board_id": {"ccw": True, "mx": True, "my": True},
 }
 _wrapped_indevs = []
+_usb_mouse = None
+_hid_idle_prev = None
 # Future Settings-toggle seam: when False, hotplugged displays enumerate
 # but the UI never auto-switches (manual switch_to_usb still works).
 _auto_switch = True
@@ -49,6 +51,113 @@ def arm_usb_display(width=640, height=480):
     _usb_dev.start()
     _ensure_poll_timer()
     return _usb_dev
+
+
+def arm_usb_hid():
+    global _usb_mouse
+    if _usb_mouse is not None:
+        return _usb_mouse
+    try:
+        import usb_disp
+    except ImportError:
+        return None
+    if not hasattr(usb_disp, "hid_start"):
+        return None
+    try:
+        import drivers.indev.usb_hid as usb_hid_mod
+    except ImportError as e:
+        logger.error("usb hid driver import fail: %s" % (e))
+        return None
+    try:
+        if not usb_disp.hid_start():
+            return None
+    except Exception as e:
+        logger.error("usb hid start fail: %s" % (e))
+        return None
+    try:
+        _usb_mouse = usb_hid_mod.USBMouse()
+        from mpos import InputManager
+        InputManager.register_indev(_usb_mouse)
+        _usb_mouse.attach_cursor()
+        _usb_mouse.hide_cursor()
+        _usb_mouse.enable(False)
+    except Exception as e:
+        logger.error("usb hid mouse init fail: %s" % (e))
+        _usb_mouse = None
+        return None
+    _ensure_poll_timer()
+    return _usb_mouse
+
+
+def _hid_claimed():
+    try:
+        import usb_disp
+    except ImportError:
+        return []
+    if not hasattr(usb_disp, "hid_claimed_addrs"):
+        return []
+    try:
+        return list(usb_disp.hid_claimed_addrs())
+    except Exception as e:
+        logger.error("usb hid claimed fail: %s" % (e))
+        return []
+
+
+def _update_hid_watchdog_exclusion(claimed):
+    global _hid_idle_prev
+    try:
+        import usb_disp
+    except ImportError:
+        return
+    if not hasattr(usb_disp, "auto_reset_idle"):
+        return
+    if claimed and _hid_idle_prev is None:
+        try:
+            _hid_idle_prev = bool(usb_disp.auto_reset_idle())
+            usb_disp.auto_reset_idle(False)
+        except Exception as e:
+            logger.error("hid idle suppress fail: %s" % (e))
+            _hid_idle_prev = None
+    elif not claimed and _hid_idle_prev is not None:
+        try:
+            usb_disp.auto_reset_idle(_hid_idle_prev)
+        except Exception as e:
+            logger.error("hid idle restore fail: %s" % (e))
+        _hid_idle_prev = None
+
+
+def _sync_usb_mouse(claimed):
+    mouse = _usb_mouse
+    if claimed and mouse is None:
+        mouse = arm_usb_hid()
+    if mouse is None:
+        return
+    try:
+        if claimed:
+            mouse.enable(True)
+            mouse.show_cursor()
+        else:
+            mouse.enable(False)
+            mouse.hide_cursor()
+    except Exception as e:
+        logger.error("usb hid mouse sync fail: %s" % (e))
+
+
+def _poll_hid():
+    try:
+        import usb_disp
+    except ImportError:
+        return
+    if not hasattr(usb_disp, "hid_poll"):
+        return
+    try:
+        usb_disp.hid_poll()
+    except Exception as e:
+        logger.error("usb hid poll fail: %s" % (e))
+        return
+    claimed = _hid_claimed()
+    _update_hid_watchdog_exclusion(claimed)
+    _sync_usb_mouse(claimed)
 
 
 # width/height default to 640x480: smallest standard DMT mode, proven to sync.
@@ -277,6 +386,12 @@ def _repoint_indevs(display, old):
             indev._width = new_lv_disp.get_horizontal_resolution()
             indev._height = new_lv_disp.get_vertical_resolution()
             indev._py_disp_drv = py_disp
+        on_display_changed = getattr(indev, "_on_display_changed", None)
+        if on_display_changed is not None:
+            try:
+                on_display_changed(new_lv_disp)
+            except Exception as e:
+                logger.error("sw indev display hook fail: %s" % (e))
         if hasattr(indev, "_on_size_change"):
             new_lv_disp.add_event_cb(indev._on_size_change, lv.EVENT.RESOLUTION_CHANGED, None)
         indev.enable(True)
@@ -297,6 +412,8 @@ def _wrap_all_touch(display, old):
     except Exception:
         exc = {}
     for indev in InputManager.list_indevs():
+        if getattr(indev, "__usb_absolute__", False):
+            continue
         if not hasattr(indev, "_calc_coords") or indev in _wrapped_indevs:
             continue
         _wrapped_indevs.append(indev)
@@ -358,6 +475,8 @@ def _ensure_poll_timer():
 
 def _poll_cb(t):
     global _sw_idle_polls, _sw_retries
+    if not _switching:
+        _poll_hid()
     dev = _usb_dev
     if dev is None or _switching:
         return

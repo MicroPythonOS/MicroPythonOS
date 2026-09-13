@@ -1,4 +1,6 @@
-# MicroPython USER_C_MODULE for USB display adapters (Pico_USB_Disp, MIT).
+# MicroPython USER_C_MODULE for USB display adapters (Pico_USB_Disp, MIT)
+# plus a minimal USB HID host transport (src/usb_hid.c: boot-protocol mice
+# + keyboards on raw usb_host, own client + task, no upstream/ changes).
 # ESP32-only PoC: DisplayLink DL-1xx via the in-tree IDF usb_host stack.
 #
 # Pass as:
@@ -16,6 +18,7 @@ set(C_USB_DISP_SOURCES
     ${C_USB_DISP_UPSTREAM}/usb_disp_prot_dl-1xx.cpp
     ${C_USB_DISP_UPSTREAM}/usb_disp_hal_esp32.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/usb_disp_mpy.c
+    ${CMAKE_CURRENT_LIST_DIR}/src/usb_hid.c
 )
 
 # T6/MS91xx need USB High-Speed (ESP32-P4 only); on S2/S3 they compile to

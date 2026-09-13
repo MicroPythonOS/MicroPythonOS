@@ -416,6 +416,12 @@ try:
 except Exception as e:
     logger.error("USB display arm failed: %s", e)
 
+try:
+    from mpos.board.usb_display import arm_usb_hid
+    arm_usb_hid()
+except Exception as e:
+    logger.error("USB HID arm failed: %s", e)
+
 async def ota_rollback_cancel():
     try:
         from esp32 import Partition

@@ -13,6 +13,7 @@ Board Support:
 - ESP32-S3 USB display: fix hard crash (abort in IDF `enum.c`, reboot loop) when a port reset hit a hub-to-hub uplink and dropped the whole subtree — high-speed ports are now never reset, manually or automatically, and `hub_ports()` reports the speed flag
 - ESP32-S3 USB display: watchdog escalates a dead-silent hub with stuck ports to one automatic root power cycle (max 3 per boot), proven to revive EP0-dead hubs that survive port resets; manual `force_reenum()` remains for anything beyond that
 - ESP32-S3 USB display: escalation fires at the first breaker trip instead of the third, and episode closes mark the port preexisting so uplink ports that resolve someone else's enumeration can never draw a quiet auto-reset
+- ESP32-S3: add support for USB Human Interface Device (HID) such as mouse pointers
 
 Frameworks:
 - topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target

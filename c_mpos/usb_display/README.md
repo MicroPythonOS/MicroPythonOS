@@ -1,10 +1,12 @@
-c_mpos/usb_display: MicroPython binding for Pico_USB_Disp (USB display adapters).
+c_mpos/usb_display: MicroPython binding for Pico_USB_Disp (USB display adapters)
+plus a minimal USB HID host transport (boot-protocol mice + keyboards).
 
 ESP32-only: DisplayLink DL-1xx via the in-tree IDF usb_host stack.
 Build with: ./scripts/build_mpos.sh esp32s3 --usbdisplay
 Python driver: internal_filesystem/lib/drivers/display/usb_disp/
+HID Python driver: internal_filesystem/lib/drivers/indev/usb_hid.py
 Shared board helper: internal_filesystem/lib/mpos/board/usb_display.py
-Boot hook: internal_filesystem/lib/mpos/main.py (arm_usb_display())
+Boot hook: internal_filesystem/lib/mpos/main.py (arm_usb_display(), arm_usb_hid())
 
 upstream/ holds a vendored snapshot (see upstream/VERSION). Only the
 ESP32-relevant sources are used (upstream/CMakeLists.txt ESP-IDF branch):
@@ -202,6 +204,37 @@ What it took to get hotplug / hot-unplug working, per level
   (MPOS_NO_USBDEV, ~6.3 KiB, nothing imports it) and P4-gating the HS
   protocols — not from shaving. Real headroom needs partition or
   build-system work, not more trimming.
+
+--- USB HID level (boot-protocol mice + keyboards, phase 1: mouse) ---
+- Transport is minimal on purpose (no espressif/usb_host_hid managed
+  component: ~51 KB flash + a managed `usb` override that would shadow
+  the in-tree component our settle patch targets). src/usb_hid.c owns a
+  second usb_host client + task on the shared stack; the display HAL is
+  untouched (one device may be opened by both clients at once).
+- Two-stage setup avoids a deadlock: the client task only opens/stages
+  candidates; blocking SET_PROTOCOL/SET_IDLE run in hid_poll() on the
+  app thread (same pending_probe pattern as the display). Interrupt
+  callbacks only memcpy into a 64-entry SPSC ring and resubmit.
+- Module API (all on usb_disp, same --usbdisplay build): hid_start()
+  (False until the host is up, retried by the 1s poll timer),
+  hid_poll() (change bool like USBDisp.poll()), hid_drain() (raw
+  (addr, subclass, protocol, bytes) tuples), hid_state()
+  ((addr, kind, vid, pid)), hid_claimed_addrs(). Parsing is
+  Python-side (drivers/indev/usb_hid.py parser registry), so new
+  device kinds never need C changes.
+- Watchdog coexistence: a healthy mouse reads exactly like a wedged
+  adapter (connected + enabled, no bus growth), which the idle
+  auto-reset would PORT_RESET ~15s after plug. While any HID device
+  is claimed, board code suppresses auto_reset_idle (restoring the
+  prior value on unplug, so a manual user setting is never forced
+  back on). The disabled-port episode path is unaffected.
+- LVGL: USBMouse subclasses PointerDriver with identity _calc_coords
+  (absolute positions, no TouchCalData side effects) and
+  __usb_absolute__ so the panel->USB touch wrap skips it. Cursor is an
+  lv.image set via indev.set_cursor (LVGL reparents it to the sys
+  layer); reparented + re-set on display swaps via the generic
+  _on_display_changed hook in _repoint_indevs. Wheel scrolls the
+  object under the cursor best-effort.
 
 --- Debugging notes ---
 - bus_devices() (stack address list) separates "nothing sensed"

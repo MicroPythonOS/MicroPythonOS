@@ -15,6 +15,7 @@
 #include "usb/usb_host.h"
 #include "usb_disp.h"
 #include "usb_disp_hal.h"
+#include "usb_hid.h"
 
 // Upstream's default usb_disp_log is a no-op outside Arduino. Route all
 // library logs to the console (UART REPL during USB-host PoC) instead.
@@ -233,19 +234,31 @@ static mp_obj_t mp_usb_disp_bus_devices(void) {
     }
     uint8_t claimed = 0;
     bool have_claimed = usb_disp_hal_claimed_addr(&claimed);
+    uint8_t hid_addrs[8];
+    uint8_t n_hid = usb_hid_claimed_addrs(hid_addrs, (uint8_t)sizeof(hid_addrs));
     for (int i = 0; i < n; i++) {
         mp_obj_list_append(list, mp_obj_new_int(addrs[i]));
     }
+    // Claimed devices (display + HID) left the stack's idle list, so
+    // re-add any that bus_devices() did not report.
+    uint8_t extra[9];
+    uint8_t n_extra = 0;
     if (have_claimed) {
+        extra[n_extra++] = claimed;
+    }
+    for (uint8_t i = 0; i < n_hid && n_extra < (uint8_t)sizeof(extra); i++) {
+        extra[n_extra++] = hid_addrs[i];
+    }
+    for (uint8_t i = 0; i < n_extra; i++) {
         bool seen = false;
-        for (int i = 0; i < n; i++) {
-            if (addrs[i] == claimed) {
+        for (int k = 0; k < n; k++) {
+            if (addrs[k] == extra[i]) {
                 seen = true;
                 break;
             }
         }
-        if (!seen && n < (int)sizeof(addrs)) {
-            mp_obj_list_append(list, mp_obj_new_int(claimed));
+        if (!seen) {
+            mp_obj_list_append(list, mp_obj_new_int(extra[i]));
         }
     }
     return list;
@@ -308,8 +321,23 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_disp_reset_port_obj, 2, 4, mp_
 // root-hub line. Read-only, safe any time.
 static char s_lsusb_buf[2048];
 static mp_obj_t mp_usb_disp_lsusb_fn(void) {
-    uint16_t n = usb_disp_hal_lsusb(s_lsusb_buf, sizeof(s_lsusb_buf));
-    return mp_obj_new_str(s_lsusb_buf, n);
+    uint16_t used = usb_disp_hal_lsusb(s_lsusb_buf, sizeof(s_lsusb_buf));
+    // Claimed HID devices left the idle list, so the HAL could not list
+    // them: append one line each from hid_state() (no string descriptors,
+    // EP0 is busy streaming; VID:PID + kind is enough to identify).
+    usb_hid_state_t st[4];
+    uint8_t n_hid = usb_hid_state(st, 4);
+    for (uint8_t i = 0; i < n_hid && used + 64 < sizeof(s_lsusb_buf); i++) {
+        const char *kind = st[i].protocol == 2 ? "mouse" : "keyboard";
+        int w = snprintf(s_lsusb_buf + used, sizeof(s_lsusb_buf) - used,
+                         "Bus 001 Device %03d: ID %04x:%04x HID %s\n",
+                         st[i].addr, st[i].vid, st[i].pid, kind);
+        if (w < 0 || (uint16_t)w >= sizeof(s_lsusb_buf) - used) {
+            break;
+        }
+        used = (uint16_t)(used + w);
+    }
+    return mp_obj_new_str(s_lsusb_buf, used);
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_disp_lsusb_obj, mp_usb_disp_lsusb_fn);
 
@@ -337,6 +365,79 @@ static mp_obj_t mp_usb_disp_set_auto_reset_idle_fn(size_t n_args, const mp_obj_t
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_disp_set_auto_reset_idle_obj, 0, 1, mp_usb_disp_set_auto_reset_idle_fn);
 
+// hid_start() - register the HID client (own task) on the shared host
+// stack. False when the stack is not up yet (arm_usb_display runs first);
+// idempotent, safe to retry from the 1s poll timer.
+static mp_obj_t mp_usb_hid_start_fn(void) {
+    return mp_obj_new_bool(usb_hid_start());
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_start_obj, mp_usb_hid_start_fn);
+
+// hid_poll() - pump staged HID setups and claim health checks. True on
+// device-set change (connect/disconnect), like USBDisp.poll().
+static uint32_t s_hid_last_gen = 0;
+static mp_obj_t mp_usb_hid_poll_fn(void) {
+    usb_hid_poll();
+    uint32_t gen = usb_hid_change_gen();
+    bool changed = (gen != s_hid_last_gen);
+    s_hid_last_gen = gen;
+    return mp_obj_new_bool(changed);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_poll_obj, mp_usb_hid_poll_fn);
+
+// hid_drain() - [(addr, subclass, protocol, bytes), ...] input reports
+// since the last call. Raw boot reports; parsing is Python-side so new
+// device kinds never need C changes.
+static mp_obj_t mp_usb_hid_drain_fn(void) {
+    usb_hid_event_t ev[16];
+    uint8_t n = usb_hid_drain(ev, (uint8_t)(sizeof(ev) / sizeof(ev[0])));
+    mp_obj_t list = mp_obj_new_list(0, NULL);
+    for (uint8_t i = 0; i < n; i++) {
+        mp_obj_t t[4];
+        t[0] = mp_obj_new_int(ev[i].addr);
+        t[1] = mp_obj_new_int(ev[i].subclass);
+        t[2] = mp_obj_new_int(ev[i].protocol);
+        t[3] = mp_obj_new_bytes(ev[i].data, ev[i].len);
+        mp_obj_list_append(list, mp_obj_new_tuple(4, t));
+    }
+    return list;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_drain_obj, mp_usb_hid_drain_fn);
+
+// hid_state() - [(addr, kind, vid, pid), ...] for streaming HID devices.
+// kind is "mouse" or "keyboard".
+static mp_obj_t mp_usb_hid_state_fn(void) {
+    usb_hid_state_t st[4];
+    uint8_t n = usb_hid_state(st, 4);
+    mp_obj_t list = mp_obj_new_list(0, NULL);
+    for (uint8_t i = 0; i < n; i++) {
+        mp_obj_t t[4];
+        t[0] = mp_obj_new_int(st[i].addr);
+        const char *kind = st[i].protocol == 2 ? "mouse" : "keyboard";
+        t[1] = mp_obj_new_str(kind, strlen(kind));
+        t[2] = mp_obj_new_int(st[i].vid);
+        t[3] = mp_obj_new_int(st[i].pid);
+        mp_obj_list_append(list, mp_obj_new_tuple(4, t));
+    }
+    return list;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_state_obj, mp_usb_hid_state_fn);
+
+// hid_claimed_addrs() - [addr, ...] held open by the HID client. The hub
+// watchdog's idle auto-reset must skip these (a healthy mouse reads
+// exactly like a wedged adapter: connected + enabled, no bus growth);
+// bus_devices()/lsusb re-add them for the same reason as the display.
+static mp_obj_t mp_usb_hid_claimed_addrs_fn(void) {
+    uint8_t addrs[8];
+    uint8_t n = usb_hid_claimed_addrs(addrs, (uint8_t)sizeof(addrs));
+    mp_obj_t list = mp_obj_new_list(0, NULL);
+    for (uint8_t i = 0; i < n; i++) {
+        mp_obj_list_append(list, mp_obj_new_int(addrs[i]));
+    }
+    return list;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_claimed_addrs_obj, mp_usb_hid_claimed_addrs_fn);
+
 static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_usb_disp) },
     { MP_ROM_QSTR(MP_QSTR_USBDisp), MP_ROM_PTR(&mp_type_usbdisp) },
@@ -347,6 +448,11 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_reset_port), MP_ROM_PTR(&mp_usb_disp_reset_port_obj) },
     { MP_ROM_QSTR(MP_QSTR_set_watchdog), MP_ROM_PTR(&mp_usb_disp_set_watchdog_obj) },
     { MP_ROM_QSTR(MP_QSTR_auto_reset_idle), MP_ROM_PTR(&mp_usb_disp_set_auto_reset_idle_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_start), MP_ROM_PTR(&mp_usb_hid_start_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_poll), MP_ROM_PTR(&mp_usb_hid_poll_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_drain), MP_ROM_PTR(&mp_usb_hid_drain_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_state), MP_ROM_PTR(&mp_usb_hid_state_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_claimed_addrs), MP_ROM_PTR(&mp_usb_hid_claimed_addrs_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_disp_module_globals, usb_disp_module_globals_table);
