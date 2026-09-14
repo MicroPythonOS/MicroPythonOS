@@ -65,6 +65,7 @@ typedef struct {
     uint8_t protocol;
     uint8_t ep_in;
     uint16_t mps;
+    uint8_t speed; // usb_speed_t: 0=low, 1=full, 2=high (decides TT involvement)
     uint8_t interval_ms; // poll cadence, from bInterval, clamped
     uint32_t poll_next_ms; // next transient tick due
     uint32_t polls; // cumulative transient polls performed
@@ -263,6 +264,13 @@ static void hid_intr_cb(usb_transfer_t *xfer) {
             }
         }
     } else if (xfer->status != USB_TRANSFER_STATUS_CANCELED) {
+        // Visible by design (not verbose): persistent-transfer errors are
+        // rare, and the status code discriminates TT/split faults (ERROR)
+        // from surprise removal (NO_DEVICE) from stalls/overflows.
+        // Full list: 0=completed 1=error 2=timed-out 3=canceled
+        // 4=stall 5=overflow 6=skipped 7=no-device.
+        usb_disp_log("[HID] addr=%u intr status=%d actual=%d", slot->addr,
+                     (int)xfer->status, xfer->actual_num_bytes);
         slot->xfer_err = true;
     }
 }
@@ -451,6 +459,17 @@ static void hid_scan(void) {
         hid_slot_t *slot = &s_slots[free_idx];
         memset(slot, 0, sizeof(*slot));
         slot->state = HID_SLOT_STAGED;
+        {
+            // Speed decides TT involvement (low-speed devices behind the
+            // hub need split transactions; full-speed do not). Cached
+            // here for hid_state(); descriptor reads above are cached
+            // so this stays non-blocking in the client task.
+            usb_device_info_t dinfo;
+            slot->speed = 0xFF; // unknown
+            if (usb_host_device_info(dev, &dinfo) == ESP_OK) {
+                slot->speed = (uint8_t)dinfo.speed;
+            }
+        }
         slot->dev = dev;
         slot->addr = addr;
         slot->iface = iface;
@@ -832,9 +851,15 @@ static void hid_kbd_poll_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+static volatile uint32_t s_client_last_pump_ms = 0;
+
 static void hid_client_task(void *arg) {
     (void)arg;
     while (true) {
+        // Heartbeat for event-delivery-stall detection (see
+        // usb_hid_loop_lag_ms): if this stops advancing while the device
+        // is alive, completions/teardowns/rescans all freeze with it.
+        s_client_last_pump_ms = hid_now_ms();
         usb_host_client_handle_events(s_hid_client, pdMS_TO_TICKS(100));
         // Streaming slots only: staged slots are owned by hid_poll()
         // (app thread), so a replug racing setup is torn down there.
@@ -882,6 +907,7 @@ bool usb_hid_start(void) {
     }
     s_hid_started = true;
     s_scan_needed = true;
+    s_client_last_pump_ms = hid_now_ms();
     xTaskCreate(hid_client_task, "usbhid_client", 4096, NULL, 5, NULL);
     usb_disp_log("[HID] client started (S3 channel policy: display > mouse > keyboard)");
     return true;
@@ -970,6 +996,7 @@ uint8_t usb_hid_state(usb_hid_state_t *out, uint8_t max) {
         out[n].protocol = slot->protocol;
         out[n].vid = slot->vid;
         out[n].pid = slot->pid;
+        out[n].speed = slot->speed;
         n++;
     }
     return n;
@@ -1053,6 +1080,13 @@ void usb_hid_retry(void) {
     hid_defer_clear_all(false);
     s_scan_needed = true;
     usb_disp_log("[HID] manual retry re-armed");
+}
+
+uint32_t usb_hid_loop_lag_ms(void) {
+    // Unsigned wrap-safe: how long ago the client task last pumped
+    // events. ~100ms steady state; seconds mean event delivery (and
+    // with it completions, teardowns, rescans) is stalled.
+    return hid_now_ms() - s_client_last_pump_ms;
 }
 
 void usb_hid_set_verbose(bool on) {

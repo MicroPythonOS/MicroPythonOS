@@ -32,6 +32,7 @@ typedef struct {
     uint8_t protocol; // 1 = keyboard, 2 = mouse (boot protocol numbers)
     uint16_t vid;
     uint16_t pid;
+    uint8_t speed; // usb_speed_t: 0=low, 1=full, 2=high, 0xFF=unknown
 } usb_hid_state_t;
 
 // Register our own usb_host client + task. False when the host stack is
@@ -85,6 +86,11 @@ typedef struct {
 
 // Live polled keyboards (for usb_disp.hid_poll_stats()).
 uint8_t usb_hid_poll_stats(usb_hid_poll_stat_t *out, uint8_t max);
+
+// ms since the client task last pumped events (usb_disp.hid_loop_lag()).
+// ~100ms in steady state; seconds mean event delivery - completions,
+// teardowns, rescans - is stalled. Wrap-safe subtraction.
+uint32_t usb_hid_loop_lag_ms(void);
 
 // Per-tick debug logging, off by default (usb_disp.hid_verbose()).
 // Gated [HID][V] lines: claim/submit/wait outcomes per tick. Opt-in

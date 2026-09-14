@@ -71,8 +71,11 @@ HID (same module, same build):
 - hid_poll() -> bool - pump setups/health; True on device-set change.
 - hid_drain() -> [(addr, subclass, protocol, bytes)] - raw boot
   reports since last call (consumed by drivers/indev/usb_hid.py).
-- hid_state() -> [(addr, kind, vid, pid)] - streaming devices only.
-  kind is "mouse" or "keyboard".
+- hid_state() -> [(addr, kind, vid, pid, speed)] - streaming devices
+  only. kind is "mouse" or "keyboard"; speed is 0=low, 1=full,
+  2=high (low-speed devices behind a hub need split transactions -
+  decisive for TT-overload theories, so it is captured at stage time
+  and exposed here).
 - hid_claimed_addrs() -> [addr] - held-open addresses (watchdog
   exclusion + bus_devices/lsusb re-add).
 - hid_parked() -> [(vid, pid, kind, fails)] - parked (fails=255) or
@@ -84,8 +87,15 @@ HID (same module, same build):
   transiently-polled keyboards (see polling note above).
 - hid_verbose([on]) - per-tick debug flag, off by default (bare call
   reads it back). When on, each transient tick logs [HID][V]
-  claim/submit/wait outcomes. Opt-in only: at ~100 ticks/s it would
+  claim/submit/wait outcomes. Opt-in only: at ~20 ticks/s it would
   drown the REPL (and any file transfer) otherwise.
+- hid_loop_lag() - ms since the HID client task last pumped stack
+  events. Reads ~100 in steady state; seconds mean event delivery
+  (completions, teardowns, rescans) is stalled - e.g. app-thread
+  control traffic (watchdog sweep, lsusb opens, setup ctrls) with
+  multi-second timeouts serializing shared stack locks. If teardown
+  ever lags a flagged error by seconds, read this first: it separates
+  a stalled event loop from a wedged bus.
 
 =====================================================================
 What it took to get hotplug / hot-unplug working, per level
@@ -384,6 +394,15 @@ What it took to get hotplug / hot-unplug working, per level
   that finds none just skips (counted, silent) and parks after 50
   consecutive misses. If transient polling proves out, Phase B moves
   mice to the same scheme (steady state 6).
+- Persistent interrupt errors log the URB status code:
+  `[HID] addr=N intr status=S actual=A` with S: 0=completed, 1=error
+  (no response/CRC - TT/split faults land here), 2=timed-out,
+  3=canceled, 4=stall, 5=overflow, 6=skipped, 7=no-device (surprise
+  removal). Status=7 arriving on a standing pipe seconds-to-a-minute
+  before a hub renumber is an early warning of the coming drop, not
+  noise. A mouse whose standing transfer errors first every collapse
+  while a second periodic pipe is being aborted next to it points at
+  scheduler/TT interaction, not at either device.
 - Debugging channel pressure: hid_parked() non-empty with fails=255
   plus the "No more HCD channels" lines = exhausted, not wedged. Do NOT reset_port()
   parked devices (they are healthy and enumerated; a reset just burns

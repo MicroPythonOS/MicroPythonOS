@@ -422,20 +422,22 @@ static mp_obj_t mp_usb_hid_drain_fn(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_drain_obj, mp_usb_hid_drain_fn);
 
-// hid_state() - [(addr, kind, vid, pid), ...] for streaming HID devices.
-// kind is "mouse" or "keyboard".
+// hid_state() - [(addr, kind, vid, pid, speed), ...] for streaming HID
+// devices. kind is "mouse" or "keyboard"; speed is 0=low, 1=full,
+// 2=high (low-speed devices behind a hub need split transactions).
 static mp_obj_t mp_usb_hid_state_fn(void) {
     usb_hid_state_t st[4];
     uint8_t n = usb_hid_state(st, 4);
     mp_obj_t list = mp_obj_new_list(0, NULL);
     for (uint8_t i = 0; i < n; i++) {
-        mp_obj_t t[4];
+        mp_obj_t t[5];
         t[0] = mp_obj_new_int(st[i].addr);
         const char *kind = st[i].protocol == 2 ? "mouse" : "keyboard";
         t[1] = mp_obj_new_str(kind, strlen(kind));
         t[2] = mp_obj_new_int(st[i].vid);
         t[3] = mp_obj_new_int(st[i].pid);
-        mp_obj_list_append(list, mp_obj_new_tuple(4, t));
+        t[4] = mp_obj_new_int(st[i].speed);
+        mp_obj_list_append(list, mp_obj_new_tuple(5, t));
     }
     return list;
 }
@@ -504,6 +506,14 @@ static mp_obj_t mp_usb_hid_poll_stats_fn(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_poll_stats_obj, mp_usb_hid_poll_stats_fn);
 
+// hid_loop_lag() - ms since the HID client task last pumped stack
+// events. Reads ~100 in steady state; seconds indicate event delivery
+// (completions, teardowns, rescans) is stalled.
+static mp_obj_t mp_usb_hid_loop_lag_fn(void) {
+    return mp_obj_new_int((mp_int_t)usb_hid_loop_lag_ms());
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_loop_lag_obj, mp_usb_hid_loop_lag_fn);
+
 // hid_verbose([on]) - with no args, return the per-tick debug flag;
 // with an arg, set it. Off by default; when on, each transient tick
 // logs [HID][V] claim/submit/wait outcomes (only useful while actively
@@ -536,6 +546,7 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_hid_retry), MP_ROM_PTR(&mp_usb_hid_retry_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_poll_stats), MP_ROM_PTR(&mp_usb_hid_poll_stats_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_verbose), MP_ROM_PTR(&mp_usb_hid_verbose_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_loop_lag), MP_ROM_PTR(&mp_usb_hid_loop_lag_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_disp_module_globals, usb_disp_module_globals_table);
