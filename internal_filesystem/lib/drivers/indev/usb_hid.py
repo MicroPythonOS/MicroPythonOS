@@ -63,13 +63,13 @@ def find_parser(subclass, protocol):
 class HIDSource:
     def drain(self):
         try:
-            import usb_disp  # NOQA
+            import usb  # NOQA
         except ImportError:
             return []
-        if not hasattr(usb_disp, "hid_drain"):
+        if not hasattr(usb, "hid_drain"):
             return []
         try:
-            return list(usb_disp.hid_drain())
+            return list(usb.hid_drain())
         except Exception:
             return []
 

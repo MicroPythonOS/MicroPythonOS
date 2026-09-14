@@ -40,7 +40,7 @@
 
 #include "usb_hid.h"
 
-// usb_disp_log() lives in usb_disp_mpy.c (routes to UART REPL).
+// usb_disp_log() lives in usb_mpy.c (routes to UART REPL).
 void usb_disp_log(const char *fmt, ...);
 
 #define USB_HID_MAX_DEV 4

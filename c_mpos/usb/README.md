@@ -1,12 +1,14 @@
-c_mpos/usb_display: MicroPython binding for Pico_USB_Disp (USB display adapters)
-plus a minimal USB HID host transport (boot-protocol mice + keyboards).
+c_mpos/usb: MicroPython `usb` module for ESP32 USB host support -
+DisplayLink display adapters (via Pico_USB_Disp) plus a minimal USB HID
+host transport (boot-protocol mice + keyboards).
 
 ESP32-only: DisplayLink DL-1xx via the in-tree IDF usb_host stack.
-Build with: ./scripts/build_mpos.sh esp32s3 --usbdisplay
-Python driver: internal_filesystem/lib/drivers/display/usb_disp/
+Build with: ./scripts/build_mpos.sh esp32s3 --usb
+Python driver: internal_filesystem/lib/drivers/display/usb_display/
 HID Python driver: internal_filesystem/lib/drivers/indev/usb_hid.py
-Shared board helper: internal_filesystem/lib/mpos/board/usb_display.py
-Boot hook: internal_filesystem/lib/mpos/main.py (arm_usb_display(), arm_usb_hid())
+Framework: internal_filesystem/lib/mpos/usb/ (USBManager)
+Boot hook: internal_filesystem/lib/mpos/main.py (USBManager.arm_display(), USBManager.arm_hid())
+User docs: ../docs/docs/frameworks/usb-manager.md
 
 upstream/ holds a vendored snapshot (see upstream/VERSION). Only the
 ESP32-relevant sources are used (upstream/CMakeLists.txt ESP-IDF branch):
@@ -31,10 +33,10 @@ prefer re-vendoring over keeping the fork. New standalone features
 (e.g. src/usb_hid.c) still go outside upstream/.
 
 =====================================================================
-REPL API reference (all on `import usb_disp`, --usbdisplay builds only)
+REPL API reference (all on `import usb`, --usb builds only)
 =====================================================================
 
-USBDisp(port=0, width=0, height=0, ignore_edid=False) - adapter handle.
+Display(port=0, width=0, height=0, ignore_edid=False) - adapter handle.
 Single slot on ESP32: repeated constructions reuse usb_disp_at(0)
 (original resolution kept; use set_mode() to change it).
 - start() - start the USB host for all registered ports (call once).
@@ -116,12 +118,12 @@ What it took to get hotplug / hot-unplug working, per level
 - IDF usb_host has NO external-hub support by default: without
   CONFIG_USB_HOST_HUBS_SUPPORTED (+ MULTI_LEVEL for cascaded hubs),
   downstream devices never enumerate (the hub itself is seen, nothing
-  behind it). Enabled in --usbdisplay builds only.
+  behind it). Enabled in --usb builds only.
 - Hotplug race (the big one): a DL chip boots its own firmware for 1-2s
   after power-on, but the stack resets a new port within ~300ms. An early
   reset wedges the adapter's EP0 until its next POWER cut (USB resets and
   root-port power cycles do not recover it behind externally powered
-  hubs). Fixes, both in --usbdisplay builds only:
+  hubs). Fixes, both in --usb builds only:
   - patches/usb_ext_port_settle.patch: 2s settle before a hub port's
     first reset, compiled to a no-op without -DMPOS_USB_PORT_SETTLE_MS
     (same repo patch-file convention as the other .patch files).
@@ -137,7 +139,7 @@ What it took to get hotplug / hot-unplug working, per level
   (IDF's own recycle path cannot recover pre-enumeration failures:
   "Ext hub port recycle error: ESP_ERR_INVALID_ARG"). Linux xHCI retries
   transparently, which is why the same hub+adapter works on a PC. Fix in
-  the HAL (usb_disp_hal_esp32.cpp, --usbdisplay builds only): a hub-port
+  the HAL (usb_disp_hal_esp32.cpp, --usb builds only): a hub-port
   watchdog sweeps every external hub with read-only GET_PORT_STATUS while
   no display is attached and recovers ports stuck connected-but-
   unenumerated: up to 3 targeted SET_FEATURE(PORT_RESET)s with growing
@@ -157,7 +159,7 @@ What it took to get hotplug / hot-unplug working, per level
   nothing else touches; fresh addresses reset all watchdog state
   naturally. A port that reads enabled with no
   episode gets one neutral pointer line naming its reset_port() call —
-  and, with auto_reset_idle (default on, usb_disp.auto_reset_idle()
+  and, with auto_reset_idle (default on, usb.auto_reset_idle()
   toggles it, bare call reads it back), one automatic PORT_RESET after
   a 15s grace, but only if that port is not marked preexisting: marks
   go onto idle ports at boot, hub plug, and display-unplug snapshots
@@ -176,12 +178,12 @@ What it took to get hotplug / hot-unplug working, per level
   and reboots the board — proven by four identical crash dumps. A hub
   whose EP0 stays dead gets 30s/60s/120s backoffs, then a quiet 120s
   probe rhythm instead of log spam. Manual equivalents for the REPL:
-  usb_disp.hub_ports() lists (hub_addr, port, connected, enabled, high_speed) and
-  usb_disp.reset_port(hub_addr, port[, power_cycle[, force]]) re-enumerates
+  usb.hub_ports() lists (hub_addr, port, connected, enabled, high_speed) and
+  usb.reset_port(hub_addr, port[, power_cycle[, force]]) re-enumerates
   one port without disturbing the rest of the chain (unlike force_reenum's
   root-port power cycle); high-speed targets are refused unless
   force=True (never use it on an uplink mid-enumeration).
-  usb_disp.set_watchdog(False) opts out.
+  usb.set_watchdog(False) opts out.
 - Wait guidance (measured against a DL-195 that needs 1-2s to boot,
   longer when browned-out by rapid VBUS cycling): judge a plug only
   after ~5s hands-off (the watchdog heals slow boots by itself);
@@ -206,7 +208,7 @@ What it took to get hotplug / hot-unplug working, per level
   event-driven, but the app must still poll: usb_disp_poll() drives
   WAIT -> MODE_SETUP -> READY (and reconnect/re-enumeration).
 - MicroPython's TinyUSB *device* stack owns the single OTG peripheral at
-  boot, so --usbdisplay builds compile it out (MICROPY_HW_ENABLE_USBDEV=0).
+  boot, so --usb builds compile it out (MICROPY_HW_ENABLE_USBDEV=0).
   There is no runtime device<->host handover: mp_usbd_deinit() only
   soft-disconnects, the driver/PHY stay resident. Console remains over
   UART REPL; USB-Serial-JTAG shares the OTG pins so it is unreachable
@@ -217,7 +219,7 @@ What it took to get hotplug / hot-unplug working, per level
   config is kept; use set_mode() to change it).
 - CFLAGS_EXTRA reaches IDF component compiles (verified in flags) — that
   is how -DESP_PLATFORM and -DMPOS_USB_PORT_SETTLE_MS get to usb_host
-  code while staying scoped to --usbdisplay builds.
+  code while staying scoped to --usb builds.
 
 --- LVGL level (displays, rendering, input, topmenu) ---
 - The Python driver subclasses DisplayDriver behind a fake bus shim
@@ -256,7 +258,7 @@ What it took to get hotplug / hot-unplug working, per level
   teardown bytecodes, so the swap suspends the pump first (idempotent
   flag, resumed in finally blocks) — a hard freeze with dead Ctrl-C was
   the symptom before this.
-- No board-file changes: mpos.main calls arm_usb_display() (construct +
+- No board-file changes: mpos.main calls USBManager.arm_display() (construct +
   start + poll timer, ~1ms, never blocks boot); the existing 1s poll
   timer is the whole event system (no asyncio watcher needed — the stack
   is event-driven and poll() just advances the state machine). On a READY
@@ -301,7 +303,7 @@ What it took to get hotplug / hot-unplug working, per level
   report), so new device kinds never need C changes. USBHIDKeyboard
   subclasses Fri3dCommunicatorKeyboard unchanged (same HID->LVGL table,
   repeat logic, ESC/arrows nav hooks); USBMouse + keyboard share one
-  hub, armed together by arm_usb_hid(), enabled per-kind from
+  hub, armed together by USBManager.arm_hid(), enabled per-kind from
   hid_state() (kind-aware _sync_usb_hid).
 - Transient keyboard polling (Phase A experiment): keyboards hold NO
   persistent interrupt pipe. A poll task ticks each keyboard at a calm
@@ -345,7 +347,7 @@ What it took to get hotplug / hot-unplug working, per level
   "keyboard polling started (addr=N, every Mms)" on first keyboard,
   "keyboard polling stopped (N polls performed, M channel-fails)" when
   the last one goes away. Per-tick failures are silent counters;
-  usb_disp.hid_poll_stats() returns [(addr, kind, polls, ch_fails)]
+  usb.hid_poll_stats() returns [(addr, kind, polls, ch_fails)]
   per live keyboard - sample twice and diff polls for the effective
   rate. 50 consecutive channel failures parks (see below); other
   tick failures use the normal transient backoff.
@@ -477,8 +479,8 @@ What it took to get hotplug / hot-unplug working, per level
   signature) parks immediately with one explanatory line; transient
   failures back off 4s/12s/28s, then park. Parked devices stay silent
   until a bus topology change (plug/unplug/reenum, checked every
-  hid_poll) or usb_disp.hid_retry(). Unplug clears the device's
-  failure history. usb_disp.hid_parked() lists [(vid, pid, kind,
+  hid_poll) or usb.hid_retry(). Unplug clears the device's
+  failure history. usb.hid_parked() lists [(vid, pid, kind,
   fails)] with fails=255 for parked.
 - Phase A changes the math: keyboards hold no persistent pipe (see
   polling note above), so steady state is 4 defaults + hub + bulk +
@@ -505,12 +507,12 @@ What it took to get hotplug / hot-unplug working, per level
 --- Debugging notes ---
 - bus_devices() (stack address list) separates "nothing sensed"
   (cable/power/stack) from "hubs only" (adapter missing/wedged) from
-  "adapter present, failing" in one call. print(usb_disp.lsusb()) shows
+  "adapter present, failing" in one call. print(usb.lsusb()) shows
   the same bus Linux-style with VID:PID and product strings.
 - Delayed teardown puzzle (open): twice observed, a flagged transfer
   error with no teardown for 12s / 47s despite the <=100ms code path,
   never reproduced since. Unknown whether event-delivery stall or
-  log-side artifact. Decider: usb_disp.hid_loop_lag() sampled DURING
+  log-side artifact. Decider: usb.hid_loop_lag() sampled DURING
   such a gap (all readings so far were taken in healthy windows).
 - Poll-rate excursions (open, non-load-bearing): one 119/s and one
   0.3/s episode against the 20/s design, also never reproduced;
