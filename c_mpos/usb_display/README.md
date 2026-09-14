@@ -291,14 +291,16 @@ What it took to get hotplug / hot-unplug working, per level
   persistent interrupt pipe. A poll task ticks each keyboard at a calm
   50ms floor (bInterval above that is respected up to 100ms): claim ->
   submit one IN transfer -> wait (30ms timeout) -> copy any report to
-  the ring -> free -> release, then sleep. The 10ms original ticked
+  the ring -> free -> release, then   sleep. The 10ms original ticked
   claim/CLEAR_FEATURE/submit/halt/flush/release 100x/sec and knocked
   cheap hub TTs off the bus (whole-hub re-enumeration every few
   seconds, taking mouse+keyboard down together); 50ms keeps typing
   responsive while staying an order of magnitude quieter. Toggle
-  resync (CLEAR_FEATURE, fresh pipes start DATA0 while the device
-  kept its sequence) runs once per POLLED episode, never per tick,
-  for the same reason. Steady state holds hub + display + mouse
+  resync (CLEAR_FEATURE: fresh pipes start DATA0 while the device
+  kept its sequence) runs on every tick - without it only the first
+  report after each resync lands and releases are lost, freezing the
+  Python key state at the last press (endless typematic repeat), so
+  per-tick resync is load-bearing, not hygiene. Steady state holds hub + display + mouse
   pipes only, so the full combo fits the S3 budget with margin to
   spare. Boot reports are level-state, so tick-rate sampling loses
   nothing vs native polling (only a press+release inside one tick is

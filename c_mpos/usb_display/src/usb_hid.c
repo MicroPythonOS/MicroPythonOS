@@ -520,16 +520,8 @@ static void hid_setup_slot(hid_slot_t *slot) {
         // POLLED (transient claim/submit/release per tick from the poll
         // task below) so hub + display + mouse + keyboard fit the S3
         // channel budget. Mice keep the persistent path for now.
-        //
-        // Toggle resync lives HERE (once per POLLED episode), not in the
-        // tick: a fresh pipe starts at DATA0 while the device kept its
-        // sequence, and per-tick CLEAR_FEATUREs on a healthy endpoint
-        // turned out to upset real hardware (hub-wide collapse). Error
-        // recoveries tear the slot down, so the next episode resyncs.
-        if (!hid_ctrl(slot, 0x02, 0x01, 0x0000, slot->ep_in)) {
-            HID_VLOG("[HID][V] addr=%u episode resync failed, continuing",
-                     slot->addr);
-        }
+        // (Toggle resync is per-tick in hid_kbd_poll_once, not here: a
+        // once-per-episode resync leaves every later tick mismatched.)
         hid_defer_clear_entry(defer);
         slot->state = HID_SLOT_POLLED;
         slot->poll_next_ms = now_ms + slot->interval_ms;
@@ -655,6 +647,17 @@ static kbd_poll_res_t hid_kbd_poll_once(hid_slot_t *slot) {
         HID_VLOG("[HID][V] addr=%u tick claim err=0x%X", slot->addr,
                  (unsigned)cerr);
         return (cerr == ESP_ERR_NOT_SUPPORTED) ? KBD_CH_FAIL : KBD_OTHER_FAIL;
+    }
+    // Toggle resync, every tick: a fresh pipe starts at DATA0 while the
+    // device kept advancing its sequence across our free/realloc cycles,
+    // so without this only the first report after each resync lands and
+    // releases are lost (stuck keys). CLEAR_FEATURE(ENDPOINT_HALT)
+    // resets the device side to DATA0 to match. Best effort: a failure
+    // here must not kill the tick, the submit below will report back
+    // if the endpoint is really broken. Kept at the calm 50ms cadence,
+    // not the 10ms one that collapsed hubs.
+    if (!hid_ctrl(slot, 0x02, 0x01, 0x0000, slot->ep_in)) {
+        HID_VLOG("[HID][V] addr=%u tick resync failed, continuing", slot->addr);
     }
     kbd_poll_res_t res = KBD_OTHER_FAIL;
     usb_transfer_t *x = NULL;
