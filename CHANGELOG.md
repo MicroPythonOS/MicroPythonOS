@@ -1,10 +1,13 @@
 Future release (next version)
 =====
 
+0.19.0
+======
+
 Board Support:
-- ESP32-S3: USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195; T6/MS91xx protocol code vendored for ESP32-P4 but untested) — drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum), falls back to the onboard LCD when no adapter is present, live-switches between panel and USB with auto-revert on unplug, and heals replugged/slow-booting hub ports with a hub-port watchdog (targeted resets with backoff, VBUS power-cycle, root power-cycle escalation, `lsusb()`/`hub_ports()`/`reset_port()` REPL helpers). Note: the `usb` API was renamed without backwards compatibility (`usb_disp` → `usb`, `--usbdisplay` → `--usb`) — field units need `--erase-all` or a lib re-sync
-- ESP32-S3: USB HID mice — boot-protocol pointer support with theme-aware cursor, per-kind arm/enable from `hid_state()`, and safe retire-and-quiesce teardown of live streaming devices
-- ESP32-S3: USB HID keyboards — boot-protocol support reusing the Fri3d key tables and nav hooks, sharing the S3 channel policy with mice (display > mouse > keyboard claim order, silent parking with backoff and topology re-arm, `hid_parked()`/`hid_retry()` introspection, experimental transient polling via `hid_set_kbd_transient()`)
+- ESP32-S3: USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195; T6/MS91xx protocol code vendored for ESP32-P4 but untested) — drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum), falls back to the onboard LCD when no adapter is present, live-switches between panel and USB with auto-revert on unplug, and heals replugged/slow-booting hub ports with a hub-port watchdog (targeted resets with backoff, VBUS power-cycle, root power-cycle escalation, REPL helper functions).
+- ESP32-S3: USB HID mice - boot-protocol pointer support with theme-aware cursor, per-kind arm/enable and safe retire-and-quiesce teardown of live streaming devices
+- ESP32-S3: USB HID keyboards - boot-protocol support reusing the Fri3d key tables and nav hooks, sharing the S3 channel policy with mice (display > mouse > keyboard claim order, silent parking with backoff and topology re-arm, introspection, experimental (default off) transient polling
 
 Frameworks:
 - topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target
@@ -12,7 +15,7 @@ Frameworks:
 
 OS:
 - ESP32-S3: cap ESP-IDF log strings at the ERROR default (LOG_MAXIMUM_EQUALS_DEFAULT), saving ~42 KB of app flash (micropython.bin 3,666,864 → 3,624,784 B); MicroPython logging is unaffected, C logs can no longer be raised above ERROR at runtime- ESP32-S3: disable Ethernet (ETH_ENABLED=n plus the SPI-Ethernet drivers, which would otherwise force-select it back on), saving ~24 KB of app flash (micropython.bin 3,624,784 → 3,600,688 B); no supported S3 board has an Ethernet PHY
-- Build system: `./scripts/build_mpos.sh esp32s3 --usb` enables USB host support (display adapters + HID) — compiles in the `usb` C module with hub support and settles, and frees the OTG peripheral by disabling TinyUSB device mode (console remains over UART REPL)
+- Build system: ./scripts/build_mpos.sh esp32s3 --usb enables USB host support (display adapters + HID) — compiles in the C module 'usb' with hub support and settles, and frees the OTG peripheral by disabling TinyUSB device mode (console remains over UART REPL on GPIO43/44 and on webREPL)
 
 0.18.1
 ======
