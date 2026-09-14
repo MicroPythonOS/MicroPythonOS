@@ -440,12 +440,12 @@ What it took to get hotplug / hot-unplug working, per level
   the tick only touches POLLED non-retired slots; setup only touches
   STAGED; health-check skips retiring. The retire path is the only
   one that blocks, and only on the app thread.
-- Known wart: retiring a healthy idle streaming slot always takes the
-  3s forced path, because the drain-wait runs before halt/flush while
-  standing URBs (correctly) never complete on their own. Harmless
-  (teardown completes correctly either way) but noisy and slow;
-  fix = halt+flush BEFORE the bounded drain-wait so completions arrive
-  promptly as CANCELED. Filed, not yet applied.
+- Fixed wart (was: retiring a healthy idle streaming slot always took the
+  3s forced path, because the drain-wait ran before halt/flush while
+  standing URBs correctly never complete on their own): halt+flush now run
+  BEFORE the bounded drain-wait, so the halt forces CANCELED completions
+  that reap promptly. Same outcome, ~3s faster; the forced path and its
+  loud log remain for genuinely wedged transfers.
 
 --- HCD channels (the hard silicon limit, ESP32-S3) ---
 - Rule of thumb first, math after: on ESP32-S3 in USB host mode you
@@ -531,6 +531,11 @@ What it took to get hotplug / hot-unplug working, per level
   reset_port() it, or wait ~5s for the watchdog's [HUB] lines.
 - Dead Ctrl-C + dead UART + alive USB tasks = main thread wedged in C;
   bisect with refr_now() per display (screenless refresh was the killer).
+- If the adapter renumbers (new bus address) behind the display client,
+  poll() can sit at False forever without reclaiming: the client does not
+  always follow the new address. force_reenum() (root-port power cycle)
+  recovers it (proven 2026-09-14: reset_port renumbered 3->5, poll stuck
+  False, force_reenum re-enumerated + claimed + auto-switched).
 - The full swap runs clean on the desktop unix build between two SDL
   displays (tmp/run_swap_repro.py via mpos-controller) — use it to
   separate pure-LVGL bugs (gdb-speed) from device-specific ones.

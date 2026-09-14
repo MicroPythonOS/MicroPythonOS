@@ -314,6 +314,13 @@ static void hid_intr_cb(usb_transfer_t *xfer) {
 static void hid_retire_teardown(hid_slot_t *slot) {
     uint8_t addr = slot->addr;
     slot->state = HID_SLOT_CLOSING; // stop all new submits first of all
+    // Halt BEFORE the drain-wait: standing URBs never complete on their
+    // own, so waiting first always burns the full bound on healthy idle
+    // slots. Halting forces in-flight transfers to complete as CANCELED,
+    // and the bounded wait below reaps those completions promptly. (This
+    // used to run after the wait: same outcome, always 3s slower.)
+    usb_host_endpoint_halt(slot->dev, slot->ep_in);
+    usb_host_endpoint_flush(slot->dev, slot->ep_in);
     uint32_t waited = 0;
     while ((s_kbd_tick_active || slot->inflight > 0) &&
            waited < HID_RETIRE_WAIT_MS) {
@@ -323,10 +330,7 @@ static void hid_retire_teardown(hid_slot_t *slot) {
     if (s_kbd_tick_active || slot->inflight > 0) {
         usb_disp_log("[HID] addr=%u retire forced with work in flight", addr);
     }
-    // Belt and braces: quiesce the endpoint, then drain completions once
-    // more before anything below is freed.
-    usb_host_endpoint_halt(slot->dev, slot->ep_in);
-    usb_host_endpoint_flush(slot->dev, slot->ep_in);
+    // Drain completions once more before anything below is freed.
     vTaskDelay(pdMS_TO_TICKS(50));
     usb_host_endpoint_clear(slot->dev, slot->ep_in);
     for (uint8_t i = 0; i < USB_HID_XFER_PER_DEV; i++) {
