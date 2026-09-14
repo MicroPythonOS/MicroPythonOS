@@ -161,14 +161,35 @@ _CURSOR_W = 16
 _CURSOR_H = 16
 _CURSOR_MAP = None
 
+# Classic 45-degree arrow pointer (tip at top-left = hotspot).
+# X = filled pixel, . = transparent.
+_CURSOR_ROWS = [
+    "X...............",
+    "XX..............",
+    "X.X.............",
+    "X..X............",
+    "X...X...........",
+    "X....X..........",
+    "X.....X.........",
+    "X......X........",
+    "X.......X.......",
+    "X........X......",
+    "X.....XXXXX.....",
+    "X...X...X.......",
+    "X..X.....X......",
+    "X.X......X......",
+    "XX.......X......",
+    "X........X......",
+]
+
 
 def _cursor_map():
     global _CURSOR_MAP
     if _CURSOR_MAP is None:
         px = bytearray(_CURSOR_W * _CURSOR_H * 4)
-        for y in range(_CURSOR_H):
-            for x in range(_CURSOR_W - y):
-                if x < 2 or y < 2 or x == _CURSOR_W - 1 - y:
+        for y, row in enumerate(_CURSOR_ROWS):
+            for x, ch in enumerate(row):
+                if ch == "X":
                     o = (y * _CURSOR_W + x) * 4
                     px[o] = 255
                     px[o + 1] = 255
