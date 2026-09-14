@@ -110,6 +110,13 @@ bool usb_hid_verbose(void);
 // its own handle for lsusb).
 usb_device_handle_t usb_hid_held_handle(uint8_t addr);
 
+// True when one of our HID slots holds the device on (hub_addr, port).
+// The hub watchdog's quiet auto-reset consults this to skip exactly the
+// HID-owned idle ports while other ports keep healing (port-exact skip:
+// parked devices have no open handle and stay covered by the Python-side
+// global suppression instead).
+bool usb_hid_owns_idle_port(uint8_t hub_addr, uint8_t port);
+
 #ifdef __cplusplus
 }
 #endif

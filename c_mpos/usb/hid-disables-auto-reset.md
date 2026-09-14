@@ -18,18 +18,31 @@ devices. Parked keyboards are the same signature (enumerated but silent);
 resetting one burns a bus address and re-parks it, since it can never claim
 until something unplugs anyway.
 
-## The rule
+## The rule (v2: port-exact skip)
 
-Port status cannot discriminate, so the watchdog defers to the one layer
-that knows: the HID layer's claimed/parked lists. While any HID is claimed
-OR parked, `USBManager._poll_hid()` (via `_update_hid_watchdog_exclusion`)
-forces `auto_reset_idle` off and restores the prior value afterwards, so a
-manual user setting is never forced back on.
+Port status cannot discriminate, so the layer that knows the HID ports
+tells the watchdog. Two mechanisms, split by resolvability:
 
-Explicitly NOT suppressed: the disabled-port episode path (targeted resets,
-backoff, VBUS power cycle). Only the *enabled*-idle quiet healer yields.
-The judgment call: resetting a healthy mouse on a loop is worse than a
-stuck adapter needing a manual `reset_port()` while HID is present.
+- **Claimed devices (open handle): port-exact skip in C.**
+  `usb_hid_owns_idle_port(hub, port)` resolves any open HID handle to its
+  (hub, port) via the `device_info()` parent chain (cached reads, no EP0
+  traffic). The sweep skips the quiet auto-reset exactly on HID-owned
+  idle ports and logs the reason inline:
+  `[HUB] addr=1 port=3 HID device, auto-reset skipped`. Other ports keep
+  healing. A recheck at fire time closes the claimed-during-grace race.
+  Any non-empty slot counts (streaming, polled, staged, closing).
+- **Parked devices (no handle): global suppression in Python.**
+  `USBManager` forces `auto_reset_idle` off while the parked list is
+  non-empty and restores the prior value after (a manual user setting is
+  never forced back on). Parked ports are unresolvable, so this stays
+  global. Previously claimed devices also forced it off; they no longer
+  need to.
+
+Explicitly NOT suppressed either way: the disabled-port episode path
+(targeted resets, backoff, VBUS power cycle). Only the *enabled*-idle
+quiet healer yields. The judgment call stands: resetting a healthy mouse
+on a loop is worse than a stuck adapter needing a manual `reset_port()`
+while a parked HID is present.
 
 ## The cost (observed 2026-09-14)
 
@@ -63,16 +76,13 @@ bug.
 
 ## Options (all P1-or-later, none needed for the exoneration)
 
-- Narrow suppression to HID-owned ports only: skip auto-reset just for the
-  port(s) the mouse/keyboard sits on, keep healing the rest. Caveat: the C
-  layer knows claimed *addresses*, not which (hub, port) they hang off;
-  that mapping needs hub-driver introspection that may not exist. Spike
-  first, promise later.
-- Class-aware skip: before auto-resetting an idle port, check whether its
-  device is HID-class and skip only those. The `lsusb` HAL pass already
-  opens idle devices, so the descriptor fetch is proven cheap there — but
-  it is still more C work, and more EP0 traffic next to sick ports.
-- Visibility line (recommended regardless): put the suppression reason in
-  the pointer line, e.g. `[HUB] addr=1 port=3 enabled but idle
-  (auto-reset suppressed: HID claimed; reset_port(1,3) if stuck)`. Zero
-  behavior change; the confusion above becomes self-explaining in the log.
+- ~~Narrow suppression to HID-owned ports only~~ DONE (v2 above):
+  the feared hub-driver introspection was unnecessary, the
+  `device_info()` parent chain resolves it. No spike was needed.
+- ~~Class-aware skip~~ DROPPED: needs the same port resolution *plus*
+  descriptor fetches on potentially-sick ports (the observed
+  `CHECK_SHORT_DEV_DESC` failure mode) *plus* interface walks (mice are
+  class-0 at device level). All risk for a win the port-exact skip
+  already delivers, without teaching new device classes.
+- ~~Visibility line~~ DONE (v2 above): the skip reason prints inline at
+  the sweep site, so the log explains itself.

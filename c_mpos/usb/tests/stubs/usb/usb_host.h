@@ -87,8 +87,17 @@ typedef struct {
     uint16_t wTotalLength;
 } usb_config_desc_t;
 
+// Mirrors the real IDF layout (names must match: production code reads
+// parent.port_num / parent.dev_hdl / dev_addr for the HID port skip).
 typedef struct {
+    usb_device_handle_t dev_hdl;
+    uint8_t port_num;
+} usb_parent_dev_info_t;
+
+typedef struct {
+    usb_parent_dev_info_t parent;
     usb_speed_t speed;
+    uint8_t dev_addr;
 } usb_device_info_t;
 
 esp_err_t usb_host_client_register(const usb_host_client_config_t *config,

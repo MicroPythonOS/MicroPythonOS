@@ -81,23 +81,33 @@ class TestHIDWatchdogExclusion(unittest.TestCase):
         except Exception:
             pass
 
-    def test_claimed_mouse_suppresses_idle_reset(self):
-        USBManager._update_hid_watchdog_exclusion([10])
-        self.assertFalse(self.fake.idle_reset)
+    def test_claimed_only_leaves_idle_reset_alone(self):
+        # Port-exact skip (C side) covers claimed devices; global
+        # suppression is parked-only now.
+        self.fake.addrs = [10]
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
+        self.assertTrue(self.fake.idle_reset)
+        self.assertIsNone(USBManager._hid_idle_prev)
 
     def test_unplug_restores_idle_reset(self):
-        USBManager._update_hid_watchdog_exclusion([10])
-        USBManager._update_hid_watchdog_exclusion([])
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        USBManager._update_hid_watchdog_exclusion()
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertTrue(self.fake.idle_reset)
 
     def test_manual_disable_is_not_forced_back_on(self):
         self.fake.idle_reset = False
-        USBManager._update_hid_watchdog_exclusion([10])
-        USBManager._update_hid_watchdog_exclusion([])
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        USBManager._update_hid_watchdog_exclusion()
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertFalse(self.fake.idle_reset)
 
-    def test_no_claim_no_touch(self):
-        USBManager._update_hid_watchdog_exclusion([])
+    def test_no_parked_no_touch(self):
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertTrue(self.fake.idle_reset)
         self.assertIsNone(USBManager._hid_idle_prev)
 
@@ -108,9 +118,11 @@ class TestHIDWatchdogExclusion(unittest.TestCase):
         )
 
     def test_parked_suppresses_idle_reset(self):
-        USBManager._update_hid_watchdog_exclusion([(0x046D, 0xC31C, "keyboard", 255)])
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        USBManager._update_hid_watchdog_exclusion()
         self.assertFalse(self.fake.idle_reset)
-        USBManager._update_hid_watchdog_exclusion([])
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertTrue(self.fake.idle_reset)
 
     def test_poll_hid_wires_parked_to_suppression(self):

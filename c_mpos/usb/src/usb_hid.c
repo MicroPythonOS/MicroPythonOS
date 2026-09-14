@@ -1166,6 +1166,41 @@ usb_device_handle_t usb_hid_held_handle(uint8_t addr) {
     return NULL;
 }
 
+// Does one of our HID slots hold the device on (hub_addr, port)? Lets the
+// hub watchdog skip its quiet auto-reset exactly on HID-owned ports
+// instead of suppressing globally. device_info() resolves any open handle
+// to (parent hub handle, port), and the parent's own info gives the hub
+// address: pure cached stack reads, no EP0 traffic, safe from any thread.
+// Any non-empty slot counts (streaming, polled, staged, closing):
+// anything with an open handle is ours, including a device mid-setup or
+// mid-teardown. Racy by design (a slot can tear down mid-read): the worst
+// outcome is one skipped quiet reset, never a wrong reset, since this
+// only ever suppresses.
+bool usb_hid_owns_idle_port(uint8_t hub_addr, uint8_t port) {
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        usb_device_handle_t dev = slot->dev;
+        if (slot->state == HID_SLOT_EMPTY || dev == NULL) {
+            continue;
+        }
+        usb_device_info_t info;
+        if (usb_host_device_info(dev, &info) != ESP_OK) {
+            continue;
+        }
+        if (info.parent.port_num != port) {
+            continue;
+        }
+        usb_device_info_t hub_info;
+        if (usb_host_device_info(info.parent.dev_hdl, &hub_info) != ESP_OK) {
+            continue;
+        }
+        if (hub_info.dev_addr == hub_addr) {
+            return true;
+        }
+    }
+    return false;
+}
+
 uint8_t usb_hid_poll_stats(usb_hid_poll_stat_t *out, uint8_t max) {
     uint8_t n = 0;
     if (out == NULL || max == 0) {

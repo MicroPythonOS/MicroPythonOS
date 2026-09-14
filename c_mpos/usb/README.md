@@ -353,10 +353,14 @@ What it took to get hotplug / hot-unplug working, per level
   tick failures use the normal transient backoff.
 - Watchdog coexistence: a healthy/enumerated HID reads exactly like a
   wedged adapter (connected + enabled, no bus growth), which the idle
-  auto-reset would PORT_RESET ~15s after plug/park. While any HID is
-  claimed OR parked, board code suppresses auto_reset_idle (restoring
-  the prior value afterwards, so a manual user setting is never forced
-  back on). The disabled-port episode path is unaffected.
+  auto-reset would PORT_RESET ~15s after plug/park. Two-part answer (see
+  hid-disables-auto-reset.md): claimed devices are skipped port-exactly
+  in C (usb_hid_owns_idle_port resolves any open handle via the
+  device_info parent chain; the sweep logs "HID device, auto-reset
+  skipped" inline, rechecked at fire time), while parked devices (no
+  handle, unresolvable) keep the Python-side global suppression with
+  prior-value restore. The disabled-port episode path is unaffected
+  either way.
 - LVGL: USBMouse subclasses PointerDriver with identity _calc_coords
   (absolute positions, no TouchCalData side effects) and
   __usb_absolute__ so the panel->USB touch wrap skips it. Cursor is an

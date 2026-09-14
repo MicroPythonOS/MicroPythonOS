@@ -142,6 +142,8 @@ typedef struct {
     uint16_t pid;
     uint8_t dev_class;
     int speed;
+    uint8_t parent_hub;
+    uint8_t parent_port;
     uint8_t cfg[FAKE_CFG_MAX];
     uint16_t cfg_len;
     usb_device_desc_t ddesc;
@@ -285,6 +287,13 @@ void fake_set_open_err(uint8_t addr, esp_err_t err) {
     fake_dev_t *d = fake_find(addr);
     if (d != NULL) {
         d->open_err = err;
+    }
+}
+void fake_set_parent(uint8_t addr, uint8_t hub_addr, uint8_t port) {
+    fake_dev_t *d = fake_find(addr);
+    if (d != NULL) {
+        d->parent_hub = hub_addr;
+        d->parent_port = port;
     }
 }
 
@@ -470,6 +479,10 @@ esp_err_t usb_host_device_info(usb_device_handle_t dev, usb_device_info_t *info)
         return d->info_err;
     }
     info->speed = (usb_speed_t)d->speed;
+    info->parent.port_num = d->parent_port;
+    fake_dev_t *hub = fake_find(d->parent_hub);
+    info->parent.dev_hdl = (hub != NULL) ? (usb_device_handle_t)hub : NULL;
+    info->dev_addr = d->addr;
     return ESP_OK;
 }
 

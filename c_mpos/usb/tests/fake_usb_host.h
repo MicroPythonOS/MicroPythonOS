@@ -23,6 +23,9 @@ void fake_advance_ms(uint32_t ms);
 void fake_plug(uint8_t addr, uint16_t vid, uint16_t pid, uint8_t dev_class,
                int speed, const uint8_t *cfg_blob, uint16_t cfg_len);
 void fake_unplug(uint8_t addr);
+// Topology: which (hub addr, port) a device hangs off (for device_info
+// parent resolution). Defaults to hub 0 / port 0 = matches nothing.
+void fake_set_parent(uint8_t addr, uint8_t hub_addr, uint8_t port);
 void fake_set_open_err(uint8_t addr, esp_err_t err);
 void fake_set_claim_err(uint8_t addr, esp_err_t err);
 void fake_set_info_err(uint8_t addr, esp_err_t err);

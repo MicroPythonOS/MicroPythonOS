@@ -135,21 +135,29 @@ class USBManager:
             return []
 
     @classmethod
-    def _update_hid_watchdog_exclusion(cls, claimed):
+    def _update_hid_watchdog_exclusion(cls):
+        # Global idle-reset suppression, parked-only: a parked device is
+        # enumerated but silent, which reads exactly like a wedged adapter,
+        # and with no open handle its port is unresolvable. Claimed devices
+        # need no global suppression: the C watchdog skips exactly the
+        # HID-owned ports (usb_hid_owns_idle_port) while other ports keep
+        # healing. Restores the prior value afterwards, so a manual user
+        # setting is never forced back on.
         try:
             import usb
         except ImportError:
             return
         if not hasattr(usb, "auto_reset_idle"):
             return
-        if claimed and cls._hid_idle_prev is None:
+        parked = cls._hid_parked_entries()
+        if parked and cls._hid_idle_prev is None:
             try:
                 cls._hid_idle_prev = bool(usb.auto_reset_idle())
                 usb.auto_reset_idle(False)
             except Exception as e:
                 logger.error("hid idle suppress fail: %s" % (e))
                 cls._hid_idle_prev = None
-        elif not claimed and cls._hid_idle_prev is not None:
+        elif not parked and cls._hid_idle_prev is not None:
             try:
                 usb.auto_reset_idle(cls._hid_idle_prev)
             except Exception as e:
@@ -202,12 +210,7 @@ class USBManager:
             logger.error("usb hid poll fail: %s" % (e))
             return
         claimed = cls._hid_claimed()
-        # Suppression covers parked devices too: a parked keyboard is
-        # enumerated (enabled port, no bus growth), so without this the
-        # watchdog would PORT_RESET it ~15s after parking whenever no other
-        # HID is claimed - pointlessly re-enumerating a healthy device that
-        # can never claim (no channels) until something unplugs.
-        cls._update_hid_watchdog_exclusion(claimed if claimed else cls._hid_parked_entries())
+        cls._update_hid_watchdog_exclusion()
         cls._sync_usb_hid(claimed)
 
     # width/height default to 640x480: smallest standard DMT mode, proven to sync.

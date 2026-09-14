@@ -648,8 +648,53 @@ static void case_accessors(void) {
     CHECK(!fake_log_has("dropped"));
 }
 
-static void case_lag_gen(void) {
+static void case_owns_idle_port(void) {
     test_reset();
+    CHECK(usb_hid_start());
+    plug_hub(1);
+    plug_mouse(2);
+    plug_keyboard(3);
+    fake_set_parent(2, 1, 1);
+    fake_set_parent(3, 1, 4);
+    fake_queue_new_dev(1);
+    fake_queue_new_dev(2);
+    fake_queue_new_dev(3);
+    pump_client();
+    CHECK(usb_hid_poll());
+    CHECK(find_slot(2) != NULL && find_slot(2)->state == HID_SLOT_STREAMING);
+    CHECK(find_slot(3) != NULL && find_slot(3)->state == HID_SLOT_STREAMING);
+    CHECK(usb_hid_owns_idle_port(1, 1));
+    CHECK(usb_hid_owns_idle_port(1, 4));
+    CHECK(!usb_hid_owns_idle_port(1, 2));
+    CHECK(!usb_hid_owns_idle_port(1, 3));
+    CHECK(!usb_hid_owns_idle_port(9, 1));
+    CHECK(!usb_hid_owns_idle_port(1, 0));
+    // Unreadable device info fails safe (no match, never a wrong match).
+    fake_set_info_err(2, ESP_FAIL);
+    CHECK(!usb_hid_owns_idle_port(1, 1));
+    CHECK(usb_hid_owns_idle_port(1, 4));
+    fake_set_info_err(2, ESP_OK);
+    CHECK(usb_hid_owns_idle_port(1, 1));
+    // A staged (not yet set up) slot already counts: open handle, ours.
+    test_reset();
+    CHECK(usb_hid_start());
+    plug_hub(1);
+    plug_mouse(2);
+    fake_set_parent(2, 1, 1);
+    fake_queue_new_dev(1);
+    fake_queue_new_dev(2);
+    pump_client();
+    CHECK(find_slot(2) != NULL && find_slot(2)->state == HID_SLOT_STAGED);
+    CHECK(usb_hid_owns_idle_port(1, 1));
+    // Torn-down slots stop matching once the handle closes.
+    fake_unplug(2);
+    pump_client();
+    CHECK(usb_hid_poll());
+    CHECK(find_slot(2) == NULL);
+    CHECK(!usb_hid_owns_idle_port(1, 1));
+}
+
+static void case_lag_gen(void) {    test_reset();
     CHECK(usb_hid_start());
     uint32_t a = usb_hid_loop_lag_ms();
     fake_advance_ms(500);
@@ -678,6 +723,7 @@ int main(void) {
     case_toggle();
     case_tick();
     case_accessors();
+    case_owns_idle_port();
     case_lag_gen();
     printf("hid-host: %d checks, %d failures\n", s_checks, s_fails);
     return s_fails != 0;
