@@ -87,6 +87,12 @@ typedef struct {
 // Live polled keyboards (for usb_disp.hid_poll_stats()).
 uint8_t usb_hid_poll_stats(usb_hid_poll_stat_t *out, uint8_t max);
 
+// Keyboard transport mode experiment (usb_disp.hid_set_kbd_transient()):
+// false (default) = persistent interrupt pipe like mice; true =
+// transient per-tick polling. Live keyboards re-stage on flip.
+void usb_hid_set_kbd_transient(bool on);
+bool usb_hid_kbd_transient(void);
+
 // ms since the client task last pumped events (usb_disp.hid_loop_lag()).
 // ~100ms in steady state; seconds mean event delivery - completions,
 // teardowns, rescans - is stalled. Wrap-safe subtraction.

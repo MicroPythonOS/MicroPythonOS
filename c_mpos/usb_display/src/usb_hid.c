@@ -108,6 +108,16 @@ static bool s_hid_verbose = false;
 
 #define HID_VLOG(...) do { if (s_hid_verbose) usb_disp_log(__VA_ARGS__); } while (0)
 
+// Experiment switch (revert-test for the mouse+keyboard collapse):
+// false = keyboards claim a PERSISTENT interrupt pipe like mice
+// (pre-Phase-A behavior, zero abort churn); true = transient polling.
+// Default persistent: the collapse under test never happens without
+// transient aborts next to a standing pipe, and channels fit
+// persistently everywhere except display-attached pressure (where the
+// park policy still applies). Flippable live via hid_set_kbd_transient
+// (applies to newly staged devices; live keyboards re-stage).
+static bool s_kbd_transient = false;
+
 static bool s_hid_started = false;
 static volatile bool s_scan_needed = false;
 static SemaphoreHandle_t s_hid_ctrl_mutex = NULL;
@@ -534,7 +544,7 @@ static void hid_setup_slot(hid_slot_t *slot) {
                      slot->addr);
     }
     hid_ctrl(slot, 0x21, 0x0A, 0x0000, slot->iface); // SET_IDLE, best effort
-    if (slot->protocol == 1) {
+    if (slot->protocol == 1 && s_kbd_transient) {
         // Phase A: keyboards hold NO persistent interrupt pipe. They go
         // POLLED (transient claim/submit/release per tick from the poll
         // task below) so hub + display + mouse + keyboard fit the S3
@@ -1080,6 +1090,29 @@ void usb_hid_retry(void) {
     hid_defer_clear_all(false);
     s_scan_needed = true;
     usb_disp_log("[HID] manual retry re-armed");
+}
+
+void usb_hid_set_kbd_transient(bool on) {
+    if (s_kbd_transient == on) {
+        return;
+    }
+    s_kbd_transient = on;
+    // Live keyboards re-stage under the new mode on next setup pass;
+    // flag them gone so normal teardown paths recycle them. Streaming
+    // (persistent) and POLLED slots both converge without new machinery.
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        if (slot->state != HID_SLOT_EMPTY && slot->protocol == 1 &&
+            slot->dev != NULL) {
+            slot->gone = true;
+        }
+    }
+    usb_disp_log("[HID] keyboard mode: %s (live keyboards re-stage)",
+                 on ? "transient" : "persistent");
+}
+
+bool usb_hid_kbd_transient(void) {
+    return s_kbd_transient;
 }
 
 uint32_t usb_hid_loop_lag_ms(void) {

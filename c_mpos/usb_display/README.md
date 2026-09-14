@@ -90,12 +90,18 @@ HID (same module, same build):
   claim/submit/wait outcomes. Opt-in only: at ~20 ticks/s it would
   drown the REPL (and any file transfer) otherwise.
 - hid_loop_lag() - ms since the HID client task last pumped stack
-  events. Reads ~100 in steady state; seconds mean event delivery
+  events. Reads ~100 in steady state; seconds indicate event delivery
   (completions, teardowns, rescans) is stalled - e.g. app-thread
   control traffic (watchdog sweep, lsusb opens, setup ctrls) with
   multi-second timeouts serializing shared stack locks. If teardown
   ever lags a flagged error by seconds, read this first: it separates
   a stalled event loop from a wedged bus.
+- hid_set_kbd_transient([on]) - keyboard transport experiment switch.
+  Default persistent (False): keyboards claim a standing interrupt
+  pipe like mice, exactly pre-Phase-A behavior. True selects
+  transient per-tick polling (needed under display channel pressure).
+  Bare call reads back. Live keyboards re-stage on flip, so both modes
+  are A/B-testable on one firmware without reflashing.
 
 =====================================================================
 What it took to get hotplug / hot-unplug working, per level
@@ -358,6 +364,30 @@ What it took to get hotplug / hot-unplug working, per level
   HAL pass covers the address and appends a generic `HID mouse` /
   `HID keyboard` line only for held addresses the HAL pass skipped
   (dedup by address; never double-prints).
+
+--- Mouse+keyboard collapse experiment (revert-test) ---
+- Observation driving it: keyboard transient alone is perfect, mouse +
+  display is perfect, keyboard + display is perfect - only mouse
+  (persistent pipe, standing resubmits) + keyboard (transient aborts
+  every tick) collapses the hub within seconds, mouse URB erroring
+  first every time. Power ruled out (lightest combo fails, heaviest
+  holds); channels ruled out (0 fails, ~6 pipes, no display).
+- Hypothesis under test: the standing-periodic + transient-abort
+  coexistence disturbs shared TT/scheduler state (both HIDs are
+  low-speed: every transfer is a split transaction). Neither party is
+  guilty alone, which is why every single-device cell is green.
+- Experiment shape: keyboards persistent by default (this switch);
+  flip live with hid_set_kbd_transient(True) to re-enable transient
+  without reflashing. If hub+mouse+kbd-persistent holds, the abort
+  interaction is convicted; if it still collapses, look at hub TT
+  hardware (different hub) - more polling won't fix a two-periodic
+  silicon issue. Phase B (mouse transient too) stays parked until
+  this resolves: it doubles the suspect operation class.
+- End-state note: persistent keyboards cannot serve the required
+  display+mouse+keyboard combo in a 7-usable world (8 pipes), so a
+  stable revert-test result argues for pressure-adaptive transport
+  (persistent when channels allow, transient+parking under display
+  pressure), not for deleting the transient path.
 
 --- HCD channels (the hard silicon limit, ESP32-S3) ---
 - The S3 DWC_OTG core has 8 host channels (~7 usable; one is reserved

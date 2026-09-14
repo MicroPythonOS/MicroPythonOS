@@ -514,6 +514,20 @@ static mp_obj_t mp_usb_hid_loop_lag_fn(void) {
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_hid_loop_lag_obj, mp_usb_hid_loop_lag_fn);
 
+// hid_set_kbd_transient([on]) - keyboard transport mode experiment.
+// Default (persistent, False): keyboards claim like mice. True selects
+// transient per-tick polling (needed under display channel pressure).
+// Bare call reads back. Live keyboards re-stage on flip.
+static mp_obj_t mp_usb_hid_set_kbd_transient_fn(size_t n_args, const mp_obj_t *args) {
+    if (n_args == 0) {
+        return mp_obj_new_bool(usb_hid_kbd_transient());
+    }
+    usb_hid_set_kbd_transient(mp_obj_is_true(args[0]));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_hid_set_kbd_transient_obj, 0, 1,
+                                           mp_usb_hid_set_kbd_transient_fn);
+
 // hid_verbose([on]) - with no args, return the per-tick debug flag;
 // with an arg, set it. Off by default; when on, each transient tick
 // logs [HID][V] claim/submit/wait outcomes (only useful while actively
@@ -547,6 +561,7 @@ static const mp_rom_map_elem_t usb_disp_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_hid_poll_stats), MP_ROM_PTR(&mp_usb_hid_poll_stats_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_verbose), MP_ROM_PTR(&mp_usb_hid_verbose_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_loop_lag), MP_ROM_PTR(&mp_usb_hid_loop_lag_obj) },
+    { MP_ROM_QSTR(MP_QSTR_hid_set_kbd_transient), MP_ROM_PTR(&mp_usb_hid_set_kbd_transient_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_disp_module_globals, usb_disp_module_globals_table);
