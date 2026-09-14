@@ -330,6 +330,10 @@ What it took to get hotplug / hot-unplug working, per level
   forever) and risks use-after-free when the late completion fires -
   exactly the failure the first Phase A firmware showed. A slow answer
   arriving between timeout and halt is kept, not dropped.
+  (Caveat from the revert-test verdict below: correct per-tick
+  hygiene does not make coexistence safe - the abort churn itself,
+  not its bookkeeping, is what the hub chokes on next to a standing
+  periodic pipe.)
   A wait that expires with no data is NEUTRAL (idle keyboard NAKs),
   never a failure: reap, free, next tick. Only genuine errors feed
   backoff/parking, and a completed tick (with or without data) resets
@@ -365,29 +369,51 @@ What it took to get hotplug / hot-unplug working, per level
   `HID keyboard` line only for held addresses the HAL pass skipped
   (dedup by address; never double-prints).
 
---- Mouse+keyboard collapse experiment (revert-test) ---
-- Observation driving it: keyboard transient alone is perfect, mouse +
-  display is perfect, keyboard + display is perfect - only mouse
-  (persistent pipe, standing resubmits) + keyboard (transient aborts
-  every tick) collapses the hub within seconds, mouse URB erroring
-  first every time. Power ruled out (lightest combo fails, heaviest
-  holds); channels ruled out (0 fails, ~6 pipes, no display).
-- Hypothesis under test: the standing-periodic + transient-abort
+--- Mouse+keyboard collapse experiment (revert-test): VERDICT REACHED ---
+- A/B/A result, same firmware/hub/devices throughout: persistent +
+  persistent soaked stable (extended run, zero collapses) -> flip to
+  transient collapsed within ~2s with the identical mouse-first
+  signature, repeating -> flip back restored stability. The abort
+  interaction is convicted: transient abort churn (per-tick
+  halt/flush/free/claim) next to a standing periodic pipe collapses
+  this hub; neither half fails alone, which is why every
+  single-device cell (kbd alone, mouse+display, kbd+display) is green.
+  Power ruled out (lightest combo fails, heaviest holds); channels
+  ruled out (0 fails, ~6 pipes, no display in the failing topology).
+- Mechanism, as narrowed: standing-periodic + transient-abort
   coexistence disturbs shared TT/scheduler state (both HIDs are
-  low-speed: every transfer is a split transaction). Neither party is
-  guilty alone, which is why every single-device cell is green.
-- Experiment shape: keyboards persistent by default (this switch);
-  flip live with hid_set_kbd_transient(True) to re-enable transient
-  without reflashing. If hub+mouse+kbd-persistent holds, the abort
-  interaction is convicted; if it still collapses, look at hub TT
-  hardware (different hub) - more polling won't fix a two-periodic
-  silicon issue. Phase B (mouse transient too) stays parked until
-  this resolves: it doubles the suspect operation class.
+  low-speed: every transfer is a split transaction). The mouse URB
+  erroring first every cycle is the standing pipe sampling shared
+  disturbed state, not mouse guilt.
+- Experiment shape (kept for future hubs): keyboards persistent by
+  default (this switch); flip live with hid_set_kbd_transient(True)
+  to re-enable transient without reflashing.
 - End-state note: persistent keyboards cannot serve the required
-  display+mouse+keyboard combo in a 7-usable world (8 pipes), so a
-  stable revert-test result argues for pressure-adaptive transport
-  (persistent when channels allow, transient+parking under display
-  pressure), not for deleting the transient path.
+  display+mouse+keyboard combo in a 7-usable world (8 pipes), so this
+  verdict argues for pressure-adaptive transport (persistent when
+  channels allow, transient+parking under display pressure), not for
+  deleting the transient path.
+
+--- Ruled-out options log (do not re-litigate without new evidence) ---
+- Option 1 (free the hub status pipe): repriced Low -> High. Frees one
+  channel by forking hub.c (the pipe belongs to the hub driver; freeing
+  it out from under the driver faults continuously) and rebuilds
+  hot-plug detection as app-level port-status polling + manual
+  reset_port() driving - around a driver that still thinks it owns the
+  hub. Gains a single channel for zero margin (enumeration transients
+  need a free channel per the official docs), and addresses channel
+  count while every observed collapse happens with free channels.
+  Shelved.
+- Option 3 (EP0 pooling in usbh.c): Very High effort + permanent IDF
+  fork + control-path crash risk (a bug here means no USB at all, not
+  degraded USB), for 3 channels nobody is currently denied. Last
+  resort only, gated on ever seeing NOT_SUPPORTED claims as the
+  binding constraint again.
+- Phase B (mouse transient too): on hold, not dead. It doubles the
+  convicted operation class (abort churn), so it runs against the
+  verdict above; revive only if a hub without the abort interaction
+  still fails two concurrent periodics (i.e. the trigger turns out to
+  be standingness after all, not aborts).
 
 --- Safe teardown (the StoreProhibited lesson) ---
 - hid_teardown() used to free transfer structs and close the device
@@ -396,7 +422,7 @@ What it took to get hotplug / hot-unplug working, per level
   LIVE streaming slot: completions landing after free() corrupt the
   heap, and the crash surfaces seconds later in unrelated code
   (decoded once: StoreProhibited in TLSF malloc from a touch read,
-  ~5s after toggling a healthy 10ms keyboard into teardown).
+  ~5s after toggling a healthy streaming keyboard into teardown).
 - Rule since: no transfer memory is freed while a completion for it
   can still arrive. Live teardowns go through retire +
   HID_SLOT_CLOSING, owned solely by the app thread: stop new submits
@@ -412,8 +438,21 @@ What it took to get hotplug / hot-unplug working, per level
   the tick only touches POLLED non-retired slots; setup only touches
   STAGED; health-check skips retiring. The retire path is the only
   one that blocks, and only on the app thread.
+- Known wart: retiring a healthy idle streaming slot always takes the
+  3s forced path, because the drain-wait runs before halt/flush while
+  standing URBs (correctly) never complete on their own. Harmless
+  (teardown completes correctly either way) but noisy and slow;
+  fix = halt+flush BEFORE the bounded drain-wait so completions arrive
+  promptly as CANCELED. Filed, not yet applied.
 
 --- HCD channels (the hard silicon limit, ESP32-S3) ---
+- Rule of thumb first, math after: on ESP32-S3 in USB host mode you
+  get 8 channels, which in practice means **max 1 hub + 2 downstream
+  devices** (each device costs its EP0 pipe plus one pipe per claimed
+  endpoint; the hub itself costs its EP0 pipe plus its status pipe;
+  and enumeration transiently needs a free channel, so a nominally
+  "full" budget still fails intermittently). The ESP32-P4 and ESP32-S31
+  have 16 channels, so **1 hub + 4 devices** fits there with margin.
 - The S3 DWC_OTG core has 8 host channels (~7 usable; one is reserved
   per the HCD's own test). One channel is consumed per USB *pipe* and
   held for the pipe's lifetime - transfers (URBs) multiplex on their
@@ -468,6 +507,19 @@ What it took to get hotplug / hot-unplug working, per level
   (cable/power/stack) from "hubs only" (adapter missing/wedged) from
   "adapter present, failing" in one call. print(usb_disp.lsusb()) shows
   the same bus Linux-style with VID:PID and product strings.
+- Delayed teardown puzzle (open): twice observed, a flagged transfer
+  error with no teardown for 12s / 47s despite the <=100ms code path,
+  never reproduced since. Unknown whether event-delivery stall or
+  log-side artifact. Decider: usb_disp.hid_loop_lag() sampled DURING
+  such a gap (all readings so far were taken in healthy windows).
+- Poll-rate excursions (open, non-load-bearing): one 119/s and one
+  0.3/s episode against the 20/s design, also never reproduced;
+  collapse behavior never depended on them. hid_poll_stats() deltas
+  would catch a recurrence.
+- Single EP0 STALL datapoint (keyboard, mid-collapse session only,
+  never keyboard-alone): filed as collapse fallout, not device guilt
+  - consistent with everything else pointing at interaction, not at
+  either device.
 - Zombie devices (address persists with dead EP0 long after unplug,
   `Unknown device` in lsusb): suspect a dropped DEV_GONE in a burst —
   our client queue is 32 deep for that reason. Discriminator: unplug,
