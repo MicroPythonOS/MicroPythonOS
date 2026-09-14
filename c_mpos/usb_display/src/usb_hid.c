@@ -52,7 +52,8 @@ void usb_disp_log(const char *fmt, ...);
 typedef enum {
     HID_SLOT_EMPTY = 0,
     HID_SLOT_STAGED, // opened by client task, setup pending in hid_poll
-    HID_SLOT_STREAMING,
+    HID_SLOT_STREAMING, // persistent interrupt pipe (mice)
+    HID_SLOT_POLLED, // Phase A: keyboard, interrupt pipe allocated per tick
 } hid_slot_state_t;
 
 typedef struct {
@@ -64,12 +65,36 @@ typedef struct {
     uint8_t protocol;
     uint8_t ep_in;
     uint16_t mps;
+    uint8_t interval_ms; // poll cadence, from bInterval, clamped
+    uint32_t poll_next_ms; // next transient tick due
+    uint32_t polls; // cumulative transient polls performed
+    uint16_t ch_total; // cumulative transient channel failures
+    uint8_t ch_consec; // consecutive transient channel failures
     uint16_t vid;
     uint16_t pid;
     volatile bool gone;
     volatile bool xfer_err;
     usb_transfer_t *xfer[USB_HID_XFER_PER_DEV];
 } hid_slot_t;
+
+// Transient keyboard polling (Phase A experiment): after this many
+// consecutive per-tick channel failures, park instead of spinning.
+// ~2.5s at the 50ms tick: long enough to ride out someone else's
+// enumeration burst, short enough to go quiet fast on real exhaustion.
+#define HID_KBD_PARK_AFTER 50
+// Completion wait for one transient poll (submit is async even here).
+// Deliberately short: responsiveness comes from the 10ms tick rate, not
+// the pend length - a keypress just after a timeout is caught by the
+// next tick. A short bound also limits wasted channel-hold time per
+// tick, which is the whole point of transient polling. Expiry with no
+// data is NEUTRAL (idle keyboard), never a failure.
+#define HID_KBD_TICK_TIMEOUT_MS 30
+// Bounded wait to reap a halted transient transfer (CANCELED completion)
+// before its memory may be freed and the interface released. Freeing
+// early strands the endpoint object in the stack ("EP already allocated"
+// on the next claim) and risks use-after-free when the late completion
+// fires. Uses the same done semaphore; the client task keeps pumping.
+#define HID_KBD_REAP_TIMEOUT_MS 50
 
 static hid_slot_t s_slots[USB_HID_MAX_DEV];
 static usb_hid_event_t s_ring[USB_HID_RING_MASK + 1];
@@ -78,10 +103,16 @@ static volatile uint8_t s_ring_tail = 0; // consumer (hid_drain) only
 static volatile uint32_t s_dropped = 0;
 
 static usb_host_client_handle_t s_hid_client = NULL;
+static bool s_hid_verbose = false;
+
+#define HID_VLOG(...) do { if (s_hid_verbose) usb_disp_log(__VA_ARGS__); } while (0)
+
 static bool s_hid_started = false;
 static volatile bool s_scan_needed = false;
 static SemaphoreHandle_t s_hid_ctrl_mutex = NULL;
 static SemaphoreHandle_t s_hid_ctrl_done = NULL;
+static SemaphoreHandle_t s_kbd_done = NULL;
+static TaskHandle_t s_kbd_poll_task = NULL;
 static volatile uint32_t s_change_gen = 0;
 
 // Retry deferral: per-device setup-failure accounting so a device that
@@ -318,7 +349,7 @@ static bool hid_slot_addr_known(uint8_t addr) {
 // Client-task context, non-blocking (descriptor reads are cached).
 static bool hid_find_boot_iface(const uint8_t *blob, uint16_t len, uint8_t *iface,
                                 uint8_t *subclass, uint8_t *protocol, uint8_t *ep_in,
-                                uint16_t *mps) {
+                                uint16_t *mps, uint8_t *interval_ms) {
     const uint8_t *p = blob;
     const uint8_t *end = blob + len;
     uint8_t cur_iface = 0, cur_alt = 0, cur_class = 0, cur_sub = 0, cur_proto = 0;
@@ -345,6 +376,20 @@ static bool hid_find_boot_iface(const uint8_t *blob, uint16_t len, uint8_t *ifac
                 if (*mps == 0 || *mps > USB_HID_XFER_SIZE) {
                     *mps = USB_HID_XFER_SIZE;
                 }
+                // Poll cadence for transient mode (Phase A): deliberately
+                // calm (50ms floor). The per-tick claim/CLEAR_FEATURE/
+                // submit/halt/flush/release churn every 10ms was knocking
+                // cheap hub TTs off the bus, so keyboards trade latency
+                // (fine for typing/REPL) for bus quiet. bInterval is ms
+                // for low-speed, 2^(n-1) frames for full-speed; anything
+                // below the floor becomes 50ms, above 100ms stays capped.
+                uint8_t iv = p[6];
+                if (iv < 50) {
+                    iv = 50;
+                } else if (iv > 100) {
+                    iv = 100;
+                }
+                *interval_ms = iv;
                 return true;
             }
         }
@@ -396,10 +441,10 @@ static void hid_scan(void) {
             usb_host_device_close(s_hid_client, dev); // hub: stack handles
             continue;
         }
-        uint8_t iface = 0, subclass = 0, protocol = 0, ep_in = 0;
+        uint8_t iface = 0, subclass = 0, protocol = 0, ep_in = 0, interval_ms = 10;
         uint16_t mps = 0;
         if (!hid_find_boot_iface((const uint8_t *)cdesc, cdesc->wTotalLength, &iface,
-                                 &subclass, &protocol, &ep_in, &mps)) {
+                                 &subclass, &protocol, &ep_in, &mps, &interval_ms)) {
             usb_host_device_close(s_hid_client, dev);
             continue;
         }
@@ -413,6 +458,7 @@ static void hid_scan(void) {
         slot->protocol = protocol;
         slot->ep_in = ep_in;
         slot->mps = mps;
+        slot->interval_ms = interval_ms;
         slot->vid = ddesc->idVendor;
         slot->pid = ddesc->idProduct;
         usb_disp_log("[HID] staged %s addr=%u if=%u ep=%02X mps=%u %04X:%04X",
@@ -447,6 +493,8 @@ static void hid_teardown(hid_slot_t *slot, const char *why, bool dev_gone) {
     s_scan_needed = true;
 }
 
+static void hid_kbd_task_ensure(void);
+
 // Stage 2 (app thread via hid_poll): blocking setup of one staged slot.
 // Parked/cooling devices are skipped silently; failures feed the defer
 // table instead of retrying hot (see hid_defer_fail).
@@ -467,6 +515,33 @@ static void hid_setup_slot(hid_slot_t *slot) {
                      slot->addr);
     }
     hid_ctrl(slot, 0x21, 0x0A, 0x0000, slot->iface); // SET_IDLE, best effort
+    if (slot->protocol == 1) {
+        // Phase A: keyboards hold NO persistent interrupt pipe. They go
+        // POLLED (transient claim/submit/release per tick from the poll
+        // task below) so hub + display + mouse + keyboard fit the S3
+        // channel budget. Mice keep the persistent path for now.
+        //
+        // Toggle resync lives HERE (once per POLLED episode), not in the
+        // tick: a fresh pipe starts at DATA0 while the device kept its
+        // sequence, and per-tick CLEAR_FEATUREs on a healthy endpoint
+        // turned out to upset real hardware (hub-wide collapse). Error
+        // recoveries tear the slot down, so the next episode resyncs.
+        if (!hid_ctrl(slot, 0x02, 0x01, 0x0000, slot->ep_in)) {
+            HID_VLOG("[HID][V] addr=%u episode resync failed, continuing",
+                     slot->addr);
+        }
+        hid_defer_clear_entry(defer);
+        slot->state = HID_SLOT_POLLED;
+        slot->poll_next_ms = now_ms + slot->interval_ms;
+        slot->polls = 0;
+        slot->ch_total = 0;
+        slot->ch_consec = 0;
+        usb_disp_log("[HID] keyboard addr=%u polled every %ums", slot->addr,
+                     slot->interval_ms);
+        hid_kbd_task_ensure();
+        s_change_gen++;
+        return;
+    }
     esp_err_t claim_err =
         usb_host_interface_claim(s_hid_client, slot->dev, slot->iface, 0);
     if (claim_err != ESP_OK) {
@@ -533,6 +608,227 @@ static void hid_setup_staged(void) {
     }
 }
 
+// ---- Transient keyboard polling (Phase A experiment) ----
+//
+// A POLLED keyboard holds its open handle but no interrupt pipe. Each
+// tick allocates the pipe (claim), submits one IN transfer, waits,
+// copies any report into the ring, and frees everything again. Steady
+// state holds hub + display + mouse pipes only, so the full combo fits
+// the S3 budget with margin to spare. Boot reports are level-state, so
+// tick-rate sampling loses nothing vs native bInterval polling (only a
+// press+release inside one tick window is invisible - same as hardware).
+// All per-tick failures are silent counters; transitions log lines.
+
+typedef enum {
+    KBD_OK = 0,
+    KBD_EMPTY,     // wait expired, no data (idle keyboard: neutral)
+    KBD_CH_FAIL,   // no channel (claim/alloc failed with NOT_SUPPORTED)
+    KBD_OTHER_FAIL, // anything else (submit/status)
+    KBD_GONE,      // device went away
+} kbd_poll_res_t;
+
+static volatile uint32_t s_kbd_total_polls = 0;
+static volatile uint32_t s_kbd_total_ch = 0;
+
+static void hid_kbd_done_cb(usb_transfer_t *xfer) {
+    if (s_kbd_done != NULL) {
+        xSemaphoreGive(s_kbd_done);
+    }
+    (void)xfer;
+}
+
+typedef enum {
+    REAP_CLEAN = 0, // reaped, no data
+    REAP_DATA,      // reaped, and a slow answer arrived: kept
+    REAP_WEDGED,    // reap itself timed out
+} reap_res_t;
+
+static reap_res_t hid_kbd_reap(hid_slot_t *slot, usb_transfer_t *x);
+
+static kbd_poll_res_t hid_kbd_poll_once(hid_slot_t *slot) {
+    if (slot->dev == NULL || slot->gone) {
+        return KBD_GONE;
+    }
+    esp_err_t cerr =
+        usb_host_interface_claim(s_hid_client, slot->dev, slot->iface, 0);
+    if (cerr != ESP_OK) {
+        HID_VLOG("[HID][V] addr=%u tick claim err=0x%X", slot->addr,
+                 (unsigned)cerr);
+        return (cerr == ESP_ERR_NOT_SUPPORTED) ? KBD_CH_FAIL : KBD_OTHER_FAIL;
+    }
+    kbd_poll_res_t res = KBD_OTHER_FAIL;
+    usb_transfer_t *x = NULL;
+    if (usb_host_transfer_alloc(slot->mps, 0, &x) == ESP_OK) {
+        x->device_handle = slot->dev;
+        x->bEndpointAddress = slot->ep_in;
+        x->callback = hid_kbd_done_cb;
+        x->context = slot;
+        x->num_bytes = slot->mps;
+        xSemaphoreTake(s_kbd_done, 0);
+        if (usb_host_transfer_submit(x) != ESP_OK) {
+            HID_VLOG("[HID][V] addr=%u tick submit failed", slot->addr);
+        } else if (xSemaphoreTake(s_kbd_done, pdMS_TO_TICKS(HID_KBD_TICK_TIMEOUT_MS)) !=
+                   pdTRUE) {
+            // Idle keyboard (NAKs, no data): neutral, not a failure.
+            // Reap synchronously, then the next tick (10ms away) catches
+            // any keypress that starts right after this.
+            HID_VLOG("[HID][V] addr=%u tick wait timeout (idle)", slot->addr);
+            reap_res_t rr = hid_kbd_reap(slot, x);
+            if (rr != REAP_WEDGED) {
+                slot->polls++;
+                s_kbd_total_polls++;
+                res = (rr == REAP_DATA) ? KBD_OK : KBD_EMPTY;
+            }
+        } else if (x->status != USB_TRANSFER_STATUS_COMPLETED) {
+            HID_VLOG("[HID][V] addr=%u tick status=%d actual=%d", slot->addr,
+                     (int)x->status, x->actual_num_bytes);
+            // A completed-but-errored transfer is genuinely suspicious
+            // (unlike an idle timeout): reap for hygiene, but keep the
+            // backoff verdict so a persistently erroring endpoint parks
+            // loudly instead of spinning silently.
+            hid_kbd_reap(slot, x);
+        } else {
+            if (x->actual_num_bytes > 0) {
+                uint8_t n =
+                    x->actual_num_bytes > 255 ? 255 : (uint8_t)x->actual_num_bytes;
+                hid_ring_push(slot->addr, slot->subclass, slot->protocol,
+                              x->data_buffer, n);
+                HID_VLOG("[HID][V] addr=%u tick ok bytes=%d", slot->addr,
+                         x->actual_num_bytes);
+            }
+            slot->polls++;
+            s_kbd_total_polls++;
+            res = KBD_OK;
+        }
+        usb_host_transfer_free(x);
+    }
+    usb_host_interface_release(s_hid_client, slot->dev, slot->iface);
+    return res;
+}
+
+// Reap a halted transient transfer so its memory may be freed and the
+// interface released: halt + flush, then wait (bounded) for the CANCELED
+// (or late-OK) completion, then clear. Follows the display HAL's
+// bulk_ep_recover choreography (halt->flush->clear). REAP_WEDGED means
+// even the reap timed out: the pipe is wedged beyond a tick-level retry.
+static reap_res_t hid_kbd_reap(hid_slot_t *slot, usb_transfer_t *x) {
+    usb_host_endpoint_halt(slot->dev, slot->ep_in);
+    usb_host_endpoint_flush(slot->dev, slot->ep_in);
+    if (xSemaphoreTake(s_kbd_done, pdMS_TO_TICKS(HID_KBD_REAP_TIMEOUT_MS)) !=
+        pdTRUE) {
+        HID_VLOG("[HID][V] addr=%u reap timeout (pipe wedged)", slot->addr);
+        return REAP_WEDGED;
+    }
+    if (x->status == USB_TRANSFER_STATUS_COMPLETED && x->actual_num_bytes > 0) {
+        // Slow device answered between our timeout and the halt: keep
+        // the report instead of dropping it on the floor.
+        uint8_t n =
+            x->actual_num_bytes > 255 ? 255 : (uint8_t)x->actual_num_bytes;
+        hid_ring_push(slot->addr, slot->subclass, slot->protocol,
+                      x->data_buffer, n);
+        HID_VLOG("[HID][V] addr=%u late data kept bytes=%d", slot->addr,
+                 x->actual_num_bytes);
+        usb_host_endpoint_clear(slot->dev, slot->ep_in);
+        return REAP_DATA;
+    }
+    usb_host_endpoint_clear(slot->dev, slot->ep_in);
+    return REAP_CLEAN;
+}
+
+// One scheduler pass over POLLED keyboards. Testable directly (the task
+// wrapper below is a thin loop around this).
+static void hid_kbd_tick(uint32_t now_ms) {
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        if (slot->state != HID_SLOT_POLLED) {
+            continue;
+        }
+        if (slot->dev == NULL || slot->gone) {
+            hid_teardown(slot, "disconnected", true);
+            continue;
+        }
+        if ((int32_t)(now_ms - slot->poll_next_ms) < 0) {
+            continue;
+        }
+        slot->poll_next_ms = now_ms + slot->interval_ms;
+        kbd_poll_res_t r = hid_kbd_poll_once(slot);
+        if (r == KBD_OK || r == KBD_EMPTY) {
+            // A completed tick (with or without data) proves the whole
+            // device + stack path works end to end.
+            slot->ch_consec = 0;
+        } else if (r == KBD_CH_FAIL) {
+            slot->ch_total++;
+            s_kbd_total_ch++;
+            slot->ch_consec++;
+            if (slot->ch_consec >= HID_KBD_PARK_AFTER) {
+                hid_defer_t *d = hid_defer_lookup(slot->vid, slot->pid,
+                                                  slot->protocol, true);
+                hid_defer_fail(d, slot->vid, slot->pid, slot->protocol,
+                               slot->addr, true, now_ms);
+                hid_teardown(slot, "parking: no channels for transient poll", false);
+            }
+        } else if (r == KBD_OTHER_FAIL) {
+            hid_defer_t *d = hid_defer_lookup(slot->vid, slot->pid,
+                                              slot->protocol, true);
+            hid_defer_fail(d, slot->vid, slot->pid, slot->protocol, slot->addr,
+                           false, now_ms);
+            hid_teardown(slot, "transient poll failed", false);
+        } else {
+            hid_teardown(slot, "disconnected", true);
+        }
+    }
+}
+
+static bool hid_kbd_any_polled(void) {
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        if (s_slots[i].state == HID_SLOT_POLLED) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Start the poll task on first POLLED keyboard (idempotent). Logs the
+// started line here so it is unit-testable; the stopped line lives in
+// the task itself.
+static void hid_kbd_poll_task(void *arg);
+
+static void hid_kbd_task_ensure(void) {
+    if (s_kbd_poll_task != NULL) {
+        return;
+    }
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        if (slot->state == HID_SLOT_POLLED && slot->dev != NULL) {
+            usb_disp_log("[HID] keyboard polling started (addr=%u, every %ums)",
+                         slot->addr, slot->interval_ms);
+            break;
+        }
+    }
+    if (!hid_kbd_any_polled()) {
+        return;
+    }
+    if (xTaskCreate(hid_kbd_poll_task, "usbhid_kbdpoll", 4096, NULL, 5,
+                    &s_kbd_poll_task) != pdPASS) {
+        s_kbd_poll_task = NULL;
+    }
+}
+
+static void hid_kbd_poll_task(void *arg) {
+    (void)arg;
+    uint32_t base_polls = s_kbd_total_polls;
+    uint32_t base_ch = s_kbd_total_ch;
+    while (hid_kbd_any_polled()) {
+        hid_kbd_tick(hid_now_ms());
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    usb_disp_log("[HID] keyboard polling stopped (%lu polls performed, %lu channel-fails)",
+                 (unsigned long)(s_kbd_total_polls - base_polls),
+                 (unsigned long)(s_kbd_total_ch - base_ch));
+    s_kbd_poll_task = NULL;
+    vTaskDelete(NULL);
+}
+
 static void hid_client_task(void *arg) {
     (void)arg;
     while (true) {
@@ -575,7 +871,8 @@ bool usb_hid_start(void) {
     }
     s_hid_ctrl_mutex = xSemaphoreCreateMutex();
     s_hid_ctrl_done = xSemaphoreCreateBinary();
-    if (s_hid_ctrl_mutex == NULL || s_hid_ctrl_done == NULL) {
+    s_kbd_done = xSemaphoreCreateBinary();
+    if (s_hid_ctrl_mutex == NULL || s_hid_ctrl_done == NULL || s_kbd_done == NULL) {
         usb_host_client_deregister(s_hid_client);
         s_hid_client = NULL;
         return false;
@@ -627,10 +924,12 @@ bool usb_hid_poll(void) {
     uint32_t before = s_change_gen;
     hid_topology_check();
     hid_setup_staged();
-    // Health-check streaming claims; a dead handle means a missed DEV_GONE.
+    hid_kbd_task_ensure();
+    // Health-check live claims; a dead handle means a missed DEV_GONE.
     for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
         hid_slot_t *slot = &s_slots[i];
-        if (slot->state == HID_SLOT_STREAMING && slot->dev != NULL && !slot->gone) {
+        if ((slot->state == HID_SLOT_STREAMING || slot->state == HID_SLOT_POLLED) &&
+            slot->dev != NULL && !slot->gone) {
             usb_device_info_t info;
             if (usb_host_device_info(slot->dev, &info) != ESP_OK) {
                 slot->gone = true;
@@ -660,7 +959,8 @@ uint8_t usb_hid_state(usb_hid_state_t *out, uint8_t max) {
     }
     for (uint8_t i = 0; i < USB_HID_MAX_DEV && n < max; i++) {
         hid_slot_t *slot = &s_slots[i];
-        if (slot->state != HID_SLOT_STREAMING || slot->dev == NULL) {
+        if ((slot->state != HID_SLOT_STREAMING && slot->state != HID_SLOT_POLLED) ||
+            slot->dev == NULL) {
             continue;
         }
         out[n].addr = slot->addr;
@@ -701,12 +1001,31 @@ uint32_t usb_hid_change_gen(void) {
 usb_device_handle_t usb_hid_held_handle(uint8_t addr) {
     for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
         hid_slot_t *slot = &s_slots[i];
-        if (slot->state == HID_SLOT_STREAMING && slot->dev != NULL &&
-            slot->addr == addr) {
+        if ((slot->state == HID_SLOT_STREAMING || slot->state == HID_SLOT_POLLED) &&
+            slot->dev != NULL && slot->addr == addr) {
             return slot->dev;
         }
     }
     return NULL;
+}
+
+uint8_t usb_hid_poll_stats(usb_hid_poll_stat_t *out, uint8_t max) {
+    uint8_t n = 0;
+    if (out == NULL || max == 0) {
+        return 0;
+    }
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV && n < max; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        if (slot->state != HID_SLOT_POLLED || slot->dev == NULL) {
+            continue;
+        }
+        out[n].addr = slot->addr;
+        out[n].protocol = slot->protocol;
+        out[n].polls = slot->polls;
+        out[n].ch_fails = slot->ch_total;
+        n++;
+    }
+    return n;
 }
 
 uint8_t usb_hid_parked(usb_hid_parked_t *out, uint8_t max) {
@@ -731,4 +1050,12 @@ void usb_hid_retry(void) {
     hid_defer_clear_all(false);
     s_scan_needed = true;
     usb_disp_log("[HID] manual retry re-armed");
+}
+
+void usb_hid_set_verbose(bool on) {
+    s_hid_verbose = on;
+}
+
+bool usb_hid_verbose(void) {
+    return s_hid_verbose;
 }

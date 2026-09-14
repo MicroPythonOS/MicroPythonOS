@@ -69,9 +69,28 @@ typedef struct {
 uint8_t usb_hid_parked(usb_hid_parked_t *out, uint8_t max);
 
 // Clear the parked/cooldown list and rescan now (usb_disp.hid_retry()).
-// Topology changes (plug/unplug) re-arm automatically; this is the
+// Topology changes (plug/unplug) re-arms automatically; this is the
 // manual equivalent.
 void usb_hid_retry(void);
+
+// One transiently-polled keyboard: cumulative counters for REPL frequency
+// checks (usb_disp.hid_poll_stats()). Per-slot counters reset on
+// teardown (unplug/replug); sample twice and diff for polls/sec.
+typedef struct {
+    uint8_t addr;
+    uint8_t protocol; // 1 = keyboard (only keyboards are polled)
+    uint32_t polls;   // transient polls performed
+    uint16_t ch_fails; // cumulative transient channel failures
+} usb_hid_poll_stat_t;
+
+// Live polled keyboards (for usb_disp.hid_poll_stats()).
+uint8_t usb_hid_poll_stats(usb_hid_poll_stat_t *out, uint8_t max);
+
+// Per-tick debug logging, off by default (usb_disp.hid_verbose()).
+// Gated [HID][V] lines: claim/submit/wait outcomes per tick. Opt-in
+// only - at ~100 ticks/s it would drown the REPL otherwise.
+void usb_hid_set_verbose(bool on);
+bool usb_hid_verbose(void);
 
 // Open handle of a STREAMING device, if any (NULL otherwise). Lets
 // lsusb-style inspection reuse the held handle instead of reopening a

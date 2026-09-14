@@ -80,6 +80,12 @@ HID (same module, same build):
   exhaustion, not a wedged device.
 - hid_retry() - clear parked/cooldown and rescan now (plug/unplug
   re-arms automatically).
+- hid_poll_stats() - [(addr, kind, polls, ch_fails)] for live
+  transiently-polled keyboards (see polling note above).
+- hid_verbose([on]) - per-tick debug flag, off by default (bare call
+  reads it back). When on, each transient tick logs [HID][V]
+  claim/submit/wait outcomes. Opt-in only: at ~100 ticks/s it would
+  drown the REPL (and any file transfer) otherwise.
 
 =====================================================================
 What it took to get hotplug / hot-unplug working, per level
@@ -281,6 +287,46 @@ What it took to get hotplug / hot-unplug working, per level
   repeat logic, ESC/arrows nav hooks); USBMouse + keyboard share one
   hub, armed together by arm_usb_hid(), enabled per-kind from
   hid_state() (kind-aware _sync_usb_hid).
+- Transient keyboard polling (Phase A experiment): keyboards hold NO
+  persistent interrupt pipe. A poll task ticks each keyboard at a calm
+  50ms floor (bInterval above that is respected up to 100ms): claim ->
+  submit one IN transfer -> wait (30ms timeout) -> copy any report to
+  the ring -> free -> release, then sleep. The 10ms original ticked
+  claim/CLEAR_FEATURE/submit/halt/flush/release 100x/sec and knocked
+  cheap hub TTs off the bus (whole-hub re-enumeration every few
+  seconds, taking mouse+keyboard down together); 50ms keeps typing
+  responsive while staying an order of magnitude quieter. Toggle
+  resync (CLEAR_FEATURE, fresh pipes start DATA0 while the device
+  kept its sequence) runs once per POLLED episode, never per tick,
+  for the same reason. Steady state holds hub + display + mouse
+  pipes only, so the full combo fits the S3 budget with margin to
+  spare. Boot reports are level-state, so tick-rate sampling loses
+  nothing vs native polling (only a press+release inside one tick is
+  invisible - same as hardware bInterval sampling). Mice keep
+  persistent pipes for now (Phase B would move them too).
+  Teardown choreography per tick (the hard-learned part): a halted
+  transfer must be reaped (halt -> flush -> bounded wait for the
+  CANCELED completion -> clear) BEFORE its memory is freed and the
+  interface released. Freeing early strands the endpoint object in the
+  stack ("EP already allocated" on the next claim, every ~10ms
+  forever) and risks use-after-free when the late completion fires -
+  exactly the failure the first Phase A firmware showed. A slow answer
+  arriving between timeout and halt is kept, not dropped.
+  A wait that expires with no data is NEUTRAL (idle keyboard NAKs),
+  never a failure: reap, free, next tick. Only genuine errors feed
+  backoff/parking, and a completed tick (with or without data) resets
+  the consecutive-failure count. Rationale for the short 30ms bound:
+  responsiveness comes from the tick rate, not the pend length - a
+  keypress just after a timeout is caught by the next tick - while a
+  long pend would hold a channel doing nothing, defeating the point.
+  Lifecycle lines (the only polling logs by default):
+  "keyboard polling started (addr=N, every Mms)" on first keyboard,
+  "keyboard polling stopped (N polls performed, M channel-fails)" when
+  the last one goes away. Per-tick failures are silent counters;
+  usb_disp.hid_poll_stats() returns [(addr, kind, polls, ch_fails)]
+  per live keyboard - sample twice and diff polls for the effective
+  rate. 50 consecutive channel failures parks (see below); other
+  tick failures use the normal transient backoff.
 - Watchdog coexistence: a healthy/enumerated HID reads exactly like a
   wedged adapter (connected + enabled, no bus growth), which the idle
   auto-reset would PORT_RESET ~15s after plug/park. While any HID is
@@ -323,17 +369,19 @@ What it took to get hotplug / hot-unplug working, per level
   mouse > keyboard (the display claims through its own client and
   always wins; among staged HIDs, mice set up before keyboards). A
   claim failing with ESP_ERR_NOT_SUPPORTED (the channel-exhaustion
-  signature) parks the device immediately with one explanatory line;
-  other setup failures cool down 4s/12s/28s, then park. Parked devices
-  stay silent until a bus topology change (plug/unplug/reenum, checked
-  every hid_poll) or usb_disp.hid_retry(). Unplug clears the device's
+  signature) parks immediately with one explanatory line; transient
+  failures back off 4s/12s/28s, then park. Parked devices stay silent
+  until a bus topology change (plug/unplug/reenum, checked every
+  hid_poll) or usb_disp.hid_retry(). Unplug clears the device's
   failure history. usb_disp.hid_parked() lists [(vid, pid, kind,
   fails)] with fails=255 for parked.
-- Consequence for the common desk setup: behind one hub you get the
-  display + ONE hid device (mouse preferred). Keyboard-only-behind-hub
-  and mouseless setups work; hub + display + keyboard + mouse does
-  not, by physics. ESP32-P4 has 16 channels (fits everything) but is
-  not a target yet.
+- Phase A changes the math: keyboards hold no persistent pipe (see
+  polling note above), so steady state is 4 defaults + hub + bulk +
+  mouse = 7 pipes, +1 transiently during each keyboard tick. The full
+  combo now fits whenever a free channel exists at tick time; a tick
+  that finds none just skips (counted, silent) and parks after 50
+  consecutive misses. If transient polling proves out, Phase B moves
+  mice to the same scheme (steady state 6).
 - Debugging channel pressure: hid_parked() non-empty with fails=255
   plus the "No more HCD channels" lines = exhausted, not wedged. Do NOT reset_port()
   parked devices (they are healthy and enumerated; a reset just burns
