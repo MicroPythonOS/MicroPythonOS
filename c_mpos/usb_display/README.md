@@ -389,6 +389,30 @@ What it took to get hotplug / hot-unplug working, per level
   (persistent when channels allow, transient+parking under display
   pressure), not for deleting the transient path.
 
+--- Safe teardown (the StoreProhibited lesson) ---
+- hid_teardown() used to free transfer structs and close the device
+  with no regard for in-flight URBs. That is safe for dead devices
+  (the stack cancels everything promptly) but use-after-free for a
+  LIVE streaming slot: completions landing after free() corrupt the
+  heap, and the crash surfaces seconds later in unrelated code
+  (decoded once: StoreProhibited in TLSF malloc from a touch read,
+  ~5s after toggling a healthy 10ms keyboard into teardown).
+- Rule since: no transfer memory is freed while a completion for it
+  can still arrive. Live teardowns go through retire +
+  HID_SLOT_CLOSING, owned solely by the app thread: stop new submits
+  first (state flip), wait boundedly for in-flight count + tick pass
+  to drain (completions keep pumping on the client task - waiting
+  there would deadlock), then halt/flush/clear, free, release, close.
+  Wedged transfers that never complete are leaked deliberately, never
+  freed (a late completion into leaked memory is harmless; into freed
+  memory is a crash). Per-slot in-flight accounting (increment on
+  submit, decrement in callback) is what makes the wait decidable.
+- Ownership split, lock-free by design: client task only tears down
+  dead (gone/errored, non-retiring) slots and skips retiring ones;
+  the tick only touches POLLED non-retired slots; setup only touches
+  STAGED; health-check skips retiring. The retire path is the only
+  one that blocks, and only on the app thread.
+
 --- HCD channels (the hard silicon limit, ESP32-S3) ---
 - The S3 DWC_OTG core has 8 host channels (~7 usable; one is reserved
   per the HCD's own test). One channel is consumed per USB *pipe* and

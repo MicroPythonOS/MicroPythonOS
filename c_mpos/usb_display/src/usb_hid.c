@@ -54,6 +54,7 @@ typedef enum {
     HID_SLOT_STAGED, // opened by client task, setup pending in hid_poll
     HID_SLOT_STREAMING, // persistent interrupt pipe (mice)
     HID_SLOT_POLLED, // Phase A: keyboard, interrupt pipe allocated per tick
+    HID_SLOT_CLOSING, // quiescing for a safe teardown (app thread owns it)
 } hid_slot_state_t;
 
 typedef struct {
@@ -71,6 +72,13 @@ typedef struct {
     uint32_t polls; // cumulative transient polls performed
     uint16_t ch_total; // cumulative transient channel failures
     uint8_t ch_consec; // consecutive transient channel failures
+    volatile bool retire; // live teardown requested: quiesce, then free.
+        // Set from any thread; only the app thread acts on it (see
+        // hid_retire_teardown). While set, no new submits may start.
+    volatile int inflight; // transfers submitted but not yet completed.
+        // Incremented on submit, decremented in the completion callback;
+        // the retire path waits for zero so no completion ever fires
+        // into freed memory (StoreProhibited crash, proven on hardware).
     uint16_t vid;
     uint16_t pid;
     volatile bool gone;
@@ -124,6 +132,7 @@ static SemaphoreHandle_t s_hid_ctrl_mutex = NULL;
 static SemaphoreHandle_t s_hid_ctrl_done = NULL;
 static SemaphoreHandle_t s_kbd_done = NULL;
 static TaskHandle_t s_kbd_poll_task = NULL;
+static volatile bool s_kbd_tick_active = false;
 static volatile uint32_t s_change_gen = 0;
 
 // Retry deferral: per-device setup-failure accounting so a device that
@@ -261,16 +270,26 @@ static void hid_ring_push(uint8_t addr, uint8_t subclass, uint8_t protocol,
 
 static void hid_intr_cb(usb_transfer_t *xfer) {
     hid_slot_t *slot = (hid_slot_t *)xfer->context;
+    if (slot->inflight > 0) {
+        slot->inflight--;
+    }
+    if (slot->retire || slot->state == HID_SLOT_CLOSING) {
+        // Slot is being quiesced: drop the completion silently. The
+        // retire path waits for inflight to reach zero before freeing.
+        return;
+    }
     if (xfer->status == USB_TRANSFER_STATUS_COMPLETED) {
         uint8_t n = xfer->actual_num_bytes > 255 ? 255 : (uint8_t)xfer->actual_num_bytes;
         if (n > 0) {
             hid_ring_push(slot->addr, slot->subclass, slot->protocol,
                           xfer->data_buffer, n);
         }
-        if (slot->state == HID_SLOT_STREAMING && !slot->gone) {
+        if (slot->state == HID_SLOT_STREAMING && !slot->gone && !slot->retire) {
             xfer->num_bytes = slot->mps;
             if (usb_host_transfer_submit(xfer) != ESP_OK) {
                 slot->xfer_err = true;
+            } else {
+                slot->inflight++;
             }
         }
     } else if (xfer->status != USB_TRANSFER_STATUS_CANCELED) {
@@ -283,6 +302,48 @@ static void hid_intr_cb(usb_transfer_t *xfer) {
                      (int)xfer->status, xfer->actual_num_bytes);
         slot->xfer_err = true;
     }
+}
+
+// Quiesced teardown for LIVE slots (retire flag), app thread only.
+// Blocked waits are safe here: completions keep pumping on the client
+// task. Never call from the client task itself (it owns the pump the
+// reap below depends on). Bound for one retire quiesce; expiry logs
+// loudly and proceeds (tearing down blind still beats leaking, and
+// matches the pre-existing fast path's risk profile, minus the race).
+#define HID_RETIRE_WAIT_MS 3000
+static void hid_retire_teardown(hid_slot_t *slot) {
+    uint8_t addr = slot->addr;
+    slot->state = HID_SLOT_CLOSING; // stop all new submits first of all
+    uint32_t waited = 0;
+    while ((s_kbd_tick_active || slot->inflight > 0) &&
+           waited < HID_RETIRE_WAIT_MS) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        waited += 10;
+    }
+    if (s_kbd_tick_active || slot->inflight > 0) {
+        usb_disp_log("[HID] addr=%u retire forced with work in flight", addr);
+    }
+    // Belt and braces: quiesce the endpoint, then drain completions once
+    // more before anything below is freed.
+    usb_host_endpoint_halt(slot->dev, slot->ep_in);
+    usb_host_endpoint_flush(slot->dev, slot->ep_in);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    usb_host_endpoint_clear(slot->dev, slot->ep_in);
+    for (uint8_t i = 0; i < USB_HID_XFER_PER_DEV; i++) {
+        if (slot->xfer[i] != NULL) {
+            usb_host_transfer_free(slot->xfer[i]);
+            slot->xfer[i] = NULL;
+        }
+    }
+    if (slot->dev != NULL) {
+        usb_host_interface_release(s_hid_client, slot->dev, slot->iface);
+        usb_host_device_close(s_hid_client, slot->dev);
+        slot->dev = NULL;
+    }
+    usb_disp_log("[HID] addr=%u retired", addr);
+    memset(slot, 0, sizeof(*slot));
+    s_change_gen++;
+    s_scan_needed = true;
 }
 
 static void hid_client_event_cb(const usb_host_client_event_msg_t *msg, void *arg) {
@@ -595,6 +656,8 @@ static void hid_setup_slot(hid_slot_t *slot) {
     for (uint8_t k = 0; k < USB_HID_XFER_PER_DEV; k++) {
         if (usb_host_transfer_submit(slot->xfer[k]) != ESP_OK) {
             slot->xfer_err = true;
+        } else {
+            slot->inflight++;
         }
     }
     if (slot->xfer_err) {
@@ -699,40 +762,66 @@ static kbd_poll_res_t hid_kbd_poll_once(hid_slot_t *slot) {
         xSemaphoreTake(s_kbd_done, 0);
         if (usb_host_transfer_submit(x) != ESP_OK) {
             HID_VLOG("[HID][V] addr=%u tick submit failed", slot->addr);
-        } else if (xSemaphoreTake(s_kbd_done, pdMS_TO_TICKS(HID_KBD_TICK_TIMEOUT_MS)) !=
-                   pdTRUE) {
-            // Idle keyboard (NAKs, no data): neutral, not a failure.
-            // Reap synchronously, then the next tick (10ms away) catches
-            // any keypress that starts right after this.
-            HID_VLOG("[HID][V] addr=%u tick wait timeout (idle)", slot->addr);
-            reap_res_t rr = hid_kbd_reap(slot, x);
-            if (rr != REAP_WEDGED) {
+        } else {
+            // Paired with the reap/wait below: exactly one completion
+            // (data, error, or CANCELED-from-reap) settles this transfer.
+            // The counter lets retire-teardown wait out in-flight work
+            // instead of freeing under it (StoreProhibited, proven).
+            slot->inflight++;
+            // drop: deliberately leak instead of freeing. Set only when
+            // the transfer may still complete later (reap timed out): the
+            // stack would then write into freed heap. A wedged pipe is
+            // rare; its late completion only signals the done semaphore.
+            bool drop = false;
+            if (xSemaphoreTake(s_kbd_done, pdMS_TO_TICKS(HID_KBD_TICK_TIMEOUT_MS)) !=
+                pdTRUE) {
+                // Idle keyboard (NAKs, no data): neutral, not a failure.
+                // Reap synchronously, then the next tick catches any
+                // keypress that starts right after this.
+                HID_VLOG("[HID][V] addr=%u tick wait timeout (idle)", slot->addr);
+                reap_res_t rr = hid_kbd_reap(slot, x);
+                slot->inflight--;
+                if (rr == REAP_WEDGED) {
+                    usb_disp_log("[HID] addr=%u wedged transfer dropped (not freed)",
+                                 slot->addr);
+                    drop = true;
+                } else {
+                    slot->polls++;
+                    s_kbd_total_polls++;
+                    res = (rr == REAP_DATA) ? KBD_OK : KBD_EMPTY;
+                }
+            } else if (x->status != USB_TRANSFER_STATUS_COMPLETED) {
+                HID_VLOG("[HID][V] addr=%u tick status=%d actual=%d", slot->addr,
+                         (int)x->status, x->actual_num_bytes);
+                // A completed-but-errored transfer is genuinely suspicious
+                // (unlike an idle timeout): reap for hygiene, but keep the
+                // backoff verdict so a persistently erroring endpoint parks
+                // loudly instead of spinning silently.
+                reap_res_t rr = hid_kbd_reap(slot, x);
+                slot->inflight--;
+                if (rr == REAP_WEDGED) {
+                    usb_disp_log("[HID] addr=%u wedged transfer dropped (not freed)",
+                                 slot->addr);
+                    drop = true;
+                }
+            } else {
+                if (x->actual_num_bytes > 0) {
+                    uint8_t n =
+                        x->actual_num_bytes > 255 ? 255 : (uint8_t)x->actual_num_bytes;
+                    hid_ring_push(slot->addr, slot->subclass, slot->protocol,
+                                  x->data_buffer, n);
+                    HID_VLOG("[HID][V] addr=%u tick ok bytes=%d", slot->addr,
+                             x->actual_num_bytes);
+                }
                 slot->polls++;
                 s_kbd_total_polls++;
-                res = (rr == REAP_DATA) ? KBD_OK : KBD_EMPTY;
+                slot->inflight--;
+                res = KBD_OK;
             }
-        } else if (x->status != USB_TRANSFER_STATUS_COMPLETED) {
-            HID_VLOG("[HID][V] addr=%u tick status=%d actual=%d", slot->addr,
-                     (int)x->status, x->actual_num_bytes);
-            // A completed-but-errored transfer is genuinely suspicious
-            // (unlike an idle timeout): reap for hygiene, but keep the
-            // backoff verdict so a persistently erroring endpoint parks
-            // loudly instead of spinning silently.
-            hid_kbd_reap(slot, x);
-        } else {
-            if (x->actual_num_bytes > 0) {
-                uint8_t n =
-                    x->actual_num_bytes > 255 ? 255 : (uint8_t)x->actual_num_bytes;
-                hid_ring_push(slot->addr, slot->subclass, slot->protocol,
-                              x->data_buffer, n);
-                HID_VLOG("[HID][V] addr=%u tick ok bytes=%d", slot->addr,
-                         x->actual_num_bytes);
+            if (!drop) {
+                usb_host_transfer_free(x);
             }
-            slot->polls++;
-            s_kbd_total_polls++;
-            res = KBD_OK;
         }
-        usb_host_transfer_free(x);
     }
     usb_host_interface_release(s_hid_client, slot->dev, slot->iface);
     return res;
@@ -773,6 +862,10 @@ static void hid_kbd_tick(uint32_t now_ms) {
     for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
         hid_slot_t *slot = &s_slots[i];
         if (slot->state != HID_SLOT_POLLED) {
+            continue;
+        }
+        if (slot->retire) {
+            // Owned by hid_retire_teardown (app thread) now.
             continue;
         }
         if (slot->dev == NULL || slot->gone) {
@@ -863,6 +956,22 @@ static void hid_kbd_poll_task(void *arg) {
 
 static volatile uint32_t s_client_last_pump_ms = 0;
 
+// One client-task pass over a single slot. Split out for unit tests;
+// the live loop below just iterates it.
+static void hid_client_task_slot(hid_slot_t *slot) {
+    // Retiring slots belong to the app thread (hid_retire_teardown):
+    // touching them here would double-free against it.
+    if (slot->retire) {
+        return;
+    }
+    if (slot->state == HID_SLOT_STREAMING && (slot->gone || slot->xfer_err)) {
+        // Give errored transfers a moment to complete as CANCELED.
+        vTaskDelay(pdMS_TO_TICKS(50));
+        bool gone = slot->gone;
+        hid_teardown(slot, gone ? "disconnected" : "transfer error", gone);
+    }
+}
+
 static void hid_client_task(void *arg) {
     (void)arg;
     while (true) {
@@ -875,13 +984,7 @@ static void hid_client_task(void *arg) {
         // (app thread), so a replug racing setup is torn down there.
         // Splitting ownership avoids double-close of the device handle.
         for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
-            hid_slot_t *slot = &s_slots[i];
-            if (slot->state == HID_SLOT_STREAMING && (slot->gone || slot->xfer_err)) {
-                // Give errored transfers a moment to complete as CANCELED.
-                vTaskDelay(pdMS_TO_TICKS(50));
-                bool gone = slot->gone;
-                hid_teardown(slot, gone ? "disconnected" : "transfer error", gone);
-            }
+            hid_client_task_slot(&s_slots[i]);
         }
         if (s_scan_needed) {
             s_scan_needed = false;
@@ -962,13 +1065,23 @@ bool usb_hid_poll(void) {
     }
     uint32_t before = s_change_gen;
     hid_topology_check();
+    // Retire-flagged live slots first: quiesced teardown (may block),
+    // so their restage follows in a later poll, never mid-teardown.
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        if (slot->retire && slot->state != HID_SLOT_EMPTY &&
+            slot->state != HID_SLOT_CLOSING && slot->dev != NULL) {
+            hid_retire_teardown(slot);
+        }
+    }
     hid_setup_staged();
     hid_kbd_task_ensure();
     // Health-check live claims; a dead handle means a missed DEV_GONE.
+    // Retiring slots are skipped: the retire path owns them already.
     for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
         hid_slot_t *slot = &s_slots[i];
         if ((slot->state == HID_SLOT_STREAMING || slot->state == HID_SLOT_POLLED) &&
-            slot->dev != NULL && !slot->gone) {
+            slot->dev != NULL && !slot->gone && !slot->retire) {
             usb_device_info_t info;
             if (usb_host_device_info(slot->dev, &info) != ESP_OK) {
                 slot->gone = true;
@@ -1097,14 +1210,15 @@ void usb_hid_set_kbd_transient(bool on) {
         return;
     }
     s_kbd_transient = on;
-    // Live keyboards re-stage under the new mode on next setup pass;
-    // flag them gone so normal teardown paths recycle them. Streaming
-    // (persistent) and POLLED slots both converge without new machinery.
+    // Live keyboards re-stage under the new mode via the retire path
+    // below (NOT via gone: tearing down a live streaming slot with
+    // in-flight URBs use-after-frees the heap - StoreProhibited,
+    // proven on hardware). Streaming and POLLED slots converge alike.
     for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
         hid_slot_t *slot = &s_slots[i];
-        if (slot->state != HID_SLOT_EMPTY && slot->protocol == 1 &&
-            slot->dev != NULL) {
-            slot->gone = true;
+        if ((slot->state == HID_SLOT_STREAMING || slot->state == HID_SLOT_POLLED) &&
+            slot->protocol == 1 && slot->dev != NULL) {
+            slot->retire = true;
         }
     }
     usb_disp_log("[HID] keyboard mode: %s (live keyboards re-stage)",
