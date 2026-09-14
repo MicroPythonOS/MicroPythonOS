@@ -2,7 +2,7 @@ Future release (next version)
 =====
 
 Board Support:
-- ESP32-S3: USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195; T6/MS91xx protocol code vendored for ESP32-P4 but untested) via `./scripts/build_mpos.sh esp32s3 --usb` — drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum), falls back to the onboard LCD when no adapter is present, live-switches between panel and USB with auto-revert on unplug, and heals replugged/slow-booting hub ports with a hub-port watchdog (targeted resets with backoff, VBUS power-cycle, root power-cycle escalation, `lsusb()`/`hub_ports()`/`reset_port()` REPL helpers). Note: the `usb` API was renamed without backwards compatibility (`usb_disp` → `usb`, `--usbdisplay` → `--usb`) — field units need `--erase-all` or a lib re-sync
+- ESP32-S3: USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195; T6/MS91xx protocol code vendored for ESP32-P4 but untested) — drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum), falls back to the onboard LCD when no adapter is present, live-switches between panel and USB with auto-revert on unplug, and heals replugged/slow-booting hub ports with a hub-port watchdog (targeted resets with backoff, VBUS power-cycle, root power-cycle escalation, `lsusb()`/`hub_ports()`/`reset_port()` REPL helpers). Note: the `usb` API was renamed without backwards compatibility (`usb_disp` → `usb`, `--usbdisplay` → `--usb`) — field units need `--erase-all` or a lib re-sync
 - ESP32-S3: USB HID mice — boot-protocol pointer support with theme-aware cursor, per-kind arm/enable from `hid_state()`, and safe retire-and-quiesce teardown of live streaming devices
 - ESP32-S3: USB HID keyboards — boot-protocol support reusing the Fri3d key tables and nav hooks, sharing the S3 channel policy with mice (display > mouse > keyboard claim order, silent parking with backoff and topology re-arm, `hid_parked()`/`hid_retry()` introspection, experimental transient polling via `hid_set_kbd_transient()`)
 
@@ -11,8 +11,8 @@ Frameworks:
 - topmenu: drawer now extends from below the notification bar all the way to the bottom screen edge instead of a fixed 90% height, closing the tappable strip of the underlying app that stayed visible beneath it
 
 OS:
-- ESP32-S3: cap ESP-IDF log strings at the ERROR default (LOG_MAXIMUM_EQUALS_DEFAULT), saving ~42 KB of app flash (micropython.bin 3,666,864 → 3,624,784 B); MicroPython logging is unaffected, C logs can no longer be raised above ERROR at runtime
-- ESP32-S3: disable Ethernet (ETH_ENABLED=n plus the SPI-Ethernet drivers, which would otherwise force-select it back on), saving ~24 KB of app flash (micropython.bin 3,624,784 → 3,600,688 B); no supported S3 board has an Ethernet PHY
+- ESP32-S3: cap ESP-IDF log strings at the ERROR default (LOG_MAXIMUM_EQUALS_DEFAULT), saving ~42 KB of app flash (micropython.bin 3,666,864 → 3,624,784 B); MicroPython logging is unaffected, C logs can no longer be raised above ERROR at runtime- ESP32-S3: disable Ethernet (ETH_ENABLED=n plus the SPI-Ethernet drivers, which would otherwise force-select it back on), saving ~24 KB of app flash (micropython.bin 3,624,784 → 3,600,688 B); no supported S3 board has an Ethernet PHY
+- Build system: `./scripts/build_mpos.sh esp32s3 --usb` enables USB host support (display adapters + HID) — compiles in the `usb` C module with hub support and settles, and frees the OTG peripheral by disabling TinyUSB device mode (console remains over UART REPL)
 
 0.18.1
 ======
