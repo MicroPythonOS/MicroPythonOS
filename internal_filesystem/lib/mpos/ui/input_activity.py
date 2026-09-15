@@ -22,6 +22,22 @@ returns a result dict with the new value:
 Callers (e.g. SettingActivity) are responsible for persisting the
 result and updating any UI that depends on it.
 """
+def _notify_selected(activity, index):
+    """Call the setting's optional `selected_callback(value)` for the option
+    at `index` of `activity._ui_options`. Module-level (not a method) so
+    handler code keeps working on lightweight test fixtures that only carry
+    the attributes the handlers read. Never raises: a broken preview hook
+    must not break the input screen."""
+    cb = getattr(activity, "_selected_callback", None)
+    options = getattr(activity, "_ui_options", None)
+    if not cb or not options or index is None or index < 0 or index >= len(options):
+        return
+    try:
+        cb(options[index][1])
+    except Exception as e:
+        logger.error("selected_callback raised: %s", e)
+
+
 class InputActivity(Activity):
 
     active_radio_index = -1  # Track active radio button index
@@ -79,6 +95,11 @@ class InputActivity(Activity):
             # `allow_deselect` is an opt-in for inputs where "nothing
             # selected" is a legitimate value.
             self._radio_allow_deselect = bool(self.setting.get("allow_deselect", False))
+            # Optional live-selection hook: fires on every tap that leaves an
+            # option selected, BEFORE Save (Save/Cancel semantics unchanged).
+            # Lets pickers preview a choice, e.g. play a sound effect.
+            self._selected_callback = self.setting.get("selected_callback")
+            self._ui_options = ui_options
             # Create radio buttons and check the right one
             self.active_radio_index = -1 # none
             for i, (option_text, option_value) in enumerate(ui_options):
@@ -96,6 +117,11 @@ class InputActivity(Activity):
                 else: # don't show identical options
                     options_with_newlines += ("%s\n" % option[0])
             self.dropdown.set_options(options_with_newlines)
+            self._selected_callback = self.setting.get("selected_callback")
+            self._ui_options = ui_options
+            self.dropdown.add_event_cb(
+                lambda e: _notify_selected(self, self.dropdown.get_selected()),
+                lv.EVENT.VALUE_CHANGED, None)
             # select the right one:
             for i, (option_text, option_value) in enumerate(ui_options):
                 if initial_value == option_value:
@@ -227,12 +253,17 @@ class InputActivity(Activity):
                 else:
                     logger.warning("radio: ignoring un-check of active option %s (radios require exactly one)", current_checkbox_index)
                     target_obj.add_state(lv.STATE.CHECKED)
+                    # A re-tap of the active option still counts as "selected":
+                    # a preview hook wants to fire again (hear the sound again).
+                    _notify_selected(self, current_checkbox_index)
             return
         else:
             if self.active_radio_index >= 0: # is there something to uncheck?
                 old_checked = self.radio_container.get_child(self.active_radio_index)
                 old_checked.remove_state(lv.STATE.CHECKED)
             self.active_radio_index = current_checkbox_index
+            _notify_selected(self, current_checkbox_index)
+
 
     def create_radio_button(self, parent, text, index):
         cb = lv.checkbox(parent)
