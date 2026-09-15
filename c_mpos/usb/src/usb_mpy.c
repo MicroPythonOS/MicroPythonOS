@@ -15,6 +15,14 @@
 #include "usb_disp_hal.h"
 #include "usb_hid.h"
 
+// P0 spike: TinyUSB device-mode teardown / bringup for runtime host activation.
+// On a no-UART board this lets CDC stay alive by default and only switch to
+// host mode when the user explicitly enables it.
+extern void tud_deinit(uint8_t rhport);
+extern void mp_usbd_init(void);
+extern void usb_phy_init(void);
+extern void usb_phy_deinit(void);
+
 extern const mp_obj_type_t mp_type_usb_display;
 
 // Upstream's default usb_disp_log is a no-op outside Arduino. Route all
@@ -339,6 +347,86 @@ static mp_obj_t mp_usb_hid_set_kbd_transient_fn(size_t n_args, const mp_obj_t *a
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_hid_set_kbd_transient_obj, 0, 1,
                                            mp_usb_hid_set_kbd_transient_fn);
 
+// P0 spike helpers (will be folded into activate_host/deactivate_host in P1).
+static void spike_client_cb(const usb_host_client_event_msg_t *msg, void *arg) {
+    (void)msg;
+    (void)arg;
+}
+
+static void spike_daemon_task(void *arg);
+
+static mp_obj_t mp_usb_spike_host_fn(void) {
+    // 1. Tear down TinyUSB device mode.
+    tud_deinit(0);
+    // 2. Delete the device-mode PHY so the host stack can create its own.
+    usb_phy_deinit();
+    // 3. Let the DWC2 core reset settle.
+    vTaskDelay(pdMS_TO_TICKS(500));
+    // 4. Minimal host install — no display HAL, no HID.
+    const usb_host_config_t host_cfg = {
+        .skip_phy_setup = false,
+        .root_port_unpowered = false,
+        .intr_flags = 0,
+    };
+    ESP_ERROR_CHECK(usb_host_install(&host_cfg));
+    const usb_host_client_config_t client_cfg = {
+        .is_synchronous = false,
+        .max_num_event_msg = 8,
+        .async = {
+            .client_event_callback = spike_client_cb,
+            .callback_arg = NULL,
+        },
+    };
+    usb_host_client_handle_t client = NULL;
+    ESP_ERROR_CHECK(usb_host_client_register(&client_cfg, &client));
+    xTaskCreate(spike_daemon_task, "usbh_daemon", 4096, (void *)client, 4, NULL);
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_spike_host_obj, mp_usb_spike_host_fn);
+
+static void spike_daemon_task(void *arg) {
+    usb_host_client_handle_t client = (usb_host_client_handle_t)arg;
+    while (true) {
+        uint32_t flags;
+        usb_host_lib_handle_events(portMAX_DELAY, &flags);
+        if (flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) {
+            usb_host_device_free_all();
+        }
+        if (flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) {
+            break;
+        }
+    }
+    usb_host_client_deregister(client);
+    vTaskDelete(NULL);
+}
+
+static mp_obj_t mp_usb_spike_cdc_fn(void) {
+    usb_host_uninstall();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    usb_phy_init();
+    mp_usbd_init();
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_spike_cdc_obj, mp_usb_spike_cdc_fn);
+    // Host teardown: uninstalling tears down hub/enum/usbh/hcd + deletes host PHY.
+    usb_host_uninstall();
+    // Recreate the device PHY and restart TinyUSB/CDC.
+    vTaskDelay(pdMS_TO_TICKS(100));
+    usb_phy_init();
+    mp_usbd_init();
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_spike_cdc_obj, mp_usb_spike_cdc_fn);
+    // Host teardown: uninstalling tears down hub/enum/usbh/hcd + deletes host PHY.
+    usb_host_uninstall();
+    // Recreate the device PHY and restart TinyUSB/CDC.
+    vTaskDelay(pdMS_TO_TICKS(100));
+    usb_phy_init();
+    mp_usbd_init();
+    return mp_const_true;
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_spike_cdc_obj, mp_usb_spike_cdc_fn);
+
 // hid_verbose([on]) - with no args, return the per-tick debug flag;
 // with an arg, set it. Off by default; when on, each transient tick
 // logs [HID][V] claim/submit/wait outcomes (only useful while actively
@@ -373,6 +461,8 @@ static const mp_rom_map_elem_t usb_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_hid_verbose), MP_ROM_PTR(&mp_usb_hid_verbose_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_loop_lag), MP_ROM_PTR(&mp_usb_hid_loop_lag_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_set_kbd_transient), MP_ROM_PTR(&mp_usb_hid_set_kbd_transient_obj) },
+    { MP_ROM_QSTR(MP_QSTR__spike_host), MP_ROM_PTR(&mp_usb_spike_host_obj) },
+    { MP_ROM_QSTR(MP_QSTR__spike_cdc), MP_ROM_PTR(&mp_usb_spike_cdc_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_module_globals, usb_module_globals_table);

@@ -418,7 +418,9 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# Pico_USB_Disp's platform detection in the QSTR pre-pass too (the real
 	# compiles get it via the usermod INTERFACE definition).
 	if [ "$usbhost" == "1" ]; then
-		export CFLAGS_EXTRA="-DMICROPY_HW_ENABLE_USBDEV=0 -DESP_PLATFORM -DMPOS_USB_PORT_SETTLE_MS=2000"
+		# P0 spike: keep TinyUSB compiled in so CDC is available by default.
+		# Host mode activates at runtime via tud_deinit() + usb_host_install().
+		export CFLAGS_EXTRA="-DESP_PLATFORM -DMPOS_USB_PORT_SETTLE_MS=2000"
 		export MPOS_NO_USBDEV=1
 		usb_usermod="USER_C_MODULE=$codebasedir/c_mpos/usb/micropython.cmake"
 	else

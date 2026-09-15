@@ -407,19 +407,13 @@ try:
 except Exception as e:
     logger.error("Couldn't start boot services: %s", e)
 
-# USB host (--usb builds only): start the host stack now
-# without waiting, so later hotplugs enumerate; the poll timer switches the
-# UI over automatically if a monitor becomes ready. Never delays boot.
+# USB host (--usb builds only): P0 spike — do NOT arm at boot while
+# TinyUSB CDC is active (same PHY, would crash). The user must call
+# usb._spike_host() from the REPL to switch to host mode.
 try:
-    from mpos.usb import USBManager
-    USBManager.arm_display()
-except Exception as e:
-    logger.error("USB display arm failed: %s", e)
-
-try:
-    USBManager.arm_hid()
-except Exception as e:
-    logger.error("USB HID arm failed: %s", e)
+    from mpos import USBManager  # NOQA — import only, no arm
+except Exception:
+    pass
 
 async def ota_rollback_cancel():
     try:
