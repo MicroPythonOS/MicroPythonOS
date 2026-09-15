@@ -27,6 +27,34 @@ def _value_label_for(setting, stored_value):
     return stored_value
 
 
+def _row_value_text(setting, stored_value):
+    """Label text for a setting row in the SettingsActivity list.
+
+    Pure function of the setting dict plus the stored pref value (None
+    when unset) so the row-rendering rule is unit-testable. A
+    `dont_persist` entry with a `default_value` (e.g. live state re-read
+    on every open, like USB Host Mode) shows "(defaults to X)" instead
+    of "(not persisted)"; `dont_persist` without one keeps the old text.
+    """
+    if setting.get("activity_class"):
+        return setting.get("placeholder") or ""
+    if setting.get("dont_persist"):
+        default_value = setting.get("default_value")
+        if default_value is not None:
+            return f"(defaults to {_value_label_for(setting, default_value)})"
+        return "(not persisted)"
+    if stored_value is None:
+        default_value = setting.get("default_value")
+        if default_value is not None:
+            # Map default to its human-readable label too, when one exists.
+            return f"(defaults to {_value_label_for(setting, default_value)})"
+        return "(not set)"
+    # Map stored value to its ui_options label when present
+    # (e.g. "lightningpiggy" → "Lightning Piggy"). No-op when
+    # no ui_options or the value isn't in the list.
+    return _value_label_for(setting, stored_value)
+
+
 # Used to list and edit all settings:
 class SettingsActivity(Activity):
 
@@ -82,24 +110,10 @@ class SettingsActivity(Activity):
             # Value label (smaller, below title)
             value = lv.label(setting_cont)
             if setting.get("activity_class"):
-                placeholder = setting.get("placeholder") or ""
-                value_text = placeholder
-            elif setting.get("dont_persist"):
-                value_text = "(not persisted)"
+                value_text = setting.get("placeholder") or ""
             else:
                 stored_value = self.prefs.get_string(setting["key"])
-                if stored_value is None:
-                    default_value = setting.get("default_value")
-                    if default_value is not None:
-                        # Map default to its human-readable label too, when one exists.
-                        value_text = f"(defaults to {_value_label_for(setting, default_value)})"
-                    else:
-                        value_text = "(not set)"
-                else:
-                    # Map stored value to its ui_options label when present
-                    # (e.g. "lightningpiggy" → "Lightning Piggy"). No-op when
-                    # no ui_options or the value isn't in the list.
-                    value_text = _value_label_for(setting, stored_value)
+                value_text = _row_value_text(setting, stored_value)
             value.set_text(value_text)
             value.set_style_text_font(lv.font_montserrat_12, lv.PART.MAIN)
             value.set_style_text_color(lv.color_hex(0x666666), lv.PART.MAIN)

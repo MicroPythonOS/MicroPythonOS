@@ -15,7 +15,7 @@ Usage:
 
 import unittest
 
-from mpos.ui.settings_activity import _value_label_for
+from mpos.ui.settings_activity import _row_value_text, _value_label_for
 
 
 class TestValueLabelFor(unittest.TestCase):
@@ -114,6 +114,46 @@ class TestShouldShow(unittest.TestCase):
         self._should_show({"should_show": lambda s: captured.append(s) or True, "key": "mykey"})
         self.assertEqual(len(captured), 1)
         self.assertEqual(captured[0]["key"], "mykey")
+
+
+class TestRowValueText(unittest.TestCase):
+
+    def test_dont_persist_with_default_shows_defaults_to(self):
+        # USB Host Mode case: dont_persist (single source of truth lives
+        # elsewhere) + live default_value re-read on every open.
+        setting = {
+            "dont_persist": True,
+            "default_value": "on",
+            "ui_options": [("On", "on"), ("Off", "off")],
+        }
+        self.assertEqual(_row_value_text(setting, None), "(defaults to On)")
+
+    def test_dont_persist_with_default_no_options(self):
+        setting = {"dont_persist": True, "default_value": "off"}
+        self.assertEqual(_row_value_text(setting, None), "(defaults to off)")
+
+    def test_dont_persist_without_default_keeps_old_text(self):
+        # One-shot actions (bootloader, format) have no meaningful value.
+        setting = {"dont_persist": True}
+        self.assertEqual(_row_value_text(setting, None), "(not persisted)")
+        self.assertEqual(_row_value_text(setting, "anything"), "(not persisted)")
+
+    def test_activity_shows_placeholder(self):
+        setting = {"activity_class": object(), "placeholder": "Scan Wi-Fi"}
+        self.assertEqual(_row_value_text(setting, None), "Scan Wi-Fi")
+        setting = {"activity_class": object()}
+        self.assertEqual(_row_value_text(setting, None), "")
+
+    def test_stored_value_maps_to_label(self):
+        setting = {"key": "theme", "ui_options": [("Light", "light")]}
+        self.assertEqual(_row_value_text(setting, "light"), "Light")
+
+    def test_unset_with_default_shows_defaults_to(self):
+        setting = {"key": "theme", "default_value": "dark"}
+        self.assertEqual(_row_value_text(setting, None), "(defaults to dark)")
+
+    def test_unset_without_default_shows_not_set(self):
+        self.assertEqual(_row_value_text({"key": "x"}, None), "(not set)")
 
 
 if __name__ == "__main__":
