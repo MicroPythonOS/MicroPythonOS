@@ -8,6 +8,7 @@ Covers:
 - Bar widgets (clock, wifi, bell) are present after open
 """
 
+import sys
 import time
 import unittest
 
@@ -20,6 +21,11 @@ from mpos import (
     wait_for_widget,
 )
 from mpos.ui import topmenu
+
+sys.path.append("tests")
+from _mpos_device_unittest import patch_unittest_main
+
+patch_unittest_main()
 
 
 # ---------------------------------------------------------------------------

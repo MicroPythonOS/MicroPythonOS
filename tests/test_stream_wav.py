@@ -154,6 +154,9 @@ class TestComputeDrainMs(unittest.TestCase):
         # e.g. playback stalled and ran long: never sleep a negative amount
         self.assertEqual(WAVStream.compute_drain_ms(2000, 4171), 0)
 
+
+@unittest.skipIf(sys.platform == "esp32",
+                  "Desktop timing-simulation branch never runs on ESP32 (I2S path instead)")
 class TestDesktopRepeat(unittest.TestCase):
     """Desktop playback must honor repeat_count like the I2S path does.
 

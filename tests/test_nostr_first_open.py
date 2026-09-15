@@ -8,6 +8,7 @@ import unittest
 import lvgl as lv
 
 sys.path.append("apps")
+sys.path.append("tests")
 
 from com_micropythonos_nostr.chat_model import (
     DEFAULT_CHANNEL_ID,
@@ -25,6 +26,10 @@ from mpos import AppManager, wait_for_render
 from mpos.ui.testing import click_label, find_label_with_text, wait_for_text
 
 from nostr.event import Event
+
+from _mpos_device_unittest import patch_unittest_main
+
+patch_unittest_main()
 
 
 class TestNostrFirstOpenShowsDefaultChannel(unittest.TestCase):
