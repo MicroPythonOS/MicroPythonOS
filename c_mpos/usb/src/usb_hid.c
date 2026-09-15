@@ -128,6 +128,15 @@ static bool s_kbd_transient = false;
 
 static bool s_hid_started = false;
 static volatile bool s_scan_needed = false;
+// Stop flags for host-mode exit (usb_hid_stop, app thread): the client
+// task's loop and the kbd poll loop check these and self-delete. Cleared
+// in usb_hid_start (NOT at the end of stop): a task waking late must still
+// see the flag set and exit, never revive. Done flags let stop join
+// instead of hoping a fixed delay suffices.
+static volatile bool s_client_stop = false;
+static volatile bool s_kbd_stop = false;
+static volatile bool s_client_task_done = false;
+static volatile bool s_kbd_task_done = false;
 static SemaphoreHandle_t s_hid_ctrl_mutex = NULL;
 static SemaphoreHandle_t s_hid_ctrl_done = NULL;
 static SemaphoreHandle_t s_kbd_done = NULL;
@@ -937,6 +946,7 @@ static void hid_kbd_task_ensure(void) {
     if (!hid_kbd_any_polled()) {
         return;
     }
+    s_kbd_task_done = false;
     if (xTaskCreate(hid_kbd_poll_task, "usbhid_kbdpoll", 4096, NULL, 5,
                     &s_kbd_poll_task) != pdPASS) {
         s_kbd_poll_task = NULL;
@@ -947,7 +957,7 @@ static void hid_kbd_poll_task(void *arg) {
     (void)arg;
     uint32_t base_polls = s_kbd_total_polls;
     uint32_t base_ch = s_kbd_total_ch;
-    while (hid_kbd_any_polled()) {
+    while (!s_kbd_stop && hid_kbd_any_polled()) {
         hid_kbd_tick(hid_now_ms());
         vTaskDelay(pdMS_TO_TICKS(5));
     }
@@ -955,6 +965,7 @@ static void hid_kbd_poll_task(void *arg) {
                  (unsigned long)(s_kbd_total_polls - base_polls),
                  (unsigned long)(s_kbd_total_ch - base_ch));
     s_kbd_poll_task = NULL;
+    s_kbd_task_done = true;
     vTaskDelete(NULL);
 }
 
@@ -978,7 +989,7 @@ static void hid_client_task_slot(hid_slot_t *slot) {
 
 static void hid_client_task(void *arg) {
     (void)arg;
-    while (true) {
+    while (!s_client_stop) {
         // Heartbeat for event-delivery-stall detection (see
         // usb_hid_loop_lag_ms): if this stops advancing while the device
         // is alive, completions/teardowns/rescans all freeze with it.
@@ -995,6 +1006,8 @@ static void hid_client_task(void *arg) {
             hid_scan();
         }
     }
+    s_client_task_done = true;
+    vTaskDelete(NULL);
 }
 
 bool usb_hid_start(void) {
@@ -1024,10 +1037,110 @@ bool usb_hid_start(void) {
     }
     s_hid_started = true;
     s_scan_needed = true;
+    s_client_stop = false;
+    s_kbd_stop = false;
+    s_client_task_done = false;
+    s_kbd_task_done = false;
     s_client_last_pump_ms = hid_now_ms();
     xTaskCreate(hid_client_task, "usbhid_client", 4096, NULL, 5, NULL);
     usb_disp_log("[HID] client started (S3 channel policy: display > mouse > keyboard)");
     return true;
+}
+
+// Tear down the HID client for host-mode exit (deactivate path).
+// App thread only. Stops the client + kbd tasks, frees every slot
+// WITHOUT retire-waiting (no completions can arrive once the tasks stop
+// and the host uninstalls; waiting would burn 3s per live slot), deletes
+// the semaphores, deregisters the client, resets all state.
+// usb_hid_start() works again afterwards. Every public accessor stays
+// safe to call while stopped (empty state, s_hid_started gate).
+void usb_hid_stop(void) {
+    if (!s_hid_started) {
+        return;
+    }
+    s_hid_started = false;
+    // 1. Stop the kbd poll task first: an in-flight tick could submit new
+    // transfers at any moment (bounded by tick timeouts, ~100ms worst).
+    s_kbd_stop = true;
+    vTaskDelay(pdMS_TO_TICKS(150));
+    // 2. Quiesce every endpoint while the client task still pumps: halted
+    // transfers complete as CANCELED, and CANCELED never resubmits, so no
+    // URB outlives this function. Skipping this leaves submitted URBs in
+    // the stack and client deregister fails (proven on hardware).
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        if (slot->dev != NULL) {
+            usb_host_endpoint_halt(slot->dev, slot->ep_in);
+            usb_host_endpoint_flush(slot->dev, slot->ep_in);
+        }
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+    // 3. Stop the client task and join (bounded, see flags above).
+    s_client_stop = true;
+    if (s_hid_client != NULL) {
+        usb_host_client_unblock(s_hid_client);
+    }
+    // Join on the done flags (bounded). The kbd task only exists while a
+    // transient keyboard is polled; a stale done=true from a normally
+    // exited task is fine (nothing to wait for), and task_ensure clears
+    // it whenever a new poll task starts.
+    bool need_kbd = (s_kbd_poll_task != NULL);
+    uint32_t waited = 0;
+    while ((!s_client_task_done || (need_kbd && !s_kbd_task_done)) && waited < 1000) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        waited += 10;
+    }
+    if (!s_client_task_done || (need_kbd && !s_kbd_task_done)) {
+        usb_disp_log("[HID] stop: task join timed out, proceeding anyway");
+    }
+    for (uint8_t i = 0; i < USB_HID_MAX_DEV; i++) {
+        hid_slot_t *slot = &s_slots[i];
+        for (uint8_t k = 0; k < USB_HID_XFER_PER_DEV; k++) {
+            if (slot->xfer[k] != NULL) {
+                usb_host_transfer_free(slot->xfer[k]);
+                slot->xfer[k] = NULL;
+            }
+        }
+        if (slot->dev != NULL) {
+            usb_host_interface_release(s_hid_client, slot->dev, slot->iface);
+            usb_host_device_close(s_hid_client, slot->dev);
+            slot->dev = NULL;
+        }
+    }
+    memset(s_slots, 0, sizeof(s_slots));
+    memset(s_defer, 0, sizeof(s_defer));
+    s_ring_head = 0;
+    s_ring_tail = 0;
+    s_dropped = 0;
+    s_topo_n = -1;
+    s_scan_needed = false;
+    s_kbd_total_polls = 0;
+    s_kbd_total_ch = 0;
+    if (s_hid_ctrl_mutex != NULL) {
+        vSemaphoreDelete(s_hid_ctrl_mutex);
+        s_hid_ctrl_mutex = NULL;
+    }
+    if (s_hid_ctrl_done != NULL) {
+        vSemaphoreDelete(s_hid_ctrl_done);
+        s_hid_ctrl_done = NULL;
+    }
+    if (s_kbd_done != NULL) {
+        vSemaphoreDelete(s_kbd_done);
+        s_kbd_done = NULL;
+    }
+    s_kbd_poll_task = NULL;
+    if (s_hid_client != NULL) {
+        if (usb_host_client_deregister(s_hid_client) != ESP_OK) {
+            usb_disp_log("[HID] stop: client deregister failed");
+        }
+        s_hid_client = NULL;
+    }
+    s_change_gen++;
+    usb_disp_log("[HID] client stopped");
+    // Note: a kbd tick in flight across the reset above can recreate one
+    // defer entry (harmless phantom in hid_parked until the next topology
+    // change or hid_retry; 50ms race window, no crash: teardown on a
+    // zeroed slot is a no-op plus a generation bump).
 }
 
 // Bus topology snapshot: any addr-list change (plug/unplug/reenum at a

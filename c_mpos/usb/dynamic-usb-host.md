@@ -1,12 +1,19 @@
 # Dynamic USB host activation / CDC restore plan
 
+**Status: implemented (P1).** Spike probes replaced by
+`usb.activate_host()` / `usb.deactivate_host()` + `usb_hid_stop()` +
+`usb_disp_hal_stop()`; `USBManager.activate()` / `deactivate()` with
+persisted `host_mode` pref; boot honors the flag with BOOTSEL escape;
+Settings → "USB Host Mode" toggle; host harness lifecycle tests.
+Remaining: device matrix verification (P2 in the original plan numbering).
+
 ## Problem
 
-With `--usb`, the build currently passes `-DMICROPY_HW_ENABLE_USBDEV=0`, which
-compiles out TinyUSB device mode entirely. This frees the OTG peripheral for
+With `--usb`, the build used to pass `-DMICROPY_HW_ENABLE_USBDEV=0`, which
+compiled out TinyUSB device mode entirely. This freed the OTG peripheral for
 the IDF `usb_host` stack, but on boards where the only exposed serial port is
-USB-CDC (no UART on GPIO43/44) the REPL disappears after flashing and users
-cannot access the device.
+USB-CDC (no UART on GPIO43/44) the REPL disappeared after flashing and users
+could not access the device.
 
 Goal: keep USB-CDC alive by default; switch the same OTG PHY to USB host mode
 only when the user explicitly enables "USB Host Mode" (Settings toggle or REPL

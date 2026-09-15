@@ -15,9 +15,10 @@
 #include "usb_disp_hal.h"
 #include "usb_hid.h"
 
-// P0 spike: TinyUSB device-mode teardown / bringup for runtime host activation.
-// On a no-UART board this lets CDC stay alive by default and only switch to
-// host mode when the user explicitly enables it.
+// Runtime host/device switching (Settings "USB Host Mode"):
+// TinyUSB teardown / bringup lets CDC stay alive by default and only
+// switches to host mode when the user explicitly enables it.
+extern bool tud_inited(void);
 extern void tud_deinit(uint8_t rhport);
 extern void mp_usbd_init(void);
 extern void usb_phy_init(void);
@@ -347,36 +348,59 @@ static mp_obj_t mp_usb_hid_set_kbd_transient_fn(size_t n_args, const mp_obj_t *a
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mp_usb_hid_set_kbd_transient_obj, 0, 1,
                                            mp_usb_hid_set_kbd_transient_fn);
 
-// P0 spike helpers (will be folded into activate_host/deactivate_host in P1).
-static mp_obj_t mp_usb_spike_host_fn(void) {
-    // 1. Tear down TinyUSB device mode.
+// P1: runtime host/device switching (Settings "USB Host Mode").
+// The C layer owns ONLY the mode switch (peripheral handover). Stack
+// bringup stays exactly the legacy sequence in Python (Display()
+// constructs = init+add, .start() = hal_start, then hid_start), so no
+// port/slot is ever registered twice.
+static bool s_host_active = false;
+
+// activate_host() - leave CDC device mode. Tears down TinyUSB and deletes
+// the device-mode PHY; the host stack installs itself on first use below
+// (Display.start() / hid_start()). Idempotent: True when host mode holds.
+static mp_obj_t mp_usb_activate_host_fn(void) {
+    if (s_host_active) {
+        return mp_const_true;
+    }
     tud_deinit(0);
-    // 2. Delete the device-mode PHY so the host stack can create its own.
     usb_phy_deinit();
-    // 3. Let the DWC2 core reset settle.
-    vTaskDelay(pdMS_TO_TICKS(500));
-    // 4. Full display/HID stack via the proven HAL path. A display port
-    // must be registered first (usb_disp_hal_add) or hal_start returns
-    // early and later bus queries crash on the uninstalled stack.
-    usb_disp_init();
-    usb_disp_config_t cfg = {0};
-    usb_disp_hal_add(&cfg);
-    usb_disp_hal_start();
-    usb_hid_start();
+    s_host_active = true;
     return mp_const_true;
 }
-static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_spike_host_obj, mp_usb_spike_host_fn);
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_activate_host_obj, mp_usb_activate_host_fn);
 
-static mp_obj_t mp_usb_spike_cdc_fn(void) {
-    // Host teardown: uninstalling tears down hub/enum/usbh/hcd + deletes host PHY.
-    usb_host_uninstall();
-    // Recreate the device PHY and restart TinyUSB/CDC.
-    vTaskDelay(pdMS_TO_TICKS(100));
+// cdc_inited() - True while the TinyUSB device stack is initialized.
+// Diagnostic for the deactivate path (False in host mode, True after a
+// clean return to CDC). Needs no host attached; mounted/connected state
+// additionally needs VBUS from a real USB host.
+static mp_obj_t mp_usb_cdc_inited_fn(void) {
+    return mp_obj_new_bool(tud_inited());
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_cdc_inited_obj, mp_usb_cdc_inited_fn);
+
+// host_active() - True while the host stack is up (between a successful
+// activate_host and deactivate_host). Lets Python/UI show live state.
+static mp_obj_t mp_usb_host_active_fn(void) {
+    return mp_obj_new_bool(s_host_active);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_host_active_obj, mp_usb_host_active_fn);
+
+// deactivate_host() - switch from USB host mode back to CDC device mode.
+// Stops HID + display clients, uninstalls the host stack (deletes its
+// PHY), recreates the device PHY, restarts TinyUSB. Idempotent: True
+// when CDC mode is assured (REPL rejoins automatically).
+static mp_obj_t mp_usb_deactivate_host_fn(void) {
+    if (!s_host_active) {
+        return mp_const_true;
+    }
+    usb_hid_stop();
+    usb_disp_hal_stop();
     usb_phy_init();
     mp_usbd_init();
+    s_host_active = false;
     return mp_const_true;
 }
-static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_spike_cdc_obj, mp_usb_spike_cdc_fn);
+static MP_DEFINE_CONST_FUN_OBJ_0(mp_usb_deactivate_host_obj, mp_usb_deactivate_host_fn);
 
 // hid_verbose([on]) - with no args, return the per-tick debug flag;
 // with an arg, set it. Off by default; when on, each transient tick
@@ -412,8 +436,10 @@ static const mp_rom_map_elem_t usb_module_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_hid_verbose), MP_ROM_PTR(&mp_usb_hid_verbose_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_loop_lag), MP_ROM_PTR(&mp_usb_hid_loop_lag_obj) },
     { MP_ROM_QSTR(MP_QSTR_hid_set_kbd_transient), MP_ROM_PTR(&mp_usb_hid_set_kbd_transient_obj) },
-    { MP_ROM_QSTR(MP_QSTR__spike_host), MP_ROM_PTR(&mp_usb_spike_host_obj) },
-    { MP_ROM_QSTR(MP_QSTR__spike_cdc), MP_ROM_PTR(&mp_usb_spike_cdc_obj) },
+    { MP_ROM_QSTR(MP_QSTR_activate_host), MP_ROM_PTR(&mp_usb_activate_host_obj) },
+    { MP_ROM_QSTR(MP_QSTR_cdc_inited), MP_ROM_PTR(&mp_usb_cdc_inited_obj) },
+    { MP_ROM_QSTR(MP_QSTR_host_active), MP_ROM_PTR(&mp_usb_host_active_obj) },
+    { MP_ROM_QSTR(MP_QSTR_deactivate_host), MP_ROM_PTR(&mp_usb_deactivate_host_obj) },
 };
 
 static MP_DEFINE_CONST_DICT(usb_module_globals, usb_module_globals_table);

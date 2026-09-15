@@ -1,7 +1,7 @@
 
 import logging
 
-from mpos import Activity, AppearanceManager, AppManager, AudioManager, InputManager, Intent, NumberFormat, SettingsActivity, TimeZone
+from mpos import Activity, AppearanceManager, AppManager, AudioManager, InputManager, Intent, NumberFormat, SettingsActivity, TimeZone, USBManager
 from mpos.notification_manager import DEFAULT_NOTIFICATION_SOUND, NOTIFICATION_SOUND_OPTIONS
 
 logger = logging.getLogger(__name__)
@@ -111,6 +111,11 @@ class Settings(SettingsActivity):
             {"title": "Auto Start App", "key": "auto_start_app", "ui": "radiobuttons", "ui_options":  [(app.name, app.fullname) for app in AppManager.get_app_list()], "allow_deselect": True},
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
             {"title": "Calibrate IMU", "key": "calibrate_imu", "ui": "activity", "activity_class": CalibrateIMUActivity},
+            # USB host mode is expert-grade: activating kills USB-CDC (the
+            # console on no-UART boards) until deactivated. dont_persist:
+            # the single source of truth is the USB preference, written by
+            # the callback; default_value is re-read live on every open.
+            {"title": "USB Host Mode", "key": "usb_host_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options": [("On", "on"), ("Off", "off")], "default_value": "on" if USBManager.host_mode_active() else "off", "changed_callback": self.usb_host_mode_changed, "should_show": USBManager.is_available()},
             # Expert settings, alphabetically
             {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
@@ -122,6 +127,14 @@ class Settings(SettingsActivity):
         return intent
 
     # Change handlers:
+    def usb_host_mode_changed(self, new_value):
+        if new_value == "on":
+            if not USBManager.activate():
+                logger.error("USB host mode activation failed")
+        else:
+            if not USBManager.deactivate():
+                logger.error("USB host mode deactivation failed")
+
     def reset_into_bootloader(self, new_value):
         if new_value != "bootloader":
             return

@@ -407,13 +407,15 @@ try:
 except Exception as e:
     logger.error("Couldn't start boot services: %s", e)
 
-# USB host (--usb builds only): P0 spike — do NOT arm at boot while
-# TinyUSB CDC is active (same PHY, would crash). The user must call
-# usb._spike_host() from the REPL to switch to host mode.
+# USB host mode (--usb builds): CDC device mode is the default. The host
+# stack starts only on explicit request: persisted flag (Settings "USB
+# Host Mode"), unless BOOT is held (physical escape back to CDC).
 try:
-    from mpos import USBManager  # NOQA — import only, no arm
-except Exception:
-    pass
+    from mpos.usb import USBManager
+    if USBManager.host_boot_requested():
+        USBManager.activate()
+except Exception as e:
+    logger.error("USB host boot arm failed: %s", e)
 
 async def ota_rollback_cancel():
     try:

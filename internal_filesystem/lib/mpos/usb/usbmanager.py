@@ -35,6 +35,9 @@ class USBManager:
     _sw_retries = 0
     _SW_RETRY_EVERY = 5
     _SW_MAX_RETRIES = 6
+    # Persisted host-mode preference (Settings "USB Host Mode").
+    _HOST_PREFS = "com.micropythonos.usb"
+    _HOST_MODE_KEY = "host_mode"
 
     @classmethod
     def is_available(cls):
@@ -43,6 +46,128 @@ class USBManager:
             return True
         except ImportError:
             return False
+
+    @classmethod
+    def _get_host_pref(cls):
+        try:
+            from mpos import SharedPreferences
+            return SharedPreferences(cls._HOST_PREFS).get_bool(cls._HOST_MODE_KEY, False)
+        except Exception:
+            return False
+
+    @classmethod
+    def _set_host_pref(cls, on):
+        try:
+            from mpos import SharedPreferences
+            SharedPreferences(cls._HOST_PREFS).edit().put_bool(cls._HOST_MODE_KEY, bool(on)).commit()
+        except Exception as e:
+            logger.error("usb host pref save fail: %s" % (e))
+
+    @classmethod
+    def _bootsel_held(cls):
+        # Physical escape hatch: BOOT held at boot forces CDC device mode
+        # regardless of the persisted flag (no-UART boards would otherwise
+        # strand headless in host mode). Best effort: GPIO0 with pull-up
+        # on most S3 boards; silent no-op anywhere else.
+        try:
+            from machine import Pin
+            import time as _time
+            boot = Pin(0, Pin.IN, Pin.PULL_UP)
+            _time.sleep_ms(5)
+            return boot.value() == 0
+        except Exception:
+            return False
+
+    @classmethod
+    def host_boot_requested(cls):
+        if cls._bootsel_held():
+            logger.warning("usb BOOTSEL held: staying in CDC device mode")
+            return False
+        return cls._get_host_pref()
+
+    @classmethod
+    def host_mode_active(cls):
+        try:
+            import usb
+        except ImportError:
+            return False
+        if not hasattr(usb, "host_active"):
+            return False
+        try:
+            return bool(usb.host_active())
+        except Exception:
+            return False
+
+    @classmethod
+    def activate(cls, persist=True):
+        # Runtime switch from CDC device mode to USB host mode. Tears down
+        # TinyUSB, starts the host stack, arms display + HID. CDC dies here
+        # by design (announce it in the UI before calling).
+        try:
+            import usb
+        except ImportError:
+            return False
+        if not hasattr(usb, "activate_host"):
+            return False
+        try:
+            usb.activate_host()
+        except Exception as e:
+            logger.error("usb host activate fail: %s" % (e))
+            return False
+        cls.arm_display()
+        cls.arm_hid()
+        if persist:
+            cls._set_host_pref(True)
+        return True
+
+    @classmethod
+    def deactivate(cls, persist=True):
+        # Runtime switch back to CDC device mode. The UI must be on panel
+        # first (can't tear down the active display); indevs are
+        # unregistered + deleted so no stale pointers survive.
+        try:
+            import usb
+        except ImportError:
+            return False
+        if not hasattr(usb, "deactivate_host"):
+            return False
+        if cls._active == "usb":
+            try:
+                cls.switch_to_panel()
+            except Exception as e:
+                logger.error("usb host deactivate switch-back fail: %s" % (e))
+                return False
+        try:
+            from mpos import InputManager
+            for dev in (cls._usb_mouse, cls._usb_keyboard):
+                if dev is None:
+                    continue
+                try:
+                    InputManager.unregister_indev(dev)
+                except Exception:
+                    pass
+                try:
+                    dev.delete()
+                except Exception as e:
+                    logger.error("usb hid delete fail: %s" % (e))
+        except Exception as e:
+            logger.error("usb hid teardown fail: %s" % (e))
+        cls._usb_mouse = None
+        cls._usb_keyboard = None
+        cls._hid_hub = None
+        cls._usb_dev = None
+        cls._usb_display = None
+        cls._update_hid_watchdog_exclusion()
+        try:
+            usb.deactivate_host()
+        except Exception as e:
+            logger.error("usb host deactivate fail (reboot recommended): %s" % (e))
+            if persist:
+                cls._set_host_pref(False)
+            return False
+        if persist:
+            cls._set_host_pref(False)
+        return True
 
     @classmethod
     def arm_display(cls, width=640, height=480):

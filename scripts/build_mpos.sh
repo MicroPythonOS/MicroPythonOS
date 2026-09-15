@@ -242,6 +242,19 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/u
 echo "Applying micropython USB PHY deinit patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/usb_phy_deinit.patch
 
+# Dynamic USB host support: TinyUSB frees its DWC2 ISR handle on deinit
+# without NULLing it, so a deinit→reinit cycle (host deactivate back to
+# CDC) double-frees and crashes in esp_intr_disable. Guard + clear.
+# The component is fetched at build time, so on a fresh checkout it may
+# not exist yet: build once to fetch, then rebuild to patch.
+_tinyusb_dwc2="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__tinyusb/src/portable/synopsys/dwc2/dwc2_esp32.h
+if [ -f "$_tinyusb_dwc2" ]; then
+	echo "Applying tinyusb ISR double-free patch..."
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__tinyusb "$codebasedir"/patches/tinyusb_isr_double_free.patch
+else
+	echo "WARNING: tinyusb component not fetched yet — skipping ISR patch; rebuild once to apply it."
+fi
+
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
 # Pre-existence check so MPOS still builds against older pinned

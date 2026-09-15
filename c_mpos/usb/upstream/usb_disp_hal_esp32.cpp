@@ -90,6 +90,14 @@ static struct usb_disp_hal s_hal[USB_DISP_MAX];
 static uint8_t s_nhal = 0;
 static usb_host_client_handle_t s_client;
 static bool s_started = false;
+// MPOS runtime host-mode exit: set by usb_disp_hal_stop() to break the
+// task loops below (each self-deletes). Cleared in hal_start (NOT at the
+// end of stop): a task waking late must still see the flag and exit, never
+// revive — revived zombies once flooded the DWC2 IRQ allocator every 10ms.
+// Done flags let hal_stop join instead of hoping a fixed delay suffices.
+static volatile bool s_stop_tasks = false;
+static volatile bool s_daemon_task_done = false;
+static volatile bool s_client_task_done = false;
 
 uint32_t usb_disp_hal_ms(void) {
     return (uint32_t)(esp_timer_get_time() / 1000);
@@ -617,7 +625,7 @@ static void bulk_ep_recover(struct usb_disp_hal *h) {
 static void client_task(void *arg) {
     (void)arg;
     struct usb_disp_hal *h = &s_hal[0];
-    while (true) {
+    while (!s_stop_tasks) {
         usb_host_client_handle_events(s_client, pdMS_TO_TICKS(100));
         if (h->gone) {
             h->gone = false;
@@ -639,17 +647,21 @@ static void client_task(void *arg) {
             bulk_ep_recover(h);
         }
     }
+    s_client_task_done = true;
+    vTaskDelete(NULL);
 }
 
 static void daemon_task(void *arg) {
     (void)arg;
-    while (true) {
+    while (!s_stop_tasks) {
         uint32_t flags;
         usb_host_lib_handle_events(portMAX_DELAY, &flags);
         if (flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) {
             usb_host_device_free_all();
         }
     }
+    s_daemon_task_done = true;
+    vTaskDelete(NULL);
 }
 
 // ---------------------------------------------------------------
@@ -1603,6 +1615,9 @@ static bool enum_filter_cb(const usb_device_desc_t *dev_desc,
 void usb_disp_hal_start(void) {
     if (s_started || s_nhal == 0) return;
     s_started = true;
+    s_stop_tasks = false;
+    s_daemon_task_done = false;
+    s_client_task_done = false;
 
     // インストール前に切断期間を置く。
     // マイコンのリブートはバスリセットだけで VBUS が切れないため、
@@ -1642,6 +1657,86 @@ void usb_disp_hal_start(void) {
 
     xTaskCreate(daemon_task, "usbd_daemon", 4096, NULL, 4, NULL);
     xTaskCreate(client_task, "usbd_client", 4096, NULL, 5, NULL);
+}
+
+// MPOS runtime host-mode exit (deactivate path, mirrors hal_start).
+// Quiesces the display bulk pipe first (halt forces CANCELED completions
+// through the still-running client task; freeing transfer memory under
+// live URBs is the StoreProhibited crash), then tears down the device,
+// stops both tasks, deregisters the client, and uninstalls the host
+// stack (which deletes its PHY). Idempotent; hal_start() works again
+// afterwards. App thread only (blocks ~300ms).
+void usb_disp_hal_stop(void) {
+    if (!s_started) {
+        return;
+    }
+    for (uint8_t i = 0; i < s_nhal; i++) {
+        struct usb_disp_hal *h = &s_hal[i];
+        if (h->dev != NULL && h->iface_claimed && h->bulk_ep != 0) {
+            usb_host_endpoint_halt(h->dev, h->bulk_ep);
+            usb_host_endpoint_flush(h->dev, h->bulk_ep);
+        }
+    }
+    // Let the still-running tasks pump the resulting CANCELED completions
+    // (and any NO_CLIENTS fallout) BEFORE the tasks die: afterwards nobody
+    // processes proc requests, their flags stick, and uninstall refuses.
+    vTaskDelay(pdMS_TO_TICKS(300));
+    for (uint8_t i = 0; i < s_nhal; i++) {
+        device_teardown(&s_hal[i]);
+    }
+    s_stop_tasks = true;
+    usb_host_lib_unblock();
+    if (s_client != NULL) {
+        usb_host_client_unblock(s_client);
+    }
+    // Join both task loops (bounded): the client task can be inside a long
+    // blocking transfer when signalled. Fixed-delay-and-hope left zombies.
+    uint32_t stop_waited = 0;
+    while ((!s_daemon_task_done || !s_client_task_done) && stop_waited < 1000) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        stop_waited += 10;
+    }
+    if (!s_daemon_task_done || !s_client_task_done) {
+        usb_disp_log("[HAL] stop: task join timed out, proceeding anyway");
+    }
+    if (s_client != NULL) {
+        if (usb_host_client_deregister(s_client) != ESP_OK) {
+            usb_disp_log("[HAL] stop: client deregister failed");
+        }
+        s_client = NULL;
+    }
+    // Drain library events from the app thread: deregister raises
+    // NO_CLIENTS, which nobody pumps now that the tasks are gone, and
+    // uninstall refuses while event/proc flags are set. Uninstall itself
+    // is retried: teardown fallout can need several pump rounds to settle.
+    esp_err_t uninstall_err = ESP_FAIL;
+    for (uint8_t u = 0; u < 3 && uninstall_err != ESP_OK; u++) {
+        for (uint8_t i = 0; i < 10; i++) {
+            uint32_t flags = 0;
+            if (usb_host_lib_handle_events(0, &flags) != ESP_OK) {
+                break;
+            }
+            if (flags == 0) {
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        // Free device objects the dead tasks can no longer release
+        // (NO_CLIENTS handling died with the daemon).
+        usb_host_device_free_all();
+        uninstall_err = usb_host_uninstall();
+        if (uninstall_err != ESP_OK) {
+            usb_disp_log("[HAL] stop: host uninstall failed (0x%X), retrying",
+                         (unsigned)uninstall_err);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+    if (uninstall_err != ESP_OK) {
+        usb_disp_log("[HAL] stop: host uninstall FAILED (0x%X)",
+                     (unsigned)uninstall_err);
+    }
+    s_started = false;
+    usb_disp_log("[HAL] host stopped");
 }
 
 void usb_disp_hal_poll(usb_disp_hal_t *h) {

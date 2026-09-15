@@ -12,5 +12,6 @@ SemaphoreHandle_t xSemaphoreCreateBinary(void);
 SemaphoreHandle_t xSemaphoreCreateMutex(void);
 int xSemaphoreTake(SemaphoreHandle_t sem, TickType_t ticks);
 int xSemaphoreGive(SemaphoreHandle_t sem);
+void vSemaphoreDelete(SemaphoreHandle_t sem);
 
 #endif

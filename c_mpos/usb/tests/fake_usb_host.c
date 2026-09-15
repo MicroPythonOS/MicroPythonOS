@@ -80,6 +80,10 @@ int xSemaphoreGive(SemaphoreHandle_t sem) {
     return pdTRUE;
 }
 
+void vSemaphoreDelete(SemaphoreHandle_t sem) {
+    free(sem);
+}
+
 SemaphoreHandle_t xSemaphoreCreateBinary(void) {
     int *count = (int *)calloc(1, sizeof(int));
     return (SemaphoreHandle_t)count;
@@ -435,6 +439,11 @@ esp_err_t usb_host_client_register(const usb_host_client_config_t *config,
 }
 
 esp_err_t usb_host_client_deregister(usb_host_client_handle_t client) {
+    (void)client;
+    return ESP_OK;
+}
+
+esp_err_t usb_host_client_unblock(usb_host_client_handle_t client) {
     (void)client;
     return ESP_OK;
 }
