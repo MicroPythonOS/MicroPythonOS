@@ -236,6 +236,12 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/u
 echo "Applying lib/esp-idf USB enum no-abort patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/usb_enum_no_abort.patch
 
+# Dynamic USB host support: expose usb_phy_deinit() so the runtime
+# host-activation path can delete the device-mode PHY before the host
+# stack creates its own. Purely additive, inert everywhere else.
+echo "Applying micropython USB PHY deinit patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/usb_phy_deinit.patch
+
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
 # Pre-existence check so MPOS still builds against older pinned

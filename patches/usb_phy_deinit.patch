@@ -1,0 +1,30 @@
+diff --git a/ports/esp32/usb.c b/ports/esp32/usb.c
+index bca2305..bc1c479 100644
+--- a/ports/esp32/usb.c
++++ b/ports/esp32/usb.c
+@@ -52,6 +52,13 @@ void usb_phy_init(void) {
+     usb_new_phy(&phy_conf, &phy_hdl);
+ }
+ 
++void usb_phy_deinit(void) {
++    if (phy_hdl) {
++        usb_del_phy(phy_hdl);
++        phy_hdl = NULL;
++    }
++}
++
+ #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4
+ void usb_usj_mode(void) {
+     // Switch the USB PHY back to Serial/Jtag mode, disabling OTG support
+diff --git a/ports/esp32/usb.h b/ports/esp32/usb.h
+index 9943726..76b9aa5 100644
+--- a/ports/esp32/usb.h
++++ b/ports/esp32/usb.h
+@@ -29,6 +29,7 @@
+ #define MICROPY_HW_USB_CDC_TX_TIMEOUT_MS (500)
+ 
+ void usb_phy_init(void);
++void usb_phy_deinit(void);
+ void usb_usj_mode(void);
+ 
+ #endif // MICROPY_INCLUDED_ESP32_USB_H

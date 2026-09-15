@@ -101,53 +101,49 @@ only when the user explicitly enables "USB Host Mode" (Settings toggle or REPL
 - Size budget: current headroom ~42 KB. Adding TinyUSB back may consume most of
   it. If needed, disable `MICROPY_HW_ENABLE_USB_RUNTIME_DEVICE=0` and/or MSC.
 
-## P0 — spike (RESULTS)
+## P0 — spike (RESULTS, 2026-09-15)
 
-Temporarily modified the `--usb` build to keep USBDEV compiled in and added
-`usb._spike_host()` / `usb._spike_cdc()` module functions. Also added
-`usb_phy_deinit()` to `ports/esp32/usb.c` to delete the device-mode PHY.
+**Verdict: the runtime transition is proven feasible, full stack included.**
 
-**Findings (2026-09-15):**
+With clean bench power, `usb._spike_host()` (`tud_deinit` + `usb_phy_deinit`
++ `usb_disp_init`/`hal_add`/`hal_start` + `usb_hid_start`) enumerates the
+whole bench through the transition: hub + mouse staged + DisplayLink
+descriptor walk + `bulk OUT configured`, `bus_devices()` = `[2, 3, 1]`,
+`hub_ports()` correct. No crash, no hang.
 
-1. ✅ `tud_deinit(0)` — tears down TinyUSB device mode cleanly from a live
-   system. DCD core is reset, interrupts freed.
-2. ✅ `usb_phy_deinit()` — deletes the device-mode PHY handle.
-3. ✅ `usb_host_install()` + `usb_host_client_register()` — host stack
-   installs successfully after the DWC2 transition. `bus_devices()` returns
-   `[]` without crashing (the bus layer is alive, proven by decoding a
-   previous crash to `usbh_devs_addr_list_fill` in the display-HAL path).
-4. ❌ Hub enumeration — `E (xxxxx) HUB: Failed to issue root port reset`.
-   Root port reset fails after the mode switch. Either the DWC2 core reset
-   isn't thorough enough, the PHY isn't actually driving the bus in host
-   mode, or no OTG device is connected on this board (UART and OTG may be
-   on different physical connectors). Needs P1 investigation.
-5. ❌ CDC restore — `_spike_cdc()` crashes with `intr_alloc: No free
-   interrupt inputs for USB interrupt`. The host stack's interrupt isn't
-   freed before `mp_usbd_init()` reinitializes TinyUSB. Needs proper client
-   deregistration + daemon task teardown before `usb_host_uninstall()`.
-6. ❌ Display HAL path (`usb_disp_hal_start()`) — crashes with `s_nhal == 0`
-   because `usb_disp_hal_add()` was never called. The HAL requires a
-   registered display port before starting.
+Earlier failures in this session were environmental, not code:
+- OTG backfeed power (externally powered hub feeding VBUS back) browned
+  out the board on replugs: serial vanishing, reboots, phantom single-shot
+  `hcd_port_command(RESET)` failures, 50 s silences that were reboot
+  windows. Removing OTG external power fixed all of it.
+- The console `/dev/ttyUSB0` is a CH340 **USB VM forward**: it can vanish
+  independently of the board. If lost: halt and ask the user to reconnect,
+  do not thrash.
+- The `usbh_devs_addr_list_fill` LoadProhibited was a spike bug
+  (`hal_start` with `s_nhal == 0` early-returns, leaving the stack
+  uninstalled), not a transition bug.
 
-**Verdict: the runtime transition is proven feasible but needs P1 fixes
-for hub enumeration and CDC restore. The spike code (`_spike_host`,
-`_spike_cdc`, `usb_phy_deinit`, `usb_mpy.c` spike helpers, `main.py`
-boot-guard) is committed as-is for reference.**
+**CDC restore: root-caused, fix designed (P1).** The naive
+`usb_host_uninstall()` + `usb_phy_init()` + `mp_usbd_init()` crashes in
+TinyUSB re-init: `dwc2_int_set` → `esp_intr_free` on a stale handle →
+`esp_intr_disable` LoadProhibited (+0x20). TinyUSB's DCD frees its ISR
+handle on deinit without NULLing it, so re-init double-frees. Fix: 4-line
+patch NULL-guarding both `usb_ih` statics (dcd_esp32sx.c single +
+dwc2_esp32.h array), plus proper teardown order in our path (deregister
+clients, stop daemon/client/HID tasks, then uninstall) — the spike skipped
+all teardown, which also contributed.
+
+**Submodule note:** `usb_phy_deinit()` lives in `patches/usb_phy_deinit.patch`
+(applied by `build_mpos.sh`, same convention as the other usb patches), not
+as a submodule edit.
 
 ## Known P0 issues → P1 tasks
 
-1. **Hub enumeration** — root port reset fails after dev→host transition.
-   Investigate: more thorough DWC2 core reset, PHY warm-reset, or
-   `USB_OTG_MODE_DEFAULT` mode.
-2. **CDC restore** — proper client/task teardown sequence before
-   `usb_host_uninstall()`, then `usb_phy_init()` + `mp_usbd_init()`.
-3. **Display HAL init** — add `usb_disp_hal_add()` with a dummy display
-   config before `usb_disp_hal_start()`, and handle teardown of display
-   client before uninstall.
-4. **HID client lifecycle** — `usb_hid_start()` / `usb_hid_stop()` must
-   handle repeated activation/deactivation (slot cleanup, task lifecycle).
-5. **Interrupt cleanup** — ensure USB interrupt is freed before
-   `mp_usbd_init()` recreates it.
+1. ~~Hub enumeration~~ CLOSED (environmental, proven working).
+2. **CDC restore** — tinyusb ISR-handle patch + proper client/task teardown
+   order (`usb_hid_stop()`, `usb_disp_hal_stop()`), then re-verify the
+   round-trip.
+3. ~~Display HAL init~~ CLOSED (spike bug, `hal_add` before `hal_start`).
 
 ## P1 — implementation (after P0 success)
 
