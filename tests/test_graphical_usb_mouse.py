@@ -5,6 +5,25 @@ from mpos.ui.appearance_manager import AppearanceManager
 from mpos.ui.testing import GraphicalTestCase
 
 
+def _logical_to_physical(x, y):
+    """Map display-logical coords to the physical coords USBMouse reports.
+
+    LVGL rotates every indev point by the display rotation before
+    hit-testing (indev_pointer_proc), so pointer drivers report
+    physical-panel coords; mirrors _touch_read_cb in mpos.ui.testing.
+    """
+    disp = lv.display_get_default()
+    rot = disp.get_rotation() if disp else 0
+    if rot == 3:
+        return disp.get_vertical_resolution() - 1 - y, x
+    if rot == 1:
+        return y, disp.get_horizontal_resolution() - 1 - x
+    if rot == 2:
+        return (disp.get_horizontal_resolution() - 1 - x,
+                disp.get_vertical_resolution() - 1 - y)
+    return x, y
+
+
 class TestUSBMouse(GraphicalTestCase):
     def setUp(self):
         super().setUp()
@@ -56,10 +75,15 @@ class TestUSBMouse(GraphicalTestCase):
         btn.add_event_cb(lambda e: clicked.append(True), lv.EVENT.CLICKED, None)
         self.wait_for_render()
         area = lv.area_t()
-        btn.get_coords(area)
+        for _ in range(50):
+            btn.get_coords(area)
+            if area.x2 >= area.x1 and area.y2 >= area.y1:
+                break
+            self.wait_for_render()
         cx = (area.x1 + area.x2) // 2
         cy = (area.y1 + area.y2) // 2
-        self.source.inject_mouse(dx=cx - self.mouse._x, dy=cy - self.mouse._y)
+        tx, ty = _logical_to_physical(cx, cy)
+        self.source.inject_mouse(dx=tx - self.mouse._x, dy=ty - self.mouse._y)
         self.mouse.read()
         self.wait_for_render()
         self.source.inject_mouse(buttons=1)
