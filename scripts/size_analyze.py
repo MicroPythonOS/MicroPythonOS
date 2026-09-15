@@ -256,8 +256,8 @@ def classify(source, main_index):
             return ("lvgl:" + sub, rel.split("/")[-1])
         if rel.endswith("lv_mp.c.obj"):
             return ("lvgl-bindings", "lv_mp.c")
-        if "/c_mpos/usb_display/" in rel:
-            return ("usermod:usb-display", rel.split("/")[-1])
+        if "/c_mpos/usb/" in rel:
+            return ("usermod:usb", rel.split("/")[-1])
         if "/c_mpos/quirc/" in rel:
             return ("usermod:quirc", rel.split("/")[-1])
         if "/c_mpos/" in rel:

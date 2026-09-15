@@ -15,6 +15,7 @@ from .net.download_manager import DownloadManager
 from .task_manager import TaskManager
 from .camera_manager import CameraManager
 from .sensor_manager import SensorManager
+from .usb.usbmanager import USBManager
 from .time_zone import TimeZone
 from .number_format import NumberFormat
 from .device_info import DeviceInfo
@@ -105,6 +106,7 @@ __all__ = (
     "InputManager",
     "AppearanceManager",
     "SensorManager",
+    "USBManager",
     "get_event_name", "print_event",
     "setContentView", "back_screen",
     "set_back_screen_disabled", "is_back_screen_disabled",

@@ -1,31 +1,21 @@
 Future release (next version)
 =====
 
+0.19.0
+======
+
 Board Support:
-- ESP32-S3: experimental USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195) via `./scripts/build_mpos.sh esp32s3 --usbdisplay`; drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum — smaller modes use a sub-25MHz pixel clock real monitors cannot sync to), falling back to the onboard LCD when no adapter is present (MaTouch ESP32-S3 2.8" and Waveshare ESP32-S3-Touch-LCD-2 board files); live-switch between panel and USB at runtime with auto-revert on unplug, plus an IDF usb_host settle delay so hotplugged adapters enumerate instead of wedging
-- ESP32-S3 USB display: hub-port watchdog heals replugged adapters and slow-booting hub ports — IDF attempts a hub-port reset only once, so a port read while the DisplayLink chip is still booting stayed DISABLED forever (same hub+adapter works on Linux, whose xHCI retries); the HAL now re-enumerates connected-but-unenumerated ports a few seconds later via a targeted port reset, with `usb_disp.hub_ports()` / `usb_disp.reset_port()` REPL helpers for inspection and manual recovery
-- ESP32-S3 USB display: watchdog recovery extended with backoff (up to 3 port resets at ~4s/~12s/~28s stuck time, then one VBUS power-cycle, then silence until replug) for browned-out adapters that need longer than one grace period; every recovery step logs its per-port counters on serial
-- ESP32-S3 USB display: watchdog episodes now close on bus-address growth instead of the port-enabled bit (the stack can leave a port enabled but unaddressed for tens of seconds, which previously faked an "enumerated" verdict and went silent); plus a bounded auto-switch retry (every ~5s, max 6) so a READY transition lost to mid-boot chaos still switches over
-- ESP32-S3 USB display: new `usb_disp.lsusb()` REPL helper printing a Linux-style bus listing (`Bus 001 Device 002: ID 17e9:028f ...`) with VID:PID and product strings
-- ESP32-S3 USB display: client event queue deepened 8→32 so burst disconnects during error storms don't drop DEV_GONE and leak zombie device objects
-- ESP32-S3 USB display: idle-port auto-reset re-armed via preexisting markers (snapshot idle ports at boot, hub plug, and display-unplug; any observed disconnect clears) instead of flap edges, so unplugs during an attached display no longer go unobserved; transfer timeouts adapt down under failure and slow sweeps log themselves; `auto_reset_idle()` with no args reads the toggle back
-- ESP32-S3 USB display: watchdog episodes open on disabled ports only, dues defer during bus growth and for 10s after a hub appears, dead hubs decay to a quiet 120s probe, and manual `reset_port()` gains a `force=True` high-speed override
-- ESP32-S3 USB display: fix hard crash (abort in IDF `enum.c`, reboot loop) when a port reset hit a hub-to-hub uplink and dropped the whole subtree — high-speed ports are now never reset, manually or automatically, and `hub_ports()` reports the speed flag
-- ESP32-S3 USB display: watchdog escalates a dead-silent hub with stuck ports to one automatic root power cycle (max 3 per boot), proven to revive EP0-dead hubs that survive port resets; manual `force_reenum()` remains for anything beyond that
-- ESP32-S3 USB display: escalation fires at the first breaker trip instead of the third, and episode closes mark the port preexisting so uplink ports that resolve someone else's enumeration can never draw a quiet auto-reset
-- ESP32-S3: add support for USB Human Interface Device (HID) such as mouse pointers
-- ESP32-S3 USB HID: keyboards join mice (boot-protocol, shared parser registry, per-kind arm/enable from `hid_state()` reusing the Fri3d key tables and nav hooks); theme-aware mouse cursor (black on light, white on dark); `lsusb()` serves streaming HIDs from held handles with deduped fallback lines, and `hid_state()` also reports device speed
-- ESP32-S3 USB HID: S3 channel policy for the 8-channel host budget (1 hub + 2 devices max; P4/S31 fit 1 hub + 4 with 16 channels) — display > mouse > keyboard claim order, silent parking with backoff and topology re-arm plus `hid_parked()`/`hid_retry()` introspection, and watchdog idle-reset suppression while HID is claimed or parked
-- ESP32-S3 USB HID: transient keyboard polling experiment (claim/submit/release per tick with reap choreography, neutral idle timeouts, per-tick toggle resync, `hid_poll_stats()`/`hid_verbose()` introspection); the revert-test convicted abort-churn coexistence (persistent+persistent stable, transient collapses the hub in seconds), so keyboards stay persistent by default with a live `hid_set_kbd_transient()` A/B toggle
-- ESP32-S3 USB HID: fix heap-crashing StoreProhibited from tearing down live streaming slots with in-flight URBs — live teardowns now retire and quiesce (halt/flush/reap before free, wedged transfers deliberately leaked); `hid_loop_lag()` exposes event-loop stalls for diagnosing delayed teardowns
+- ESP32-S3: USB display adapter support (DisplayLink DL-1xx, e.g. DL-165/DL-195; T6/MS91xx protocol code vendored for ESP32-P4 but untested) — drives an external monitor over USB OTG (EDID auto or fixed mode, 640x480 minimum), falls back to the onboard LCD when no adapter is present, live-switches between panel and USB with auto-revert on unplug, and heals replugged/slow-booting hub ports with a hub-port watchdog (targeted resets with backoff, VBUS power-cycle, root power-cycle escalation, REPL helper functions).
+- ESP32-S3: USB HID mice - boot-protocol pointer support with theme-aware cursor, per-kind arm/enable and safe retire-and-quiesce teardown of live streaming devices
+- ESP32-S3: USB HID keyboards - boot-protocol support reusing the Fri3d key tables and nav hooks, sharing the S3 channel policy with mice (display > mouse > keyboard claim order, silent parking with backoff and topology re-arm, introspection, experimental (default off) transient polling
 
 Frameworks:
 - topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target
 - topmenu: drawer now extends from below the notification bar all the way to the bottom screen edge instead of a fixed 90% height, closing the tappable strip of the underlying app that stayed visible beneath it
 
 OS:
-- ESP32-S3: cap ESP-IDF log strings at the ERROR default (LOG_MAXIMUM_EQUALS_DEFAULT), saving ~42 KB of app flash (micropython.bin 3,666,864 → 3,624,784 B); MicroPython logging is unaffected, C logs can no longer be raised above ERROR at runtime
-- ESP32-S3: disable Ethernet (ETH_ENABLED=n plus the SPI-Ethernet drivers, which would otherwise force-select it back on), saving ~24 KB of app flash (micropython.bin 3,624,784 → 3,600,688 B); no supported S3 board has an Ethernet PHY
+- ESP32-S3: cap ESP-IDF log strings at the ERROR default (LOG_MAXIMUM_EQUALS_DEFAULT), saving ~42 KB of app flash (micropython.bin 3,666,864 → 3,624,784 B); MicroPython logging is unaffected, C logs can no longer be raised above ERROR at runtime- ESP32-S3: disable Ethernet (ETH_ENABLED=n plus the SPI-Ethernet drivers, which would otherwise force-select it back on), saving ~24 KB of app flash (micropython.bin 3,624,784 → 3,600,688 B); no supported S3 board has an Ethernet PHY
+- Build system: ./scripts/build_mpos.sh esp32s3 --usb enables USB host support (display adapters + HID) — compiles in the C module 'usb' with hub support and settles, and frees the OTG peripheral by disabling TinyUSB device mode (console remains over UART REPL on GPIO43/44 and on webREPL)
 
 0.18.1
 ======

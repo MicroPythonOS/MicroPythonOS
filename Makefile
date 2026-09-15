@@ -31,3 +31,7 @@ build-mpos-unix: ## Build MicroPythonOS for unix
 .PHONY: build-mpos-unix-coverage
 build-mpos-unix-coverage: ## Build MicroPythonOS for unix with sys.settrace coverage support
 	./scripts/build_mpos.sh unix coverage
+
+.PHONY: usb-host-tests
+usb-host-tests: ## Host unit tests for the USB HID C transport (no hardware)
+	$(MAKE) -C c_mpos/usb/tests test

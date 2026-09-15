@@ -1,6 +1,6 @@
 import lvgl as lv
 
-from drivers.indev.usb_hid import FakeHIDSource, USBMouse
+from drivers.indev.usb_hid import _CURSOR_H, _CURSOR_W, _cursor_map, FakeHIDSource, USBMouse
 from mpos.ui.appearance_manager import AppearanceManager
 from mpos.ui.testing import GraphicalTestCase
 
@@ -78,6 +78,17 @@ class TestUSBMouse(GraphicalTestCase):
         after = disp.get_layer_sys().get_child_count()
         self.assertEqual(after, before + 1)
         self.assertEqual(self.screen.get_child_count(), 0)
+
+    def test_cursor_is_arrow_shaped(self):
+        def alpha(x, y):
+            return _cursor_map()[(y * _CURSOR_W + x) * 4 + 3]
+
+        self.assertEqual((_CURSOR_W, _CURSOR_H), (16, 16))
+        self.assertEqual(alpha(0, 0), 255)
+        self.assertEqual(alpha(15, 0), 0)
+        self.assertEqual(alpha(15, 15), 0)
+        self.assertEqual(alpha(0, 12), 255)
+        self.assertEqual(alpha(12, 12), 0)
 
     def test_wheel_does_not_crash(self):
         target = lv.obj(self.screen)

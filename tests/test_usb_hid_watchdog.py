@@ -4,11 +4,11 @@ import unittest
 import lvgl as lv
 
 from mpos import InputManager
-from mpos.board import usb_display
+from mpos.usb import USBManager
 from mpos.ui.testing import GraphicalTestCase
 
 
-class FakeDispMod:
+class FakeUSBMod:
     def __init__(self):
         self.idle_reset = True
         self.addrs = []
@@ -36,7 +36,7 @@ class FakeDispMod:
         self.idle_reset = bool(args[0])
 
 
-class LegacyFakeDispMod:
+class LegacyFakeUSBMod:
     def __init__(self):
         self.idle_reset = True
         self.addrs = []
@@ -68,75 +68,87 @@ class FakeUSB:
 
 class TestHIDWatchdogExclusion(unittest.TestCase):
     def setUp(self):
-        self.fake = FakeDispMod()
-        sys.modules["usb_disp"] = self.fake
-        self.prev_idle = usb_display._hid_idle_prev
-        usb_display._hid_idle_prev = None
+        self.fake = FakeUSBMod()
+        sys.modules["usb"] = self.fake
+        self.prev_idle = USBManager._hid_idle_prev
+        USBManager._hid_idle_prev = None
 
     def tearDown(self):
-        sys.modules.pop("usb_disp", None)
-        usb_display._hid_idle_prev = self.prev_idle
+        sys.modules.pop("usb", None)
+        USBManager._hid_idle_prev = self.prev_idle
         try:
             self.fake.auto_reset_idle(True)
         except Exception:
             pass
 
-    def test_claimed_mouse_suppresses_idle_reset(self):
-        usb_display._update_hid_watchdog_exclusion([10])
-        self.assertFalse(self.fake.idle_reset)
+    def test_claimed_only_leaves_idle_reset_alone(self):
+        # Port-exact skip (C side) covers claimed devices; global
+        # suppression is parked-only now.
+        self.fake.addrs = [10]
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
+        self.assertTrue(self.fake.idle_reset)
+        self.assertIsNone(USBManager._hid_idle_prev)
 
     def test_unplug_restores_idle_reset(self):
-        usb_display._update_hid_watchdog_exclusion([10])
-        usb_display._update_hid_watchdog_exclusion([])
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        USBManager._update_hid_watchdog_exclusion()
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertTrue(self.fake.idle_reset)
 
     def test_manual_disable_is_not_forced_back_on(self):
         self.fake.idle_reset = False
-        usb_display._update_hid_watchdog_exclusion([10])
-        usb_display._update_hid_watchdog_exclusion([])
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        USBManager._update_hid_watchdog_exclusion()
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertFalse(self.fake.idle_reset)
 
-    def test_no_claim_no_touch(self):
-        usb_display._update_hid_watchdog_exclusion([])
+    def test_no_parked_no_touch(self):
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertTrue(self.fake.idle_reset)
-        self.assertIsNone(usb_display._hid_idle_prev)
+        self.assertIsNone(USBManager._hid_idle_prev)
 
     def test_parked_entries_read(self):
         self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
         self.assertEqual(
-            usb_display._hid_parked_entries(), [(0x046D, 0xC31C, "keyboard", 255)]
+            USBManager._hid_parked_entries(), [(0x046D, 0xC31C, "keyboard", 255)]
         )
 
     def test_parked_suppresses_idle_reset(self):
-        usb_display._update_hid_watchdog_exclusion([(0x046D, 0xC31C, "keyboard", 255)])
+        self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
+        USBManager._update_hid_watchdog_exclusion()
         self.assertFalse(self.fake.idle_reset)
-        usb_display._update_hid_watchdog_exclusion([])
+        self.fake.parked_entries = []
+        USBManager._update_hid_watchdog_exclusion()
         self.assertTrue(self.fake.idle_reset)
 
     def test_poll_hid_wires_parked_to_suppression(self):
         self.fake.addrs = []
         self.fake.hid_states = []
         self.fake.parked_entries = [(0x046D, 0xC31C, "keyboard", 255)]
-        usb_display._poll_hid()
+        USBManager._poll_hid()
         self.assertFalse(self.fake.idle_reset)
         self.fake.parked_entries = []
-        usb_display._poll_hid()
+        USBManager._poll_hid()
         self.assertTrue(self.fake.idle_reset)
 
 
 class TestSyncUSBHID(GraphicalTestCase):
     def setUp(self):
         super().setUp()
-        self.fake = FakeDispMod()
-        sys.modules["usb_disp"] = self.fake
-        self.prev = (usb_display._usb_mouse, usb_display._usb_keyboard, usb_display._hid_hub)
-        usb_display._usb_mouse = None
-        usb_display._usb_keyboard = None
-        usb_display._hid_hub = None
+        self.fake = FakeUSBMod()
+        sys.modules["usb"] = self.fake
+        self.prev = (USBManager._usb_mouse, USBManager._usb_keyboard, USBManager._hid_hub)
+        USBManager._usb_mouse = None
+        USBManager._usb_keyboard = None
+        USBManager._hid_hub = None
 
     def tearDown(self):
-        sys.modules.pop("usb_disp", None)
-        for dev in (usb_display._usb_mouse, usb_display._usb_keyboard):
+        sys.modules.pop("usb", None)
+        for dev in (USBManager._usb_mouse, USBManager._usb_keyboard):
             if dev is None:
                 continue
             try:
@@ -147,13 +159,13 @@ class TestSyncUSBHID(GraphicalTestCase):
                 dev.delete()
             except Exception:
                 pass
-        usb_display._usb_mouse, usb_display._usb_keyboard, usb_display._hid_hub = self.prev
+        USBManager._usb_mouse, USBManager._usb_keyboard, USBManager._hid_hub = self.prev
 
     def _armed_with_recorders(self):
         self.fake.addrs = [5, 6]
-        usb_display._sync_usb_hid([5, 6])
-        mouse = usb_display._usb_mouse
-        kbd = usb_display._usb_keyboard
+        USBManager._sync_usb_hid([5, 6])
+        mouse = USBManager._usb_mouse
+        kbd = USBManager._usb_keyboard
         self.assertIsNotNone(mouse)
         self.assertIsNotNone(kbd)
         mouse_calls = []
@@ -176,7 +188,7 @@ class TestSyncUSBHID(GraphicalTestCase):
     def test_mouse_only_state(self):
         mouse, kbd, mouse_calls, kbd_calls = self._armed_with_recorders()
         self.fake.hid_states = [(6, "mouse", 0x17EF, 0x608D)]
-        usb_display._sync_usb_hid([6])
+        USBManager._sync_usb_hid([6])
         self.assertEqual(mouse_calls, [True])
         self.assertEqual(kbd_calls, [False])
         self.assertFalse(mouse._cursor.has_flag(lv.obj.FLAG.HIDDEN))
@@ -184,7 +196,7 @@ class TestSyncUSBHID(GraphicalTestCase):
     def test_keyboard_only_state(self):
         mouse, kbd, mouse_calls, kbd_calls = self._armed_with_recorders()
         self.fake.hid_states = [(5, "keyboard", 0x046D, 0xC31C)]
-        usb_display._sync_usb_hid([5])
+        USBManager._sync_usb_hid([5])
         self.assertEqual(mouse_calls, [False])
         self.assertEqual(kbd_calls, [True])
         self.assertTrue(mouse._cursor.has_flag(lv.obj.FLAG.HIDDEN))
@@ -193,19 +205,19 @@ class TestSyncUSBHID(GraphicalTestCase):
         mouse, kbd, mouse_calls, kbd_calls = self._armed_with_recorders()
         self.fake.hid_states = []
         self.fake.addrs = []
-        usb_display._sync_usb_hid([])
+        USBManager._sync_usb_hid([])
         self.assertEqual(mouse_calls, [False])
         self.assertEqual(kbd_calls, [False])
         self.assertTrue(mouse._cursor.has_flag(lv.obj.FLAG.HIDDEN))
 
     def test_legacy_module_follows_claimed(self):
-        sys.modules["usb_disp"] = LegacyFakeDispMod()
-        usb_display._usb_mouse = None
-        usb_display._usb_keyboard = None
-        usb_display._hid_hub = None
-        usb_display._sync_usb_hid([6])
-        self.assertIsNotNone(usb_display._usb_mouse)
-        self.assertIsNotNone(usb_display._usb_keyboard)
+        sys.modules["usb"] = LegacyFakeUSBMod()
+        USBManager._usb_mouse = None
+        USBManager._usb_keyboard = None
+        USBManager._hid_hub = None
+        USBManager._sync_usb_hid([6])
+        self.assertIsNotNone(USBManager._usb_mouse)
+        self.assertIsNotNone(USBManager._usb_keyboard)
 
 
 class TestMouseSkipsTouchWrap(GraphicalTestCase):
@@ -216,8 +228,8 @@ class TestMouseSkipsTouchWrap(GraphicalTestCase):
         self.addCleanup(mouse.delete)
         InputManager.register_indev(mouse)
         self.addCleanup(InputManager.unregister_indev, mouse)
-        usb_display._wrap_all_touch(FakeUSB(), FakePanel())
-        self.addCleanup(usb_display._unwrap_touch)
+        USBManager._wrap_all_touch(FakeUSB(), FakePanel())
+        self.addCleanup(USBManager._unwrap_touch)
         self.assertTrue("_calc_coords" not in mouse.__dict__)
         self.assertEqual(mouse._calc_coords(7, 9), (7, 9))
         _ = lv  # silence unused import if helpers change

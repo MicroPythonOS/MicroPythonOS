@@ -732,6 +732,7 @@ typedef struct {
     bool power_cycled[USB_DISP_HUB_MAX_PORTS];     // vbus cycle spent
     bool given_up[USB_DISP_HUB_MAX_PORTS];         // silent until flap
     bool noted[USB_DISP_HUB_MAX_PORTS];            // idle hint logged
+    bool hid_noted[USB_DISP_HUB_MAX_PORTS];        // hid-skip hint logged (MPOS)
     bool preexisting[USB_DISP_HUB_MAX_PORTS];      // idle since before last arm
     bool quiet[USB_DISP_HUB_MAX_PORTS];            // idle auto-reset episode
     bool quiet_done[USB_DISP_HUB_MAX_PORTS];       // idle reset spent
@@ -1006,6 +1007,7 @@ static void wd_port_clear(hub_wd_t *slot, uint8_t idx) {
     slot->given_up[idx] = false;
     slot->n_at_open[idx] = 0;
     slot->noted[idx] = false;
+    slot->hid_noted[idx] = false;
     slot->quiet[idx] = false;
     slot->quiet_done[idx] = false;
     slot->preexisting[idx] = false;
@@ -1154,6 +1156,22 @@ static void hub_watchdog_step(bool allow_actions) {
                                  "(reset_port(%u,%u) if stuck)",
                                  addr, port, addr, port);
                 }
+                // Port-exact HID skip (MPOS): one of our HID slots holds
+                // this port's device, so the quiet auto-reset stands down
+                // here while other ports keep healing. Unresolvable parked
+                // devices stay covered by the Python-side global
+                // suppression instead (see USBManager). Only reported when
+                // the toggle is on: with it off nothing would arm anyway.
+                if (s_auto_reset_idle && usb_hid_owns_idle_port(addr, port)) {
+                    if (!slot->hid_noted[idx]) {
+                        slot->hid_noted[idx] = true;
+                        usb_disp_log("[HUB] addr=%u port=%u HID device, "
+                                     "auto-reset skipped",
+                                     addr, port);
+                    }
+                    continue;
+                }
+                slot->hid_noted[idx] = false;
                 if (s_auto_reset_idle && !slot->preexisting[idx] &&
                     !slot->quiet_done[idx]) {
                     slot->stuck_since[idx] = now;
@@ -1182,6 +1200,17 @@ static void hub_watchdog_step(bool allow_actions) {
             if ((int32_t)(now - slot->next_due[idx]) < 0) continue;
             if (!allow_actions) continue;
             if (slot->quiet[idx]) {
+                // A HID may have claimed this port during the grace:
+                // re-check ownership before firing (MPOS, see above).
+                if (usb_hid_owns_idle_port(addr, port)) {
+                    usb_disp_log("[HUB] addr=%u port=%u HID arrived, "
+                                 "idle reset skipped",
+                                 addr, port);
+                    wd_port_closed(slot, idx, addr, port, now, "hid owned");
+                    slot->quiet_done[idx] = true;
+                    slot->preexisting[idx] = true;
+                    continue;
+                }
                 usb_disp_log("[HUB] addr=%u port=%u idle reset (stuck %lus)",
                              addr, port,
                              (unsigned long)((now - slot->stuck_since[idx]) /

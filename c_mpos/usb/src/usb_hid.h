@@ -1,5 +1,5 @@
 // Minimal USB HID host transport (boot-protocol mice + keyboards).
-// Public interface for the MicroPython binding (usb_disp_mpy.c).
+// Public interface for the MicroPython binding (usb_mpy.c).
 // Transport-only: report parsing lives in Python (drivers/indev/usb_hid.py),
 // so swapping this for the official hid_host component later only touches
 // this file, not the module API or the Python side.
@@ -36,7 +36,7 @@ typedef struct {
 } usb_hid_state_t;
 
 // Register our own usb_host client + task. False when the host stack is
-// not up yet (arm_usb_display() runs first in main.py); idempotent.
+// not up yet (USBManager.arm_display() runs first in main.py); idempotent.
 bool usb_hid_start(void);
 
 // App-thread pump: completes staged setups, health-checks claims.
@@ -66,16 +66,16 @@ typedef struct {
     uint8_t fails;    // consecutive setup failures (255 = parked)
 } usb_hid_parked_t;
 
-// Parked/cooldown list for REPL introspection (usb_disp.hid_parked()).
+// Parked/cooldown list for REPL introspection (usb.hid_parked()).
 uint8_t usb_hid_parked(usb_hid_parked_t *out, uint8_t max);
 
-// Clear the parked/cooldown list and rescan now (usb_disp.hid_retry()).
+// Clear the parked/cooldown list and rescan now (usb.hid_retry()).
 // Topology changes (plug/unplug) re-arms automatically; this is the
 // manual equivalent.
 void usb_hid_retry(void);
 
 // One transiently-polled keyboard: cumulative counters for REPL frequency
-// checks (usb_disp.hid_poll_stats()). Per-slot counters reset on
+// checks (usb.hid_poll_stats()). Per-slot counters reset on
 // teardown (unplug/replug); sample twice and diff for polls/sec.
 typedef struct {
     uint8_t addr;
@@ -84,21 +84,21 @@ typedef struct {
     uint16_t ch_fails; // cumulative transient channel failures
 } usb_hid_poll_stat_t;
 
-// Live polled keyboards (for usb_disp.hid_poll_stats()).
+// Live polled keyboards (for usb.hid_poll_stats()).
 uint8_t usb_hid_poll_stats(usb_hid_poll_stat_t *out, uint8_t max);
 
-// Keyboard transport mode experiment (usb_disp.hid_set_kbd_transient()):
+// Keyboard transport mode experiment (usb.hid_set_kbd_transient()):
 // false (default) = persistent interrupt pipe like mice; true =
 // transient per-tick polling. Live keyboards re-stage on flip.
 void usb_hid_set_kbd_transient(bool on);
 bool usb_hid_kbd_transient(void);
 
-// ms since the client task last pumped events (usb_disp.hid_loop_lag()).
+// ms since the client task last pumped events (usb.hid_loop_lag()).
 // ~100ms in steady state; seconds mean event delivery - completions,
 // teardowns, rescans - is stalled. Wrap-safe subtraction.
 uint32_t usb_hid_loop_lag_ms(void);
 
-// Per-tick debug logging, off by default (usb_disp.hid_verbose()).
+// Per-tick debug logging, off by default (usb.hid_verbose()).
 // Gated [HID][V] lines: claim/submit/wait outcomes per tick. Opt-in
 // only - at ~100 ticks/s it would drown the REPL otherwise.
 void usb_hid_set_verbose(bool on);
@@ -109,6 +109,13 @@ bool usb_hid_verbose(void);
 // live device by address mid-stream (same reason the display HAL keeps
 // its own handle for lsusb).
 usb_device_handle_t usb_hid_held_handle(uint8_t addr);
+
+// True when one of our HID slots holds the device on (hub_addr, port).
+// The hub watchdog's quiet auto-reset consults this to skip exactly the
+// HID-owned idle ports while other ports keep healing (port-exact skip:
+// parked devices have no open handle and stay covered by the Python-side
+// global suppression instead).
+bool usb_hid_owns_idle_port(uint8_t hub_addr, uint8_t port);
 
 #ifdef __cplusplus
 }

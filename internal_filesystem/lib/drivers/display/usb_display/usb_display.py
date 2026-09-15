@@ -10,7 +10,7 @@ BYTE_ORDER_RGB = display_driver_framework.BYTE_ORDER_RGB
 BYTE_ORDER_BGR = display_driver_framework.BYTE_ORDER_BGR
 
 
-class _USBDispBus:
+class _USBDisplayBus:
     def __init__(self, usb_dev):
         self._dev = usb_dev
         self._callback = None
@@ -43,7 +43,7 @@ class _USBDispBus:
             self._callback()
 
 
-class USB_DISP(display_driver_framework.DisplayDriver):
+class USBDisplayDriver(display_driver_framework.DisplayDriver):
     def __init__(
         self,
         usb_dev,
@@ -56,10 +56,10 @@ class USB_DISP(display_driver_framework.DisplayDriver):
         color_space=lv.COLOR_FORMAT.RGB565,  # NOQA
     ):
         if color_space != lv.COLOR_FORMAT.RGB565:  # NOQA
-            raise ValueError("USB_DISP PoC only supports RGB565")
+            raise ValueError("USBDisplayDriver only supports RGB565")
         self._usb_dev = usb_dev
         super().__init__(
-            data_bus=_USBDispBus(usb_dev),
+            data_bus=_USBDisplayBus(usb_dev),
             display_width=display_width,
             display_height=display_height,
             frame_buffer1=frame_buffer1,
@@ -75,7 +75,7 @@ class USB_DISP(display_driver_framework.DisplayDriver):
 
     def set_rotation(self, value):
         if value != lv.DISPLAY_ROTATION._0:  # NOQA
-            raise ValueError("USB_DISP only supports rotation _0")
+            raise ValueError("USBDisplayDriver only supports rotation _0")
         super().set_rotation(value)
 
     def poll(self):
