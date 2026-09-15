@@ -35,9 +35,12 @@ class USBManager:
     _sw_retries = 0
     _SW_RETRY_EVERY = 5
     _SW_MAX_RETRIES = 6
-    # Persisted host-mode preference (Settings "USB Host Mode").
-    _HOST_PREFS = "com.micropythonos.usb"
-    _HOST_MODE_KEY = "host_mode"
+    # Host-mode preference lives in the Settings app's preferences (same
+    # key the Settings UI persists), so UI, REPL and boot all share one
+    # source of truth. Stored as strings ("on"/"once"/"off"); only "on"
+    # boots into host mode.
+    _HOST_PREFS = "com.micropythonos.settings"
+    _HOST_MODE_KEY = "usb_host_mode"
 
     @classmethod
     def is_available(cls):
@@ -51,7 +54,7 @@ class USBManager:
     def _get_host_pref(cls):
         try:
             from mpos import SharedPreferences
-            return SharedPreferences(cls._HOST_PREFS).get_bool(cls._HOST_MODE_KEY, False)
+            return SharedPreferences(cls._HOST_PREFS).get_string(cls._HOST_MODE_KEY) == "on"
         except Exception:
             return False
 
@@ -59,7 +62,8 @@ class USBManager:
     def _set_host_pref(cls, on):
         try:
             from mpos import SharedPreferences
-            SharedPreferences(cls._HOST_PREFS).edit().put_bool(cls._HOST_MODE_KEY, bool(on)).commit()
+            SharedPreferences(cls._HOST_PREFS).edit().put_string(
+                cls._HOST_MODE_KEY, "on" if on else "off").commit()
         except Exception as e:
             logger.error("usb host pref save fail: %s" % (e))
 

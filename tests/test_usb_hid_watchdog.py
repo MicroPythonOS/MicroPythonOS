@@ -335,8 +335,17 @@ class TestActivateDeactivate(GraphicalTestCase):
                          and USBManager._get_host_pref())
 
     def test_host_pref_round_trip(self):
+        # Single source of truth shared with the Settings UI: same
+        # namespace, same key the framework persists ("on"/"off" strings).
+        self.assertEqual((USBManager._HOST_PREFS, USBManager._HOST_MODE_KEY),
+                         ("com.micropythonos.settings", "usb_host_mode"))
         import os
-        path = "prefs/com.micropythonos.usb/config.json"
+        path = "prefs/com.micropythonos.settings/config.json"
+        try:
+            with open(path, "rb") as f:
+                had = f.read()
+        except Exception:
+            had = None
         try:
             USBManager._set_host_pref(True)
             self.assertTrue(USBManager._get_host_pref())
@@ -344,7 +353,11 @@ class TestActivateDeactivate(GraphicalTestCase):
             self.assertFalse(USBManager._get_host_pref())
         finally:
             try:
-                if os.path.exists(path):
-                    os.remove(path)
+                if had is None:
+                    if os.path.exists(path):
+                        os.remove(path)
+                else:
+                    with open(path, "wb") as f:
+                        f.write(had)
             except Exception:
                 pass

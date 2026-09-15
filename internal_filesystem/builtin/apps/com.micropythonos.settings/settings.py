@@ -112,12 +112,10 @@ class Settings(SettingsActivity):
             {"title": "Check IMU Calibration", "key": "check_imu_calibration", "ui": "activity", "activity_class": CheckIMUCalibrationActivity},
             {"title": "Calibrate IMU", "key": "calibrate_imu", "ui": "activity", "activity_class": CalibrateIMUActivity},
             # USB host mode is expert-grade: activating kills USB-CDC (the
-            # console on no-UART boards) until deactivated. dont_persist:
-            # the single source of truth is the USB preference, written by
-            # the callback; default_value is re-read live on every open.
-            # "once" activates without persisting (and clears any persisted
-            # flag), so the next reboot comes back in CDC device mode.
-            {"title": "USB Host Mode", "key": "usb_host_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options": [("On", "on"), ("On until reboot", "once"), ("Off", "off")], "note": "Device becomes a Host for USB keyboard, mice or display adapters.", "default_value": "on" if USBManager.host_mode_active() else "off", "changed_callback": self.usb_host_mode_changed, "should_show": USBManager.is_available()},
+            # console on no-UART boards) until deactivated. Persisted by the
+            # framework into the same key USBManager boots from, so the row
+            # always shows the truth; the callback only switches modes.
+            {"title": "USB Host Mode", "key": "usb_host_mode", "ui": "radiobuttons", "ui_options": [("On", "on"), ("On until reboot", "once"), ("Off", "off")], "note": "Device becomes a Host for USB keyboard, mice or display adapters.", "default_value": "off", "changed_callback": self.usb_host_mode_changed, "should_show": USBManager.is_available()},
             # Expert settings, alphabetically
             {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
@@ -130,17 +128,15 @@ class Settings(SettingsActivity):
 
     # Change handlers:
     def usb_host_mode_changed(self, new_value):
-        if new_value == "on":
-            if not USBManager.activate():
-                logger.error("USB host mode activation failed")
-        elif new_value == "once":
-            if USBManager.activate(persist=False):
-                USBManager._set_host_pref(False)
-            else:
-                logger.error("USB host mode activation failed")
-        else:
-            if not USBManager.deactivate():
+        # Persistence is handled by the framework (same key USBManager
+        # boots from); here we only switch modes, never persisting. The
+        # framework stores first, so a failed activation still persists
+        # the intent and retries next boot (BOOTSEL escapes if needed).
+        if new_value == "off":
+            if not USBManager.deactivate(persist=False):
                 logger.error("USB host mode deactivation failed")
+        elif not USBManager.activate(persist=False):
+            logger.error("USB host mode activation failed")
 
     def reset_into_bootloader(self, new_value):
         if new_value != "bootloader":

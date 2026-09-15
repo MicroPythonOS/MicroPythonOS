@@ -46,22 +46,24 @@ only when the user explicitly enables "USB Host Mode" (Settings toggle or REPL
 - Default boot: CDC enabled, REPL over USB. `USBManager.is_available()` still
   returns `True` because the `usb` C module is built in; it just reports no host
   stack running.
-- Settings → "USB Host Mode" toggle ON: calls `USBManager.activate(persist=True)`.
+- Settings → "USB Host Mode" (`On` persisted, `On until reboot` one-shot,
+  `Off`): the framework persists the choice into the same
+  `com.micropythonos.settings` / `usb_host_mode` key USBManager boots from,
+  so UI, REPL and boot share one source of truth; the callback only
+  switches modes via `USBManager.activate(persist=False)` /
+  `deactivate(persist=False)`.
   - Stops TinyUSB CDC.
   - Starts IDF USB host.
   - Arms display + HID as today.
-  - Saves `SharedPreferences("com.micropythonos.usb").set_bool("host_mode", True)`.
+  - The `activate(persist=True)` default writes `"on"` to the shared key.
   - CDC gone until deactivated. UART/WebREPL still work if configured.
-- Toggle OFF: calls `USBManager.deactivate(persist=True)`.
+- Toggle OFF: calls `USBManager.deactivate(persist=True)` (writes `"off"`).
   - Stops host (HID client, display client, `usb_host_uninstall`).
   - Reinitializes TinyUSB PHY and `mp_usbd_init()`.
   - CDC returns; REPL rejoins automatically (`mphalport.c` polls/writes CDC
     dynamically).
-  - Saves `host_mode=False`.
-- Persisted boot: `mpos/main.py` reads the preference. If true, it performs the
-  same deactivate-CDC/activate-host sequence before arming display/HID.
-- Escape hatch: BOOT button held at boot forces CDC mode regardless of the
-  persisted flag (two-line check in `main.py`).
+- Persisted boot: `mpos/main.py` boots into host mode only when the shared
+  key reads `"on"`. BOOT held forces CDC regardless of the stored value.
 
 ### C additions
 
