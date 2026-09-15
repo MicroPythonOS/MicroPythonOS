@@ -10,6 +10,7 @@ Board Support:
 - ESP32-S3: USB HID keyboards - boot-protocol support reusing the Fri3d key tables and nav hooks, sharing the S3 channel policy with mice (display > mouse > keyboard claim order, silent parking with backoff and topology re-arm, introspection, experimental (default off) transient polling
 
 Frameworks:
+- InputActivity: optional `selected_callback(value)` setting key for radiobuttons/dropdown, fired on every pick before Save (re-tapping the active radio fires again) so pickers can preview a choice live, e.g. play a sound effect. `changed_callback` semantics unchanged
 - topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target
 - topmenu: drawer now extends from below the notification bar all the way to the bottom screen edge instead of a fixed 90% height, closing the tappable strip of the underlying app that stayed visible beneath it
 
