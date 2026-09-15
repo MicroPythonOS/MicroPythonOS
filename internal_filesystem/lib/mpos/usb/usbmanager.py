@@ -87,7 +87,17 @@ class USBManager:
         if cls._bootsel_held():
             logger.warning("usb BOOTSEL held: staying in CDC device mode")
             return False
-        return cls._get_host_pref()
+        try:
+            from mpos import SharedPreferences
+            stored = SharedPreferences(cls._HOST_PREFS).get_string(cls._HOST_MODE_KEY)
+        except Exception:
+            return False
+        if stored == "once":
+            # One-shot expired on reboot: normalize to Off so the Settings
+            # row stops showing a stale selection. Runs once per session.
+            cls._set_host_pref(False)
+            return False
+        return stored == "on"
 
     @classmethod
     def host_mode_active(cls):

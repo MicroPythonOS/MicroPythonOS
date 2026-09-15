@@ -115,7 +115,7 @@ class Settings(SettingsActivity):
             # console on no-UART boards) until deactivated. Persisted by the
             # framework into the same key USBManager boots from, so the row
             # always shows the truth; the callback only switches modes.
-            {"title": "USB Host Mode", "key": "usb_host_mode", "ui": "radiobuttons", "ui_options": [("On", "on"), ("On until reboot", "once"), ("Off", "off")], "note": "Device becomes a Host for USB keyboard, mice or display adapters.", "default_value": "off", "changed_callback": self.usb_host_mode_changed, "should_show": USBManager.is_available()},
+            {"title": "USB Host Mode", "key": "usb_host_mode", "ui": "radiobuttons", "ui_options": [("On", "on"), ("On until reboot", "once"), ("Off", "off")], "note": "Allows connecting a USB keyboard, mouse or display adapter using a USB OTG cable. Stops debug REPL on USB-CDC, but WebREPL and TTL UART remain.", "default_value": "off", "changed_callback": self.usb_host_mode_changed, "should_show": USBManager.is_available()},
             # Expert settings, alphabetically
             {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},

@@ -339,25 +339,51 @@ class TestActivateDeactivate(GraphicalTestCase):
         # namespace, same key the framework persists ("on"/"off" strings).
         self.assertEqual((USBManager._HOST_PREFS, USBManager._HOST_MODE_KEY),
                          ("com.micropythonos.settings", "usb_host_mode"))
-        import os
-        path = "prefs/com.micropythonos.settings/config.json"
-        try:
-            with open(path, "rb") as f:
-                had = f.read()
-        except Exception:
-            had = None
+        had = self._backup_prefs()
         try:
             USBManager._set_host_pref(True)
             self.assertTrue(USBManager._get_host_pref())
             USBManager._set_host_pref(False)
             self.assertFalse(USBManager._get_host_pref())
         finally:
-            try:
-                if had is None:
-                    if os.path.exists(path):
-                        os.remove(path)
-                else:
-                    with open(path, "wb") as f:
-                        f.write(had)
-            except Exception:
-                pass
+            self._restore_prefs(had)
+
+    def test_once_normalizes_to_off_on_boot(self):
+        # "On until reboot" expires at the next boot: stored value becomes
+        # Off so the Settings row stops showing a stale selection.
+        had = self._backup_prefs()
+        try:
+            from mpos import SharedPreferences
+            SharedPreferences("com.micropythonos.settings").edit().put_string(
+                "usb_host_mode", "once").commit()
+            self.assertFalse(USBManager.host_boot_requested())
+            self.assertFalse(USBManager._get_host_pref())
+            self.assertEqual(
+                SharedPreferences("com.micropythonos.settings").get_string("usb_host_mode"),
+                "off")
+            # Second boot: already normalized, stays off.
+            self.assertFalse(USBManager.host_boot_requested())
+        finally:
+            self._restore_prefs(had)
+
+    @staticmethod
+    def _backup_prefs():
+        try:
+            with open("prefs/com.micropythonos.settings/config.json", "rb") as f:
+                return f.read()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _restore_prefs(had):
+        import os
+        path = "prefs/com.micropythonos.settings/config.json"
+        try:
+            if had is None:
+                if os.path.exists(path):
+                    os.remove(path)
+            else:
+                with open(path, "wb") as f:
+                    f.write(had)
+        except Exception:
+            pass
