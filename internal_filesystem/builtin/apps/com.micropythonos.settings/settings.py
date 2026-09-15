@@ -115,7 +115,9 @@ class Settings(SettingsActivity):
             # console on no-UART boards) until deactivated. dont_persist:
             # the single source of truth is the USB preference, written by
             # the callback; default_value is re-read live on every open.
-            {"title": "USB Host Mode", "key": "usb_host_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options": [("On", "on"), ("Off", "off")], "default_value": "on" if USBManager.host_mode_active() else "off", "changed_callback": self.usb_host_mode_changed, "should_show": USBManager.is_available()},
+            # "once" activates without persisting (and clears any persisted
+            # flag), so the next reboot comes back in CDC device mode.
+            {"title": "USB Host Mode", "key": "usb_host_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options": [("On", "on"), ("On until reboot", "once"), ("Off", "off")], "note": "Device becomes a Host for USB keyboard, mice or display adapters.", "default_value": "on" if USBManager.host_mode_active() else "off", "changed_callback": self.usb_host_mode_changed, "should_show": USBManager.is_available()},
             # Expert settings, alphabetically
             {"title": "Restart to Bootloader", "key": "boot_mode", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("Normal", "normal"), ("Bootloader", "bootloader")], "changed_callback": self.reset_into_bootloader},
             {"title": "Format internal data partition", "key": "format_internal_data_partition", "dont_persist": True, "ui": "radiobuttons", "ui_options":  [("No, do not format", "no"), ("Yes, erase all settings, files and non-builtin apps", "yes")], "changed_callback": self.format_internal_data_partition},
@@ -130,6 +132,11 @@ class Settings(SettingsActivity):
     def usb_host_mode_changed(self, new_value):
         if new_value == "on":
             if not USBManager.activate():
+                logger.error("USB host mode activation failed")
+        elif new_value == "once":
+            if USBManager.activate(persist=False):
+                USBManager._set_host_pref(False)
+            else:
                 logger.error("USB host mode activation failed")
         else:
             if not USBManager.deactivate():
