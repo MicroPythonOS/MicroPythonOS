@@ -7,8 +7,10 @@ Build with: ./scripts/build_mpos.sh esp32s3 --usb
 Python driver: internal_filesystem/lib/drivers/display/usb_display/
 HID Python driver: internal_filesystem/lib/drivers/indev/usb_hid.py
 Framework: internal_filesystem/lib/mpos/usb/ (USBManager)
-Boot hook: internal_filesystem/lib/mpos/main.py (USBManager.arm_display(), USBManager.arm_hid())
+Boot hook: internal_filesystem/lib/mpos/main.py honors persisted host_mode
+(USBManager.activate()) else CDC device mode; Settings "USB Host Mode" toggle
 User docs: ../docs/docs/frameworks/usb-manager.md
+Design record (runtime host/CDC switching): dynamic-usb-host.md
 
 upstream/ holds a vendored snapshot (see upstream/VERSION). Only the
 ESP32-relevant sources are used (upstream/CMakeLists.txt ESP-IDF branch):
@@ -104,6 +106,18 @@ HID (same module, same build):
   transient per-tick polling (needed under display channel pressure).
   Bare call reads back. Live keyboards re-stage on flip, so both modes
   are A/B-testable on one firmware without reflashing.
+
+Mode switching (same module, --usb builds only; CDC is the default boot):
+- activate_host() - leave CDC device mode: tud_deinit() + delete the
+  device PHY. The host stack installs itself on first use below
+  (Display.start() / hid_start()); stack bringup stays the legacy
+  Python sequence so no port/slot is ever registered twice. Idempotent.
+- deactivate_host() - stop HID + display clients, uninstall the host
+  stack, recreate the device PHY, restart TinyUSB. Idempotent; the REPL
+  rejoins CDC automatically. See "Host-mode exit" below.
+- host_active() - True while the host stack is up.
+- cdc_inited() - True while the TinyUSB device stack is initialized.
+  Diagnostic for the deactivate path (needs no host attached).
 
 =====================================================================
 What it took to get hotplug / hot-unplug working, per level
@@ -208,11 +222,22 @@ What it took to get hotplug / hot-unplug working, per level
   event-driven, but the app must still poll: usb_disp_poll() drives
   WAIT -> MODE_SETUP -> READY (and reconnect/re-enumeration).
 - MicroPython's TinyUSB *device* stack owns the single OTG peripheral at
-  boot, so --usb builds compile it out (MICROPY_HW_ENABLE_USBDEV=0).
-  There is no runtime device<->host handover: mp_usbd_deinit() only
-  soft-disconnects, the driver/PHY stay resident. Console remains over
-  UART REPL; USB-Serial-JTAG shares the OTG pins so it is unreachable
-  only while the adapter is plugged (WebREPL over WiFi still works).
+  boot, and --usb builds keep it that way: CDC is the default console and
+  the host stack starts only on explicit request (Settings "USB Host Mode"
+  or USBManager.activate(), persisted, BOOTSEL escape). The handover both
+  ways is proven on hardware (see dynamic-usb-host.md): activate does
+  tud_deinit() + usb_phy_deinit() (patches/usb_phy_deinit.patch exposes
+  it), then the legacy Python bringup; deactivate runs usb_hid_stop() +
+  usb_disp_hal_stop() (joined task exits, endpoint quiesce, deregister,
+  event drain, retried uninstall), recreates the device PHY and restarts
+  TinyUSB. Two hard-learned rules: stop flags clear only in start (a task
+  waking late must still see them set, never revive - revived zombies
+  once flooded the DWC2 IRQ allocator every 10ms), and TinyUSB frees its
+  ISR handle without NULLing it, so re-init double-frees without
+  patches/tinyusb_isr_double_free.patch (decoded LoadProhibited).
+  Console remains over UART REPL where exposed (USB-Serial-JTAG shares
+  the OTG pins so it is unreachable while the adapter is plugged;
+  WebREPL over WiFi still works).
 - Upstream has no remove API and one slot on ESP32, so the binding reuses
   usb_disp_at(0) once added: REPL retries, repeated constructions, and
   the Settings-toggle path all share the handle (original resolution
@@ -258,15 +283,19 @@ What it took to get hotplug / hot-unplug working, per level
   teardown bytecodes, so the swap suspends the pump first (idempotent
   flag, resumed in finally blocks) — a hard freeze with dead Ctrl-C was
   the symptom before this.
-- No board-file changes: mpos.main calls USBManager.arm_display() (construct +
-  start + poll timer, ~1ms, never blocks boot); the existing 1s poll
+- No board-file changes: mpos.main honors the persisted host_mode flag
+  (USBManager.activate(): tud-deinit, host bringup, construct + start +
+  poll timer, ~1ms of Python, never blocks boot); otherwise CDC stays up
+  and nothing USB runs. The existing 1s poll
   timer is the whole event system (no asyncio watcher needed — the stack
   is event-driven and poll() just advances the state machine). On a READY
   transition with the panel active it auto-switches; on disconnect with
   USB active it auto-reverts. Event-gated with a bounded level retry
   (every ~5s, max 6 per episode, budget reset by any bus event), so a
   switch that fails transiently mid-boot still lands without a
-  retry-storm. _auto_switch is the seam for the future Settings toggle.
+  retry-storm. The _auto_switch flag gates panel auto-switching; the
+  Settings "USB Host Mode" row (On / On-until-reboot / Off) gates host
+  mode itself, persisted in the shared settings prefs.
 - Swap order (all validated on hardware): disable pump -> disable indevs
   -> remove_and_stop_all_activities() -> blank old display -> blank handled
   -> set_default + reassign main_display -> repoint indevs (+ touch wrap)
