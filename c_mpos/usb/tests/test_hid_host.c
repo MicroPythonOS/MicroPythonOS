@@ -55,6 +55,10 @@ static void test_reset(void) {
     s_kbd_total_ch = 0;
     s_kbd_transient = false;
     s_hid_verbose = false;
+    s_client_stop = false;
+    s_kbd_stop = false;
+    s_client_task_done = false;
+    s_kbd_task_done = false;
 }
 
 // Mirror the client-task loop body: deliver events, scan, per-slot work.
@@ -648,8 +652,7 @@ static void case_accessors(void) {
     CHECK(!fake_log_has("dropped"));
 }
 
-static void case_owns_idle_port(void) {
-    test_reset();
+static void case_owns_idle_port(void) {    test_reset();
     CHECK(usb_hid_start());
     plug_hub(1);
     plug_mouse(2);
@@ -694,6 +697,54 @@ static void case_owns_idle_port(void) {
     CHECK(!usb_hid_owns_idle_port(1, 1));
 }
 
+static void case_lifecycle(void) {
+    test_reset();
+    bringup_mouse_kbd();
+    uint32_t gen = usb_hid_change_gen();
+    // Stop: everything quiesces without waiting, state resets. Tasks never
+    // run in the harness, so mark them exited (the join would time out).
+    s_client_task_done = true;
+    int64_t t0 = fake_now_us;
+    usb_hid_stop();
+    CHECK(fake_now_us - t0 < 1000 * 1000);
+    CHECK(usb_hid_change_gen() != gen);
+    CHECK(!usb_hid_poll());
+    uint8_t addrs[8];
+    CHECK(usb_hid_claimed_addrs(addrs, 8) == 0);
+    usb_hid_state_t st[4];
+    CHECK(usb_hid_state(st, 4) == 0);
+    CHECK(find_slot(5) == NULL && find_slot(6) == NULL);
+    CHECK(fake_live_xfers() == 0);
+    // Stop is idempotent.
+    usb_hid_stop();
+    CHECK(!usb_hid_poll());
+    // Restart works: semaphores recreated, setup runs (hid_ctrl needs them).
+    CHECK(usb_hid_start());
+    plug_mouse(5);
+    plug_keyboard(6);
+    fake_queue_new_dev(5);
+    fake_queue_new_dev(6);
+    pump_client();
+    CHECK(usb_hid_poll());
+    CHECK(find_slot(5) != NULL && find_slot(5)->state == HID_SLOT_STREAMING);
+    CHECK(find_slot(6) != NULL && find_slot(6)->state == HID_SLOT_STREAMING);
+    s_client_task_done = true;
+    usb_hid_stop();
+    CHECK(find_slot(5) == NULL && find_slot(6) == NULL);
+}
+
+static void case_stop_timeout(void) {
+    // A task that never exits (missed flag window) must not wedge the
+    // stop: bounded join, loud warn, teardown proceeds.
+    test_reset();
+    bringup_mouse_kbd();
+    fake_log_clear();
+    usb_hid_stop();
+    CHECK(fake_log_has("join timed out"));
+    CHECK(find_slot(5) == NULL && find_slot(6) == NULL);
+    CHECK(fake_live_xfers() == 0);
+}
+
 static void case_lag_gen(void) {    test_reset();
     CHECK(usb_hid_start());
     uint32_t a = usb_hid_loop_lag_ms();
@@ -724,6 +775,8 @@ int main(void) {
     case_tick();
     case_accessors();
     case_owns_idle_port();
+    case_lifecycle();
+    case_stop_timeout();
     case_lag_gen();
     printf("hid-host: %d checks, %d failures\n", s_checks, s_fails);
     return s_fails != 0;

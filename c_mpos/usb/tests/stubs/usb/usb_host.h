@@ -103,6 +103,7 @@ typedef struct {
 esp_err_t usb_host_client_register(const usb_host_client_config_t *config,
                                    usb_host_client_handle_t *out);
 esp_err_t usb_host_client_deregister(usb_host_client_handle_t client);
+esp_err_t usb_host_client_unblock(usb_host_client_handle_t client);
 esp_err_t usb_host_client_handle_events(usb_host_client_handle_t client,
                                         uint32_t timeout_ticks);
 esp_err_t usb_host_device_open(usb_host_client_handle_t client, uint8_t addr,

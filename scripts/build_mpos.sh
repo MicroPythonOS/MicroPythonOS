@@ -236,6 +236,25 @@ apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/u
 echo "Applying lib/esp-idf USB enum no-abort patch..."
 apply_patch "$codebasedir"/lvgl_micropython/lib/esp-idf "$codebasedir"/patches/usb_enum_no_abort.patch
 
+# Dynamic USB host support: expose usb_phy_deinit() so the runtime
+# host-activation path can delete the device-mode PHY before the host
+# stack creates its own. Purely additive, inert everywhere else.
+echo "Applying micropython USB PHY deinit patch..."
+apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/patches/usb_phy_deinit.patch
+
+# Dynamic USB host support: TinyUSB frees its DWC2 ISR handle on deinit
+# without NULLing it, so a deinit→reinit cycle (host deactivate back to
+# CDC) double-frees and crashes in esp_intr_disable. Guard + clear.
+# The component is fetched at build time, so on a fresh checkout it may
+# not exist yet: build once to fetch, then rebuild to patch.
+_tinyusb_dwc2="$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__tinyusb/src/portable/synopsys/dwc2/dwc2_esp32.h
+if [ -f "$_tinyusb_dwc2" ]; then
+	echo "Applying tinyusb ISR double-free patch..."
+	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython/ports/esp32/managed_components/espressif__tinyusb "$codebasedir"/patches/tinyusb_isr_double_free.patch
+else
+	echo "WARNING: tinyusb component not fetched yet — skipping ISR patch; rebuild once to apply it."
+fi
+
 # Fast emoji rendering: bake a codepoint range filter into lv_imgfont so
 # non-emoji glyphs bail out in C without invoking the MicroPython path_cb.
 # Pre-existence check so MPOS still builds against older pinned
@@ -418,7 +437,9 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# Pico_USB_Disp's platform detection in the QSTR pre-pass too (the real
 	# compiles get it via the usermod INTERFACE definition).
 	if [ "$usbhost" == "1" ]; then
-		export CFLAGS_EXTRA="-DMICROPY_HW_ENABLE_USBDEV=0 -DESP_PLATFORM -DMPOS_USB_PORT_SETTLE_MS=2000"
+		# P0 spike: keep TinyUSB compiled in so CDC is available by default.
+		# Host mode activates at runtime via tud_deinit() + usb_host_install().
+		export CFLAGS_EXTRA="-DESP_PLATFORM -DMPOS_USB_PORT_SETTLE_MS=2000"
 		export MPOS_NO_USBDEV=1
 		usb_usermod="USER_C_MODULE=$codebasedir/c_mpos/usb/micropython.cmake"
 	else

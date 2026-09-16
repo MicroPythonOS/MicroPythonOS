@@ -407,19 +407,15 @@ try:
 except Exception as e:
     logger.error("Couldn't start boot services: %s", e)
 
-# USB host (--usb builds only): start the host stack now
-# without waiting, so later hotplugs enumerate; the poll timer switches the
-# UI over automatically if a monitor becomes ready. Never delays boot.
+# USB host mode (--usb builds): CDC device mode is the default. The host
+# stack starts only on explicit request: persisted flag (Settings "USB
+# Host Mode"), unless BOOT is held (physical escape back to CDC).
 try:
     from mpos.usb import USBManager
-    USBManager.arm_display()
+    if USBManager.host_boot_requested():
+        USBManager.activate()
 except Exception as e:
-    logger.error("USB display arm failed: %s", e)
-
-try:
-    USBManager.arm_hid()
-except Exception as e:
-    logger.error("USB HID arm failed: %s", e)
+    logger.error("USB host boot arm failed: %s", e)
 
 async def ota_rollback_cancel():
     try:

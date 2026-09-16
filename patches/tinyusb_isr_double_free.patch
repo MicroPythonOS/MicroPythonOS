@@ -1,0 +1,16 @@
+--- a/src/portable/synopsys/dwc2/dwc2_esp32.h
++++ b/src/portable/synopsys/dwc2/dwc2_esp32.h
+@@ -101,8 +101,12 @@
+   if (enabled) {
+     esp_intr_alloc(_dwc2_controller[rhport].irqnum, ESP_INTR_FLAG_LOWMED,
+                    dwc2_int_handler_wrap, (void*)(uintptr_t)tu_u16(role, rhport), &usb_ih[rhport]);
+-  } else {
++  } else if (usb_ih[rhport]) {
++    // MPOS runtime host/device switching deinits and reinits the stack
++    // without rebooting: the handle dangles after the first free, so guard
++    // the re-free (double-free crashes in esp_intr_disable) and clear it.
+     esp_intr_free(usb_ih[rhport]);
++    usb_ih[rhport] = NULL;
+   }
+ }
+ 

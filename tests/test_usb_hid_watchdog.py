@@ -8,12 +8,31 @@ from mpos.usb import USBManager
 from mpos.ui.testing import GraphicalTestCase
 
 
+class FakeDisplayHandle:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def start(self):
+        return None
+
+    def poll(self):
+        return False
+
+    def ready(self):
+        return False
+
+
 class FakeUSBMod:
+    Display = FakeDisplayHandle
+
     def __init__(self):
         self.idle_reset = True
         self.addrs = []
         self.hid_states = []
         self.parked_entries = []
+        self.activated = False
+        self.deactivated = False
+        self._host_active = False
 
     def hid_poll(self):
         return False
@@ -34,6 +53,19 @@ class FakeUSBMod:
         if not args:
             return self.idle_reset
         self.idle_reset = bool(args[0])
+
+    def activate_host(self):
+        self.activated = True
+        self._host_active = True
+        return True
+
+    def deactivate_host(self):
+        self.deactivated = True
+        self._host_active = False
+        return True
+
+    def host_active(self):
+        return self._host_active
 
 
 class LegacyFakeUSBMod:
@@ -233,3 +265,125 @@ class TestMouseSkipsTouchWrap(GraphicalTestCase):
         self.assertTrue("_calc_coords" not in mouse.__dict__)
         self.assertEqual(mouse._calc_coords(7, 9), (7, 9))
         _ = lv  # silence unused import if helpers change
+
+
+class TestActivateDeactivate(GraphicalTestCase):
+    def setUp(self):
+        super().setUp()
+        self.fake = FakeUSBMod()
+        sys.modules["usb"] = self.fake
+        self.prev = (
+            USBManager._usb_dev, USBManager._usb_mouse,
+            USBManager._usb_keyboard, USBManager._hid_hub,
+            USBManager._hid_idle_prev, USBManager._active,
+        )
+        USBManager._usb_dev = None
+        USBManager._usb_mouse = None
+        USBManager._usb_keyboard = None
+        USBManager._hid_hub = None
+        USBManager._hid_idle_prev = None
+        USBManager._active = "panel"
+
+    def tearDown(self):
+        sys.modules.pop("usb", None)
+        for dev in (USBManager._usb_mouse, USBManager._usb_keyboard):
+            if dev is None:
+                continue
+            try:
+                InputManager.unregister_indev(dev)
+            except Exception:
+                pass
+            try:
+                dev.delete()
+            except Exception:
+                pass
+        (USBManager._usb_dev, USBManager._usb_mouse,
+         USBManager._usb_keyboard, USBManager._hid_hub,
+         USBManager._hid_idle_prev, USBManager._active) = self.prev
+
+    def test_activate_arms_display_and_hid(self):
+        self.assertTrue(USBManager.activate(persist=False))
+        self.assertTrue(self.fake.activated)
+        self.assertIsNotNone(USBManager._usb_dev)
+        self.assertIsNotNone(USBManager._usb_mouse)
+        self.assertIsNotNone(USBManager._usb_keyboard)
+        self.assertTrue(USBManager.host_mode_active())
+
+    def test_activate_legacy_module_fails(self):
+        sys.modules["usb"] = LegacyFakeUSBMod()
+        self.assertFalse(USBManager.activate(persist=False))
+
+    def test_deactivate_tears_everything_down(self):
+        self.assertTrue(USBManager.activate(persist=False))
+        mouse, kbd = USBManager._usb_mouse, USBManager._usb_keyboard
+        self.assertTrue(mouse in InputManager.list_indevs())
+        self.assertTrue(USBManager.deactivate(persist=False))
+        self.assertTrue(self.fake.deactivated)
+        self.assertIsNone(USBManager._usb_dev)
+        self.assertIsNone(USBManager._usb_mouse)
+        self.assertIsNone(USBManager._usb_keyboard)
+        self.assertIsNone(USBManager._hid_hub)
+        self.assertTrue(mouse not in InputManager.list_indevs())
+        self.assertTrue(kbd not in InputManager.list_indevs())
+        self.assertFalse(USBManager.host_mode_active())
+        self.assertIsNone(USBManager._hid_idle_prev)
+
+    def test_host_boot_defaults_off(self):
+        # No pref file, BOOT pin unreadable-or-high on desktop: off either way.
+        self.assertFalse(USBManager.host_boot_requested())
+        self.assertFalse(USBManager._bootsel_held()
+                         and USBManager._get_host_pref())
+
+    def test_host_pref_round_trip(self):
+        # Single source of truth shared with the Settings UI: same
+        # namespace, same key the framework persists ("on"/"off" strings).
+        self.assertEqual((USBManager._HOST_PREFS, USBManager._HOST_MODE_KEY),
+                         ("com.micropythonos.settings", "usb_host_mode"))
+        had = self._backup_prefs()
+        try:
+            USBManager._set_host_pref(True)
+            self.assertTrue(USBManager._get_host_pref())
+            USBManager._set_host_pref(False)
+            self.assertFalse(USBManager._get_host_pref())
+        finally:
+            self._restore_prefs(had)
+
+    def test_once_normalizes_to_off_on_boot(self):
+        # "On until reboot" expires at the next boot: stored value becomes
+        # Off so the Settings row stops showing a stale selection.
+        had = self._backup_prefs()
+        try:
+            from mpos import SharedPreferences
+            SharedPreferences("com.micropythonos.settings").edit().put_string(
+                "usb_host_mode", "once").commit()
+            self.assertFalse(USBManager.host_boot_requested())
+            self.assertFalse(USBManager._get_host_pref())
+            self.assertEqual(
+                SharedPreferences("com.micropythonos.settings").get_string("usb_host_mode"),
+                "off")
+            # Second boot: already normalized, stays off.
+            self.assertFalse(USBManager.host_boot_requested())
+        finally:
+            self._restore_prefs(had)
+
+    @staticmethod
+    def _backup_prefs():
+        try:
+            with open("prefs/com.micropythonos.settings/config.json", "rb") as f:
+                return f.read()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _restore_prefs(had):
+        import os
+        path = "prefs/com.micropythonos.settings/config.json"
+        try:
+            if had is None:
+                if os.path.exists(path):
+                    os.remove(path)
+            else:
+                with open(path, "wb") as f:
+                    f.write(had)
+        except Exception:
+            pass

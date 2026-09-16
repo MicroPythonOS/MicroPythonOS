@@ -37,6 +37,11 @@ usb_disp_hal_t *usb_disp_hal_add(const usb_disp_config_t *cfg);
 // 全ポート登録後に一度だけ呼ぶ (ホストスタック/ワーカーの起動)
 void usb_disp_hal_start(void);
 
+// MPOS: ランタイムのホストモード終了 (deactivate パス)。タスク停止、
+// デバイスクローズ、クライアント登録解除、usb_host_uninstall まで行う。
+// 冪等。後は usb_disp_hal_start() が再び使える。
+void usb_disp_hal_stop(void);
+
 // 手動サービスモード (Pico のみ実体あり、他は start/no-op と同義)
 // start の代わりに start_manual を呼び、以後 task を専有コンテキスト
 // (arduino-pico の loop1() 等) から休みなく呼び続ける

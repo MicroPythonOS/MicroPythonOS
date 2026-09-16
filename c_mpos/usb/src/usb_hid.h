@@ -39,6 +39,10 @@ typedef struct {
 // not up yet (USBManager.arm_display() runs first in main.py); idempotent.
 bool usb_hid_start(void);
 
+// Tear down the HID client for host-mode exit (deactivate path).
+// App thread only; usb_hid_start() works again afterwards.
+void usb_hid_stop(void);
+
 // App-thread pump: completes staged setups, health-checks claims.
 // True when the device set changed (connect/disconnect).
 bool usb_hid_poll(void);
