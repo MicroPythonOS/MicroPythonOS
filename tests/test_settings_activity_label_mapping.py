@@ -71,6 +71,24 @@ class TestValueLabelFor(unittest.TestCase):
         self.assertEqual(_value_label_for(setting, "x"), "First")
 
 
+class TestRowValueTextNonStringValues(unittest.TestCase):
+    """Prefs are JSON: a value stored as int (older app versions, numeric
+    ui_options values) must still render as text, not raise in set_text."""
+
+    def test_int_stored_value_becomes_text(self):
+        self.assertEqual(_row_value_text({"key": "n"}, 6), "6")
+
+    def test_int_stored_value_maps_to_option_label(self):
+        setting = {"key": "n", "ui_options": [("Six", 6), ("Eight", 8)]}
+        self.assertEqual(_row_value_text(setting, 8), "Eight")
+
+    def test_int_default_value_is_shown_as_text(self):
+        self.assertEqual(_row_value_text({"key": "n", "default_value": 6}, None), "(defaults to 6)")
+
+    def test_string_values_unchanged(self):
+        self.assertEqual(_row_value_text({"key": "n"}, "abc"), "abc")
+
+
 class TestShouldShow(unittest.TestCase):
 
     def _should_show(self, setting):
