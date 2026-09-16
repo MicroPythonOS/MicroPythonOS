@@ -15,6 +15,11 @@ import lvgl as lv
 from mpos import simulate_click, simulate_long_press, wait_for_render
 
 
+_LONG_PRESS_TIME_DEFAULT = 400
+_LONG_PRESS_TIME_SHORT_CLICK = 3000
+_LONG_PRESS_TIME_LONG_CLICK = 150
+
+
 class TestGraphicalSimulateLongPress(unittest.TestCase):
 
     def setUp(self):
@@ -42,6 +47,19 @@ class TestGraphicalSimulateLongPress(unittest.TestCase):
         self.button.get_coords(area)
         return (area.x1 + area.x2) // 2, (area.y1 + area.y2) // 2
 
+    def _set_long_press_time(self, ms):
+        """Set the simulated touch indev's long-press time and return the indev.
+
+        Also resets long-press state so a previous test cannot pollute this one.
+        Caller must restore the default with set_long_press_time(400).
+        """
+        import mpos.ui.testing as _testing
+        _testing._ensure_touch_indev()
+        indev = _testing._touch_indev
+        indev.reset_long_press()
+        indev.set_long_press_time(ms)
+        return indev
+
     def _wait_until(self, predicate, timeout_ms=2000):
         """Poll wait_for_render() until predicate() is true or timeout expires."""
         deadline = time.ticks_add(time.ticks_ms(), timeout_ms)
@@ -52,35 +70,47 @@ class TestGraphicalSimulateLongPress(unittest.TestCase):
         return False
 
     def test_long_press_fires_long_pressed(self):
-        x, y = self._button_center()
-        simulate_long_press(x, y)
-        found = self._wait_until(
-            lambda: "long_pressed" in self.events,
-            timeout_ms=2000,
-        )
-        self.assertTrue(
-            found,
-            "simulate_long_press did not deliver LONG_PRESSED, got: %s" % self.events,
-        )
+        # Lower the threshold so a real 1000ms long press fires quickly and
+        # deterministically, then restore the default afterwards.
+        indev = self._set_long_press_time(_LONG_PRESS_TIME_LONG_CLICK)
+        try:
+            x, y = self._button_center()
+            simulate_long_press(x, y)
+            found = self._wait_until(
+                lambda: "long_pressed" in self.events,
+                timeout_ms=2000,
+            )
+            self.assertTrue(
+                found,
+                "simulate_long_press did not deliver LONG_PRESSED, got: %s" % self.events,
+            )
+        finally:
+            indev.set_long_press_time(_LONG_PRESS_TIME_DEFAULT)
 
     def test_short_click_does_not_fire_long_pressed(self):
-        x, y = self._button_center()
-        # Use a very short press duration so that even severe OS sleep jitter on
-        # slow CI runners cannot accidentally cross LVGL's long-press threshold.
-        simulate_click(x, y, press_duration_ms=20)
-        # On slow systems SHORT_CLICKED may take a few frames to arrive.
-        found_short = self._wait_until(
-            lambda: "short_clicked" in self.events,
-            timeout_ms=1000,
-        )
-        self.assertTrue(
-            "long_pressed" not in self.events,
-            "short click unexpectedly delivered LONG_PRESSED, got: %s" % self.events,
-        )
-        self.assertTrue(
-            found_short,
-            "short click did not deliver SHORT_CLICKED, got: %s" % self.events,
-        )
+        # Raise the long-press threshold so that scheduling jitter on slow CI
+        # runners cannot accidentally turn a 20ms short click into a long press.
+        # LVGL decides long press by wall-clock time, not CPU time, so limiting
+        # the intended press duration alone is not enough on a loaded machine.
+        indev = self._set_long_press_time(_LONG_PRESS_TIME_SHORT_CLICK)
+        try:
+            x, y = self._button_center()
+            simulate_click(x, y, press_duration_ms=20)
+            # On slow systems SHORT_CLICKED may take a few frames to arrive.
+            found_short = self._wait_until(
+                lambda: "short_clicked" in self.events,
+                timeout_ms=1000,
+            )
+            self.assertTrue(
+                "long_pressed" not in self.events,
+                "short click unexpectedly delivered LONG_PRESSED, got: %s" % self.events,
+            )
+            self.assertTrue(
+                found_short,
+                "short click did not deliver SHORT_CLICKED, got: %s" % self.events,
+            )
+        finally:
+            indev.set_long_press_time(_LONG_PRESS_TIME_DEFAULT)
 
 
 if __name__ == "__main__":
