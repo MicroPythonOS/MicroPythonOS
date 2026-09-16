@@ -74,6 +74,65 @@ class WAVStream:
     WAVE_FORMAT_PCM = 0x1
     WAVE_FORMAT_ADPCM = 0x0011
     WAVE_FORMAT_EXTENSIBLE = 0xFFFE # often used for 24 and 32 bits per sample
+
+    # Warm output (opt-in per board via AudioManager.Output(warm_ms=N)): after a
+    # clip ends, the MCLK PWM and I2S peripheral keep running and the codec stays
+    # unmuted for N ms, so the next clip starts without the click that restarting
+    # the clocks and re-unmuting the DAC produces on every press (ES8311 boards).
+    # Released by the idle timer, by release_warm(), or by a recorder that needs
+    # the I2S peripheral.
+    _warm = None          # {"i2s", "mck", "rate", "fmt", "pins", "on_close"}
+    _warm_busy = False    # a clip is currently playing through the warm output
+    _warm_timer = None    # machine.Timer(-1) one-shot idle release
+
+    @classmethod
+    def release_warm(cls):
+        """Mute the codec and stop the clocks kept warm between clips."""
+        cls._cancel_warm_timer()
+        warm = cls._warm
+        if not warm:
+            return
+        cls._warm = None
+        cls._warm_busy = False
+        try:
+            if warm.get("on_close"):
+                warm["on_close"]()
+            time.sleep_ms(12)  # let the soft-mute ramp settle before the clocks stop
+        except Exception as e:
+            logger.error("release_warm on_close failed: %s", e)
+        for key in ("i2s", "mck"):
+            try:
+                if warm.get(key):
+                    warm[key].deinit()
+            except Exception as e:
+                logger.error("release_warm %s deinit failed: %s", key, e)
+
+    @classmethod
+    def _arm_warm_timer(cls, warm_ms):
+        try:
+            if cls._warm_timer is None:
+                cls._warm_timer = machine.Timer(-1)
+            cls._warm_timer.init(mode=machine.Timer.ONE_SHOT, period=warm_ms,
+                                 callback=cls._warm_timer_cb)
+        except Exception as e:
+            # No virtual timer on this port: the output stays warm until
+            # release_warm() is called explicitly.
+            logger.error("warm idle timer failed: %s", e)
+
+    @classmethod
+    def _cancel_warm_timer(cls):
+        if cls._warm_timer:
+            try:
+                cls._warm_timer.deinit()
+            except Exception:
+                pass
+
+    @classmethod
+    def _warm_timer_cb(cls, _timer=None):
+        if cls._warm_busy:
+            return  # a clip is playing; its finally block re-arms the timer
+        cls.release_warm()
+
     _VOLUME_TO_SHIFT = (
         16, 7, 6, 6, 5, 5, 5, 4, 4, 4,
         4, 4, 4, 3, 3, 3, 3, 3, 3, 3,
@@ -99,6 +158,7 @@ class WAVStream:
         on_open=None,
         on_close=None,
         repeat_count=1,
+        warm_ms=0,
     ):
         """
         Initialize WAV stream.
@@ -111,8 +171,12 @@ class WAVStream:
             on_complete: Callback function(message) when playback finishes
             requested_sample_rate: Optional negotiated sample rate for shared clocks
             on_open: Optional callable invoked after MCLK starts, before I2S init
-            on_close: Optional callable invoked before I2S deinit (after audio drains)
+            on_close: Optional callable invoked before I2S deinit (after audio drains),
+                or when a warm output is finally released
             repeat_count: Total number of times to play the file (default: 1)
+            warm_ms: Keep the I2S clocks running and the codec unmuted for this
+                many ms after the clip ends so the next clip starts click-free
+                (0 = close the output after every clip)
         """
         self.file_path = file_path
         self.stream_type = stream_type
@@ -123,6 +187,7 @@ class WAVStream:
         self.on_open = on_open
         self.on_close = on_close
         self.repeat_count = repeat_count if repeat_count is not None else 1
+        self.warm_ms = int(warm_ms or 0)
         self._repeat_played = 0
         self._keep_running = True
         self._is_playing = False
@@ -651,57 +716,32 @@ class WAVStream:
                     self._play_desktop()
                     return
 
-                # Initialize I2S (always 16-bit output)
+                # Initialize I2S (always 16-bit output), or reuse a warm one.
                 try:
                     i2s_format = machine.I2S.MONO if channels == 1 else machine.I2S.STEREO
-                    if __debug__: logger.debug("I2S config: format=%s, ibuf=%s, has_sck=%s, mck_pin=%s", 'MONO' if channels == 1 else 'STEREO', ibuf, bool(self.i2s_pins.get('sck')), self.i2s_pins.get('mck'))
-
-                    # Configure MCLK pin if provided (must be done before I2S init)
-                    # On some MicroPython versions, machine.I2S() supports a mck argument
-                    # but not on ESP32S3 1.27.0 version, apparently.
-                    if 'mck' in self.i2s_pins:
-                        mck_pin = machine.Pin(self.i2s_pins['mck'], machine.Pin.OUT)
-                        from machine import PWM
-                        try:
-                            self._mck_pwm = PWM(mck_pin)
-                            freq, duty = WAVStream._get_freq_duty(playback_rate)
-                            self._mck_pwm.freq(freq)
-                            self._mck_pwm.duty_u16(duty)
-                            if __debug__: logger.debug("MCLK PWM started at %s Hz with duty cycle %s/65535", freq, duty)
-                        except Exception as e:
-                            logger.error("MCLK PWM init failed: %s", e)
-                            # fallback or error handling
-
-                    # Notify codec/amp to prepare for playback (enable amp, unmute DAC, etc.)
-                    if self.on_open:
-                        try:
-                            self.on_open()
-                        except Exception as e:
-                            logger.error("on_open failed: %s", e)
-
-                    if self.i2s_pins.get("sck"):
-                        self._i2s = machine.I2S(
-                            0,
-                            sck=machine.Pin(self.i2s_pins['sck'], machine.Pin.OUT),
-                            ws=machine.Pin(self.i2s_pins['ws'], machine.Pin.OUT),
-                            sd=machine.Pin(self.i2s_pins['sd'], machine.Pin.OUT),
-                            mode=machine.I2S.TX,
-                            bits=16,
-                            format=i2s_format,
-                            rate=playback_rate,
-                            ibuf=ibuf
-                        )
+                    if __debug__: logger.debug("I2S config: format=%s, ibuf=%s, has_sck=%s, mck_pin=%s, warm_ms=%s", 'MONO' if channels == 1 else 'STEREO', ibuf, bool(self.i2s_pins.get('sck')), self.i2s_pins.get('mck'), self.warm_ms)
+                    keep_warm = self.warm_ms > 0
+                    pins_key = (self.i2s_pins.get('mck'), self.i2s_pins.get('sck'),
+                                self.i2s_pins.get('ws'), self.i2s_pins.get('sd'))
+                    warm = WAVStream._warm
+                    if keep_warm and warm and warm["rate"] == playback_rate \
+                            and warm["fmt"] == i2s_format and warm["pins"] == pins_key:
+                        # Same clocks and format as the previous clip: reuse them. No
+                        # MCLK/I2S restart and no DAC re-unmute, so nothing clicks.
+                        WAVStream._warm_busy = True
+                        WAVStream._cancel_warm_timer()
+                        self._i2s = warm["i2s"]
+                        self._mck_pwm = warm["mck"]
+                        if __debug__: logger.debug("Reusing warm I2S/MCLK")
                     else:
-                        self._i2s = machine.I2S(
-                            0,
-                            ws=machine.Pin(self.i2s_pins['ws'], machine.Pin.OUT),
-                            sd=machine.Pin(self.i2s_pins['sd'], machine.Pin.OUT),
-                            mode=machine.I2S.TX,
-                            bits=16,
-                            format=i2s_format,
-                            rate=playback_rate,
-                            ibuf=ibuf
-                        )
+                        if warm:
+                            WAVStream.release_warm()
+                        self._open_i2s_output(playback_rate, i2s_format, ibuf, keep_warm)
+                        if keep_warm and self._i2s:
+                            WAVStream._warm = {"i2s": self._i2s, "mck": self._mck_pwm,
+                                               "rate": playback_rate, "fmt": i2s_format,
+                                               "pins": pins_key, "on_close": self.on_close}
+                            WAVStream._warm_busy = True
                 except Exception as e:
                     logger.error("I2S init failed: %s", e)
                     return
@@ -788,21 +828,82 @@ class WAVStream:
         finally:
             if not self.runs_async:
                 self._is_playing = False
-                if self.on_close:
-                    try:
-                        self.on_close()
-                    except Exception as e:
-                        logger.error("on_close failed: %s", e)
-                if self._i2s:
-                    if __debug__: logger.debug("Done playing, doing i2s deinit")
-                    self._i2s.deinit() # disabling this does not fix the "play just once" issue
+                warm = WAVStream._warm
+                if warm and self._i2s is warm["i2s"]:
+                    # Warm output: leave the clocks running and the codec unmuted;
+                    # the idle timer (or release_warm()) tears them down later.
                     self._i2s = None
-                if self._mck_pwm:
-                    try:
-                        if __debug__: logger.debug("Done playing, stopping MCLK PWM")
-                        self._mck_pwm.deinit()
-                    finally:
-                        self._mck_pwm = None
+                    self._mck_pwm = None
+                    WAVStream._warm_busy = False
+                    WAVStream._arm_warm_timer(self.warm_ms)
+                else:
+                    if self.on_close:
+                        try:
+                            self.on_close()
+                        except Exception as e:
+                            logger.error("on_close failed: %s", e)
+                    if self._i2s:
+                        if __debug__: logger.debug("Done playing, doing i2s deinit")
+                        self._i2s.deinit() # disabling this does not fix the "play just once" issue
+                        self._i2s = None
+                    if self._mck_pwm:
+                        try:
+                            if __debug__: logger.debug("Done playing, stopping MCLK PWM")
+                            self._mck_pwm.deinit()
+                        finally:
+                            self._mck_pwm = None
+
+    def _open_i2s_output(self, playback_rate, i2s_format, ibuf, keep_warm):
+        """Start MCLK, notify the codec and open I2S TX.
+
+        Default order: MCLK -> on_open -> I2S, so on_open runs before
+        machine.I2S() binds the pins (boards that mux pins in on_open rely on
+        this). Warm order: MCLK -> I2S -> prime with silence -> on_open, so the
+        codec is unmuted only once the clocks are stable and carrying silence.
+        """
+        if 'mck' in self.i2s_pins:
+            mck_pin = machine.Pin(self.i2s_pins['mck'], machine.Pin.OUT)
+            from machine import PWM
+            try:
+                self._mck_pwm = PWM(mck_pin)
+                freq, duty = WAVStream._get_freq_duty(playback_rate)
+                self._mck_pwm.freq(freq)
+                self._mck_pwm.duty_u16(duty)
+                if __debug__: logger.debug("MCLK PWM started at %s Hz with duty cycle %s/65535", freq, duty)
+            except Exception as e:
+                logger.error("MCLK PWM init failed: %s", e)
+        if not keep_warm:
+            self._call_on_open()
+        if self.i2s_pins.get("sck"):
+            self._i2s = machine.I2S(
+                0,
+                sck=machine.Pin(self.i2s_pins['sck'], machine.Pin.OUT),
+                ws=machine.Pin(self.i2s_pins['ws'], machine.Pin.OUT),
+                sd=machine.Pin(self.i2s_pins['sd'], machine.Pin.OUT),
+                mode=machine.I2S.TX, bits=16, format=i2s_format,
+                rate=playback_rate, ibuf=ibuf)
+        else:
+            self._i2s = machine.I2S(
+                0,
+                ws=machine.Pin(self.i2s_pins['ws'], machine.Pin.OUT),
+                sd=machine.Pin(self.i2s_pins['sd'], machine.Pin.OUT),
+                mode=machine.I2S.TX, bits=16, format=i2s_format,
+                rate=playback_rate, ibuf=ibuf)
+        if keep_warm:
+            try:
+                self._i2s.write(bytearray(1024))
+            except Exception as e:
+                logger.error("I2S prime failed: %s", e)
+            time.sleep_ms(8)
+            self._call_on_open()
+            time.sleep_ms(10)
+
+    def _call_on_open(self):
+        if self.on_open:
+            try:
+                self.on_open()
+            except Exception as e:
+                logger.error("on_open failed: %s", e)
 
     def set_repeat(self, count):
         """Set total number of times to play the file."""

@@ -1,6 +1,12 @@
 Future release (next version)
 =====
 
+Board Support:
+- Waveshare ESP32-S3-Touch-LCD-3.5: keep the ES8311 speaker output warm for 30 s after a clip (warm_ms) so rapid back-to-back clips play without a click
+
+Frameworks:
+- AudioManager/WAVStream: opt-in warm output (Output(warm_ms=N)) keeps the I2S clocks running and the codec unmuted between clips so back-to-back playback doesn't click on codecs such as the ES8311; released after N ms idle, by WAVStream.release_warm(), or before I2S recording
+
 0.19.0
 ======
 

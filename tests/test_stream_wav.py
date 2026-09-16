@@ -255,3 +255,90 @@ class TestDesktopRepeat(unittest.TestCase):
         self.assertEqual(len(self.completions), 1)
         # Far fewer passes than requested: stop() ended the loop.
         self.assertTrue(stream._repeat_played < 100)
+
+
+class _FakeDev:
+    def __init__(self):
+        self.deinit_calls = 0
+
+    def deinit(self):
+        self.deinit_calls += 1
+
+
+class _FakeTimer:
+    def __init__(self):
+        self.deinit_calls = 0
+        self.inits = []
+
+    def deinit(self):
+        self.deinit_calls += 1
+
+    def init(self, **kwargs):
+        self.inits.append(kwargs)
+
+
+class TestWarmOutput(unittest.TestCase):
+    """Warm output: clocks and codec kept alive between clips, released on idle."""
+
+    def setUp(self):
+        self._saved = (WAVStream._warm, WAVStream._warm_busy, WAVStream._warm_timer)
+        WAVStream._warm = None
+        WAVStream._warm_busy = False
+        WAVStream._warm_timer = _FakeTimer()
+
+    def tearDown(self):
+        WAVStream._warm, WAVStream._warm_busy, WAVStream._warm_timer = self._saved
+
+    def _make_warm(self, on_close=None):
+        i2s, mck = _FakeDev(), _FakeDev()
+        WAVStream._warm = {"i2s": i2s, "mck": mck, "rate": 22050, "fmt": 0,
+                           "pins": (12, 13, 15, 16), "on_close": on_close}
+        return i2s, mck
+
+    def test_release_mutes_codec_then_stops_clocks(self):
+        calls = []
+        i2s, mck = self._make_warm(on_close=lambda: calls.append("close"))
+        WAVStream.release_warm()
+        self.assertEqual(calls, ["close"])
+        self.assertEqual(i2s.deinit_calls, 1)
+        self.assertEqual(mck.deinit_calls, 1)
+        self.assertIsNone(WAVStream._warm)
+        self.assertFalse(WAVStream._warm_busy)
+        self.assertEqual(WAVStream._warm_timer.deinit_calls, 1)
+
+    def test_release_without_warm_output_is_noop(self):
+        WAVStream.release_warm()
+        self.assertIsNone(WAVStream._warm)
+
+    def test_release_still_stops_clocks_when_on_close_raises(self):
+        def boom():
+            raise RuntimeError("codec")
+        i2s, mck = self._make_warm(on_close=boom)
+        WAVStream.release_warm()
+        self.assertEqual(i2s.deinit_calls, 1)
+        self.assertEqual(mck.deinit_calls, 1)
+        self.assertIsNone(WAVStream._warm)
+
+    def test_idle_timer_does_not_release_while_a_clip_plays(self):
+        i2s, _ = self._make_warm()
+        WAVStream._warm_busy = True
+        WAVStream._warm_timer_cb(None)
+        self.assertIsNotNone(WAVStream._warm)
+        self.assertEqual(i2s.deinit_calls, 0)
+
+    def test_idle_timer_releases_when_idle(self):
+        i2s, _ = self._make_warm()
+        WAVStream._warm_timer_cb(None)
+        self.assertIsNone(WAVStream._warm)
+        self.assertEqual(i2s.deinit_calls, 1)
+
+    def test_arm_timer_is_one_shot_with_warm_ms_period(self):
+        WAVStream._arm_warm_timer(30000)
+        self.assertEqual(len(WAVStream._warm_timer.inits), 1)
+        self.assertEqual(WAVStream._warm_timer.inits[0]["period"], 30000)
+
+    def test_warm_ms_defaults_to_zero(self):
+        stream = WAVStream("dummy.wav", 0, 70, {}, lambda m: None)
+        self.assertEqual(stream.warm_ms, 0)
+        stream = WAVStream("dummy.wav", 0, 70, {}, lambda m: None, warm_ms=30000)
+        self.assertEqual(stream.warm_ms, 30000)
