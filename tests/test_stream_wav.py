@@ -298,13 +298,15 @@ class TestWarmOutput(unittest.TestCase):
     def test_release_mutes_codec_then_stops_clocks(self):
         calls = []
         i2s, mck = self._make_warm(on_close=lambda: calls.append("close"))
+        timer = WAVStream._warm_timer
         WAVStream.release_warm()
         self.assertEqual(calls, ["close"])
         self.assertEqual(i2s.deinit_calls, 1)
         self.assertEqual(mck.deinit_calls, 1)
         self.assertIsNone(WAVStream._warm)
         self.assertFalse(WAVStream._warm_busy)
-        self.assertEqual(WAVStream._warm_timer.deinit_calls, 1)
+        self.assertEqual(timer.deinit_calls, 1)
+        self.assertIsNone(WAVStream._warm_timer)
 
     def test_release_without_warm_output_is_noop(self):
         WAVStream.release_warm()
@@ -331,6 +333,12 @@ class TestWarmOutput(unittest.TestCase):
         WAVStream._warm_timer_cb(None)
         self.assertIsNone(WAVStream._warm)
         self.assertEqual(i2s.deinit_calls, 1)
+
+    def test_cancel_drops_the_timer_object(self):
+        timer = WAVStream._warm_timer
+        WAVStream._cancel_warm_timer()
+        self.assertEqual(timer.deinit_calls, 1)
+        self.assertIsNone(WAVStream._warm_timer)
 
     def test_arm_timer_is_one_shot_with_warm_ms_period(self):
         WAVStream._arm_warm_timer(30000)

@@ -107,23 +107,37 @@ class WAVStream:
             except Exception as e:
                 logger.error("release_warm %s deinit failed: %s", key, e)
 
+    # Virtual timer where the port has one (rp2, ...); ESP32 only has hardware
+    # timers 0-3 and the LVGL task handler owns 0, so fall back to 3.
+    _WARM_TIMER_IDS = (-1, 3)
+
     @classmethod
     def _arm_warm_timer(cls, warm_ms):
         try:
             if cls._warm_timer is None:
-                cls._warm_timer = machine.Timer(-1)
+                for timer_id in cls._WARM_TIMER_IDS:
+                    try:
+                        cls._warm_timer = machine.Timer(timer_id)
+                        break
+                    except ValueError:
+                        continue
+                if cls._warm_timer is None:
+                    raise ValueError("no usable machine.Timer")
             cls._warm_timer.init(mode=machine.Timer.ONE_SHOT, period=warm_ms,
                                  callback=cls._warm_timer_cb)
         except Exception as e:
-            # No virtual timer on this port: the output stays warm until
-            # release_warm() is called explicitly.
+            # No timer available: the output stays warm until release_warm()
+            # is called explicitly (or a recorder takes the peripheral).
             logger.error("warm idle timer failed: %s", e)
 
     @classmethod
     def _cancel_warm_timer(cls):
-        if cls._warm_timer:
+        # Drop the object as well: a deinit'd ESP32 hardware timer is not
+        # reliably re-armed by init(), so the next arm creates a fresh one.
+        timer, cls._warm_timer = cls._warm_timer, None
+        if timer:
             try:
-                cls._warm_timer.deinit()
+                timer.deinit()
             except Exception:
                 pass
 
