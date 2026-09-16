@@ -1,6 +1,9 @@
 Future release (next version)
 =====
 
+Builtin Apps:
+- AppStore: improve robustness of app update checker
+
 0.19.0
 ======
 
@@ -12,7 +15,7 @@ Board Support:
 - ESP32-S3: add USB Human HID mice support with theme-aware cursor
 
 Frameworks:
-- SettingsActivity: `dont_persist` entries with a `default_value` now show "(defaults to X)" in the list instead of "(not persisted)"
+- SettingsActivity: `dont_persist` entries with a `default_value` now show '(defaults to X)' in the list instead of '(not persisted)'
 - topmenu: fix swipe-up-to-close never firing — the close gesture only listened for SCROLL events (which require drawer content taller than the viewport) while real drags deliver PRESSED/PRESSING/RELEASED; the drawer now tracks the press drag and closes once it moves upward past the notification-bar height, with per-event debug logging of position and target
 - topmenu: drawer now extends from below the notification bar all the way to the bottom screen edge instead of a fixed 90% height, closing the tappable strip of the underlying app that stayed visible beneath it
 
