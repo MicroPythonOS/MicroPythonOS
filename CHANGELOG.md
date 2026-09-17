@@ -3,6 +3,7 @@ Future release (next version)
 
 Builtin Apps:
 - AppStore: improve robustness of app update checker
+- Settings: the Notification sound picker plays each option as you tap it (via InputActivity selected_callback), so you can hear a sound before saving
 
 Frameworks:
 - InputActivity: optional `selected_callback(value)` setting key for radiobuttons/dropdown, fired on every pick before Save (re-tapping the active radio fires again) so pickers can preview a choice live, e.g. play a sound effect. `changed_callback` semantics unchanged
