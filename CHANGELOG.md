@@ -1,6 +1,8 @@
 Future release (next version)
 =====
 
+Frameworks:
+- SettingsActivity: fix a TypeError ("can't convert 'int' object to str implicitly", surfaced as the "app threw an exception" dialog) when a setting's stored value is a number instead of a string
 Builtin Apps:
 - AppStore: improve robustness of app update checker
 
