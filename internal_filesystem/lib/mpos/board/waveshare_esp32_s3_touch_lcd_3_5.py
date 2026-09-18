@@ -31,7 +31,7 @@ from mpos import InputManager
 
 # Pin configuration (from the Waveshare demo code / schematic)
 SPI_BUS = 2
-SPI_FREQ = 40000000
+SPI_FREQ = 80000000
 LCD_SCLK = 5
 LCD_MOSI = 1
 LCD_MISO = 2
