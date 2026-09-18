@@ -283,5 +283,49 @@ class TestNotificationManager(unittest.TestCase):
             nm_module.time = original_time
 
 
+class TestPreviewSound(unittest.TestCase):
+    """preview_sound plays a given RTTTL on the buzzer regardless of the
+    stored preference, and is a silent no-op for a falsy value or when the
+    board has no buzzer output."""
+
+    def setUp(self):
+        from mpos import AudioManager
+        self._orig_find = NotificationManager._find_buzzer_output
+        self._orig_player = AudioManager.player
+        self.started = []
+        mgr_self = self
+
+        class _P:
+            def __init__(self, **kw):
+                self.kw = kw
+
+            def start(self):
+                mgr_self.started.append(self.kw)
+
+        AudioManager.player = staticmethod(lambda **kw: _P(**kw))
+        NotificationManager._find_buzzer_output = staticmethod(lambda: "buzzer")
+
+    def tearDown(self):
+        from mpos import AudioManager
+        NotificationManager._find_buzzer_output = staticmethod(self._orig_find) if not isinstance(self._orig_find, staticmethod) else self._orig_find
+        AudioManager.player = self._orig_player
+
+    def test_plays_given_rtttl(self):
+        NotificationManager.preview_sound("beep:d=4,o=5,b=120:c")
+        self.assertEqual(len(self.started), 1)
+        self.assertEqual(self.started[0]["rtttl"], "beep:d=4,o=5,b=120:c")
+        self.assertEqual(self.started[0]["output"], "buzzer")
+
+    def test_falsy_value_is_noop(self):
+        NotificationManager.preview_sound("")
+        NotificationManager.preview_sound(None)
+        self.assertEqual(self.started, [])
+
+    def test_no_buzzer_is_noop(self):
+        NotificationManager._find_buzzer_output = staticmethod(lambda: None)
+        NotificationManager.preview_sound("beep:d=4,o=5,b=120:c")
+        self.assertEqual(self.started, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -51,8 +51,10 @@ def _row_value_text(setting, stored_value):
         return "(not set)"
     # Map stored value to its ui_options label when present
     # (e.g. "lightningpiggy" → "Lightning Piggy"). No-op when
-    # no ui_options or the value isn't in the list.
-    return _value_label_for(setting, stored_value)
+    # no ui_options or the value isn't in the list. Prefs are JSON, so a
+    # value stored as int/float (an older app version, or a numeric
+    # ui_options value) must still become label text.
+    return str(_value_label_for(setting, stored_value))
 
 
 # Used to list and edit all settings:

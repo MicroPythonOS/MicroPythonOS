@@ -180,6 +180,30 @@ class NotificationManager:
         return None
 
     @classmethod
+    def preview_sound(cls, rtttl):
+        """Play `rtttl` once on the buzzer, e.g. from a settings picker's
+        selected_callback so the user hears a choice before saving it.
+
+        Unlike _play_notification_sound this ignores the stored preference
+        and the rate limiter; a falsy value (the "off" option) or a board
+        without a buzzer is a silent no-op.
+        """
+        try:
+            if not rtttl:
+                return
+            output = cls._find_buzzer_output()
+            if output is None:
+                return
+            AudioManager.player(
+                rtttl=rtttl,
+                stream_type=AudioManager.STREAM_NOTIFICATION,
+                volume=60,
+                output=output,
+            ).start()
+        except Exception as e:
+            logger.warning("Failed to preview notification sound: %s", e)
+
+    @classmethod
     def _play_notification_sound(cls):
         try:
             rtttl = cls._get_settings_prefs().get_string(

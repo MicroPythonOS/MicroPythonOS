@@ -404,12 +404,15 @@ class WebSocketApp:
                 elif msg.type == ABNF.OPCODE_PONG:
                     self.last_pong_tm = time.time()
                 elif msg.type == ABNF.OPCODE_PING:
-                    data = msg.data
-                    _run_callback(self.on_ping, self, data)
-                    try:
-                        await self.ws.pong(data)
-                    except Exception as e:
-                        _log_error(f"Failed to send pong: {e}")
+                    self._handle_ping(msg.data)
+
+    def _handle_ping(self, data):
+        """Incoming PING frame. The bundled aiohttp port already answered it:
+        WebSocketClient.receive() maps PING to a PONG send before handing the
+        frame up (and ClientWebSocketResponse has no pong() at all), so only
+        the callback runs here. Replying again used to raise AttributeError
+        on every relay ping and log a misleading ERROR (MicroPythonOS#299)."""
+        _run_callback(self.on_ping, self, data)
 
     async def _send_async(self, data, opcode):
         """Async send implementation."""
