@@ -50,7 +50,15 @@ class TestUSBHIDKeyboard(GraphicalTestCase):
         super().setUp()
         self.source = FakeHIDSource()
         self.hub = HIDHub(self.source)
-        self.kbd = USBHIDKeyboard(self.hub)
+        # Disable key repeat for these tests: _type_key() intentionally leaves
+        # each key held across wait_for_render() gaps. On slow/loaded CI runners
+        # that wall-clock gap can exceed the default 300ms repeat delay and
+        # emit duplicate characters, making the assertions flaky.
+        self.kbd = USBHIDKeyboard(
+            self.hub,
+            repeat_initial_delay_ms=1_000_000,
+            repeat_rate_ms=1_000_000,
+        )
         self.addCleanup(self._cleanup_kbd)
         group = lv.group_get_default()
         if group is not None:
