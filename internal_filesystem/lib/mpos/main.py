@@ -198,7 +198,22 @@ def detect_board():
         # Do I2C-based board detection
         # IMPORTANT: ESP32 GPIO 6-11 are internal SPI flash pins and will cause WDT reset if used.
         # ESP32-S3 has more usable GPIOs (up to 48). Detect chip variant first to skip unsafe probes.
-        is_esp32s3 = "S3" in sys.implementation._machine.upper()
+        machine_name = sys.implementation._machine.upper()
+        is_esp32s3 = "S3" in machine_name
+        is_esp32p4 = "P4" in machine_name
+
+        if is_esp32p4:
+            # ESP32-P4 boards get their own probes: the xtensa boards' pin
+            # numbers below map to unrelated peripherals on the P4 (MIPI,
+            # SDIO to the Wi-Fi co-processor, ...) and an I2C probe on them
+            # hangs the chip hard, before the REPL is reachable.
+            if __debug__: logger.debug("waveshare_esp32_p4_wifi6_touch_lcd_4_3 ?")
+            if i2c0 := fail_save_i2c(sda=7, scl=8):
+                if single_address_i2c_scan(i2c0, 0x5D) or single_address_i2c_scan(i2c0, 0x14):  # GT911 touch (either address)
+                    return "waveshare_esp32_p4_wifi6_touch_lcd_4_3"
+                restore_i2c(7, 8)
+            if __debug__: logger.debug("Unknown ESP32-P4 board")
+            return None
 
         if is_esp32s3:
             if __debug__: logger.debug("lilygo_t_hmi ?")
@@ -328,6 +343,13 @@ else:
     else:
         # It makes no sense to continue, because we have no display etc...
         raise RuntimeError("No board detected, exit initialization!")
+
+if lv.display_get_default() is None:
+    # A board file that registers no LVGL display (e.g. a board whose display
+    # driver is still being brought up) must stop here: init_rootscreen() would
+    # otherwise dereference a NULL display and panic the chip into a reboot
+    # loop, with no REPL to debug from.
+    raise RuntimeError("Board file mpos.board.%s registered no display, exit initialization!" % board)
 
 # Allow LVGL M:/path/to/file or M:relative/path/to/file to work for image set_src etc
 import mpos.fs_driver
