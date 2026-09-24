@@ -122,4 +122,78 @@ try:
 except Exception as e:
     logger.error("GT911 init failed: %s" % (e))
 
+# === AUDIO (ES8311 codec -> onboard power amplifier -> speaker connector) ===
+# I2S pins and the amplifier enable from Waveshare's BSP: MCLK=13, BCLK=12,
+# LRCK=10, ESP32->codec (playback)=9, codec->ESP32=11, PA enable GPIO53
+# (active high). Codec control is I2C @0x18 on the shared bus. The
+# microphones go through a separate ES7210 ADC (I2C @0x40, same I2S bus),
+# which MicroPythonOS has no driver for yet, so only playback is wired up.
+PA_ENABLE = 53
+_es8311 = None
+try:
+    import drivers.codec.es8311 as es8311_drv
+
+    class _CodecI2C:
+        """Adapt the lcd_bus i2c wrapper to the machine.I2C-style API the
+        ES8311 driver expects (writeto_mem/readfrom_mem_into)."""
+
+        def __init__(self, bus, dev_id):
+            self._dev = i2c.I2C.Device(bus=bus, dev_id=dev_id, reg_bits=8)
+
+        def writeto_mem(self, addr, reg, data):
+            self._dev.write_mem(reg, data)
+
+        def readfrom_mem_into(self, addr, reg, buf):
+            self._dev.read_mem(reg, buf=buf)
+
+    _es8311 = es8311_drv.ES8311(_CodecI2C(i2c_bus, es8311_drv.I2C_ADDR))
+    # Same starting point as the ESP32-S3-Touch-LCD-3.5 (76% was the loudest
+    # clean setting through its speaker); this board's amplifier still needs
+    # an ear on it.
+    _es8311.set_dac_volume(76)
+except Exception as e:
+    logger.error("ES8311 init failed: %s" % (e))
+
+# Amplifier off at boot; enabled only around playback to keep it quiet.
+_pa_enable = machine.Pin(PA_ENABLE, machine.Pin.OUT, value=0)
+
+
+def _audio_on_open():
+    """Called after MCLK starts and before I2S init: amplifier on, DAC unmuted."""
+    _pa_enable.value(1)
+    if _es8311:
+        time.sleep_ms(10)         # let the amplifier settle before unmuting
+        _es8311.dac_mute(False)
+
+
+def _audio_on_close():
+    """Called before I2S deinit: soft-mute the DAC, then amplifier off, to suppress pops."""
+    if _es8311:
+        _es8311.dac_mute(True)
+        time.sleep_ms(20)
+    _pa_enable.value(0)
+
+
+if _es8311:
+    from mpos import AudioManager
+
+    AudioManager.add(
+        AudioManager.Output(
+            name="Speaker",
+            kind="i2s",
+            channels=1,
+            i2s_pins={
+                'mck': 13,  # MCLK - 256 x sample_rate during playback
+                'sck': 12,  # BCLK
+                'ws':  10,  # LRCK
+                'sd':  9,   # I2S TX (ESP32-P4 -> ES8311 DAC)
+            },
+            on_open=_audio_on_open,
+            on_close=_audio_on_close,
+            # Like the other ES8311 boards this one clicks on every MCLK/I2S
+            # restart; once the opt-in warm output (PR #301) lands, add
+            # warm_ms=30000 here so back-to-back clips stay silent.
+        )
+    )
+
 if __debug__: logger.debug("waveshare_esp32_p4_wifi6_touch_lcd_4_3.py finished")
