@@ -113,6 +113,7 @@ if [ -z "$target" ]; then
     echo "Example: $0 esp32-small"
     echo "Example: $0 esp32s3"
     echo "Example: $0 esp32s3 --usb (USB host support: display adapters + HID, ESP32-S3 USB host)"
+    echo "Example: $0 esp32p4 (ESP32-P4 + ESP32-C6 Wi-Fi co-processor, e.g. Waveshare ESP32-P4-WIFI6-Touch-LCD boards)"
     echo "Example: $0 unphone"
     echo "Example: $0 lilygo_t4"
     echo "Example: $0 clean"
@@ -311,8 +312,9 @@ if [ ! -f "$codebasedir"/lvgl_micropython/lib/micropython/mpy-cross/build/mpy-cr
 fi
 
 echo "Refreshing freezefs..."
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" -o "$target" == "esp32p4" ]; then
 	builtin_march="xtensawin"
+	[ "$target" == "esp32p4" ] && builtin_march="rv32imc"  # ESP32-P4 is RISC-V
 else
 	case "$(uname -m)" in
 		x86_64|i686|i386|armv6l|riscv64) builtin_march="host" ;;
@@ -335,10 +337,11 @@ if [ "$target" != "web" ]; then
 	reset_web_port_changes
 fi
 
-if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" ]; then
+if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o "$target" == "esp32-small" -o "$target" == "lilygo_t4" -o "$target" == "esp32p4" ]; then
 	# Cleanup compiled .py files, otherwise if one from lib/ gets delected, the old .mpy might be used
 	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC-SPIRAM/frozen_mpy 2>/dev/null
 	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_S3-SPIRAM_OCT/frozen_mpy 2>/dev/null
+	rm -r lvgl_micropython/lib/micropython/ports/esp32/build-ESP32_GENERIC_P4-C6_WIFI/frozen_mpy 2>/dev/null
 
 	echo "Applying lvgl_micropython esp32 inisetup warning patch..."
 	apply_patch "$codebasedir"/lvgl_micropython/lib/micropython "$codebasedir"/lvgl_micropython/esp32_inisetup_warn_and_format.patch
@@ -370,6 +373,15 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		partition_size=3737600 # esp32 builds are ~65 KiB bigger than esp32s3 builds
 		flash_size="4"
 		otasupport="" # too small for 2 OTA partitions + internal storage
+	elif [ "$target" == "esp32p4" ]; then
+		# ESP32-P4 (RISC-V) with an ESP32-C6 Wi-Fi/BLE co-processor over SDIO
+		# (esp_hosted + esp_wifi_remote, pulled in by MicroPython's C6_WIFI
+		# variant). Boards so far ship 32 MB flash and 32 MB PSRAM, so the
+		# app partitions get 4 MiB each instead of the 3.5 MiB legacy size.
+		BOARD=ESP32_GENERIC_P4
+		BOARD_VARIANT=C6_WIFI
+		partition_size=4194304
+		flash_size="32"
 	else # esp32s3 or unphone
         if [ "$target" == "unphone" ]; then
             flash_size="8"
