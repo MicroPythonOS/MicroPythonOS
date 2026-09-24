@@ -400,6 +400,12 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 		BOARD_VARIANT=C6_WIFI
 		partition_size=4194304
 		flash_size="32"
+		# PSRAM at 200 MHz (ESP-IDF 5.5 still labels that speed experimental)
+		# and the 256 KB L2 cache with 128-byte lines, as in Waveshare's and
+		# Espressif's P4 display examples: the MIPI-DSI panel is scanned out
+		# of PSRAM continuously (480x800 RGB565 at 60 Hz is 46 MB/s) and
+		# MicroPython's default 20 MHz PSRAM clock cannot feed it.
+		extra_configs="CONFIG_IDF_EXPERIMENTAL_FEATURES=y CONFIG_SPIRAM_SPEED_200M=y CONFIG_CACHE_L2_CACHE_256KB=y CONFIG_CACHE_L2_CACHE_LINE_128B=y"
 	else # esp32s3 or unphone
         if [ "$target" == "unphone" ]; then
             flash_size="8"
