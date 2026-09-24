@@ -7,7 +7,12 @@
 #include "py/mperrno.h"
 #include "py/nlr.h" // Include for nlr_buf_t
 
-#ifdef __xtensa__
+// On the ESP32 port py/runtime.h already pulls in FreeRTOS (via
+// mpthreadport.h), which defines INC_FREERTOS_H and declares the real
+// uxTaskGetStackHighWaterMark; only desktop/web builds need the stub.
+// Keying on __xtensa__ (as before) broke the RISC-V ESP32-P4 build with a
+// conflicting prototype, and ESP_PLATFORM is not set for this compile unit.
+#if defined(INC_FREERTOS_H) || defined(ESP_PLATFORM) || defined(__xtensa__)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #else
