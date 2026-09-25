@@ -14,9 +14,13 @@ if __debug__: logger.debug("waveshare_esp32_p4_wifi6_touch_lcd_4_3.py initializa
 # Pins, panel timings and the ST7701 register table come from Waveshare's
 # ESP-IDF BSP (waveshare/esp32_p4_wifi6_touch_lcd_4_3 1.0.1).
 #
-# The panel is used in its native portrait orientation (480 wide, 800 high):
-# the ST7701 cannot swap rows and columns for the video interface, and the
-# enclosure's cable/button placement suits portrait.
+# The panel is natively portrait (480 wide, 800 high) and the ST7701 cannot
+# swap rows and columns on the video interface, so the landscape UI (800x480,
+# like the other MicroPythonOS boards) is produced by the P4's PPA (pixel
+# processing accelerator): LVGL renders landscape, the DSI bus rotates each
+# finished update into the panel's back buffer. LCD_ROTATION picks which
+# way is up (270 is upright in the enclosure, 90 is upside down); 0 would
+# give the native portrait.
 
 import time
 
@@ -29,8 +33,9 @@ from drivers.display.st7701_dsi import ST7701_DSI
 import drivers.indev.gt911 as gt911
 from mpos import InputManager
 
-LCD_WIDTH = 480
+LCD_WIDTH = 480      # panel (physical) size
 LCD_HEIGHT = 800
+LCD_ROTATION = 270   # 270 or 90: landscape (which way is up; 90 is upside down in the enclosure), 0: native portrait
 LCD_RST = 27
 LCD_BL = 26          # backlight enable, PWM dimmable, ACTIVE LOW (the BSP drives its LEDC channel inverted)
 
@@ -76,8 +81,11 @@ display_bus = lcd_bus.DSIBus(
     vsync_front_porch=60,
     phy_ldo_channel=3,
     phy_ldo_voltage_mv=2500,
+    rotation=LCD_ROTATION,
 )
 
+# Two screen-sized LVGL buffers (landscape); the panel's own two portrait
+# frame buffers are managed by the bus (see drivers.display.st7701_dsi).
 _FB_SIZE = const(480 * 800 * 2)  # RGB565, whole screen: 768000 bytes
 fb1 = display_bus.allocate_framebuffer(_FB_SIZE, lcd_bus.MEMORY_SPIRAM)
 fb2 = display_bus.allocate_framebuffer(_FB_SIZE, lcd_bus.MEMORY_SPIRAM)
@@ -92,6 +100,8 @@ mpos.ui.main_display = ST7701_DSI(
     reset_state=ST7701_DSI.STATE_LOW,
     color_space=lv.COLOR_FORMAT.RGB565,
     color_byte_order=ST7701_DSI.BYTE_ORDER_RGB,
+    rotation={0: lv.DISPLAY_ROTATION._0, 90: lv.DISPLAY_ROTATION._90,
+              180: lv.DISPLAY_ROTATION._180, 270: lv.DISPLAY_ROTATION._270}[LCD_ROTATION],
 )  # triggers lv.init()
 mpos.ui.main_display.init()
 if __debug__: logger.debug("ST7701 panel ID: %s", mpos.ui.main_display.panel_id)
@@ -109,7 +119,8 @@ mpos.ui.main_display.set_backlight(100)
 
 # === TOUCH (GT911) ===
 # Neither its reset nor its interrupt line is wired to the P4 on this board,
-# so the controller is polled at whichever address its strap selected.
+# so the controller is polled at whichever address its strap selected. It
+# reports panel (portrait) coordinates; LVGL maps them to the rotated UI.
 i2c_bus = i2c.I2C.Bus(host=0, scl=I2C_SCL, sda=I2C_SDA, freq=I2C_FREQ, use_locks=False)
 try:
     present = i2c_bus.scan()

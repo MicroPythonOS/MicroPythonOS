@@ -26,9 +26,12 @@ class ST7701_DSI(display_driver_framework.DisplayDriver):
     the video stream on the first flush, i.e. after that setup, the order
     Espressif's own esp_lcd_st7701 MIPI driver uses.
 
-    Rotation is not supported: the ST7701 has no row/column exchange for
-    the video interface, so the display runs in the panel's native
-    orientation.
+    Rotation: the ST7701 has no row/column exchange for the video
+    interface, so a rotated (e.g. landscape) UI is produced by the ESP32-P4's
+    PPA instead: create the bus with the matching `rotation` (degrees) and
+    pass the same rotation here; LVGL then renders the rotated picture and
+    the bus rotates every finished update into the panel's back buffer. The
+    rotation is fixed at construction (set_rotation() later is refused).
     """
 
     STATE_HIGH = STATE_HIGH
@@ -55,8 +58,10 @@ class ST7701_DSI(display_driver_framework.DisplayDriver):
         backlight_on_state=STATE_HIGH,
         color_byte_order=BYTE_ORDER_RGB,
         color_space=lv.COLOR_FORMAT.RGB565,
+        rotation=lv.DISPLAY_ROTATION._0,
     ):
         self.panel_id = None
+        self._fixed_rotation = rotation
 
         super().__init__(
             data_bus=data_bus,
@@ -79,6 +84,11 @@ class ST7701_DSI(display_driver_framework.DisplayDriver):
             _param_bits=8,
             _init_bus=True,  # creates the DSI bus, the DBI command IO and the DPI panel (frame buffers)
         )
+
+        if rotation != lv.DISPLAY_ROTATION._0:
+            # LVGL works in the rotated (logical) resolution from now on; the
+            # bus does the pixel rotation (DSIBus rotation=...).
+            self._disp_drv.set_rotation(rotation)
 
     def init(self, type=None):  # NOQA
         # Hardware reset: reset_state is the active level (the framework
@@ -106,6 +116,12 @@ class ST7701_DSI(display_driver_framework.DisplayDriver):
 
     def get_params(self, cmd, params):
         self._data_bus.rx_param(cmd, params)
+
+    def set_rotation(self, value):
+        if value != self._fixed_rotation:
+            raise NotImplementedError(
+                'ST7701_DSI: rotation is fixed at construction (DSIBus rotation=... and rotation=...)'
+            )
 
     def _set_memory_location(self, x1, y1, x2, y2):  # NOQA
         # video-mode panel: no CASET/RASET/RAMWR
