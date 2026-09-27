@@ -467,6 +467,10 @@ if [ "$target" == "esp32" -o "$target" == "esp32s3" -o "$target" == "unphone" -o
 	# - BLE 5 controller features (extended/periodic advertising, 2M/coded PHY):
 	#   MicroPython's bluetooth module only does legacy advertising and scanning
 	extra_configs="$extra_configs CONFIG_LWIP_PPP_SUPPORT=n CONFIG_LWIP_PPP_PAP_SUPPORT=n CONFIG_LWIP_PPP_CHAP_SUPPORT=n CONFIG_MBEDTLS_SSL_PROTO_DTLS=n CONFIG_MBEDTLS_TLS_SERVER_AND_CLIENT=n CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y CONFIG_BT_NIMBLE_50_FEATURE_SUPPORT=n"
+	# - IPv6: the one trim users could notice (sockets are IPv4 only afterwards);
+	#   everything the OS and its apps talk to is reachable over IPv4, and it is
+	#   worth ~23 KB of flash plus the neighbour-discovery tables in RAM
+	extra_configs="$extra_configs CONFIG_LWIP_IPV6=n"
 	python3 make.py $ccache_arg $otasupport --optimize-size --partition-size=$partition_size --flash-size=$flash_size esp32 BOARD=$BOARD BOARD_VARIANT=$BOARD_VARIANT \
 		USER_C_MODULE="$codebasedir"/secp256k1-embedded-ecdh/micropython.cmake \
 		USER_C_MODULE="$codebasedir"/c_mpos/micropython.cmake \
